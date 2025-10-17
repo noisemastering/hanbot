@@ -7,7 +7,10 @@ const ConversationSchema = new mongoose.Schema({
   greeted: { type: Boolean, default: false },
   lastIntent: { type: String, default: null },
   lastMessageAt: { type: Date, default: Date.now },
+  lastGreetTime: { type: Number, default: 0 },
+  unknownCount: { type: Number, default: 0 } // 👈 NUEVO campo
 });
+
 
 // Crea o reutiliza el modelo (importante en hot reloads o entornos de desarrollo)
 const Conversation = mongoose.models.Conversation || mongoose.model("Conversation", ConversationSchema);
@@ -24,7 +27,7 @@ async function getConversation(psid) {
       convo.lastMessageAt = new Date();
       await convo.save();
     }
-    return convo;
+    return convo.toObject(); // 🔥 devuelve snapshot limpio del documento actualizado
   } catch (err) {
     console.error("❌ Error en getConversation:", err);
     return { psid, state: "new", greeted: false, lastIntent: null };
