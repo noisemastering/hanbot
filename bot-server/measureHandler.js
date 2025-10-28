@@ -185,7 +185,7 @@ function isApproximateMeasure(message) {
  * @returns {string}
  */
 function generateSizeResponse(options) {
-  const { smaller, bigger, exact, requestedDim, availableSizes } = options;
+  const { smaller, bigger, exact, requestedDim, availableSizes, isRepeated } = options;
 
   const responses = [];
 
@@ -211,7 +211,15 @@ function generateSizeResponse(options) {
 
     if (suggestions.length > 0) {
       parts.push('\n' + suggestions.join('\n'));
-      parts.push('\n\n¿Cuál te gustaría ver con más detalle? 🌿');
+
+      // If user is repeating the request, mention custom sizes
+      if (isRepeated) {
+        parts.push('\n\n💡 **También fabricamos medidas personalizadas.**');
+        parts.push('\nSi realmente necesitas esa medida exacta, podemos cotizarla para ti.');
+        parts.push('\n\n¿Te gustaría una cotización personalizada o prefieres una de las medidas disponibles? 😊');
+      } else {
+        parts.push('\n\n¿Cuál te gustaría ver con más detalle? 🌿');
+      }
     } else {
       parts.push('\nPor el momento no tenemos esa medida exacta en stock. ¿Te gustaría ver nuestras medidas estándar?');
     }

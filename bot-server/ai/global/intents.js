@@ -241,12 +241,29 @@ Google Maps 👉 https://www.google.com/maps/place/Hanlob/
     if (dimensions) {
       // User specified exact dimensions
       const closest = findClosestSizes(dimensions, availableSizes);
+      const requestedSizeStr = `${dimensions.width}x${dimensions.height}`;
 
-      await updateConversation(psid, {
+      // Check if user is insisting on the same unavailable size
+      const isRepeated = !closest.exact &&
+                        convo.lastUnavailableSize === requestedSizeStr &&
+                        convo.lastIntent === "specific_measure";
+
+      // Update conversation state
+      const updateData = {
         lastIntent: "specific_measure",
         unknownCount: 0,
-        requestedSize: `${dimensions.width}x${dimensions.height}`
-      });
+        requestedSize: requestedSizeStr
+      };
+
+      // If size is not available, track it for insistence detection
+      if (!closest.exact) {
+        updateData.lastUnavailableSize = requestedSizeStr;
+      } else {
+        // Clear lastUnavailableSize if we found exact match
+        updateData.lastUnavailableSize = null;
+      }
+
+      await updateConversation(psid, updateData);
 
       return {
         type: "text",
@@ -255,7 +272,8 @@ Google Maps 👉 https://www.google.com/maps/place/Hanlob/
           bigger: closest.bigger,
           exact: closest.exact,
           requestedDim: dimensions,
-          availableSizes
+          availableSizes,
+          isRepeated
         })
       };
     } else {

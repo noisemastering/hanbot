@@ -13,7 +13,8 @@ const conversationSchema = new mongoose.Schema({
   // Campaign & context tracking
   campaignRef: { type: String, default: null },
   requestedSize: { type: String, default: null },  // Track last size user asked about
-  familyShown: { type: String, default: null }     // Track last family shown
+  familyShown: { type: String, default: null },     // Track last family shown
+  lastUnavailableSize: { type: String, default: null }  // Track unavailable size to detect insistence
 });
 
 module.exports = mongoose.model("Conversation", conversationSchema);
