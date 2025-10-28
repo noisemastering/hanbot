@@ -85,17 +85,27 @@ Google Maps 👉 https://www.google.com/maps/place/Hanlob/
     };
   }
 
-  // 📋 DETAILS REQUEST - User asks for more information/details
-  if (/\b(detalles?|m[aá]s\s+informaci[oó]n|m[aá]s\s+info|ver\s+m[aá]s|cu[eé]ntame\s+m[aá]s|especificaciones|ficha\s+t[eé]cnica)\b/i.test(msg)) {
+  // 📋 DETAILS REQUEST - User asks for more information/details or wants to see a product
+  if (/\b(detalles?|m[aá]s\s+informaci[oó]n|m[aá]s\s+info|ver\s+m[aá]s|cu[eé]ntame\s+m[aá]s|especificaciones|ficha\s+t[eé]cnica|d[eé]jame\s+ver|mu[eé]strame|ens[eé][nñ]ame|quiero\s+ver|ver\s+la|ver\s+el)\b/i.test(msg)) {
     await updateConversation(psid, { lastIntent: "details_request", unknownCount: 0 });
 
-    // Check if user has a requested size in context
-    if (convo.requestedSize) {
+    // Check if message contains a specific size (e.g., "dejame ver la de 4x6")
+    const dimensionsInMsg = parseDimensions(msg);
+    let sizeToShow = convo.requestedSize;
+
+    if (dimensionsInMsg) {
+      // User mentioned a specific size in the "ver" request
+      sizeToShow = `${dimensionsInMsg.width}x${dimensionsInMsg.height}`;
+      await updateConversation(psid, { requestedSize: sizeToShow });
+    }
+
+    // Check if we have a size to show details for
+    if (sizeToShow) {
       // Try to fetch the ML link for this size
       const product = await Product.findOne({
         $or: [
-          { size: convo.requestedSize },
-          { size: convo.requestedSize + 'm' }
+          { size: sizeToShow },
+          { size: sizeToShow + 'm' }
         ],
         type: "confeccionada"
       });
@@ -103,7 +113,7 @@ Google Maps 👉 https://www.google.com/maps/place/Hanlob/
       if (product?.mLink) {
         return {
           type: "text",
-          text: `Aquí tienes más detalles de la malla sombra de ${convo.requestedSize}:\n\n` +
+          text: `Aquí tienes más detalles de la malla sombra de ${sizeToShow}:\n\n` +
                 `📱 Puedes verla y comprarla en nuestra *Tienda Oficial de Mercado Libre*:\n` +
                 `👉 ${product.mLink}\n\n` +
                 `🏪 O visítanos en nuestra bodega en Querétaro\n` +

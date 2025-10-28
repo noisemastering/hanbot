@@ -95,9 +95,9 @@ const INTENT_DEFINITIONS = {
 
   // Purchase-related
   details_request: {
-    description: "Usuario pide más detalles, información específica, especificaciones (dame más detalles, quiero más info, cuéntame más, ver más)",
+    description: "Usuario pide más detalles, quiere ver un producto, o solicita información específica (dame más detalles, dejame ver, muéstrame, enseñame, ver la de, quiero ver)",
     priority: 3,
-    keywords: ["detalles", "detalle", "más información", "más info", "especificaciones", "cuéntame más", "ver más"]
+    keywords: ["detalles", "detalle", "más información", "más info", "especificaciones", "cuéntame más", "ver más", "dejame ver", "muéstrame", "enseñame", "quiero ver", "ver la", "ver el"]
   },
   buying_intent: {
     description: "Usuario quiere comprar, pedir, ordenar el producto (quiero comprar, lo quiero, me lo llevo, cómo lo compro, dónde compro)",
