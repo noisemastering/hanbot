@@ -10,6 +10,7 @@ const {
   generateSizeResponse,
   generateGenericSizeResponse
 } = require("../../measureHandler");
+const Product = require("../../models/Product");
 
 async function handleGlobalIntents(msg, psid, convo = {}) {
 
@@ -63,11 +64,26 @@ Google Maps 👉 https://www.google.com/maps/place/Hanlob/
     let response = "";
 
     if (convo.requestedSize) {
+      // Try to fetch ML link for the requested size
+      // Try with and without "m" suffix (size might be "4x6" or "4x6m")
+      const product = await Product.findOne({
+        $or: [
+          { size: convo.requestedSize },
+          { size: convo.requestedSize + 'm' }
+        ],
+        type: "confeccionada"
+      });
+      const mlLink = product?.mLink;
+
       // User mentioned a size earlier
       if (/quer[ée]taro/i.test(cityName)) {
         response = `Perfecto, estás en Querétaro 🏡. Para la malla sombra de ${convo.requestedSize} que te interesa, el **envío va incluido** en zona urbana.\n\n¿Te gustaría pasar a la bodega o prefieres que te la llevemos? 😊`;
       } else {
-        response = `Perfecto, enviamos a ${cityName.charAt(0).toUpperCase() + cityName.slice(1)} sin problema 🚚.\n\nPara la malla sombra de ${convo.requestedSize}:\n\n📱 Puedes comprarla en nuestra *Tienda Oficial de Mercado Libre* con envío garantizado\n\n📞 O llámanos: 442 123 4567 / 442 765 4321\n\n¿Con cuál opción te gustaría proceder? 😊`;
+        const mlLinkText = mlLink
+          ? `\n\n📱 Puedes comprarla en nuestra *Tienda Oficial de Mercado Libre* con envío garantizado:\n👉 ${mlLink}`
+          : `\n\n📱 Puedes comprarla en nuestra *Tienda Oficial de Mercado Libre* con envío garantizado`;
+
+        response = `Perfecto, enviamos a ${cityName.charAt(0).toUpperCase() + cityName.slice(1)} sin problema 🚚.\n\nPara la malla sombra de ${convo.requestedSize}:${mlLinkText}\n\n📞 O llámanos: 442 123 4567 / 442 765 4321\n\n¿Con cuál opción te gustaría proceder? 😊`;
       }
     } else {
       // No size mentioned yet
@@ -92,11 +108,28 @@ Google Maps 👉 https://www.google.com/maps/place/Hanlob/
     if (convo.requestedSize || convo.lastIntent === "specific_measure") {
       const size = convo.requestedSize || "la medida que mencionaste";
 
+      // Try to fetch the ML link for this size
+      let mlLink = null;
+      if (convo.requestedSize) {
+        // Try with and without "m" suffix (size might be "4x6" or "4x6m")
+        const product = await Product.findOne({
+          $or: [
+            { size: convo.requestedSize },
+            { size: convo.requestedSize + 'm' }
+          ],
+          type: "confeccionada"
+        });
+        mlLink = product?.mLink;
+      }
+
+      const mlLinkText = mlLink
+        ? `📱 *Opción 1*: Puedes adquirirla en nuestra *Tienda Oficial de Mercado Libre* con envío a toda la República:\n👉 ${mlLink}\n\n`
+        : `📱 *Opción 1*: Búscala en nuestra *Tienda Oficial de Mercado Libre* (envío a toda la República)\n\n`;
+
       return {
         type: "text",
         text: `¡Perfecto! 🎉 Para comprar la malla sombra ${size}:\n\n` +
-              `📱 *Opción 1*: Puedes adquirirla en nuestra *Tienda Oficial de Mercado Libre* con envío a toda la República:\n` +
-              `👉 [Link directo aquí - pendiente agregar]\n\n` +
+              mlLinkText +
               `🏪 *Opción 2*: Visítanos en nuestra bodega en Querétaro (envío incluido en zona urbana)\n\n` +
               `📞 *Opción 3*: Llámanos para hacer tu pedido:\n` +
               `442 123 4567 / 442 765 4321\n\n` +
