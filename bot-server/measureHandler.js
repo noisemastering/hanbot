@@ -212,13 +212,16 @@ function generateSizeResponse(options) {
     if (suggestions.length > 0) {
       parts.push('\n' + suggestions.join('\n'));
 
-      // If user is repeating the request, mention custom sizes
+      // ALWAYS mention custom sizes when we don't have exact match
+      parts.push('\n\n💡 **También fabricamos medidas personalizadas.**');
+
       if (isRepeated) {
-        parts.push('\n\n💡 **También fabricamos medidas personalizadas.**');
+        // User insisted - be more direct about custom option
         parts.push('\nSi realmente necesitas esa medida exacta, podemos cotizarla para ti.');
         parts.push('\n\n¿Te gustaría una cotización personalizada o prefieres una de las medidas disponibles? 😊');
       } else {
-        parts.push('\n\n¿Cuál te gustaría ver con más detalle? 🌿');
+        // First time - offer custom as an option
+        parts.push('\n\n¿Cuál opción te interesa? 🌿');
       }
     } else {
       parts.push('\nPor el momento no tenemos esa medida exacta en stock. ¿Te gustaría ver nuestras medidas estándar?');
