@@ -1,5 +1,6 @@
 // conversationManager.js
 const mongoose = require("mongoose");
+const Conversation = require("./models/Conversation");
 
 const ConversationSchema = new mongoose.Schema({
   psid: { type: String, required: true, unique: true },
@@ -10,10 +11,6 @@ const ConversationSchema = new mongoose.Schema({
   lastGreetTime: { type: Number, default: 0 },
   unknownCount: { type: Number, default: 0 } // 👈 NUEVO campo
 });
-
-
-// Crea o reutiliza el modelo (importante en hot reloads o entornos de desarrollo)
-const Conversation = mongoose.models.Conversation || mongoose.model("Conversation", ConversationSchema);
 
 // 🔍 Obtener (y crear si no existe)
 async function getConversation(psid) {

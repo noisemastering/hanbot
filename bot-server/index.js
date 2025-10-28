@@ -3,7 +3,7 @@ require('dotenv').config();
 const Message = require('./models/Message');
 
 
-const { generateReply } = require('./ai');
+const { generateReply } = require('./ai/index');
 const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
@@ -167,6 +167,35 @@ app.post("/webhook", async (req, res) => {
       const webhookEvent = entry.messaging[0];
       const senderPsid = webhookEvent.sender.id;
 
+
+      // 🧩 BLOQUE NUEVO: detección de campañas o enlaces con ?ref=
+      const referral = webhookEvent.referral || webhookEvent.postback?.referral;
+      if (referral) {
+        console.log("🧭 Usuario llegó desde una campaña o enlace promocional:");
+        console.log("  Ref:", referral.ref);
+        console.log("  Ad ID:", referral.ad_id);
+        console.log("  Campaign ID:", referral.campaign_id);
+
+        // Guardamos datos de campaña en la conversación (sin tocar tu modelo User)
+        await updateConversation(senderPsid, {
+          lastIntent: "ad_entry",
+          campaignRef: referral.ref || null,
+          adId: referral.ad_id || null,
+          campaignId: referral.campaign_id || null,
+        });
+
+        // 💬 Mensaje inicial según la campaña
+        if (referral.ref === "malla_beige") {
+          await callSendAPI(senderPsid, {
+            text: "👋 ¡Hola! Soy Camila de Hanlob. Veo que te interesa la *malla sombra beige* 🌿 ¿Deseas ver precios o medidas?",
+          });
+        } else if (referral.ref === "borde_jardin") {
+          await callSendAPI(senderPsid, {
+            text: "🌱 ¡Hola! Te cuento sobre nuestros *bordes para jardín*. ¿Buscas algo flexible o rígido?",
+          });
+        }
+      }
+
       if (webhookEvent.message) {
         const messageText = webhookEvent.message.text;
         console.log(`📨 Message received from ${senderPsid}: "${messageText}"`);
@@ -261,6 +290,46 @@ app.delete("/conversations/:psid", async (req, res) => {
   }
 });
 
+
+// ============================================
+// 🎯 Asignar campaña manualmente (para pruebas o dashboard)
+// ============================================
+
+// ============================================
+// 📌 Asignar campaña manualmente a un usuario
+// ============================================
+const Campaign = require("./models/Campaign");
+
+app.post("/assign-campaign/:psid", async (req, res) => {
+  try {
+    const { ref } = req.body;
+    const psid = req.params.psid;
+
+    const campaign = await Campaign.findOne({ ref });
+    if (!campaign) {
+      return res.status(404).json({ success: false, error: "Campaña no encontrada" });
+    }
+
+    // ✅ Asegura que la conversación existe
+    let convo = await getConversation(psid);
+    if (!convo) {
+      convo = await updateConversation(psid, { psid, state: "active" });
+    }
+
+    // ✅ Vincula la campaña correctamente
+    await updateConversation(psid, {
+      campaignRef: ref,
+      lastIntent: "campaign_entry",
+      state: "active"
+    });
+
+    console.log(`✅ Campaña ${ref} asignada a ${psid}`);
+    res.json({ success: true, message: `Campaña ${ref} asignada al usuario ${psid}` });
+  } catch (err) {
+    console.error("❌ Error al asignar campaña:", err);
+    res.status(500).json({ success: false, error: "Error del servidor" });
+  }
+});
 
 server.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);

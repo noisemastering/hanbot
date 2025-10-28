@@ -2,7 +2,32 @@
 require("dotenv").config();
 const axios = require("axios");
 const Product = require("./models/Product");
+const ProductFamily = require("./models/ProductFamily");
 const { getValidMLToken } = require("./mlTokenManager");
+
+
+async function findProductFamily(query) {
+  const rx = buildLooseRegex(query);
+  if (!rx) return null;
+
+  const fam = await ProductFamily.findOne({
+    $or: [
+      { name: rx },
+      { keywords: rx },
+      { description: rx }
+    ]
+  }).lean();
+
+  if (!fam) return null;
+
+  return {
+    name: fam.name,
+    description: fam.description,
+    features: fam.features,
+    commonUses: fam.commonUses,
+    imageUrl: fam.imageUrl
+  };
+}
 
 
 function buildLooseRegex(query) {
@@ -51,6 +76,12 @@ async function findLocalProduct(query) {
     }
 
     console.log("🔍 Ejecutando búsqueda local con regex:", rx);
+    // 🚫 Evita búsquedas genéricas como "invernadero", "jardín", "huerto"
+    const genericContexts = ["invernadero", "jardin", "jardín", "huerto", "plantas"];
+    if (genericContexts.some(ctx => query.toLowerCase().includes(ctx))) {
+    console.log("⚠️ Consulta genérica de contexto detectada, sin coincidencia directa de producto.");
+    return null;
+    }
 
     const docs = await Product.find({
       $or: [
@@ -86,11 +117,12 @@ async function findLocalProduct(query) {
     }
 
     return {
-      name: bestMatch.name,
-      price: bestMatch.price || "Consultar precio",
-      permalink: bestMatch.mLink || bestMatch.permalink || "",
-      imageUrl: bestMatch.imageUrl || bestMatch.image || "",
-      source: "mongo",
+        name: bestMatch.name,
+        price: bestMatch.price || "Consultar precio",
+        permalink: bestMatch.mLink || bestMatch.permalink || "",
+        imageUrl: bestMatch.imageUrl || bestMatch.image || "",
+        source: "mongo",
+        isFromML: false
     };
   } catch (err) {
     console.error("❌ Error buscando en MongoDB:", err.message || err);
@@ -131,12 +163,14 @@ async function findMLProduct(query) {
 
     const p = detail.data;
     return {
-      name: p.title,
-      price: p.price || "Consultar precio",
-      permalink: p.permalink,
-      imageUrl: p.thumbnail || (p.pictures && p.pictures[0]?.url) || "",
-      source: "ml",
-    };
+        name: p.title,
+        price: p.price || "Consultar precio",
+        permalink: p.permalink,
+        imageUrl: p.thumbnail || (p.pictures && p.pictures[0]?.url) || "",
+        source: "ml",
+        isFromML: true
+        };
+
   } catch (err) {
     const payload = err.response?.data || err.message;
     console.error("❌ Error buscando en Mercado Libre:", payload);
@@ -173,4 +207,4 @@ async function getProduct(query) {
   return null;
 }
 
-module.exports = { getProduct };
+module.exports = { getProduct, findProductFamily };
