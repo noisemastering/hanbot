@@ -48,6 +48,42 @@ Google Maps 👉 https://www.google.com/maps/place/Hanlob/
     };
   }
 
+  // 🏙️ City response after shipping question (context-aware)
+  // If user was just asked about shipping and responds with a city name
+  if (convo.lastIntent === "shipping_info") {
+    // Any short text response is likely a city name
+    const cityName = msg.trim();
+
+    await updateConversation(psid, {
+      lastIntent: "city_provided",
+      unknownCount: 0
+    });
+
+    // Build context-aware response
+    let response = "";
+
+    if (convo.requestedSize) {
+      // User mentioned a size earlier
+      if (/quer[ée]taro/i.test(cityName)) {
+        response = `Perfecto, estás en Querétaro 🏡. Para la malla sombra de ${convo.requestedSize} que te interesa, el **envío va incluido** en zona urbana.\n\n¿Te gustaría pasar a la bodega o prefieres que te la llevemos? 😊`;
+      } else {
+        response = `Perfecto, enviamos a ${cityName.charAt(0).toUpperCase() + cityName.slice(1)} sin problema 🚚.\n\nPara la malla sombra de ${convo.requestedSize}:\n\n📱 Puedes comprarla en nuestra *Tienda Oficial de Mercado Libre* con envío garantizado\n\n📞 O llámanos: 442 123 4567 / 442 765 4321\n\n¿Con cuál opción te gustaría proceder? 😊`;
+      }
+    } else {
+      // No size mentioned yet
+      if (/quer[ée]taro/i.test(cityName)) {
+        response = `Perfecto, estás en Querétaro 🏡. El **envío va incluido** en zona urbana.\n\nCuéntame, ¿qué medida te interesa? Tenemos:\n• *3x4m* - $450\n• *4x6m* - $650`;
+      } else {
+        response = `Perfecto, enviamos a ${cityName.charAt(0).toUpperCase() + cityName.slice(1)} sin problema 🚚.\n\nCuéntame, ¿qué medida te interesa? Tenemos:\n• *3x4m* - $450\n• *4x6m* - $650`;
+      }
+    }
+
+    return {
+      type: "text",
+      text: response
+    };
+  }
+
   // 💰 BUYING INTENT - Handle purchase requests (HIGH PRIORITY!)
   if (/\b(quiero|comprar|compro|pedir|ordenar|llevar|adquirir|cómo\s+lo\s+compro)\b/i.test(msg)) {
     await updateConversation(psid, { lastIntent: "buying_intent", unknownCount: 0 });
