@@ -64,26 +64,11 @@ Google Maps 👉 https://www.google.com/maps/place/Hanlob/
     let response = "";
 
     if (convo.requestedSize) {
-      // Try to fetch ML link for the requested size
-      // Try with and without "m" suffix (size might be "4x6" or "4x6m")
-      const product = await Product.findOne({
-        $or: [
-          { size: convo.requestedSize },
-          { size: convo.requestedSize + 'm' }
-        ],
-        type: "confeccionada"
-      });
-      const mlLink = product?.mLink;
-
       // User mentioned a size earlier
       if (/quer[ée]taro/i.test(cityName)) {
-        response = `Perfecto, estás en Querétaro 🏡. Para la malla sombra de ${convo.requestedSize} que te interesa, el **envío va incluido** en zona urbana.\n\n¿Te gustaría pasar a la bodega o prefieres que te la llevemos? 😊`;
+        response = `Perfecto, estás en Querétaro 🏡. Para la malla sombra de ${convo.requestedSize} que te interesa, el **envío va incluido** en zona urbana.\n\n¿Te gustaría comprarlo o prefieres más información? 😊`;
       } else {
-        const mlLinkText = mlLink
-          ? `\n\n📱 Puedes comprarla en nuestra *Tienda Oficial de Mercado Libre* con envío garantizado:\n👉 ${mlLink}`
-          : `\n\n📱 Puedes comprarla en nuestra *Tienda Oficial de Mercado Libre* con envío garantizado`;
-
-        response = `Perfecto, enviamos a ${cityName.charAt(0).toUpperCase() + cityName.slice(1)} sin problema 🚚.\n\nPara la malla sombra de ${convo.requestedSize}:${mlLinkText}\n\n📞 O llámanos: 442 123 4567 / 442 765 4321\n\n¿Con cuál opción te gustaría proceder? 😊`;
+        response = `Perfecto, enviamos a ${cityName.charAt(0).toUpperCase() + cityName.slice(1)} sin problema 🚚.\n\nPara la malla sombra de ${convo.requestedSize}, el envío es garantizado.\n\n¿Te gustaría comprarlo o necesitas más información? 😊`;
       }
     } else {
       // No size mentioned yet
@@ -97,6 +82,44 @@ Google Maps 👉 https://www.google.com/maps/place/Hanlob/
     return {
       type: "text",
       text: response
+    };
+  }
+
+  // 📋 DETAILS REQUEST - User asks for more information/details
+  if (/\b(detalles?|m[aá]s\s+informaci[oó]n|m[aá]s\s+info|ver\s+m[aá]s|cu[eé]ntame\s+m[aá]s|especificaciones|ficha\s+t[eé]cnica)\b/i.test(msg)) {
+    await updateConversation(psid, { lastIntent: "details_request", unknownCount: 0 });
+
+    // Check if user has a requested size in context
+    if (convo.requestedSize) {
+      // Try to fetch the ML link for this size
+      const product = await Product.findOne({
+        $or: [
+          { size: convo.requestedSize },
+          { size: convo.requestedSize + 'm' }
+        ],
+        type: "confeccionada"
+      });
+
+      if (product?.mLink) {
+        return {
+          type: "text",
+          text: `Aquí tienes más detalles de la malla sombra de ${convo.requestedSize}:\n\n` +
+                `📱 Puedes verla y comprarla en nuestra *Tienda Oficial de Mercado Libre*:\n` +
+                `👉 ${product.mLink}\n\n` +
+                `🏪 O visítanos en nuestra bodega en Querétaro\n` +
+                `📞 O llámanos: 442 123 4567 / 442 765 4321\n\n` +
+                `¿Con cuál opción te gustaría proceder? 😊`
+        };
+      }
+    }
+
+    // Generic details request without specific size context
+    return {
+      type: "text",
+      text: `Con gusto te doy más información. ¿Sobre qué medida te gustaría saber más?\n\n` +
+            `Tenemos disponibles:\n` +
+            `• *3x4m* - $450\n` +
+            `• *4x6m* - $650`
     };
   }
 

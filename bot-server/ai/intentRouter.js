@@ -61,6 +61,7 @@ async function routeByIntent(intent, message, psid, convo, botName) {
       return null;
 
     // All measure-related and purchase intents go to global handler
+    case "details_request":  // User asks for more info - show ML link
     case "buying_intent":  // HIGH PRIORITY - conversion critical!
     case "measures_generic":
     case "measures_specific":

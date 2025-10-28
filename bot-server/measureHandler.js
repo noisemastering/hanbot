@@ -190,15 +190,11 @@ function generateSizeResponse(options) {
   const responses = [];
 
   if (exact) {
-    // Build base responses with ML link if available
-    const mlLinkText = exact.mLink
-      ? `\n\n📱 Cómpralo en Mercado Libre con envío a toda la República:\n👉 ${exact.mLink}`
-      : '';
-
+    // Generic responses WITHOUT ML link (link shown only on buying intent or when user asks for details)
     responses.push(
-      `¡Perfecto! Tenemos justo la medida **${exact.sizeStr}** disponible por $${exact.price} 🌿${mlLinkText}`,
-      `Sí, contamos con **${exact.sizeStr}** por $${exact.price}${mlLinkText}`,
-      `Tenemos la medida exacta **${exact.sizeStr}** en stock por $${exact.price} ✨${mlLinkText}`
+      `¡Perfecto! Tenemos justo la medida **${exact.sizeStr}** disponible por $${exact.price} 🌿`,
+      `Sí, contamos con **${exact.sizeStr}** por $${exact.price}. ¿Te gustaría ver más detalles?`,
+      `Tenemos la medida exacta **${exact.sizeStr}** en stock por $${exact.price} ✨`
     );
   } else {
     const parts = [];
