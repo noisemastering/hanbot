@@ -1,0 +1,184 @@
+import React from 'react';
+
+function CampaignProductsView({
+  campaignProducts,
+  loading,
+  onAdd,
+  onEdit,
+  onDelete
+}) {
+  return (
+    <div>
+      {/* Header with Add Button */}
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-white">Productos de Campaña</h1>
+          <p className="text-gray-400 mt-2">Gestiona los productos asociados a cada campaña</p>
+        </div>
+        <button
+          onClick={onAdd}
+          className="px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center space-x-2"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          <span>Nuevo Producto de Campaña</span>
+        </button>
+      </div>
+
+      {/* Campaign Products Table */}
+      <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl overflow-hidden">
+        <div className="px-6 py-4 border-b border-gray-700/50">
+          <h2 className="text-xl font-bold text-white">Lista de Productos de Campaña</h2>
+        </div>
+
+        {loading ? (
+          <div className="p-8 text-center">
+            <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+            <p className="text-gray-400 mt-4">Cargando productos de campaña...</p>
+          </div>
+        ) : campaignProducts.length === 0 ? (
+          <div className="p-12 text-center">
+            <div className="w-16 h-16 mx-auto mb-4 bg-gray-700/50 rounded-full flex items-center justify-center">
+              <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+              </svg>
+            </div>
+            <h3 className="text-lg font-semibold text-white mb-2">No hay productos de campaña</h3>
+            <p className="text-gray-400 mb-6">Comienza agregando tu primer producto de campaña</p>
+            <button
+              onClick={onAdd}
+              className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors inline-flex items-center space-x-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              <span>Agregar Producto de Campaña</span>
+            </button>
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-900/50">
+                <tr>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    Producto
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    Campaña
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    Detalles
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    Variantes
+                  </th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    Estado
+                  </th>
+                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
+                    Acciones
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-700/50">
+                {campaignProducts.map((cp) => (
+                  <tr key={cp._id} className="hover:bg-gray-700/30 transition-colors">
+                    <td className="px-6 py-4">
+                      <div className="flex items-center">
+                        <div>
+                          <div className="text-sm font-medium text-white">{cp.name}</div>
+                          {cp.shortName && (
+                            <div className="text-sm text-gray-400">
+                              {cp.shortName}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <code className="text-xs text-primary-400 bg-primary-500/10 px-2 py-1 rounded">
+                        {cp.campaignRef}
+                      </code>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                      <div className="flex flex-col space-y-1">
+                        {cp.shade && (
+                          <span className="text-xs">
+                            <span className="text-gray-500">Sombra:</span> {cp.shade}
+                          </span>
+                        )}
+                        {cp.color && (
+                          <span className="text-xs">
+                            <span className="text-gray-500">Color:</span> {cp.color}
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="flex flex-col space-y-1">
+                        <span className="text-sm text-gray-300">
+                          {cp.variants?.length || 0} variante(s)
+                        </span>
+                        {cp.variants?.length > 0 && (
+                          <div className="flex flex-wrap gap-1">
+                            {cp.variants.slice(0, 3).map((variant, idx) => (
+                              <span
+                                key={idx}
+                                className="text-xs bg-gray-700/50 text-gray-300 px-2 py-0.5 rounded"
+                              >
+                                {variant.size}
+                              </span>
+                            ))}
+                            {cp.variants.length > 3 && (
+                              <span className="text-xs text-gray-500">
+                                +{cp.variants.length - 3}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        cp.active
+                          ? "bg-green-500/20 text-green-300"
+                          : "bg-gray-500/20 text-gray-400"
+                      }`}>
+                        {cp.active ? "Activo" : "Inactivo"}
+                      </span>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex items-center justify-end space-x-2">
+                        <button
+                          onClick={() => onEdit(cp)}
+                          className="p-2 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
+                          title="Editar"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => onDelete(cp)}
+                          className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                          title="Eliminar"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+export default CampaignProductsView;

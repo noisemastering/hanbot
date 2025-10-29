@@ -20,10 +20,7 @@ mongoose.connect(process.env.MONGODB_URI)
   .then(() => console.log('✅ Connected to MongoDB Atlas'))
   .catch(err => console.error('❌ MongoDB connection error:', err));
 
-const productRoutes = require('./routes/productsRoutes');
-app.use('/products', productRoutes);
-
-// --- CORS CONFIG ---
+// --- CORS CONFIG (MUST BE BEFORE ROUTES) ---
 const cors = require("cors");
 
 app.use(
@@ -32,13 +29,22 @@ app.use(
       "http://localhost:3001", // tu dashboard local
       "https://emanational-leeanna-impressionable.ngrok-free.dev" // tu túnel ngrok actual
     ],
-    methods: ["GET", "POST", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"]
   })
 );
 
 // Asegura respuesta correcta a preflight requests (CORS)
 app.options(/.*/, cors());
+
+// Register routes AFTER CORS middleware
+const productRoutes = require('./routes/productsRoutes');
+const campaignRoutes = require('./routes/campaignsRoutes');
+const campaignProductRoutes = require('./routes/campaignProductsRoutes');
+
+app.use('/products', productRoutes);
+app.use('/campaigns', campaignRoutes);
+app.use('/campaign-products', campaignProductRoutes);
 
 
 // Middleware - Parse JSON payloads
