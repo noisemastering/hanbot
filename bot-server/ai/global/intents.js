@@ -16,21 +16,56 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   console.log("🌍 INTENTOS GLOBALES CHECANDO →", msg);
 
+  // Normalize common misspellings
+  msg = msg.replace(/\bmaya\b/gi, 'malla')
+           .replace(/\bmaia\b/gi, 'malla');
+
+  // ✅ AFFIRMATIVE RESPONSE - Handle "sí", "si", "yes", "dale" after showing size/price
+  if (/^(s[ií]|yes|dale|ok|claro|perfecto|adelante|por\s+favor)$/i.test(msg.trim())) {
+    // Check if user was just shown a specific size/price
+    if (convo.lastIntent === "specific_measure" && convo.requestedSize) {
+      const sizeVariants = [convo.requestedSize, convo.requestedSize + 'm'];
+
+      // Add swapped dimensions
+      const match = convo.requestedSize.match(/(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)/);
+      if (match) {
+        const swapped = `${match[2]}x${match[1]}`;
+        sizeVariants.push(swapped, swapped + 'm');
+      }
+
+      const product = await Product.findOne({
+        size: { $in: sizeVariants },
+        type: "confeccionada"
+      });
+
+      if (product?.mLink) {
+        await updateConversation(psid, { lastIntent: "affirmative_link_provided", unknownCount: 0 });
+
+        return {
+          type: "text",
+          text: `Aquí está el enlace de nuestra Tienda Oficial en Mercado Libre para la malla sombra de ${convo.requestedSize}:\n\n` +
+                `${product.mLink}\n\n` +
+                `Estamos disponibles para cualquier información adicional.`
+        };
+      }
+    }
+  }
+
   // 📍 Ubicación
   if (/donde|ubicad[oa]|direccion|qued[ao]|mapa|local/i.test(msg)) {
     await updateConversation(psid, { lastIntent: "location_info" });
 
     return {
       type: "text",
-      text: `📍 Estamos en Querétaro:
+      text: `Estamos en Querétaro:
 
-**Hanlob - Microparque Industrial Navex Park**  
-Calle Loma de San Gremal No. 108, **bodega 73**,  
+**Hanlob - Microparque Industrial Navex Park**
+Calle Loma de San Gremal No. 108, **bodega 73**,
 Col. Ejido Santa María Magdalena, C.P. 76137, Santiago de Querétaro, Qro.
 
-Google Maps 👉 https://www.google.com/maps/place/Hanlob/
+Google Maps: https://www.google.com/maps/place/Hanlob/
 
-¿Te gustaría pasar o prefieres envío? 🚚😊`
+¿Te gustaría pasar a la bodega o prefieres que te enviemos el producto?`
     };
   }
 
@@ -38,21 +73,42 @@ Google Maps 👉 https://www.google.com/maps/place/Hanlob/
   if (/env[ií]o|entregan|domicilio|reparto|llega|envias|paquete/i.test(msg)) {
     await updateConversation(psid, { lastIntent: "shipping_info" });
 
+    // If user already asked about a specific size, give them the link directly
+    if (convo.requestedSize) {
+      const sizeVariants = [convo.requestedSize, convo.requestedSize + 'm'];
+
+      // Add swapped dimensions
+      const match = convo.requestedSize.match(/(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)/);
+      if (match) {
+        const swapped = `${match[2]}x${match[1]}`;
+        sizeVariants.push(swapped, swapped + 'm');
+      }
+
+      const product = await Product.findOne({
+        size: { $in: sizeVariants },
+        type: "confeccionada"
+      });
+
+      if (product?.mLink) {
+        return {
+          type: "text",
+          text: `Sí, enviamos a todo el país. Aquí está el enlace de la malla sombra de ${convo.requestedSize}:\n\n${product.mLink}`
+        };
+      }
+    }
+
     return {
       type: "text",
-      text: `🚚 **Sí realizamos entregas.**
-
-• En *Querétaro zona urbana*, el envío normalmente **va incluido** 🏡
-• A todo el país enviamos con **entrega garantizada** desde nuestra *Tienda Oficial en Mercado Libre*.
-
-¿En qué ciudad te encuentras? 😊`
+      text: `Sí realizamos entregas.\n\n• En Querétaro zona urbana, el envío normalmente va incluido\n• A todo el país enviamos con entrega garantizada desde nuestra Tienda Oficial en Mercado Libre\n\n¿En qué ciudad te encuentras?`
     };
   }
 
   // 🏙️ City response after shipping question (context-aware)
   // If user was just asked about shipping and responds with a city name
-  if (convo.lastIntent === "shipping_info") {
-    // Any short text response is likely a city name
+  // BUT NOT if they're asking another question (precio, medida, etc.)
+  if (convo.lastIntent === "shipping_info" &&
+      !/\b(precio|cuanto|cuesta|medida|tamaño|dimension|tiene|hay|vende|fabrica|color)\b/i.test(msg)) {
+    // Short text response is likely a city name
     const cityName = msg.trim();
 
     await updateConversation(psid, {
@@ -101,24 +157,27 @@ Google Maps 👉 https://www.google.com/maps/place/Hanlob/
 
     // Check if we have a size to show details for
     if (sizeToShow) {
-      // Try to fetch the ML link for this size
+      // Try to fetch the ML link for this size (with dimension swapping)
+      const sizeVariants = [sizeToShow, sizeToShow + 'm'];
+
+      // Add swapped dimensions
+      const match = sizeToShow.match(/(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)/);
+      if (match) {
+        const swapped = `${match[2]}x${match[1]}`;
+        sizeVariants.push(swapped, swapped + 'm');
+      }
+
       const product = await Product.findOne({
-        $or: [
-          { size: sizeToShow },
-          { size: sizeToShow + 'm' }
-        ],
+        size: { $in: sizeVariants },
         type: "confeccionada"
       });
 
       if (product?.mLink) {
         return {
           type: "text",
-          text: `Aquí tienes más detalles de la malla sombra de ${sizeToShow}:\n\n` +
-                `📱 Puedes verla y comprarla en nuestra *Tienda Oficial de Mercado Libre*:\n` +
-                `👉 ${product.mLink}\n\n` +
-                `🏪 O visítanos en nuestra bodega en Querétaro\n` +
-                `📞 O llámanos: 442 123 4567 / 442 765 4321\n\n` +
-                `¿Con cuál opción te gustaría proceder? 😊`
+          text: `Aquí está el enlace seguro de nuestra Tienda Oficial en Mercado Libre para la malla sombra de ${sizeToShow}:\n\n` +
+                `${product.mLink}\n\n` +
+                `Estamos disponibles para cualquier información adicional.`
         };
       }
     }
@@ -144,40 +203,51 @@ Google Maps 👉 https://www.google.com/maps/place/Hanlob/
       // Try to fetch the ML link for this size
       let mlLink = null;
       if (convo.requestedSize) {
-        // Try with and without "m" suffix (size might be "4x6" or "4x6m")
+        // Try with and without "m" suffix, and also swapped dimensions
+        // (e.g., user asks "4x6" but DB has "6x4m")
+        const sizeVariants = [convo.requestedSize, convo.requestedSize + 'm'];
+
+        // Add swapped dimensions
+        const match = convo.requestedSize.match(/(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)/);
+        if (match) {
+          const swapped = `${match[2]}x${match[1]}`;
+          sizeVariants.push(swapped, swapped + 'm');
+        }
+
         const product = await Product.findOne({
-          $or: [
-            { size: convo.requestedSize },
-            { size: convo.requestedSize + 'm' }
-          ],
+          size: { $in: sizeVariants },
           type: "confeccionada"
         });
         mlLink = product?.mLink;
       }
 
-      const mlLinkText = mlLink
-        ? `📱 *Opción 1*: Puedes adquirirla en nuestra *Tienda Oficial de Mercado Libre* con envío a toda la República:\n👉 ${mlLink}\n\n`
-        : `📱 *Opción 1*: Búscala en nuestra *Tienda Oficial de Mercado Libre* (envío a toda la República)\n\n`;
-
-      return {
-        type: "text",
-        text: `¡Perfecto! 🎉 Para comprar la malla sombra ${size}:\n\n` +
-              mlLinkText +
-              `🏪 *Opción 2*: Visítanos en nuestra bodega en Querétaro (envío incluido en zona urbana)\n\n` +
-              `📞 *Opción 3*: Llámanos para hacer tu pedido:\n` +
-              `442 123 4567 / 442 765 4321\n\n` +
-              `¿Con cuál opción te gustaría proceder? 😊`
-      };
+      if (mlLink) {
+        return {
+          type: "text",
+          text: `Perfecto. Aquí está el enlace seguro de nuestra Tienda Oficial en Mercado Libre para la malla sombra de ${size}:\n\n` +
+                `${mlLink}\n\n` +
+                `Estamos disponibles para cualquier información adicional.`
+        };
+      } else {
+        return {
+          type: "text",
+          text: `Perfecto. Para comprar la malla sombra de ${size}, puedes:\n\n` +
+                `• Buscarla en nuestra Tienda Oficial de Mercado Libre\n` +
+                `• Visitarnos en nuestra bodega en Querétaro\n` +
+                `• Llamarnos: 442 123 4567 / 442 765 4321\n\n` +
+                `¿Cuál opción prefieres?`
+        };
+      }
     }
 
     // No specific size mentioned yet
     return {
       type: "text",
-      text: `¡Excelente! 🎉 ¿Qué medida te interesa?\n\n` +
+      text: `Perfecto. ¿Qué medida te interesa?\n\n` +
             `Tenemos disponibles:\n` +
-            `• *3x4m* - $450\n` +
-            `• *4x6m* - $650\n\n` +
-            `Dime cuál prefieres y te ayudo con el proceso de compra 😊`
+            `• 3x4m - $450\n` +
+            `• 4x6m - $650\n\n` +
+            `Dime cuál prefieres.`
     };
   }
 
@@ -242,8 +312,26 @@ Google Maps 👉 https://www.google.com/maps/place/Hanlob/
   // Parse specific dimensions from message
   const dimensions = parseDimensions(msg);
 
+  // Handle custom size questions BEFORE generic measures
+  if (/\b(medidas?\s+(personalizad[ao]s?|especiales?|a\s+medida|custom)|pueden?\s+(hacer|fabricar|crear).*medida|venden?\s+(por|x)\s+medidas?)\b/i.test(msg)) {
+    await updateConversation(psid, { lastIntent: "custom_sizes_question", unknownCount: 0 });
+
+    return {
+      type: "text",
+      text: `Sí, manejamos medidas estándar pero también fabricamos a la medida que necesites.\n\n` +
+            `Algunas de nuestras medidas estándar son:\n` +
+            `• 3x4m - $450\n` +
+            `• 4x6m - $650\n` +
+            `• 5x4m - $575\n\n` +
+            `¿Qué medida necesitas?`
+    };
+  }
+
   // Generic measure/price inquiry (no specific dimensions mentioned)
-  const isGenericMeasureQuery = /\b(medidas|tamaños?|dimensiones|cu[aá]nto|precio|cuestan)\b.*\b(medidas|disponibles|tienen|hay|manejan)\b/i.test(msg) && !dimensions;
+  // Simplified: just asking about price, sizes, or cost
+  const isGenericMeasureQuery = /\b(precio|cuestan?|cu[aá]nto|medidas?|tamaños?|dimensiones|disponibles?)\b/i.test(msg) &&
+                                  !/\b(instalaci[oó]n|color|material|env[ií]o|ubicaci[oó]n|donde)\b/i.test(msg) &&
+                                  !dimensions;
 
   if (dimensions || isGenericMeasureQuery) {
     const availableSizes = await getAvailableSizes();
@@ -275,6 +363,32 @@ Google Maps 👉 https://www.google.com/maps/place/Hanlob/
 
       await updateConversation(psid, updateData);
 
+      // If exact match, provide ML link immediately
+      if (closest.exact) {
+        const sizeVariants = [requestedSizeStr, requestedSizeStr + 'm'];
+
+        // Add swapped dimensions
+        const match = requestedSizeStr.match(/(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)/);
+        if (match) {
+          const swapped = `${match[2]}x${match[1]}`;
+          sizeVariants.push(swapped, swapped + 'm');
+        }
+
+        const product = await Product.findOne({
+          size: { $in: sizeVariants },
+          type: "confeccionada"
+        });
+
+        if (product?.mLink) {
+          return {
+            type: "text",
+            text: `Sí, contamos con **${closest.exact.sizeStr}** por $${closest.exact.price}.\n\n` +
+                  `Aquí está el enlace de nuestra Tienda Oficial en Mercado Libre:\n\n` +
+                  `${product.mLink}`
+          };
+        }
+      }
+
       return {
         type: "text",
         text: generateSizeResponse({
@@ -295,6 +409,18 @@ Google Maps 👉 https://www.google.com/maps/place/Hanlob/
         text: generateGenericSizeResponse(availableSizes)
       };
     }
+  }
+
+  // Handle vague dimension requests ("tipo casa", "tipo A", "más o menos", etc.)
+  if (/\b(tipo\s+[a-z]|m[aá]s\s+o\s+menos|aproximad[ao]|grande|peque[nñ]o|mediano|chico)\b/i.test(msg) &&
+      /\b(necesito|ocupo|quiero|requiero)\b/i.test(msg)) {
+    await updateConversation(psid, { lastIntent: "vague_dimensions", unknownCount: 0 });
+
+    return {
+      type: "text",
+      text: `Para ayudarte mejor, necesito las medidas específicas del área que quieres cubrir.\n\n` +
+            `¿Podrías decirme el largo y el ancho en metros? Por ejemplo: 4x6, 3x5, etc.`
+    };
   }
 
   // Si no coincide ninguna intención global:
