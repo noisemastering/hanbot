@@ -4,12 +4,17 @@ const Conversation = require("./models/Conversation");
 
 const ConversationSchema = new mongoose.Schema({
   psid: { type: String, required: true, unique: true },
-  state: { type: String, default: "new" }, // new | active | closed
+  state: {
+    type: String,
+    default: "new",
+    enum: ["new", "active", "closed", "needs_human", "human_active"] // 👈 Added human_active
+  }, // new | active | closed | needs_human | human_active
   greeted: { type: Boolean, default: false },
   lastIntent: { type: String, default: null },
   lastMessageAt: { type: Date, default: Date.now },
   lastGreetTime: { type: Number, default: 0 },
-  unknownCount: { type: Number, default: 0 } // 👈 NUEVO campo
+  unknownCount: { type: Number, default: 0 },
+  clarificationCount: { type: Number, default: 0 } // 👈 Para rastrear intentos de clarificación
 });
 
 // 🔍 Obtener (y crear si no existe)
