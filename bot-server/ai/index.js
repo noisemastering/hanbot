@@ -181,7 +181,19 @@ async function generateReply(userMessage, psid, referral = null) {
     if (familyResponse) return familyResponse;
 
     // 🛒 Búsqueda de producto (solo si hay keywords)
-    if (productKeywordRegex.test(cleanMsg)) {
+    // Skip product search for multi-question scenarios - let fallback handle comprehensive answers
+    const multiQuestionIndicators = [
+      /precio|costo|cu[aá]nto.*(?:cuesta|vale)/i, // Price questions
+      /\b(si|funciona|repele|impermeable|agua)\b.*\b(agua|repele|impermeable|funciona)/i, // Water/function questions
+      /\by\s+(si|funciona|repele|tiempo|entrega|pago|forma|cuanto|donde)/i, // Multiple questions with "y"
+      /\btambién|además|ademas/i, // Also/additionally
+      /\?.*\?/, // Multiple question marks
+      /,.*\b(y|si|tiempo|entrega|pago|forma|costo|precio)/i // Commas followed by other questions
+    ];
+
+    const isMultiQuestion = multiQuestionIndicators.some(regex => regex.test(cleanMsg));
+
+    if (!isMultiQuestion && productKeywordRegex.test(cleanMsg)) {
       const product = await getProduct(cleanMsg);
       if (product) {
         await updateConversation(psid, { lastIntent: "product_search", state: "active", unknownCount: 0 });
@@ -200,6 +212,8 @@ async function generateReply(userMessage, psid, referral = null) {
           imageUrl: product.imageUrl
         };
       }
+    } else if (isMultiQuestion) {
+      console.log("⏩ Multi-question detected before product search, skipping to fallback");
     }
 
     // 🔁 Respuestas automáticas rápidas (FAQ / respuestas simples)

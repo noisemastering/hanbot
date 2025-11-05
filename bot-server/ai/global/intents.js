@@ -180,11 +180,30 @@ Google Maps: https://www.google.com/maps/place/Hanlob/
 
   // ⏰ Delivery time and payment questions (BEFORE shipping handler to catch "cuando llega")
   if (/cu[aá]nto\s+tiempo|cuando\s+llega|tiempo\s+de\s+entrega|tarda|demora|anticipo|pago\s+contra\s+entrega|forma\s+de\s+pago|c[oó]mo\s+pag/i.test(msg)) {
+    // 🔴 SKIP if message contains MULTIPLE questions (let fallback handle comprehensive answer)
+    const multiQuestionIndicators = [
+      /precio|costo|cu[aá]nto.*(?:cuesta|vale)/i, // Price questions
+      /\b(si|funciona|repele|impermeable|agua)\b.*\b(agua|repele|impermeable|funciona)/i, // Water/function questions
+      /\by\s+(si|funciona|repele|tiempo|entrega|pago|forma|cuanto|donde)/i, // Multiple questions with "y"
+      /\btambién|además|ademas/i, // Also/additionally
+      /\?.*\?/, // Multiple question marks
+      /,.*\b(y|si|tiempo|entrega|pago|forma|costo|precio)/i // Commas followed by other questions
+    ];
+
+    const isMultiQuestion = multiQuestionIndicators.some(regex => regex.test(msg));
+    if (isMultiQuestion) {
+      console.log("⏩ Multi-question detected in delivery_time_payment handler, skipping to fallback");
+      return null; // Let fallback handle it with complete answer
+    }
+
     await updateConversation(psid, { lastIntent: "delivery_time_payment" });
 
     return {
       type: "text",
-      text: "El pago se realiza al ordenar en Mercado Libre"
+      text: "El pago se realiza 100% en Mercado Libre al hacer el pedido. Aceptamos tarjetas, efectivo y meses sin intereses.\n\n" +
+            "Tiempos de entrega:\n" +
+            "• CDMX y zona metropolitana: 1-2 días hábiles\n" +
+            "• Interior de la República: 3-5 días hábiles"
     };
   }
 

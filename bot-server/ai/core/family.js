@@ -7,6 +7,22 @@ async function handleFamilyFlow(cleanMsg, psid, convo) {
   const familyDetected = await findFamily(cleanMsg);
   if (!familyDetected) return null;
 
+  // 🔴 SKIP if message contains MULTIPLE questions (let fallback handle comprehensive answer)
+  const multiQuestionIndicators = [
+    /precio|costo|cu[aá]nto.*(?:cuesta|vale)/i, // Price questions
+    /\b(si|funciona|repele|impermeable|agua)\b.*\b(agua|repele|impermeable|funciona)/i, // Water/function questions
+    /\by\s+(si|funciona|repele|tiempo|entrega|pago|forma|cuanto|donde)/i, // Multiple questions with "y"
+    /\btambién|además|ademas/i, // Also/additionally
+    /\?.*\?/, // Multiple question marks
+    /,.*\b(y|si|tiempo|entrega|pago|forma|costo|precio)/i // Commas followed by other questions
+  ];
+
+  const isMultiQuestion = multiQuestionIndicators.some(regex => regex.test(cleanMsg));
+  if (isMultiQuestion) {
+    console.log("⏩ Multi-question detected in handleFamilyFlow, skipping to fallback");
+    return null; // Let fallback handle it with complete answer
+  }
+
   if (convo.familyShown === familyDetected.name) {
     await updateConversation(psid, { lastIntent: "family_repeat", unknownCount: 0 });
     return { type: "text", text: `Claro 😊, seguimos con ${familyDetected.name.toLowerCase()}. ¿Te interesa ver las opciones en **beige confeccionada** o en **rollos monofilamento**?` };

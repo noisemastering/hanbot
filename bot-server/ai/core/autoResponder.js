@@ -6,6 +6,20 @@ async function autoResponder(cleanMsg) {
   const family = await findFamily(cleanMsg);
   if (!family) return null;
 
+  // 🔴 SKIP if message contains multiple questions (let fallback handle it)
+  const multiQuestionIndicators = [
+    /\by\s+(si|funciona|repele|tiempo|entrega|pago|forma|cuanto|donde)/i, // "y si funciona"
+    /\btambién|además|ademas/i, // también, además
+    /\?.*\?/,  // múltiples signos de interrogación
+    /,.*\b(y|si|tiempo|entrega|pago|forma)/i // comas seguidas de otras preguntas
+  ];
+
+  const isMultiQuestion = multiQuestionIndicators.some(regex => regex.test(cleanMsg));
+  if (isMultiQuestion) {
+    console.log("⏩ Multi-question detected in autoResponder, skipping to fallback");
+    return null; // Let fallback handle it
+  }
+
   const subfamilies = await ProductSubfamily.find({ familyId: family._id }).lean();
 
   // Detectar intención simple
