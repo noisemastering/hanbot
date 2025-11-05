@@ -11,7 +11,7 @@ const { classifyIntent } = require("./intentClassifier");
 const { routeByIntent } = require("./intentRouter");
 
 const { handleGlobalIntents } = require("./global/intents");
-const { handleGreeting, handleThanks, handleOptOut } = require("./core/greetings");
+const { handleGreeting, handleThanks, handleOptOut, handleAcknowledgment } = require("./core/greetings");
 const { handleCatalogOverview } = require("./core/catalog");
 const { handleFamilyFlow } = require("./core/family");
 const { autoResponder } = require("./core/autoResponder");
@@ -69,6 +69,10 @@ async function generateReply(userMessage, psid, referral = null) {
       console.log("⚠️ Auto-escalating to human after multiple failures");
       return await handleHumanHandoff(userMessage, psid, convo, "auto_escalation");
     }
+
+    // 👍 ACKNOWLEDGMENT: Handle simple acknowledgments and emojis (before AI calls)
+    const acknowledgmentResponse = await handleAcknowledgment(cleanMsg, psid, convo);
+    if (acknowledgmentResponse) return acknowledgmentResponse;
 
     // 🧠 Si hay campaña activa, intentar intención global primero
     if (campaign) {

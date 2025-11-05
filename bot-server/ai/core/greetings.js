@@ -60,4 +60,21 @@ async function handleOptOut(cleanMsg, convo) {
   return null;
 }
 
-module.exports = { handleGreeting, handleThanks, handleOptOut };
+// 👍 Handle acknowledgment emojis and confirmations
+async function handleAcknowledgment(cleanMsg, psid, convo) {
+  // Check for acknowledgment emojis or simple confirmations (with or without text)
+  const isAcknowledgment = /^(👍|👌|✅|❤️|😊|🙂|👏|💯|ok|vale|perfecto|excelente|entendido|si|sí|dale|claro|listo)[\s!]*$/i.test(cleanMsg);
+
+  if (isAcknowledgment) {
+    console.log("👍 Acknowledgment detected:", cleanMsg);
+    await updateConversation(psid, { lastIntent: "acknowledgment", unknownCount: 0 });
+
+    return {
+      type: "text",
+      text: "Perfecto! ¿Hay algo más en lo que pueda ayudarte?"
+    };
+  }
+  return null;
+}
+
+module.exports = { handleGreeting, handleThanks, handleOptOut, handleAcknowledgment };
