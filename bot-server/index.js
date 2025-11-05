@@ -241,9 +241,11 @@ app.post("/webhook", async (req, res) => {
           await saveMessage(recipientPsid, messageText, "human");
           await updateConversation(recipientPsid, {
             state: "human_active",
-            lastIntent: "human_takeover"
+            lastIntent: "human_takeover",
+            agentTookOverAt: new Date()
           });
-          // Don't generate bot response
+          // Don't generate bot response - acknowledge webhook and return
+          res.sendStatus(200);
           return;
         }
 
@@ -269,13 +271,13 @@ app.post("/webhook", async (req, res) => {
         // Message from user
         console.log(`📨 User message received from ${senderPsid}: "${messageText || '[image]'}"`);
 
-        // Check if conversation is in human_active state
-        const { getConversation } = require("./conversationManager");
-        const convo = await getConversation(senderPsid);
+        // Check if human agent is currently handling this conversation
+        const { getConversation, isHumanActive } = require("./conversationManager");
 
-        if (convo.state === "human_active") {
+        if (await isHumanActive(senderPsid)) {
           console.log(`⏸️ Conversation with ${senderPsid} is being handled by a human agent. Bot will not respond.`);
           await saveMessage(senderPsid, messageText || "[image]", "user");
+          res.sendStatus(200);
           return;
         }
 
