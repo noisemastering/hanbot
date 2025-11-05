@@ -27,6 +27,7 @@ app.use(
   cors({
     origin: [
       "http://localhost:3001", // tu dashboard local
+      "https://hanbot-nu.vercel.app", // production dashboard
       "https://emanational-leeanna-impressionable.ngrok-free.dev" // tu túnel ngrok actual
     ],
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
@@ -59,7 +60,10 @@ const { Server } = require("socket.io");
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: ["http://localhost:3001"],
+    origin: [
+      "http://localhost:3001",
+      "https://hanbot-nu.vercel.app"
+    ],
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type", "Authorization"]
   }
