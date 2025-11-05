@@ -11,11 +11,13 @@ const { classifyIntent } = require("./intentClassifier");
 const { routeByIntent } = require("./intentRouter");
 
 const { handleGlobalIntents } = require("./global/intents");
-const { handleGreeting, handleThanks } = require("./core/greetings");
+const { handleGreeting, handleThanks, handleOptOut } = require("./core/greetings");
 const { handleCatalogOverview } = require("./core/catalog");
 const { handleFamilyFlow } = require("./core/family");
 const { autoResponder } = require("./core/autoResponder");
 const { handleFallback } = require("./core/fallback");
+const { detectEdgeCase, handleUnintelligible, handleComplexQuestion } = require("./core/edgeCaseHandler");
+const { isHumanHandoffRequest, handleHumanHandoff, detectFrustration, shouldAutoEscalate } = require("./core/humanHandoff");
 
 
 
@@ -32,7 +34,7 @@ async function generateReply(userMessage, psid, referral = null) {
     const convo = await getConversation(psid);
     console.log("🧩 Conversación actual:", convo);
 
-    // 🎯 Detectar campaña activa
+    // 🎯 Detectar campaña activa (MOVED UP - no AI calls needed)
     let campaign = null;
     if (!convo.campaignRef && referral?.ref) {
       campaign = await Campaign.findOne({ ref: referral.ref, active: true });
@@ -42,6 +44,30 @@ async function generateReply(userMessage, psid, referral = null) {
       }
     } else if (convo.campaignRef) {
       campaign = await Campaign.findOne({ ref: convo.campaignRef });
+    }
+
+    // 🚫 Check for opt-out (when conversation is closed and user confirms with "no")
+    const optOutResponse = await handleOptOut(cleanMsg, convo);
+    if (optOutResponse && optOutResponse.type === "no_response") {
+      // Don't send any response - user has opted out
+      return null;
+    }
+
+    // 🤝 HUMAN HANDOFF: Check if user explicitly wants to talk to a human
+    if (isHumanHandoffRequest(cleanMsg)) {
+      return await handleHumanHandoff(userMessage, psid, convo, "explicit");
+    }
+
+    // 🤝 HUMAN HANDOFF: Check for frustration
+    if (detectFrustration(cleanMsg)) {
+      console.log("⚠️ Frustration detected, offering human handoff");
+      return await handleHumanHandoff(userMessage, psid, convo, "frustrated");
+    }
+
+    // 🤝 HUMAN HANDOFF: Auto-escalate if needed (after multiple failures)
+    if (shouldAutoEscalate(convo)) {
+      console.log("⚠️ Auto-escalating to human after multiple failures");
+      return await handleHumanHandoff(userMessage, psid, convo, "auto_escalation");
     }
 
     // 🧠 Si hay campaña activa, intentar intención global primero
@@ -63,14 +89,58 @@ async function generateReply(userMessage, psid, referral = null) {
       }
     }
 
-    // 🤖 AI-POWERED INTENT CLASSIFICATION (NEW!)
-    // This gives us flexibility to handle misspellings, slang, and variations
-    const classification = await classifyIntent(userMessage, {
-      psid,
-      lastIntent: convo.lastIntent,
-      campaignRef: convo.campaignRef
-    });
+    // 🚨 OPTIMIZED: Run edge case detection and intent classification IN PARALLEL
+    const isLikelyCityResponse =
+      (convo.lastIntent === "shipping_info" ||
+       convo.lastIntent === "specific_measure" ||
+       convo.lastIntent === "city_provided") &&
+      cleanMsg.length > 2 &&
+      cleanMsg.length < 40 &&
+      cleanMsg.split(/\s+/).length <= 4 &&
+      !/\b(precio|cuanto|cuesta|medida|tamaño|dimension|tiene|hay|vende|fabrica|color|hola|buenos|buenas|que tal)\b/i.test(cleanMsg);
 
+    // Check if message contains dimension patterns (e.g., "7x5", "7 x 5", "3 por 4")
+    const hasDimensionPattern = /\d+(?:\.\d+)?\s*[xX×]\s*\d+(?:\.\d+)?/.test(cleanMsg) ||
+                                /\d+(?:\.\d+)?\s+por\s+\d+(?:\.\d+)?/i.test(cleanMsg) ||
+                                /(?:de|medida)\s+\d+(?:\.\d+)?\s+\d+(?:\.\d+)?/i.test(cleanMsg);
+
+    // Skip edge case detection if message has clear dimensions or is likely a city name
+    const skipEdgeCaseDetection = isLikelyCityResponse || hasDimensionPattern;
+
+    // Run AI calls in parallel to save time
+    const [edgeCase, classification] = await Promise.all([
+      skipEdgeCaseDetection
+        ? Promise.resolve({ isUnintelligible: false, isComplex: false, confidence: 0 })
+        : detectEdgeCase(userMessage, openai),
+      classifyIntent(userMessage, {
+        psid,
+        lastIntent: convo.lastIntent,
+        campaignRef: convo.campaignRef
+      })
+    ]);
+
+    // Check edge cases first (unintelligible or complex)
+    if (!skipEdgeCaseDetection) {
+      if (edgeCase.isComplex && edgeCase.confidence > 0.9) {
+        console.log(`🔴 Mensaje complejo detectado (${edgeCase.confidence}): ${edgeCase.reason}`);
+        return await handleComplexQuestion(psid, edgeCase.reason);
+      }
+
+      if (edgeCase.isUnintelligible && edgeCase.confidence > 0.9) {
+        console.log(`⚠️ Mensaje ininteligible detectado (${edgeCase.confidence}): ${edgeCase.reason}`);
+        return await handleUnintelligible(psid, convo, BOT_PERSONA_NAME);
+      }
+    }
+
+    // ✅ Message is understandable - reset clarification counter if it was set
+    if (convo.clarificationCount > 0) {
+      updateConversation(psid, { clarificationCount: 0 }).catch(err =>
+        console.error("Error resetting clarification count:", err)
+      );
+      console.log("✅ Mensaje entendido, contador de clarificación reiniciado");
+    }
+
+    // 🤖 AI-POWERED INTENT CLASSIFICATION
     // Try to route by classified intent
     if (classification.confidence > 0.6) {
       const intentResponse = await routeByIntent(

@@ -3,19 +3,97 @@ const Product = require("./models/Product");
 const CampaignProduct = require("./models/CampaignProduct");
 
 /**
+ * Converts Spanish number words to digits
+ * @param {string} text - Text containing number words
+ * @returns {string} - Text with numbers converted to digits
+ */
+function convertSpanishNumbersToDigits(text) {
+  const numberMap = {
+    'cero': '0', 'uno': '1', 'una': '1', 'dos': '2', 'tres': '3', 'cuatro': '4',
+    'cinco': '5', 'seis': '6', 'siete': '7', 'ocho': '8', 'nueve': '9',
+    'diez': '10', 'once': '11', 'doce': '12', 'trece': '13', 'catorce': '14',
+    'quince': '15', 'dieciséis': '16', 'dieciseis': '16', 'diecisiete': '17',
+    'dieciocho': '18', 'diecinueve': '19', 'veinte': '20', 'veintiuno': '21',
+    'veintidós': '22', 'veintidos': '22', 'veintitrés': '23', 'veintitres': '23',
+    'veinticuatro': '24', 'veinticinco': '25', 'treinta': '30', 'cuarenta': '40',
+    'cincuenta': '50', 'sesenta': '60', 'setenta': '70', 'ochenta': '80', 'noventa': '90'
+  };
+
+  let converted = text.toLowerCase();
+
+  // STEP 1: Handle "NUMBER y medio" patterns first (e.g., "nueve metros y medio" → "9.5")
+  // This must happen BEFORE we replace individual number words
+  // Note: We remove "metros" from the output to allow "9.5 por 1.30" pattern matching
+  converted = converted.replace(/\b(uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|dieciséis|dieciseis|diecisiete|dieciocho|diecinueve|veinte|veintiuno|veintidós|veintidos|veintitrés|veintitres|veinticuatro|veinticinco|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa)\s+metros?\s+y\s+medio\b/gi, (match, num) => {
+    const numVal = numberMap[num.toLowerCase()];
+    if (numVal) {
+      return `${numVal}.5`;
+    }
+    return match;
+  });
+
+  // STEP 2: Handle decimal patterns like "uno treinta" (1.30)
+  // Small number (≤10) followed by another number = decimal
+  converted = converted.replace(/\b(uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s+(diez|veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cero|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve)\b/gi, (match, ones, decimal) => {
+    const onesVal = numberMap[ones.toLowerCase()];
+    const decimalVal = numberMap[decimal.toLowerCase()];
+
+    if (onesVal && decimalVal && parseInt(onesVal) <= 10) {
+      return `${onesVal}.${decimalVal}`;
+    }
+    return match;
+  });
+
+  // STEP 3: Handle compound numbers like "treinta y cinco" (35)
+  converted = converted.replace(/\b(veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa)\s+y\s+(uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve)\b/gi, (match, tens, ones) => {
+    const tensVal = numberMap[tens.toLowerCase()];
+    const onesVal = numberMap[ones.toLowerCase()];
+    if (tensVal && onesVal) {
+      return (parseInt(tensVal) + parseInt(onesVal)).toString();
+    }
+    return match;
+  });
+
+  // STEP 4: Replace remaining simple number words
+  for (const [word, digit] of Object.entries(numberMap)) {
+    const regex = new RegExp(`\\b${word}\\b`, 'gi');
+    converted = converted.replace(regex, digit);
+  }
+
+  return converted;
+}
+
+/**
  * Parses dimension patterns from user message
  * Supports: "15 x 25", "8x8", "De. 8 8", "2.80 x 3.80"
+ * Also supports: "nueve metros y medio por uno treinta" (9.5 x 1.30)
  * @param {string} message - User's message
  * @returns {object|null} - {width, height, area} or null if not found
  */
 function parseDimensions(message) {
+  // Convert Spanish number words to digits first
+  const converted = convertSpanishNumbersToDigits(message);
+
   // Pattern 1: "15 x 25" or "15x25"
   const pattern1 = /(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/;
 
   // Pattern 2: "De. 8 8" or "de 8 8"
   const pattern2 = /(?:de\.?|medida)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)/i;
 
-  let match = message.match(pattern1) || message.match(pattern2);
+  // Pattern 3: "9.5 por 1.30" (por = by in Spanish)
+  const pattern3 = /(\d+(?:\.\d+)?)\s+por\s+(\d+(?:\.\d+)?)/i;
+
+  // Pattern 4: "metros por metros" with optional "de"
+  const pattern4 = /(\d+(?:\.\d+)?)\s+metros?\s+(?:de\s+)?(?:ancho\s+)?(?:por|x)\s+(\d+(?:\.\d+)?)\s*metros?/i;
+
+  // Pattern 5: "3 ancho x 5 largo" - dimensions with ancho/largo labels
+  const pattern5 = /(\d+(?:\.\d+)?)\s+(?:de\s+)?ancho\s+(?:por|x)\s+(\d+(?:\.\d+)?)\s+(?:de\s+)?largo/i;
+
+  let match = converted.match(pattern1) ||
+              converted.match(pattern2) ||
+              converted.match(pattern3) ||
+              converted.match(pattern4) ||
+              converted.match(pattern5);
 
   if (match) {
     const width = parseFloat(match[1]);
@@ -124,19 +202,45 @@ async function getAvailableSizes(campaignRef = null) {
 function findClosestSizes(requestedDim, availableSizes) {
   const requestedArea = requestedDim.area;
 
-  // Check for exact match (within 0.5 sq meters tolerance)
-  const exact = availableSizes.find(size => Math.abs(size.area - requestedArea) < 0.5);
+  // Check for exact match by dimensions (not just area!)
+  // Must match either width×height or height×width (swapped dimensions)
+  const dimensionTolerance = 0.2; // 20cm tolerance for each dimension
+  const exact = availableSizes.find(size => {
+    // Check if dimensions match (within tolerance)
+    const matchesDirect =
+      Math.abs(size.width - requestedDim.width) < dimensionTolerance &&
+      Math.abs(size.height - requestedDim.height) < dimensionTolerance;
 
-  // Find smaller and bigger
+    // Check if swapped dimensions match (3x10 matches 10x3)
+    const matchesSwapped =
+      Math.abs(size.width - requestedDim.height) < dimensionTolerance &&
+      Math.abs(size.height - requestedDim.width) < dimensionTolerance;
+
+    return matchesDirect || matchesSwapped;
+  });
+
+  // Filter to only sizes that can actually cover the space in at least one orientation
+  const validSizes = availableSizes.filter(size => {
+    const canCoverNormal = size.width >= requestedDim.width && size.height >= requestedDim.height;
+    const canCoverSwapped = size.width >= requestedDim.height && size.height >= requestedDim.width;
+    return canCoverNormal || canCoverSwapped;
+  });
+
+  // Among valid sizes, find the closest smaller and bigger by area
   let smaller = null;
   let bigger = null;
+  let smallestDiffSmaller = Infinity;
+  let smallestDiffBigger = Infinity;
 
-  for (const size of availableSizes) {
-    if (size.area < requestedArea) {
-      smaller = size; // Keep updating to get the largest smaller size
-    } else if (size.area > requestedArea && !bigger) {
-      bigger = size; // Get the smallest bigger size
-      break;
+  for (const size of validSizes) {
+    const areaDiff = Math.abs(size.area - requestedArea);
+
+    if (size.area < requestedArea && areaDiff < smallestDiffSmaller) {
+      smaller = size;
+      smallestDiffSmaller = areaDiff;
+    } else if (size.area > requestedArea && areaDiff < smallestDiffBigger) {
+      bigger = size;
+      smallestDiffBigger = areaDiff;
     }
   }
 
@@ -158,7 +262,12 @@ function calculateRecommendedArea(area) {
  * @returns {boolean}
  */
 function isInstallationQuery(message) {
-  return /\b(instalad[ao]|instalaci[oó]n|instalar|colocad[ao]|colocar|poner)\b/i.test(message);
+  // Only match explicit installation service questions, not general "poner" statements
+  // ✅ Matches: "¿Ustedes instalan?", "Hacen instalación?", "Quién pone la malla?"
+  // ❌ Doesn't match: "ocupo poner una malla", "necesito poner" (buying intent)
+  return /\b(instalad[ao]|instalaci[oó]n|instalar|colocad[ao]|colocar)\b/i.test(message) ||
+         /\b(ustedes|usted|hacen|ofrec\w+|dan|tienen)\s+.*\b(ponen|pone|ponemos|instalaci[oó]n)\b/i.test(message) ||
+         /\b(qui[eé]n|c[oó]mo)\s+.*\b(pone|instala|coloca)\b/i.test(message);
 }
 
 /**
@@ -182,54 +291,107 @@ function isApproximateMeasure(message) {
 /**
  * Generates natural response for size inquiry
  * @param {object} options - Response configuration
- * @returns {string}
+ * @returns {object} - {text, suggestedSizes} where suggestedSizes is array of size strings for context
  */
 function generateSizeResponse(options) {
   const { smaller, bigger, exact, requestedDim, availableSizes, isRepeated } = options;
 
   const responses = [];
+  const suggestedSizes = []; // Track suggested sizes for context
 
   if (exact) {
     // Generic responses WITHOUT ML link (link shown only on buying intent or when user asks for details)
+    suggestedSizes.push(exact.sizeStr);
     responses.push(
-      `¡Perfecto! Tenemos justo la medida **${exact.sizeStr}** disponible por $${exact.price} 🌿`,
-      `Sí, contamos con **${exact.sizeStr}** por $${exact.price}. ¿Te gustaría ver más detalles?`,
-      `Tenemos la medida exacta **${exact.sizeStr}** en stock por $${exact.price} ✨`
+      `Por supuesto, de **${exact.sizeStr}** la tenemos en $${exact.price}`,
+      `Claro, **${exact.sizeStr}** la tenemos disponible en $${exact.price}`,
+      `Perfecto, **${exact.sizeStr}** está disponible por $${exact.price}`
     );
   } else {
     const parts = [];
 
-    if (requestedDim) {
-      parts.push(`Para un área de ${requestedDim.width}x${requestedDim.height}m, te sugiero estas opciones cercanas:`);
-    } else {
-      parts.push(`Las medidas más cercanas que tengo disponibles son:`);
+    // Check if multiple pieces can cover the area
+    const requestedArea = requestedDim ? requestedDim.area : 0;
+    let multiPieceOption = null;
+
+    if (requestedDim && availableSizes.length > 0) {
+      // Look for sizes that, when multiplied, match the requested area
+      // For example: 10x10m (100m²) = 2x 10x5m (2 × 50m²)
+      for (const size of availableSizes) {
+        const piecesNeeded = Math.round(requestedArea / size.area);
+
+        // Check if 2-4 pieces would cover exactly (within 5% tolerance)
+        if (piecesNeeded >= 2 && piecesNeeded <= 4) {
+          const totalArea = size.area * piecesNeeded;
+          const areaDiff = Math.abs(totalArea - requestedArea);
+          const tolerance = requestedArea * 0.05; // 5% tolerance
+
+          if (areaDiff <= tolerance) {
+            multiPieceOption = {
+              size: size.sizeStr,
+              pieces: piecesNeeded,
+              priceEach: size.price,
+              priceTotal: size.price * piecesNeeded
+            };
+            break; // Use first match
+          }
+        }
+      }
     }
 
-    const suggestions = [];
-    if (smaller) suggestions.push(`• **${smaller.sizeStr}** por $${smaller.price}`);
-    if (bigger) suggestions.push(`• **${bigger.sizeStr}** por $${bigger.price}`);
+    // If we found a multi-piece solution, lead with that instead of custom
+    if (multiPieceOption) {
+      parts.push(`Para cubrir ${requestedDim.width}x${requestedDim.height}m puedes usar **${multiPieceOption.pieces} piezas de ${multiPieceOption.size}**:`);
+      parts.push(`\n• ${multiPieceOption.pieces}x ${multiPieceOption.size} por $${multiPieceOption.priceEach} c/u = **$${multiPieceOption.priceTotal} total**`);
+      suggestedSizes.push(multiPieceOption.size);
 
-    if (suggestions.length > 0) {
-      parts.push('\n' + suggestions.join('\n'));
-
-      if (isRepeated) {
-        // User insisted - be more direct about custom option
-        parts.push('\n\n💡 **También fabricamos medidas personalizadas.**');
-        parts.push('\nSi realmente necesitas esa medida exacta, podemos cotizarla para ti.');
-        parts.push('\n\n¿Te gustaría una cotización personalizada o prefieres una de las medidas disponibles? 😊');
-      } else {
-        // First time - brief mention of custom
-        parts.push('\n\n💡 También fabricamos medidas personalizadas.');
-        parts.push('\n\n¿Cuál te gustaría ver con más detalle? 🌿');
+      // Still show other options
+      if (smaller && smaller.sizeStr !== multiPieceOption.size) {
+        parts.push(`\n• **${smaller.sizeStr}** (más pequeña) por $${smaller.price}`);
+        suggestedSizes.push(smaller.sizeStr);
       }
+      if (bigger && bigger.sizeStr !== multiPieceOption.size) {
+        parts.push(`\n• **${bigger.sizeStr}** (más grande) por $${bigger.price}`);
+        suggestedSizes.push(bigger.sizeStr);
+      }
+
+      parts.push('\n\n¿Cuál opción te interesa?');
     } else {
-      parts.push('\nPor el momento no tenemos esa medida exacta en stock. ¿Te gustaría ver nuestras medidas estándar?');
+      // No multi-piece solution - use existing logic
+      // Lead with custom/special size message
+      if (requestedDim) {
+        parts.push(`La medida de ${requestedDim.width}x${requestedDim.height}m es una medida especial que necesitaríamos fabricar a la medida para ti.`);
+      } else {
+        parts.push(`Esa medida es especial y necesitaríamos fabricarla a la medida.`);
+      }
+
+      // Show alternatives WITH PRICES
+      const suggestions = [];
+      if (smaller) {
+        suggestions.push(`• **${smaller.sizeStr}** por $${smaller.price}`);
+        suggestedSizes.push(smaller.sizeStr);
+      }
+      if (bigger) {
+        suggestions.push(`• **${bigger.sizeStr}** por $${bigger.price}`);
+        suggestedSizes.push(bigger.sizeStr);
+      }
+
+      if (suggestions.length > 0) {
+        parts.push('\n\nTenemos estas opciones cercanas disponibles:');
+        parts.push('\n' + suggestions.join('\n'));
+        parts.push('\n\n¿Cuál te interesa?');
+      } else {
+        parts.push('\n\n¿Te gustaría ver nuestras medidas estándar?');
+      }
     }
 
     responses.push(parts.join(''));
   }
 
-  return responses[Math.floor(Math.random() * responses.length)];
+  return {
+    text: responses[Math.floor(Math.random() * responses.length)],
+    suggestedSizes
+  };
 }
 
 /**
@@ -242,15 +404,14 @@ function generateGenericSizeResponse(availableSizes) {
     return "Por el momento no tengo medidas disponibles en stock. ¿Te gustaría que te avise cuando tengamos nuevas opciones?";
   }
 
-  const sizeList = availableSizes
-    .slice(0, 5) // Show max 5 sizes
-    .map(s => `• **${s.sizeStr}** - $${s.price}`)
-    .join('\n');
+  // Show range: smallest to largest
+  const smallest = availableSizes[0];
+  const largest = availableSizes[availableSizes.length - 1];
 
   const responses = [
-    `Estas son nuestras medidas disponibles en malla sombra beige confeccionada 🌿:\n\n${sizeList}\n\n¿Te gustaría más información sobre alguna?`,
-    `Contamos con las siguientes medidas:\n\n${sizeList}\n\n¿Cuál se adapta mejor a tu proyecto?`,
-    `Tengo estas opciones disponibles:\n\n${sizeList}\n\n¿Te interesa alguna en particular? 😊`
+    `Tenemos diferentes medidas y precios, desde $${smallest.price} en tamaño de ${smallest.sizeStr} hasta $${largest.price} en tamaño de ${largest.sizeStr}.\n\n¿Qué medida necesitas?`,
+    `Contamos con varias opciones, desde $${smallest.price} en ${smallest.sizeStr} hasta $${largest.price} en ${largest.sizeStr}.\n\n¿Cuál se adapta mejor a tu proyecto?`,
+    `Manejamos diferentes tamaños y precios, desde $${smallest.price} (${smallest.sizeStr}) hasta $${largest.price} (${largest.sizeStr}).\n\n¿Qué dimensiones estás buscando?`
   ];
 
   return responses[Math.floor(Math.random() * responses.length)];

@@ -95,9 +95,9 @@ const INTENT_DEFINITIONS = {
 
   // Purchase-related
   details_request: {
-    description: "Usuario pide más detalles, quiere ver un producto, o solicita información específica (dame más detalles, dejame ver, muéstrame, enseñame, ver la de, quiero ver)",
+    description: "Usuario pide más detalles, quiere ver un producto, o solicita información específica (dame más detalles, dejame ver, muéstrame, enseñame, la de, el de, quiero ver)",
     priority: 3,
-    keywords: ["detalles", "detalle", "más información", "más info", "especificaciones", "cuéntame más", "ver más", "dejame ver", "muéstrame", "enseñame", "quiero ver", "ver la", "ver el"]
+    keywords: ["detalles", "detalle", "más información", "más info", "especificaciones", "cuéntame más", "ver más", "dejame ver", "muéstrame", "enseñame", "quiero ver", "ver la", "ver el", "la de", "el de"]
   },
   buying_intent: {
     description: "Usuario quiere comprar, pedir, ordenar el producto (quiero comprar, lo quiero, me lo llevo, cómo lo compro, dónde compro)",
@@ -182,8 +182,8 @@ Clasifica esta intención:`;
 
     const result = JSON.parse(response.choices[0].message.content);
 
-    // Log for learning
-    await logIntent({
+    // Log for learning (non-blocking - don't await)
+    logIntent({
       psid: context.psid,
       message,
       detectedIntent: result.intent,
@@ -193,7 +193,7 @@ Clasifica esta intención:`;
         lastIntent: context.lastIntent,
         campaignRef: context.campaignRef
       }
-    });
+    }).catch(err => console.error("⚠️ Error logging intent:", err.message));
 
     console.log(`🧠 AI Intent: ${result.intent} (${(result.confidence * 100).toFixed(0)}%) - ${result.reasoning}`);
 

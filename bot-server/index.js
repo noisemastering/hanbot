@@ -166,6 +166,27 @@ app.post("/test-message", async (req, res) => {
   }
 });
 
+// GET /webhook - Facebook webhook verification
+app.get("/webhook", (req, res) => {
+  const VERIFY_TOKEN = process.env.FB_VERIFY_TOKEN || "hanlob_verify_token_2025";
+
+  const mode = req.query["hub.mode"];
+  const token = req.query["hub.verify_token"];
+  const challenge = req.query["hub.challenge"];
+
+  if (mode && token) {
+    if (mode === "subscribe" && token === VERIFY_TOKEN) {
+      console.log("✅ Webhook verificado correctamente");
+      res.status(200).send(challenge);
+    } else {
+      console.log("❌ Token de verificación incorrecto");
+      res.sendStatus(403);
+    }
+  } else {
+    res.sendStatus(400);
+  }
+});
+
 app.post("/webhook", async (req, res) => {
   const body = req.body;
   if (body.object === "page") {
@@ -204,7 +225,113 @@ app.post("/webhook", async (req, res) => {
 
       if (webhookEvent.message) {
         const messageText = webhookEvent.message.text;
-        console.log(`📨 Message received from ${senderPsid}: "${messageText}"`);
+        const FB_PAGE_ID = process.env.FB_PAGE_ID;
+
+        // 🧑‍💼 Detect if message is from Page (human agent) or from User
+        const isFromPage = senderPsid === FB_PAGE_ID;
+        const recipientPsid = isFromPage ? webhookEvent.recipient.id : senderPsid;
+
+        if (isFromPage) {
+          // Message from human agent - mark conversation as human_active and don't respond
+          console.log(`👨‍💼 Human agent message detected for user ${recipientPsid}: "${messageText}"`);
+          await saveMessage(recipientPsid, messageText, "human");
+          await updateConversation(recipientPsid, {
+            state: "human_active",
+            lastIntent: "human_takeover"
+          });
+          // Don't generate bot response
+          return;
+        }
+
+        // 🤖 SKIP AUTOMATED FACEBOOK CTA RESPONSES
+        // When users click CTA buttons like "Ver tienda en línea" from ads,
+        // Facebook automatically sends a pre-formatted message on their behalf.
+        // We detect these and don't respond to avoid duplicates.
+        if (messageText) {
+          const isFacebookAutoCTA =
+            /^Ingresa al siguiente link:\s*https?:\/\//i.test(messageText) ||
+            /^(Ver|See|View)\s+(tienda|shop|store|website)/i.test(messageText) ||
+            /^(Haz|Hacer)\s+clic\s+aqu[íi]:/i.test(messageText) ||
+            /^Shop\s+now:\s*https?:\/\//i.test(messageText);
+
+          if (isFacebookAutoCTA) {
+            console.log(`🤖 Facebook auto-CTA detected, skipping bot response: "${messageText}"`);
+            await saveMessage(senderPsid, messageText, "user");
+            res.sendStatus(200);
+            return;
+          }
+        }
+
+        // Message from user
+        console.log(`📨 User message received from ${senderPsid}: "${messageText || '[image]'}"`);
+
+        // Check if conversation is in human_active state
+        const { getConversation } = require("./conversationManager");
+        const convo = await getConversation(senderPsid);
+
+        if (convo.state === "human_active") {
+          console.log(`⏸️ Conversation with ${senderPsid} is being handled by a human agent. Bot will not respond.`);
+          await saveMessage(senderPsid, messageText || "[image]", "user");
+          return;
+        }
+
+        // 📸 Check for attachments (images, stickers, etc.)
+        const attachments = webhookEvent.message.attachments;
+        if (attachments && attachments.length > 0) {
+          // Check for stickers first (thumbs up, reactions, etc.)
+          const stickerAttachment = attachments.find(att => att.type === "image" && att.payload?.sticker_id);
+
+          if (stickerAttachment) {
+            console.log(`👍 Sticker/reaction received (ID: ${stickerAttachment.payload.sticker_id})`);
+            await registerUserIfNeeded(senderPsid);
+            await saveMessage(senderPsid, "[Reacción enviada]", "user");
+
+            // Don't respond to stickers/reactions - they're just acknowledgments
+            res.sendStatus(200);
+            return;
+          }
+
+          // Now check for actual images (photos)
+          const imageAttachment = attachments.find(att => att.type === "image" && !att.payload?.sticker_id);
+
+          if (imageAttachment) {
+            const imageUrl = imageAttachment.payload.url;
+            console.log(`📸 Image received: ${imageUrl}`);
+
+            await registerUserIfNeeded(senderPsid);
+            await saveMessage(senderPsid, `[Imagen enviada: ${imageUrl}]`, "user");
+
+            // Analyze the image using GPT-4 Vision
+            const { OpenAI } = require("openai");
+            const { analyzeImage, generateImageResponse } = require("./ai/core/imageAnalyzer");
+            const openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
+
+            (async () => {
+              try {
+                const analysisResult = await analyzeImage(imageUrl, openai);
+                const reply = generateImageResponse(analysisResult);
+
+                await callSendAPI(senderPsid, { text: reply.text });
+                await saveMessage(senderPsid, reply.text, "bot");
+
+                // Update conversation intent
+                const { updateConversation } = require("./conversationManager");
+                await updateConversation(senderPsid, {
+                  lastIntent: "image_received",
+                  state: "active"
+                });
+              } catch (error) {
+                console.error("❌ Error processing image:", error);
+                await callSendAPI(senderPsid, {
+                  text: "Recibí tu imagen, pero tuve problemas al analizarla. ¿Podrías describirme con palabras qué necesitas?"
+                });
+              }
+            })();
+
+            res.sendStatus(200);
+            return;
+          }
+        }
 
         await registerUserIfNeeded(senderPsid);
         await saveMessage(senderPsid, messageText, "user");
