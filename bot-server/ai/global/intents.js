@@ -175,7 +175,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   }
 
   // 📍 Ubicación
-  if (/donde|ubicad[oa]|direccion|qued[ao]|mapa|local/i.test(msg)) {
+  if (/donde|ubicad[oa]|direccion|qued[ao]|mapa|local|ciudad|encuentran/i.test(msg)) {
     await updateConversation(psid, { lastIntent: "location_info" });
 
     return {
@@ -188,7 +188,10 @@ Col. Ejido Santa María Magdalena, C.P. 76137, Santiago de Querétaro, Qro.
 
 Google Maps: https://www.google.com/maps/place/Hanlob/
 
-¿Te gustaría pasar a la bodega o prefieres que te enviemos el producto?`
+Enviamos a todo el país a través de nuestra Tienda Oficial en Mercado Libre:
+https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
+
+¿En qué ciudad te encuentras?`
     };
   }
 
@@ -292,7 +295,7 @@ Google Maps: https://www.google.com/maps/place/Hanlob/
   // Use actual Mexican location lookup instead of pattern matching
   const acceptCityAfterMeasure = convo.lastIntent === "specific_measure" && convo.requestedSize;
 
-  if (convo.lastIntent === "shipping_info" || convo.lastIntent === "city_provided" || acceptCityAfterMeasure) {
+  if (convo.lastIntent === "shipping_info" || convo.lastIntent === "location_info" || convo.lastIntent === "city_provided" || acceptCityAfterMeasure) {
     // Check if message is likely a location name (short, not a question)
     if (isLikelyLocationName(msg)) {
       // Try to detect actual Mexican location
@@ -313,16 +316,16 @@ Google Maps: https://www.google.com/maps/place/Hanlob/
     if (convo.requestedSize) {
       // User mentioned a size earlier
       if (/quer[ée]taro/i.test(cityName)) {
-        response = `Perfecto, estás en Querétaro 🏡. Para la malla sombra de ${convo.requestedSize} que te interesa, el envío va incluido en zona urbana.\n\n¿Te gustaría comprarlo o prefieres más información? 😊`;
+        response = `Perfecto, estás en Querétaro 🏡. Para la malla sombra de ${convo.requestedSize} que te interesa, el envío va incluido en zona urbana.\n\nPuedes verlo en nuestra Tienda Oficial de ML:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n¿Te gustaría más información? 😊`;
       } else {
-        response = `Perfecto, enviamos a ${cityName.charAt(0).toUpperCase() + cityName.slice(1)} sin problema 🚚.\n\nPara la malla sombra de ${convo.requestedSize}, el envío es garantizado.\n\n¿Te gustaría comprarlo o necesitas más información? 😊`;
+        response = `Perfecto, enviamos a ${cityName.charAt(0).toUpperCase() + cityName.slice(1)} sin problema 🚚.\n\nPara la malla sombra de ${convo.requestedSize}, el envío es garantizado a través de Mercado Libre:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n¿Te gustaría más información? 😊`;
       }
     } else {
       // No size mentioned yet
       if (/quer[ée]taro/i.test(cityName)) {
-        response = `Perfecto, estás en Querétaro 🏡. El envío va incluido en zona urbana.\n\nCuéntame, ¿qué medida te interesa? Tenemos:\n• 3x4m - $450\n• 4x6m - $650`;
+        response = `Perfecto, estás en Querétaro 🏡. El envío va incluido en zona urbana.\n\nPuedes ver nuestras medidas en la Tienda Oficial:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n¿Qué medida te interesa?`;
       } else {
-        response = `Perfecto, enviamos a ${cityName.charAt(0).toUpperCase() + cityName.slice(1)} sin problema 🚚.\n\nCuéntame, ¿qué medida te interesa? Tenemos:\n• 3x4m - $450\n• 4x6m - $650`;
+        response = `Perfecto, enviamos a ${cityName.charAt(0).toUpperCase() + cityName.slice(1)} sin problema 🚚.\n\nPuedes ver todas las medidas en nuestra Tienda Oficial:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n¿Qué medida necesitas?`;
       }
     }
 
