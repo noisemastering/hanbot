@@ -195,9 +195,18 @@ async function generateReply(userMessage, psid, referral = null) {
       /,.*\b(y|si|tiempo|entrega|pago|forma|costo|precio)/i // Commas followed by other questions
     ];
 
-    const isMultiQuestion = multiQuestionIndicators.some(regex => regex.test(cleanMsg));
+    // 📏 Detect multiple size requests (e.g., "4x3 y 4x4", "precios de 3x4 y 4x6")
+    const multipleSizeIndicators = [
+      /\d+(?:\.\d+)?[xX×]\d+(?:\.\d+)?.*\b(y|,|de)\b.*\d+(?:\.\d+)?[xX×]\d+(?:\.\d+)?/i, // Multiple dimensions with "y" or comma (e.g., "4x3 y 4x4")
+      /\bprecios\b/i, // Plural "precios" suggests multiple items
+      /\bcostos\b/i, // Plural "costos"
+      /\bmall?as?\b.*\bmall?as?\b/i, // Multiple mentions of "malla/mallas"
+    ];
 
-    if (!isMultiQuestion && productKeywordRegex.test(cleanMsg)) {
+    const isMultiQuestion = multiQuestionIndicators.some(regex => regex.test(cleanMsg));
+    const isMultiSize = multipleSizeIndicators.some(regex => regex.test(cleanMsg));
+
+    if (!isMultiQuestion && !isMultiSize && productKeywordRegex.test(cleanMsg)) {
       const product = await getProduct(cleanMsg);
       if (product) {
         await updateConversation(psid, { lastIntent: "product_search", state: "active", unknownCount: 0 });
@@ -218,6 +227,8 @@ async function generateReply(userMessage, psid, referral = null) {
       }
     } else if (isMultiQuestion) {
       console.log("⏩ Multi-question detected before product search, skipping to fallback");
+    } else if (isMultiSize) {
+      console.log("📏 Multiple size request detected before product search, skipping to fallback");
     }
 
     // 🔁 Respuestas automáticas rápidas (FAQ / respuestas simples)

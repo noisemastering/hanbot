@@ -18,6 +18,20 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   console.log("🌍 INTENTOS GLOBALES CHECANDO →", msg);
 
+  // 📏 SKIP if message contains MULTIPLE size requests (let fallback handle comprehensive answer)
+  const multipleSizeIndicators = [
+    /\d+(?:\.\d+)?[xX×]\d+(?:\.\d+)?.*\b(y|,|de)\b.*\d+(?:\.\d+)?[xX×]\d+(?:\.\d+)?/i, // Multiple dimensions with "y" or comma (e.g., "4x3 y 4x4")
+    /\bprecios\b/i, // Plural "precios" suggests multiple items
+    /\bcostos\b/i, // Plural "costos"
+    /\bmall?as?\b.*\bmall?as?\b/i, // Multiple mentions of "malla/mallas"
+  ];
+
+  const isMultiSize = multipleSizeIndicators.some(regex => regex.test(msg));
+  if (isMultiSize) {
+    console.log("📏 Multiple size request detected in handleGlobalIntents, delegating to fallback");
+    return null;
+  }
+
   // Normalize common misspellings
   msg = msg.replace(/\bmaya\b/gi, 'malla')
            .replace(/\bmaia\b/gi, 'malla');
