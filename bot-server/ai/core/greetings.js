@@ -63,7 +63,9 @@ async function handleOptOut(cleanMsg, convo) {
 // 👍 Handle acknowledgment emojis and confirmations
 async function handleAcknowledgment(cleanMsg, psid, convo) {
   // Check for acknowledgment emojis or simple confirmations (with or without text)
-  const isAcknowledgment = /^(👍|👌|✅|❤️|😊|🙂|👏|💯|ok|vale|perfecto|excelente|entendido|si|sí|dale|claro|listo)[\s!]*$/i.test(cleanMsg);
+  // Also includes common Mexican chat abbreviations: ntp (no te preocupes), np (no problem), sta bien (está bien)
+  const isAcknowledgment = /^(👍|👌|✅|❤️|😊|🙂|👏|💯|ok|vale|perfecto|excelente|entendido|si|sí|dale|claro|listo|ntp|np|sta\s*bien|esta\s*bien|está\s*bien)[\s!]*$/i.test(cleanMsg) ||
+                            /^(ntp|np)\s+(está|esta|sta)\s+bien[\s!]*$/i.test(cleanMsg);
 
   if (isAcknowledgment) {
     console.log("👍 Acknowledgment detected:", cleanMsg);
