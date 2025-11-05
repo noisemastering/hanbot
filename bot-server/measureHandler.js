@@ -339,13 +339,26 @@ function generateSizeResponse(options) {
       }
     }
 
-    // If we found a multi-piece solution, lead with that instead of custom
+    // If we found a multi-piece solution, lead with clarification + multi-piece + custom option
     if (multiPieceOption) {
-      parts.push(`Para cubrir ${requestedDim.width}x${requestedDim.height}m puedes usar **${multiPieceOption.pieces} piezas de ${multiPieceOption.size}**:`);
-      parts.push(`\n• ${multiPieceOption.pieces}x ${multiPieceOption.size} por $${multiPieceOption.priceEach} c/u = **$${multiPieceOption.priceTotal} total**`);
+      // First clarify this is a special/oversized request
+      const largestAvailable = availableSizes[availableSizes.length - 1];
+      const isOversized = requestedDim.width > largestAvailable.width || requestedDim.height > largestAvailable.height;
+
+      if (isOversized) {
+        parts.push(`La medida de ${requestedDim.width}x${requestedDim.height}m excede nuestras medidas estándar (la más grande es ${largestAvailable.sizeStr}).\n\n`);
+      }
+
+      parts.push(`**Para cubrir ${requestedDim.width}x${requestedDim.height}m, tienes estas opciones:**\n`);
+      parts.push(`\n• ${multiPieceOption.pieces} piezas de **${multiPieceOption.size}** por $${multiPieceOption.priceEach} c/u = **$${multiPieceOption.priceTotal} total**`);
       suggestedSizes.push(multiPieceOption.size);
 
-      // Still show other options
+      // Always mention custom fabrication for oversized requests
+      if (isOversized) {
+        parts.push(`\n• También fabricamos medidas personalizadas. Para cotizar ${requestedDim.width}x${requestedDim.height}m exacta, contáctanos.`);
+      }
+
+      // Still show other standard sizes if available
       if (smaller && smaller.sizeStr !== multiPieceOption.size) {
         parts.push(`\n• **${smaller.sizeStr}** (más pequeña) por $${smaller.price}`);
         suggestedSizes.push(smaller.sizeStr);
