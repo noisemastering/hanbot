@@ -129,8 +129,6 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   // 💰 BULK/VOLUME DISCOUNT INQUIRY - Handle requests for bulk discounts
   // Detect: multiple units, wholesale, volume discounts, special prices
-  const { getBusinessInfo } = require("../../businessInfoManager");
-
   if (/\b(descuento|rebaja|precio especial|precio mayoreo|mayoreo|volumen)\b/i.test(msg) ||
       /\b(\d+)\s+(piezas?|unidades?|mallas?|de la misma)\b/i.test(msg) ||
       /\b(si\s+encargar[aá]|si\s+compro|si\s+pido)\s+(\d+|vari[oa]s|much[oa]s)\b/i.test(msg)) {
