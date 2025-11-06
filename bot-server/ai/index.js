@@ -1,7 +1,7 @@
 // ai/index.js
 require("dotenv").config();
 const { OpenAI } = require("openai");
-const { getConversation, updateConversation } = require("../conversationManager");
+const { getConversation, updateConversation, isHumanActive } = require("../conversationManager");
 const { getBusinessInfo } = require("../businessInfoManager");
 const { getProduct } = require("../hybridSearch");
 const Campaign = require("../models/Campaign");
@@ -33,6 +33,12 @@ async function generateReply(userMessage, psid, referral = null) {
     const cleanMsg = userMessage.toLowerCase().trim();
     const convo = await getConversation(psid);
     console.log("🧩 Conversación actual:", convo);
+
+    // 👨‍💼 CRITICAL: If human agent is active, bot should NOT respond at all
+    if (await isHumanActive(psid)) {
+      console.log("👨‍💼 Human agent is handling this conversation, bot will not respond");
+      return null;
+    }
 
     // 🎯 Detectar campaña activa (MOVED UP - no AI calls needed)
     let campaign = null;

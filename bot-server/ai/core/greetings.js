@@ -1,7 +1,13 @@
 // ai/core/greetings.js
-const { updateConversation } = require("../../conversationManager");
+const { updateConversation, isHumanActive } = require("../../conversationManager");
 
 async function handleGreeting(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
+  // Don't respond to greetings if human is active
+  if (await isHumanActive(psid)) {
+    console.log("🚫 Human is active, ignoring greeting");
+    return null;
+  }
+
   if (/^(hola|buenas|buenos días|buenas tardes|buenas noches|qué tal|hey|hi|hello)\b/.test(cleanMsg)) {
     const now = Date.now();
     const lastGreetTime = convo.lastGreetTime || 0;
@@ -31,6 +37,12 @@ async function handleGreeting(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
 }
 
 async function handleThanks(cleanMsg, psid, BOT_PERSONA_NAME) {
+  // Don't respond to thanks if human is active
+  if (await isHumanActive(psid)) {
+    console.log("🚫 Human is active, ignoring thanks");
+    return null;
+  }
+
   // Check for continuation phrases - if user is continuing, don't close
   const hasContinuation = /\b(pero|aun|todavía|todavia|aún|tengo\s+(una\s+)?(duda|pregunta)|quiero\s+saber|me\s+gustaría|quisiera)\b/i.test(cleanMsg);
 
@@ -69,6 +81,12 @@ async function handleOptOut(cleanMsg, convo) {
 
 // 👍 Handle acknowledgment emojis and confirmations
 async function handleAcknowledgment(cleanMsg, psid, convo) {
+  // Don't respond to acknowledgments if human is active
+  if (await isHumanActive(psid)) {
+    console.log("🚫 Human is active, ignoring acknowledgment");
+    return null;
+  }
+
   // Check for acknowledgment emojis or simple confirmations (with or without text)
   // Also includes common Mexican chat abbreviations: ntp (no te preocupes), np (no problem), sta bien (está bien)
   const isAcknowledgment = /^(👍|👌|✅|❤️|😊|🙂|👏|💯|ok|vale|perfecto|excelente|entendido|si|sí|dale|claro|listo|ntp|np|sta\s*bien|esta\s*bien|está\s*bien)[\s!]*$/i.test(cleanMsg) ||
