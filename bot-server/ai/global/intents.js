@@ -51,6 +51,24 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 📏 PRICING BY METER/ROLL - Handle "cuánto vale el metro" questions
+  if (/\b(cu[aá]nto|precio|vale|cuesta)\s+(?:el\s+)?metro\b/i.test(msg) ||
+      /\b(vend[eé]is|vendes|manejan)\s+(?:por\s+)?metros?\b/i.test(msg) ||
+      /\b(comprar|vender)\s+(?:por\s+)?metros?\b/i.test(msg) ||
+      /\b(rollos?|rollo\s+completo)\b/i.test(msg)) {
+
+    await updateConversation(psid, { lastIntent: "price_by_meter" });
+
+    return {
+      type: "text",
+      text: "No vendemos por metro 📏, sino por medidas específicas ya confeccionadas (2x2m, 3x4m, 4x6m, etc.).\n\n" +
+            "Si necesitas comprar malla en rollo completo (por metro), vendemos rollos de:\n" +
+            "• 4.20m x 100m\n" +
+            "• 2.10m x 100m\n\n" +
+            "¿Qué te interesa: una medida específica confeccionada o un rollo completo?"
+    };
+  }
+
   // 📋 CATALOG REQUEST - Handle requests for general pricing, sizes, and colors listing
   if (/\b(pongan?|den|muestren?|env[ií]en?|pasame?|pasen?|listado?)\s+(de\s+)?(precios?|medidas?|opciones?|tama[ñn]os?|colores?)\b/i.test(msg) ||
       /\b(precios?\s+y\s+medidas?)\b/i.test(msg) ||
