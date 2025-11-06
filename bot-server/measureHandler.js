@@ -293,7 +293,7 @@ function isInstallationQuery(message) {
  * @returns {boolean}
  */
 function isColorQuery(message) {
-  return /\b(color|colores|qu[eé]\s+color|tonos?|verde|azul|negra?|blanca?)\b/i.test(message);
+  return /\b(color|colores|qu[eé]\s+color|tonos?|verde|azul|negra?|blanca?|beige|bex)\b/i.test(message);
 }
 
 /**
