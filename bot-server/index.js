@@ -238,6 +238,11 @@ app.post("/webhook", async (req, res) => {
         if (isFromPage) {
           // Message from human agent - mark conversation as human_active and don't respond
           console.log(`👨‍💼 Human agent message detected for user ${recipientPsid}: "${messageText}"`);
+
+          // Cancel any pending debounced messages for this user
+          const { cancelDebounce } = require("./messageDebouncer");
+          cancelDebounce(recipientPsid);
+
           await saveMessage(recipientPsid, messageText, "human");
           await updateConversation(recipientPsid, {
             state: "human_active",
@@ -276,6 +281,11 @@ app.post("/webhook", async (req, res) => {
 
         if (await isHumanActive(senderPsid)) {
           console.log(`⏸️ Conversation with ${senderPsid} is being handled by a human agent. Bot will not respond.`);
+
+          // Cancel any pending debounced messages for this user
+          const { cancelDebounce } = require("./messageDebouncer");
+          cancelDebounce(senderPsid);
+
           await saveMessage(senderPsid, messageText || "[image]", "user");
           res.sendStatus(200);
           return;
@@ -342,9 +352,13 @@ app.post("/webhook", async (req, res) => {
         await registerUserIfNeeded(senderPsid);
         await saveMessage(senderPsid, messageText, "user");
 
-        (async () => {
+        // Use message debouncer to wait for user to finish typing
+        const { debounceMessage } = require("./messageDebouncer");
+
+        debounceMessage(senderPsid, messageText, async (combinedMessage) => {
           try {
-            const reply = await generateReply(messageText, senderPsid);
+            console.log(`🤖 Generating reply for combined message: "${combinedMessage}"`);
+            const reply = await generateReply(combinedMessage, senderPsid);
 
             // 🧩 Nuevo control de seguridad: si no hay respuesta, salimos
             if (!reply) {
@@ -380,7 +394,7 @@ app.post("/webhook", async (req, res) => {
           } catch (err) {
             console.error("❌ Error al responder con IA:", err);
           }
-        })();
+        });
       }
     }
     res.status(200).send("EVENT_RECEIVED");
