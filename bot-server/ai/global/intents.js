@@ -195,6 +195,21 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
     };
   }
 
+  // 💳 Alternative payment method (in-person at store)
+  if (/otra\s+forma|otro\s+(m[eé]todo|modo)|alternativa.*pago|pago.*persona|pago.*local|pago.*tienda|pagar.*efectivo|efectivo.*directo/i.test(msg)) {
+    const businessInfo = await getBusinessInfo();
+    await updateConversation(psid, { lastIntent: "alternative_payment" });
+
+    return {
+      type: "text",
+      text: `La única alternativa al pago por Mercado Libre es venir directamente a nuestras oficinas en Querétaro y pagar en efectivo o con tarjeta.\n\n` +
+            `📍 ${businessInfo.address}\n` +
+            `📞 ${businessInfo.phones.join(" / ")}\n` +
+            `🕓 ${businessInfo.hours}\n\n` +
+            `¿Te encuentras en Querétaro?`
+    };
+  }
+
   // ⏰ Delivery time and payment questions (BEFORE shipping handler to catch "cuando llega")
   if (/cu[aá]nto\s+tiempo|cuando\s+llega|tiempo\s+de\s+entrega|tarda|demora|anticipo|pago\s+contra\s+entrega|forma\s+de\s+pago|c[oó]mo\s+pag/i.test(msg)) {
     // 🔴 SKIP if message contains MULTIPLE questions (let fallback handle comprehensive answer)
@@ -217,8 +232,9 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
 
     return {
       type: "text",
-      text: "El pago se realiza 100% en Mercado Libre al hacer el pedido. Aceptamos tarjetas, efectivo y meses sin intereses.\n\n" +
-            "Tiempos de entrega:\n" +
+      text: "💳 El pago se realiza 100% POR ADELANTADO en Mercado Libre al momento de hacer tu pedido (no se paga al recibir).\n\n" +
+            "Aceptamos todas las formas de pago de Mercado Libre: tarjetas, efectivo, meses sin intereses.\n\n" +
+            "⏰ Tiempos de entrega:\n" +
             "• CDMX y zona metropolitana: 1-2 días hábiles\n" +
             "• Interior de la República: 3-5 días hábiles"
     };

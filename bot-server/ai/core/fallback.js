@@ -29,8 +29,9 @@ TIEMPOS DE ENTREGA:
 - Interior de la República: 3-5 días hábiles
 
 FORMA DE PAGO:
-- Pago 100% en Mercado Libre al hacer el pedido
+- Pago 100% POR ADELANTADO en Mercado Libre al momento de hacer el pedido (NO se paga al recibir)
 - Aceptamos todas las formas de pago de Mercado Libre (tarjetas, efectivo, meses sin intereses)
+- Alternativa: Venir a las oficinas en Querétaro y pagar en efectivo o con tarjeta en persona
 
 LO QUE NO OFRECEMOS:
 - ❌ NO ofrecemos servicio de instalación, montaje, colocación ni armado
