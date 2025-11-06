@@ -34,7 +34,10 @@ async function handleThanks(cleanMsg, psid, BOT_PERSONA_NAME) {
   // Check for continuation phrases - if user is continuing, don't close
   const hasContinuation = /\b(pero|aun|todavía|todavia|aún|tengo\s+(una\s+)?(duda|pregunta)|quiero\s+saber|me\s+gustaría|quisiera)\b/i.test(cleanMsg);
 
-  if (!hasContinuation && /\b(gracias|perfecto|excelente|muy amable|adiós|bye|nos vemos)\b/i.test(cleanMsg)) {
+  // Expanded goodbye patterns to include common Mexican closing phrases
+  const isGoodbye = /\b(gracias|perfecto|excelente|muy amable|adiós|adios|bye|nos vemos|hasta luego|nos hablamos|te hablo|luego hablo|después|despu[ée]s\s+(te\s+)?(contacto|hablo|comunico)|ma[ñn]ana\s+(me\s+|te\s+)?(comunico|hablo|contacto))\b/i.test(cleanMsg);
+
+  if (!hasContinuation && isGoodbye) {
     await updateConversation(psid, { state: "closed", unknownCount: 0, lastIntent: "closed" });
     return {
       type: "text",

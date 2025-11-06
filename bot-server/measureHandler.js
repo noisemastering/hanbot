@@ -89,11 +89,28 @@ function parseDimensions(message) {
   // Pattern 5: "3 ancho x 5 largo" - dimensions with ancho/largo labels
   const pattern5 = /(\d+(?:\.\d+)?)\s+(?:de\s+)?ancho\s+(?:por|x)\s+(\d+(?:\.\d+)?)\s+(?:de\s+)?largo/i;
 
+  // Pattern 6: "8 metros de largo x 5 de ancho" or "8 metros de ancho x 5 de largo"
+  const pattern6 = /(\d+(?:\.\d+)?)\s*metros?\s+de\s+(largo|ancho)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*(?:metros?)?\s*(?:de\s+)?(largo|ancho)?/i;
+
   let match = converted.match(pattern1) ||
               converted.match(pattern2) ||
               converted.match(pattern3) ||
               converted.match(pattern4) ||
               converted.match(pattern5);
+
+  // Handle pattern 6 separately due to different capture groups
+  const match6 = converted.match(pattern6);
+  if (match6) {
+    // match6[1] = first number, match6[2] = "largo" or "ancho"
+    // match6[3] = second number, match6[4] = "largo" or "ancho"
+    const width = parseFloat(match6[1]);
+    const height = parseFloat(match6[3]);
+    return {
+      width,
+      height,
+      area: width * height
+    };
+  }
 
   if (match) {
     const width = parseFloat(match[1]);
