@@ -473,16 +473,54 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
   // Check for color query ONLY if no dimensions are present
   // If dimensions are present, let the dimension handler deal with it
   if (isColorQuery(msg) && !dimensions) {
-    await updateConversation(psid, { lastIntent: "color_query", unknownCount: 0 });
-    const colorResponses = [
-      `Por ahora solo manejamos malla sombra beige en versión confeccionada 🌿. ¿Te gustaría ver las medidas disponibles?`,
-      `Actualmente tenemos disponible solo el color beige en malla confeccionada. ¿Quieres que te muestre los tamaños?`,
-      `De momento contamos únicamente con beige, que es nuestro color más popular 😊. ¿Te interesa ver precios y medidas?`
-    ];
-    return {
-      type: "text",
-      text: colorResponses[Math.floor(Math.random() * colorResponses.length)]
-    };
+    // Detect if this is a color CONFIRMATION (user confirming they want beige)
+    // vs a color INQUIRY (user asking what colors are available)
+    const isConfirmation = /\b(esta\s+bien|está\s+bien|ok|perfecto|si|sí|dale|claro|ese|esa|me\s+gusta)\b/i.test(msg);
+
+    if (isConfirmation) {
+      // User is confirming they want beige - show products directly
+      await updateConversation(psid, { lastIntent: "color_confirmed", unknownCount: 0 });
+
+      // Fetch beige products from database
+      const products = await Product.find({
+        isActive: true,
+        color: /beige/i
+      }).sort({ size: 1 });
+
+      if (!products || products.length === 0) {
+        return {
+          type: "text",
+          text: "En este momento tenemos disponibles mallas sombra beige desde 2x2m hasta 10x5m.\n\n" +
+                "¿Qué medida necesitas para tu proyecto?"
+        };
+      }
+
+      let response = "📐 Perfecto! Aquí están las medidas disponibles en beige:\n\n";
+
+      products.forEach(p => {
+        response += `• ${p.size} → $${p.price}\n`;
+      });
+
+      response += "\n✨ También fabricamos medidas personalizadas\n\n";
+      response += "¿Qué medida necesitas?";
+
+      return {
+        type: "text",
+        text: response
+      };
+    } else {
+      // User is asking about colors - ask if they want to see sizes
+      await updateConversation(psid, { lastIntent: "color_query", unknownCount: 0 });
+      const colorResponses = [
+        `Por ahora solo manejamos malla sombra beige en versión confeccionada 🌿. ¿Te gustaría ver las medidas disponibles?`,
+        `Actualmente tenemos disponible solo el color beige en malla confeccionada. ¿Quieres que te muestre los tamaños?`,
+        `De momento contamos únicamente con beige, que es nuestro color más popular 😊. ¿Te interesa ver precios y medidas?`
+      ];
+      return {
+        type: "text",
+        text: colorResponses[Math.floor(Math.random() * colorResponses.length)]
+      };
+    }
   }
 
   // Handle references to previously mentioned size ("esa medida", "la medida que envié/dije")
