@@ -57,6 +57,25 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       /\b(comprar|vender)\s+(?:por\s+)?metros?\b/i.test(msg) ||
       /\b(rollos?|rollo\s+completo)\b/i.test(msg)) {
 
+    // 🔴 EXPLICIT ROLL REQUEST: If customer explicitly asks for a roll with dimensions,
+    // hand off to human immediately without asking clarifying questions
+    const explicitRollRequest = /\b(rollo\s+(?:de|completo)\s+(?:\d+(?:\.\d+)?)\s*[xX×]\s*(?:\d+(?:\.\d+)?)|\d+(?:\.\d+)?\s*[xX×]\s*\d+(?:\.\d+)?\s+rollo)\b/i.test(msg);
+
+    if (explicitRollRequest) {
+      const info = await getBusinessInfo();
+      await updateConversation(psid, { lastIntent: "roll_explicit_request", state: "needs_human" });
+
+      return {
+        type: "text",
+        text: "Perfecto, con gusto te ayudamos con el rollo que necesitas.\n\n" +
+              "Para cotizar rollos, comunícate directamente con uno de nuestros asesores:\n\n" +
+              `📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n` +
+              `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}\n\n` +
+              "También puedes escribirnos aquí por Messenger y te atenderemos con gusto."
+      };
+    }
+
+    // General meter/roll inquiry - show options and ask
     await updateConversation(psid, { lastIntent: "price_by_meter" });
 
     return {
