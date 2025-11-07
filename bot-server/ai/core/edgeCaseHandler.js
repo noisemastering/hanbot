@@ -17,16 +17,23 @@ async function detectEdgeCase(message, openai) {
           role: "system",
           content: `Analiza el siguiente mensaje de un cliente y clasifícalo en una de estas categorías:
 
-UNINTELLIGIBLE: El mensaje es completamente incomprensible, tiene errores graves de escritura sin sentido, es spam, o no tiene ningún contenido útil
-- Ejemplos: "asdfgh", "ksksksk", "?????" (solo símbolos), emojis sin ningún contexto
-- NO son unintelligible: "si", "si esa", "de esa medida", "la que envié" (respuestas cortas en contexto), "hola hola", errores de tipeo menores como "deesa" por "de esa"
+UNINTELLIGIBLE: SOLO para mensajes VERDADERAMENTE incomprensibles sin ningún sentido aparente
+- Ejemplos: "asdfgh", "ksksksk", "?????" (solo símbolos sin contexto), emojis aleatorios sin texto
+- NO son unintelligible:
+  * Errores de tipeo (ej: "recio" por "precio", "deesa" por "de esa", "donde se uvican")
+  * Mensajes en MAYÚSCULAS (ej: "DONDE SE UBICAN", "CUANTO CUESTA")
+  * Respuestas cortas en contexto (ej: "si", "si esa", "de esa medida", "la que envié")
+  * Mensajes mal formateados con saltos de línea o puntuación extraña
+  * Abreviaciones comunes (ej: "q", "tb", "tmb", "xq")
+  * IMPORTANTE: Si puedes inferir la intención del mensaje, es NORMAL, no UNINTELLIGIBLE
 
 COMPLEX: El mensaje requiere análisis técnico avanzado, cálculos complejos personalizados, o conocimiento muy especializado
 - Ejemplos: "necesito calcular cuánta malla necesito para cubrir un área irregular de 45m² con altura variable entre 2.5m y 4m con sistema de tensores automáticos", "necesito certificación UV para exportación a Estados Unidos"
-- NO son complejas: preguntas sobre tamaños custom simples, preguntas sobre instalación, preguntas sobre colores o materiales
+- NO son complejas: preguntas sobre tamaños custom simples, preguntas sobre instalación, preguntas sobre colores o materiales, preguntas sobre ubicación o precio
 
 NORMAL: Cualquier pregunta que un chatbot de ventas básico pueda responder (¡PREFIERE ESTA CATEGORÍA en casos dudosos!)
-- Ejemplos: "tienes malla sombra?", "cuánto cuesta?", "qué colores hay?", "hacen envíos?", "si", "si esa", "de esa medida", "la que les envié", referencias a medidas mencionadas antes
+- Ejemplos: "tienes malla sombra?", "cuánto cuesta?", "qué colores hay?", "hacen envíos?", "donde estan?", "precio", "ubicacion"
+- Incluye: preguntas con typos, mensajes en mayúsculas, preguntas múltiples simples (precio + ubicación)
 
 Responde ÚNICAMENTE con un JSON:
 {
