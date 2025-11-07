@@ -20,11 +20,11 @@ function Messages() {
   useEffect(() => {
     const fetchMessages = async () => {
       try {
-        const res = await API.get("/messages");
-        setMessages(res.data.data);
+        const res = await API.get("/conversations");
+        setMessages(res.data);
 
         // Fetch status for each unique PSID
-        const uniquePSIDs = [...new Set(res.data.data.map(m => m.psid))];
+        const uniquePSIDs = [...new Set(res.data.map(m => m.psid))];
         const statuses = {};
         for (const psid of uniquePSIDs) {
           try {
