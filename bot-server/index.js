@@ -25,11 +25,23 @@ const cors = require("cors");
 
 app.use(
   cors({
-    origin: [
-      "http://localhost:3001", // tu dashboard local
-      "https://hanbot-nu.vercel.app", // production dashboard
-      "https://emanational-leeanna-impressionable.ngrok-free.dev" // tu túnel ngrok actual
-    ],
+    origin: function(origin, callback) {
+      // Allow requests with no origin (mobile apps, Postman, etc.)
+      if (!origin) return callback(null, true);
+
+      const allowedOrigins = [
+        "http://localhost:3001",
+        "https://hanbot-nu.vercel.app",
+        "https://emanational-leeanna-impressionable.ngrok-free.dev"
+      ];
+
+      // Allow all vercel.app subdomains
+      if (origin.includes('.vercel.app') || allowedOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        callback(new Error('Not allowed by CORS'));
+      }
+    },
     methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization"]
   })
