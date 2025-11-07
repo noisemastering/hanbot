@@ -184,6 +184,12 @@ app.post("/test-message", async (req, res) => {
 
 // 👨‍💼 API: Manual human takeover
 app.post("/api/conversation/:psid/takeover", async (req, res) => {
+  // Authentication check
+  const auth = req.headers.authorization;
+  if (!auth || auth.trim() !== "Bearer hanlob_admin_2025") {
+    return res.status(403).json({ success: false, error: "Unauthorized" });
+  }
+
   try {
     const { psid } = req.params;
     const { agentName, reason } = req.body;
@@ -217,6 +223,12 @@ app.post("/api/conversation/:psid/takeover", async (req, res) => {
 
 // 🤖 API: Release conversation back to bot
 app.post("/api/conversation/:psid/release", async (req, res) => {
+  // Authentication check
+  const auth = req.headers.authorization;
+  if (!auth || auth.trim() !== "Bearer hanlob_admin_2025") {
+    return res.status(403).json({ success: false, error: "Unauthorized" });
+  }
+
   try {
     const { psid } = req.params;
 
@@ -242,6 +254,12 @@ app.post("/api/conversation/:psid/release", async (req, res) => {
 
 // 🔍 API: Check conversation status
 app.get("/api/conversation/:psid/status", async (req, res) => {
+  // Authentication check
+  const auth = req.headers.authorization;
+  if (!auth || auth.trim() !== "Bearer hanlob_admin_2025") {
+    return res.status(403).json({ success: false, error: "Unauthorized" });
+  }
+
   try {
     const { psid } = req.params;
     const { getConversation, isHumanActive } = require("./conversationManager");
