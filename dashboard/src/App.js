@@ -16,7 +16,8 @@ import CampaignsView from "./components/CampaignsView";
 import CampaignProductModal from "./components/CampaignProductModal";
 import CampaignProductsView from "./components/CampaignProductsView";
 
-const socket = io("http://localhost:3000");
+const API_URL = process.env.REACT_APP_API_URL || "http://localhost:3000";
+const socket = io(API_URL);
 
 function playPopSound() {
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -122,7 +123,7 @@ function App() {
 
   const fetchMessages = async () => {
     try {
-      const res = await fetch("http://localhost:3000/messages", {
+      const res = await fetch(`${API_URL}/messages`, {
         headers: { Authorization: "Bearer hanlob_admin_2025" }
       });
       const data = await res.json();
@@ -137,8 +138,8 @@ function App() {
   const fetchProducts = async () => {
     setProductsLoading(true);
     try {
-      console.log("Fetching products from:", "http://localhost:3000/products");
-      const res = await fetch("http://localhost:3000/products");
+      console.log("Fetching products from:", `${API_URL}/products`);
+      const res = await fetch(`${API_URL}/products`);
       console.log("Response status:", res.status);
       const data = await res.json();
       console.log("Response data:", data);
@@ -157,7 +158,7 @@ function App() {
 
   const handleDeleteProduct = async (productId) => {
     try {
-      const res = await fetch(`http://localhost:3000/products/${productId}`, {
+      const res = await fetch(`${API_URL}/products/${productId}`, {
         method: "DELETE"
       });
       const data = await res.json();
@@ -174,8 +175,8 @@ function App() {
   const handleSaveProduct = async (productData) => {
     try {
       const url = editingProduct
-        ? `http://localhost:3000/products/${editingProduct._id}`
-        : "http://localhost:3000/products";
+        ? `${API_URL}/products/${editingProduct._id}`
+        : `${API_URL}/products`;
       const method = editingProduct ? "PUT" : "POST";
 
       const res = await fetch(url, {
@@ -203,7 +204,7 @@ function App() {
   const fetchCampaigns = async () => {
     setCampaignsLoading(true);
     try {
-      const res = await fetch("http://localhost:3000/campaigns");
+      const res = await fetch(`${API_URL}/campaigns`);
       const data = await res.json();
       if (data.success) {
         setCampaigns(data.data || []);
@@ -217,7 +218,7 @@ function App() {
 
   const handleDeleteCampaign = async (campaignId) => {
     try {
-      const res = await fetch(`http://localhost:3000/campaigns/${campaignId}`, {
+      const res = await fetch(`${API_URL}/campaigns/${campaignId}`, {
         method: "DELETE"
       });
       const data = await res.json();
@@ -234,8 +235,8 @@ function App() {
   const handleSaveCampaign = async (campaignData) => {
     try {
       const url = editingCampaign
-        ? `http://localhost:3000/campaigns/${editingCampaign._id}`
-        : "http://localhost:3000/campaigns";
+        ? `${API_URL}/campaigns/${editingCampaign._id}`
+        : `${API_URL}/campaigns`;
       const method = editingCampaign ? "PUT" : "POST";
 
       const res = await fetch(url, {
@@ -263,7 +264,7 @@ function App() {
   const fetchCampaignProducts = async () => {
     setCampaignProductsLoading(true);
     try {
-      const res = await fetch("http://localhost:3000/campaign-products");
+      const res = await fetch(`${API_URL}/campaign-products`);
       const data = await res.json();
       if (data.success) {
         setCampaignProducts(data.data || []);
@@ -277,7 +278,7 @@ function App() {
 
   const handleDeleteCampaignProduct = async (campaignProductId) => {
     try {
-      const res = await fetch(`http://localhost:3000/campaign-products/${campaignProductId}`, {
+      const res = await fetch(`${API_URL}/campaign-products/${campaignProductId}`, {
         method: "DELETE"
       });
       const data = await res.json();
@@ -294,8 +295,8 @@ function App() {
   const handleSaveCampaignProduct = async (campaignProductData) => {
     try {
       const url = editingCampaignProduct
-        ? `http://localhost:3000/campaign-products/${editingCampaignProduct._id}`
-        : "http://localhost:3000/campaign-products";
+        ? `${API_URL}/campaign-products/${editingCampaignProduct._id}`
+        : `${API_URL}/campaign-products`;
       const method = editingCampaignProduct ? "PUT" : "POST";
 
       const res = await fetch(url, {
