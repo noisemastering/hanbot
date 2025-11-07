@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import io from "socket.io-client";
+import API from "./api";
 import {
   ResponsiveContainer,
   BarChart,
@@ -98,6 +99,8 @@ function App() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [activeMenu, setActiveMenu] = useState("overview");
   const [selectedConversation, setSelectedConversation] = useState(null);
+  const [conversationStatuses, setConversationStatuses] = useState({});
+  const [handoverLoading, setHandoverLoading] = useState({});
   const [conversationFilter, setConversationFilter] = useState(null);
 
   // Products state
@@ -318,6 +321,51 @@ function App() {
     } catch (error) {
       console.error("Error saving campaign product:", error);
       alert("Error al guardar el producto de campaña");
+    }
+  };
+
+  const fetchConversationStatus = async (psid) => {
+    try {
+      const res = await API.get(`/api/conversation/${psid}/status`);
+      setConversationStatuses(prev => ({
+        ...prev,
+        [psid]: res.data
+      }));
+    } catch (err) {
+      console.error(`Error fetching status for ${psid}:`, err);
+    }
+  };
+
+  const handleTakeover = async (psid) => {
+    setHandoverLoading(prev => ({ ...prev, [psid]: true }));
+    try {
+      await API.post(`/api/conversation/${psid}/takeover`, {
+        agentName: "Dashboard User",
+        reason: "Manual takeover from dashboard"
+      });
+
+      await fetchConversationStatus(psid);
+      alert(`Control tomado del PSID: ${psid.slice(0, 16)}...\nEl bot dejara de responder.`);
+    } catch (err) {
+      console.error("Error taking over:", err);
+      alert(`Error: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setHandoverLoading(prev => ({ ...prev, [psid]: false }));
+    }
+  };
+
+  const handleRelease = async (psid) => {
+    setHandoverLoading(prev => ({ ...prev, [psid]: true }));
+    try {
+      await API.post(`/api/conversation/${psid}/release`);
+
+      await fetchConversationStatus(psid);
+      alert(`Conversacion liberada: ${psid.slice(0, 16)}...\nEl bot puede responder de nuevo.`);
+    } catch (err) {
+      console.error("Error releasing:", err);
+      alert(`Error: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setHandoverLoading(prev => ({ ...prev, [psid]: false }));
     }
   };
 
@@ -733,87 +781,6 @@ function App() {
           )}
         </div>
 
-        {/* Conversation Detail Modal */}
-        {selectedConversation && (
-          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-gray-800/95 backdrop-blur-lg border border-gray-700/50 rounded-xl max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col">
-              {/* Modal Header */}
-              <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between">
-                <div>
-                  <h2 className="text-xl font-bold text-white">Detalle de Conversación</h2>
-                  <p className="text-sm text-gray-400 font-mono mt-1">
-                    Usuario: {selectedConversation.slice(0, 16)}...
-                  </p>
-                </div>
-                <button
-                  onClick={() => setSelectedConversation(null)}
-                  className="p-2 rounded-lg text-gray-400 hover:bg-gray-700/50 hover:text-white transition-colors"
-                >
-                  <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
-              </div>
-
-              {/* Conversation Messages */}
-              <div className="flex-1 overflow-y-auto p-6 space-y-4">
-                {getUserConversation(selectedConversation).map((msg, index) => (
-                  <div
-                    key={index}
-                    className={`flex ${msg.senderType === "bot" ? "justify-start" : "justify-end"}`}
-                  >
-                    <div
-                      className={`max-w-[70%] rounded-lg px-4 py-3 ${
-                        msg.senderType === "bot"
-                          ? "bg-gray-700/50 border border-gray-600/50"
-                          : "bg-primary-500/20 border border-primary-500/30"
-                      }`}
-                    >
-                      <div className="flex items-center space-x-2 mb-1">
-                        <span
-                          className={`text-xs font-medium ${
-                            msg.senderType === "bot" ? "text-purple-400" : "text-blue-400"
-                          }`}
-                        >
-                          {msg.senderType === "bot" ? "Bot" : "Usuario"}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {new Date(msg.timestamp).toLocaleTimeString()}
-                        </span>
-                      </div>
-                      <p className="text-sm text-gray-200">{msg.text}</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {/* Modal Footer */}
-              <div className="px-6 py-4 border-t border-gray-700/50 flex justify-between items-center">
-                <div className="text-sm text-gray-400">
-                  {getUserConversation(selectedConversation).length} mensajes en total
-                </div>
-                <div className="flex space-x-2">
-                  <button
-                    onClick={() => {
-                      setConversationFilter(selectedConversation);
-                      setSelectedConversation(null);
-                      setFilter("all");
-                    }}
-                    className="px-4 py-2 bg-primary-500/20 text-primary-400 rounded-lg hover:bg-primary-500/30 transition-colors"
-                  >
-                    Ver en Tabla
-                  </button>
-                  <button
-                    onClick={() => setSelectedConversation(null)}
-                    className="px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
-                  >
-                    Cerrar
-                  </button>
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
           </>
         )}
 
@@ -902,8 +869,8 @@ function App() {
                           <tr
                             key={msg._id}
                             onClick={() => {
-                              setConversationFilter(msg.psid);
-                              setActiveMenu("overview");
+                              setSelectedConversation(msg.psid);
+                              fetchConversationStatus(msg.psid);
                             }}
                             className="hover:bg-gray-700/30 transition-colors cursor-pointer"
                           >
@@ -1237,6 +1204,112 @@ function App() {
             </div>
           </div>
         )}
+
+        {/* Conversation Detail Modal - Global */}
+        {selectedConversation && (
+          <div
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50"
+            onClick={() => setSelectedConversation(null)}
+          >
+            <div
+              className="bg-gray-900 rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] flex flex-col"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Modal Header */}
+              <div className="flex justify-between items-center p-4 border-b border-gray-700">
+                <h2 className="text-xl font-bold text-white">
+                  Detalle de Conversacion
+                </h2>
+                <button
+                  onClick={() => setSelectedConversation(null)}
+                  className="text-gray-400 hover:text-white text-2xl"
+                >
+                  &times;
+                </button>
+              </div>
+
+              {/* Modal Body - Scrollable Messages */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-3">
+                {getUserConversation(selectedConversation).map((msg, i) => (
+                  <div
+                    key={i}
+                    className={`p-3 rounded-lg ${
+                      msg.senderType === "bot"
+                        ? "bg-blue-900 text-blue-100"
+                        : "bg-gray-800 text-gray-100"
+                    }`}
+                  >
+                    <div className="flex justify-between items-start mb-1">
+                      <span className="text-xs font-semibold uppercase">
+                        {msg.senderType === "bot" ? "🤖 Bot" : "👤 Usuario"}
+                      </span>
+                      <span className="text-xs text-gray-400">
+                        {new Date(msg.timestamp).toLocaleString()}
+                      </span>
+                    </div>
+                    <p className="whitespace-pre-wrap">{msg.text}</p>
+                  </div>
+                ))}
+              </div>
+
+              {/* Modal Footer */}
+              <div className="p-4 border-t border-gray-700 space-y-3">
+                {/* Status Indicator */}
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-300">Estado actual:</span>
+                  {conversationStatuses[selectedConversation]?.humanActive ? (
+                    <span className="px-3 py-1 bg-orange-500 text-white rounded-full text-sm font-medium">
+                      👨‍💼 Humano Activo
+                    </span>
+                  ) : (
+                    <span className="px-3 py-1 bg-green-500 text-white rounded-full text-sm font-medium">
+                      🤖 Bot Activo
+                    </span>
+                  )}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="flex gap-2">
+                  {conversationStatuses[selectedConversation]?.humanActive ? (
+                    <button
+                      onClick={() => handleRelease(selectedConversation)}
+                      disabled={handoverLoading[selectedConversation]}
+                      className="flex-1 px-4 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {handoverLoading[selectedConversation] ? "..." : "🤖 Liberar al Bot"}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => handleTakeover(selectedConversation)}
+                      disabled={handoverLoading[selectedConversation]}
+                      className="flex-1 px-4 py-2 bg-orange-500 text-white rounded-lg hover:bg-orange-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {handoverLoading[selectedConversation] ? "..." : "👨‍💼 Tomar Control"}
+                    </button>
+                  )}
+
+                  <button
+                    onClick={() => {
+                      setSelectedConversation(null);
+                      setActiveMenu("messages");
+                    }}
+                    className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
+                  >
+                    Ver en Tabla
+                  </button>
+
+                  <button
+                    onClick={() => setSelectedConversation(null)}
+                    className="px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700 transition-colors"
+                  >
+                    Cerrar
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
       </main>
       </div>
     </div>
