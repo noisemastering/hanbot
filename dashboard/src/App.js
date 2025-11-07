@@ -817,6 +817,222 @@ function App() {
           </>
         )}
 
+        {/* Conversaciones View */}
+        {activeMenu === "conversations" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-white">Conversaciones</h2>
+            </div>
+
+            {/* Filters */}
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setFilter("all")}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  filter === "all"
+                    ? "bg-primary-500 text-white"
+                    : "bg-gray-800/50 text-gray-400 hover:bg-gray-700/50"
+                }`}
+              >
+                Todos los Mensajes
+              </button>
+              <button
+                onClick={() => setFilter("user")}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  filter === "user"
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-800/50 text-gray-400 hover:bg-gray-700/50"
+                }`}
+              >
+                Solo Usuarios
+              </button>
+              <button
+                onClick={() => setFilter("bot")}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  filter === "bot"
+                    ? "bg-purple-500 text-white"
+                    : "bg-gray-800/50 text-gray-400 hover:bg-gray-700/50"
+                }`}
+              >
+                Solo Bot
+              </button>
+            </div>
+
+            {/* Messages Table */}
+            <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-700/50">
+                <h2 className="text-xl font-bold text-white">Mensajes Recientes</h2>
+              </div>
+              {loading ? (
+                <div className="p-8 text-center">
+                  <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-gray-400 mt-4">Cargando mensajes...</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-900/50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                          Fecha y Hora
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                          Tipo
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                          ID de Usuario
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                          Mensaje
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-700/50">
+                      {filteredMessages.length === 0 ? (
+                        <tr>
+                          <td colSpan="4" className="px-6 py-8 text-center text-gray-400">
+                            No se encontraron mensajes
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredMessages.map((msg) => (
+                          <tr
+                            key={msg._id}
+                            onClick={() => {
+                              setConversationFilter(msg.psid);
+                              setActiveMenu("overview");
+                            }}
+                            className="hover:bg-gray-700/30 transition-colors cursor-pointer"
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                              {new Date(msg.createdAt).toLocaleString("es-MX")}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {msg.from === "bot" ? (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                  Bot
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                  Usuario
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 font-mono">
+                              {msg.psid.substring(0, 12)}...
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-300 max-w-md truncate">
+                              {msg.text}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Analytics View */}
+        {activeMenu === "analytics" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-white">Analíticas</h2>
+            </div>
+
+            {/* Stats Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+              {/* Total Messages */}
+              <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 backdrop-blur-lg border border-blue-500/20 rounded-xl p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-400 mb-1">Mensajes Totales</p>
+                    <h3 className="text-3xl font-bold text-white">{totalMessages}</h3>
+                  </div>
+                  <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              {/* Unique Users */}
+              <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 backdrop-blur-lg border border-purple-500/20 rounded-xl p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-400 mb-1">Usuarios Únicos</p>
+                    <h3 className="text-3xl font-bold text-white">{totalUsers}</h3>
+                  </div>
+                  <div className="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              {/* Response Rate */}
+              <div className="bg-gradient-to-br from-primary-500/10 to-primary-600/5 backdrop-blur-lg border border-primary-500/20 rounded-xl p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-400 mb-1">Tasa de Respuesta</p>
+                    <h3 className="text-3xl font-bold text-white">{botResponseRate}%</h3>
+                  </div>
+                  <div className="w-12 h-12 bg-primary-500/20 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+
+              {/* Unanswered */}
+              <div className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 backdrop-blur-lg border border-amber-500/20 rounded-xl p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-sm font-medium text-gray-400 mb-1">Sin Responder</p>
+                    <h3 className="text-3xl font-bold text-white">{unanswered}</h3>
+                  </div>
+                  <div className="w-12 h-12 bg-amber-500/20 rounded-lg flex items-center justify-center">
+                    <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                    </svg>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Activity Chart */}
+            <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
+              <h2 className="text-xl font-bold text-white mb-6 flex items-center">
+                <svg className="w-5 h-5 text-primary-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+                </svg>
+                Actividad por Hora
+              </h2>
+              <ResponsiveContainer width="100%" height={250}>
+                <BarChart data={getChartData(messages)}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis dataKey="hour" stroke="#9CA3AF" />
+                  <YAxis stroke="#9CA3AF" />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1F2937',
+                      border: '1px solid #374151',
+                      borderRadius: '8px',
+                      color: '#fff'
+                    }}
+                  />
+                  <Bar dataKey="count" fill="#22c55e" radius={[8, 8, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
         {/* Products View */}
         {activeMenu === "products" && (
           <ProductsView
