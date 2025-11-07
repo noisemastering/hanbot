@@ -16,11 +16,7 @@ import CampaignsView from "./components/CampaignsView";
 import CampaignProductModal from "./components/CampaignProductModal";
 import CampaignProductsView from "./components/CampaignProductsView";
 
-// Log environment variable for debugging
-console.log("🔍 REACT_APP_API_URL:", process.env.REACT_APP_API_URL);
-console.log("🌐 Using API_URL:", process.env.REACT_APP_API_URL || "http://localhost:3000");
-
-const API_URL = process.env.REACT_APP_API_URL || "http://localhost:3000";
+const API_URL = "https://hanbot-production.up.railway.app";
 const socket = io(API_URL);
 
 function playPopSound() {
