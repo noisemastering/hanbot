@@ -50,18 +50,21 @@ app.use(
 // Asegura respuesta correcta a preflight requests (CORS)
 app.options(/.*/, cors());
 
-// Register routes AFTER CORS middleware
+// Middleware - Parse JSON payloads (MUST come before routes)
+app.use(bodyParser.json());
+
+// Register routes AFTER CORS and body-parser middleware
 const productRoutes = require('./routes/productsRoutes');
 const campaignRoutes = require('./routes/campaignsRoutes');
 const campaignProductRoutes = require('./routes/campaignProductsRoutes');
+const conversationsRoutes = require('./routes/conversationsRoutes');
+const analyticsRoutes = require('./routes/analyticsRoutes');
 
 app.use('/products', productRoutes);
 app.use('/campaigns', campaignRoutes);
 app.use('/campaign-products', campaignProductRoutes);
-
-
-// Middleware - Parse JSON payloads
-app.use(bodyParser.json());
+app.use('/conversations', conversationsRoutes);
+app.use('/analytics', analyticsRoutes);
 
 // ============================================
 // Start the Express Server with Socket.IO
