@@ -16,6 +16,7 @@ import CampaignModal from "./components/CampaignModal";
 import CampaignsView from "./components/CampaignsView";
 import CampaignProductModal from "./components/CampaignProductModal";
 import CampaignProductsView from "./components/CampaignProductsView";
+import Messages from "./pages/Messages";
 
 const API_URL = "https://hanbot-production.up.railway.app";
 const socket = io(API_URL);
@@ -785,125 +786,7 @@ function App() {
         )}
 
         {/* Conversaciones View */}
-        {activeMenu === "conversations" && (
-          <div className="space-y-6">
-            <div className="flex items-center justify-between">
-              <h2 className="text-2xl font-bold text-white">Conversaciones</h2>
-              <div className="text-sm text-gray-400">
-                Debug: {messages.length} total, {filteredMessages.length} filtered, loading: {loading ? 'yes' : 'no'}
-              </div>
-            </div>
-
-            {/* Filters */}
-            <div className="flex items-center space-x-2">
-              <button
-                onClick={() => setFilter("all")}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                  filter === "all"
-                    ? "bg-primary-500 text-white"
-                    : "bg-gray-800/50 text-gray-400 hover:bg-gray-700/50"
-                }`}
-              >
-                Todos los Mensajes
-              </button>
-              <button
-                onClick={() => setFilter("user")}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                  filter === "user"
-                    ? "bg-blue-500 text-white"
-                    : "bg-gray-800/50 text-gray-400 hover:bg-gray-700/50"
-                }`}
-              >
-                Solo Usuarios
-              </button>
-              <button
-                onClick={() => setFilter("bot")}
-                className={`px-4 py-2 rounded-lg font-medium transition-all ${
-                  filter === "bot"
-                    ? "bg-purple-500 text-white"
-                    : "bg-gray-800/50 text-gray-400 hover:bg-gray-700/50"
-                }`}
-              >
-                Solo Bot
-              </button>
-            </div>
-
-            {/* Messages Table */}
-            <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl overflow-hidden">
-              <div className="px-6 py-4 border-b border-gray-700/50">
-                <h2 className="text-xl font-bold text-white">Mensajes Recientes</h2>
-              </div>
-              {loading ? (
-                <div className="p-8 text-center">
-                  <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-                  <p className="text-gray-400 mt-4">Cargando mensajes...</p>
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full">
-                    <thead className="bg-gray-900/50">
-                      <tr>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                          Fecha y Hora
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                          Tipo
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                          ID de Usuario
-                        </th>
-                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                          Mensaje
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-700/50">
-                      {filteredMessages.length === 0 ? (
-                        <tr>
-                          <td colSpan="4" className="px-6 py-8 text-center text-gray-400">
-                            No se encontraron mensajes
-                          </td>
-                        </tr>
-                      ) : (
-                        filteredMessages.map((msg) => (
-                          <tr
-                            key={msg._id}
-                            onClick={() => {
-                              setSelectedConversation(msg.psid);
-                              fetchConversationStatus(msg.psid);
-                            }}
-                            className="hover:bg-gray-700/30 transition-colors cursor-pointer"
-                          >
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                              {new Date(msg.timestamp || msg.createdAt).toLocaleString("es-MX")}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              {(msg.senderType || msg.from) === "bot" ? (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                                  Bot
-                                </span>
-                              ) : (
-                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                                  Usuario
-                                </span>
-                              )}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 font-mono">
-                              {msg.psid.substring(0, 12)}...
-                            </td>
-                            <td className="px-6 py-4 text-sm text-gray-300 max-w-md truncate">
-                              {msg.text}
-                            </td>
-                          </tr>
-                        ))
-                      )}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        {activeMenu === "conversations" && <Messages />}
 
         {/* Analytics View */}
         {activeMenu === "analytics" && (
