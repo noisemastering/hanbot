@@ -170,6 +170,88 @@ app.post("/test-message", async (req, res) => {
   }
 });
 
+// 👨‍💼 API: Manual human takeover
+app.post("/api/conversation/:psid/takeover", async (req, res) => {
+  try {
+    const { psid } = req.params;
+    const { agentName, reason } = req.body;
+
+    console.log(`👨‍💼 API: Manual takeover requested for ${psid} by ${agentName || 'agent'}`);
+
+    // Cancel any pending debounced messages
+    const { cancelDebounce } = require("./messageDebouncer");
+    cancelDebounce(psid);
+
+    // Mark conversation as human_active
+    await updateConversation(psid, {
+      state: "human_active",
+      lastIntent: "human_takeover",
+      agentTookOverAt: new Date(),
+      agentName: agentName || "Human Agent"
+    });
+
+    res.json({
+      success: true,
+      message: `Conversation with ${psid} is now handled by ${agentName || 'human agent'}`,
+      psid,
+      agentName: agentName || "Human Agent",
+      timestamp: new Date()
+    });
+  } catch (error) {
+    console.error("❌ Error in manual takeover:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 🤖 API: Release conversation back to bot
+app.post("/api/conversation/:psid/release", async (req, res) => {
+  try {
+    const { psid } = req.params;
+
+    console.log(`🤖 API: Releasing conversation ${psid} back to bot`);
+
+    // Mark conversation as active (bot control)
+    await updateConversation(psid, {
+      state: "active",
+      lastIntent: "bot_resumed"
+    });
+
+    res.json({
+      success: true,
+      message: `Conversation with ${psid} released back to bot`,
+      psid,
+      timestamp: new Date()
+    });
+  } catch (error) {
+    console.error("❌ Error releasing conversation:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 🔍 API: Check conversation status
+app.get("/api/conversation/:psid/status", async (req, res) => {
+  try {
+    const { psid } = req.params;
+    const { getConversation, isHumanActive } = require("./conversationManager");
+
+    const convo = await getConversation(psid);
+    const humanActive = await isHumanActive(psid);
+
+    res.json({
+      psid,
+      state: convo?.state || "unknown",
+      humanActive,
+      agentName: convo?.agentName || null,
+      agentTookOverAt: convo?.agentTookOverAt || null,
+      lastIntent: convo?.lastIntent || null,
+      timestamp: new Date()
+    });
+  } catch (error) {
+    console.error("❌ Error checking conversation status:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // GET /webhook - Facebook webhook verification
 app.get("/webhook", (req, res) => {
   const VERIFY_TOKEN = process.env.FB_VERIFY_TOKEN || "hanlob_verify_token_2025";
@@ -198,6 +280,37 @@ app.post("/webhook", async (req, res) => {
       const webhookEvent = entry.messaging[0];
       const senderPsid = webhookEvent.sender.id;
 
+
+      // 🤝 HANDOVER PROTOCOL: Handle thread control events
+      if (webhookEvent.pass_thread_control) {
+        const targetPsid = senderPsid;
+        console.log(`👨‍💼 HANDOVER: Human agent took control of conversation with ${targetPsid}`);
+        console.log(`   New owner app ID: ${webhookEvent.pass_thread_control.new_owner_app_id}`);
+        console.log(`   Metadata: ${webhookEvent.pass_thread_control.metadata || 'none'}`);
+
+        await updateConversation(targetPsid, {
+          state: "human_active",
+          lastIntent: "human_takeover",
+          agentTookOverAt: new Date()
+        });
+
+        res.sendStatus(200);
+        return;
+      }
+
+      if (webhookEvent.take_thread_control) {
+        const targetPsid = senderPsid;
+        console.log(`🤖 HANDOVER: Bot regained control of conversation with ${targetPsid}`);
+        console.log(`   Previous owner app ID: ${webhookEvent.take_thread_control.previous_owner_app_id}`);
+
+        await updateConversation(targetPsid, {
+          state: "active",
+          lastIntent: "bot_resumed"
+        });
+
+        res.sendStatus(200);
+        return;
+      }
 
       // 🧩 BLOQUE NUEVO: detección de campañas o enlaces con ?ref=
       const referral = webhookEvent.referral || webhookEvent.postback?.referral;
@@ -230,6 +343,14 @@ app.post("/webhook", async (req, res) => {
       if (webhookEvent.message) {
         const messageText = webhookEvent.message.text;
         const FB_PAGE_ID = process.env.FB_PAGE_ID;
+
+        // 🔍 DEBUG: Log all webhook event details for debugging human agent detection
+        console.log(`\n🔍 WEBHOOK DEBUG:`);
+        console.log(`   senderPsid: ${senderPsid}`);
+        console.log(`   FB_PAGE_ID: ${FB_PAGE_ID}`);
+        console.log(`   recipientId: ${webhookEvent.recipient?.id}`);
+        console.log(`   messageText: "${messageText}"`);
+        console.log(`   Match? ${senderPsid === FB_PAGE_ID ? '✅ YES (HUMAN AGENT)' : '❌ NO (USER)'}\n`);
 
         // 🧑‍💼 Detect if message is from Page (human agent) or from User
         const isFromPage = senderPsid === FB_PAGE_ID;
