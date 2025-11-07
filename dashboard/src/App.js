@@ -905,10 +905,10 @@ function App() {
                             className="hover:bg-gray-700/30 transition-colors cursor-pointer"
                           >
                             <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                              {new Date(msg.createdAt).toLocaleString("es-MX")}
+                              {new Date(msg.timestamp || msg.createdAt).toLocaleString("es-MX")}
                             </td>
                             <td className="px-6 py-4 whitespace-nowrap">
-                              {msg.from === "bot" ? (
+                              {(msg.senderType || msg.from) === "bot" ? (
                                 <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
                                   Bot
                                 </span>
