@@ -153,7 +153,7 @@ function Messages() {
                         backgroundColor: "#4caf50",
                         color: "white",
                         border: "none",
-                        borderRadius: "4px",
+                        borderRadius: "8px",
                         cursor: loading[msg.psid] ? "not-allowed" : "pointer",
                         opacity: loading[msg.psid] ? 0.6 : 1
                       }}
@@ -172,7 +172,7 @@ function Messages() {
                         backgroundColor: "#ff9800",
                         color: "white",
                         border: "none",
-                        borderRadius: "4px",
+                        borderRadius: "8px",
                         cursor: loading[msg.psid] ? "not-allowed" : "pointer",
                         opacity: loading[msg.psid] ? 0.6 : 1
                       }}
@@ -270,7 +270,7 @@ function Messages() {
                       backgroundColor: "#4caf50",
                       color: "white",
                       border: "none",
-                      borderRadius: "4px",
+                      borderRadius: "8px",
                       cursor: loading[selectedPsid] ? "not-allowed" : "pointer",
                       opacity: loading[selectedPsid] ? 0.6 : 1
                     }}
@@ -286,7 +286,7 @@ function Messages() {
                       backgroundColor: "#ff9800",
                       color: "white",
                       border: "none",
-                      borderRadius: "4px",
+                      borderRadius: "8px",
                       cursor: loading[selectedPsid] ? "not-allowed" : "pointer",
                       opacity: loading[selectedPsid] ? 0.6 : 1
                     }}
@@ -301,7 +301,7 @@ function Messages() {
                     backgroundColor: "#666",
                     color: "white",
                     border: "none",
-                    borderRadius: "4px",
+                    borderRadius: "8px",
                     cursor: "pointer"
                   }}
                 >
