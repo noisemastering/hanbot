@@ -2,6 +2,22 @@
 const { getBusinessInfo } = require("../../businessInfoManager");
 const { updateConversation } = require("../../conversationManager");
 
+// Helper function to check if we're in business hours (Mon-Fri, 9am-6pm Mexico City time)
+function isBusinessHours() {
+  // Get current time in Mexico City (UTC-6)
+  const now = new Date();
+  const mexicoTime = new Date(now.toLocaleString("en-US", { timeZone: "America/Mexico_City" }));
+
+  const day = mexicoTime.getDay(); // 0 = Sunday, 6 = Saturday
+  const hour = mexicoTime.getHours();
+
+  // Monday-Friday (1-5) and between 9am-6pm
+  const isWeekday = day >= 1 && day <= 5;
+  const isDuringHours = hour >= 9 && hour < 18;
+
+  return isWeekday && isDuringHours;
+}
+
 async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME) {
   const businessInfo = await getBusinessInfo();
 
@@ -90,15 +106,27 @@ INSTRUCCIONES CRÍTICAS:
   const newUnknownCount = (convo.unknownCount || 0) + 1;
   await updateConversation(psid, { lastIntent: "fallback", unknownCount: newUnknownCount });
 
+  // Determine handoff threshold based on business hours
+  // During business hours: hand over immediately (threshold = 1)
+  // After hours/weekends: try harder (threshold = 2)
+  const inBusinessHours = isBusinessHours();
+  const handoffThreshold = inBusinessHours ? 1 : 2;
+
+  console.log(`🕒 Business hours check: ${inBusinessHours ? 'YES' : 'NO'} - Handoff threshold: ${handoffThreshold}`);
+
   // Flag conversation for human help when bot is struggling
-  if (newUnknownCount >= 2) {
+  if (newUnknownCount >= handoffThreshold) {
     const info = await getBusinessInfo();
 
     // Mark conversation as needing human intervention
+    const handoffContext = inBusinessHours
+      ? "during business hours"
+      : "after hours/weekend";
+
     await updateConversation(psid, {
       unknownCount: 0,
       handoffRequested: true,
-      handoffReason: `Bot unable to help after ${newUnknownCount} unknown messages`,
+      handoffReason: `Bot unable to help after ${newUnknownCount} unknown message(s) ${handoffContext}`,
       handoffTimestamp: new Date(),
       state: "needs_human"
     });
