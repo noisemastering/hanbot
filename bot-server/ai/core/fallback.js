@@ -90,9 +90,19 @@ INSTRUCCIONES CRÍTICAS:
   const newUnknownCount = (convo.unknownCount || 0) + 1;
   await updateConversation(psid, { lastIntent: "fallback", unknownCount: newUnknownCount });
 
+  // Flag conversation for human help when bot is struggling
   if (newUnknownCount >= 2) {
     const info = await getBusinessInfo();
-    await updateConversation(psid, { unknownCount: 0 });
+
+    // Mark conversation as needing human intervention
+    await updateConversation(psid, {
+      unknownCount: 0,
+      handoffRequested: true,
+      handoffReason: `Bot unable to help after ${newUnknownCount} unknown messages`,
+      handoffTimestamp: new Date(),
+      state: "needs_human"
+    });
+
     if (!info) {
       return { type: "text", text: `Lo siento 😔, no tengo información disponible. Si deseas hablar con un asesor, puedo darte los teléfonos.` };
     }

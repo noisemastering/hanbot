@@ -95,9 +95,33 @@ function Messages() {
     return acc;
   }, {});
 
+  // Count conversations needing help
+  const conversationsNeedingHelp = Object.values(latestMessages).filter(msg => {
+    const status = conversationStatuses[msg.psid];
+    return status?.handoffRequested && !status?.humanActive;
+  }).length;
+
   return (
     <div>
-      <h2 style={{ color: "white" }}>💬 Conversaciones registradas <span style={{ fontSize: "0.7em", color: "#888", marginLeft: "1rem" }}>[v2.0]</span></h2>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+        <h2 style={{ color: "white", margin: 0 }}>
+          💬 Conversaciones registradas
+          <span style={{ fontSize: "0.7em", color: "#888", marginLeft: "1rem" }}>[v2.0]</span>
+        </h2>
+        {conversationsNeedingHelp > 0 && (
+          <div style={{
+            backgroundColor: "#ff5252",
+            color: "white",
+            padding: "8px 16px",
+            borderRadius: "20px",
+            fontWeight: "bold",
+            fontSize: "0.9rem",
+            animation: "pulse 2s infinite"
+          }}>
+            🚨 {conversationsNeedingHelp} conversación{conversationsNeedingHelp > 1 ? 'es' : ''} necesita{conversationsNeedingHelp === 1 ? '' : 'n'} ayuda
+          </div>
+        )}
+      </div>
       <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "2rem", border: "1px solid #555" }}>
         <thead>
           <tr style={{ backgroundColor: "#1b3a1b", color: "lightgreen" }}>
@@ -113,6 +137,7 @@ function Messages() {
           {Object.values(latestMessages).map((msg) => {
             const status = conversationStatuses[msg.psid];
             const isHumanActive = status?.humanActive;
+            const needsHelp = status?.handoffRequested && !isHumanActive;
 
             return (
               <tr
@@ -121,7 +146,12 @@ function Messages() {
                   setSelectedPsid(msg.psid);
                   fetchFullConversation(msg.psid);
                 }}
-                style={{ borderBottom: "1px solid #555", cursor: "pointer" }}
+                style={{
+                  borderBottom: "1px solid #555",
+                  cursor: "pointer",
+                  backgroundColor: needsHelp ? "#4a1515" : "transparent",
+                  borderLeft: needsHelp ? "4px solid #ff5252" : "none"
+                }}
               >
                 <td style={{ padding: "8px", color: "#e0e0e0" }}>{new Date(msg.timestamp).toLocaleString()}</td>
                 <td style={{ padding: "8px", fontFamily: "monospace", fontSize: "0.85em", color: "#e0e0e0" }}>
@@ -134,7 +164,16 @@ function Messages() {
                   {msg.senderType}
                 </td>
                 <td style={{ padding: "8px" }}>
-                  {isHumanActive ? (
+                  {needsHelp ? (
+                    <div>
+                      <span style={{ color: "#ff5252", fontWeight: "bold" }}>🚨 Necesita Ayuda</span>
+                      {status?.handoffReason && (
+                        <div style={{ fontSize: "0.75em", color: "#aaa", marginTop: "4px" }}>
+                          {status.handoffReason}
+                        </div>
+                      )}
+                    </div>
+                  ) : isHumanActive ? (
                     <span style={{ color: "#ff9800" }}>👨‍💼 Humano</span>
                   ) : (
                     <span style={{ color: "#4caf50" }}>🤖 Bot</span>

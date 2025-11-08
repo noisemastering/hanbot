@@ -277,6 +277,9 @@ app.get("/api/conversation/:psid/status", async (req, res) => {
       agentName: convo?.agentName || null,
       agentTookOverAt: convo?.agentTookOverAt || null,
       lastIntent: convo?.lastIntent || null,
+      handoffRequested: convo?.handoffRequested || false,
+      handoffReason: convo?.handoffReason || null,
+      handoffTimestamp: convo?.handoffTimestamp || null,
       timestamp: new Date()
     });
   } catch (error) {
