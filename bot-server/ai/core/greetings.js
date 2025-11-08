@@ -49,8 +49,8 @@ async function handleThanks(cleanMsg, psid, BOT_PERSONA_NAME) {
   // Check if message contains actual product/size requests
   const hasProductRequest = /\b(\d+\s*x\s*\d+|precio|medida|rollo|metro|malla|sombra|tien[ea]s?|cuanto|cuánto|cotiz|ofrece|disponible)\b/i.test(cleanMsg);
 
-  // Expanded goodbye patterns to include common Mexican closing phrases
-  const isGoodbye = /\b(gracias|perfecto|excelente|muy amable|adiós|adios|bye|nos vemos|hasta luego|nos hablamos|te hablo|luego hablo|después|despu[ée]s\s+(te\s+)?(contacto|hablo|comunico)|ma[ñn]ana\s+(me\s+|te\s+)?(comunico|hablo|contacto))\b/i.test(cleanMsg);
+  // Expanded goodbye patterns to include common Mexican closing phrases and deferment messages
+  const isGoodbye = /\b(gracias|perfecto|excelente|muy amable|adiós|adios|bye|nos vemos|hasta luego|nos hablamos|te hablo|luego hablo|después|despu[ée]s\s+(te\s+)?(contacto|hablo|comunico|escribo)|ma[ñn]ana\s+(me\s+|te\s+)?(comunico|hablo|contacto|escribo)|analizar|lo\s+(voy\s+a\s+)?analizo|escribo\s+(más\s+|mas\s+)?tarde|te\s+escribo|lo\s+pienso|más\s+tarde|mas\s+tarde)\b/i.test(cleanMsg);
 
   // Only treat as goodbye if: no continuation, has goodbye words, AND no product request
   if (!hasContinuation && !hasProductRequest && isGoodbye) {
