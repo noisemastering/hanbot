@@ -5,12 +5,19 @@ const { updateConversation } = require("../../conversationManager");
 async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME) {
   const businessInfo = await getBusinessInfo();
 
+  // Determine if this is an ongoing conversation
+  const isOngoingConversation = convo.greeted === true || convo.state !== 'new';
+  const conversationContext = isOngoingConversation
+    ? "\n⚠️ CRÍTICO: Esta es una conversación EN CURSO. NO saludes con 'Hola', '¡Hola!', 'Buenas', etc. Ve directo al punto de la respuesta."
+    : "\n✅ Esta es una conversación NUEVA. Puedes saludar brevemente si es apropiado.";
+
   const response = await openai.chat.completions.create({
     model: process.env.AI_MODEL || "gpt-3.5-turbo",
     messages: [
       {
         role: "system",
         content: `Eres ${BOT_PERSONA_NAME}, asesora de ventas de Hanlob, empresa mexicana de mallas sombra en Querétaro.
+${conversationContext}
 
 PRODUCTOS Y CARACTERÍSTICAS:
 - Malla sombra beige 90% confeccionada (medidas: 3x4m - $450, 4x6m - $650)
@@ -67,7 +74,19 @@ INSTRUCCIONES CRÍTICAS:
     temperature: 0.7
   });
 
-  const aiReply = response.choices?.[0]?.message?.content || `Lo siento 😔 no tengo información sobre eso.`;
+  let aiReply = response.choices?.[0]?.message?.content || `Lo siento 😔 no tengo información sobre eso.`;
+
+  // CRITICAL: Strip out greetings from ongoing conversations
+  if (isOngoingConversation) {
+    // Remove common greetings at the start of the message
+    aiReply = aiReply.replace(/^¡?Hola!?\s*/i, '');
+    aiReply = aiReply.replace(/^Buenas\s+(tardes?|d[ií]as?|noches?)!?\s*/i, '');
+    aiReply = aiReply.replace(/^Qu[eé]\s+tal!?\s*/i, '');
+    aiReply = aiReply.replace(/^Hey!?\s*/i, '');
+    // Trim any leading whitespace left after removing greeting
+    aiReply = aiReply.trim();
+  }
+
   const newUnknownCount = (convo.unknownCount || 0) + 1;
   await updateConversation(psid, { lastIntent: "fallback", unknownCount: newUnknownCount });
 
