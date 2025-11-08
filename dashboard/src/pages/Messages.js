@@ -98,15 +98,15 @@ function Messages() {
   return (
     <div>
       <h2>💬 Conversaciones registradas <span style={{ fontSize: "0.7em", color: "#888", marginLeft: "1rem" }}>[v2.0]</span></h2>
-      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "2rem" }}>
+      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "2rem", border: "1px solid #555" }}>
         <thead>
           <tr style={{ backgroundColor: "#1b3a1b", color: "lightgreen" }}>
-            <th style={{ padding: "8px", textAlign: "left" }}>Fecha</th>
-            <th style={{ padding: "8px", textAlign: "left" }}>PSID</th>
-            <th style={{ padding: "8px", textAlign: "left" }}>Último mensaje</th>
-            <th style={{ padding: "8px", textAlign: "left" }}>Tipo</th>
-            <th style={{ padding: "8px", textAlign: "left" }}>Estado</th>
-            <th style={{ padding: "8px", textAlign: "left" }}>Acción</th>
+            <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Fecha</th>
+            <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>PSID</th>
+            <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Último mensaje</th>
+            <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Tipo</th>
+            <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Estado</th>
+            <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Acción</th>
           </tr>
         </thead>
         <tbody>
@@ -121,7 +121,7 @@ function Messages() {
                   setSelectedPsid(msg.psid);
                   fetchFullConversation(msg.psid);
                 }}
-                style={{ borderBottom: "1px solid #2a2a2a", cursor: "pointer" }}
+                style={{ borderBottom: "1px solid #555", cursor: "pointer" }}
               >
                 <td style={{ padding: "8px", color: "#e0e0e0" }}>{new Date(msg.timestamp).toLocaleString()}</td>
                 <td style={{ padding: "8px", fontFamily: "monospace", fontSize: "0.85em", color: "#e0e0e0" }}>
