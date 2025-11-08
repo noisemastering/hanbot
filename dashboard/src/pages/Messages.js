@@ -219,7 +219,7 @@ function Messages() {
           >
             {/* Header */}
             <div style={{ padding: "1rem", borderBottom: "1px solid #2a2a2a", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ margin: 0 }}>Conversacion Completa - PSID: {selectedPsid.substring(0, 12)}...</h3>
+              <h3 style={{ margin: 0, color: "white" }}>Conversacion Completa - PSID: {selectedPsid.substring(0, 12)}...</h3>
               <button
                 onClick={() => setSelectedPsid(null)}
                 style={{
@@ -250,7 +250,7 @@ function Messages() {
                     <span>{msg.senderType === "bot" ? "🤖 Bot" : "👤 Usuario"}</span>
                     <span>{new Date(msg.timestamp).toLocaleString()}</span>
                   </div>
-                  <p style={{ margin: 0, whiteSpace: "pre-wrap" }}>{msg.text}</p>
+                  <p style={{ margin: 0, whiteSpace: "pre-wrap", color: "white" }}>{msg.text}</p>
                 </div>
               ))}
             </div>
