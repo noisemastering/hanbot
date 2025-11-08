@@ -123,11 +123,11 @@ function Messages() {
                 }}
                 style={{ borderBottom: "1px solid #2a2a2a", cursor: "pointer" }}
               >
-                <td style={{ padding: "8px" }}>{new Date(msg.timestamp).toLocaleString()}</td>
-                <td style={{ padding: "8px", fontFamily: "monospace", fontSize: "0.85em" }}>
+                <td style={{ padding: "8px", color: "#e0e0e0" }}>{new Date(msg.timestamp).toLocaleString()}</td>
+                <td style={{ padding: "8px", fontFamily: "monospace", fontSize: "0.85em", color: "#e0e0e0" }}>
                   {msg.psid.substring(0, 12)}...
                 </td>
-                <td style={{ padding: "8px", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis" }}>
+                <td style={{ padding: "8px", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", color: "white" }}>
                   {msg.text}
                 </td>
                 <td style={{ padding: "8px", color: msg.senderType === "bot" ? "lightblue" : "white" }}>
