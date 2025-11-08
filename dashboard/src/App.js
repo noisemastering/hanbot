@@ -401,6 +401,7 @@ function App() {
         fetchCampaigns();
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeMenu]);
 
   // Metrics
