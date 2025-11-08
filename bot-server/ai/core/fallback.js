@@ -18,21 +18,20 @@ function isBusinessHours() {
   return isWeekday && isDuringHours;
 }
 
-async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME) {
-  const businessInfo = await getBusinessInfo();
-
-  // Determine if this is an ongoing conversation
+// Helper function to try understanding a message with AI
+async function tryUnderstandMessage(message, convo, openai, BOT_PERSONA_NAME, businessInfo) {
   const isOngoingConversation = convo.greeted === true || convo.state !== 'new';
   const conversationContext = isOngoingConversation
     ? "\n⚠️ CRÍTICO: Esta es una conversación EN CURSO. NO saludes con 'Hola', '¡Hola!', 'Buenas', etc. Ve directo al punto de la respuesta."
     : "\n✅ Esta es una conversación NUEVA. Puedes saludar brevemente si es apropiado.";
 
-  const response = await openai.chat.completions.create({
-    model: process.env.AI_MODEL || "gpt-3.5-turbo",
-    messages: [
-      {
-        role: "system",
-        content: `Eres ${BOT_PERSONA_NAME}, asesora de ventas de Hanlob, empresa mexicana de mallas sombra en Querétaro.
+  try {
+    const response = await openai.chat.completions.create({
+      model: process.env.AI_MODEL || "gpt-3.5-turbo",
+      messages: [
+        {
+          role: "system",
+          content: `Eres ${BOT_PERSONA_NAME}, asesora de ventas de Hanlob, empresa mexicana de mallas sombra en Querétaro.
 ${conversationContext}
 
 PRODUCTOS Y CARACTERÍSTICAS:
@@ -83,25 +82,77 @@ INSTRUCCIONES CRÍTICAS:
 - Si preguntan pago: mencionar que se paga al ordenar en Mercado Libre
 - Si una medida pedida no está disponible, sugerir las más cercanas (3x4m o 4x6m)
 - Si no sabes algo: discúlpate y ofrece contacto directo
-- NUNCA inventes información o servicios que no ofrecemos`
-      },
-      { role: "user", content: userMessage }
-    ],
-    temperature: 0.7
-  });
+- NUNCA inventes información o servicios que no ofrecemos
 
-  let aiReply = response.choices?.[0]?.message?.content || `Lo siento 😔 no tengo información sobre eso.`;
+**IMPORTANTE: Si el mensaje es confuso, fragmentado, o no puedes entender qué pregunta el cliente, responde exactamente: "MENSAJE_NO_ENTENDIDO"**`
+        },
+        { role: "user", content: message }
+      ],
+      temperature: 0.7
+    });
 
-  // CRITICAL: Strip out greetings from ongoing conversations
-  if (isOngoingConversation) {
-    // Remove common greetings at the start of the message
-    aiReply = aiReply.replace(/^¡?Hola!?\s*/i, '');
-    aiReply = aiReply.replace(/^Buenas\s+(tardes?|d[ií]as?|noches?)!?\s*/i, '');
-    aiReply = aiReply.replace(/^Qu[eé]\s+tal!?\s*/i, '');
-    aiReply = aiReply.replace(/^Hey!?\s*/i, '');
-    // Trim any leading whitespace left after removing greeting
-    aiReply = aiReply.trim();
+    const aiReply = response.choices?.[0]?.message?.content || '';
+
+    // Check if AI couldn't understand
+    if (aiReply.includes('MENSAJE_NO_ENTENDIDO') || aiReply.includes('no tengo información') || aiReply.length < 20) {
+      return { text: aiReply, isGeneric: true };
+    }
+
+    // Strip greetings if ongoing conversation
+    let cleanReply = aiReply;
+    if (isOngoingConversation) {
+      cleanReply = aiReply.replace(/^¡?Hola!?\s*/i, '');
+      cleanReply = cleanReply.replace(/^Buenas\s+(tardes?|d[ií]as?|noches?)!?\s*/i, '');
+      cleanReply = cleanReply.replace(/^Qu[eé]\s+tal!?\s*/i, '');
+      cleanReply = cleanReply.replace(/^Hey!?\s*/i, '');
+      cleanReply = cleanReply.trim();
+    }
+
+    return { text: cleanReply, isGeneric: false };
+  } catch (err) {
+    console.error("❌ Error in tryUnderstandMessage:", err);
+    return null;
   }
+}
+
+// Helper function to get previous user message
+async function getPreviousUserMessage(psid) {
+  try {
+    const Message = require('../../models/Message');
+    // Get last 2 user messages
+    const messages = await Message.find({ psid, senderType: 'user' })
+      .sort({ timestamp: -1 })
+      .limit(2);
+
+    // Return the second one (previous message) if it exists
+    return messages.length > 1 ? messages[1].text : null;
+  } catch (err) {
+    console.error("❌ Error fetching previous message:", err);
+    return null;
+  }
+}
+
+async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME) {
+  const businessInfo = await getBusinessInfo();
+
+  // 🔗 Try stitching with previous message first
+  const previousMessage = await getPreviousUserMessage(psid);
+  if (previousMessage) {
+    const stitchedMessage = `${previousMessage} ${userMessage}`;
+    console.log(`🧩 Trying stitched message: "${stitchedMessage}"`);
+
+    // Try to understand the stitched message
+    const stitchedResponse = await tryUnderstandMessage(stitchedMessage, convo, openai, BOT_PERSONA_NAME, businessInfo);
+
+    if (stitchedResponse && !stitchedResponse.isGeneric) {
+      console.log(`✅ Stitched message understood!`);
+      await updateConversation(psid, { lastIntent: "fallback_stitched", unknownCount: 0 });
+      return { type: "text", text: stitchedResponse.text };
+    }
+  }
+
+  // If stitching didn't work, use simple clarification message
+  console.log(`❓ Message not understood, using simple clarification`);
 
   const newUnknownCount = (convo.unknownCount || 0) + 1;
   await updateConversation(psid, { lastIntent: "fallback", unknownCount: newUnknownCount });
@@ -144,7 +195,8 @@ INSTRUCCIONES CRÍTICAS:
     };
   }
 
-  return { type: "text", text: aiReply };
+  // Before reaching handoff threshold, use simple clarification message
+  return { type: "text", text: "Lo siento, no entendí la pregunta. ¿Podrías repetirla?" };
 }
 
 module.exports = { handleFallback };
