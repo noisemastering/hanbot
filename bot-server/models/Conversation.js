@@ -16,6 +16,7 @@ const conversationSchema = new mongoose.Schema({
   requestedSize: { type: String, default: null },  // Track last size user asked about
   familyShown: { type: String, default: null },     // Track last family shown
   lastUnavailableSize: { type: String, default: null },  // Track unavailable size to detect insistence
+  oversizedRepeatCount: { type: Number, default: 0 },  // Track how many times user asked for same oversized dimension
 
   // Human handoff tracking
   handoffRequested: { type: Boolean, default: false },  // User explicitly requested human

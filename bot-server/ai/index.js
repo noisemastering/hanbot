@@ -5,6 +5,7 @@ const { getConversation, updateConversation, isHumanActive } = require("../conve
 const { getBusinessInfo } = require("../businessInfoManager");
 const { getProduct } = require("../hybridSearch");
 const Campaign = require("../models/Campaign");
+const { extractReference } = require("../referenceEstimator");
 
 // AI-powered intent classification
 const { classifyIntent } = require("./intentClassifier");
@@ -114,8 +115,11 @@ async function generateReply(userMessage, psid, referral = null) {
                                 /\d+(?:\.\d+)?\s+por\s+\d+(?:\.\d+)?/i.test(cleanMsg) ||
                                 /(?:de|medida)\s+\d+(?:\.\d+)?\s+\d+(?:\.\d+)?/i.test(cleanMsg);
 
-    // Skip edge case detection if message has clear dimensions or is likely a city name
-    const skipEdgeCaseDetection = isLikelyCityResponse || hasDimensionPattern;
+    // Check if message contains reference objects (e.g., "tamaño de un carro", "para un patio")
+    const hasReferenceObject = extractReference(userMessage) !== null;
+
+    // Skip edge case detection if message has clear dimensions, references, or is likely a city name
+    const skipEdgeCaseDetection = isLikelyCityResponse || hasDimensionPattern || hasReferenceObject;
 
     // Run AI calls in parallel to save time
     const [edgeCase, classification] = await Promise.all([

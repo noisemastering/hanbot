@@ -88,9 +88,13 @@ function parseDimensions(message) {
   // Convert Spanish number words to digits first
   const converted = convertSpanishNumbersToDigits(message);
 
+  // PREPROCESSING: Fix spacing around decimal points (e.g., "7 .70" → "7.70")
+  // This handles cases where users add spaces before decimal points
+  let normalized = converted.replace(/(\d)\s+(\.\d+)/g, '$1$2');
+
   // PREPROCESSING: Strip out "m" units (e.g., "6.5 m x 3.17 m" → "6.5 x 3.17")
   // This allows all existing patterns to work with messages that include units
-  const normalized = converted.replace(/(\d+(?:\.\d+)?)\s*m\b/gi, '$1');
+  normalized = normalized.replace(/(\d+(?:\.\d+)?)\s*m\b/gi, '$1');
 
   // Pattern 1: "15 x 25" or "15x25"
   const pattern1 = /(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/;
