@@ -173,6 +173,22 @@ app.get("/messages", async (req, res) => {
   }
 });
 
+// Ruta para obtener todos los usuarios con sus nombres
+app.get("/users", async (req, res) => {
+  const auth = req.headers.authorization;
+  if (!auth || auth.trim() !== "Bearer hanlob_admin_2025") {
+    return res.status(403).json({ success: false, error: "Unauthorized" });
+  }
+
+  try {
+    const users = await User.find().select('psid first_name last_name profile_pic last_interaction').sort({ last_interaction: -1 });
+    res.json({ success: true, data: users });
+  } catch (err) {
+    console.error("❌ Error retrieving users:", err);
+    res.status(500).json({ success: false, error: "Server error" });
+  }
+});
+
 // Ruta temporal para insertar mensaje de prueba
 app.post("/test-message", async (req, res) => {
   try {

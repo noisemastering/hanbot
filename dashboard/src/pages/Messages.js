@@ -8,6 +8,16 @@ function Messages() {
   const [selectedPsid, setSelectedPsid] = useState(null);
   const [fullConversation, setFullConversation] = useState([]);
   const [dateFilter, setDateFilter] = useState('today');
+  const [users, setUsers] = useState({});
+
+  // Helper function to get user display name
+  const getUserName = (psid) => {
+    const user = users[psid];
+    if (user && user.first_name) {
+      return `${user.first_name}${user.last_name ? ' ' + user.last_name : ''}`;
+    }
+    return psid; // Fallback to PSID if no name available
+  };
 
   // Get date range based on filter using Mexico City timezone
   const getDateRange = (filter) => {
@@ -77,7 +87,23 @@ function Messages() {
         console.error(err);
       }
     };
+
+    const fetchUsers = async () => {
+      try {
+        const res = await API.get("/users");
+        // Convert array to object with psid as key
+        const usersMap = {};
+        res.data.data.forEach(user => {
+          usersMap[user.psid] = user;
+        });
+        setUsers(usersMap);
+      } catch (err) {
+        console.error("Error fetching users:", err);
+      }
+    };
+
     fetchMessages();
+    fetchUsers();
   }, []);
 
   const handleTakeover = async (psid) => {
@@ -162,7 +188,7 @@ function Messages() {
           <thead>
             <tr style={{ backgroundColor: "#2a1a5e", color: "#bb86fc" }}>
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Fecha</th>
-              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>PSID</th>
+              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Cliente</th>
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Último mensaje</th>
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Estado</th>
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Acción</th>
@@ -196,8 +222,8 @@ function Messages() {
                       minute: '2-digit'
                     })}
                   </td>
-                  <td style={{ padding: "10px", fontFamily: "monospace", fontSize: "0.85em", color: "#e0e0e0" }}>
-                    {msg.psid.substring(0, 12)}...
+                  <td style={{ padding: "10px", color: "#e0e0e0" }}>
+                    {getUserName(msg.psid)}
                   </td>
                   <td style={{ padding: "10px", maxWidth: "350px", overflow: "hidden", textOverflow: "ellipsis", color: "white" }}>
                     {msg.text}
@@ -334,12 +360,12 @@ function Messages() {
           </div>
         </div>
 
-      {/* Main conversations table */}
-      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "1rem", border: "1px solid #555" }}>
+        {/* Main conversations table */}
+        <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "1rem", border: "1px solid #555" }}>
         <thead>
           <tr style={{ backgroundColor: "#1b3a1b", color: "lightgreen" }}>
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Fecha</th>
-            <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>PSID</th>
+            <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Cliente</th>
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Último mensaje</th>
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Tipo</th>
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Estado</th>
@@ -367,8 +393,8 @@ function Messages() {
                 }}
               >
                 <td style={{ padding: "8px", color: "#e0e0e0" }}>{new Date(msg.timestamp).toLocaleString()}</td>
-                <td style={{ padding: "8px", fontFamily: "monospace", fontSize: "0.85em", color: "#e0e0e0" }}>
-                  {msg.psid.substring(0, 12)}...
+                <td style={{ padding: "8px", color: "#e0e0e0" }}>
+                  {getUserName(msg.psid)}
                 </td>
                 <td style={{ padding: "8px", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", color: "white" }}>
                   {msg.text}
@@ -437,7 +463,8 @@ function Messages() {
             );
           })}
         </tbody>
-      </table>
+        </table>
+      </div>
 
       {/* Conversation Detail Modal */}
       {selectedPsid && (
