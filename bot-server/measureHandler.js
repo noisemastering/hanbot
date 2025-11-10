@@ -378,6 +378,15 @@ function hasFractionalMeters(dimensions) {
 }
 
 /**
+ * Detects if message is asking about weed control (maleza)
+ * @param {string} message
+ * @returns {boolean}
+ */
+function isWeedControlQuery(message) {
+  return /\b(maleza|antimaleza|anti-maleza|hierba|malas?\s+hierbas?|ground\s*cover|crec[eé]\s+(la\s+)?maleza|quita\s+maleza|evita\s+maleza|bloquea\s+maleza)\b/i.test(message);
+}
+
+/**
  * Detects if message mentions approximate/needs to measure
  * @param {string} message
  * @returns {boolean}
@@ -536,6 +545,7 @@ module.exports = {
   calculateRecommendedArea,
   isInstallationQuery,
   isColorQuery,
+  isWeedControlQuery,
   isApproximateMeasure,
   hasFractionalMeters,
   generateSizeResponse,

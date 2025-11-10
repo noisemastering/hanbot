@@ -7,7 +7,9 @@ const {
   findClosestSizes,
   isInstallationQuery,
   isColorQuery,
+  isWeedControlQuery,
   isApproximateMeasure,
+  hasFractionalMeters,
   generateSizeResponse,
   generateGenericSizeResponse
 } = require("../../measureHandler");
@@ -48,6 +50,36 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       text: "Aquí está el enlace de nuestra Tienda Oficial en Mercado Libre:\n\n" +
             "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n" +
             "Estamos disponibles para ayudarte con cualquier duda sobre nuestros productos."
+    };
+  }
+
+  // 🌿 WEED CONTROL / MALLA ANTIMALEZA - Handle questions about weed control
+  if (isWeedControlQuery(msg)) {
+    await updateConversation(psid, { lastIntent: "weed_control_query" });
+
+    // Check if they're also asking about water permeability
+    const asksAboutWater = /\b(agua|permeable|impermeable|lluvia|filtra|pasa|transmina|repele)\b/i.test(msg);
+
+    let response = "";
+
+    if (asksAboutWater) {
+      // They're asking if malla sombra blocks weeds AND about water
+      response = "La malla sombra es PERMEABLE, permite que el agua pase a través de ella. No repele el agua.\n\n";
+      response += "Sin embargo, tenemos un producto específico para control de maleza: la MALLA ANTIMALEZA (Ground Cover), ";
+      response += "que también es permeable y está diseñada especialmente para bloquear el crecimiento de maleza.\n\n";
+    } else {
+      // General weed control question
+      response = "¡Tenemos justo lo que necesitas! Contamos con MALLA ANTIMALEZA (Ground Cover), ";
+      response += "un producto especializado para bloquear el crecimiento de maleza.\n\n";
+    }
+
+    response += "Puedes ver todas las medidas disponibles en nuestra Tienda Oficial de Mercado Libre:\n\n";
+    response += "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n";
+    response += "¿Qué medida necesitas para tu proyecto?";
+
+    return {
+      type: "text",
+      text: response
     };
   }
 
@@ -430,6 +462,22 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
     }
 
     // Generic details request without specific size context
+    // Check if user has a campaign reference - show campaign description
+    if (convo.campaignRef) {
+      const Campaign = require("../../models/Campaign");
+      const campaign = await Campaign.findOne({ ref: convo.campaignRef });
+
+      if (campaign?.description) {
+        return {
+          type: "text",
+          text: `📋 *Ficha Técnica - ${campaign.name}*\n\n` +
+                `${campaign.description}\n\n` +
+                `¿Te gustaría conocer las medidas y precios disponibles?`
+        };
+      }
+    }
+
+    // No campaign or no description - ask which size they want info about
     return {
       type: "text",
       text: `Con gusto te doy más información. ¿Sobre qué medida te gustaría saber más?\n\n` +
@@ -474,7 +522,8 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
   const dimensions = parseDimensions(msg);
 
   // Check for approximate measurement / need to measure properly
-  if (isApproximateMeasure(msg)) {
+  // BUT only if no dimensions were parsed (including from reference objects)
+  if (isApproximateMeasure(msg) && !dimensions) {
     await updateConversation(psid, { lastIntent: "measurement_guidance", unknownCount: 0 });
     const guidanceResponses = [
       `¡Perfecto! 📏 Te recomiendo medir el área total y luego elegir una malla aproximadamente 1 metro cuadrado más pequeña que el espacio. Esto deja espacio para los tensores y asegura una instalación adecuada.\n\nCuando tengas la medida exacta, con gusto te ayudo a elegir el tamaño ideal 🌿`,
@@ -651,6 +700,9 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
                         convo.lastUnavailableSize === requestedSizeStr &&
                         convo.lastIntent === "specific_measure";
 
+      // 📏 Check if dimensions contain fractional meters
+      const hasFractions = hasFractionalMeters(dimensions);
+
       // If exact match, provide ML link immediately
       if (closest.exact) {
         const sizeVariants = [requestedSizeStr, requestedSizeStr + 'm'];
@@ -701,6 +753,85 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
         }
       }
 
+      // 📏 Handle fractional meters - warn and provide closest full-meter options
+      if (hasFractions && !closest.exact) {
+        // Calculate rounded dimensions to nearest full meter
+        const roundedWidth = Math.round(dimensions.width);
+        const roundedHeight = Math.round(dimensions.height);
+
+        // Build fractional meter warning response
+        let responseText = `📏 Nota: Solo vendemos medidas en metros completos (por ejemplo: 6m, 7m).\n\n`;
+        responseText += `Para la medida que solicitaste (${dimensions.width}m x ${dimensions.height}m), las opciones más cercanas son:\n\n`;
+
+        // Show closest smaller and bigger options
+        const optionsToShow = [];
+        if (closest.smaller) optionsToShow.push(closest.smaller);
+        if (closest.bigger) optionsToShow.push(closest.bigger);
+
+        // If we have options, show them with ML links
+        if (optionsToShow.length > 0) {
+          for (const option of optionsToShow) {
+            // Fetch the product to get ML link
+            const sizeVariants = [option.sizeStr, option.sizeStr + 'm'];
+            const match = option.sizeStr.match(/(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)/);
+            if (match) {
+              const swapped = `${match[2]}x${match[1]}`;
+              sizeVariants.push(swapped, swapped + 'm');
+            }
+
+            const product = await Product.findOne({
+              size: { $in: sizeVariants },
+              type: "confeccionada"
+            });
+
+            if (product?.mLink) {
+              responseText += `• **${option.sizeStr}** por $${option.price}:\n${product.mLink}\n\n`;
+            } else {
+              responseText += `• **${option.sizeStr}** por $${option.price}\n\n`;
+            }
+          }
+        } else {
+          // No standard sizes available - suggest custom fabrication
+          responseText += `No tenemos medidas estándar que se ajusten exactamente.\n\n`;
+          responseText += `También fabricamos medidas personalizadas. Para cotizar ${roundedWidth}m x ${roundedHeight}m, contáctanos directamente.`;
+        }
+
+        // Update conversation state
+        await updateConversation(psid, {
+          lastIntent: "specific_measure",
+          unknownCount: 0,
+          requestedSize: requestedSizeStr,
+          lastUnavailableSize: requestedSizeStr,
+          suggestedSizes: optionsToShow.map(o => o.sizeStr)
+        });
+
+        return {
+          type: "text",
+          text: responseText
+        };
+      }
+
+      // 🔁 Check if user is repeating the same unavailable size request
+      const currentRepeatCount = convo.oversizedRepeatCount || 0;
+
+      if (isRepeated && currentRepeatCount >= 2) {
+        // User has asked for this same oversized dimension 3+ times - hand off to human
+        const info = await getBusinessInfo();
+
+        await updateConversation(psid, {
+          lastIntent: "human_handoff",
+          state: "needs_human",
+          handoffReason: "repeated_oversized_request",
+          handoffTimestamp: new Date(),
+          oversizedRepeatCount: 0  // Reset counter
+        });
+
+        return {
+          type: "text",
+          text: `Entiendo que necesitas específicamente una malla de ${requestedSizeStr}. 🤔\n\nPara poder ayudarte mejor con esta medida personalizada, te paso con nuestro equipo de ventas:\n\n📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n🕓 ${info?.hours || "Lun-Vie 9am-6pm"}\n\nEllos podrán cotizar la fabricación exacta de ${requestedSizeStr} y darte un presupuesto personalizado. 👍`
+        };
+      }
+
       // No exact match - generate response with alternatives
       const sizeResponse = generateSizeResponse({
         smaller: closest.smaller,
@@ -717,6 +848,7 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
         unknownCount: 0,
         requestedSize: requestedSizeStr,
         lastUnavailableSize: closest.exact ? null : requestedSizeStr,
+        oversizedRepeatCount: isRepeated ? currentRepeatCount + 1 : 0,  // Increment if repeated, reset if different size
         suggestedSizes: sizeResponse.suggestedSizes // Save for follow-up questions
       });
 
