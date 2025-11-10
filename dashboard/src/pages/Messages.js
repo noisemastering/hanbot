@@ -153,180 +153,186 @@ function Messages() {
 
   return (
     <div>
-      {/* Quick Actions Section */}
-      <div style={{ marginBottom: "1.5rem" }}>
-        <h3 style={{ color: "white", marginBottom: "0.75rem", fontSize: "1.1rem" }}>
-          Acciones Rápidas
-        </h3>
-        <div style={{
-          display: "flex",
-          gap: "1rem",
-          overflowX: "auto",
-          paddingBottom: "0.5rem",
-          scrollbarWidth: "thin",
-          scrollbarColor: "#4caf50 #1a1a1a"
-        }}>
-          {quickActionConversations.map((msg) => {
-            const status = conversationStatuses[msg.psid];
-            const isHumanActive = status?.humanActive;
-            const needsHelp = status?.handoffRequested && !isHumanActive;
+      {/* SECTION 1: Recent Activity Table */}
+      <div style={{ marginBottom: "2.5rem" }}>
+        <h2 style={{ color: "white", marginBottom: "1rem", fontSize: "1.3rem", fontWeight: "bold" }}>
+          ⚡ Actividad Reciente - Últimas 10 Conversaciones
+        </h2>
+        <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #555" }}>
+          <thead>
+            <tr style={{ backgroundColor: "#2a1a5e", color: "#bb86fc" }}>
+              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Fecha</th>
+              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>PSID</th>
+              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Último mensaje</th>
+              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Estado</th>
+              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            {quickActionConversations.map((msg) => {
+              const status = conversationStatuses[msg.psid];
+              const isHumanActive = status?.humanActive;
+              const needsHelp = status?.handoffRequested && !isHumanActive;
 
-            let statusIcon = "🤖";
-            let statusText = "Bot";
-            let statusColor = "#4caf50";
+              return (
+                <tr
+                  key={msg._id}
+                  onClick={() => {
+                    setSelectedPsid(msg.psid);
+                    fetchFullConversation(msg.psid);
+                  }}
+                  style={{
+                    borderBottom: "1px solid #555",
+                    cursor: "pointer",
+                    backgroundColor: needsHelp ? "#4a1515" : "transparent",
+                    borderLeft: needsHelp ? "4px solid #ff5252" : "none"
+                  }}
+                >
+                  <td style={{ padding: "10px", color: "#e0e0e0", fontSize: "0.9rem" }}>
+                    {new Date(msg.timestamp).toLocaleString('es-MX', {
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit'
+                    })}
+                  </td>
+                  <td style={{ padding: "10px", fontFamily: "monospace", fontSize: "0.85em", color: "#e0e0e0" }}>
+                    {msg.psid.substring(0, 12)}...
+                  </td>
+                  <td style={{ padding: "10px", maxWidth: "350px", overflow: "hidden", textOverflow: "ellipsis", color: "white" }}>
+                    {msg.text}
+                  </td>
+                  <td style={{ padding: "10px" }}>
+                    {needsHelp ? (
+                      <div>
+                        <span style={{ color: "#ff5252", fontWeight: "bold", fontSize: "0.9rem" }}>🚨 Necesita Ayuda</span>
+                        {status?.handoffReason && (
+                          <div style={{ fontSize: "0.75em", color: "#aaa", marginTop: "4px" }}>
+                            {status.handoffReason}
+                          </div>
+                        )}
+                      </div>
+                    ) : isHumanActive ? (
+                      <span style={{ color: "#ff9800", fontSize: "0.9rem" }}>👨‍💼 Humano</span>
+                    ) : (
+                      <span style={{ color: "#4caf50", fontSize: "0.9rem" }}>🤖 Bot</span>
+                    )}
+                  </td>
+                  <td style={{ padding: "10px" }}>
+                    {isHumanActive ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRelease(msg.psid);
+                        }}
+                        disabled={loading[msg.psid]}
+                        style={{
+                          padding: "6px 12px",
+                          backgroundColor: "#4caf50",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "8px",
+                          cursor: loading[msg.psid] ? "not-allowed" : "pointer",
+                          opacity: loading[msg.psid] ? 0.6 : 1,
+                          fontSize: "0.85rem"
+                        }}
+                      >
+                        {loading[msg.psid] ? "..." : "🤖 Liberar"}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTakeover(msg.psid);
+                        }}
+                        disabled={loading[msg.psid]}
+                        style={{
+                          padding: "6px 12px",
+                          backgroundColor: "#ff9800",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "8px",
+                          cursor: loading[msg.psid] ? "not-allowed" : "pointer",
+                          opacity: loading[msg.psid] ? 0.6 : 1,
+                          fontSize: "0.85rem"
+                        }}
+                      >
+                        {loading[msg.psid] ? "..." : "👨‍💼 Tomar"}
+                      </button>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
 
-            if (needsHelp) {
-              statusIcon = "🚨";
-              statusText = "Needs Help";
-              statusColor = "#ff5252";
-            } else if (isHumanActive) {
-              statusIcon = "👨‍💼";
-              statusText = "Human";
-              statusColor = "#ff9800";
-            }
+      {/* SECTION 2: All Conversations Table with Date Filtering */}
+      <div>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
+          <h2 style={{ color: "white", margin: 0, fontSize: "1.3rem", fontWeight: "bold" }}>
+            💬 Todas las Conversaciones - {filteredMessages.length} conversación{filteredMessages.length !== 1 ? 'es' : ''}
+          </h2>
+          {conversationsNeedingHelp > 0 && (
+            <div style={{
+              backgroundColor: "#ff5252",
+              color: "white",
+              padding: "8px 16px",
+              borderRadius: "20px",
+              fontWeight: "bold",
+              fontSize: "0.9rem",
+              animation: "pulse 2s infinite"
+            }}>
+              🚨 {conversationsNeedingHelp} conversación{conversationsNeedingHelp > 1 ? 'es' : ''} necesita{conversationsNeedingHelp === 1 ? '' : 'n'} ayuda
+            </div>
+          )}
+        </div>
 
-            return (
-              <div
-                key={msg.psid}
-                onClick={() => {
-                  setSelectedPsid(msg.psid);
-                  fetchFullConversation(msg.psid);
-                }}
+        {/* Date Filter Buttons */}
+        <div style={{ marginBottom: "1rem" }}>
+          <div style={{
+            display: "flex",
+            gap: "0.5rem",
+            flexWrap: "wrap"
+          }}>
+            {[
+              { key: 'today', label: 'Hoy' },
+              { key: 'yesterday', label: 'Ayer' },
+              { key: 'week', label: 'Últimos 7 días' },
+              { key: 'month', label: 'Últimos 30 días' },
+              { key: 'all', label: 'Todos' }
+            ].map(({ key, label }) => (
+              <button
+                key={key}
+                onClick={() => setDateFilter(key)}
                 style={{
-                  minWidth: "250px",
-                  padding: "1rem",
-                  background: "rgba(255, 255, 255, 0.05)",
-                  backdropFilter: "blur(10px)",
-                  border: `1px solid ${statusColor}40`,
-                  borderRadius: "12px",
+                  padding: "0.5rem 1rem",
+                  backgroundColor: dateFilter === key ? "#4caf50" : "rgba(255, 255, 255, 0.1)",
+                  color: "white",
+                  border: dateFilter === key ? "2px solid #4caf50" : "1px solid #555",
+                  borderRadius: "8px",
                   cursor: "pointer",
-                  transition: "all 0.3s ease",
-                  boxShadow: needsHelp ? `0 0 20px ${statusColor}40` : "0 4px 6px rgba(0,0,0,0.1)"
+                  fontWeight: dateFilter === key ? "bold" : "normal",
+                  transition: "all 0.2s ease",
+                  fontSize: "0.9rem"
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.transform = "translateY(-2px)";
-                  e.currentTarget.style.boxShadow = `0 8px 12px ${statusColor}40`;
+                  if (dateFilter !== key) {
+                    e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.15)";
+                  }
                 }}
                 onMouseLeave={(e) => {
-                  e.currentTarget.style.transform = "translateY(0)";
-                  e.currentTarget.style.boxShadow = needsHelp ? `0 0 20px ${statusColor}40` : "0 4px 6px rgba(0,0,0,0.1)";
+                  if (dateFilter !== key) {
+                    e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.1)";
+                  }
                 }}
               >
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
-                  <span style={{
-                    fontFamily: "monospace",
-                    fontSize: "0.85rem",
-                    color: "#aaa",
-                    fontWeight: "500"
-                  }}>
-                    {msg.psid.substring(0, 8)}...
-                  </span>
-                  <span style={{
-                    fontSize: "0.75rem",
-                    color: statusColor,
-                    fontWeight: "bold",
-                    display: "flex",
-                    alignItems: "center",
-                    gap: "4px"
-                  }}>
-                    {statusIcon} {statusText}
-                  </span>
-                </div>
-                <div style={{
-                  fontSize: "0.9rem",
-                  color: "white",
-                  marginBottom: "0.5rem",
-                  overflow: "hidden",
-                  textOverflow: "ellipsis",
-                  whiteSpace: "nowrap"
-                }}>
-                  {msg.text}
-                </div>
-                <div style={{
-                  fontSize: "0.75rem",
-                  color: "#666",
-                  display: "flex",
-                  justifyContent: "space-between",
-                  alignItems: "center"
-                }}>
-                  <span>{new Date(msg.timestamp).toLocaleString('es-MX', {
-                    month: 'short',
-                    day: 'numeric',
-                    hour: '2-digit',
-                    minute: '2-digit'
-                  })}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Date Filter Buttons */}
-      <div style={{ marginBottom: "1.5rem" }}>
-        <div style={{
-          display: "flex",
-          gap: "0.5rem",
-          flexWrap: "wrap"
-        }}>
-          {[
-            { key: 'today', label: 'Hoy' },
-            { key: 'yesterday', label: 'Ayer' },
-            { key: 'week', label: 'Últimos 7 días' },
-            { key: 'month', label: 'Últimos 30 días' },
-            { key: 'all', label: 'Todos' }
-          ].map(({ key, label }) => (
-            <button
-              key={key}
-              onClick={() => setDateFilter(key)}
-              style={{
-                padding: "0.5rem 1rem",
-                backgroundColor: dateFilter === key ? "#4caf50" : "rgba(255, 255, 255, 0.1)",
-                color: "white",
-                border: dateFilter === key ? "2px solid #4caf50" : "1px solid #555",
-                borderRadius: "8px",
-                cursor: "pointer",
-                fontWeight: dateFilter === key ? "bold" : "normal",
-                transition: "all 0.2s ease",
-                fontSize: "0.9rem"
-              }}
-              onMouseEnter={(e) => {
-                if (dateFilter !== key) {
-                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.15)";
-                }
-              }}
-              onMouseLeave={(e) => {
-                if (dateFilter !== key) {
-                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.1)";
-                }
-              }}
-            >
-              {label}
-            </button>
-          ))}
-        </div>
-      </div>
-
-      {/* Header with count */}
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-        <h2 style={{ color: "white", margin: 0 }}>
-          💬 Conversaciones registradas - {filteredMessages.length} conversación{filteredMessages.length !== 1 ? 'es' : ''}
-          <span style={{ fontSize: "0.7em", color: "#888", marginLeft: "1rem" }}>[v2.0]</span>
-        </h2>
-        {conversationsNeedingHelp > 0 && (
-          <div style={{
-            backgroundColor: "#ff5252",
-            color: "white",
-            padding: "8px 16px",
-            borderRadius: "20px",
-            fontWeight: "bold",
-            fontSize: "0.9rem",
-            animation: "pulse 2s infinite"
-          }}>
-            🚨 {conversationsNeedingHelp} conversación{conversationsNeedingHelp > 1 ? 'es' : ''} necesita{conversationsNeedingHelp === 1 ? '' : 'n'} ayuda
+                {label}
+              </button>
+            ))}
           </div>
-        )}
-      </div>
+        </div>
 
       {/* Main conversations table */}
       <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "1rem", border: "1px solid #555" }}>
