@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from "react";
-import { Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
 import io from "socket.io-client";
 import API from "./api";
 import {
@@ -39,7 +38,6 @@ const menuItems = [
   {
     id: "overview",
     label: "Panel General",
-    path: "/",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
     )
@@ -47,7 +45,6 @@ const menuItems = [
   {
     id: "conversations",
     label: "Conversaciones",
-    path: "/conversations",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
     )
@@ -55,7 +52,6 @@ const menuItems = [
   {
     id: "analytics",
     label: "Analíticas",
-    path: "/analytics",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
     )
@@ -63,7 +59,6 @@ const menuItems = [
   {
     id: "products",
     label: "Productos",
-    path: "/products",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
     )
@@ -71,7 +66,6 @@ const menuItems = [
   {
     id: "campaigns",
     label: "Campañas",
-    path: "/campaigns",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
     )
@@ -79,7 +73,6 @@ const menuItems = [
   {
     id: "campaign-products",
     label: "Productos de Campaña",
-    path: "/campaign-products",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
     )
@@ -87,7 +80,6 @@ const menuItems = [
   {
     id: "users",
     label: "Usuarios",
-    path: "/users",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
     )
@@ -95,7 +87,6 @@ const menuItems = [
   {
     id: "settings",
     label: "Configuración",
-    path: "/settings",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
     )
@@ -103,12 +94,11 @@ const menuItems = [
 ];
 
 function App() {
-  const location = useLocation();
-  const navigate = useNavigate();
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [activeMenu, setActiveMenu] = useState("overview");
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [conversationStatuses, setConversationStatuses] = useState({});
   const [handoverLoading, setHandoverLoading] = useState({});
@@ -392,59 +382,37 @@ function App() {
   }, []);
 
   useEffect(() => {
-    if (location.pathname === "/products") {
+    if (activeMenu === "products") {
       fetchProducts();
     }
-  }, [location.pathname]);
+  }, [activeMenu]);
 
   useEffect(() => {
-    if (location.pathname === "/campaigns") {
+    if (activeMenu === "campaigns") {
       fetchCampaigns();
     }
-  }, [location.pathname]);
+  }, [activeMenu]);
 
   useEffect(() => {
-    if (location.pathname === "/campaign-products") {
+    if (activeMenu === "campaign-products") {
       fetchCampaignProducts();
       // Also fetch campaigns for the dropdown in the modal
       if (campaigns.length === 0) {
         fetchCampaigns();
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname]);
+  }, [activeMenu]);
 
-  // Helper function to get today's date range in Mexico City time
-  const getTodayRange = () => {
-    const now = new Date();
-    const mexicoTime = new Date(now.toLocaleString("en-US", { timeZone: "America/Mexico_City" }));
-
-    const startOfDay = new Date(mexicoTime);
-    startOfDay.setHours(0, 0, 0, 0);
-
-    const endOfDay = new Date(mexicoTime);
-    endOfDay.setHours(23, 59, 59, 999);
-
-    return { start: startOfDay, end: endOfDay };
-  };
-
-  // Filter messages for today only
-  const { start: todayStart, end: todayEnd } = getTodayRange();
-  const todayMessages = messages.filter((m) => {
-    const msgDate = new Date(m.timestamp);
-    return msgDate >= todayStart && msgDate <= todayEnd;
-  });
-
-  // Metrics (using today's messages only)
-  const totalMessages = todayMessages.length;
-  const totalUsers = new Set(todayMessages.map((m) => m.psid)).size;
-  const botMessages = todayMessages.filter((m) => m.senderType === "bot").length;
+  // Metrics
+  const totalMessages = messages.length;
+  const totalUsers = new Set(messages.map((m) => m.psid)).size;
+  const botMessages = messages.filter((m) => m.senderType === "bot").length;
   const botResponseRate = totalMessages
     ? ((botMessages / totalMessages) * 100).toFixed(1)
     : 0;
 
   const lastMessagesByUser = {};
-  todayMessages.forEach((m) => {
+  messages.forEach((m) => {
     if (!lastMessagesByUser[m.psid]) lastMessagesByUser[m.psid] = m;
   });
   const unanswered = Object.values(lastMessagesByUser).filter(
@@ -514,22 +482,23 @@ function App() {
           {/* Menu Items */}
           <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
             {menuItems.map((item) => (
-              <NavLink
+              <button
                 key={item.id}
-                to={item.path}
-                onClick={() => setSidebarOpen(false)}
-                className={({ isActive }) => `w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
-                  isActive
+                onClick={() => {
+                  setActiveMenu(item.id);
+                  setSidebarOpen(false);
+                }}
+                className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
+                  activeMenu === item.id
                     ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
                     : 'text-gray-400 hover:bg-gray-800/50 hover:text-white'
                 }`}
-                end={item.path === "/"}
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   {item.icon}
                 </svg>
                 <span className="font-medium">{item.label}</span>
-              </NavLink>
+              </button>
             ))}
           </nav>
 
@@ -561,7 +530,7 @@ function App() {
                 </button>
                 <div>
                   <h1 className="text-xl font-bold text-white">
-                    {menuItems.find(item => item.path === location.pathname)?.label || "Panel General"}
+                    {menuItems.find(item => item.id === activeMenu)?.label || "Panel General"}
                   </h1>
                   <p className="text-sm text-gray-400">Monitorea tu chatbot en tiempo real</p>
                 </div>
@@ -598,26 +567,9 @@ function App() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <Routes>
-          {/* Overview Route */}
-          <Route path="/" element={
+        {/* Overview Content */}
+        {activeMenu === "overview" && (
           <>
-        {/* Today's Stats Header */}
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-white mb-2">
-            📊 Estadísticas de Hoy
-          </h2>
-          <p className="text-sm text-gray-400">
-            {new Date().toLocaleDateString('es-MX', {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-              timeZone: 'America/Mexico_City'
-            })}
-          </p>
-        </div>
-
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* Total Messages */}
@@ -644,7 +596,7 @@ function App() {
           {/* Unique Users */}
           <button
             onClick={() => {
-              navigate("/users");
+              setActiveMenu("users");
               setFilter("all");
               setConversationFilter(null);
             }}
@@ -831,13 +783,131 @@ function App() {
         </div>
 
           </>
-          } />
+        )}
 
-          {/* Conversaciones Route */}
-          <Route path="/conversations" element={<Messages />} />
+        {/* Conversaciones View */}
+        {activeMenu === "conversations" && (
+          <div className="space-y-6">
+            <div className="flex items-center justify-between">
+              <h2 className="text-2xl font-bold text-white">Conversaciones</h2>
+              <div className="text-sm text-gray-400">
+                Debug: {messages.length} total, {filteredMessages.length} filtered, loading: {loading ? 'yes' : 'no'}
+              </div>
+            </div>
 
-          {/* Analytics Route */}
-          <Route path="/analytics" element={(
+            {/* Filters */}
+            <div className="flex items-center space-x-2">
+              <button
+                onClick={() => setFilter("all")}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  filter === "all"
+                    ? "bg-primary-500 text-white"
+                    : "bg-gray-800/50 text-gray-400 hover:bg-gray-700/50"
+                }`}
+              >
+                Todos los Mensajes
+              </button>
+              <button
+                onClick={() => setFilter("user")}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  filter === "user"
+                    ? "bg-blue-500 text-white"
+                    : "bg-gray-800/50 text-gray-400 hover:bg-gray-700/50"
+                }`}
+              >
+                Solo Usuarios
+              </button>
+              <button
+                onClick={() => setFilter("bot")}
+                className={`px-4 py-2 rounded-lg font-medium transition-all ${
+                  filter === "bot"
+                    ? "bg-purple-500 text-white"
+                    : "bg-gray-800/50 text-gray-400 hover:bg-gray-700/50"
+                }`}
+              >
+                Solo Bot
+              </button>
+            </div>
+
+            {/* Messages Table */}
+            <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl overflow-hidden">
+              <div className="px-6 py-4 border-b border-gray-700/50">
+                <h2 className="text-xl font-bold text-white">Mensajes Recientes</h2>
+              </div>
+              {loading ? (
+                <div className="p-8 text-center">
+                  <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-gray-400 mt-4">Cargando mensajes...</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead className="bg-gray-900/50">
+                      <tr>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                          Fecha y Hora
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                          Tipo
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                          ID de Usuario
+                        </th>
+                        <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                          Mensaje
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-700/50">
+                      {filteredMessages.length === 0 ? (
+                        <tr>
+                          <td colSpan="4" className="px-6 py-8 text-center text-gray-400">
+                            No se encontraron mensajes
+                          </td>
+                        </tr>
+                      ) : (
+                        filteredMessages.map((msg) => (
+                          <tr
+                            key={msg._id}
+                            onClick={() => {
+                              setSelectedConversation(msg.psid);
+                              fetchConversationStatus(msg.psid);
+                            }}
+                            className="hover:bg-gray-700/30 transition-colors cursor-pointer"
+                          >
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
+                              {new Date(msg.timestamp || msg.createdAt).toLocaleString("es-MX")}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap">
+                              {(msg.senderType || msg.from) === "bot" ? (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                                  Bot
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                                  Usuario
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300 font-mono">
+                              {msg.psid.substring(0, 12)}...
+                            </td>
+                            <td className="px-6 py-4 text-sm text-gray-300 max-w-md truncate">
+                              {msg.text}
+                            </td>
+                          </tr>
+                        ))
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Analytics View */}
+        {activeMenu === "analytics" && (
           <div className="space-y-6">
             <div className="flex items-center justify-between">
               <h2 className="text-2xl font-bold text-white">Analíticas</h2>
@@ -932,69 +1002,64 @@ function App() {
               </ResponsiveContainer>
             </div>
           </div>
-          )} />
+        )}
 
-          {/* Products Route */}
-          <Route path="/products" element={
-            <ProductsView
-              products={products}
-              loading={productsLoading}
-              onAdd={() => {
-                setEditingProduct(null);
-                setShowProductModal(true);
-              }}
-              onEdit={(product) => {
-                setEditingProduct(product);
-                setShowProductModal(true);
-              }}
-              onDelete={(product) => {
-                setDeleteConfirmProduct(product);
-              }}
-            />
-          } />
+        {/* Products View */}
+        {activeMenu === "products" && (
+          <ProductsView
+            products={products}
+            loading={productsLoading}
+            onAdd={() => {
+              setEditingProduct(null);
+              setShowProductModal(true);
+            }}
+            onEdit={(product) => {
+              setEditingProduct(product);
+              setShowProductModal(true);
+            }}
+            onDelete={(product) => {
+              setDeleteConfirmProduct(product);
+            }}
+          />
+        )}
 
-          {/* Campaigns Route */}
-          <Route path="/campaigns" element={
-            <CampaignsView
-              campaigns={campaigns}
-              loading={campaignsLoading}
-              onAdd={() => {
-                setEditingCampaign(null);
-                setShowCampaignModal(true);
-              }}
-              onEdit={(campaign) => {
-                setEditingCampaign(campaign);
-                setShowCampaignModal(true);
-              }}
-              onDelete={(campaign) => {
-                setDeleteConfirmCampaign(campaign);
-              }}
-            />
-          } />
+        {/* Campaigns View */}
+        {activeMenu === "campaigns" && (
+          <CampaignsView
+            campaigns={campaigns}
+            loading={campaignsLoading}
+            onAdd={() => {
+              setEditingCampaign(null);
+              setShowCampaignModal(true);
+            }}
+            onEdit={(campaign) => {
+              setEditingCampaign(campaign);
+              setShowCampaignModal(true);
+            }}
+            onDelete={(campaign) => {
+              setDeleteConfirmCampaign(campaign);
+            }}
+          />
+        )}
 
-          {/* Campaign Products Route */}
-          <Route path="/campaign-products" element={
-            <CampaignProductsView
-              campaignProducts={campaignProducts}
-              loading={campaignProductsLoading}
-              onAdd={() => {
-                setEditingCampaignProduct(null);
-                setShowCampaignProductModal(true);
-              }}
-              onEdit={(campaignProduct) => {
-                setEditingCampaignProduct(campaignProduct);
-                setShowCampaignProductModal(true);
-              }}
-              onDelete={(campaignProduct) => {
-                setDeleteConfirmCampaignProduct(campaignProduct);
-              }}
-            />
-          } />
-
-          {/* Users and Settings Routes - Placeholder */}
-          <Route path="/users" element={<div className="text-white">Users View - Coming Soon</div>} />
-          <Route path="/settings" element={<div className="text-white">Settings View - Coming Soon</div>} />
-        </Routes>
+        {/* Campaign Products View */}
+        {activeMenu === "campaign-products" && (
+          <CampaignProductsView
+            campaignProducts={campaignProducts}
+            loading={campaignProductsLoading}
+            onAdd={() => {
+              setEditingCampaignProduct(null);
+              setShowCampaignProductModal(true);
+            }}
+            onEdit={(campaignProduct) => {
+              setEditingCampaignProduct(campaignProduct);
+              setShowCampaignProductModal(true);
+            }}
+            onDelete={(campaignProduct) => {
+              setDeleteConfirmCampaignProduct(campaignProduct);
+            }}
+          />
+        )}
 
         {/* Product Modal */}
         {showProductModal && (
@@ -1227,7 +1292,7 @@ function App() {
                   <button
                     onClick={() => {
                       setSelectedConversation(null);
-                      navigate("/conversations");
+                      setActiveMenu("messages");
                     }}
                     className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors"
                   >
