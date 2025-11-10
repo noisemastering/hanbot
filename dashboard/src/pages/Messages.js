@@ -7,6 +7,44 @@ function Messages() {
   const [loading, setLoading] = useState({});
   const [selectedPsid, setSelectedPsid] = useState(null);
   const [fullConversation, setFullConversation] = useState([]);
+  const [dateFilter, setDateFilter] = useState('today');
+
+  // Get date range based on filter using Mexico City timezone
+  const getDateRange = (filter) => {
+    const now = new Date();
+    const mexicoOffset = -6 * 60; // CST is UTC-6
+    const localOffset = now.getTimezoneOffset();
+    const offsetDiff = mexicoOffset - localOffset;
+
+    const toMexicoTime = (date) => {
+      const adjusted = new Date(date.getTime() + offsetDiff * 60000);
+      return adjusted;
+    };
+
+    const mexicoNow = toMexicoTime(now);
+    const startOfDay = new Date(mexicoNow);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    switch(filter) {
+      case 'today':
+        return { start: startOfDay, end: new Date(mexicoNow.getTime() + 24 * 60 * 60 * 1000) };
+      case 'yesterday':
+        const yesterday = new Date(startOfDay);
+        yesterday.setDate(yesterday.getDate() - 1);
+        return { start: yesterday, end: startOfDay };
+      case 'week':
+        const weekAgo = new Date(startOfDay);
+        weekAgo.setDate(weekAgo.getDate() - 7);
+        return { start: weekAgo, end: new Date(mexicoNow.getTime() + 24 * 60 * 60 * 1000) };
+      case 'month':
+        const monthAgo = new Date(startOfDay);
+        monthAgo.setDate(monthAgo.getDate() - 30);
+        return { start: monthAgo, end: new Date(mexicoNow.getTime() + 24 * 60 * 60 * 1000) };
+      case 'all':
+      default:
+        return { start: new Date(0), end: new Date(8640000000000000) }; // Max date
+    }
+  };
 
   const fetchFullConversation = async (psid) => {
     try {
@@ -95,17 +133,184 @@ function Messages() {
     return acc;
   }, {});
 
-  // Count conversations needing help
-  const conversationsNeedingHelp = Object.values(latestMessages).filter(msg => {
+  // Get 10 most recent conversations for quick actions (always unfiltered)
+  const quickActionConversations = Object.values(latestMessages)
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    .slice(0, 10);
+
+  // Filter conversations based on selected date range
+  const { start, end } = getDateRange(dateFilter);
+  const filteredMessages = Object.values(latestMessages).filter(msg => {
+    const msgDate = new Date(msg.timestamp);
+    return msgDate >= start && msgDate < end;
+  });
+
+  // Count conversations needing help (from filtered list)
+  const conversationsNeedingHelp = filteredMessages.filter(msg => {
     const status = conversationStatuses[msg.psid];
     return status?.handoffRequested && !status?.humanActive;
   }).length;
 
   return (
     <div>
+      {/* Quick Actions Section */}
+      <div style={{ marginBottom: "1.5rem" }}>
+        <h3 style={{ color: "white", marginBottom: "0.75rem", fontSize: "1.1rem" }}>
+          Acciones Rápidas
+        </h3>
+        <div style={{
+          display: "flex",
+          gap: "1rem",
+          overflowX: "auto",
+          paddingBottom: "0.5rem",
+          scrollbarWidth: "thin",
+          scrollbarColor: "#4caf50 #1a1a1a"
+        }}>
+          {quickActionConversations.map((msg) => {
+            const status = conversationStatuses[msg.psid];
+            const isHumanActive = status?.humanActive;
+            const needsHelp = status?.handoffRequested && !isHumanActive;
+
+            let statusIcon = "🤖";
+            let statusText = "Bot";
+            let statusColor = "#4caf50";
+
+            if (needsHelp) {
+              statusIcon = "🚨";
+              statusText = "Needs Help";
+              statusColor = "#ff5252";
+            } else if (isHumanActive) {
+              statusIcon = "👨‍💼";
+              statusText = "Human";
+              statusColor = "#ff9800";
+            }
+
+            return (
+              <div
+                key={msg.psid}
+                onClick={() => {
+                  setSelectedPsid(msg.psid);
+                  fetchFullConversation(msg.psid);
+                }}
+                style={{
+                  minWidth: "250px",
+                  padding: "1rem",
+                  background: "rgba(255, 255, 255, 0.05)",
+                  backdropFilter: "blur(10px)",
+                  border: `1px solid ${statusColor}40`,
+                  borderRadius: "12px",
+                  cursor: "pointer",
+                  transition: "all 0.3s ease",
+                  boxShadow: needsHelp ? `0 0 20px ${statusColor}40` : "0 4px 6px rgba(0,0,0,0.1)"
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.transform = "translateY(-2px)";
+                  e.currentTarget.style.boxShadow = `0 8px 12px ${statusColor}40`;
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.transform = "translateY(0)";
+                  e.currentTarget.style.boxShadow = needsHelp ? `0 0 20px ${statusColor}40` : "0 4px 6px rgba(0,0,0,0.1)";
+                }}
+              >
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "0.5rem" }}>
+                  <span style={{
+                    fontFamily: "monospace",
+                    fontSize: "0.85rem",
+                    color: "#aaa",
+                    fontWeight: "500"
+                  }}>
+                    {msg.psid.substring(0, 8)}...
+                  </span>
+                  <span style={{
+                    fontSize: "0.75rem",
+                    color: statusColor,
+                    fontWeight: "bold",
+                    display: "flex",
+                    alignItems: "center",
+                    gap: "4px"
+                  }}>
+                    {statusIcon} {statusText}
+                  </span>
+                </div>
+                <div style={{
+                  fontSize: "0.9rem",
+                  color: "white",
+                  marginBottom: "0.5rem",
+                  overflow: "hidden",
+                  textOverflow: "ellipsis",
+                  whiteSpace: "nowrap"
+                }}>
+                  {msg.text}
+                </div>
+                <div style={{
+                  fontSize: "0.75rem",
+                  color: "#666",
+                  display: "flex",
+                  justifyContent: "space-between",
+                  alignItems: "center"
+                }}>
+                  <span>{new Date(msg.timestamp).toLocaleString('es-MX', {
+                    month: 'short',
+                    day: 'numeric',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                  })}</span>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Date Filter Buttons */}
+      <div style={{ marginBottom: "1.5rem" }}>
+        <div style={{
+          display: "flex",
+          gap: "0.5rem",
+          flexWrap: "wrap"
+        }}>
+          {[
+            { key: 'today', label: 'Hoy' },
+            { key: 'yesterday', label: 'Ayer' },
+            { key: 'week', label: 'Últimos 7 días' },
+            { key: 'month', label: 'Últimos 30 días' },
+            { key: 'all', label: 'Todos' }
+          ].map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setDateFilter(key)}
+              style={{
+                padding: "0.5rem 1rem",
+                backgroundColor: dateFilter === key ? "#4caf50" : "rgba(255, 255, 255, 0.1)",
+                color: "white",
+                border: dateFilter === key ? "2px solid #4caf50" : "1px solid #555",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontWeight: dateFilter === key ? "bold" : "normal",
+                transition: "all 0.2s ease",
+                fontSize: "0.9rem"
+              }}
+              onMouseEnter={(e) => {
+                if (dateFilter !== key) {
+                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.15)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (dateFilter !== key) {
+                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.1)";
+                }
+              }}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Header with count */}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
         <h2 style={{ color: "white", margin: 0 }}>
-          💬 Conversaciones registradas
+          💬 Conversaciones registradas - {filteredMessages.length} conversación{filteredMessages.length !== 1 ? 'es' : ''}
           <span style={{ fontSize: "0.7em", color: "#888", marginLeft: "1rem" }}>[v2.0]</span>
         </h2>
         {conversationsNeedingHelp > 0 && (
@@ -122,7 +327,9 @@ function Messages() {
           </div>
         )}
       </div>
-      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "2rem", border: "1px solid #555" }}>
+
+      {/* Main conversations table */}
+      <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "1rem", border: "1px solid #555" }}>
         <thead>
           <tr style={{ backgroundColor: "#1b3a1b", color: "lightgreen" }}>
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Fecha</th>
@@ -134,7 +341,7 @@ function Messages() {
           </tr>
         </thead>
         <tbody>
-          {Object.values(latestMessages).map((msg) => {
+          {filteredMessages.map((msg) => {
             const status = conversationStatuses[msg.psid];
             const isHumanActive = status?.humanActive;
             const needsHelp = status?.handoffRequested && !isHumanActive;
