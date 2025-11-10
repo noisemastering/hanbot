@@ -135,6 +135,33 @@ async function getPreviousUserMessage(psid) {
 async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME) {
   const businessInfo = await getBusinessInfo();
 
+  // 🏭 Detect frustration about size limitations / custom manufacturing requests
+  const customManufacturingFrustration = /\b(fabricante|manufacturer|manufactur|hacer.*medid|medid.*especial|medid.*solicit|no\s+cubre|no\s+cubr|área\s+que\s+necesito|no.*ayud.*nada|pueden\s+hacer|puede\s+hacer)\b/i.test(userMessage);
+
+  if (customManufacturingFrustration) {
+    console.log(`🏭 Custom manufacturing frustration detected, handing off to specialist`);
+
+    await updateConversation(psid, {
+      unknownCount: 0,
+      handoffRequested: true,
+      handoffReason: "Customer requesting custom manufacturing - needs specialist",
+      handoffTimestamp: new Date(),
+      state: "needs_human",
+      lastIntent: "custom_manufacturing_request"
+    });
+
+    return {
+      type: "text",
+      text:
+        `Tienes toda la razón, somos fabricantes y SÍ podemos hacer mallas a la medida que necesites.\n\n` +
+        `Voy a transferir tu caso con un especialista que te dará una cotización personalizada. ` +
+        `Por favor comunícate con nuestro equipo:\n\n` +
+        `📞 ${businessInfo.phones.join(" / ")}\n` +
+        `🕓 ${businessInfo.hours}\n` +
+        `📍 ${businessInfo.address}`
+    };
+  }
+
   // 🔗 Try stitching with previous message first
   const previousMessage = await getPreviousUserMessage(psid);
   if (previousMessage) {
