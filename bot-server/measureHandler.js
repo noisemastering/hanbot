@@ -1,6 +1,7 @@
 // measureHandler.js
 const Product = require("./models/Product");
 const CampaignProduct = require("./models/CampaignProduct");
+const { extractReference } = require("./referenceEstimator");
 
 /**
  * Converts Spanish number words to digits
@@ -71,8 +72,25 @@ function convertSpanishNumbersToDigits(text) {
  * @returns {object|null} - {width, height, area} or null if not found
  */
 function parseDimensions(message) {
+  // FIRST: Check if user mentioned a reference object (e.g., "tamaño de un carro")
+  const reference = extractReference(message);
+  if (reference) {
+    // Return estimated dimensions with reference marker
+    return {
+      width: reference.width,
+      height: reference.height,
+      area: reference.width * reference.height,
+      isEstimated: true,
+      referenceObject: reference.description
+    };
+  }
+
   // Convert Spanish number words to digits first
   const converted = convertSpanishNumbersToDigits(message);
+
+  // PREPROCESSING: Strip out "m" units (e.g., "6.5 m x 3.17 m" → "6.5 x 3.17")
+  // This allows all existing patterns to work with messages that include units
+  const normalized = converted.replace(/(\d+(?:\.\d+)?)\s*m\b/gi, '$1');
 
   // Pattern 1: "15 x 25" or "15x25"
   const pattern1 = /(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/;
@@ -92,14 +110,63 @@ function parseDimensions(message) {
   // Pattern 6: "8 metros de largo x 5 de ancho" or "8 metros de ancho x 5 de largo"
   const pattern6 = /(\d+(?:\.\d+)?)\s*metros?\s+de\s+(largo|ancho)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*(?:metros?)?\s*(?:de\s+)?(largo|ancho)?/i;
 
-  let match = converted.match(pattern1) ||
-              converted.match(pattern2) ||
-              converted.match(pattern3) ||
-              converted.match(pattern4) ||
-              converted.match(pattern5);
+  // Pattern 7: "10 metros de ancho por 27 de largo" - using "por" instead of "x"
+  const pattern7 = /(\d+(?:\.\d+)?)\s*metros?\s+de\s+(ancho|largo)\s+por\s+(\d+(?:\.\d+)?)\s*(?:metros?)?\s*(?:de\s+)?(largo|ancho)/i;
+
+  // Pattern 8: "Largo 6.00 Ancho 5.00" or "Ancho 5.00 Largo 6.00" (formal specification without connector)
+  const pattern8 = /(largo|ancho)\s+(\d+(?:\.\d+)?)\s+(ancho|largo)\s+(\d+(?:\.\d+)?)/i;
+
+  let match = normalized.match(pattern1) ||
+              normalized.match(pattern2) ||
+              normalized.match(pattern3) ||
+              normalized.match(pattern4) ||
+              normalized.match(pattern5);
+
+  // Handle pattern 8 first (most specific - formal specification)
+  const match8 = normalized.match(pattern8);
+  if (match8) {
+    // match8[1] = first label ("largo" or "ancho")
+    // match8[2] = first number
+    // match8[3] = second label ("ancho" or "largo")
+    // match8[4] = second number
+    const firstLabel = match8[1].toLowerCase();
+    const firstNum = parseFloat(match8[2]);
+    const secondLabel = match8[3].toLowerCase();
+    const secondNum = parseFloat(match8[4]);
+
+    // Determine which is width and which is height
+    const width = firstLabel === 'ancho' ? firstNum : secondNum;
+    const height = firstLabel === 'largo' ? firstNum : secondNum;
+
+    return {
+      width,
+      height,
+      area: width * height
+    };
+  }
+
+  // Handle pattern 7 next
+  const match7 = normalized.match(pattern7);
+  if (match7) {
+    // match7[1] = first number, match7[2] = "ancho" or "largo"
+    // match7[3] = second number, match7[4] = "largo" or "ancho"
+    const firstNum = parseFloat(match7[1]);
+    const secondNum = parseFloat(match7[3]);
+    const firstLabel = match7[2].toLowerCase();
+
+    // Determine which is width and which is height
+    const width = firstLabel === 'ancho' ? firstNum : secondNum;
+    const height = firstLabel === 'largo' ? firstNum : secondNum;
+
+    return {
+      width,
+      height,
+      area: width * height
+    };
+  }
 
   // Handle pattern 6 separately due to different capture groups
-  const match6 = converted.match(pattern6);
+  const match6 = normalized.match(pattern6);
   if (match6) {
     // match6[1] = first number, match6[2] = "largo" or "ancho"
     // match6[3] = second number, match6[4] = "largo" or "ancho"
@@ -297,6 +364,20 @@ function isColorQuery(message) {
 }
 
 /**
+ * Detects if dimensions contain fractional meters
+ * @param {object} dimensions - {width, height, area}
+ * @returns {boolean}
+ */
+function hasFractionalMeters(dimensions) {
+  if (!dimensions) return false;
+
+  const widthHasFraction = dimensions.width % 1 !== 0;
+  const heightHasFraction = dimensions.height % 1 !== 0;
+
+  return widthHasFraction || heightHasFraction;
+}
+
+/**
  * Detects if message mentions approximate/needs to measure
  * @param {string} message
  * @returns {boolean}
@@ -456,6 +537,7 @@ module.exports = {
   isInstallationQuery,
   isColorQuery,
   isApproximateMeasure,
+  hasFractionalMeters,
   generateSizeResponse,
   generateGenericSizeResponse
 };
