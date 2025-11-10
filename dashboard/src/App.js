@@ -404,16 +404,37 @@ function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeMenu]);
 
-  // Metrics
-  const totalMessages = messages.length;
-  const totalUsers = new Set(messages.map((m) => m.psid)).size;
-  const botMessages = messages.filter((m) => m.senderType === "bot").length;
+  // Helper function to get today's date range in Mexico City time
+  const getTodayRange = () => {
+    const now = new Date();
+    const mexicoTime = new Date(now.toLocaleString("en-US", { timeZone: "America/Mexico_City" }));
+
+    const startOfDay = new Date(mexicoTime);
+    startOfDay.setHours(0, 0, 0, 0);
+
+    const endOfDay = new Date(mexicoTime);
+    endOfDay.setHours(23, 59, 59, 999);
+
+    return { start: startOfDay, end: endOfDay };
+  };
+
+  // Filter messages for today only
+  const { start: todayStart, end: todayEnd } = getTodayRange();
+  const todayMessages = messages.filter((m) => {
+    const msgDate = new Date(m.timestamp);
+    return msgDate >= todayStart && msgDate <= todayEnd;
+  });
+
+  // Metrics (using today's messages only)
+  const totalMessages = todayMessages.length;
+  const totalUsers = new Set(todayMessages.map((m) => m.psid)).size;
+  const botMessages = todayMessages.filter((m) => m.senderType === "bot").length;
   const botResponseRate = totalMessages
     ? ((botMessages / totalMessages) * 100).toFixed(1)
     : 0;
 
   const lastMessagesByUser = {};
-  messages.forEach((m) => {
+  todayMessages.forEach((m) => {
     if (!lastMessagesByUser[m.psid]) lastMessagesByUser[m.psid] = m;
   });
   const unanswered = Object.values(lastMessagesByUser).filter(
@@ -571,6 +592,22 @@ function App() {
         {/* Overview Content */}
         {activeMenu === "overview" && (
           <>
+        {/* Today's Stats Header */}
+        <div className="mb-6">
+          <h2 className="text-2xl font-bold text-white mb-2">
+            📊 Estadísticas de Hoy
+          </h2>
+          <p className="text-sm text-gray-400">
+            {new Date().toLocaleDateString('es-MX', {
+              weekday: 'long',
+              year: 'numeric',
+              month: 'long',
+              day: 'numeric',
+              timeZone: 'America/Mexico_City'
+            })}
+          </p>
+        </div>
+
         {/* Stats Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
           {/* Total Messages */}
