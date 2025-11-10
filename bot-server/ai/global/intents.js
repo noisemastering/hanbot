@@ -703,6 +703,68 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
       // 📏 Check if dimensions contain fractional meters
       const hasFractions = hasFractionalMeters(dimensions);
 
+      // 📏 Handle fractional meters FIRST - even if there's an "exact" match within tolerance
+      // This ensures we warn users that only whole meters are available
+      if (hasFractions) {
+        // Calculate rounded dimensions to nearest full meter
+        const roundedWidth = Math.round(dimensions.width);
+        const roundedHeight = Math.round(dimensions.height);
+
+        // Build fractional meter warning response
+        let responseText = `📏 Nota: Solo vendemos medidas en metros completos (sin decimales).\n\n`;
+        responseText += `Para la medida que solicitaste (${dimensions.width}m x ${dimensions.height}m), las opciones más cercanas son:\n\n`;
+
+        // Show closest smaller and bigger options
+        const optionsToShow = [];
+        if (closest.smaller) optionsToShow.push(closest.smaller);
+        if (closest.bigger) optionsToShow.push(closest.bigger);
+        if (closest.exact) optionsToShow.push(closest.exact);
+
+        // If we have options, show them with ML links
+        if (optionsToShow.length > 0) {
+          for (const option of optionsToShow) {
+            // Fetch the product to get ML link
+            const sizeVariants = [option.sizeStr, option.sizeStr + 'm'];
+            const match = option.sizeStr.match(/(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)/);
+            if (match) {
+              const swapped = `${match[2]}x${match[1]}`;
+              sizeVariants.push(swapped, swapped + 'm');
+            }
+
+            const product = await Product.findOne({
+              size: { $in: sizeVariants },
+              type: "confeccionada"
+            });
+
+            if (product?.mLink) {
+              responseText += `• **${option.sizeStr}** por $${option.price}:\n${product.mLink}\n\n`;
+            } else {
+              responseText += `• **${option.sizeStr}** por $${option.price}\n\n`;
+            }
+          }
+        } else {
+          // No standard sizes available - suggest custom fabrication
+          responseText += `No tenemos medidas estándar que se ajusten exactamente.\n\n`;
+          responseText += `También fabricamos medidas personalizadas. Para cotizar ${roundedWidth}m x ${roundedHeight}m, contáctanos directamente.`;
+        }
+
+        responseText += `\n💡 ¿Te sirve alguna de estas medidas?`;
+
+        // Update conversation state
+        await updateConversation(psid, {
+          lastIntent: "fractional_meters",
+          unknownCount: 0,
+          requestedSize: requestedSizeStr,
+          lastUnavailableSize: requestedSizeStr,
+          suggestedSizes: optionsToShow.map(o => o.sizeStr)
+        });
+
+        return {
+          type: "text",
+          text: responseText
+        };
+      }
+
       // If exact match, provide ML link immediately
       if (closest.exact) {
         const sizeVariants = [requestedSizeStr, requestedSizeStr + 'm'];
@@ -751,64 +813,6 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
             text: responseText
           };
         }
-      }
-
-      // 📏 Handle fractional meters - warn and provide closest full-meter options
-      if (hasFractions && !closest.exact) {
-        // Calculate rounded dimensions to nearest full meter
-        const roundedWidth = Math.round(dimensions.width);
-        const roundedHeight = Math.round(dimensions.height);
-
-        // Build fractional meter warning response
-        let responseText = `📏 Nota: Solo vendemos medidas en metros completos (por ejemplo: 6m, 7m).\n\n`;
-        responseText += `Para la medida que solicitaste (${dimensions.width}m x ${dimensions.height}m), las opciones más cercanas son:\n\n`;
-
-        // Show closest smaller and bigger options
-        const optionsToShow = [];
-        if (closest.smaller) optionsToShow.push(closest.smaller);
-        if (closest.bigger) optionsToShow.push(closest.bigger);
-
-        // If we have options, show them with ML links
-        if (optionsToShow.length > 0) {
-          for (const option of optionsToShow) {
-            // Fetch the product to get ML link
-            const sizeVariants = [option.sizeStr, option.sizeStr + 'm'];
-            const match = option.sizeStr.match(/(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)/);
-            if (match) {
-              const swapped = `${match[2]}x${match[1]}`;
-              sizeVariants.push(swapped, swapped + 'm');
-            }
-
-            const product = await Product.findOne({
-              size: { $in: sizeVariants },
-              type: "confeccionada"
-            });
-
-            if (product?.mLink) {
-              responseText += `• **${option.sizeStr}** por $${option.price}:\n${product.mLink}\n\n`;
-            } else {
-              responseText += `• **${option.sizeStr}** por $${option.price}\n\n`;
-            }
-          }
-        } else {
-          // No standard sizes available - suggest custom fabrication
-          responseText += `No tenemos medidas estándar que se ajusten exactamente.\n\n`;
-          responseText += `También fabricamos medidas personalizadas. Para cotizar ${roundedWidth}m x ${roundedHeight}m, contáctanos directamente.`;
-        }
-
-        // Update conversation state
-        await updateConversation(psid, {
-          lastIntent: "specific_measure",
-          unknownCount: 0,
-          requestedSize: requestedSizeStr,
-          lastUnavailableSize: requestedSizeStr,
-          suggestedSizes: optionsToShow.map(o => o.sizeStr)
-        });
-
-        return {
-          type: "text",
-          text: responseText
-        };
       }
 
       // 🔁 Check if user is repeating the same unavailable size request
