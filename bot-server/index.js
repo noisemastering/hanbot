@@ -90,10 +90,17 @@ io.on("connection", (socket) => {
 });
 
 // Emitir evento cuando se guarda un nuevo mensaje
-async function saveMessage(psid, text, senderType) {
-  const msg = await Message.create({ psid, text, senderType });
+async function saveMessage(psid, text, senderType, messageId = null) {
+  const msg = await Message.create({ psid, text, senderType, messageId });
   io.emit("new_message", msg); // <-- Notifica al dashboard
   return msg;
+}
+
+// Check if a message has already been processed (deduplication)
+async function isMessageProcessed(messageId) {
+  if (!messageId) return false;
+  const existing = await Message.findOne({ messageId });
+  return !!existing;
 }
 
 // ============================================
@@ -515,15 +522,24 @@ app.post("/webhook", async (req, res) => {
 
       if (webhookEvent.message) {
         const messageText = webhookEvent.message.text;
+        const messageId = webhookEvent.message.mid; // Facebook message ID
         const FB_PAGE_ID = process.env.FB_PAGE_ID;
 
         // 🔍 DEBUG: Log all webhook event details for debugging human agent detection
         console.log(`\n🔍 WEBHOOK DEBUG:`);
         console.log(`   senderPsid: ${senderPsid}`);
+        console.log(`   messageId: ${messageId}`);
         console.log(`   FB_PAGE_ID: ${FB_PAGE_ID}`);
         console.log(`   recipientId: ${webhookEvent.recipient?.id}`);
         console.log(`   messageText: "${messageText}"`);
         console.log(`   Match? ${senderPsid === FB_PAGE_ID ? '✅ YES (HUMAN AGENT)' : '❌ NO (USER)'}\n`);
+
+        // 🚫 DEDUPLICATION: Check if this message has already been processed
+        if (await isMessageProcessed(messageId)) {
+          console.log(`⚠️ Duplicate webhook detected for message ${messageId}, skipping processing`);
+          res.sendStatus(200);
+          return;
+        }
 
         // 🧑‍💼 Detect if message is from Page (human agent) or from User
         const isFromPage = senderPsid === FB_PAGE_ID;
@@ -537,7 +553,7 @@ app.post("/webhook", async (req, res) => {
           const { cancelDebounce } = require("./messageDebouncer");
           cancelDebounce(recipientPsid);
 
-          await saveMessage(recipientPsid, messageText, "human");
+          await saveMessage(recipientPsid, messageText, "human", messageId);
           await updateConversation(recipientPsid, {
             state: "human_active",
             lastIntent: "human_takeover",
@@ -561,7 +577,7 @@ app.post("/webhook", async (req, res) => {
 
           if (isFacebookAutoCTA) {
             console.log(`🤖 Facebook auto-CTA detected, skipping bot response: "${messageText}"`);
-            await saveMessage(senderPsid, messageText, "user");
+            await saveMessage(senderPsid, messageText, "user", messageId);
             res.sendStatus(200);
             return;
           }
@@ -580,7 +596,7 @@ app.post("/webhook", async (req, res) => {
           const { cancelDebounce } = require("./messageDebouncer");
           cancelDebounce(senderPsid);
 
-          await saveMessage(senderPsid, messageText || "[image]", "user");
+          await saveMessage(senderPsid, messageText || "[image]", "user", messageId);
           res.sendStatus(200);
           return;
         }
@@ -594,7 +610,7 @@ app.post("/webhook", async (req, res) => {
           if (stickerAttachment) {
             console.log(`👍 Sticker/reaction received (ID: ${stickerAttachment.payload.sticker_id})`);
             await registerUserIfNeeded(senderPsid);
-            await saveMessage(senderPsid, "[Reacción enviada]", "user");
+            await saveMessage(senderPsid, "[Reacción enviada]", "user", messageId);
 
             // Don't respond to stickers/reactions - they're just acknowledgments
             res.sendStatus(200);
@@ -609,7 +625,7 @@ app.post("/webhook", async (req, res) => {
             console.log(`📸 Image received: ${imageUrl}`);
 
             await registerUserIfNeeded(senderPsid);
-            await saveMessage(senderPsid, `[Imagen enviada: ${imageUrl}]`, "user");
+            await saveMessage(senderPsid, `[Imagen enviada: ${imageUrl}]`, "user", messageId);
 
             // Analyze the image using GPT-4 Vision
             const { OpenAI } = require("openai");
@@ -644,7 +660,7 @@ app.post("/webhook", async (req, res) => {
         }
 
         await registerUserIfNeeded(senderPsid);
-        await saveMessage(senderPsid, messageText, "user");
+        await saveMessage(senderPsid, messageText, "user", messageId);
 
         // Use message debouncer to wait for user to finish typing
         const { debounceMessage } = require("./messageDebouncer");
