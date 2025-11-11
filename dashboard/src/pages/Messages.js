@@ -11,15 +11,6 @@ function Messages() {
   const [users, setUsers] = useState({});
   const [refreshing, setRefreshing] = useState(false);
 
-  // Helper function to get user display name
-  const getUserName = (psid) => {
-    const user = users[psid];
-    if (user && user.first_name) {
-      return `${user.first_name}${user.last_name ? ' ' + user.last_name : ''}`;
-    }
-    return psid; // Fallback to PSID if no name available
-  };
-
   // Helper function to show message excerpt
   const getMessageExcerpt = (text, maxLength = 60) => {
     if (!text) return '';
