@@ -24,7 +24,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   const multipleSizeIndicators = [
     /\d+(?:\.\d+)?[xX×]\d+(?:\.\d+)?.*\b(y|,|de)\b.*\d+(?:\.\d+)?[xX×]\d+(?:\.\d+)?/i, // Multiple dimensions with "y" or comma (e.g., "4x3 y 4x4")
     /\bprecios\b/i, // Plural "precios" suggests multiple items
-    /\bcostos\b/i, // Plural "costos"
+    /\bcostos?\s+de\s+.*\by\b/i, // "costos de X y Y" - costs of multiple items
     /\bmall?as?\b.*\bmall?as?\b/i, // Multiple mentions of "malla/mallas"
   ];
 
