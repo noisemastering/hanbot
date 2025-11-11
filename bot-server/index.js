@@ -181,8 +181,54 @@ app.get("/users", async (req, res) => {
   }
 
   try {
-    const users = await User.find().select('psid first_name last_name profile_pic last_interaction').sort({ last_interaction: -1 });
-    res.json({ success: true, data: users });
+    // Get all unique PSIDs from messages
+    const uniquePsids = await Message.distinct('psid');
+    console.log(`📊 Found ${uniquePsids.length} unique PSIDs in messages`);
+
+    // Get existing users from database
+    const existingUsers = await User.find({ psid: { $in: uniquePsids } });
+    const existingPsidSet = new Set(existingUsers.map(u => u.psid));
+
+    // Find PSIDs that don't have user records
+    const missingPsids = uniquePsids.filter(psid => !existingPsidSet.has(psid));
+    console.log(`🔍 Need to fetch ${missingPsids.length} missing user profiles from Facebook`);
+
+    // Fetch missing users from Facebook Graph API
+    const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN;
+    const newUsers = [];
+
+    for (const psid of missingPsids) {
+      try {
+        const res = await axios.get(
+          `https://graph.facebook.com/v18.0/${psid}`,
+          {
+            params: {
+              fields: "first_name,last_name,profile_pic",
+              access_token: FB_PAGE_TOKEN
+            }
+          }
+        );
+
+        const userData = {
+          psid: psid,
+          first_name: res.data.first_name || '',
+          last_name: res.data.last_name || '',
+          profile_pic: res.data.profile_pic || '',
+          last_interaction: new Date()
+        };
+
+        // Save to database
+        await User.create(userData);
+        newUsers.push(userData);
+        console.log(`✅ Fetched and saved user: ${userData.first_name} ${userData.last_name}`);
+      } catch (err) {
+        console.error(`❌ Error fetching user ${psid}:`, err.response?.data || err.message);
+      }
+    }
+
+    // Return all users (existing + newly fetched)
+    const allUsers = [...existingUsers, ...newUsers];
+    res.json({ success: true, data: allUsers });
   } catch (err) {
     console.error("❌ Error retrieving users:", err);
     res.status(500).json({ success: false, error: "Server error" });
