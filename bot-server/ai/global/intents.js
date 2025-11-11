@@ -36,7 +36,8 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   // Normalize common misspellings
   msg = msg.replace(/\bmaya\b/gi, 'malla')
-           .replace(/\bmaia\b/gi, 'malla');
+           .replace(/\bmaia\b/gi, 'malla')
+           .replace(/\broyo\b/gi, 'rollo');
 
   // 🏪 MERCADO LIBRE STORE LINK - Handle requests to see the online store
   if (/\b(ver|visitar|ir a|mostrar|enviar|dar|darme|dame|quiero)\s+(la\s+)?(tienda|catalogo|cat[aá]logo)\b/i.test(msg) ||
@@ -125,7 +126,8 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       /\b(precios?\s+y\s+medidas?)\b/i.test(msg) ||
       /\b(medidas?\s+y\s+precios?)\b/i.test(msg) ||
       /\b(hacer\s+presupuesto|cotizaci[oó]n)\b/i.test(msg) ||
-      /\b(opciones?\s+disponibles?|qu[eé]\s+tienen|todo\s+lo\s+que\s+tienen)\b/i.test(msg)) {
+      /\b(opciones?\s+disponibles?|qu[eé]\s+tienen|todo\s+lo\s+que\s+tienen)\b/i.test(msg) ||
+      /\b(medidas?\s+est[aá]ndares?)\b/i.test(msg)) {
 
     await updateConversation(psid, { lastIntent: "catalog_request" });
 
@@ -186,6 +188,39 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   const hasThanksClosure = /\b(gracias|muchas gracias|perfecto.*gracias|ok.*gracias|excelente.*gracias|muy amable|adiós|bye|nos vemos|ago\s+mi\s+pedido|hago\s+mi\s+pedido)\b/i.test(msg);
 
   if (!hasThanksClosure && /\b(s[ií]|yes|dale|ok|claro|perfecto|adelante|exact[oa]|correct[oa]|as[ií]|esa|ese)\b/i.test(msg)) {
+
+    // FIRST: Check if bot offered to show all standard sizes
+    if (convo.offeredToShowAllSizes) {
+      await updateConversation(psid, {
+        lastIntent: "show_all_sizes_confirmed",
+        unknownCount: 0,
+        offeredToShowAllSizes: false // Clear the flag
+      });
+
+      // Fetch all available sizes
+      const availableSizes = await getAvailableSizes();
+
+      // Build condensed list
+      let response = "📐 Aquí están todas nuestras medidas disponibles:\n\n";
+
+      // Group by area for better presentation
+      const sizesFormatted = availableSizes.slice(0, 15).map(s => `• ${s.sizeStr} - $${s.price}`);
+      response += sizesFormatted.join('\n');
+
+      if (availableSizes.length > 15) {
+        response += `\n\n... y ${availableSizes.length - 15} medidas más.`;
+      }
+
+      response += "\n\nPuedes ver todas en nuestra Tienda Oficial:\n";
+      response += "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n";
+      response += "¿Qué medida te interesa?";
+
+      return {
+        type: "text",
+        text: response
+      };
+    }
+
     // Check if user was just shown a specific size/price
     if (convo.lastIntent === "specific_measure" && convo.requestedSize) {
       const sizeVariants = [convo.requestedSize, convo.requestedSize + 'm'];
@@ -214,6 +249,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       } else {
         // If no exact product found, provide alternatives
         const availableSizes = await getAvailableSizes();
+        const businessInfo = await getBusinessInfo();
         const dimensions = {
           width: match ? parseFloat(match[1]) : null,
           height: match ? parseFloat(match[2]) : null,
@@ -229,8 +265,14 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
             exact: closest.exact,
             requestedDim: dimensions,
             availableSizes,
-            isRepeated: false
+            isRepeated: false,
+            businessInfo
           });
+
+          // Update conversation with the flag if we offered to show all sizes
+          if (sizeResponse.offeredToShowAllSizes) {
+            await updateConversation(psid, { offeredToShowAllSizes: true });
+          }
 
           return {
             type: "text",
@@ -619,6 +661,7 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
     } else {
       // No exact match - provide alternatives
       const availableSizes = await getAvailableSizes();
+      const businessInfo = await getBusinessInfo();
       const dimensions = {
         width: parseFloat(match[1]),
         height: parseFloat(match[2]),
@@ -632,13 +675,15 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
         exact: closest.exact,
         requestedDim: dimensions,
         availableSizes,
-        isRepeated: true
+        isRepeated: true,
+        businessInfo
       });
 
       await updateConversation(psid, {
         lastIntent: "size_reference_alternatives",
         unknownCount: 0,
-        suggestedSizes: sizeResponse.suggestedSizes
+        suggestedSizes: sizeResponse.suggestedSizes,
+        offeredToShowAllSizes: sizeResponse.offeredToShowAllSizes || false
       });
 
       return {
@@ -837,13 +882,15 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
       }
 
       // No exact match - generate response with alternatives
+      const businessInfo = await getBusinessInfo();
       const sizeResponse = generateSizeResponse({
         smaller: closest.smaller,
         bigger: closest.bigger,
         exact: closest.exact,
         requestedDim: dimensions,
         availableSizes,
-        isRepeated
+        isRepeated,
+        businessInfo
       });
 
       // Update conversation state with suggested sizes for context
@@ -853,7 +900,8 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
         requestedSize: requestedSizeStr,
         lastUnavailableSize: closest.exact ? null : requestedSizeStr,
         oversizedRepeatCount: isRepeated ? currentRepeatCount + 1 : 0,  // Increment if repeated, reset if different size
-        suggestedSizes: sizeResponse.suggestedSizes // Save for follow-up questions
+        suggestedSizes: sizeResponse.suggestedSizes, // Save for follow-up questions
+        offeredToShowAllSizes: sizeResponse.offeredToShowAllSizes || false
       });
 
       return {

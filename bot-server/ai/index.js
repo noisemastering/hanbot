@@ -179,7 +179,7 @@ async function generateReply(userMessage, psid, referral = null) {
     const greetingResponse = await handleGreeting(cleanMsg, psid, convo, BOT_PERSONA_NAME);
     if (greetingResponse) return greetingResponse;
 
-    const thanksResponse = await handleThanks(cleanMsg, psid, BOT_PERSONA_NAME);
+    const thanksResponse = await handleThanks(cleanMsg, psid, convo, BOT_PERSONA_NAME);
     if (thanksResponse) return thanksResponse;
 
     // 🌍 Global intents (measures, shipping, location, etc.) - for ALL users

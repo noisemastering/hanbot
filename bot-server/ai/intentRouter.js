@@ -27,7 +27,7 @@ async function routeByIntent(intent, message, psid, convo, botName) {
       return await handleGreeting(cleanMsg, psid, convo, botName);
 
     case "thanks":
-      return await handleThanks(cleanMsg, psid, botName);
+      return await handleThanks(cleanMsg, psid, convo, botName);
 
     case "catalog_overview":
       return await handleCatalogOverview(cleanMsg, psid);

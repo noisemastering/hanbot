@@ -36,11 +36,17 @@ async function handleGreeting(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
   return null;
 }
 
-async function handleThanks(cleanMsg, psid, BOT_PERSONA_NAME) {
+async function handleThanks(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
   // Don't respond to thanks if human is active
   if (await isHumanActive(psid)) {
     console.log("🚫 Human is active, ignoring thanks");
     return null;
+  }
+
+  // Don't respond if conversation is already closed (user is just acknowledging our goodbye)
+  if (convo.state === "closed" || convo.lastIntent === "closed") {
+    console.log("🚫 Conversation already closed, not responding to farewell acknowledgment");
+    return { type: "no_response" };
   }
 
   // Check for continuation phrases - if user is continuing, don't close

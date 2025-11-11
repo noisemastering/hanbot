@@ -405,7 +405,7 @@ function isApproximateMeasure(message) {
  * @returns {object} - {text, suggestedSizes} where suggestedSizes is array of size strings for context
  */
 function generateSizeResponse(options) {
-  const { smaller, bigger, exact, requestedDim, availableSizes, isRepeated } = options;
+  const { smaller, bigger, exact, requestedDim, availableSizes, isRepeated, businessInfo } = options;
 
   const responses = [];
   const suggestedSizes = []; // Track suggested sizes for context
@@ -484,9 +484,9 @@ function generateSizeResponse(options) {
       // No multi-piece solution - use existing logic
       // Lead with custom/special size message
       if (requestedDim) {
-        parts.push(`La medida de ${requestedDim.width}x${requestedDim.height}m es una medida especial que necesitaríamos fabricar a la medida para ti.`);
+        parts.push(`La medida de ${requestedDim.width}x${requestedDim.height}m no la manejamos como medida estándar, pero tenemos dos opciones para ti:\n`);
       } else {
-        parts.push(`Esa medida es especial y necesitaríamos fabricarla a la medida.`);
+        parts.push(`Esa medida no la manejamos como estándar, pero tenemos opciones para ti:\n`);
       }
 
       // Show alternatives WITH PRICES
@@ -501,20 +501,48 @@ function generateSizeResponse(options) {
       }
 
       if (suggestions.length > 0) {
-        parts.push('\n\nTenemos estas opciones cercanas disponibles:');
+        parts.push('\n**Medidas más cercanas disponibles:**');
         parts.push('\n' + suggestions.join('\n'));
-        parts.push('\n\n¿Cuál te interesa?');
+
+        // ALWAYS mention custom fabrication option with contact info
+        if (businessInfo && requestedDim) {
+          parts.push(`\n\n**O también podemos fabricarla a la medida exacta que necesitas** (${requestedDim.width}x${requestedDim.height}m). Para cotizar la fabricación personalizada, puedes contactarnos directamente:\n`);
+          parts.push(`\n📞 ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}`);
+          parts.push(`\n🕓 ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}`);
+        }
+
+        parts.push('\n\n¿Te gustaría alguna de las opciones disponibles o prefieres la fabricación personalizada?');
       } else {
-        parts.push('\n\n¿Te gustaría ver nuestras medidas estándar?');
+        // No standard sizes available - likely oversized request
+        // Mention the largest available size for context
+        if (availableSizes.length > 0) {
+          const largest = availableSizes[availableSizes.length - 1];
+          parts.push(`\n\nNuestra medida más grande disponible es **${largest.sizeStr}** por $${largest.price}.`);
+          suggestedSizes.push(largest.sizeStr);
+        }
+
+        // Offer custom fabrication
+        if (businessInfo && requestedDim) {
+          parts.push(`\n\n**Para la medida que necesitas (${requestedDim.width}x${requestedDim.height}m), podemos fabricarla a la medida**. Para cotizar, contáctanos:\n`);
+          parts.push(`\n📞 ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}`);
+          parts.push(`\n🕓 ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}`);
+          parts.push(`\n\nO también puedes ver todas nuestras medidas estándar en nuestra Tienda Oficial:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob`);
+        } else {
+          parts.push('\n\n¿Te gustaría ver todas nuestras medidas estándar?');
+        }
       }
     }
 
     responses.push(parts.join(''));
   }
 
+  // Check if we're offering to show all sizes (when we ask the question)
+  const offeredToShowAllSizes = responses.some(r => r.includes('¿Te gustaría ver todas nuestras medidas estándar?'));
+
   return {
     text: responses[Math.floor(Math.random() * responses.length)],
-    suggestedSizes
+    suggestedSizes,
+    offeredToShowAllSizes
   };
 }
 

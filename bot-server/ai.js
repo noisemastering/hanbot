@@ -270,6 +270,7 @@ async function generateReply(userMessage, psid) {
       if (dimensions) {
         // User specified exact dimensions
         const closest = findClosestSizes(dimensions, availableSizes);
+        const businessInfo = await getBusinessInfo();
 
         await updateConversation(psid, {
           lastIntent: "specific_measure",
@@ -284,8 +285,9 @@ async function generateReply(userMessage, psid) {
             bigger: closest.bigger,
             exact: closest.exact,
             requestedDim: dimensions,
-            availableSizes
-          })
+            availableSizes,
+            businessInfo
+          }).text
         };
       } else {
         // Generic inquiry - show all available sizes
