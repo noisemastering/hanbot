@@ -8,7 +8,7 @@ function Messages() {
   const [selectedPsid, setSelectedPsid] = useState(null);
   const [fullConversation, setFullConversation] = useState([]);
   const [dateFilter, setDateFilter] = useState('today');
-  const [users, setUsers] = useState({});
+  const [, setUsers] = useState({}); // eslint-disable-line no-unused-vars
   const [refreshing, setRefreshing] = useState(false);
 
   // Helper function to show message excerpt
