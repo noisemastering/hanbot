@@ -101,7 +101,12 @@ async function saveMessage(psid, text, senderType) {
 // ============================================
 async function registerUserIfNeeded(senderPsid) {
   const existing = await User.findOne({ psid: senderPsid });
-  if (existing) return;
+  if (existing) {
+    console.log(`👤 User already registered: ${existing.first_name || existing.psid}`);
+    return;
+  }
+
+  console.log(`🔄 Attempting to register new user: ${senderPsid}`);
 
   try {
     const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN;
@@ -118,12 +123,34 @@ async function registerUserIfNeeded(senderPsid) {
     const userData = res.data;
     await User.create({
       psid: senderPsid,
-      ...userData
+      ...userData,
+      last_interaction: new Date()
     });
 
-    console.log(`✅ Usuario registrado: ${userData.first_name} ${userData.last_name}`);
+    console.log(`✅ Usuario registrado exitosamente: ${userData.first_name} ${userData.last_name} (PSID: ${senderPsid})`);
   } catch (err) {
-    console.error("❌ Error al registrar usuario:", err.response?.data || err.message);
+    const errorCode = err.response?.data?.error?.code;
+    const errorSubcode = err.response?.data?.error?.subcode;
+    const errorMessage = err.response?.data?.error?.message || err.message;
+
+    console.error(`❌ Error al registrar usuario ${senderPsid}:`);
+    console.error(`   Error Code: ${errorCode || 'N/A'}`);
+    console.error(`   Error Subcode: ${errorSubcode || 'N/A'}`);
+    console.error(`   Message: ${errorMessage}`);
+
+    // Still create a basic user record with just the PSID so dashboard doesn't break
+    try {
+      await User.create({
+        psid: senderPsid,
+        first_name: '',
+        last_name: '',
+        profile_pic: '',
+        last_interaction: new Date()
+      });
+      console.log(`⚠️  Created basic user record for PSID: ${senderPsid} (no profile data available)`);
+    } catch (createErr) {
+      console.error(`❌ Failed to create even basic user record: ${createErr.message}`);
+    }
   }
 }
 
@@ -189,46 +216,9 @@ app.get("/users", async (req, res) => {
     const existingUsers = await User.find({ psid: { $in: uniquePsids } });
     const existingPsidSet = new Set(existingUsers.map(u => u.psid));
 
-    // Find PSIDs that don't have user records
-    const missingPsids = uniquePsids.filter(psid => !existingPsidSet.has(psid));
-    console.log(`🔍 Need to fetch ${missingPsids.length} missing user profiles from Facebook`);
-
-    // Fetch missing users from Facebook Graph API
-    const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN;
-    const newUsers = [];
-
-    for (const psid of missingPsids) {
-      try {
-        const res = await axios.get(
-          `https://graph.facebook.com/v18.0/${psid}`,
-          {
-            params: {
-              fields: "first_name,last_name,profile_pic",
-              access_token: FB_PAGE_TOKEN
-            }
-          }
-        );
-
-        const userData = {
-          psid: psid,
-          first_name: res.data.first_name || '',
-          last_name: res.data.last_name || '',
-          profile_pic: res.data.profile_pic || '',
-          last_interaction: new Date()
-        };
-
-        // Save to database
-        await User.create(userData);
-        newUsers.push(userData);
-        console.log(`✅ Fetched and saved user: ${userData.first_name} ${userData.last_name}`);
-      } catch (err) {
-        console.error(`❌ Error fetching user ${psid}:`, err.response?.data || err.message);
-      }
-    }
-
-    // Return all users (existing + newly fetched)
-    const allUsers = [...existingUsers, ...newUsers];
-    res.json({ success: true, data: allUsers });
+    // Just return existing users quickly (don't fetch from Facebook)
+    // Missing users will be created lazily when they send messages
+    res.json({ success: true, data: existingUsers });
   } catch (err) {
     console.error("❌ Error retrieving users:", err);
     res.status(500).json({ success: false, error: "Server error" });
