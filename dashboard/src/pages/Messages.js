@@ -9,6 +9,7 @@ function Messages() {
   const [fullConversation, setFullConversation] = useState([]);
   const [dateFilter, setDateFilter] = useState('today');
   const [users, setUsers] = useState({});
+  const [refreshing, setRefreshing] = useState(false);
 
   // Helper function to get user display name
   const getUserName = (psid) => {
@@ -17,6 +18,13 @@ function Messages() {
       return `${user.first_name}${user.last_name ? ' ' + user.last_name : ''}`;
     }
     return psid; // Fallback to PSID if no name available
+  };
+
+  // Helper function to show message excerpt
+  const getMessageExcerpt = (text, maxLength = 60) => {
+    if (!text) return '';
+    if (text.length <= maxLength) return text;
+    return text.substring(0, maxLength) + '...';
   };
 
   // Get date range based on filter using Mexico City timezone
@@ -102,8 +110,18 @@ function Messages() {
       }
     };
 
+    // Initial fetch
     fetchMessages();
     fetchUsers();
+
+    // Auto-refresh every 30 seconds
+    const interval = setInterval(() => {
+      fetchMessages();
+      fetchUsers();
+    }, 30000);
+
+    // Cleanup interval on unmount
+    return () => clearInterval(interval);
   }, []);
 
   const handleTakeover = async (psid) => {
@@ -151,6 +169,48 @@ function Messages() {
     }
   };
 
+  const handleRefresh = async () => {
+    console.log("🔄 handleRefresh CALLED");
+    setRefreshing(true);
+
+    const timeout = new Promise((_, reject) =>
+      setTimeout(() => reject(new Error('Request timeout')), 10000)
+    );
+
+    try {
+      console.log("🔄 Fetching conversations...");
+      const messagesRes = await Promise.race([
+        API.get("/conversations"),
+        timeout
+      ]);
+      console.log(`✅ Got ${messagesRes.data.length} messages`);
+
+      console.log("🔄 Fetching users...");
+      const usersRes = await Promise.race([
+        API.get("/users"),
+        timeout
+      ]);
+      console.log(`✅ Got ${usersRes.data.data.length} users`);
+
+      setMessages(messagesRes.data);
+
+      const usersMap = {};
+      usersRes.data.data.forEach(user => {
+        usersMap[user.psid] = user;
+      });
+      setUsers(usersMap);
+
+      console.log("✅ Refresh COMPLETE!");
+    } catch (err) {
+      console.error("❌ REFRESH ERROR:", err);
+      console.error("Error details:", err.response?.data || err.message);
+      alert(`Error: ${err.response?.data?.error || err.message}`);
+    } finally {
+      console.log("🔄 Setting refreshing to FALSE");
+      setRefreshing(false);
+    }
+  };
+
   // Group messages by PSID to show only the latest message per conversation
   const latestMessages = messages.reduce((acc, msg) => {
     if (!acc[msg.psid] || new Date(msg.timestamp) > new Date(acc[msg.psid].timestamp)) {
@@ -179,6 +239,27 @@ function Messages() {
 
   return (
     <div>
+      {/* Refresh Button */}
+      <div style={{ marginBottom: "1.5rem", display: "flex", justifyContent: "flex-end" }}>
+        <button
+          onClick={handleRefresh}
+          disabled={refreshing}
+          style={{
+            padding: "0.75rem 1.5rem",
+            backgroundColor: refreshing ? "#666" : "#4caf50",
+            color: "white",
+            border: "none",
+            borderRadius: "8px",
+            cursor: refreshing ? "not-allowed" : "pointer",
+            fontWeight: "bold",
+            fontSize: "1rem",
+            opacity: refreshing ? 0.6 : 1
+          }}
+        >
+          {refreshing ? "🔄 Actualizando..." : "🔄 Actualizar"}
+        </button>
+      </div>
+
       {/* SECTION 1: Recent Activity Table */}
       <div style={{ marginBottom: "2.5rem" }}>
         <h2 style={{ color: "white", marginBottom: "1rem", fontSize: "1.3rem", fontWeight: "bold" }}>
@@ -188,9 +269,8 @@ function Messages() {
           <thead>
             <tr style={{ backgroundColor: "#2a1a5e", color: "#bb86fc" }}>
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Fecha</th>
-              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Cliente</th>
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Último mensaje</th>
-              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Estado</th>
+              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Vocero</th>
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Acción</th>
             </tr>
           </thead>
@@ -222,11 +302,9 @@ function Messages() {
                       minute: '2-digit'
                     })}
                   </td>
-                  <td style={{ padding: "10px", color: "#e0e0e0" }}>
-                    {getUserName(msg.psid)}
-                  </td>
-                  <td style={{ padding: "10px", maxWidth: "350px", overflow: "hidden", textOverflow: "ellipsis", color: "white" }}>
-                    {msg.text}
+                  <td style={{ padding: "10px", paddingRight: "30px", maxWidth: "350px", overflow: "hidden", textOverflow: "ellipsis", color: "white", position: "relative", whiteSpace: "nowrap" }}>
+                    {getMessageExcerpt(msg.text)}
+                    <span style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)" }}>{msg.senderType === "bot" ? "🤖" : "👤"}</span>
                   </td>
                   <td style={{ padding: "10px" }}>
                     {needsHelp ? (
@@ -245,47 +323,67 @@ function Messages() {
                     )}
                   </td>
                   <td style={{ padding: "10px" }}>
-                    {isHumanActive ? (
+                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                      {isHumanActive ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRelease(msg.psid);
+                          }}
+                          disabled={loading[msg.psid]}
+                          style={{
+                            padding: "6px 12px",
+                            backgroundColor: "#4caf50",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "8px",
+                            cursor: loading[msg.psid] ? "not-allowed" : "pointer",
+                            opacity: loading[msg.psid] ? 0.6 : 1,
+                            fontSize: "0.85rem"
+                          }}
+                        >
+                          {loading[msg.psid] ? "..." : "🤖 Liberar"}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleTakeover(msg.psid);
+                          }}
+                          disabled={loading[msg.psid]}
+                          style={{
+                            padding: "6px 12px",
+                            backgroundColor: "#ff9800",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "8px",
+                            cursor: loading[msg.psid] ? "not-allowed" : "pointer",
+                            opacity: loading[msg.psid] ? 0.6 : 1,
+                            fontSize: "0.85rem"
+                          }}
+                        >
+                          {loading[msg.psid] ? "..." : "👨‍💼 Tomar"}
+                        </button>
+                      )}
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          handleRelease(msg.psid);
+                          setSelectedPsid(msg.psid);
+                          fetchFullConversation(msg.psid);
                         }}
-                        disabled={loading[msg.psid]}
                         style={{
                           padding: "6px 12px",
-                          backgroundColor: "#4caf50",
+                          backgroundColor: "#2196F3",
                           color: "white",
                           border: "none",
                           borderRadius: "8px",
-                          cursor: loading[msg.psid] ? "not-allowed" : "pointer",
-                          opacity: loading[msg.psid] ? 0.6 : 1,
+                          cursor: "pointer",
                           fontSize: "0.85rem"
                         }}
                       >
-                        {loading[msg.psid] ? "..." : "🤖 Liberar"}
+                        💬
                       </button>
-                    ) : (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleTakeover(msg.psid);
-                        }}
-                        disabled={loading[msg.psid]}
-                        style={{
-                          padding: "6px 12px",
-                          backgroundColor: "#ff9800",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "8px",
-                          cursor: loading[msg.psid] ? "not-allowed" : "pointer",
-                          opacity: loading[msg.psid] ? 0.6 : 1,
-                          fontSize: "0.85rem"
-                        }}
-                      >
-                        {loading[msg.psid] ? "..." : "👨‍💼 Tomar"}
-                      </button>
-                    )}
+                    </div>
                   </td>
                 </tr>
               );
@@ -365,10 +463,9 @@ function Messages() {
         <thead>
           <tr style={{ backgroundColor: "#1b3a1b", color: "lightgreen" }}>
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Fecha</th>
-            <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Cliente</th>
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Último mensaje</th>
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Tipo</th>
-            <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Estado</th>
+            <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Vocero</th>
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Acción</th>
           </tr>
         </thead>
@@ -393,11 +490,9 @@ function Messages() {
                 }}
               >
                 <td style={{ padding: "8px", color: "#e0e0e0" }}>{new Date(msg.timestamp).toLocaleString()}</td>
-                <td style={{ padding: "8px", color: "#e0e0e0" }}>
-                  {getUserName(msg.psid)}
-                </td>
-                <td style={{ padding: "8px", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", color: "white" }}>
-                  {msg.text}
+                <td style={{ padding: "8px", paddingRight: "30px", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", color: "white", position: "relative", whiteSpace: "nowrap" }}>
+                  {getMessageExcerpt(msg.text)}
+                  <span style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)" }}>{msg.senderType === "bot" ? "🤖" : "👤"}</span>
                 </td>
                 <td style={{ padding: "8px", color: msg.senderType === "bot" ? "lightblue" : "white" }}>
                   {msg.senderType}
@@ -419,45 +514,64 @@ function Messages() {
                   )}
                 </td>
                 <td style={{ padding: "8px" }}>
-                  {isHumanActive ? (
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    {isHumanActive ? (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRelease(msg.psid);
+                        }}
+                        disabled={loading[msg.psid]}
+                        style={{
+                          padding: "6px 12px",
+                          backgroundColor: "#4caf50",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "8px",
+                          cursor: loading[msg.psid] ? "not-allowed" : "pointer",
+                          opacity: loading[msg.psid] ? 0.6 : 1
+                        }}
+                      >
+                        {loading[msg.psid] ? "..." : "🤖 Liberar al Bot"}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTakeover(msg.psid);
+                        }}
+                        disabled={loading[msg.psid]}
+                        style={{
+                          padding: "6px 12px",
+                          backgroundColor: "#ff9800",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "8px",
+                          cursor: loading[msg.psid] ? "not-allowed" : "pointer",
+                          opacity: loading[msg.psid] ? 0.6 : 1
+                        }}
+                      >
+                        {loading[msg.psid] ? "..." : "👨‍💼 Tomar Control"}
+                      </button>
+                    )}
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleRelease(msg.psid);
+                        setSelectedPsid(msg.psid);
+                        fetchFullConversation(msg.psid);
                       }}
-                      disabled={loading[msg.psid]}
                       style={{
                         padding: "6px 12px",
-                        backgroundColor: "#4caf50",
+                        backgroundColor: "#2196F3",
                         color: "white",
                         border: "none",
                         borderRadius: "8px",
-                        cursor: loading[msg.psid] ? "not-allowed" : "pointer",
-                        opacity: loading[msg.psid] ? 0.6 : 1
+                        cursor: "pointer"
                       }}
                     >
-                      {loading[msg.psid] ? "..." : "🤖 Liberar al Bot"}
+                      💬
                     </button>
-                  ) : (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        handleTakeover(msg.psid);
-                      }}
-                      disabled={loading[msg.psid]}
-                      style={{
-                        padding: "6px 12px",
-                        backgroundColor: "#ff9800",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "8px",
-                        cursor: loading[msg.psid] ? "not-allowed" : "pointer",
-                        opacity: loading[msg.psid] ? 0.6 : 1
-                      }}
-                    >
-                      {loading[msg.psid] ? "..." : "👨‍💼 Tomar Control"}
-                    </button>
-                  )}
+                  </div>
                 </td>
               </tr>
             );
