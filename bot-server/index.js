@@ -235,6 +235,91 @@ app.get("/users", async (req, res) => {
   }
 });
 
+// Manual endpoint to force-sync all missing user profiles from Facebook
+app.post("/sync-users", async (req, res) => {
+  const auth = req.headers.authorization;
+  if (!auth || auth.trim() !== "Bearer hanlob_admin_2025") {
+    return res.status(403).json({ success: false, error: "Unauthorized" });
+  }
+
+  try {
+    console.log("🔄 Starting manual user sync...");
+
+    // Get all unique PSIDs from messages
+    const uniquePsids = await Message.distinct('psid');
+    console.log(`📊 Found ${uniquePsids.length} unique PSIDs in messages:`, uniquePsids);
+
+    // Get existing users from database
+    const existingUsers = await User.find({ psid: { $in: uniquePsids } });
+    const existingPsidSet = new Set(existingUsers.map(u => u.psid));
+    console.log(`✅ Already have ${existingUsers.length} users in database`);
+
+    // Find PSIDs that don't have user records
+    const missingPsids = uniquePsids.filter(psid => !existingPsidSet.has(psid));
+    console.log(`🔍 Need to fetch ${missingPsids.length} missing user profiles:`, missingPsids);
+
+    if (missingPsids.length === 0) {
+      return res.json({
+        success: true,
+        message: "All users already synced",
+        totalUsers: existingUsers.length,
+        fetchedCount: 0
+      });
+    }
+
+    // Fetch missing users from Facebook Graph API
+    const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN;
+    const newUsers = [];
+    const errors = [];
+
+    for (const psid of missingPsids) {
+      try {
+        console.log(`📞 Fetching profile for PSID: ${psid}...`);
+        const response = await axios.get(
+          `https://graph.facebook.com/v18.0/${psid}`,
+          {
+            params: {
+              fields: "first_name,last_name,profile_pic",
+              access_token: FB_PAGE_TOKEN
+            }
+          }
+        );
+
+        const userData = {
+          psid: psid,
+          first_name: response.data.first_name || '',
+          last_name: response.data.last_name || '',
+          profile_pic: response.data.profile_pic || '',
+          last_interaction: new Date()
+        };
+
+        // Save to database
+        await User.create(userData);
+        newUsers.push(userData);
+        console.log(`✅ Fetched and saved user: ${userData.first_name} ${userData.last_name} (${psid})`);
+      } catch (err) {
+        const errorMsg = err.response?.data?.error?.message || err.message;
+        console.error(`❌ Error fetching user ${psid}:`, errorMsg);
+        errors.push({ psid, error: errorMsg });
+      }
+    }
+
+    console.log(`✅ Sync complete! Fetched ${newUsers.length} new users`);
+
+    res.json({
+      success: true,
+      message: `Successfully synced ${newUsers.length} users`,
+      totalUsers: existingUsers.length + newUsers.length,
+      fetchedCount: newUsers.length,
+      newUsers: newUsers,
+      errors: errors.length > 0 ? errors : undefined
+    });
+  } catch (err) {
+    console.error("❌ Error syncing users:", err);
+    res.status(500).json({ success: false, error: "Server error", details: err.message });
+  }
+});
+
 // Ruta temporal para insertar mensaje de prueba
 app.post("/test-message", async (req, res) => {
   try {
