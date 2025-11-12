@@ -91,7 +91,29 @@ io.on("connection", (socket) => {
 
 // Emitir evento cuando se guarda un nuevo mensaje
 async function saveMessage(psid, text, senderType, messageId = null) {
-  const msg = await Message.create({ psid, text, senderType, messageId });
+  // User messages start as unanswered, bot/human messages don't need the answered field
+  const answered = senderType === 'user' ? false : undefined;
+
+  // Build message object, omitting messageId if null (for sparse unique index to work)
+  const messageData = { psid, text, senderType };
+  if (messageId !== null && messageId !== undefined) {
+    messageData.messageId = messageId;
+  }
+  if (answered !== undefined) {
+    messageData.answered = answered;
+  }
+
+  const msg = await Message.create(messageData);
+
+  // When bot or human responds, mark the most recent unanswered user message as answered
+  if (senderType === 'bot' || senderType === 'human') {
+    await Message.findOneAndUpdate(
+      { psid, senderType: 'user', answered: { $ne: true } }, // Match false, undefined, or non-existent
+      { answered: true },
+      { sort: { timestamp: -1 } } // Get most recent unanswered message
+    );
+  }
+
   io.emit("new_message", msg); // <-- Notifica al dashboard
   return msg;
 }
@@ -667,8 +689,10 @@ app.post("/webhook", async (req, res) => {
 
         debounceMessage(senderPsid, messageText, async (combinedMessage) => {
           try {
+            console.log(`\n🔍 [DEBUG] Debounce callback fired for PSID: ${senderPsid}`);
             console.log(`🤖 Generating reply for combined message: "${combinedMessage}"`);
             const reply = await generateReply(combinedMessage, senderPsid);
+            console.log(`🔍 [DEBUG] generateReply returned:`, reply ? `type=${reply.type}, hasText=${!!reply.text}, hasImage=${!!reply.imageUrl}` : 'NULL');
 
             // 🧩 Nuevo control de seguridad: si no hay respuesta, salimos
             if (!reply) {
@@ -679,6 +703,7 @@ app.post("/webhook", async (req, res) => {
             // 🧩 Segundo filtro: si no hay texto ni imagen, no enviar nada
             const hasText = reply.text && reply.text.trim() !== "";
             const hasImage = reply.imageUrl && reply.imageUrl.trim() !== "";
+            console.log(`🔍 [DEBUG] hasText=${hasText}, hasImage=${hasImage}`);
 
             if (!hasText && !hasImage) {
               console.log("⚠️ Respuesta vacía o sin contenido válido, no se envía.");
@@ -687,22 +712,30 @@ app.post("/webhook", async (req, res) => {
 
             // Enviar imagen si existe
             if (reply.type === "image" && hasImage) {
+              console.log(`🔍 [DEBUG] Sending image to FB API...`);
               await callSendAPI(senderPsid, {
                 attachment: {
                   type: "image",
                   payload: { url: reply.imageUrl, is_reusable: true }
                 }
               });
+              console.log(`✅ [DEBUG] Image sent successfully`);
             }
 
             // Enviar texto si existe
             if (hasText) {
+              console.log(`🔍 [DEBUG] Sending text to FB API: "${reply.text.substring(0, 50)}..."`);
               await callSendAPI(senderPsid, { text: reply.text });
-              await saveMessage(senderPsid, reply.text, "bot");
+              console.log(`✅ [DEBUG] Text sent to FB successfully`);
+
+              console.log(`🔍 [DEBUG] Calling saveMessage for bot response...`);
+              const savedMsg = await saveMessage(senderPsid, reply.text, "bot");
+              console.log(`✅ [DEBUG] Bot message saved! ID: ${savedMsg._id}`);
             }
 
           } catch (err) {
             console.error("❌ Error al responder con IA:", err);
+            console.error("❌ Stack trace:", err.stack);
           }
         });
       }
@@ -718,12 +751,19 @@ app.post("/webhook", async (req, res) => {
 // ============================================
 const { getConversation, updateConversation, resetConversation } = require("./conversationManager");
 
-// Obtener una conversación específica
+// Obtener una conversación específica (con todos los mensajes)
 app.get("/conversations/:psid", async (req, res) => {
   try {
-    const convo = await getConversation(req.params.psid);
-    if (!convo) return res.status(404).json({ success: false, error: "Conversación no encontrada" });
-    res.json({ success: true, data: convo });
+    const Message = require('./models/Message');
+    const messages = await Message.find({ psid: req.params.psid })
+      .sort({ timestamp: 1 })  // Ascending order (oldest first)
+      .lean();
+
+    if (!messages || messages.length === 0) {
+      return res.status(404).json({ success: false, error: "No messages found for this conversation" });
+    }
+
+    res.json(messages);  // Return array directly (frontend expects this format)
   } catch (err) {
     console.error("❌ Error al obtener conversación:", err);
     res.status(500).json({ success: false, error: "Error del servidor" });

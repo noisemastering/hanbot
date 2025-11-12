@@ -22,7 +22,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   // 📏 SKIP if message contains MULTIPLE size requests (let fallback handle comprehensive answer)
   const multipleSizeIndicators = [
-    /\d+(?:\.\d+)?[xX×]\d+(?:\.\d+)?.*\b(y|,|de)\b.*\d+(?:\.\d+)?[xX×]\d+(?:\.\d+)?/i, // Multiple dimensions with "y" or comma (e.g., "4x3 y 4x4")
+    /\d+(?:\.\d+)?[xX×*]\d+(?:\.\d+)?.*\b(y|,|de)\b.*\d+(?:\.\d+)?[xX×*]\d+(?:\.\d+)?/i, // Multiple dimensions with "y" or comma (e.g., "4x3 y 4x4")
     /\bprecios\b/i, // Plural "precios" suggests multiple items
     /\bcostos?\s+de\s+.*\by\b/i, // "costos de X y Y" - costs of multiple items
     /\bmall?as?\b.*\bmall?as?\b/i, // Multiple mentions of "malla/mallas"
@@ -48,7 +48,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
     return {
       type: "text",
-      text: "Aquí está el enlace de nuestra Tienda Oficial en Mercado Libre:\n\n" +
+      text: "Ver tienda en línea\nIngresa al siguiente link:\n\n" +
             "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n" +
             "Estamos disponibles para ayudarte con cualquier duda sobre nuestros productos."
     };
@@ -92,7 +92,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
     // 🔴 EXPLICIT ROLL REQUEST: If customer explicitly asks for a roll with dimensions,
     // hand off to human immediately without asking clarifying questions
-    const explicitRollRequest = /\b(rollo\s+(?:de|completo)\s+(?:\d+(?:\.\d+)?)\s*[xX×]\s*(?:\d+(?:\.\d+)?)|\d+(?:\.\d+)?\s*[xX×]\s*\d+(?:\.\d+)?\s+rollo)\b/i.test(msg);
+    const explicitRollRequest = /\b(rollo\s+(?:de|completo)\s+(?:\d+(?:\.\d+)?)\s*[xX×*]\s*(?:\d+(?:\.\d+)?)|\d+(?:\.\d+)?\s*[xX×*]\s*\d+(?:\.\d+)?\s+rollo)\b/i.test(msg);
 
     if (explicitRollRequest) {
       const info = await getBusinessInfo();
@@ -242,7 +242,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
         return {
           type: "text",
-          text: `Aquí está el enlace de nuestra Tienda Oficial en Mercado Libre para la malla sombra de ${convo.requestedSize}:\n\n` +
+          text: `Te dejo el link a esa medida específica:\n\n` +
                 `${product.mLink}\n\n` +
                 `Estamos disponibles para cualquier información adicional.`
         };
@@ -378,7 +378,7 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
       if (product?.mLink) {
         return {
           type: "text",
-          text: `Sí, enviamos a todo el país. El envío está incluido en la mayoría de los casos o se calcula automáticamente en Mercado Libre.\n\nAquí está el enlace de la malla sombra de ${convo.requestedSize}:\n\n${product.mLink}`
+          text: `Sí, enviamos a todo el país. El envío está incluido en la mayoría de los casos o se calcula automáticamente en Mercado Libre.\n\nTe dejo el link a esa medida específica:\n\n${product.mLink}`
         };
       }
     }
@@ -496,7 +496,7 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
       if (product?.mLink) {
         return {
           type: "text",
-          text: `Aquí está el enlace seguro de nuestra Tienda Oficial en Mercado Libre para la malla sombra de ${sizeToShow}:\n\n` +
+          text: `Te dejo el link a esa medida específica:\n\n` +
                 `${product.mLink}\n\n` +
                 `Estamos disponibles para cualquier información adicional.`
         };
@@ -655,7 +655,7 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
       return {
         type: "text",
         text: `Perfecto, para la medida de ${requestedSizeStr} que mencionaste:\n\n` +
-              `Aquí está el enlace de nuestra Tienda Oficial:\n\n` +
+              `Te dejo el link a esa medida específica:\n\n` +
               `${product.mLink}`
       };
     } else {
@@ -851,7 +851,7 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
             responseText += `\n\nEnviamos a todo el país a través de Mercado Libre.`;
           }
 
-          responseText += `\n\nAquí está el enlace de nuestra Tienda Oficial:\n\n${product.mLink}`;
+          responseText += `\n\nTe dejo el link a esa medida específica:\n\n${product.mLink}`;
 
           return {
             type: "text",
@@ -982,7 +982,7 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
           return {
             type: "text",
             text: `Por supuesto, de ${requestedSizeStr} la tenemos en $${product.price}\n\n` +
-                  `Aquí está el enlace de nuestra Tienda Oficial:\n\n` +
+                  `Te dejo el link a esa medida específica:\n\n` +
                   `${product.mLink}`
           };
         }

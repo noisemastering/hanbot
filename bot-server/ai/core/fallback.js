@@ -18,12 +18,40 @@ function isBusinessHours() {
   return isWeekday && isDuringHours;
 }
 
+// Helper function to get recent conversation history
+async function getRecentConversationHistory(psid, limit = 4) {
+  try {
+    const Message = require('../../models/Message');
+    // Get last N messages (user, bot, and human) sorted by timestamp descending
+    const messages = await Message.find({ psid })
+      .sort({ timestamp: -1 })
+      .limit(limit);
+
+    // Return in chronological order (oldest first)
+    return messages.reverse();
+  } catch (err) {
+    console.error("❌ Error fetching conversation history:", err);
+    return [];
+  }
+}
+
 // Helper function to try understanding a message with AI
-async function tryUnderstandMessage(message, convo, openai, BOT_PERSONA_NAME, businessInfo) {
+async function tryUnderstandMessage(message, convo, openai, BOT_PERSONA_NAME, businessInfo, conversationHistory = []) {
   const isOngoingConversation = convo.greeted === true || convo.state !== 'new';
   const conversationContext = isOngoingConversation
     ? "\n⚠️ CRÍTICO: Esta es una conversación EN CURSO. NO saludes con 'Hola', '¡Hola!', 'Buenas', etc. Ve directo al punto de la respuesta."
     : "\n✅ Esta es una conversación NUEVA. Puedes saludar brevemente si es apropiado.";
+
+  // Build conversation history context
+  let historyContext = "";
+  if (conversationHistory.length > 0) {
+    historyContext = "\n\n📜 HISTORIAL DE LA CONVERSACIÓN:\n";
+    conversationHistory.forEach(msg => {
+      const role = msg.senderType === 'user' ? 'Cliente' : 'Tú (bot)';
+      historyContext += `${role}: ${msg.text}\n`;
+    });
+    historyContext += "\n⚠️ IMPORTANTE: NO repitas información que YA le dijiste al cliente en el historial anterior. Si ya explicaste algo, simplemente reconoce su respuesta y ofrece el siguiente paso.";
+  }
 
   try {
     const response = await openai.chat.completions.create({
@@ -32,7 +60,7 @@ async function tryUnderstandMessage(message, convo, openai, BOT_PERSONA_NAME, bu
         {
           role: "system",
           content: `Eres ${BOT_PERSONA_NAME}, asesora de ventas de Hanlob, empresa mexicana de mallas sombra en Querétaro.
-${conversationContext}
+${conversationContext}${historyContext}
 
 PRODUCTOS Y CARACTERÍSTICAS:
 - Malla sombra beige 90% confeccionada (medidas: 3x4m - $450, 4x6m - $650)
@@ -162,14 +190,27 @@ async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME
     };
   }
 
-  // 🔗 Try stitching with previous message first
+  // 📜 Get recent conversation history (last 4 messages for context)
+  const conversationHistory = await getRecentConversationHistory(psid, 4);
+  console.log(`📜 Retrieved ${conversationHistory.length} messages for conversation context`);
+
+  // 🧠 Try to understand the message with full conversation context
+  const contextualResponse = await tryUnderstandMessage(userMessage, convo, openai, BOT_PERSONA_NAME, businessInfo, conversationHistory);
+
+  if (contextualResponse && !contextualResponse.isGeneric) {
+    console.log(`✅ Message understood with conversation context!`);
+    await updateConversation(psid, { lastIntent: "fallback_contextual", unknownCount: 0 });
+    return { type: "text", text: contextualResponse.text };
+  }
+
+  // 🔗 Try stitching with previous message as fallback
   const previousMessage = await getPreviousUserMessage(psid);
   if (previousMessage) {
     const stitchedMessage = `${previousMessage} ${userMessage}`;
     console.log(`🧩 Trying stitched message: "${stitchedMessage}"`);
 
     // Try to understand the stitched message
-    const stitchedResponse = await tryUnderstandMessage(stitchedMessage, convo, openai, BOT_PERSONA_NAME, businessInfo);
+    const stitchedResponse = await tryUnderstandMessage(stitchedMessage, convo, openai, BOT_PERSONA_NAME, businessInfo, conversationHistory);
 
     if (stitchedResponse && !stitchedResponse.isGeneric) {
       console.log(`✅ Stitched message understood!`);

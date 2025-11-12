@@ -471,16 +471,41 @@ function App() {
   };
 
   function getChartData(messages) {
-    const counts = {};
-    messages.forEach((m) => {
+    // Filter messages to last 12 hours
+    const now = new Date();
+    const last12Hours = new Date(now.getTime() - 12 * 60 * 60 * 1000);
+
+    const recentMessages = messages.filter(m => new Date(m.timestamp) >= last12Hours);
+
+    // Group by hour with both received and answered counts
+    const hourlyData = {};
+
+    recentMessages.forEach((m) => {
       const date = new Date(m.timestamp);
-      const hour = date.getHours();
-      counts[hour] = (counts[hour] || 0) + 1;
+      // Format as "Nov 12, 10:00"
+      const hourKey = date.toLocaleString('es-MX', {
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+        timeZone: 'America/Mexico_City'
+      });
+
+      if (!hourlyData[hourKey]) {
+        hourlyData[hourKey] = { date: hourKey, received: 0, answered: 0, timestamp: date.getTime() };
+      }
+
+      // Count user messages as "received", answered user messages as "answered"
+      if (m.senderType === 'user') {
+        hourlyData[hourKey].received += 1;
+        if (m.answered === true) {
+          hourlyData[hourKey].answered += 1;
+        }
+      }
     });
-    return Object.entries(counts).map(([hour, count]) => ({
-      hour: `${hour}:00`,
-      count
-    }));
+
+    // Convert to array and sort by timestamp
+    return Object.values(hourlyData).sort((a, b) => a.timestamp - b.timestamp);
   }
 
   return (
@@ -712,12 +737,12 @@ function App() {
             <svg className="w-5 h-5 text-primary-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
-            Resumen de Actividad
+            Resumen de Actividad (Últimas 12 horas)
           </h2>
-          <ResponsiveContainer width="100%" height={250}>
-            <BarChart data={getChartData(messages)}>
+          <ResponsiveContainer width="100%" height={450}>
+            <BarChart data={getChartData(messages)} barSize={40} barGap={-15}>
               <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="hour" stroke="#9CA3AF" />
+              <XAxis dataKey="date" stroke="#9CA3AF" angle={-45} textAnchor="end" height={80} fontSize={10} />
               <YAxis stroke="#9CA3AF" />
               <Tooltip
                 contentStyle={{
@@ -727,7 +752,8 @@ function App() {
                   color: '#fff'
                 }}
               />
-              <Bar dataKey="count" fill="#22c55e" radius={[8, 8, 0, 0]} />
+              <Bar dataKey="answered" fill="#22c55e" fillOpacity={0.85} radius={[8, 8, 0, 0]} name="Respondidos" />
+              <Bar dataKey="received" fill="#3b82f6" fillOpacity={0.95} radius={[8, 8, 0, 0]} name="Recibidos" />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -912,12 +938,12 @@ function App() {
                 <svg className="w-5 h-5 text-primary-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                 </svg>
-                Actividad por Hora
+                Actividad por Hora (Últimas 12 horas)
               </h2>
-              <ResponsiveContainer width="100%" height={250}>
-                <BarChart data={getChartData(messages)}>
+              <ResponsiveContainer width="100%" height={450}>
+                <BarChart data={getChartData(messages)} barSize={40} barGap={-15}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="hour" stroke="#9CA3AF" />
+                  <XAxis dataKey="date" stroke="#9CA3AF" angle={-45} textAnchor="end" height={80} fontSize={10} />
                   <YAxis stroke="#9CA3AF" />
                   <Tooltip
                     contentStyle={{
@@ -927,7 +953,8 @@ function App() {
                       color: '#fff'
                     }}
                   />
-                  <Bar dataKey="count" fill="#22c55e" radius={[8, 8, 0, 0]} />
+                  <Bar dataKey="answered" fill="#22c55e" fillOpacity={0.85} radius={[8, 8, 0, 0]} name="Respondidos" />
+                  <Bar dataKey="received" fill="#3b82f6" fillOpacity={0.95} radius={[8, 8, 0, 0]} name="Recibidos" />
                 </BarChart>
               </ResponsiveContainer>
             </div>

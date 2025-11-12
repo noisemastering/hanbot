@@ -12,13 +12,14 @@ const { classifyIntent } = require("./intentClassifier");
 const { routeByIntent } = require("./intentRouter");
 
 const { handleGlobalIntents } = require("./global/intents");
-const { handleGreeting, handleThanks, handleOptOut, handleAcknowledgment } = require("./core/greetings");
+const { handleGreeting, handleThanks, handleOptOut, handleAcknowledgment, handlePurchaseDeferral } = require("./core/greetings");
 const { handleCatalogOverview } = require("./core/catalog");
 const { handleFamilyFlow } = require("./core/family");
 const { autoResponder } = require("./core/autoResponder");
 const { handleFallback } = require("./core/fallback");
 const { detectEdgeCase, handleUnintelligible, handleComplexQuestion } = require("./core/edgeCaseHandler");
 const { isHumanHandoffRequest, handleHumanHandoff, detectFrustration, shouldAutoEscalate } = require("./core/humanHandoff");
+const { handleMultipleSizes } = require("./core/multipleSizes");
 
 
 
@@ -81,6 +82,10 @@ async function generateReply(userMessage, psid, referral = null) {
     const acknowledgmentResponse = await handleAcknowledgment(cleanMsg, psid, convo);
     if (acknowledgmentResponse) return acknowledgmentResponse;
 
+    // 📅 PURCHASE DEFERRAL: Handle when user wants to think about it, take measurements, etc.
+    const deferralResponse = await handlePurchaseDeferral(cleanMsg, psid, convo);
+    if (deferralResponse) return deferralResponse;
+
     // 🧠 Si hay campaña activa, intentar intención global primero
     if (campaign) {
       const globalResponse = await handleGlobalIntents(cleanMsg, psid, convo);
@@ -110,8 +115,8 @@ async function generateReply(userMessage, psid, referral = null) {
       cleanMsg.split(/\s+/).length <= 4 &&
       !/\b(precio|cuanto|cuesta|medida|tamaño|dimension|tiene|hay|vende|fabrica|color|hola|buenos|buenas|que tal)\b/i.test(cleanMsg);
 
-    // Check if message contains dimension patterns (e.g., "7x5", "7 x 5", "3 por 4")
-    const hasDimensionPattern = /\d+(?:\.\d+)?\s*[xX×]\s*\d+(?:\.\d+)?/.test(cleanMsg) ||
+    // Check if message contains dimension patterns (e.g., "7x5", "7 x 5", "7*5", "3 por 4")
+    const hasDimensionPattern = /\d+(?:\.\d+)?\s*[xX×*]\s*\d+(?:\.\d+)?/.test(cleanMsg) ||
                                 /\d+(?:\.\d+)?\s+por\s+\d+(?:\.\d+)?/i.test(cleanMsg) ||
                                 /(?:de|medida)\s+\d+(?:\.\d+)?\s+\d+(?:\.\d+)?/i.test(cleanMsg);
 
@@ -207,7 +212,7 @@ async function generateReply(userMessage, psid, referral = null) {
 
     // 📏 Detect multiple size requests (e.g., "4x3 y 4x4", "precios de 3x4 y 4x6")
     const multipleSizeIndicators = [
-      /\d+(?:\.\d+)?[xX×]\d+(?:\.\d+)?.*\b(y|,|de)\b.*\d+(?:\.\d+)?[xX×]\d+(?:\.\d+)?/i, // Multiple dimensions with "y" or comma (e.g., "4x3 y 4x4")
+      /\d+(?:\.\d+)?[xX×*]\d+(?:\.\d+)?.*\b(y|,|de)\b.*\d+(?:\.\d+)?[xX×*]\d+(?:\.\d+)?/i, // Multiple dimensions with "y" or comma (e.g., "4x3 y 4x4")
       /\bprecios\b/i, // Plural "precios" suggests multiple items
       /\bcostos\b/i, // Plural "costos"
       /\bmall?as?\b.*\bmall?as?\b/i, // Multiple mentions of "malla/mallas"
@@ -215,6 +220,14 @@ async function generateReply(userMessage, psid, referral = null) {
 
     const isMultiQuestion = multiQuestionIndicators.some(regex => regex.test(cleanMsg));
     const isMultiSize = multipleSizeIndicators.some(regex => regex.test(cleanMsg));
+
+    // 📏 HANDLE MULTIPLE SIZE REQUESTS
+    if (isMultiSize) {
+      console.log("📏 Multiple size request detected, using specialized handler");
+      const multiSizeResponse = await handleMultipleSizes(userMessage, psid, convo, convo.campaignRef);
+      if (multiSizeResponse) return multiSizeResponse;
+      // If handler returned null (less than 2 dimensions), continue to regular flow
+    }
 
     if (!isMultiQuestion && !isMultiSize && productKeywordRegex.test(cleanMsg)) {
       const product = await getProduct(cleanMsg);
@@ -237,8 +250,6 @@ async function generateReply(userMessage, psid, referral = null) {
       }
     } else if (isMultiQuestion) {
       console.log("⏩ Multi-question detected before product search, skipping to fallback");
-    } else if (isMultiSize) {
-      console.log("📏 Multiple size request detected before product search, skipping to fallback");
     }
 
     // 🔁 Respuestas automáticas rápidas (FAQ / respuestas simples)

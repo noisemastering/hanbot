@@ -96,8 +96,8 @@ function parseDimensions(message) {
   // This allows all existing patterns to work with messages that include units
   normalized = normalized.replace(/(\d+(?:\.\d+)?)\s*m\b/gi, '$1');
 
-  // Pattern 1: "15 x 25" or "15x25"
-  const pattern1 = /(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/;
+  // Pattern 1: "15 x 25" or "15x25" or "15*25"
+  const pattern1 = /(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)/;
 
   // Pattern 2: "De. 8 8" or "de 8 8"
   const pattern2 = /(?:de\.?|medida)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)/i;
@@ -112,7 +112,7 @@ function parseDimensions(message) {
   const pattern5 = /(\d+(?:\.\d+)?)\s+(?:de\s+)?ancho\s+(?:por|x)\s+(\d+(?:\.\d+)?)\s+(?:de\s+)?largo/i;
 
   // Pattern 6: "8 metros de largo x 5 de ancho" or "8 metros de ancho x 5 de largo"
-  const pattern6 = /(\d+(?:\.\d+)?)\s*metros?\s+de\s+(largo|ancho)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*(?:metros?)?\s*(?:de\s+)?(largo|ancho)?/i;
+  const pattern6 = /(\d+(?:\.\d+)?)\s*metros?\s+de\s+(largo|ancho)\s*[xX×*]\s*(\d+(?:\.\d+)?)\s*(?:metros?)?\s*(?:de\s+)?(largo|ancho)?/i;
 
   // Pattern 7: "10 metros de ancho por 27 de largo" - using "por" instead of "x"
   const pattern7 = /(\d+(?:\.\d+)?)\s*metros?\s+de\s+(ancho|largo)\s+por\s+(\d+(?:\.\d+)?)\s*(?:metros?)?\s*(?:de\s+)?(largo|ancho)/i;
@@ -283,6 +283,8 @@ async function getAvailableSizes(campaignRef = null) {
 
 /**
  * Finds closest smaller and bigger sizes to requested dimension
+ * IMPORTANT: For physical coverage, we need dimensions that can COVER the requested space,
+ * not just match the area. If user wants 10x8m, they need at least 10m width AND 8m height.
  * @param {object} requestedDim - {width, height, area}
  * @param {Array} availableSizes - Array from getAvailableSizes()
  * @returns {object} - {smaller, bigger, exact}
@@ -308,31 +310,32 @@ function findClosestSizes(requestedDim, availableSizes) {
   });
 
   // Filter to only sizes that can actually cover the space in at least one orientation
+  // This ensures we suggest sizes that are physically useful, not just area-equivalent
   const validSizes = availableSizes.filter(size => {
     const canCoverNormal = size.width >= requestedDim.width && size.height >= requestedDim.height;
     const canCoverSwapped = size.width >= requestedDim.height && size.height >= requestedDim.width;
     return canCoverNormal || canCoverSwapped;
   });
 
-  // Among valid sizes, find the closest smaller and bigger by area
-  let smaller = null;
-  let bigger = null;
-  let smallestDiffSmaller = Infinity;
-  let smallestDiffBigger = Infinity;
+  // Among valid sizes that can cover the space, find closest match
+  // Priority: smallest size that still covers the requested dimensions
+  let bestMatch = null;
+  let smallestValidArea = Infinity;
 
   for (const size of validSizes) {
-    const areaDiff = Math.abs(size.area - requestedArea);
-
-    if (size.area < requestedArea && areaDiff < smallestDiffSmaller) {
-      smaller = size;
-      smallestDiffSmaller = areaDiff;
-    } else if (size.area > requestedArea && areaDiff < smallestDiffBigger) {
-      bigger = size;
-      smallestDiffBigger = areaDiff;
+    if (size.area < smallestValidArea) {
+      bestMatch = size;
+      smallestValidArea = size.area;
     }
   }
 
-  return { smaller, bigger, exact };
+  // If we found a valid covering size, return it as "bigger"
+  // We don't suggest "smaller" sizes anymore since they can't physically cover the space
+  return {
+    smaller: null,  // No smaller sizes - they won't physically cover the requested dimensions
+    bigger: bestMatch,
+    exact
+  };
 }
 
 /**
@@ -421,116 +424,59 @@ function generateSizeResponse(options) {
   } else {
     const parts = [];
 
-    // Check if multiple pieces can cover the area
-    const requestedArea = requestedDim ? requestedDim.area : 0;
-    let multiPieceOption = null;
-
-    if (requestedDim && availableSizes.length > 0) {
-      // Look for sizes that, when multiplied, match the requested area
-      // For example: 10x10m (100m²) = 2x 10x5m (2 × 50m²)
-      for (const size of availableSizes) {
-        const piecesNeeded = Math.round(requestedArea / size.area);
-
-        // Check if 2-4 pieces would cover exactly (within 5% tolerance)
-        if (piecesNeeded >= 2 && piecesNeeded <= 4) {
-          const totalArea = size.area * piecesNeeded;
-          const areaDiff = Math.abs(totalArea - requestedArea);
-          const tolerance = requestedArea * 0.05; // 5% tolerance
-
-          if (areaDiff <= tolerance) {
-            multiPieceOption = {
-              size: size.sizeStr,
-              pieces: piecesNeeded,
-              priceEach: size.price,
-              priceTotal: size.price * piecesNeeded
-            };
-            break; // Use first match
-          }
-        }
-      }
-    }
-
-    // If we found a multi-piece solution, lead with clarification + multi-piece + custom option
-    if (multiPieceOption) {
-      // First clarify this is a special/oversized request
-      const largestAvailable = availableSizes[availableSizes.length - 1];
-      const isOversized = requestedDim.width > largestAvailable.width || requestedDim.height > largestAvailable.height;
-
-      if (isOversized) {
-        parts.push(`La medida de ${requestedDim.width}x${requestedDim.height}m excede nuestras medidas estándar (la más grande es ${largestAvailable.sizeStr}).\n\n`);
-      }
-
-      parts.push(`**Para cubrir ${requestedDim.width}x${requestedDim.height}m, tienes estas opciones:**\n`);
-      parts.push(`\n• ${multiPieceOption.pieces} piezas de **${multiPieceOption.size}** por $${multiPieceOption.priceEach} c/u = **$${multiPieceOption.priceTotal} total**`);
-      suggestedSizes.push(multiPieceOption.size);
-
-      // Always mention custom fabrication for oversized requests
-      if (isOversized) {
-        parts.push(`\n• También fabricamos medidas personalizadas. Para cotizar ${requestedDim.width}x${requestedDim.height}m exacta, contáctanos.`);
-      }
-
-      // Still show other standard sizes if available
-      if (smaller && smaller.sizeStr !== multiPieceOption.size) {
-        parts.push(`\n• **${smaller.sizeStr}** (más pequeña) por $${smaller.price}`);
-        suggestedSizes.push(smaller.sizeStr);
-      }
-      if (bigger && bigger.sizeStr !== multiPieceOption.size) {
-        parts.push(`\n• **${bigger.sizeStr}** (más grande) por $${bigger.price}`);
-        suggestedSizes.push(bigger.sizeStr);
-      }
-
-      parts.push('\n\n¿Cuál opción te interesa?');
-    } else {
-      // No multi-piece solution - use existing logic
-      // Lead with custom/special size message
+    // No exact match - suggest closest size that can cover the dimensions, or custom fabrication
+    if (bigger) {
+      // We have a size that can cover the requested dimensions
       if (requestedDim) {
-        parts.push(`La medida de ${requestedDim.width}x${requestedDim.height}m no la manejamos como medida estándar, pero tenemos dos opciones para ti:\n`);
-      } else {
-        parts.push(`Esa medida no la manejamos como estándar, pero tenemos opciones para ti:\n`);
-      }
-
-      // Show alternatives WITH PRICES
-      const suggestions = [];
-      if (smaller) {
-        suggestions.push(`• **${smaller.sizeStr}** por $${smaller.price}`);
-        suggestedSizes.push(smaller.sizeStr);
-      }
-      if (bigger) {
-        suggestions.push(`• **${bigger.sizeStr}** por $${bigger.price}`);
+        parts.push(`La medida exacta de ${requestedDim.width}x${requestedDim.height}m no la manejamos, pero tengo dos opciones para ti:\n`);
+        parts.push(`\n**Opción 1:** Medida estándar más cercana que cubre tus dimensiones:`);
+        parts.push(`\n• **${bigger.sizeStr}** por $${bigger.price}`);
         suggestedSizes.push(bigger.sizeStr);
-      }
-
-      if (suggestions.length > 0) {
-        parts.push('\n**Medidas más cercanas disponibles:**');
-        parts.push('\n' + suggestions.join('\n'));
 
         // ALWAYS mention custom fabrication option with contact info
-        if (businessInfo && requestedDim) {
-          parts.push(`\n\n**O también podemos fabricarla a la medida exacta que necesitas** (${requestedDim.width}x${requestedDim.height}m). Para cotizar la fabricación personalizada, puedes contactarnos directamente:\n`);
+        if (businessInfo) {
+          parts.push(`\n\n**Opción 2:** Fabricación a la medida exacta (${requestedDim.width}x${requestedDim.height}m)`);
+          parts.push(`\nPara cotizar medidas personalizadas, contáctanos:`);
           parts.push(`\n📞 ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}`);
           parts.push(`\n🕓 ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}`);
         }
 
-        parts.push('\n\n¿Te gustaría alguna de las opciones disponibles o prefieres la fabricación personalizada?');
+        parts.push('\n\n¿Te interesa la medida estándar o prefieres cotizar la fabricación personalizada?');
       } else {
-        // No standard sizes available - likely oversized request
-        // Mention the largest available size for context
-        if (availableSizes.length > 0) {
-          const largest = availableSizes[availableSizes.length - 1];
+        parts.push(`Esa medida no la manejamos como estándar.\n`);
+        parts.push(`\nLa medida más cercana disponible es:`);
+        parts.push(`\n• **${bigger.sizeStr}** por $${bigger.price}`);
+        suggestedSizes.push(bigger.sizeStr);
+        parts.push('\n\n¿Te interesa esta opción?');
+      }
+    } else {
+      // No standard size can cover the requested dimensions - custom fabrication only
+      if (availableSizes.length > 0) {
+        const largest = availableSizes[availableSizes.length - 1];
+
+        if (requestedDim) {
+          parts.push(`La medida de ${requestedDim.width}x${requestedDim.height}m excede nuestras medidas estándar.`);
           parts.push(`\n\nNuestra medida más grande disponible es **${largest.sizeStr}** por $${largest.price}.`);
           suggestedSizes.push(largest.sizeStr);
-        }
-
-        // Offer custom fabrication
-        if (businessInfo && requestedDim) {
-          parts.push(`\n\n**Para la medida que necesitas (${requestedDim.width}x${requestedDim.height}m), podemos fabricarla a la medida**. Para cotizar, contáctanos:\n`);
-          parts.push(`\n📞 ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}`);
-          parts.push(`\n🕓 ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}`);
-          parts.push(`\n\nO también puedes ver todas nuestras medidas estándar en nuestra Tienda Oficial:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob`);
         } else {
-          parts.push('\n\n¿Te gustaría ver todas nuestras medidas estándar?');
+          parts.push(`Esa medida excede nuestras medidas estándar.`);
+          parts.push(`\n\nLa más grande disponible es **${largest.sizeStr}** por $${largest.price}.`);
+          suggestedSizes.push(largest.sizeStr);
         }
       }
+
+      // Offer custom fabrication
+      if (businessInfo && requestedDim) {
+        parts.push(`\n\n**Para la medida que necesitas (${requestedDim.width}x${requestedDim.height}m), podemos fabricarla a la medida**. Para cotizar, contáctanos:\n`);
+        parts.push(`\n📞 ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}`);
+        parts.push(`\n🕓 ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}`);
+      } else if (businessInfo) {
+        parts.push(`\n\n**Para medidas personalizadas, contáctanos:**\n`);
+        parts.push(`\n📞 ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}`);
+        parts.push(`\n🕓 ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}`);
+      }
+
+      parts.push(`\n\nO también puedes ver todas nuestras medidas estándar en nuestra Tienda Oficial:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob`);
     }
 
     responses.push(parts.join(''));

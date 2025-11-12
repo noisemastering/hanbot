@@ -85,6 +85,34 @@ async function handleOptOut(cleanMsg, convo) {
   return null;
 }
 
+// 📅 Handle purchase deferral: when user says they'll take measurements or contact later
+async function handlePurchaseDeferral(cleanMsg, psid, convo) {
+  // Don't respond to deferrals if human is active
+  if (await isHumanActive(psid)) {
+    console.log("🚫 Human is active, ignoring deferral");
+    return null;
+  }
+
+  // Detect deferral phrases - when user wants to think about it, take measurements, contact later, etc.
+  const isDeferral = /\b(voy\s+a\s+tomar\s+medidas?|boy\s+a\s+tomar\s+medidas?|tomar\s+medidas?|despu[eé]s\s+(me\s+)?(pongo\s+en\s+)?contacto|despu[eé]s\s+(te\s+|me\s+)?(hablo|comunico|escribo|contacto)|luego\s+(te\s+|me\s+)?(hablo|comunico|escribo|contacto)|ma[ñn]ana\s+(te\s+|me\s+)?(hablo|comunico|escribo|contacto)|lo\s+(voy\s+a\s+)?analiz[oa]r?|lo\s+(voy\s+a\s+)?pensar|te\s+(escribo|hablo|contacto)\s+(despu[eé]s|luego|m[aá]s\s+tarde)|m[aá]s\s+tarde\s+(te\s+)?(escribo|hablo|contacto)|ahorita\s+no|por\s+ahora\s+no|de\s+momento\s+no)\b/i.test(cleanMsg);
+
+  if (isDeferral) {
+    console.log("📅 Purchase deferral detected:", cleanMsg);
+    await updateConversation(psid, {
+      state: "deferred",
+      lastIntent: "purchase_deferred",
+      unknownCount: 0
+    });
+
+    return {
+      type: "text",
+      text: "Perfecto, quedamos a tus órdenes.\n\nVer tienda en línea\nIngresa al siguiente link:\n\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n¡Cuando estés listo, con gusto te ayudo!"
+    };
+  }
+
+  return null;
+}
+
 // 👍 Handle acknowledgment emojis and confirmations
 async function handleAcknowledgment(cleanMsg, psid, convo) {
   // Don't respond to acknowledgments if human is active
@@ -110,4 +138,4 @@ async function handleAcknowledgment(cleanMsg, psid, convo) {
   return null;
 }
 
-module.exports = { handleGreeting, handleThanks, handleOptOut, handleAcknowledgment };
+module.exports = { handleGreeting, handleThanks, handleOptOut, handleAcknowledgment, handlePurchaseDeferral };
