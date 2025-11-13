@@ -6,7 +6,9 @@ const Product = require("../models/Product");
 // Listar todos los productos
 router.get("/", async (req, res) => {
   try {
-    const products = await Product.find().sort({ createdAt: -1 });
+    const products = await Product.find()
+      .populate("catalogProductId")
+      .sort({ createdAt: -1 });
     res.json({ success: true, data: products });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -64,6 +66,26 @@ router.put("/:id", async (req, res) => {
     if (!product) {
       return res.status(404).json({ success: false, error: "Producto no encontrado" });
     }
+    res.json({ success: true, data: product });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// Link/unlink product to catalog
+router.post("/:id/link-catalog", async (req, res) => {
+  try {
+    const { catalogProductId } = req.body;
+    const product = await Product.findByIdAndUpdate(
+      req.params.id,
+      { catalogProductId: catalogProductId || null },
+      { new: true, runValidators: true }
+    ).populate("catalogProductId");
+
+    if (!product) {
+      return res.status(404).json({ success: false, error: "Producto no encontrado" });
+    }
+
     res.json({ success: true, data: product });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });

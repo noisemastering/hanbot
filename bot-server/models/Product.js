@@ -22,6 +22,13 @@ const productSchema = new mongoose.Schema({
     type: mongoose.Schema.Types.ObjectId,
     ref: "Application"
   }],                                                   // e.g., [id1, id2] where id1="Industrial>Agrícola>Invernaderos"
+
+  // Link to the new ProductFamily catalog (sellable products only)
+  catalogProductId: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "ProductFamily",
+    default: null
+  },
 }, { timestamps: true });
 
 module.exports = mongoose.model("Product", productSchema);

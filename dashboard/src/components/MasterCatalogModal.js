@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import API from '../api';
 
 function MasterCatalogModal({ subfamily, onSave, onClose }) {
   const [formData, setFormData] = useState({

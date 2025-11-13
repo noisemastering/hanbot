@@ -190,7 +190,6 @@ function App() {
   const [usos, setUsos] = useState([]);
 
   // Product Families state
-  const [productFamilies, setProductFamilies] = useState([]);
   const [productFamilyTree, setProductFamilyTree] = useState([]);
   const [productFamiliesLoading, setProductFamiliesLoading] = useState(false);
   const [showProductFamilyModal, setShowProductFamilyModal] = useState(false);
@@ -524,12 +523,6 @@ function App() {
       const data = await res.json();
       if (data.success) {
         setProductFamilyTree(data.data || []);
-      }
-      // Also fetch flat list for modal parent dropdown
-      const flatRes = await fetch(`${API_URL}/product-families`);
-      const flatData = await flatRes.json();
-      if (flatData.success) {
-        setProductFamilies(flatData.data || []);
       }
     } catch (error) {
       console.error("Error fetching product families:", error);
