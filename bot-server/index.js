@@ -59,12 +59,18 @@ const campaignRoutes = require('./routes/campaignsRoutes');
 const campaignProductRoutes = require('./routes/campaignProductsRoutes');
 const conversationsRoutes = require('./routes/conversationsRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
+const masterCatalogRoutes = require('./routes/masterCatalogRoutes');
+const usosRoutes = require('./routes/usosRoutes');
+const productFamilyRoutes = require('./routes/productFamilyRoutes');
 
 app.use('/products', productRoutes);
 app.use('/campaigns', campaignRoutes);
 app.use('/campaign-products', campaignProductRoutes);
 app.use('/conversations', conversationsRoutes);
 app.use('/analytics', analyticsRoutes);
+app.use('/master-catalog', masterCatalogRoutes);
+app.use('/usos', usosRoutes);
+app.use('/product-families', productFamilyRoutes);
 
 // ============================================
 // Start the Express Server with Socket.IO

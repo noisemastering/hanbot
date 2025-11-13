@@ -10,6 +10,18 @@ const productSchema = new mongoose.Schema({
   mLink: { type: String },
   imageUrl: { type: String },
   description: { type: String },
+
+  // Variant-specific fields (differences from base master catalog)
+  reinforcements: { type: Boolean, default: false },  // Has corner reinforcements
+  ojillos: { type: Boolean, default: false },         // Has grommets/eyelets
+  borderType: { type: String },                        // Ej: "Reforzado", "Simple", "Dobladillo"
+  customizable: { type: Boolean, default: false },    // Can be custom-made to order
+
+  // Applications - Link to use case/context tree
+  applicationIds: [{
+    type: mongoose.Schema.Types.ObjectId,
+    ref: "Application"
+  }],                                                   // e.g., [id1, id2] where id1="Industrial>Agrícola>Invernaderos"
 }, { timestamps: true });
 
 module.exports = mongoose.model("Product", productSchema);

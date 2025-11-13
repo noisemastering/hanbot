@@ -1,3 +1,15 @@
+/*
+ * HanlobBot Dashboard - App.js
+ *
+ * Recent Updates:
+ * - Added Master Catalog functionality:
+ *   - MasterCatalogView component for listing subfamilies with master catalog data
+ *   - MasterCatalogModal component for creating/editing master catalog entries
+ *   - Full CRUD operations integrated with /master-catalog API endpoints
+ *   - Support for: family selection, subfamily names, materials, general uses,
+ *     general specifications (JSON), and general appliances
+ */
+
 import React, { useEffect, useState } from "react";
 import { Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
 import io from "socket.io-client";
@@ -17,10 +29,19 @@ import CampaignModal from "./components/CampaignModal";
 import CampaignsView from "./components/CampaignsView";
 import CampaignProductModal from "./components/CampaignProductModal";
 import CampaignProductsView from "./components/CampaignProductsView";
+import MasterCatalogView from "./components/MasterCatalogView";
+import MasterCatalogModal from "./components/MasterCatalogModal";
+import UsosView from "./components/UsosView";
+import UsosModal from "./components/UsosModal";
+import ProductFamilyTreeView from "./components/ProductFamilyTreeView";
+import ProductFamilyModal from "./components/ProductFamilyModal";
 import Messages from "./pages/Messages";
 
-const API_URL = "https://hanbot-production.up.railway.app";
-const socket = io(API_URL);
+const API_URL = process.env.REACT_APP_API_URL || "https://hanbot-production.up.railway.app";
+const socket = io(API_URL, {
+  reconnection: false, // Don't keep trying to reconnect
+  autoConnect: false   // Don't connect automatically
+});
 
 function playPopSound() {
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -58,6 +79,27 @@ const menuItems = [
     path: "/analytics",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+    )
+  },
+  {
+    id: "familias",
+    label: "Familias",
+    path: "/familias",
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+    )
+  },
+  {
+    id: "usos",
+    label: "Usos",
+    path: "/usos",
+    icon: (
+      <>
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v7m0 0l-4 4m4-4l4 4" />
+        <circle cx="12" cy="4" r="1.5" fill="currentColor" />
+        <circle cx="8" cy="15" r="1.5" fill="currentColor" />
+        <circle cx="16" cy="15" r="1.5" fill="currentColor" />
+      </>
     )
   },
   {
@@ -134,6 +176,27 @@ function App() {
   const [showCampaignProductModal, setShowCampaignProductModal] = useState(false);
   const [editingCampaignProduct, setEditingCampaignProduct] = useState(null);
   const [deleteConfirmCampaignProduct, setDeleteConfirmCampaignProduct] = useState(null);
+
+  // Master Catalog state
+  const [subfamilies, setSubfamilies] = useState([]);
+  const [subfamiliesLoading, setSubfamiliesLoading] = useState(false);
+  const [showMasterCatalogModal, setShowMasterCatalogModal] = useState(false);
+  const [editingSubfamily, setEditingSubfamily] = useState(null);
+  const [deleteConfirmSubfamily, setDeleteConfirmSubfamily] = useState(null);
+
+  // Usos state
+  const [showUsosModal, setShowUsosModal] = useState(false);
+  const [selectedUso, setSelectedUso] = useState(null);
+  const [usos, setUsos] = useState([]);
+
+  // Product Families state
+  const [productFamilies, setProductFamilies] = useState([]);
+  const [productFamilyTree, setProductFamilyTree] = useState([]);
+  const [productFamiliesLoading, setProductFamiliesLoading] = useState(false);
+  const [showProductFamilyModal, setShowProductFamilyModal] = useState(false);
+  const [selectedProductFamily, setSelectedProductFamily] = useState(null);
+  const [selectedParentId, setSelectedParentId] = useState(null);
+  const [deleteConfirmProductFamily, setDeleteConfirmProductFamily] = useState(null);
 
   const fetchMessages = async () => {
     try {
@@ -335,6 +398,205 @@ function App() {
     }
   };
 
+  const fetchSubfamilies = async () => {
+    setSubfamiliesLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/master-catalog`);
+      const data = await res.json();
+      if (data.success) {
+        setSubfamilies(data.data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching subfamilies:", error);
+    } finally {
+      setSubfamiliesLoading(false);
+    }
+  };
+
+  const handleDeleteSubfamily = async (subfamilyId) => {
+    try {
+      const res = await fetch(`${API_URL}/master-catalog/${subfamilyId}`, {
+        method: "DELETE"
+      });
+      const data = await res.json();
+      if (data.success) {
+        setSubfamilies(subfamilies.filter(s => s._id !== subfamilyId));
+        setDeleteConfirmSubfamily(null);
+      }
+    } catch (error) {
+      console.error("Error deleting subfamily:", error);
+      alert("Error al eliminar la entrada del catálogo maestro");
+    }
+  };
+
+  const handleSaveSubfamily = async (subfamilyData) => {
+    try {
+      const url = editingSubfamily
+        ? `${API_URL}/master-catalog/${editingSubfamily._id}`
+        : `${API_URL}/master-catalog`;
+      const method = editingSubfamily ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(subfamilyData)
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        if (editingSubfamily) {
+          setSubfamilies(subfamilies.map(s => s._id === editingSubfamily._id ? data.data : s));
+        } else {
+          setSubfamilies([data.data, ...subfamilies]);
+        }
+        setShowMasterCatalogModal(false);
+        setEditingSubfamily(null);
+      }
+    } catch (error) {
+      console.error("Error saving subfamily:", error);
+      alert("Error al guardar la entrada del catálogo maestro");
+    }
+  };
+
+  const fetchUsos = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/usos`);
+      const data = await res.json();
+      if (data.success) {
+        setUsos(data.data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching usos:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteUso = async (usoId) => {
+    try {
+      const res = await fetch(`${API_URL}/usos/${usoId}`, {
+        method: "DELETE"
+      });
+      const data = await res.json();
+      if (data.success) {
+        setUsos(usos.filter(u => u._id !== usoId));
+      }
+    } catch (error) {
+      console.error("Error deleting uso:", error);
+      alert("Error al eliminar el uso");
+    }
+  };
+
+  const handleSaveUso = async (usoData) => {
+    try {
+      const url = selectedUso
+        ? `${API_URL}/usos/${selectedUso._id}`
+        : `${API_URL}/usos`;
+      const method = selectedUso ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(usoData)
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        if (selectedUso) {
+          setUsos(usos.map(u => u._id === selectedUso._id ? data.data : u));
+        } else {
+          setUsos([data.data, ...usos]);
+        }
+        setShowUsosModal(false);
+        setSelectedUso(null);
+      }
+    } catch (error) {
+      console.error("Error saving uso:", error);
+      alert("Error al guardar el uso");
+    }
+  };
+
+  const fetchProductFamilies = async () => {
+    setProductFamiliesLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/product-families/tree`);
+      const data = await res.json();
+      if (data.success) {
+        setProductFamilyTree(data.data || []);
+      }
+      // Also fetch flat list for modal parent dropdown
+      const flatRes = await fetch(`${API_URL}/product-families`);
+      const flatData = await flatRes.json();
+      if (flatData.success) {
+        setProductFamilies(flatData.data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching product families:", error);
+    } finally {
+      setProductFamiliesLoading(false);
+    }
+  };
+
+  const handleSaveProductFamily = async (productFamilyData) => {
+    try {
+      // Use the presence of _id to determine if this is an update (PUT) or create (POST)
+      const isUpdate = selectedProductFamily && selectedProductFamily._id;
+      const url = isUpdate
+        ? `${API_URL}/product-families/${selectedProductFamily._id}`
+        : `${API_URL}/product-families`;
+      const method = isUpdate ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(productFamilyData)
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        // Refresh the tree view
+        await fetchProductFamilies();
+        setShowProductFamilyModal(false);
+        setSelectedProductFamily(null);
+        setSelectedParentId(null);
+      }
+    } catch (error) {
+      console.error("Error saving product family:", error);
+      alert("Error saving product family");
+    }
+  };
+
+  const handleDeleteProductFamily = async (productId) => {
+    if (!productId) {
+      console.error("Cannot delete product family: ID is undefined or null");
+      alert("Error: No se puede eliminar el producto porque el ID no es válido");
+      setDeleteConfirmProductFamily(null);
+      return;
+    }
+
+    try {
+      const res = await fetch(`${API_URL}/product-families/${productId}`, {
+        method: "DELETE"
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Refresh the tree view
+        await fetchProductFamilies();
+        setDeleteConfirmProductFamily(null);
+      }
+    } catch (error) {
+      console.error("Error deleting product family:", error);
+      alert("Error deleting product family");
+    }
+  };
+
+  const handleAddChild = (parentProduct) => {
+    setSelectedProductFamily(null);
+    setSelectedParentId(parentProduct._id);
+    setShowProductFamilyModal(true);
+  };
+
   const fetchConversationStatus = async (psid) => {
     try {
       const res = await API.get(`/api/conversation/${psid}/status`);
@@ -412,6 +674,24 @@ function App() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname === "/master-catalog") {
+      fetchSubfamilies();
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname === "/usos") {
+      fetchUsos();
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname === "/familias") {
+      fetchProductFamilies();
+    }
   }, [location.pathname]);
 
   // Helper function to get today's date range in Mexico City time
@@ -1018,6 +1298,79 @@ function App() {
             />
           } />
 
+          {/* Master Catalog Route */}
+          <Route path="/master-catalog" element={
+            <MasterCatalogView
+              subfamilies={subfamilies}
+              loading={subfamiliesLoading}
+              onAdd={() => {
+                setEditingSubfamily(null);
+                setShowMasterCatalogModal(true);
+              }}
+              onEdit={(subfamily) => {
+                setEditingSubfamily(subfamily);
+                setShowMasterCatalogModal(true);
+              }}
+              onDelete={(subfamily) => {
+                setDeleteConfirmSubfamily(subfamily);
+              }}
+            />
+          } />
+
+          {/* Usos Route */}
+          <Route path="/usos" element={
+            <UsosView
+              usos={usos}
+              loading={loading}
+              onAdd={() => {
+                setSelectedUso(null);
+                setShowUsosModal(true);
+              }}
+              onEdit={(uso) => {
+                setSelectedUso(uso);
+                setShowUsosModal(true);
+              }}
+              onDelete={handleDeleteUso}
+            />
+          } />
+
+          {/* Familias Route */}
+          <Route path="/familias" element={
+            <ProductFamilyTreeView
+              products={productFamilyTree}
+              loading={productFamiliesLoading}
+              onAdd={() => {
+                setSelectedProductFamily(null);
+                setSelectedParentId(null);
+                setShowProductFamilyModal(true);
+              }}
+              onEdit={(product) => {
+                setSelectedProductFamily(product);
+                setSelectedParentId(null);
+                setShowProductFamilyModal(true);
+              }}
+              onDelete={(product) => {
+                setDeleteConfirmProductFamily(product);
+              }}
+              onAddChild={handleAddChild}
+              onCopy={(product) => {
+                // Create a copy with the same parent (sibling)
+                const copiedProduct = {
+                  name: product.name + ' (Copia)',
+                  description: product.description,
+                  parentId: product.parentId,
+                  sellable: product.sellable,
+                  price: product.price,
+                  sku: product.sku,
+                  stock: product.stock
+                };
+                setSelectedProductFamily(copiedProduct);
+                setSelectedParentId(null);
+                setShowProductFamilyModal(true);
+              }}
+            />
+          } />
+
           {/* Users and Settings Routes - Placeholder */}
           <Route path="/users" element={<div className="text-white">Users View - Coming Soon</div>} />
           <Route path="/settings" element={<div className="text-white">Settings View - Coming Soon</div>} />
@@ -1159,6 +1512,117 @@ function App() {
                 </button>
                 <button
                   onClick={() => handleDeleteCampaignProduct(deleteConfirmCampaignProduct._id)}
+                  className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Master Catalog Modal */}
+        {showMasterCatalogModal && (
+          <MasterCatalogModal
+            subfamily={editingSubfamily}
+            onSave={handleSaveSubfamily}
+            onClose={() => {
+              setShowMasterCatalogModal(false);
+              setEditingSubfamily(null);
+            }}
+          />
+        )}
+
+        {/* Usos Modal */}
+        {showUsosModal && (
+          <UsosModal
+            uso={selectedUso}
+            onSave={handleSaveUso}
+            onClose={() => {
+              setShowUsosModal(false);
+              setSelectedUso(null);
+            }}
+          />
+        )}
+
+        {/* Product Family Modal */}
+        {showProductFamilyModal && (
+          <ProductFamilyModal
+            product={selectedProductFamily}
+            allProducts={productFamilyTree}
+            presetParentId={selectedParentId}
+            onSave={handleSaveProductFamily}
+            onClose={() => {
+              setShowProductFamilyModal(false);
+              setSelectedProductFamily(null);
+              setSelectedParentId(null);
+            }}
+          />
+        )}
+
+        {/* Product Family Delete Confirmation Modal */}
+        {deleteConfirmProductFamily && deleteConfirmProductFamily._id && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-gray-800/95 backdrop-blur-lg border border-gray-700/50 rounded-xl max-w-md w-full p-6">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Eliminar Familia de Productos</h3>
+                  <p className="text-sm text-gray-400">Esta acción no se puede deshacer</p>
+                </div>
+              </div>
+              <p className="text-gray-300 mb-6">
+                ¿Estás seguro de que deseas eliminar <span className="font-semibold text-white">{deleteConfirmProductFamily.name}</span>? Esto también eliminará todos sus hijos.
+              </p>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setDeleteConfirmProductFamily(null)}
+                  className="flex-1 px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => handleDeleteProductFamily(deleteConfirmProductFamily._id)}
+                  className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Master Catalog Delete Confirmation Modal */}
+        {deleteConfirmSubfamily && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-gray-800/95 backdrop-blur-lg border border-gray-700/50 rounded-xl max-w-md w-full p-6">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Eliminar Entrada del Catálogo</h3>
+                  <p className="text-sm text-gray-400">Esta acción no se puede deshacer</p>
+                </div>
+              </div>
+              <p className="text-gray-300 mb-6">
+                ¿Estás seguro de que deseas eliminar la entrada <span className="font-semibold text-white">{deleteConfirmSubfamily.name}</span> del catálogo maestro?
+              </p>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setDeleteConfirmSubfamily(null)}
+                  className="flex-1 px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => handleDeleteSubfamily(deleteConfirmSubfamily._id)}
                   className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
                 >
                   Eliminar
