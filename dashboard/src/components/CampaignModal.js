@@ -6,11 +6,18 @@ function CampaignModal({ campaign, onSave, onClose }) {
     name: '',
     description: '',
     active: true,
+    status: 'ACTIVE',
     startDate: '',
     endDate: '',
     initialMessage: '',
     defaultFlow: 'malla_confeccionada',
-    conversionGoal: 'solicitar_cotizacion'
+    conversionGoal: 'solicitar_cotizacion',
+    // Facebook Campaign fields
+    fbCampaignId: '',
+    fbAdAccountId: '',
+    objective: 'OUTCOME_TRAFFIC',
+    dailyBudget: '',
+    lifetimeBudget: ''
   });
 
   useEffect(() => {
@@ -20,11 +27,17 @@ function CampaignModal({ campaign, onSave, onClose }) {
         name: campaign.name || '',
         description: campaign.description || '',
         active: campaign.active !== undefined ? campaign.active : true,
+        status: campaign.status || 'ACTIVE',
         startDate: campaign.startDate ? campaign.startDate.split('T')[0] : '',
         endDate: campaign.endDate ? campaign.endDate.split('T')[0] : '',
         initialMessage: campaign.initialMessage || '',
         defaultFlow: campaign.defaultFlow || 'malla_confeccionada',
-        conversionGoal: campaign.conversionGoal || 'solicitar_cotizacion'
+        conversionGoal: campaign.conversionGoal || 'solicitar_cotizacion',
+        fbCampaignId: campaign.fbCampaignId || '',
+        fbAdAccountId: campaign.fbAdAccountId || '',
+        objective: campaign.objective || 'OUTCOME_TRAFFIC',
+        dailyBudget: campaign.dailyBudget || '',
+        lifetimeBudget: campaign.lifetimeBudget || ''
       });
     }
   }, [campaign]);
@@ -110,6 +123,97 @@ function CampaignModal({ campaign, onSave, onClose }) {
                 className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                 placeholder="Descripción de la campaña..."
               />
+            </div>
+
+            {/* Facebook Campaign Settings */}
+            <div className="border-t border-gray-700 pt-4 mt-4">
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">Configuración de Facebook</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    FB Campaign ID
+                  </label>
+                  <input
+                    type="text"
+                    name="fbCampaignId"
+                    value={formData.fbCampaignId}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="120226050770160686"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    FB Ad Account ID
+                  </label>
+                  <input
+                    type="text"
+                    name="fbAdAccountId"
+                    value={formData.fbAdAccountId}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="act_123456789"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Objetivo
+                  </label>
+                  <select
+                    name="objective"
+                    value={formData.objective}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="OUTCOME_TRAFFIC">Tráfico</option>
+                    <option value="OUTCOME_LEADS">Leads</option>
+                    <option value="OUTCOME_SALES">Ventas</option>
+                    <option value="OUTCOME_ENGAGEMENT">Engagement</option>
+                    <option value="OUTCOME_AWARENESS">Conocimiento</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Estado
+                  </label>
+                  <select
+                    name="status"
+                    value={formData.status}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="ACTIVE">Activa</option>
+                    <option value="PAUSED">Pausada</option>
+                    <option value="ARCHIVED">Archivada</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Presupuesto Diario ($)
+                  </label>
+                  <input
+                    type="number"
+                    name="dailyBudget"
+                    value={formData.dailyBudget}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="100"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Presupuesto Total ($)
+                  </label>
+                  <input
+                    type="number"
+                    name="lifetimeBudget"
+                    value={formData.lifetimeBudget}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="3000"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Active Status and Dates */}

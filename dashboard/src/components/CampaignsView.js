@@ -1,6 +1,8 @@
-import React from 'react';
+import React, { useState } from 'react';
 
 function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
+  const [selectedCampaign, setSelectedCampaign] = useState(null);
+
   return (
     <div>
       {/* Header with Add Button */}
@@ -128,6 +130,15 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end space-x-2">
                         <button
+                          onClick={() => setSelectedCampaign(campaign)}
+                          className="p-2 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors"
+                          title="Ver Detalles"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                        <button
                           onClick={() => onEdit(campaign)}
                           className="p-2 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
                           title="Editar"
@@ -154,6 +165,237 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
           </div>
         )}
       </div>
+
+      {/* Campaign Details Modal */}
+      {selectedCampaign && (
+        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-gray-800/95 backdrop-blur-lg border border-gray-700/50 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+            {/* Modal Header */}
+            <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between">
+              <h2 className="text-xl font-bold text-white">
+                Detalles de la Campaña
+              </h2>
+              <button
+                onClick={() => setSelectedCampaign(null)}
+                className="p-2 rounded-lg text-gray-400 hover:bg-gray-700/50 hover:text-white transition-colors"
+              >
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            {/* Modal Body */}
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="space-y-6">
+                {/* Basic Information */}
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
+                    Información Básica
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">Nombre</p>
+                      <p className="text-sm text-white mt-1">{selectedCampaign.name}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">Referencia</p>
+                      <p className="text-sm text-white mt-1">
+                        <code className="bg-primary-500/10 text-primary-400 px-2 py-1 rounded">{selectedCampaign.ref}</code>
+                      </p>
+                    </div>
+                    {selectedCampaign.description && (
+                      <div className="col-span-2">
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">Descripción</p>
+                        <p className="text-sm text-gray-300 mt-1">{selectedCampaign.description}</p>
+                      </div>
+                    )}
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">Estado</p>
+                      <p className="text-sm mt-1">
+                        <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          selectedCampaign.active ? "bg-green-500/20 text-green-300" : "bg-gray-500/20 text-gray-400"
+                        }`}>
+                          {selectedCampaign.active ? "Activa" : "Inactiva"}
+                        </span>
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">Status FB</p>
+                      <p className="text-sm text-white mt-1">{selectedCampaign.status || 'N/A'}</p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Facebook Configuration */}
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
+                    Configuración de Facebook
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">FB Campaign ID</p>
+                      <p className="text-sm text-white mt-1">
+                        {selectedCampaign.fbCampaignId ? (
+                          <code className="bg-blue-500/10 text-blue-400 px-2 py-1 rounded">{selectedCampaign.fbCampaignId}</code>
+                        ) : 'N/A'}
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">FB Ad Account ID</p>
+                      <p className="text-sm text-white mt-1">{selectedCampaign.fbAdAccountId || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">Objetivo</p>
+                      <p className="text-sm text-white mt-1">{selectedCampaign.objective || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">ID Interno</p>
+                      <p className="text-sm text-gray-400 mt-1">
+                        <code className="text-xs">{selectedCampaign._id}</code>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Budget */}
+                {(selectedCampaign.dailyBudget || selectedCampaign.lifetimeBudget) && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
+                      Presupuesto
+                    </h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      {selectedCampaign.dailyBudget && (
+                        <div>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Diario</p>
+                          <p className="text-sm text-white mt-1">${selectedCampaign.dailyBudget}</p>
+                        </div>
+                      )}
+                      {selectedCampaign.lifetimeBudget && (
+                        <div>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Total</p>
+                          <p className="text-sm text-white mt-1">${selectedCampaign.lifetimeBudget}</p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Dates */}
+                {(selectedCampaign.startDate || selectedCampaign.endDate) && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
+                      Fechas
+                    </h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      {selectedCampaign.startDate && (
+                        <div>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Inicio</p>
+                          <p className="text-sm text-white mt-1">
+                            {new Date(selectedCampaign.startDate).toLocaleDateString('es-MX', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric'
+                            })}
+                          </p>
+                        </div>
+                      )}
+                      {selectedCampaign.endDate && (
+                        <div>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Fin</p>
+                          <p className="text-sm text-white mt-1">
+                            {new Date(selectedCampaign.endDate).toLocaleDateString('es-MX', {
+                              year: 'numeric',
+                              month: 'long',
+                              day: 'numeric'
+                            })}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* Bot Configuration */}
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
+                    Configuración del Bot
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    {selectedCampaign.defaultFlow && (
+                      <div>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">Flujo Predeterminado</p>
+                        <p className="text-sm text-white mt-1">{selectedCampaign.defaultFlow}</p>
+                      </div>
+                    )}
+                    {selectedCampaign.conversionGoal && (
+                      <div>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">Meta de Conversión</p>
+                        <p className="text-sm text-white mt-1">{selectedCampaign.conversionGoal}</p>
+                      </div>
+                    )}
+                    {selectedCampaign.productFocus && (
+                      <div>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">Producto Focus</p>
+                        <p className="text-sm text-white mt-1">{selectedCampaign.productFocus}</p>
+                      </div>
+                    )}
+                    {selectedCampaign.initialMessage && (
+                      <div className="col-span-2">
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">Mensaje Inicial</p>
+                        <p className="text-sm text-gray-300 mt-1 bg-gray-900/50 p-3 rounded">
+                          {selectedCampaign.initialMessage}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Metrics */}
+                {selectedCampaign.metrics && (
+                  <div>
+                    <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
+                      Métricas
+                    </h3>
+                    <div className="grid grid-cols-3 gap-4">
+                      <div className="bg-gray-900/50 p-3 rounded">
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">Visitas</p>
+                        <p className="text-2xl font-bold text-white mt-1">{selectedCampaign.metrics.visits || 0}</p>
+                      </div>
+                      <div className="bg-gray-900/50 p-3 rounded">
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">Interacciones</p>
+                        <p className="text-2xl font-bold text-white mt-1">{selectedCampaign.metrics.interactions || 0}</p>
+                      </div>
+                      <div className="bg-gray-900/50 p-3 rounded">
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">Clicks</p>
+                        <p className="text-2xl font-bold text-white mt-1">{selectedCampaign.metrics.clicks || 0}</p>
+                      </div>
+                      <div className="bg-gray-900/50 p-3 rounded">
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">Leads</p>
+                        <p className="text-2xl font-bold text-white mt-1">{selectedCampaign.metrics.leads || 0}</p>
+                      </div>
+                      <div className="bg-gray-900/50 p-3 rounded">
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">Conversiones</p>
+                        <p className="text-2xl font-bold text-white mt-1">{selectedCampaign.metrics.conversions || 0}</p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Modal Footer */}
+            <div className="px-6 py-4 border-t border-gray-700/50 flex justify-end">
+              <button
+                onClick={() => setSelectedCampaign(null)}
+                className="px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

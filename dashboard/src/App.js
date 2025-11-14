@@ -27,6 +27,8 @@ import ProductModal from "./components/ProductModal";
 import ProductsView from "./components/ProductsView";
 import CampaignModal from "./components/CampaignModal";
 import CampaignsView from "./components/CampaignsView";
+import AdSetsView from "./components/AdSetsView";
+import AdsView from "./components/AdsView";
 import CampaignProductModal from "./components/CampaignProductModal";
 import CampaignProductsView from "./components/CampaignProductsView";
 import MasterCatalogView from "./components/MasterCatalogView";
@@ -116,6 +118,22 @@ const menuItems = [
     path: "/campaigns",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+    )
+  },
+  {
+    id: "adsets",
+    label: "Ad Sets",
+    path: "/adsets",
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+    )
+  },
+  {
+    id: "ads",
+    label: "Anuncios",
+    path: "/ads",
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
     )
   },
   {
@@ -283,6 +301,8 @@ function App() {
       const res = await fetch(`${API_URL}/campaigns`);
       const data = await res.json();
       if (data.success) {
+        console.log("Campaigns loaded:", data.data);
+        console.log("Active campaigns:", data.data.filter(c => c.active === true));
         setCampaigns(data.data || []);
       }
     } catch (error) {
@@ -653,7 +673,7 @@ function App() {
   }, [location.pathname]);
 
   useEffect(() => {
-    if (location.pathname === "/campaigns") {
+    if (location.pathname === "/campaigns" || location.pathname === "/") {
       fetchCampaigns();
     }
   }, [location.pathname]);
@@ -724,6 +744,11 @@ function App() {
     (m) => m.senderType === "user"
   ).length;
 
+  // Count active campaigns
+  const activeCampaigns = campaigns.filter((c) => c.active === true).length;
+  console.log("Campaigns state:", campaigns);
+  console.log("Active campaigns count:", activeCampaigns);
+
   let filteredMessages = messages;
 
   // Apply sender type filter
@@ -735,6 +760,19 @@ function App() {
   if (conversationFilter) {
     filteredMessages = filteredMessages.filter((msg) => msg.psid === conversationFilter);
   }
+
+  // Group messages by PSID to show only the latest message per conversation
+  const latestMessagesByConversation = filteredMessages.reduce((acc, msg) => {
+    if (!acc[msg.psid] || new Date(msg.timestamp) > new Date(acc[msg.psid].timestamp)) {
+      acc[msg.psid] = msg;
+    }
+    return acc;
+  }, {});
+
+  // Get 10 most recent conversations
+  filteredMessages = Object.values(latestMessagesByConversation)
+    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
+    .slice(0, 10);
 
   // Get user's full conversation history
   const getUserConversation = (psid) => {
@@ -917,7 +955,7 @@ function App() {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
           {/* Total Messages */}
           <button
             onClick={() => {
@@ -1002,6 +1040,26 @@ function App() {
               </div>
             </div>
           </button>
+
+          {/* Active Campaigns */}
+          <button
+            onClick={() => {
+              navigate("/campaigns");
+            }}
+            className="bg-gradient-to-br from-green-500/10 to-green-600/5 backdrop-blur-lg border border-green-500/20 rounded-xl p-6 hover:from-green-500/20 hover:to-green-600/10 transition-all cursor-pointer text-left w-full"
+          >
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm font-medium text-gray-400 mb-1">Campañas Activas</p>
+                <h3 className="text-3xl font-bold text-white">{activeCampaigns}</h3>
+              </div>
+              <div className="w-12 h-12 bg-green-500/20 rounded-lg flex items-center justify-center">
+                <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                </svg>
+              </div>
+            </div>
+          </button>
         </div>
 
         {/* Activity Chart */}
@@ -1068,7 +1126,7 @@ function App() {
         {/* Messages Table */}
         <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-700/50">
-            <h2 className="text-xl font-bold text-white">Conversaciones Recientes</h2>
+            <h2 className="text-xl font-bold text-white">Conversaciones Recientes - Últimas 10</h2>
           </div>
           {loading ? (
             <div className="p-8 text-center">
@@ -1271,6 +1329,12 @@ function App() {
               }}
             />
           } />
+
+          {/* AdSets Route */}
+          <Route path="/adsets" element={<AdSetsView />} />
+
+          {/* Ads Route */}
+          <Route path="/ads" element={<AdsView />} />
 
           {/* Campaign Products Route */}
           <Route path="/campaign-products" element={
