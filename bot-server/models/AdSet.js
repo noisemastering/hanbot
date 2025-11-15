@@ -46,6 +46,12 @@ const adSetSchema = new mongoose.Schema(
     // Placement
     placements: [String],      // e.g., ["facebook_feed", "instagram_feed"]
 
+    // Products associated with this ad set
+    productIds: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product"
+    }],
+
     // Metrics
     metrics: {
       impressions: { type: Number, default: 0 },

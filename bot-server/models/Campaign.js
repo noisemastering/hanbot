@@ -41,7 +41,13 @@ const campaignSchema = new mongoose.Schema(
     },
 
 
-    // Mensajería / flujo 
+    // Products associated with this campaign
+    productIds: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product"
+    }],
+
+    // Mensajería / flujo
     initialMessage: { type: String },     // primer texto al entrar por la campaña
     followupPrompts: [String],            // preguntas guía
     defaultFlow: { type: String, default: "malla_confeccionada" },

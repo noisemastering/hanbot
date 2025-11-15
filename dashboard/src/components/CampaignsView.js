@@ -61,9 +61,6 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
                     Nombre
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Ref
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Estado
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
@@ -84,18 +81,15 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
                       <div className="flex items-center">
                         <div>
                           <div className="text-sm font-medium text-white">{campaign.name}</div>
-                          {campaign.description && (
-                            <div className="text-sm text-gray-400 truncate max-w-md">
-                              {campaign.description}
+                          {campaign.fbCampaignId && (
+                            <div className="mt-1">
+                              <code className="text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded">
+                                {campaign.fbCampaignId}
+                              </code>
                             </div>
                           )}
                         </div>
                       </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <code className="text-xs text-primary-400 bg-primary-500/10 px-2 py-1 rounded">
-                        {campaign.ref}
-                      </code>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${

@@ -12,6 +12,7 @@ router.get("/", async (req, res) => {
 
     const adSets = await AdSet.find(filter)
       .populate("campaignId", "name ref")
+      .populate("productIds", "name size price familyId")
       .sort({ createdAt: -1 });
 
     res.json({ success: true, data: adSets });
@@ -24,7 +25,8 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const adSet = await AdSet.findById(req.params.id)
-      .populate("campaignId", "name ref");
+      .populate("campaignId", "name ref")
+      .populate("productIds", "name size price familyId");
 
     if (!adSet) {
       return res.status(404).json({ success: false, error: "AdSet no encontrado" });
@@ -73,7 +75,8 @@ router.put("/:id", async (req, res) => {
       req.params.id,
       req.body,
       { new: true, runValidators: true }
-    ).populate("campaignId", "name ref");
+    ).populate("campaignId", "name ref")
+     .populate("productIds", "name size price familyId");
 
     if (!adSet) {
       return res.status(404).json({ success: false, error: "AdSet no encontrado" });

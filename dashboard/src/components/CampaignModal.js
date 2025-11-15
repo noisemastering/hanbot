@@ -1,5 +1,7 @@
 import React, { useState, useEffect } from 'react';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+
 function CampaignModal({ campaign, onSave, onClose }) {
   const [formData, setFormData] = useState({
     ref: '',
@@ -17,8 +19,27 @@ function CampaignModal({ campaign, onSave, onClose }) {
     fbAdAccountId: '',
     objective: 'OUTCOME_TRAFFIC',
     dailyBudget: '',
-    lifetimeBudget: ''
+    lifetimeBudget: '',
+    productIds: []
   });
+
+  const [products, setProducts] = useState([]);
+
+  // Fetch products on mount
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const response = await fetch(`${API_URL}/products`);
+        const data = await response.json();
+        if (data.success) {
+          setProducts(data.data);
+        }
+      } catch (error) {
+        console.error('Error fetching products:', error);
+      }
+    };
+    fetchProducts();
+  }, []);
 
   useEffect(() => {
     if (campaign) {
@@ -37,7 +58,8 @@ function CampaignModal({ campaign, onSave, onClose }) {
         fbAdAccountId: campaign.fbAdAccountId || '',
         objective: campaign.objective || 'OUTCOME_TRAFFIC',
         dailyBudget: campaign.dailyBudget || '',
-        lifetimeBudget: campaign.lifetimeBudget || ''
+        lifetimeBudget: campaign.lifetimeBudget || '',
+        productIds: campaign.productIds?.map(p => p._id || p) || []
       });
     }
   }, [campaign]);
@@ -53,6 +75,25 @@ function CampaignModal({ campaign, onSave, onClose }) {
       ...formData,
       [name]: type === 'checkbox' ? checked : value
     });
+  };
+
+  const handleProductToggle = (productId) => {
+    setFormData(prev => ({
+      ...prev,
+      productIds: prev.productIds.includes(productId)
+        ? prev.productIds.filter(id => id !== productId)
+        : [...prev.productIds, productId]
+    }));
+  };
+
+  const handleSelectAllProducts = () => {
+    if (formData.productIds.length === products.length) {
+      // Deselect all
+      setFormData(prev => ({ ...prev, productIds: [] }));
+    } else {
+      // Select all
+      setFormData(prev => ({ ...prev, productIds: products.map(p => p._id) }));
+    }
   };
 
   return (
@@ -304,6 +345,50 @@ function CampaignModal({ campaign, onSave, onClose }) {
                   <option value="contacto">Contacto</option>
                 </select>
               </div>
+            </div>
+
+            {/* Products Selection */}
+            <div className="border-t border-gray-700 pt-4 mt-4">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="text-sm font-semibold text-gray-300">Productos Asociados</h3>
+                {products.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleSelectAllProducts}
+                    className="text-xs text-primary-400 hover:text-primary-300 transition-colors"
+                  >
+                    {formData.productIds.length === products.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
+                  </button>
+                )}
+              </div>
+              <div className="max-h-64 overflow-y-auto space-y-2">
+                {products.length === 0 ? (
+                  <p className="text-sm text-gray-500">No hay productos disponibles</p>
+                ) : (
+                  products.map((product) => (
+                    <label
+                      key={product._id}
+                      className="flex items-center p-3 bg-gray-900/50 rounded-lg hover:bg-gray-700/50 cursor-pointer transition-colors"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={formData.productIds.includes(product._id)}
+                        onChange={() => handleProductToggle(product._id)}
+                        className="w-4 h-4 text-primary-500 bg-gray-700 border-gray-600 rounded focus:ring-primary-500 focus:ring-2"
+                      />
+                      <div className="ml-3 flex-1">
+                        <p className="text-sm font-medium text-white">{product.name}</p>
+                        <p className="text-xs text-gray-400">
+                          {product.size && `${product.size} - `}${product.price ? `$${product.price}` : 'Precio no disponible'}
+                        </p>
+                      </div>
+                    </label>
+                  ))
+                )}
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                {formData.productIds.length} producto(s) seleccionado(s)
+              </p>
             </div>
           </div>
         </form>

@@ -6,7 +6,9 @@ const Campaign = require("../models/Campaign");
 // Listar todas las campañas
 router.get("/", async (req, res) => {
   try {
-    const campaigns = await Campaign.find().sort({ createdAt: -1 });
+    const campaigns = await Campaign.find()
+      .populate("productIds", "name size price familyId")
+      .sort({ createdAt: -1 });
     res.json({ success: true, data: campaigns });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -16,7 +18,8 @@ router.get("/", async (req, res) => {
 // Obtener una campaña por ID
 router.get("/:id", async (req, res) => {
   try {
-    const campaign = await Campaign.findById(req.params.id);
+    const campaign = await Campaign.findById(req.params.id)
+      .populate("productIds", "name size price familyId");
     if (!campaign) {
       return res.status(404).json({ success: false, error: "Campaña no encontrada" });
     }
@@ -29,7 +32,8 @@ router.get("/:id", async (req, res) => {
 // Buscar campaña por ref
 router.get("/ref/:ref", async (req, res) => {
   try {
-    const campaign = await Campaign.findOne({ ref: req.params.ref });
+    const campaign = await Campaign.findOne({ ref: req.params.ref })
+      .populate("productIds", "name size price familyId");
     if (!campaign) {
       return res.status(404).json({ success: false, error: "Campaña no encontrada" });
     }
@@ -57,7 +61,7 @@ router.put("/:id", async (req, res) => {
       req.params.id,
       req.body,
       { new: true, runValidators: true }
-    );
+    ).populate("productIds", "name size price familyId");
     if (!campaign) {
       return res.status(404).json({ success: false, error: "Campaña no encontrada" });
     }

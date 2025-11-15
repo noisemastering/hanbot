@@ -13,6 +13,8 @@ const conversationSchema = new mongoose.Schema({
 
   // Campaign & context tracking
   campaignRef: { type: String, default: null },
+  adId: { type: String, default: null },           // Facebook Ad ID (referral.ad_id)
+  campaignId: { type: String, default: null },     // Facebook Campaign ID (referral.campaign_id)
   requestedSize: { type: String, default: null },  // Track last size user asked about
   familyShown: { type: String, default: null },     // Track last family shown
   lastUnavailableSize: { type: String, default: null },  // Track unavailable size to detect insistence

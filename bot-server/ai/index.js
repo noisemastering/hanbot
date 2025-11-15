@@ -6,6 +6,7 @@ const { getBusinessInfo } = require("../businessInfoManager");
 const { getProduct } = require("../hybridSearch");
 const Campaign = require("../models/Campaign");
 const { extractReference } = require("../referenceEstimator");
+const { getProductsForConversation } = require("../utils/productLookup");
 
 // AI-powered intent classification
 const { classifyIntent } = require("./intentClassifier");
@@ -53,6 +54,13 @@ async function generateReply(userMessage, psid, referral = null) {
     } else if (convo.campaignRef) {
       campaign = await Campaign.findOne({ ref: convo.campaignRef });
     }
+
+    // 🛍️ Get products for this conversation (from ad/adset/campaign)
+    const availableProducts = await getProductsForConversation(convo);
+    console.log(`🛍️ Available products for this conversation: ${availableProducts.length}`);
+
+    // Store products in conversation context for AI to use
+    convo.availableProducts = availableProducts;
 
     // 🚫 Check for opt-out (when conversation is closed and user confirms with "no")
     const optOutResponse = await handleOptOut(cleanMsg, convo);

@@ -633,6 +633,25 @@ app.post("/webhook", async (req, res) => {
           return;
         }
 
+        // 🎯 Check if the ad associated with this conversation is active
+        const conversation = await getConversation(senderPsid);
+        if (conversation && conversation.adId) {
+          const Ad = require("./models/Ad");
+          const ad = await Ad.findOne({ fbAdId: conversation.adId });
+
+          if (ad) {
+            if (ad.status !== "ACTIVE") {
+              console.log(`🚫 Ad ${conversation.adId} is ${ad.status}. Bot will not respond to ${senderPsid}.`);
+              await saveMessage(senderPsid, messageText || "[image]", "user", messageId);
+              res.sendStatus(200);
+              return;
+            }
+            console.log(`✅ Ad ${conversation.adId} is ACTIVE. Bot will respond.`);
+          } else {
+            console.log(`⚠️ Ad ID ${conversation.adId} found in conversation but not in database. Allowing bot response.`);
+          }
+        }
+
         // 📸 Check for attachments (images, stickers, etc.)
         const attachments = webhookEvent.message.attachments;
         if (attachments && attachments.length > 0) {

@@ -19,6 +19,7 @@ router.get("/", async (req, res) => {
           select: "name ref"
         }
       })
+      .populate("productIds", "name size price familyId")
       .sort({ createdAt: -1 });
 
     res.json({ success: true, data: ads });
@@ -38,7 +39,8 @@ router.get("/:id", async (req, res) => {
           path: "campaignId",
           select: "name ref"
         }
-      });
+      })
+      .populate("productIds", "name size price familyId");
 
     if (!ad) {
       return res.status(404).json({ success: false, error: "Ad no encontrado" });
@@ -94,7 +96,7 @@ router.put("/:id", async (req, res) => {
         path: "campaignId",
         select: "name ref"
       }
-    });
+    }).populate("productIds", "name size price familyId");
 
     if (!ad) {
       return res.status(404).json({ success: false, error: "Ad no encontrado" });

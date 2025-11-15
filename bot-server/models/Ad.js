@@ -43,6 +43,12 @@ const adSchema = new mongoose.Schema(
       }]
     },
 
+    // Products associated with this ad
+    productIds: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Product"
+    }],
+
     // Tracking
     tracking: {
       utmSource: String,

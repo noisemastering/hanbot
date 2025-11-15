@@ -1,14 +1,19 @@
 import React, { useState, useEffect } from 'react';
+import AdModal from './AdModal';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
 function AdsView() {
   const [ads, setAds] = useState([]);
+  const [adSets, setAdSets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedAd, setSelectedAd] = useState(null);
+  const [showAdModal, setShowAdModal] = useState(false);
+  const [editingAd, setEditingAd] = useState(null);
 
   useEffect(() => {
     fetchAds();
+    fetchAdSets();
   }, []);
 
   const fetchAds = async () => {
@@ -26,11 +31,84 @@ function AdsView() {
     }
   };
 
+  const fetchAdSets = async () => {
+    try {
+      const res = await fetch(`${API_URL}/adsets`);
+      const data = await res.json();
+      if (data.success) {
+        setAdSets(data.data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching ad sets:", error);
+    }
+  };
+
+  const handleSaveAd = async (adData) => {
+    try {
+      const url = editingAd
+        ? `${API_URL}/ads/${editingAd._id}`
+        : `${API_URL}/ads`;
+      const method = editingAd ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(adData)
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        await fetchAds();
+        setShowAdModal(false);
+        setEditingAd(null);
+      } else {
+        alert("Error al guardar el anuncio: " + (data.error || "Error desconocido"));
+      }
+    } catch (error) {
+      console.error("Error saving ad:", error);
+      alert("Error al guardar el anuncio");
+    }
+  };
+
+  const handleStatusChange = async (adId, newStatus) => {
+    try {
+      const res = await fetch(`${API_URL}/ads/${adId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        await fetchAds();
+      } else {
+        alert("Error al actualizar estado: " + (data.error || "Error desconocido"));
+      }
+    } catch (error) {
+      console.error("Error updating status:", error);
+      alert("Error al actualizar estado");
+    }
+  };
+
   return (
     <div>
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white">Anuncios</h1>
-        <p className="text-gray-400 mt-2">Gestiona los anuncios individuales de tus ad sets</p>
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-3xl font-bold text-white">Anuncios</h1>
+          <p className="text-gray-400 mt-2">Gestiona los anuncios individuales de tus ad sets</p>
+        </div>
+        <button
+          onClick={() => {
+            setEditingAd(null);
+            setShowAdModal(true);
+          }}
+          className="px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center space-x-2"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+          </svg>
+          <span>Nuevo Anuncio</span>
+        </button>
       </div>
 
       <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl overflow-hidden">
@@ -55,28 +133,25 @@ function AdsView() {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full table-fixed">
               <thead className="bg-gray-900/50">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[28%] px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Nombre
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    FB Ad ID
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[18%] px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Ad Set / Campaña
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[20%] px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Creative
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[12%] px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Estado
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[14%] px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Métricas
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[8%] px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Acciones
                   </th>
                 </tr>
@@ -86,9 +161,7 @@ function AdsView() {
                   <tr key={ad._id} className="hover:bg-gray-700/30 transition-colors">
                     <td className="px-6 py-4">
                       <div className="text-sm font-medium text-white">{ad.name}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <code className="text-xs text-purple-400 bg-purple-500/10 px-2 py-1 rounded">
+                      <code className="text-xs text-purple-400 bg-purple-500/10 px-3 py-1.5 rounded mt-1 inline-block">
                         {ad.fbAdId}
                       </code>
                     </td>
@@ -101,13 +174,21 @@ function AdsView() {
                       <div className="text-xs text-gray-500 truncate">{ad.creative?.body || 'Sin body'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        ad.status === 'ACTIVE'
-                          ? "bg-green-500/20 text-green-300"
-                          : "bg-gray-500/20 text-gray-400"
-                      }`}>
-                        {ad.status}
-                      </span>
+                      <select
+                        value={ad.status}
+                        onChange={(e) => handleStatusChange(ad._id, e.target.value)}
+                        className={`text-xs font-medium px-2.5 py-1.5 rounded-lg border-2 transition-colors cursor-pointer ${
+                          ad.status === 'ACTIVE'
+                            ? "bg-green-500/10 border-green-500/30 text-green-300 hover:bg-green-500/20"
+                            : ad.status === 'PAUSED'
+                            ? "bg-yellow-500/10 border-yellow-500/30 text-yellow-300 hover:bg-yellow-500/20"
+                            : "bg-gray-500/10 border-gray-500/30 text-gray-400 hover:bg-gray-500/20"
+                        }`}
+                      >
+                        <option value="ACTIVE">Activo</option>
+                        <option value="PAUSED">Pausado</option>
+                        <option value="ARCHIVED">Archivado</option>
+                      </select>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
                       <div className="flex space-x-3 text-xs">
@@ -122,13 +203,39 @@ function AdsView() {
                         </span>
                       </div>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm">
-                      <button
-                        onClick={() => setSelectedAd(ad)}
-                        className="px-3 py-1.5 bg-purple-500/20 text-purple-400 hover:bg-purple-500/30 border border-purple-500/50 rounded-lg transition-colors text-xs font-medium"
-                      >
-                        Ver Detalles
-                      </button>
+                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                      <div className="flex items-center justify-end space-x-2">
+                        <button
+                          onClick={() => setSelectedAd(ad)}
+                          className="p-2 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors"
+                          title="Ver Detalles"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingAd(ad);
+                            setShowAdModal(true);
+                          }}
+                          className="p-2 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
+                          title="Editar"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                        <button
+                          onClick={() => {/* TODO: implement delete */}}
+                          className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                          title="Eliminar"
+                        >
+                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -425,6 +532,19 @@ function AdsView() {
             </div>
           </div>
         </div>
+      )}
+
+      {/* Ad Modal */}
+      {showAdModal && (
+        <AdModal
+          ad={editingAd}
+          adSets={adSets}
+          onSave={handleSaveAd}
+          onClose={() => {
+            setShowAdModal(false);
+            setEditingAd(null);
+          }}
+        />
       )}
     </div>
   );
