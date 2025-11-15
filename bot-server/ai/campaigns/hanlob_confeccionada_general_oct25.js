@@ -1,6 +1,6 @@
 // ai/campaigns/hanlob_confeccionada_general_oct25.js
 const { updateConversation } = require("../../conversationManager");
-const CampaignProduct = require("../../models/CampaignProduct");
+const { getCampaignProductFromConversation } = require("../../utils/productCompatibility");
 
 // --- Helpers ---
 function parseSize(str) {
@@ -64,11 +64,8 @@ function variantLineCompact(v) {
 async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign) {
   const clean = String(msg).trim().toLowerCase();
 
-  // 0) Carga de producto guía de la campaña
-  const product = await CampaignProduct.findOne({
-    campaignRef: campaign.ref,
-    active: true,
-  }).lean();
+  // 0) Carga de producto guía de la campaña (usando nuevo sistema de productos)
+  const product = getCampaignProductFromConversation(convo, campaign);
 
   // Si no hay producto asociado, cae a un fallback mínimo de campaña
   if (!product) {

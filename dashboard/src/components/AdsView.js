@@ -136,22 +136,16 @@ function AdsView() {
             <table className="w-full table-fixed">
               <thead className="bg-gray-900/50">
                 <tr>
-                  <th className="w-[28%] px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[40%] px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Nombre
                   </th>
-                  <th className="w-[18%] px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[30%] px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Ad Set / Campaña
                   </th>
-                  <th className="w-[20%] px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Creative
-                  </th>
-                  <th className="w-[12%] px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[15%] px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Estado
                   </th>
-                  <th className="w-[14%] px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Métricas
-                  </th>
-                  <th className="w-[8%] px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  <th className="w-[15%] px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Acciones
                   </th>
                 </tr>
@@ -168,10 +162,6 @@ function AdsView() {
                     <td className="px-6 py-4 text-sm text-gray-300">
                       <div>{ad.adSetId?.name || 'N/A'}</div>
                       <div className="text-xs text-gray-500">{ad.adSetId?.campaignId?.name || ''}</div>
-                    </td>
-                    <td className="px-6 py-4 text-sm text-gray-300 max-w-xs">
-                      <div className="font-medium truncate">{ad.creative?.headline || 'Sin headline'}</div>
-                      <div className="text-xs text-gray-500 truncate">{ad.creative?.body || 'Sin body'}</div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <select
@@ -190,28 +180,15 @@ function AdsView() {
                         <option value="ARCHIVED">Archivado</option>
                       </select>
                     </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                      <div className="flex space-x-3 text-xs">
-                        <span title="Impresiones">
-                          <span className="text-gray-500">Imp:</span> {ad.metrics?.impressions || 0}
-                        </span>
-                        <span title="Clicks">
-                          <span className="text-gray-500">Clk:</span> {ad.metrics?.clicks || 0}
-                        </span>
-                        <span title="Conversiones">
-                          <span className="text-gray-500">Conv:</span> {ad.metrics?.conversions || 0}
-                        </span>
-                      </div>
-                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end space-x-2">
                         <button
                           onClick={() => setSelectedAd(ad)}
-                          className="p-2 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors"
-                          title="Ver Detalles"
+                          className="p-2 text-green-400 hover:bg-green-500/20 rounded-lg transition-colors"
+                          title="Ver Métricas"
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                           </svg>
                         </button>
                         <button

@@ -1,6 +1,5 @@
 // measureHandler.js
 const Product = require("./models/Product");
-const CampaignProduct = require("./models/CampaignProduct");
 const { extractReference } = require("./referenceEstimator");
 
 /**
@@ -220,59 +219,73 @@ function parseSizeString(sizeStr) {
 }
 
 /**
- * Queries all available sizes from Products and CampaignProducts
- * @param {string} campaignRef - Optional campaign reference to prioritize campaign products
+ * Queries all available sizes from Products
+ * @param {object} conversation - Optional conversation object (with availableProducts populated)
  * @returns {Array} - Array of size objects sorted by area
  */
-async function getAvailableSizes(campaignRef = null) {
+async function getAvailableSizes(conversation = null) {
   const sizes = [];
 
-  // Get sizes from CampaignProducts
-  if (campaignRef) {
-    const campaignProducts = await CampaignProduct.find({
-      campaignRef,
-      active: true
-    }).lean();
+  // If conversation has specific products associated (from ad/adset/campaign), prioritize those
+  if (conversation && conversation.availableProducts && conversation.availableProducts.length > 0) {
+    console.log(`📦 Using ${conversation.availableProducts.length} products from conversation context`);
 
-    for (const cp of campaignProducts) {
-      if (cp.variants && cp.variants.length > 0) {
-        for (const variant of cp.variants) {
-          if (variant.stock && variant.size) {
-            const parsed = parseSizeString(variant.size);
-            if (parsed) {
-              sizes.push({
-                ...parsed,
-                price: variant.price,
-                source: 'campaign',
-                productName: cp.name,
-                permalink: variant.permalink,
-                imageUrl: variant.imageUrl
-              });
-            }
+    for (const product of conversation.availableProducts) {
+      if (product.size) {
+        const parsed = parseSizeString(product.size);
+        if (parsed) {
+          // Parse price (handle both String and Number)
+          let price = 0;
+          if (typeof product.price === 'string') {
+            const cleanPrice = product.price.replace(/[$,\s]/g, '');
+            price = parseFloat(cleanPrice) || 0;
+          } else if (typeof product.price === 'number') {
+            price = product.price;
           }
+
+          sizes.push({
+            ...parsed,
+            price: price,
+            source: product.mLink ? 'mercadolibre' : 'product',
+            productName: product.name,
+            mLink: product.mLink,
+            permalink: product.mLink, // Alias for compatibility
+            imageUrl: product.imageUrl
+          });
         }
       }
     }
-  }
+  } else {
+    // Fallback: Get all regular Products (confeccionada type)
+    console.log('📦 Using all confeccionada products from catalog');
+    const products = await Product.find({
+      type: "confeccionada",
+      size: { $exists: true, $ne: null }
+    }).lean();
 
-  // Get sizes from regular Products (confeccionada type)
-  const products = await Product.find({
-    type: "confeccionada",
-    size: { $exists: true, $ne: null }
-  }).lean();
+    for (const product of products) {
+      if (product.size) {
+        const parsed = parseSizeString(product.size);
+        if (parsed) {
+          // Parse price (handle both String and Number)
+          let price = 0;
+          if (typeof product.price === 'string') {
+            const cleanPrice = product.price.replace(/[$,\s]/g, '');
+            price = parseFloat(cleanPrice) || 0;
+          } else if (typeof product.price === 'number') {
+            price = product.price;
+          }
 
-  for (const product of products) {
-    if (product.size) {
-      const parsed = parseSizeString(product.size);
-      if (parsed) {
-        sizes.push({
-          ...parsed,
-          price: product.price,
-          source: 'product',
-          productName: product.name,
-          mLink: product.mLink,
-          imageUrl: product.imageUrl
-        });
+          sizes.push({
+            ...parsed,
+            price: price,
+            source: product.mLink ? 'mercadolibre' : 'product',
+            productName: product.name,
+            mLink: product.mLink,
+            permalink: product.mLink, // Alias for compatibility
+            imageUrl: product.imageUrl
+          });
+        }
       }
     }
   }

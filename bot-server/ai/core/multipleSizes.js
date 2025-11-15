@@ -64,8 +64,8 @@ async function handleMultipleSizes(message, psid, convo, campaignRef = null) {
 
   console.log(`📏 Found ${dimensions.length} dimensions:`, dimensions.map(d => `${d.width}x${d.height}`).join(", "));
 
-  // Get available sizes
-  const availableSizes = await getAvailableSizes(campaignRef);
+  // Get available sizes (pass conversation for product context)
+  const availableSizes = await getAvailableSizes(convo);
   const businessInfo = await getBusinessInfo();
 
   // Build response parts for each dimension

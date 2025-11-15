@@ -197,8 +197,8 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         offeredToShowAllSizes: false // Clear the flag
       });
 
-      // Fetch all available sizes
-      const availableSizes = await getAvailableSizes();
+      // Fetch all available sizes (pass conversation for product context)
+      const availableSizes = await getAvailableSizes(convo);
 
       // Build condensed list
       let response = "📐 Aquí están todas nuestras medidas disponibles:\n\n";
@@ -248,7 +248,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         };
       } else {
         // If no exact product found, provide alternatives
-        const availableSizes = await getAvailableSizes();
+        const availableSizes = await getAvailableSizes(convo);
         const businessInfo = await getBusinessInfo();
         const dimensions = {
           width: match ? parseFloat(match[1]) : null,
