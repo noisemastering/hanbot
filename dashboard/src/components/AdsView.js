@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import AdModal from './AdModal';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
@@ -61,12 +62,13 @@ function AdsView() {
         await fetchAds();
         setShowAdModal(false);
         setEditingAd(null);
+        toast.success(editingAd ? 'Anuncio actualizado correctamente' : 'Anuncio creado correctamente');
       } else {
-        alert("Error al guardar el anuncio: " + (data.error || "Error desconocido"));
+        toast.error("Error al guardar el anuncio: " + (data.error || "Error desconocido"));
       }
     } catch (error) {
       console.error("Error saving ad:", error);
-      alert("Error al guardar el anuncio");
+      toast.error("Error al guardar el anuncio");
     }
   };
 
@@ -81,12 +83,13 @@ function AdsView() {
       const data = await res.json();
       if (data.success) {
         await fetchAds();
+        toast.success('Estado actualizado correctamente');
       } else {
-        alert("Error al actualizar estado: " + (data.error || "Error desconocido"));
+        toast.error("Error al actualizar estado: " + (data.error || "Error desconocido"));
       }
     } catch (error) {
       console.error("Error updating status:", error);
-      alert("Error al actualizar estado");
+      toast.error("Error al actualizar estado");
     }
   };
 

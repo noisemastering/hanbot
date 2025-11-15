@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import AdSetModal from './AdSetModal';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
@@ -61,12 +62,13 @@ function AdSetsView() {
         await fetchAdSets();
         setShowAdSetModal(false);
         setEditingAdSet(null);
+        toast.success(editingAdSet ? 'Ad Set actualizado correctamente' : 'Ad Set creado correctamente');
       } else {
-        alert("Error al guardar el ad set: " + (data.error || "Error desconocido"));
+        toast.error("Error al guardar el ad set: " + (data.error || "Error desconocido"));
       }
     } catch (error) {
       console.error("Error saving ad set:", error);
-      alert("Error al guardar el ad set");
+      toast.error("Error al guardar el ad set");
     }
   };
 
