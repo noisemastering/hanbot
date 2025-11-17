@@ -39,12 +39,14 @@ router.get("/", async (req, res) => {
       .populate("createdBy", "username firstName lastName")
       .sort({ createdAt: -1 });
 
-    const usersWithLabels = users.map(user => ({
-      ...user.toObject(),
-      fullName: user.fullName,
-      roleLabel: user.getRoleLabel(),
-      profileLabel: user.getProfileLabel()
-    }));
+    const usersWithLabels = await Promise.all(
+      users.map(async (user) => ({
+        ...user.toObject(),
+        fullName: user.fullName,
+        roleLabel: await user.getRoleLabel(),
+        profileLabel: await user.getProfileLabel()
+      }))
+    );
 
     res.json({
       success: true,
@@ -125,8 +127,8 @@ router.post("/", async (req, res) => {
       user: {
         ...userResponse,
         fullName: newUser.fullName,
-        roleLabel: newUser.getRoleLabel(),
-        profileLabel: newUser.getProfileLabel()
+        roleLabel: await newUser.getRoleLabel(),
+        profileLabel: await newUser.getProfileLabel()
       }
     });
   } catch (error) {
@@ -224,8 +226,8 @@ router.put("/:id", async (req, res) => {
       user: {
         ...userResponse,
         fullName: user.fullName,
-        roleLabel: user.getRoleLabel(),
-        profileLabel: user.getProfileLabel()
+        roleLabel: await user.getRoleLabel(),
+        profileLabel: await user.getProfileLabel()
       }
     });
   } catch (error) {

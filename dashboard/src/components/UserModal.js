@@ -289,33 +289,32 @@ function UserModal({ user, onClose, onSave }) {
               )}
             </div>
 
-            {!loadingRoles && (() => {
+            {!loadingRoles && roles.length > 0 && (() => {
               const selectedRole = roles.find(r => r.name === formData.role);
+              if (!selectedRole?.allowsProfiles) return null;
+
               const roleProfiles = getProfilesForRole(formData.role);
+              if (roleProfiles.length === 0) return null;
 
-              if (selectedRole?.allowsProfiles && roleProfiles.length > 0) {
-                return (
-                  <div>
-                    <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Perfil *
-                    </label>
-                    <select
-                      value={formData.profile || ''}
-                      onChange={(e) => setFormData({ ...formData, profile: e.target.value })}
-                      className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      required
-                    >
-                      {roleProfiles.map(profile => (
-                        <option key={profile._id} value={profile.name}>
-                          {profile.label}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                );
-              }
-
-              return null;
+              return (
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Perfil *
+                  </label>
+                  <select
+                    value={formData.profile || ''}
+                    onChange={(e) => setFormData({ ...formData, profile: e.target.value })}
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    required
+                  >
+                    {roleProfiles.map(profile => (
+                      <option key={profile._id} value={profile.name}>
+                        {profile.label}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              );
             })()}
           </div>
 
