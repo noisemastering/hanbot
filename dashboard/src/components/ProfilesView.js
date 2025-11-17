@@ -232,7 +232,7 @@ function ProfilesView() {
                             </div>
                           </div>
 
-                          {profile.createdBy && (
+                          {profile.createdBy?.username && (
                             <div className="flex items-center space-x-2">
                               <span className="text-xs text-gray-500 font-medium min-w-[100px]">Creado por:</span>
                               <span className="text-xs text-gray-400">

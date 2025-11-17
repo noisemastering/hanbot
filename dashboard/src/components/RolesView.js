@@ -188,7 +188,7 @@ function RolesView() {
                       </span>
                     </div>
 
-                    {role.createdBy && (
+                    {role.createdBy?.username && (
                       <div className="flex items-center space-x-2">
                         <span className="text-xs text-gray-500 font-medium min-w-[120px]">Creado por:</span>
                         <span className="text-xs text-gray-400">
