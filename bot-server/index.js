@@ -66,10 +66,14 @@ const usosRoutes = require('./routes/usosRoutes');
 const productFamilyRoutes = require('./routes/productFamilyRoutes');
 const authRoutes = require('./routes/authRoutes');
 const dashboardUsersRoutes = require('./routes/dashboardUsersRoutes');
+const rolesRoutes = require('./routes/rolesRoutes');
+const profilesRoutes = require('./routes/profilesRoutes');
 
 // Auth routes (no prefix, will be /auth/login, /auth/me, etc.)
 app.use('/auth', authRoutes);
 app.use('/dashboard-users', dashboardUsersRoutes);
+app.use('/roles', rolesRoutes);
+app.use('/profiles', profilesRoutes);
 
 app.use('/products', productRoutes);
 app.use('/campaigns', campaignRoutes);
