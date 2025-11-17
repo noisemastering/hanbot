@@ -39,6 +39,10 @@ import UsosModal from "./components/UsosModal";
 import ProductFamilyTreeView from "./components/ProductFamilyTreeView";
 import ProductFamilyModal from "./components/ProductFamilyModal";
 import Messages from "./pages/Messages";
+import Login from "./pages/Login";
+import { AuthProvider, useAuth } from "./contexts/AuthContext";
+import ProtectedRoute from "./components/ProtectedRoute";
+import UsersView from "./components/UsersView";
 
 const API_URL = process.env.REACT_APP_API_URL || "https://hanbot-production.up.railway.app";
 const socket = io(API_URL, {
@@ -138,14 +142,6 @@ const menuItems = [
     )
   },
   {
-    id: "campaign-products",
-    label: "Productos de Campaña",
-    path: "/campaign-products",
-    icon: (
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-    )
-  },
-  {
     id: "users",
     label: "Usuarios",
     path: "/users",
@@ -166,6 +162,9 @@ const menuItems = [
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user, loading: authLoading, canAccess, canManageUsers, logout } = useAuth();
+
+  // All useState hooks must be called BEFORE any early returns
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
@@ -708,6 +707,40 @@ function App() {
     }
   }, [location.pathname]);
 
+  // Auth checks - must be AFTER all hooks
+  // Show login page if not authenticated (except for login route)
+  if (!authLoading && !user && location.pathname !== '/login') {
+    return <Login />;
+  }
+
+  // If on login page but authenticated, redirect to home
+  if (!authLoading && user && location.pathname === '/login') {
+    navigate('/');
+    return null;
+  }
+
+  // Show loading while checking auth
+  if (authLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary-500 mx-auto"></div>
+          <p className="mt-4 text-gray-400">Cargando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Filter menu items based on user permissions
+  const filteredMenuItems = menuItems.filter(item => {
+    // Users section only visible to super_admin and admin
+    if (item.id === 'users') {
+      return canManageUsers();
+    }
+    // Filter other sections based on canAccess
+    return canAccess(item.id);
+  });
+
   // Helper function to get today's date range in Mexico City time
   const getTodayRange = () => {
     const now = new Date();
@@ -874,7 +907,7 @@ function App() {
 
           {/* Menu Items */}
           <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-            {menuItems.map((item) => (
+            {filteredMenuItems.map((item) => (
               <NavLink
                 key={item.id}
                 to={item.path}
@@ -895,7 +928,35 @@ function App() {
           </nav>
 
           {/* Sidebar Footer */}
-          <div className="p-4 border-t border-gray-700/50">
+          <div className="p-4 border-t border-gray-700/50 space-y-3">
+            {/* User Info */}
+            <div className="bg-gray-800/50 rounded-lg p-3">
+              <div className="flex items-center space-x-3 mb-2">
+                <div className="w-10 h-10 bg-primary-500/20 rounded-full flex items-center justify-center">
+                  <span className="text-primary-400 font-semibold">
+                    {user?.firstName?.[0]}{user?.lastName?.[0]}
+                  </span>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-white truncate">{user?.fullName}</p>
+                  <p className="text-xs text-gray-400 truncate">{user?.roleLabel}</p>
+                  {user?.profileLabel && (
+                    <p className="text-xs text-gray-500 truncate">{user?.profileLabel}</p>
+                  )}
+                </div>
+              </div>
+              <button
+                onClick={logout}
+                className="w-full flex items-center justify-center space-x-2 px-3 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-400 rounded-lg transition-colors text-sm"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                </svg>
+                <span>Cerrar Sesión</span>
+              </button>
+            </div>
+
+            {/* Live Indicator */}
             <div className="flex items-center space-x-2 bg-primary-500/10 px-3 py-2 rounded-lg">
               <div className="w-2 h-2 bg-primary-500 rounded-full animate-pulse"></div>
               <span className="text-sm font-medium text-primary-400">En Vivo</span>
@@ -960,6 +1021,9 @@ function App() {
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         <Routes>
+          {/* Login Route (Public) */}
+          <Route path="/login" element={<Login />} />
+
           {/* Overview Route */}
           <Route path="/" element={
           <>
@@ -1361,25 +1425,6 @@ function App() {
           {/* Ads Route */}
           <Route path="/ads" element={<AdsView />} />
 
-          {/* Campaign Products Route */}
-          <Route path="/campaign-products" element={
-            <CampaignProductsView
-              campaignProducts={campaignProducts}
-              loading={campaignProductsLoading}
-              onAdd={() => {
-                setEditingCampaignProduct(null);
-                setShowCampaignProductModal(true);
-              }}
-              onEdit={(campaignProduct) => {
-                setEditingCampaignProduct(campaignProduct);
-                setShowCampaignProductModal(true);
-              }}
-              onDelete={(campaignProduct) => {
-                setDeleteConfirmCampaignProduct(campaignProduct);
-              }}
-            />
-          } />
-
           {/* Master Catalog Route */}
           <Route path="/master-catalog" element={
             <MasterCatalogView
@@ -1453,8 +1498,8 @@ function App() {
             />
           } />
 
-          {/* Users and Settings Routes - Placeholder */}
-          <Route path="/users" element={<div className="text-white">Users View - Coming Soon</div>} />
+          {/* Users Route */}
+          <Route path="/users" element={<UsersView />} />
           <Route path="/settings" element={<div className="text-white">Settings View - Coming Soon</div>} />
         </Routes>
 

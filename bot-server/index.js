@@ -64,6 +64,12 @@ const analyticsRoutes = require('./routes/analyticsRoutes');
 const masterCatalogRoutes = require('./routes/masterCatalogRoutes');
 const usosRoutes = require('./routes/usosRoutes');
 const productFamilyRoutes = require('./routes/productFamilyRoutes');
+const authRoutes = require('./routes/authRoutes');
+const dashboardUsersRoutes = require('./routes/dashboardUsersRoutes');
+
+// Auth routes (no prefix, will be /auth/login, /auth/me, etc.)
+app.use('/auth', authRoutes);
+app.use('/dashboard-users', dashboardUsersRoutes);
 
 app.use('/products', productRoutes);
 app.use('/campaigns', campaignRoutes);
