@@ -1,7 +1,35 @@
 // routes/dashboardUsersRoutes.js
 const express = require("express");
 const router = express.Router();
+const jwt = require("jsonwebtoken");
 const DashboardUser = require("../models/DashboardUser");
+
+const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-jwt-key-change-in-production";
+
+// Authentication middleware
+const authenticate = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (!token) {
+      return res.status(401).json({ success: false, error: "No token provided" });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await DashboardUser.findById(decoded.id).select("-password");
+
+    if (!user || !user.active) {
+      return res.status(401).json({ success: false, error: "Invalid token or inactive user" });
+    }
+
+    req.user = user;
+    next();
+  } catch (error) {
+    return res.status(401).json({ success: false, error: "Invalid or expired token" });
+  }
+};
+
+// Apply authentication to all routes
+router.use(authenticate);
 
 // GET /dashboard-users - Get all dashboard users
 router.get("/", async (req, res) => {
@@ -44,6 +72,14 @@ router.post("/", async (req, res) => {
       });
     }
 
+    // Authorization check: Admins cannot create super_admin or admin roles
+    if (req.user.role === "admin" && (role === "super_admin" || role === "admin")) {
+      return res.status(403).json({
+        success: false,
+        error: "You do not have permission to create users with this role"
+      });
+    }
+
     // Check if username or email already exists
     const existing = await DashboardUser.findOne({
       $or: [{ username }, { email }]
@@ -58,11 +94,11 @@ router.post("/", async (req, res) => {
       });
     }
 
-    // Validate profile for 'user' role
-    if (role === "user" && !profile) {
+    // Validate profile for 'user' and 'super_user' roles
+    if ((role === "user" || role === "super_user") && !profile) {
       return res.status(400).json({
         success: false,
-        error: "Profile is required for user role"
+        error: "Profile is required for this role"
       });
     }
 
@@ -74,7 +110,7 @@ router.post("/", async (req, res) => {
       firstName,
       lastName,
       role,
-      profile: role === "user" ? profile : null,
+      profile: (role === "user" || role === "super_user") ? profile : null,
       createdBy
     });
 
@@ -116,6 +152,22 @@ router.put("/:id", async (req, res) => {
       });
     }
 
+    // Authorization check: Admins cannot edit super_admin or admin users
+    if (req.user.role === "admin" && (user.role === "super_admin" || user.role === "admin")) {
+      return res.status(403).json({
+        success: false,
+        error: "You do not have permission to edit this user"
+      });
+    }
+
+    // Authorization check: Admins cannot promote users to super_admin or admin
+    if (req.user.role === "admin" && role && (role === "super_admin" || role === "admin")) {
+      return res.status(403).json({
+        success: false,
+        error: "You do not have permission to assign this role"
+      });
+    }
+
     // Check for duplicate username/email (excluding current user)
     if (username && username !== user.username) {
       const existingUsername = await DashboardUser.findOne({ username });
@@ -143,8 +195,8 @@ router.put("/:id", async (req, res) => {
     if (firstName) user.firstName = firstName;
     if (lastName) user.lastName = lastName;
     if (role) user.role = role;
-    if (role === "user" && profile) user.profile = profile;
-    if (role !== "user") user.profile = null;
+    if ((role === "user" || role === "super_user") && profile) user.profile = profile;
+    if (role !== "user" && role !== "super_user") user.profile = null;
     if (typeof active === "boolean") user.active = active;
 
     // Update password if provided
@@ -181,13 +233,23 @@ router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
 
-    const user = await DashboardUser.findByIdAndDelete(id);
+    const user = await DashboardUser.findById(id);
     if (!user) {
       return res.status(404).json({
         success: false,
         error: "User not found"
       });
     }
+
+    // Authorization check: Admins cannot delete super_admin or admin users
+    if (req.user.role === "admin" && (user.role === "super_admin" || user.role === "admin")) {
+      return res.status(403).json({
+        success: false,
+        error: "You do not have permission to delete this user"
+      });
+    }
+
+    await user.deleteOne();
 
     res.json({
       success: true,

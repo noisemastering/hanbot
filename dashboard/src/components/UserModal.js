@@ -1,7 +1,9 @@
 // components/UserModal.js
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../contexts/AuthContext';
 
 function UserModal({ user, onClose, onSave }) {
+  const { user: currentUser } = useAuth();
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -190,8 +192,8 @@ function UserModal({ user, onClose, onSave }) {
                 className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                 required
               >
-                <option value="super_admin">Super Admin</option>
-                <option value="admin">Admin</option>
+                {currentUser?.role === 'super_admin' && <option value="super_admin">Super Admin</option>}
+                {currentUser?.role === 'super_admin' && <option value="admin">Admin</option>}
                 <option value="super_user">Super Usuario</option>
                 <option value="user">Usuario</option>
               </select>
