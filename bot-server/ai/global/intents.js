@@ -319,6 +319,22 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
     };
   }
 
+  // ⏳ PRODUCT LIFESPAN / DURABILITY - Handle questions about how long the product lasts
+  if (/\b(tiempo\s+de\s+vida|vida\s+[uú]til|cu[aá]nto\s+(tiempo\s+)?dura|duraci[oó]n|garant[ií]a|cuantos\s+a[ñn]os|por\s+cu[aá]nto\s+tiempo|resistencia)\b/i.test(msg) &&
+      !/\b(entrega|env[ií]o|llega|demora|tarda)\b/i.test(msg)) {
+    await updateConversation(psid, { lastIntent: "product_lifespan" });
+
+    return {
+      type: "text",
+      text: "La malla sombra reforzada tiene una vida útil de 8 a 10 años aproximadamente, dependiendo de:\n\n" +
+            "• Exposición al sol y clima\n" +
+            "• Tensión de la instalación\n" +
+            "• Mantenimiento (limpieza ocasional)\n\n" +
+            "Nuestras mallas son de alta calidad con protección UV, por lo que son muy resistentes a la intemperie 🌞🌧️\n\n" +
+            "¿Qué medida te interesa?"
+    };
+  }
+
   // ⏰ Delivery time and payment questions (BEFORE shipping handler to catch "cuando llega")
   if (/cu[aá]nto\s+tiempo|cuando\s+llega|tiempo\s+de\s+entrega|tarda|demora|anticipo|pago\s+contra\s+entrega|forma\s+de\s+pago|c[oó]mo\s+pag/i.test(msg)) {
     // 🔴 SKIP if message contains MULTIPLE questions (let fallback handle comprehensive answer)
