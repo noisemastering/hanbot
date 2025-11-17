@@ -248,31 +248,32 @@ function UserModal({ user, onClose, onSave }) {
               <label className="block text-sm font-medium text-gray-300 mb-2">
                 Rol *
               </label>
-              <select
-                value={formData.role}
-                onChange={(e) => {
-                  const newRole = e.target.value;
-                  const selectedRole = roles.find(r => r.name === newRole);
-                  let newProfile = null;
+              {loadingRoles ? (
+                <div className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-gray-400">
+                  Cargando roles...
+                </div>
+              ) : (
+                <select
+                  value={formData.role}
+                  onChange={(e) => {
+                    const newRole = e.target.value;
+                    const selectedRole = roles.find(r => r.name === newRole);
+                    let newProfile = null;
 
-                  // Set default profile based on role if it allows profiles
-                  if (selectedRole?.allowsProfiles) {
-                    const roleProfiles = getProfilesForRole(newRole);
-                    if (roleProfiles.length > 0) {
-                      newProfile = roleProfiles[0].name;
+                    // Set default profile based on role if it allows profiles
+                    if (selectedRole?.allowsProfiles) {
+                      const roleProfiles = getProfilesForRole(newRole);
+                      if (roleProfiles.length > 0) {
+                        newProfile = roleProfiles[0].name;
+                      }
                     }
-                  }
 
-                  setFormData({ ...formData, role: newRole, profile: newProfile });
-                }}
-                className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                required
-                disabled={loadingRoles}
-              >
-                {loadingRoles ? (
-                  <option>Cargando roles...</option>
-                ) : (
-                  roles
+                    setFormData({ ...formData, role: newRole, profile: newProfile });
+                  }}
+                  className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  required
+                >
+                  {roles
                     .filter(role => {
                       // Super admins can see all roles
                       if (currentUser?.role === 'super_admin') return true;
@@ -283,12 +284,12 @@ function UserModal({ user, onClose, onSave }) {
                       <option key={role._id} value={role.name}>
                         {role.label}
                       </option>
-                    ))
-                )}
-              </select>
+                    ))}
+                </select>
+              )}
             </div>
 
-            {(() => {
+            {!loadingRoles && (() => {
               const selectedRole = roles.find(r => r.name === formData.role);
               const roleProfiles = getProfilesForRole(formData.role);
 
@@ -299,7 +300,7 @@ function UserModal({ user, onClose, onSave }) {
                       Perfil *
                     </label>
                     <select
-                      value={formData.profile}
+                      value={formData.profile || ''}
                       onChange={(e) => setFormData({ ...formData, profile: e.target.value })}
                       className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                       required
