@@ -195,8 +195,17 @@ router.put("/:id", async (req, res) => {
     if (firstName) user.firstName = firstName;
     if (lastName) user.lastName = lastName;
     if (role) user.role = role;
-    if ((role === "user" || role === "super_user") && profile) user.profile = profile;
-    if (role !== "user" && role !== "super_user") user.profile = null;
+
+    // Update profile based on current or new role
+    const finalRole = role || user.role;
+    if (profile !== undefined) {
+      if (finalRole === "user" || finalRole === "super_user") {
+        user.profile = profile;
+      } else {
+        user.profile = null;
+      }
+    }
+
     if (typeof active === "boolean") user.active = active;
 
     // Update password if provided
