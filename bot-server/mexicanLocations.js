@@ -77,12 +77,22 @@ const LOCATION_VARIATIONS = {
 };
 
 /**
+ * Removes accents/diacritics from a string for comparison
+ * @param {string} str - String to normalize
+ * @returns {string} - Normalized string without accents
+ */
+function removeAccents(str) {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+/**
  * Detects if a message contains a Mexican location (state or city)
  * @param {string} message - User's message
  * @returns {object|null} - { location: string, type: 'state'|'city', normalized: string } or null
  */
 function detectMexicanLocation(message) {
   const cleaned = message.toLowerCase().trim();
+  const cleanedNoAccents = removeAccents(cleaned);
 
   // Check for abbreviations first
   for (const [abbr, fullName] of Object.entries(LOCATION_VARIATIONS)) {
@@ -96,9 +106,10 @@ function detectMexicanLocation(message) {
     }
   }
 
-  // Check for states (exact match or partial)
+  // Check for states (exact match or partial) - accent insensitive
   for (const state of MEXICAN_STATES) {
-    if (cleaned === state || cleaned.includes(state)) {
+    const stateNoAccents = removeAccents(state);
+    if (cleanedNoAccents === stateNoAccents || cleanedNoAccents.includes(stateNoAccents)) {
       return {
         location: state,
         type: 'state',
@@ -108,9 +119,10 @@ function detectMexicanLocation(message) {
     }
   }
 
-  // Check for major cities
+  // Check for major cities - accent insensitive
   for (const city of MAJOR_CITIES) {
-    if (cleaned === city || cleaned.includes(city)) {
+    const cityNoAccents = removeAccents(city);
+    if (cleanedNoAccents === cityNoAccents || cleanedNoAccents.includes(cityNoAccents)) {
       return {
         location: city,
         type: 'city',
