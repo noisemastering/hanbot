@@ -2,8 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+
 function UserModal({ user, onClose, onSave }) {
   const { user: currentUser } = useAuth();
+  const [roles, setRoles] = useState([]);
+  const [profiles, setProfiles] = useState([]);
+  const [loadingRoles, setLoadingRoles] = useState(true);
   const [formData, setFormData] = useState({
     username: '',
     email: '',
@@ -11,10 +16,17 @@ function UserModal({ user, onClose, onSave }) {
     firstName: '',
     lastName: '',
     role: 'user',
-    profile: 'salesman', // Default for 'user' role
+    profile: '',
     active: true
   });
 
+  // Fetch roles and profiles on component mount
+  useEffect(() => {
+    fetchRoles();
+    fetchProfiles();
+  }, []);
+
+  // Update form when user prop changes
   useEffect(() => {
     if (user) {
       setFormData({
@@ -24,11 +36,69 @@ function UserModal({ user, onClose, onSave }) {
         firstName: user.firstName || '',
         lastName: user.lastName || '',
         role: user.role || 'user',
-        profile: user.profile || 'salesman',
+        profile: user.profile || '',
         active: user.active !== undefined ? user.active : true
       });
     }
   }, [user]);
+
+  // Update profile options when role changes
+  useEffect(() => {
+    if (!loadingRoles && formData.role) {
+      const selectedRole = roles.find(r => r.name === formData.role);
+
+      // If the role changed and it has profiles, set default profile
+      if (selectedRole?.allowsProfiles && !user) {
+        const roleProfiles = getProfilesForRole(formData.role);
+        if (roleProfiles.length > 0 && !formData.profile) {
+          setFormData(prev => ({ ...prev, profile: roleProfiles[0].name }));
+        }
+      }
+    }
+  }, [formData.role, loadingRoles, roles, profiles, user]);
+
+  const fetchRoles = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/roles`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setRoles(data.roles.filter(r => r.active));
+      }
+    } catch (error) {
+      console.error('Error fetching roles:', error);
+    } finally {
+      setLoadingRoles(false);
+    }
+  };
+
+  const fetchProfiles = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/profiles`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setProfiles(data.profiles.filter(p => p.active));
+      }
+    } catch (error) {
+      console.error('Error fetching profiles:', error);
+    }
+  };
+
+  const getProfilesForRole = (roleName) => {
+    const selectedRole = roles.find(r => r.name === roleName);
+    if (!selectedRole) return [];
+
+    return profiles.filter(p => p.role._id === selectedRole._id);
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -45,10 +115,14 @@ function UserModal({ user, onClose, onSave }) {
       return;
     }
 
-    // Validate profile for 'user' and 'super_user' roles
-    if ((formData.role === 'user' || formData.role === 'super_user') && !formData.profile) {
-      alert('El perfil es requerido para este rol');
-      return;
+    // Validate profile based on role configuration
+    const selectedRole = roles.find(r => r.name === formData.role);
+    if (selectedRole?.allowsProfiles) {
+      const roleProfiles = getProfilesForRole(formData.role);
+      if (roleProfiles.length > 0 && !formData.profile) {
+        alert('El perfil es requerido para este rol');
+        return;
+      }
     }
 
     // Prepare data to send
@@ -59,8 +133,8 @@ function UserModal({ user, onClose, onSave }) {
       delete dataToSend.password;
     }
 
-    // Clear profile if not a 'user' or 'super_user' role
-    if (formData.role !== 'user' && formData.role !== 'super_user') {
+    // Clear profile if role doesn't allow profiles
+    if (!selectedRole?.allowsProfiles) {
       dataToSend.profile = null;
     }
 
@@ -178,60 +252,70 @@ function UserModal({ user, onClose, onSave }) {
                 value={formData.role}
                 onChange={(e) => {
                   const newRole = e.target.value;
+                  const selectedRole = roles.find(r => r.name === newRole);
                   let newProfile = null;
 
-                  // Set default profile based on role
-                  if (newRole === 'user') {
-                    newProfile = 'salesman';
-                  } else if (newRole === 'super_user') {
-                    newProfile = 'accounting';
+                  // Set default profile based on role if it allows profiles
+                  if (selectedRole?.allowsProfiles) {
+                    const roleProfiles = getProfilesForRole(newRole);
+                    if (roleProfiles.length > 0) {
+                      newProfile = roleProfiles[0].name;
+                    }
                   }
 
                   setFormData({ ...formData, role: newRole, profile: newProfile });
                 }}
                 className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                 required
+                disabled={loadingRoles}
               >
-                {currentUser?.role === 'super_admin' && <option value="super_admin">Super Admin</option>}
-                {currentUser?.role === 'super_admin' && <option value="admin">Admin</option>}
-                <option value="super_user">Super Usuario</option>
-                <option value="user">Usuario</option>
+                {loadingRoles ? (
+                  <option>Cargando roles...</option>
+                ) : (
+                  roles
+                    .filter(role => {
+                      // Super admins can see all roles
+                      if (currentUser?.role === 'super_admin') return true;
+                      // Admins can only see non-admin roles
+                      return role.name !== 'super_admin' && role.name !== 'admin';
+                    })
+                    .map(role => (
+                      <option key={role._id} value={role.name}>
+                        {role.label}
+                      </option>
+                    ))
+                )}
               </select>
             </div>
 
-            {formData.role === 'user' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Perfil *
-                </label>
-                <select
-                  value={formData.profile}
-                  onChange={(e) => setFormData({ ...formData, profile: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  required
-                >
-                  <option value="campaign_manager">Administrador de Campaña</option>
-                  <option value="salesman">Ventas</option>
-                </select>
-              </div>
-            )}
+            {(() => {
+              const selectedRole = roles.find(r => r.name === formData.role);
+              const roleProfiles = getProfilesForRole(formData.role);
 
-            {formData.role === 'super_user' && (
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Perfil *
-                </label>
-                <select
-                  value={formData.profile}
-                  onChange={(e) => setFormData({ ...formData, profile: e.target.value })}
-                  className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  required
-                >
-                  <option value="accounting">Contabilidad</option>
-                  <option value="sales">Ventas</option>
-                </select>
-              </div>
-            )}
+              if (selectedRole?.allowsProfiles && roleProfiles.length > 0) {
+                return (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Perfil *
+                    </label>
+                    <select
+                      value={formData.profile}
+                      onChange={(e) => setFormData({ ...formData, profile: e.target.value })}
+                      className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      required
+                    >
+                      {roleProfiles.map(profile => (
+                        <option key={profile._id} value={profile.name}>
+                          {profile.label}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                );
+              }
+
+              return null;
+            })()}
           </div>
 
           {/* Status */}

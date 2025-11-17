@@ -43,6 +43,8 @@ import Login from "./pages/Login";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import UsersView from "./components/UsersView";
+import RolesView from "./components/RolesView";
+import ProfilesView from "./components/ProfilesView";
 
 const API_URL = process.env.REACT_APP_API_URL || "https://hanbot-production.up.railway.app";
 const socket = io(API_URL, {
@@ -147,6 +149,22 @@ const menuItems = [
     path: "/users",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+    )
+  },
+  {
+    id: "roles",
+    label: "Roles",
+    path: "/roles",
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+    )
+  },
+  {
+    id: "profiles",
+    label: "Perfiles",
+    path: "/profiles",
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
     )
   },
   {
@@ -736,6 +754,10 @@ function App() {
     // Users section only visible to super_admin and admin
     if (item.id === 'users') {
       return canManageUsers();
+    }
+    // Roles and Profiles sections only visible to super_admin
+    if (item.id === 'roles' || item.id === 'profiles') {
+      return user?.role === 'super_admin';
     }
     // Filter other sections based on canAccess
     return canAccess(item.id);
@@ -1498,8 +1520,10 @@ function App() {
             />
           } />
 
-          {/* Users Route */}
+          {/* Users, Roles, and Profiles Routes */}
           <Route path="/users" element={<UsersView />} />
+          <Route path="/roles" element={<RolesView />} />
+          <Route path="/profiles" element={<ProfilesView />} />
           <Route path="/settings" element={<div className="text-white">Settings View - Coming Soon</div>} />
         </Routes>
 
