@@ -1,6 +1,7 @@
 // ai/campaigns/hanlob_confeccionada_general_oct25.js
 const { updateConversation } = require("../../conversationManager");
 const { getCampaignProductFromConversation } = require("../../utils/productCompatibility");
+const { generateClickLink } = require("../../tracking");
 
 // --- Helpers ---
 function parseSize(str) {
@@ -47,10 +48,17 @@ function formatMoney(n) {
   return n.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 2 });
 }
 
-function variantLine(v, includeLink = false) {
+async function variantLine(v, includeLink = false, psid = null, convo = {}) {
   const price = formatMoney(v.price);
   if (includeLink && v.permalink) {
-    return `• ${v.size} → ${price}  \n${v.permalink}`;
+    const trackedLink = await generateClickLink(psid, v.permalink, {
+      productName: v.productName || v.name,
+      productId: v.productId || v._id,
+      campaignId: convo.campaignId,
+      adSetId: convo.adSetId,
+      adId: convo.adId
+    });
+    return `• ${v.size} → ${price}  \n${trackedLink}`;
   }
   return `• ${v.size} → ${price}`;
 }
@@ -102,7 +110,7 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     const exact = findExactVariant(variants, requested);
     if (exact) {
       await updateConversation(psid, { lastIntent: "size_exact" });
-      const line = variantLine(exact, true); // incluye link
+      const line = await variantLine(exact, true, psid, convo); // incluye link
       return {
         type: "text",
         text:
@@ -118,8 +126,8 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
 
     // Construir respuesta con links para sugerencias
     let suggestions = "No tengo exactamente esa medida, pero lo más cercano es:\n";
-    if (lower) suggestions += `${variantLine(lower, true)}\n`;
-    if (upper) suggestions += `${variantLine(upper, true)}\n`;
+    if (lower) suggestions += `${await variantLine(lower, true, psid, convo)}\n`;
+    if (upper) suggestions += `${await variantLine(upper, true, psid, convo)}\n`;
 
     // Ofrecer confección a la medida
     suggestions += `\nTambién puedo confeccionarla **a la medida**. ¿Te interesa alguna de estas o prefieres a la medida?`;

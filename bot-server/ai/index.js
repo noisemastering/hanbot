@@ -7,6 +7,7 @@ const { getProduct } = require("../hybridSearch");
 const Campaign = require("../models/Campaign");
 const { extractReference } = require("../referenceEstimator");
 const { getProductsForConversation } = require("../utils/productLookup");
+const { generateClickLink } = require("../tracking");
 
 // AI-powered intent classification
 const { classifyIntent } = require("./intentClassifier");
@@ -243,9 +244,17 @@ async function generateReply(userMessage, psid, referral = null) {
         await updateConversation(psid, { lastIntent: "product_search", state: "active", unknownCount: 0 });
 
         if (product.source === "ml") {
+          const trackedLink = await generateClickLink(psid, product.permalink, {
+            productName: product.name,
+            productId: product._id || product.id,
+            campaignId: convo.campaignId,
+            adSetId: convo.adSetId,
+            adId: convo.adId
+          });
+
           return {
             type: "image",
-            text: `Encontré "${product.name}" en nuestro catálogo de Mercado Libre 💚\nPuedes comprarlo directamente aquí 👉 ${product.permalink}`,
+            text: `Encontré "${product.name}" en nuestro catálogo de Mercado Libre 💚\nPuedes comprarlo directamente aquí 👉 ${trackedLink}`,
             imageUrl: product.imageUrl
           };
         }

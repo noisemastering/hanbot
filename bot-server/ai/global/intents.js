@@ -15,6 +15,7 @@ const {
 } = require("../../measureHandler");
 const Product = require("../../models/Product");
 const { detectMexicanLocation, isLikelyLocationName } = require("../../mexicanLocations");
+const { generateClickLink } = require("../../tracking");
 
 async function handleGlobalIntents(msg, psid, convo = {}) {
 
@@ -240,10 +241,18 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       if (product?.mLink) {
         await updateConversation(psid, { lastIntent: "affirmative_link_provided", unknownCount: 0 });
 
+        const trackedLink = await generateClickLink(psid, product.mLink, {
+          productName: product.name,
+          productId: product._id,
+          campaignId: convo.campaignId,
+          adSetId: convo.adSetId,
+          adId: convo.adId
+        });
+
         return {
           type: "text",
           text: `Te dejo el link a esa medida específica:\n\n` +
-                `${product.mLink}\n\n` +
+                `${trackedLink}\n\n` +
                 `Estamos disponibles para cualquier información adicional.`
         };
       } else {
@@ -392,9 +401,17 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
       });
 
       if (product?.mLink) {
+        const trackedLink = await generateClickLink(psid, product.mLink, {
+          productName: product.name,
+          productId: product._id,
+          campaignId: convo.campaignId,
+          adSetId: convo.adSetId,
+          adId: convo.adId
+        });
+
         return {
           type: "text",
-          text: `Sí, enviamos a todo el país. El envío está incluido en la mayoría de los casos o se calcula automáticamente en Mercado Libre.\n\nTe dejo el link a esa medida específica:\n\n${product.mLink}`
+          text: `Sí, enviamos a todo el país. El envío está incluido en la mayoría de los casos o se calcula automáticamente en Mercado Libre.\n\nTe dejo el link a esa medida específica:\n\n${trackedLink}`
         };
       }
     }
@@ -510,10 +527,18 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
       });
 
       if (product?.mLink) {
+        const trackedLink = await generateClickLink(psid, product.mLink, {
+          productName: product.name,
+          productId: product._id,
+          campaignId: convo.campaignId,
+          adSetId: convo.adSetId,
+          adId: convo.adId
+        });
+
         return {
           type: "text",
           text: `Te dejo el link a esa medida específica:\n\n` +
-                `${product.mLink}\n\n` +
+                `${trackedLink}\n\n` +
                 `Estamos disponibles para cualquier información adicional.`
         };
       }
@@ -668,11 +693,19 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
     if (product?.mLink) {
       await updateConversation(psid, { lastIntent: "size_reference_confirmed", unknownCount: 0 });
 
+      const trackedLink = await generateClickLink(psid, product.mLink, {
+        productName: product.name,
+        productId: product._id,
+        campaignId: convo.campaignId,
+        adSetId: convo.adSetId,
+        adId: convo.adId
+      });
+
       return {
         type: "text",
         text: `Perfecto, para la medida de ${requestedSizeStr} que mencionaste:\n\n` +
               `Te dejo el link a esa medida específica:\n\n` +
-              `${product.mLink}`
+              `${trackedLink}`
       };
     } else {
       // No exact match - provide alternatives
@@ -798,7 +831,14 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
             });
 
             if (product?.mLink) {
-              responseText += `• **${option.sizeStr}** por $${option.price}:\n${product.mLink}\n\n`;
+              const trackedLink = await generateClickLink(psid, product.mLink, {
+                productName: product.name,
+                productId: product._id,
+                campaignId: convo.campaignId,
+                adSetId: convo.adSetId,
+                adId: convo.adId
+              });
+              responseText += `• **${option.sizeStr}** por $${option.price}:\n${trackedLink}\n\n`;
             } else {
               responseText += `• **${option.sizeStr}** por $${option.price}\n\n`;
             }
@@ -851,6 +891,14 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
             lastUnavailableSize: null
           });
 
+          const trackedLink = await generateClickLink(psid, product.mLink, {
+            productName: product.name,
+            productId: product._id,
+            campaignId: convo.campaignId,
+            adSetId: convo.adSetId,
+            adId: convo.adId
+          });
+
           // 🎨 Check if user mentioned a color
           const hasColorMention = isColorQuery(msg);
 
@@ -867,7 +915,7 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
             responseText += `\n\nEnviamos a todo el país a través de Mercado Libre.`;
           }
 
-          responseText += `\n\nTe dejo el link a esa medida específica:\n\n${product.mLink}`;
+          responseText += `\n\nTe dejo el link a esa medida específica:\n\n${trackedLink}`;
 
           return {
             type: "text",
@@ -995,11 +1043,19 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
         if (product?.mLink) {
           await updateConversation(psid, { lastIntent: "specific_measure_context", unknownCount: 0 });
 
+          const trackedLink = await generateClickLink(psid, product.mLink, {
+            productName: product.name,
+            productId: product._id,
+            campaignId: convo.campaignId,
+            adSetId: convo.adSetId,
+            adId: convo.adId
+          });
+
           return {
             type: "text",
             text: `Por supuesto, de ${requestedSizeStr} la tenemos en $${product.price}\n\n` +
                   `Te dejo el link a esa medida específica:\n\n` +
-                  `${product.mLink}`
+                  `${trackedLink}`
           };
         }
       }
