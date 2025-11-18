@@ -68,12 +68,14 @@ const authRoutes = require('./routes/authRoutes');
 const dashboardUsersRoutes = require('./routes/dashboardUsersRoutes');
 const rolesRoutes = require('./routes/rolesRoutes');
 const profilesRoutes = require('./routes/profilesRoutes');
+const clickLogsRoutes = require('./routes/clickLogsRoutes');
 
 // Auth routes (no prefix, will be /auth/login, /auth/me, etc.)
 app.use('/auth', authRoutes);
 app.use('/dashboard-users', dashboardUsersRoutes);
 app.use('/roles', rolesRoutes);
 app.use('/profiles', profilesRoutes);
+app.use('/click-logs', clickLogsRoutes);
 
 app.use('/products', productRoutes);
 app.use('/campaigns', campaignRoutes);
@@ -471,6 +473,36 @@ app.get("/api/conversation/:psid/status", async (req, res) => {
   } catch (error) {
     console.error("❌ Error checking conversation status:", error);
     res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /r/:clickId - Click tracking redirect
+app.get("/r/:clickId", async (req, res) => {
+  try {
+    const { clickId } = req.params;
+    const { recordClick, getClickData } = require('./tracking');
+
+    // Get click data
+    const clickLog = await getClickData(clickId);
+
+    if (!clickLog) {
+      return res.status(404).send("Link not found");
+    }
+
+    // Record the click with metadata
+    await recordClick(clickId, {
+      userAgent: req.get('user-agent'),
+      ipAddress: req.ip || req.connection.remoteAddress,
+      referrer: req.get('referrer')
+    });
+
+    console.log(`📊 Click tracked: ${clickId} -> ${clickLog.originalUrl}`);
+
+    // Redirect to the original URL
+    res.redirect(302, clickLog.originalUrl);
+  } catch (error) {
+    console.error("❌ Error processing click:", error);
+    res.status(500).send("Error processing redirect");
   }
 });
 
