@@ -35,8 +35,8 @@ function UserModal({ user, onClose, onSave }) {
         password: '', // Don't pre-fill password for security
         firstName: user.firstName || '',
         lastName: user.lastName || '',
-        role: user.role || 'user',
-        profile: user.profile || '',
+        role: (typeof user.role === 'string' ? user.role : user.role?.name) || 'user',
+        profile: (typeof user.profile === 'string' ? user.profile : user.profile?.name) || '',
         active: user.active !== undefined ? user.active : true
       });
     }
@@ -97,7 +97,7 @@ function UserModal({ user, onClose, onSave }) {
     const selectedRole = roles.find(r => r.name === roleName);
     if (!selectedRole) return [];
 
-    return profiles.filter(p => p.role._id === selectedRole._id);
+    return profiles.filter(p => p.role?._id === selectedRole._id);
   };
 
   const handleSubmit = (e) => {
