@@ -40,6 +40,7 @@ import ProductFamilyTreeView from "./components/ProductFamilyTreeView";
 import ProductFamilyModal from "./components/ProductFamilyModal";
 import Messages from "./pages/Messages";
 import Login from "./pages/Login";
+import Settings from "./pages/Settings";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import UsersView from "./components/UsersView";
@@ -1534,7 +1535,7 @@ function App() {
           <Route path="/roles" element={<RolesView />} />
           <Route path="/profiles" element={<ProfilesView />} />
           <Route path="/click-logs" element={<ClickLogsView />} />
-          <Route path="/settings" element={<div className="text-white">Settings View - Coming Soon</div>} />
+          <Route path="/settings" element={<Settings />} />
         </Routes>
 
         {/* Product Modal */}

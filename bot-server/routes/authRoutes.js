@@ -145,4 +145,81 @@ router.post("/logout", (req, res) => {
   });
 });
 
+// POST /auth/change-password - Change password (requires authentication)
+router.post("/change-password", async (req, res) => {
+  try {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    const { currentPassword, newPassword } = req.body;
+
+    // Validate token
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        error: "No token provided"
+      });
+    }
+
+    // Validate input
+    if (!currentPassword || !newPassword) {
+      return res.status(400).json({
+        success: false,
+        error: "Current password and new password are required"
+      });
+    }
+
+    // Validate new password strength
+    if (newPassword.length < 6) {
+      return res.status(400).json({
+        success: false,
+        error: "New password must be at least 6 characters long"
+      });
+    }
+
+    // Verify token and get user
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await DashboardUser.findById(decoded.id);
+
+    if (!user || !user.active) {
+      return res.status(401).json({
+        success: false,
+        error: "Invalid token or inactive user"
+      });
+    }
+
+    // Verify current password
+    const isMatch = await user.comparePassword(currentPassword);
+    if (!isMatch) {
+      return res.status(401).json({
+        success: false,
+        error: "Current password is incorrect"
+      });
+    }
+
+    // Update password
+    user.password = newPassword; // Will be hashed by pre-save hook
+    await user.save();
+
+    console.log(`✅ Password changed for user: ${user.username}`);
+
+    res.json({
+      success: true,
+      message: "Password changed successfully"
+    });
+  } catch (error) {
+    console.error("Change password error:", error);
+
+    if (error.name === "JsonWebTokenError") {
+      return res.status(401).json({
+        success: false,
+        error: "Invalid or expired token"
+      });
+    }
+
+    res.status(500).json({
+      success: false,
+      error: "Server error during password change"
+    });
+  }
+});
+
 module.exports = router;
