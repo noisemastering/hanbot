@@ -47,10 +47,18 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
     await updateConversation(psid, { lastIntent: "store_link_requested" });
 
+    const storeUrl = "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob";
+    const trackedLink = await generateClickLink(psid, storeUrl, {
+      productName: "Tienda Oficial",
+      campaignId: convo.campaignId,
+      adSetId: convo.adSetId,
+      adId: convo.adId
+    });
+
     return {
       type: "text",
       text: "Ver tienda en línea\nIngresa al siguiente link:\n\n" +
-            "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n" +
+            trackedLink + "\n\n" +
             "Estamos disponibles para ayudarte con cualquier duda sobre nuestros productos."
     };
   }
@@ -62,10 +70,18 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
     await updateConversation(psid, { lastIntent: "purchase_process" });
 
+    const storeUrl = "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob";
+    const trackedLink = await generateClickLink(psid, storeUrl, {
+      productName: "Tienda Oficial",
+      campaignId: convo.campaignId,
+      adSetId: convo.adSetId,
+      adId: convo.adId
+    });
+
     return {
       type: "text",
       text: "Para realizar tu compra, visita nuestra Tienda Oficial en Mercado Libre:\n\n" +
-            "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n" +
+            trackedLink + "\n\n" +
             "Ahí puedes:\n" +
             "1. Seleccionar la medida que necesitas\n" +
             "2. Agregar al carrito\n" +
