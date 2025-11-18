@@ -74,9 +74,9 @@ router.post("/login", async (req, res) => {
         lastName: user.lastName,
         fullName: user.fullName,
         role: user.role,
-        roleLabel: user.getRoleLabel(),
+        roleLabel: await user.getRoleLabel(),
         profile: user.profile,
-        profileLabel: user.getProfileLabel()
+        profileLabel: await user.getProfileLabel()
       }
     });
   } catch (error) {
@@ -123,9 +123,9 @@ router.get("/me", async (req, res) => {
         lastName: user.lastName,
         fullName: user.fullName,
         role: user.role,
-        roleLabel: user.getRoleLabel(),
+        roleLabel: await user.getRoleLabel(),
         profile: user.profile,
-        profileLabel: user.getProfileLabel()
+        profileLabel: await user.getProfileLabel()
       }
     });
   } catch (error) {
