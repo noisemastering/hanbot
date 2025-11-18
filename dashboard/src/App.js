@@ -45,6 +45,7 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import UsersView from "./components/UsersView";
 import RolesView from "./components/RolesView";
 import ProfilesView from "./components/ProfilesView";
+import ClickLogsView from "./components/ClickLogsView";
 
 const API_URL = process.env.REACT_APP_API_URL || "https://hanbot-production.up.railway.app";
 const socket = io(API_URL, {
@@ -88,6 +89,14 @@ const menuItems = [
     path: "/analytics",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+    )
+  },
+  {
+    id: "click-logs",
+    label: "Clicks",
+    path: "/click-logs",
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
     )
   },
   {
@@ -1524,6 +1533,7 @@ function App() {
           <Route path="/users" element={<UsersView />} />
           <Route path="/roles" element={<RolesView />} />
           <Route path="/profiles" element={<ProfilesView />} />
+          <Route path="/click-logs" element={<ClickLogsView />} />
           <Route path="/settings" element={<div className="text-white">Settings View - Coming Soon</div>} />
         </Routes>
 
