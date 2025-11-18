@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import API from "../api";
+import TrackedLinkGenerator from "../components/TrackedLinkGenerator";
 
 function Messages() {
   const [messages, setMessages] = useState([]);
@@ -10,6 +11,7 @@ function Messages() {
   const [dateFilter, setDateFilter] = useState('today');
   const [, setUsers] = useState({}); // eslint-disable-line no-unused-vars
   const [refreshing, setRefreshing] = useState(false);
+  const [showLinkGenerator, setShowLinkGenerator] = useState(false);
 
   // Helper function to show message excerpt
   const getMessageExcerpt = (text, maxLength = 60) => {
@@ -574,7 +576,10 @@ function Messages() {
       {/* Conversation Detail Modal */}
       {selectedPsid && (
         <div
-          onClick={() => setSelectedPsid(null)}
+          onClick={() => {
+            setSelectedPsid(null);
+            setShowLinkGenerator(false);
+          }}
           style={{
             position: "fixed",
             top: 0,
@@ -645,6 +650,19 @@ function Messages() {
                 Estado: {conversationStatuses[selectedPsid]?.humanActive ? "👨‍💼 Humano" : "🤖 Bot"}
               </span>
               <div style={{ display: "flex", gap: "0.5rem" }}>
+                <button
+                  onClick={() => setShowLinkGenerator(!showLinkGenerator)}
+                  style={{
+                    padding: "8px 16px",
+                    backgroundColor: showLinkGenerator ? "#2196f3" : "#1976d2",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "8px",
+                    cursor: "pointer"
+                  }}
+                >
+                  {showLinkGenerator ? "✕ Cerrar Enlace" : "🔗 Generar Enlace"}
+                </button>
                 {conversationStatuses[selectedPsid]?.humanActive ? (
                   <button
                     onClick={() => handleRelease(selectedPsid)}
@@ -679,7 +697,10 @@ function Messages() {
                   </button>
                 )}
                 <button
-                  onClick={() => setSelectedPsid(null)}
+                  onClick={() => {
+                    setSelectedPsid(null);
+                    setShowLinkGenerator(false);
+                  }}
                   style={{
                     padding: "8px 16px",
                     backgroundColor: "#666",
@@ -693,6 +714,16 @@ function Messages() {
                 </button>
               </div>
             </div>
+
+            {/* Tracked Link Generator */}
+            {showLinkGenerator && (
+              <div style={{ padding: "0 1rem 1rem 1rem" }}>
+                <TrackedLinkGenerator
+                  psid={selectedPsid}
+                  onClose={() => setShowLinkGenerator(false)}
+                />
+              </div>
+            )}
           </div>
         </div>
       )}

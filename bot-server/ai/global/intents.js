@@ -55,6 +55,25 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 🛒 HOW TO PURCHASE - Handle questions about the purchase process
+  if (/\bc[oó]mo\s+(realiz[oa]|hago|hacer|efectu[oa]r?|concret[oa]r?)\s+(una?\s+)?(compra|pedido|orden)/i.test(msg) ||
+      /\b(proceso|pasos?)\s+(de\s+|para\s+)?(compra|comprar|pedir|ordenar)/i.test(msg) ||
+      /\b(d[oó]nde|c[oó]mo)\s+(compro|pido|ordeno|puedo\s+comprar)/i.test(msg)) {
+
+    await updateConversation(psid, { lastIntent: "purchase_process" });
+
+    return {
+      type: "text",
+      text: "Para realizar tu compra, visita nuestra Tienda Oficial en Mercado Libre:\n\n" +
+            "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n" +
+            "Ahí puedes:\n" +
+            "1. Seleccionar la medida que necesitas\n" +
+            "2. Agregar al carrito\n" +
+            "3. Pagar con tarjeta, efectivo o meses sin intereses\n\n" +
+            "El envío está incluido en la mayoría de los casos. ¿Te puedo ayudar con algo más?"
+    };
+  }
+
   // 🌿 WEED CONTROL / MALLA ANTIMALEZA - Handle questions about weed control
   if (isWeedControlQuery(msg)) {
     await updateConversation(psid, { lastIntent: "weed_control_query" });
@@ -169,6 +188,18 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       /\b(si\s+encargar[aá]|si\s+compro|si\s+pido)\s+(\d+|vari[oa]s|much[oa]s)\b/i.test(msg)) {
 
     const info = await getBusinessInfo();
+
+    // Check if we already gave the bulk discount response recently
+    if (convo.lastIntent === "bulk_discount_inquiry") {
+      // Give a shorter follow-up response
+      return {
+        type: "text",
+        text: "Como te comenté, para cotizaciones de volumen necesitas comunicarte con nuestros asesores:\n\n" +
+              `📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n\n` +
+              "Ellos podrán darte el precio exacto para la cantidad que necesitas."
+      };
+    }
+
     await updateConversation(psid, { lastIntent: "bulk_discount_inquiry", state: "needs_human" });
 
     return {

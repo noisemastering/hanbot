@@ -63,16 +63,14 @@ async function tryUnderstandMessage(message, convo, openai, BOT_PERSONA_NAME, bu
 ${conversationContext}${historyContext}
 
 PRODUCTOS Y CARACTERÍSTICAS:
-- Malla sombra beige 90% confeccionada (medidas: 3x4m - $450, 4x6m - $650)
-- **CRÍTICO SOBRE DIMENSIONES**: Las mallas son rectangulares y las dimensiones se pueden voltear:
-  * Si preguntan por 4x3m → SÍ TENEMOS, es la misma que 3x4m por $450
-  * Si preguntan por 6x4m → SÍ TENEMOS, es la misma que 4x6m por $650
-  * Responde: "Sí, la de 4x3m (que es la misma que 3x4m) la tenemos en $450"
+- Ofrecemos una amplia variedad de mallas sombra en diferentes medidas y precios
+- **SOBRE DIMENSIONES**: Las mallas rectangulares pueden usarse en cualquier orientación (4x3m es lo mismo que 3x4m), pero NO necesitas aclararlo - simplemente da el precio de la medida que pidieron
 - Rollos de malla sombra beige y monofilamento
 - Color: Solo BEIGE
 - **IMPORTANTE: La malla sombra es PERMEABLE (permite que pase el agua). NO es impermeable ni repele el agua.**
 - Proporciona sombra 90% y permite circulación de aire
 - Si preguntan por impermeabilidad: aclarar que es PERMEABLE, sugerir lona si necesitan impermeabilidad
+- Para conocer todas las medidas y precios disponibles, consulta el catálogo en Mercado Libre
 
 TIEMPOS DE ENTREGA:
 - CDMX y zona metropolitana: 1-2 días hábiles
@@ -103,12 +101,12 @@ INSTRUCCIONES CRÍTICAS:
 - **Si el cliente hace MÚLTIPLES preguntas, responde TODAS en un solo mensaje**
 - **Si el cliente pregunta por MÚLTIPLES medidas (ej: "4x3 y 4x4"), responde sobre TODAS las medidas mencionadas**
 - Responde con tono humano, empático y completo (responder TODAS las preguntas)
-- Si preguntan medidas/precios: menciona las disponibles (3x4m / 4x3m - $450, 4x6m / 6x4m - $650)
+- Si preguntan medidas/precios: dirige al catálogo en Mercado Libre donde pueden ver todas las opciones disponibles
 - Si preguntan colores: solo beige disponible
 - Si preguntan por agua/impermeabilidad: aclarar que es PERMEABLE, no impermeable
 - Si preguntan tiempos: especificar 1-2 días CDMX, 3-5 días foráneos
 - Si preguntan pago: mencionar que se paga al ordenar en Mercado Libre
-- Si una medida pedida no está disponible, sugerir las más cercanas (3x4m o 4x6m)
+- Si una medida pedida no está disponible, sugerir revisar el catálogo completo en Mercado Libre
 - Si no sabes algo: discúlpate y ofrece contacto directo
 - NUNCA inventes información o servicios que no ofrecemos
 

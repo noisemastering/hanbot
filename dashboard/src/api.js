@@ -7,4 +7,13 @@ const API = axios.create({
   }
 });
 
+// Add request interceptor to include JWT token for authenticated routes
+API.interceptors.request.use((config) => {
+  const token = localStorage.getItem("token");
+  if (token) {
+    config.headers.Authorization = `Bearer ${token}`;
+  }
+  return config;
+});
+
 export default API;

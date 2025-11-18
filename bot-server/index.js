@@ -373,11 +373,36 @@ app.post("/test-message", async (req, res) => {
   }
 });
 
+// Helper function to validate authentication (supports both hardcoded token and JWT)
+const validateAuth = async (auth) => {
+  if (!auth) return false;
+
+  // Check hardcoded token first (backward compatibility)
+  if (auth.trim() === "Bearer hanlob_admin_2025") {
+    return true;
+  }
+
+  // Check JWT token
+  try {
+    const token = auth.replace("Bearer ", "");
+    const jwt = require("jsonwebtoken");
+    const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-jwt-key-change-in-production";
+    const decoded = jwt.verify(token, JWT_SECRET);
+
+    // Optionally verify user exists and is active
+    const DashboardUser = require("./models/DashboardUser");
+    const user = await DashboardUser.findById(decoded.id);
+    return user && user.active;
+  } catch (err) {
+    return false;
+  }
+};
+
 // 👨‍💼 API: Manual human takeover
 app.post("/api/conversation/:psid/takeover", async (req, res) => {
   // Authentication check
   const auth = req.headers.authorization;
-  if (!auth || auth.trim() !== "Bearer hanlob_admin_2025") {
+  if (!await validateAuth(auth)) {
     return res.status(403).json({ success: false, error: "Unauthorized" });
   }
 
@@ -416,7 +441,7 @@ app.post("/api/conversation/:psid/takeover", async (req, res) => {
 app.post("/api/conversation/:psid/release", async (req, res) => {
   // Authentication check
   const auth = req.headers.authorization;
-  if (!auth || auth.trim() !== "Bearer hanlob_admin_2025") {
+  if (!await validateAuth(auth)) {
     return res.status(403).json({ success: false, error: "Unauthorized" });
   }
 
@@ -447,7 +472,7 @@ app.post("/api/conversation/:psid/release", async (req, res) => {
 app.get("/api/conversation/:psid/status", async (req, res) => {
   // Authentication check
   const auth = req.headers.authorization;
-  if (!auth || auth.trim() !== "Bearer hanlob_admin_2025") {
+  if (!await validateAuth(auth)) {
     return res.status(403).json({ success: false, error: "Unauthorized" });
   }
 

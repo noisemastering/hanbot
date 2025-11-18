@@ -247,4 +247,102 @@ router.post("/:clickId/conversion", async (req, res) => {
   }
 });
 
+// POST /click-logs/generate - Generate a tracked link for human agents
+router.post("/generate", async (req, res) => {
+  try {
+    const { psid, productId, productName, originalUrl, campaignId, adSetId, adId } = req.body;
+
+    // Validate required fields
+    if (!psid || !originalUrl) {
+      return res.status(400).json({
+        success: false,
+        error: "PSID and original URL are required"
+      });
+    }
+
+    const { randomUUID } = require('crypto');
+    const clickId = randomUUID().slice(0, 8);
+
+    // Create the click log entry
+    const clickLog = new ClickLog({
+      clickId,
+      psid,
+      originalUrl,
+      productName: productName || "Manual link",
+      productId: productId || null,
+      campaignId: campaignId || null,
+      adSetId: adSetId || null,
+      adId: adId || null
+    });
+
+    await clickLog.save();
+
+    // Generate the tracked URL
+    const baseUrl = process.env.BASE_URL || 'https://hanbot-production.up.railway.app';
+    const trackedUrl = `${baseUrl}/r/${clickId}`;
+
+    console.log(`🔗 Generated tracked link for agent: ${trackedUrl} -> ${originalUrl}`);
+
+    res.json({
+      success: true,
+      clickLog: {
+        clickId,
+        trackedUrl,
+        originalUrl,
+        productName,
+        psid
+      }
+    });
+  } catch (error) {
+    console.error("Error generating tracked link:", error);
+    res.status(500).json({
+      success: false,
+      error: "Error generating tracked link"
+    });
+  }
+});
+
+// GET /click-logs/products - Get products for tracked link generation
+router.get("/products", async (req, res) => {
+  try {
+    const Product = require("../models/Product");
+    const { search, limit = 10 } = req.query;
+
+    let filter = {};
+    if (search) {
+      const regex = new RegExp(search, 'i');
+      filter = {
+        $or: [
+          { name: regex },
+          { description: regex },
+          { category: regex }
+        ]
+      };
+    }
+
+    const products = await Product.find(filter)
+      .select("name description price imageUrl mLink permalink")
+      .limit(parseInt(limit))
+      .sort({ name: 1 });
+
+    res.json({
+      success: true,
+      products: products.map(p => ({
+        _id: p._id,
+        name: p.name,
+        description: p.description,
+        price: p.price,
+        imageUrl: p.imageUrl,
+        originalUrl: p.mLink || p.permalink || ""
+      }))
+    });
+  } catch (error) {
+    console.error("Error fetching products:", error);
+    res.status(500).json({
+      success: false,
+      error: "Error fetching products"
+    });
+  }
+});
+
 module.exports = router;
