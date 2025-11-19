@@ -198,12 +198,17 @@ router.put("/:id", async (req, res) => {
       });
     }
 
-    // Cannot modify system profile name or role
-    if (profile.isSystem && (req.body.name || req.body.role)) {
-      return res.status(403).json({
-        success: false,
-        error: "Cannot modify system profile name or role"
-      });
+    // Cannot modify system profile name or role (only if actually changed)
+    if (profile.isSystem) {
+      const nameChanged = req.body.name && req.body.name !== profile.name;
+      const roleChanged = req.body.role && req.body.role !== profile.role.toString();
+
+      if (nameChanged || roleChanged) {
+        return res.status(403).json({
+          success: false,
+          error: "Cannot modify system profile name or role"
+        });
+      }
     }
 
     // Update fields

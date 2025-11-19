@@ -69,9 +69,11 @@ const dashboardUsersRoutes = require('./routes/dashboardUsersRoutes');
 const rolesRoutes = require('./routes/rolesRoutes');
 const profilesRoutes = require('./routes/profilesRoutes');
 const clickLogsRoutes = require('./routes/clickLogsRoutes');
+const pushRoutes = require('./routes/pushRoutes');
 
 // Auth routes (no prefix, will be /auth/login, /auth/me, etc.)
 app.use('/auth', authRoutes);
+app.use('/push', pushRoutes);
 app.use('/dashboard-users', dashboardUsersRoutes);
 app.use('/roles', rolesRoutes);
 app.use('/profiles', profilesRoutes);

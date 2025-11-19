@@ -1,6 +1,7 @@
 // ai/core/fallback.js
 const { getBusinessInfo } = require("../../businessInfoManager");
 const { updateConversation } = require("../../conversationManager");
+const { sendHandoffNotification } = require("../../services/pushNotifications");
 
 // Helper function to check if we're in business hours (Mon-Fri, 9am-6pm Mexico City time)
 function isBusinessHours() {
@@ -176,6 +177,11 @@ async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME
       lastIntent: "custom_manufacturing_request"
     });
 
+    // Send push notification to dashboard users
+    sendHandoffNotification(psid, "Cliente solicita fabricación a medida - necesita especialista").catch(err => {
+      console.error("❌ Failed to send push notification:", err);
+    });
+
     return {
       type: "text",
       text:
@@ -246,6 +252,12 @@ async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME
       handoffReason: `Bot unable to help after ${newUnknownCount} unknown message(s) ${handoffContext}`,
       handoffTimestamp: new Date(),
       state: "needs_human"
+    });
+
+    // Send push notification to dashboard users
+    const notificationReason = `Bot no pudo ayudar después de ${newUnknownCount} mensaje(s) no entendido(s) ${inBusinessHours ? '(horario laboral)' : '(fuera de horario)'}`;
+    sendHandoffNotification(psid, notificationReason).catch(err => {
+      console.error("❌ Failed to send push notification:", err);
     });
 
     if (!info) {
