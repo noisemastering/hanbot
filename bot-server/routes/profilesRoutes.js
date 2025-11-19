@@ -88,6 +88,35 @@ router.get("/by-role/:roleId", async (req, res) => {
   }
 });
 
+// GET /profiles/:id - Get a single profile by ID
+router.get("/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const profile = await Profile.findById(id)
+      .populate("role", "name label")
+      .populate("createdBy", "username firstName lastName");
+
+    if (!profile) {
+      return res.status(404).json({
+        success: false,
+        error: "Profile not found"
+      });
+    }
+
+    res.json({
+      success: true,
+      profile
+    });
+  } catch (error) {
+    console.error("Error fetching profile:", error);
+    res.status(500).json({
+      success: false,
+      error: "Error fetching profile"
+    });
+  }
+});
+
 // POST /profiles - Create a new profile
 router.post("/", async (req, res) => {
   try {
