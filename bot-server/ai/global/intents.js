@@ -16,6 +16,7 @@ const {
 const Product = require("../../models/Product");
 const { detectMexicanLocation, isLikelyLocationName } = require("../../mexicanLocations");
 const { generateClickLink } = require("../../tracking");
+const { sendHandoffNotification } = require("../../services/pushNotifications");
 
 async function handleGlobalIntents(msg, psid, convo = {}) {
 
@@ -328,6 +329,25 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
           // Update conversation with the flag if we offered to show all sizes
           if (sizeResponse.offeredToShowAllSizes) {
             await updateConversation(psid, { offeredToShowAllSizes: true });
+          }
+
+          // Handle custom order handoff (both sides >= 8m)
+          if (sizeResponse.isCustomOrder && sizeResponse.requiresHandoff) {
+            console.log(`🏭 Custom order detected (${dimensions.width}x${dimensions.height}m), triggering handoff`);
+
+            await updateConversation(psid, {
+              lastIntent: "custom_order_request",
+              handoffRequested: true,
+              handoffReason: `Custom order request: ${dimensions.width}x${dimensions.height}m - both sides >= 8m`,
+              handoffTimestamp: new Date(),
+              state: "needs_human",
+              unknownCount: 0
+            });
+
+            // Send push notification
+            sendHandoffNotification(psid, `Pedido especial: ${dimensions.width}x${dimensions.height}m - requiere cotización personalizada`).catch(err => {
+              console.error("❌ Failed to send push notification:", err);
+            });
           }
 
           return {
@@ -775,12 +795,31 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
         businessInfo
       });
 
-      await updateConversation(psid, {
-        lastIntent: "size_reference_alternatives",
-        unknownCount: 0,
-        suggestedSizes: sizeResponse.suggestedSizes,
-        offeredToShowAllSizes: sizeResponse.offeredToShowAllSizes || false
-      });
+      // Handle custom order handoff (both sides >= 8m)
+      if (sizeResponse.isCustomOrder && sizeResponse.requiresHandoff) {
+        console.log(`🏭 Custom order detected (${dimensions.width}x${dimensions.height}m), triggering handoff`);
+
+        await updateConversation(psid, {
+          lastIntent: "custom_order_request",
+          handoffRequested: true,
+          handoffReason: `Custom order request: ${dimensions.width}x${dimensions.height}m - both sides >= 8m`,
+          handoffTimestamp: new Date(),
+          state: "needs_human",
+          unknownCount: 0
+        });
+
+        // Send push notification
+        sendHandoffNotification(psid, `Pedido especial: ${dimensions.width}x${dimensions.height}m - requiere cotización personalizada`).catch(err => {
+          console.error("❌ Failed to send push notification:", err);
+        });
+      } else {
+        await updateConversation(psid, {
+          lastIntent: "size_reference_alternatives",
+          unknownCount: 0,
+          suggestedSizes: sizeResponse.suggestedSizes,
+          offeredToShowAllSizes: sizeResponse.offeredToShowAllSizes || false
+        });
+      }
 
       return {
         type: "text",
@@ -1004,16 +1043,35 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
         businessInfo
       });
 
-      // Update conversation state with suggested sizes for context
-      await updateConversation(psid, {
-        lastIntent: "specific_measure",
-        unknownCount: 0,
-        requestedSize: requestedSizeStr,
-        lastUnavailableSize: closest.exact ? null : requestedSizeStr,
-        oversizedRepeatCount: isRepeated ? currentRepeatCount + 1 : 0,  // Increment if repeated, reset if different size
-        suggestedSizes: sizeResponse.suggestedSizes, // Save for follow-up questions
-        offeredToShowAllSizes: sizeResponse.offeredToShowAllSizes || false
-      });
+      // Handle custom order handoff (both sides >= 8m)
+      if (sizeResponse.isCustomOrder && sizeResponse.requiresHandoff) {
+        console.log(`🏭 Custom order detected (${dimensions.width}x${dimensions.height}m), triggering handoff`);
+
+        await updateConversation(psid, {
+          lastIntent: "custom_order_request",
+          handoffRequested: true,
+          handoffReason: `Custom order request: ${dimensions.width}x${dimensions.height}m - both sides >= 8m`,
+          handoffTimestamp: new Date(),
+          state: "needs_human",
+          unknownCount: 0
+        });
+
+        // Send push notification
+        sendHandoffNotification(psid, `Pedido especial: ${dimensions.width}x${dimensions.height}m - requiere cotización personalizada`).catch(err => {
+          console.error("❌ Failed to send push notification:", err);
+        });
+      } else {
+        // Update conversation state with suggested sizes for context
+        await updateConversation(psid, {
+          lastIntent: "specific_measure",
+          unknownCount: 0,
+          requestedSize: requestedSizeStr,
+          lastUnavailableSize: closest.exact ? null : requestedSizeStr,
+          oversizedRepeatCount: isRepeated ? currentRepeatCount + 1 : 0,  // Increment if repeated, reset if different size
+          suggestedSizes: sizeResponse.suggestedSizes, // Save for follow-up questions
+          offeredToShowAllSizes: sizeResponse.offeredToShowAllSizes || false
+        });
+      }
 
       return {
         type: "text",

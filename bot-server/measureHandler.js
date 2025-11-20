@@ -3,6 +3,39 @@ const Product = require("./models/Product");
 const { extractReference } = require("./referenceEstimator");
 
 /**
+ * Check if we're in business hours (Mon-Fri, 9am-6pm Mexico City time)
+ * @returns {boolean}
+ */
+function isBusinessHours() {
+  const now = new Date();
+  const mexicoTime = new Date(now.toLocaleString("en-US", { timeZone: "America/Mexico_City" }));
+
+  const day = mexicoTime.getDay(); // 0 = Sunday, 6 = Saturday
+  const hour = mexicoTime.getHours();
+
+  // Monday-Friday (1-5) and between 9am-6pm
+  const isWeekday = day >= 1 && day <= 5;
+  const isDuringHours = hour >= 9 && hour < 18;
+
+  return isWeekday && isDuringHours;
+}
+
+/**
+ * Check if dimensions qualify as a custom order (both sides >= 8m)
+ * @param {object} dimensions - {width, height}
+ * @returns {boolean}
+ */
+function isCustomOrder(dimensions) {
+  if (!dimensions) return false;
+
+  // Both sides must be >= 8 meters for it to be a custom order
+  const minSide = Math.min(dimensions.width, dimensions.height);
+  const maxSide = Math.max(dimensions.width, dimensions.height);
+
+  return minSide >= 8 && maxSide >= 8;
+}
+
+/**
  * Converts Spanish number words to digits
  * @param {string} text - Text containing number words
  * @returns {string} - Text with numbers converted to digits
@@ -418,13 +451,39 @@ function isApproximateMeasure(message) {
 /**
  * Generates natural response for size inquiry
  * @param {object} options - Response configuration
- * @returns {object} - {text, suggestedSizes} where suggestedSizes is array of size strings for context
+ * @returns {object} - {text, suggestedSizes, isCustomOrder, requiresHandoff} where suggestedSizes is array of size strings for context
  */
 function generateSizeResponse(options) {
   const { smaller, bigger, exact, requestedDim, availableSizes, isRepeated, businessInfo } = options;
 
   const responses = [];
   const suggestedSizes = []; // Track suggested sizes for context
+
+  // Check if this is a custom order (both sides >= 8m)
+  if (requestedDim && isCustomOrder(requestedDim)) {
+    const inBusinessHours = isBusinessHours();
+
+    let customOrderText = `La medida de **${requestedDim.width}x${requestedDim.height}m** es un pedido especial que requiere fabricación personalizada.\n\n`;
+    customOrderText += `Este tipo de medidas necesitan cotización directa con nuestro equipo de ventas.\n\n`;
+
+    if (businessInfo) {
+      customOrderText += `📞 Contáctanos: ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}\n`;
+      customOrderText += `🕓 Horario: ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}\n`;
+      customOrderText += `📍 ${businessInfo.address || ''}`;
+    }
+
+    if (inBusinessHours) {
+      customOrderText += `\n\n✅ Estamos en horario de atención. Un asesor te contactará en breve para ayudarte con tu cotización.`;
+    }
+
+    return {
+      text: customOrderText,
+      suggestedSizes: [],
+      offeredToShowAllSizes: false,
+      isCustomOrder: true,
+      requiresHandoff: inBusinessHours
+    };
+  }
 
   if (exact) {
     // Generic responses WITHOUT ML link (link shown only on buying intent or when user asks for details)
@@ -540,5 +599,7 @@ module.exports = {
   isApproximateMeasure,
   hasFractionalMeters,
   generateSizeResponse,
-  generateGenericSizeResponse
+  generateGenericSizeResponse,
+  isCustomOrder,
+  isBusinessHours
 };
