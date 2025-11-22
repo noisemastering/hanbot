@@ -70,6 +70,7 @@ const rolesRoutes = require('./routes/rolesRoutes');
 const profilesRoutes = require('./routes/profilesRoutes');
 const clickLogsRoutes = require('./routes/clickLogsRoutes');
 const pushRoutes = require('./routes/pushRoutes');
+const usersRoutes = require('./routes/usersRoutes');
 
 // Auth routes (no prefix, will be /auth/login, /auth/me, etc.)
 app.use('/auth', authRoutes);
@@ -85,6 +86,7 @@ app.use('/campaign-products', campaignProductRoutes);
 app.use('/adsets', adSetsRoutes);
 app.use('/ads', adsRoutes);
 app.use('/conversations', conversationsRoutes);
+app.use('/users', usersRoutes);
 app.use('/analytics', analyticsRoutes);
 app.use('/master-catalog', masterCatalogRoutes);
 app.use('/usos', usosRoutes);
@@ -842,6 +844,19 @@ app.post("/webhook", async (req, res) => {
   } else {
     res.sendStatus(404);
   }
+});
+
+// ============================================
+// 💬 WHATSAPP WEBHOOK ROUTES (NEW)
+// ============================================
+const { verifyWhatsAppWebhook, handleWhatsAppWebhook } = require('./channels/whatsapp/handler');
+
+// GET /webhook/whatsapp - WhatsApp webhook verification
+app.get("/webhook/whatsapp", verifyWhatsAppWebhook);
+
+// POST /webhook/whatsapp - WhatsApp incoming messages
+app.post("/webhook/whatsapp", (req, res) => {
+  handleWhatsAppWebhook(req, res, io);
 });
 
 // ============================================

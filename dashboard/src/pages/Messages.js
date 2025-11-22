@@ -7,6 +7,7 @@ function Messages() {
   const [conversationStatuses, setConversationStatuses] = useState({});
   const [loading, setLoading] = useState({});
   const [selectedPsid, setSelectedPsid] = useState(null);
+  const [selectedChannel, setSelectedChannel] = useState(null);
   const [fullConversation, setFullConversation] = useState([]);
   const [dateFilter, setDateFilter] = useState('today');
   const [, setUsers] = useState({}); // eslint-disable-line no-unused-vars
@@ -18,6 +19,14 @@ function Messages() {
     if (!text) return '';
     if (text.length <= maxLength) return text;
     return text.substring(0, maxLength) + '...';
+  };
+
+  // Helper function to get channel icon and label
+  const getChannelDisplay = (channel) => {
+    if (channel === 'whatsapp') {
+      return { icon: '💬', label: 'WhatsApp', color: '#25D366' };
+    }
+    return { icon: '👥', label: 'Facebook', color: '#1877F2' };
   };
 
   // Get date range based on filter using Mexico City timezone
@@ -261,6 +270,7 @@ function Messages() {
         <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #555" }}>
           <thead>
             <tr style={{ backgroundColor: "#2a1a5e", color: "#bb86fc" }}>
+              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Canal</th>
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Fecha</th>
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Último mensaje</th>
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Vocero</th>
@@ -272,12 +282,14 @@ function Messages() {
               const status = conversationStatuses[msg.psid];
               const isHumanActive = status?.humanActive;
               const needsHelp = status?.handoffRequested && !isHumanActive;
+              const channelDisplay = getChannelDisplay(msg.channel);
 
               return (
                 <tr
                   key={msg._id}
                   onClick={() => {
                     setSelectedPsid(msg.psid);
+                    setSelectedChannel(msg.channel);
                     fetchFullConversation(msg.psid);
                   }}
                   style={{
@@ -287,6 +299,11 @@ function Messages() {
                     borderLeft: needsHelp ? "4px solid #ff5252" : "none"
                   }}
                 >
+                  <td style={{ padding: "10px", textAlign: "center" }}>
+                    <span style={{ fontSize: "1.2rem" }} title={channelDisplay.label}>
+                      {channelDisplay.icon}
+                    </span>
+                  </td>
                   <td style={{ padding: "10px", color: "#e0e0e0", fontSize: "0.9rem" }}>
                     {new Date(msg.timestamp).toLocaleString('es-MX', {
                       month: 'short',
@@ -362,6 +379,7 @@ function Messages() {
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedPsid(msg.psid);
+                          setSelectedChannel(msg.channel);
                           fetchFullConversation(msg.psid);
                         }}
                         style={{
@@ -455,6 +473,7 @@ function Messages() {
         <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "1rem", border: "1px solid #555" }}>
         <thead>
           <tr style={{ backgroundColor: "#1b3a1b", color: "lightgreen" }}>
+            <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Canal</th>
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Fecha</th>
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Último mensaje</th>
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Tipo</th>
@@ -467,12 +486,14 @@ function Messages() {
             const status = conversationStatuses[msg.psid];
             const isHumanActive = status?.humanActive;
             const needsHelp = status?.handoffRequested && !isHumanActive;
+            const channelDisplay = getChannelDisplay(msg.channel);
 
             return (
               <tr
                 key={msg._id}
                 onClick={() => {
                   setSelectedPsid(msg.psid);
+                  setSelectedChannel(msg.channel);
                   fetchFullConversation(msg.psid);
                 }}
                 style={{
@@ -482,6 +503,11 @@ function Messages() {
                   borderLeft: needsHelp ? "4px solid #ff5252" : "none"
                 }}
               >
+                <td style={{ padding: "8px", textAlign: "center" }}>
+                  <span style={{ fontSize: "1.2rem" }} title={channelDisplay.label}>
+                    {channelDisplay.icon}
+                  </span>
+                </td>
                 <td style={{ padding: "8px", color: "#e0e0e0" }}>{new Date(msg.timestamp).toLocaleString()}</td>
                 <td style={{ padding: "8px", paddingRight: "30px", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", color: "white", position: "relative", whiteSpace: "nowrap" }}>
                   {getMessageExcerpt(msg.text)}
@@ -551,6 +577,7 @@ function Messages() {
                       onClick={(e) => {
                         e.stopPropagation();
                         setSelectedPsid(msg.psid);
+                        setSelectedChannel(msg.channel);
                         fetchFullConversation(msg.psid);
                       }}
                       style={{
@@ -578,6 +605,7 @@ function Messages() {
         <div
           onClick={() => {
             setSelectedPsid(null);
+            setSelectedChannel(null);
             setShowLinkGenerator(false);
           }}
           style={{
@@ -608,9 +636,19 @@ function Messages() {
           >
             {/* Header */}
             <div style={{ padding: "1rem", borderBottom: "1px solid #2a2a2a", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <h3 style={{ margin: 0, color: "white" }}>Conversacion Completa - PSID: {selectedPsid.substring(0, 12)}...</h3>
+              <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                <span style={{ fontSize: "1.5rem" }} title={getChannelDisplay(selectedChannel).label}>
+                  {getChannelDisplay(selectedChannel).icon}
+                </span>
+                <h3 style={{ margin: 0, color: "white" }}>
+                  Conversacion Completa - PSID: {selectedPsid.substring(0, 12)}...
+                </h3>
+              </div>
               <button
-                onClick={() => setSelectedPsid(null)}
+                onClick={() => {
+                  setSelectedPsid(null);
+                  setSelectedChannel(null);
+                }}
                 style={{
                   background: "none",
                   border: "none",
@@ -699,6 +737,7 @@ function Messages() {
                 <button
                   onClick={() => {
                     setSelectedPsid(null);
+                    setSelectedChannel(null);
                     setShowLinkGenerator(false);
                   }}
                   style={{
