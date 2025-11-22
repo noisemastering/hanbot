@@ -2,7 +2,8 @@
 const mongoose = require("mongoose");
 
 const conversationSchema = new mongoose.Schema({
-  psid: { type: String, required: true, unique: true },
+  psid: { type: String, required: true, unique: true }, // Now stores unifiedId (fb:xxx or wa:xxx)
+  channel: { type: String, enum: ['facebook', 'whatsapp'], default: null }, // NEW: Track channel
   state: { type: String, default: "new" },  // new | active | closed | needs_human | human_handling
   greeted: { type: Boolean, default: false },
   lastIntent: { type: String, default: null },
