@@ -21,6 +21,7 @@ export const AuthProvider = ({ children }) => {
   const verifyToken = async () => {
     try {
       const response = await fetch(`${API_URL}/auth/me`, {
+        credentials: 'include',
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -49,6 +50,7 @@ export const AuthProvider = ({ children }) => {
     try {
       const response = await fetch(`${API_URL}/auth/login`, {
         method: 'POST',
+        credentials: 'include',
         headers: {
           'Content-Type': 'application/json'
         },

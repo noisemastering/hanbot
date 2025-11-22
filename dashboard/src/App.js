@@ -245,11 +245,12 @@ function App() {
 
   const fetchMessages = async () => {
     try {
-      const res = await fetch(`${API_URL}/messages`, {
+      const res = await fetch(`${API_URL}/conversations`, {
+        credentials: 'include',
         headers: { Authorization: "Bearer hanlob_admin_2025" }
       });
       const data = await res.json();
-      setMessages(data.data || []);
+      setMessages(data || []);
     } catch (error) {
       console.error("Error fetching messages:", error);
     } finally {
