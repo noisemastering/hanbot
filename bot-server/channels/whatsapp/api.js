@@ -1,7 +1,7 @@
 // WhatsApp Cloud API Client
 const axios = require('axios');
 
-const WHATSAPP_API_URL = 'https://graph.facebook.com/v18.0';
+const WHATSAPP_API_URL = 'https://graph.facebook.com/v22.0';
 
 /**
  * Get WhatsApp configuration from environment
