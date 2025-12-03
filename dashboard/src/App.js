@@ -68,6 +68,7 @@ function playPopSound() {
 }
 
 const menuItems = [
+  // Stand-alone items
   {
     id: "overview",
     label: "Panel General",
@@ -84,98 +85,140 @@ const menuItems = [
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
     )
   },
+
+  // Expandable sections
   {
-    id: "analytics",
-    label: "Analíticas",
-    path: "/analytics",
+    id: "estadisticas",
+    label: "Estadísticas",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-    )
+    ),
+    isExpandable: true,
+    children: [
+      {
+        id: "analytics",
+        label: "Analíticas",
+        path: "/analytics",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        )
+      },
+      {
+        id: "click-logs",
+        label: "Clicks",
+        path: "/click-logs",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+        )
+      }
+    ]
   },
   {
-    id: "click-logs",
-    label: "Clicks",
-    path: "/click-logs",
-    icon: (
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-    )
-  },
-  {
-    id: "familias",
-    label: "Familias",
-    path: "/familias",
-    icon: (
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-    )
-  },
-  {
-    id: "usos",
-    label: "Usos",
-    path: "/usos",
-    icon: (
-      <>
-        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v7m0 0l-4 4m4-4l4 4" />
-        <circle cx="12" cy="4" r="1.5" fill="currentColor" />
-        <circle cx="8" cy="15" r="1.5" fill="currentColor" />
-        <circle cx="16" cy="15" r="1.5" fill="currentColor" />
-      </>
-    )
-  },
-  {
-    id: "products",
-    label: "Productos",
-    path: "/products",
+    id: "catalogo",
+    label: "Catálogo",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
-    )
+    ),
+    isExpandable: true,
+    children: [
+      {
+        id: "familias",
+        label: "Familias",
+        path: "/familias",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+        )
+      },
+      {
+        id: "usos",
+        label: "Usos",
+        path: "/usos",
+        icon: (
+          <>
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v7m0 0l-4 4m4-4l4 4" />
+            <circle cx="12" cy="4" r="1.5" fill="currentColor" />
+            <circle cx="8" cy="15" r="1.5" fill="currentColor" />
+            <circle cx="16" cy="15" r="1.5" fill="currentColor" />
+          </>
+        )
+      },
+      {
+        id: "products",
+        label: "Productos",
+        path: "/products",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+        )
+      }
+    ]
   },
   {
-    id: "campaigns",
+    id: "campanas",
     label: "Campañas",
-    path: "/campaigns",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
-    )
+    ),
+    isExpandable: true,
+    children: [
+      {
+        id: "campaigns",
+        label: "Campañas",
+        path: "/campaigns",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+        )
+      },
+      {
+        id: "adsets",
+        label: "Ad Sets",
+        path: "/adsets",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+        )
+      },
+      {
+        id: "ads",
+        label: "Anuncios",
+        path: "/ads",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+        )
+      }
+    ]
   },
   {
-    id: "adsets",
-    label: "Ad Sets",
-    path: "/adsets",
-    icon: (
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-    )
-  },
-  {
-    id: "ads",
-    label: "Anuncios",
-    path: "/ads",
-    icon: (
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
-    )
-  },
-  {
-    id: "users",
+    id: "usuarios",
     label: "Usuarios",
-    path: "/users",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-    )
-  },
-  {
-    id: "roles",
-    label: "Roles",
-    path: "/roles",
-    icon: (
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
-    )
-  },
-  {
-    id: "profiles",
-    label: "Perfiles",
-    path: "/profiles",
-    icon: (
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
-    )
+    ),
+    isExpandable: true,
+    children: [
+      {
+        id: "users",
+        label: "Usuarios",
+        path: "/users",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
+        )
+      },
+      {
+        id: "roles",
+        label: "Roles",
+        path: "/roles",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+        )
+      },
+      {
+        id: "profiles",
+        label: "Perfiles",
+        path: "/profiles",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+        )
+      }
+    ]
   },
   {
     id: "settings",
@@ -197,6 +240,7 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all");
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [expandedSections, setExpandedSections] = useState({}); // Track expanded menu sections
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [conversationStatuses, setConversationStatuses] = useState({});
   const [handoverLoading, setHandoverLoading] = useState({});
@@ -940,24 +984,80 @@ function App() {
 
           {/* Menu Items */}
           <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
-            {filteredMenuItems.map((item) => (
-              <NavLink
-                key={item.id}
-                to={item.path}
-                onClick={() => setSidebarOpen(false)}
-                className={({ isActive }) => `w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
-                  isActive
-                    ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
-                    : 'text-gray-400 hover:bg-gray-800/50 hover:text-white'
-                }`}
-                end={item.path === "/"}
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  {item.icon}
-                </svg>
-                <span className="font-medium">{item.label}</span>
-              </NavLink>
-            ))}
+            {filteredMenuItems.map((item) => {
+              // Expandable section
+              if (item.isExpandable && item.children) {
+                const isExpanded = expandedSections[item.id];
+                return (
+                  <div key={item.id} className="space-y-1">
+                    {/* Section Header */}
+                    <button
+                      onClick={() => setExpandedSections(prev => ({ ...prev, [item.id]: !prev[item.id] }))}
+                      className="w-full flex items-center justify-between px-4 py-3 rounded-lg text-gray-300 hover:bg-gray-800/50 hover:text-white transition-all"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          {item.icon}
+                        </svg>
+                        <span className="font-medium">{item.label}</span>
+                      </div>
+                      <svg
+                        className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
+                        fill="none"
+                        stroke="currentColor"
+                        viewBox="0 0 24 24"
+                      >
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                      </svg>
+                    </button>
+
+                    {/* Submenu Items */}
+                    {isExpanded && (
+                      <div className="ml-4 space-y-1 border-l-2 border-gray-700/50 pl-2">
+                        {item.children.map((child) => (
+                          <NavLink
+                            key={child.id}
+                            to={child.path}
+                            onClick={() => setSidebarOpen(false)}
+                            className={({ isActive }) => `w-full flex items-center space-x-3 px-4 py-2 rounded-lg transition-all text-sm ${
+                              isActive
+                                ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
+                                : 'text-gray-400 hover:bg-gray-800/50 hover:text-white'
+                            }`}
+                            end={child.path === "/"}
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              {child.icon}
+                            </svg>
+                            <span className="font-medium">{child.label}</span>
+                          </NavLink>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              // Regular menu item
+              return (
+                <NavLink
+                  key={item.id}
+                  to={item.path}
+                  onClick={() => setSidebarOpen(false)}
+                  className={({ isActive }) => `w-full flex items-center space-x-3 px-4 py-3 rounded-lg transition-all ${
+                    isActive
+                      ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30'
+                      : 'text-gray-400 hover:bg-gray-800/50 hover:text-white'
+                  }`}
+                  end={item.path === "/"}
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    {item.icon}
+                  </svg>
+                  <span className="font-medium">{item.label}</span>
+                </NavLink>
+              );
+            })}
           </nav>
 
           {/* Sidebar Footer */}
