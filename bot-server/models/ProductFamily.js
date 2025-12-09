@@ -43,6 +43,15 @@ const productFamilySchema = new mongoose.Schema({
   attributes: {
     type: Map,
     of: String  // Flexible attributes like { size: "3x5m", finish: "Reforzada" }
+  },
+  // Cross-selling and human handoff features
+  requiresHumanAdvisor: {
+    type: Boolean,
+    default: false  // Flag products that need human assistance
+  },
+  genericDescription: {
+    type: String  // Brief description for cross-selling (when customer asks about this product)
+    // e.g., "Rollo antimaleza - ideal para control de hierbas en cultivos"
   }
 }, {
   timestamps: true

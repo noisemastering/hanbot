@@ -8,7 +8,9 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
     sellable: false,
     price: '',
     sku: '',
-    stock: ''
+    stock: '',
+    requiresHumanAdvisor: false,
+    genericDescription: ''
   });
 
   useEffect(() => {
@@ -20,7 +22,9 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
         sellable: product.sellable || false,
         price: product.price || '',
         sku: product.sku || '',
-        stock: product.stock || ''
+        stock: product.stock || '',
+        requiresHumanAdvisor: product.requiresHumanAdvisor || false,
+        genericDescription: product.genericDescription || ''
       });
     } else if (presetParentId) {
       // When adding a child, preset the parent
@@ -47,6 +51,8 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
       submitData.price = formData.price ? parseFloat(formData.price) : null;
       submitData.sku = formData.sku || null;
       submitData.stock = formData.stock ? parseInt(formData.stock, 10) : null;
+      submitData.requiresHumanAdvisor = formData.requiresHumanAdvisor;
+      submitData.genericDescription = formData.genericDescription || null;
     }
 
     onSave(submitData);
@@ -259,6 +265,44 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                     className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                     placeholder="0"
                   />
+                </div>
+
+                {/* Generic Description for Cross-Selling */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Descripción Genérica (Cross-Selling)
+                  </label>
+                  <textarea
+                    name="genericDescription"
+                    value={formData.genericDescription}
+                    onChange={handleChange}
+                    rows={2}
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="Ej: ideal para control de maleza en cultivos"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Descripción breve que se mostrará cuando el cliente pregunte por este producto
+                  </p>
+                </div>
+
+                {/* Requires Human Advisor Checkbox */}
+                <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
+                  <div className="flex items-center space-x-3">
+                    <input
+                      type="checkbox"
+                      id="requiresHumanAdvisor"
+                      name="requiresHumanAdvisor"
+                      checked={formData.requiresHumanAdvisor}
+                      onChange={handleChange}
+                      className="w-5 h-5 text-amber-500 bg-gray-900 border-gray-700 rounded focus:ring-amber-500 focus:ring-2"
+                    />
+                    <label htmlFor="requiresHumanAdvisor" className="text-sm font-medium text-gray-300 cursor-pointer">
+                      Requiere asesor humano
+                    </label>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2 ml-8">
+                    Cuando se marque, el bot ofrecerá conectar al cliente con un asesor humano al preguntar por este producto
+                  </p>
                 </div>
               </div>
             )}
