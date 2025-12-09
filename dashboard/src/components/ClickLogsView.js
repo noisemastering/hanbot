@@ -4,13 +4,26 @@ import toast from 'react-hot-toast';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
+// Helper function to get first day of current month
+const getFirstDayOfMonth = () => {
+  const now = new Date();
+  return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+};
+
+// Helper function to get current date
+const getCurrentDate = () => {
+  return new Date().toISOString().split('T')[0];
+};
+
 function ClickLogsView() {
   const [clickLogs, setClickLogs] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState({
     clicked: '',
-    converted: ''
+    converted: '',
+    startDate: getFirstDayOfMonth(),
+    endDate: getCurrentDate()
   });
 
   useEffect(() => {
@@ -21,7 +34,11 @@ function ClickLogsView() {
   const fetchStats = async () => {
     try {
       const token = localStorage.getItem('token');
-      const res = await fetch(`${API_URL}/click-logs/stats`, {
+      const params = new URLSearchParams();
+      if (filter.startDate) params.append('startDate', filter.startDate);
+      if (filter.endDate) params.append('endDate', filter.endDate);
+
+      const res = await fetch(`${API_URL}/click-logs/stats?${params.toString()}`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -43,6 +60,8 @@ function ClickLogsView() {
       const params = new URLSearchParams();
       if (filter.clicked) params.append('clicked', filter.clicked);
       if (filter.converted) params.append('converted', filter.converted);
+      if (filter.startDate) params.append('startDate', filter.startDate);
+      if (filter.endDate) params.append('endDate', filter.endDate);
 
       const res = await fetch(`${API_URL}/click-logs?${params.toString()}`, {
         headers: {
@@ -99,7 +118,35 @@ function ClickLogsView() {
 
       {/* Filters */}
       <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4 mb-6">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <h3 className="text-sm font-semibold text-gray-300 mb-4 flex items-center">
+          <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+          </svg>
+          Filtros
+        </h3>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Fecha Inicio
+            </label>
+            <input
+              type="date"
+              value={filter.startDate}
+              onChange={(e) => setFilter({ ...filter, startDate: e.target.value })}
+              className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              Fecha Fin
+            </label>
+            <input
+              type="date"
+              value={filter.endDate}
+              onChange={(e) => setFilter({ ...filter, endDate: e.target.value })}
+              className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
               Estado de Click
