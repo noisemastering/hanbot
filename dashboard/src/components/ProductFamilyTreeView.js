@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 
 // Recursive component to render a single product node and its children
-function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, level = 0 }) {
-  const [isExpanded, setIsExpanded] = useState(level === 0); // Root nodes expanded by default
-
+function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, level = 0, expandedNodes, onToggleExpand }) {
+  const isExpanded = expandedNodes.has(product._id);
   const hasChildren = product.children && product.children.length > 0;
   const indentClass = level > 0 ? `ml-${level * 8}` : '';
 
@@ -15,7 +14,7 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, level = 0 
           {/* Expand/Collapse Button */}
           {hasChildren ? (
             <button
-              onClick={() => setIsExpanded(!isExpanded)}
+              onClick={() => onToggleExpand(product._id)}
               className="p-1 text-gray-400 hover:text-white transition-colors"
               title={isExpanded ? "Contraer" : "Expandir"}
             >
@@ -122,6 +121,8 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, level = 0 
               onAddChild={onAddChild}
               onCopy={onCopy}
               level={level + 1}
+              expandedNodes={expandedNodes}
+              onToggleExpand={onToggleExpand}
             />
           ))}
         </div>
@@ -139,6 +140,58 @@ function ProductFamilyTreeView({
   onAddChild,
   onCopy
 }) {
+  // Manage expanded nodes state (Set of product IDs)
+  const [expandedNodes, setExpandedNodes] = useState(() => {
+    // Initialize with all root nodes expanded
+    const initialExpanded = new Set();
+    if (products && products.length > 0) {
+      products.forEach(p => initialExpanded.add(p._id));
+    }
+    return initialExpanded;
+  });
+
+  // Update expanded nodes when products change (to include new root nodes)
+  React.useEffect(() => {
+    if (products && products.length > 0) {
+      setExpandedNodes(prev => {
+        const newExpanded = new Set(prev);
+        products.forEach(p => {
+          // Keep root nodes expanded
+          if (!prev.has(p._id)) {
+            newExpanded.add(p._id);
+          }
+        });
+        return newExpanded;
+      });
+    }
+  }, [products]);
+
+  // Toggle expand/collapse for a node
+  const handleToggleExpand = (productId) => {
+    setExpandedNodes(prev => {
+      const newExpanded = new Set(prev);
+      if (newExpanded.has(productId)) {
+        newExpanded.delete(productId);
+      } else {
+        newExpanded.add(productId);
+      }
+      return newExpanded;
+    });
+  };
+
+  // Wrap onAddChild to auto-expand the parent
+  const handleAddChild = (product) => {
+    // Expand the parent node
+    setExpandedNodes(prev => {
+      const newExpanded = new Set(prev);
+      newExpanded.add(product._id);
+      return newExpanded;
+    });
+
+    // Call the original onAddChild
+    onAddChild(product);
+  };
+
   return (
     <div>
       {/* Header with Add Button */}
@@ -199,9 +252,11 @@ function ProductFamilyTreeView({
                 product={product}
                 onEdit={onEdit}
                 onDelete={onDelete}
-                onAddChild={onAddChild}
+                onAddChild={handleAddChild}
                 onCopy={onCopy}
                 level={0}
+                expandedNodes={expandedNodes}
+                onToggleExpand={handleToggleExpand}
               />
             ))}
           </div>
