@@ -100,8 +100,10 @@ router.get("/:id", async (req, res) => {
 // Create new product family
 router.post("/", async (req, res) => {
   try {
+    console.log('📝 Creating product family with data:', JSON.stringify(req.body, null, 2));
     const productFamily = new ProductFamily(req.body);
     await productFamily.save();
+    console.log('✅ Saved product family:', productFamily.name, 'requiresHumanAdvisor:', productFamily.requiresHumanAdvisor);
 
     // Populate parent info before returning
     await productFamily.populate('parentId', 'name generation');
@@ -115,11 +117,13 @@ router.post("/", async (req, res) => {
 // Update product family
 router.put("/:id", async (req, res) => {
   try {
+    console.log('📝 Updating product family', req.params.id, 'with data:', JSON.stringify(req.body, null, 2));
     const productFamily = await ProductFamily.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true, runValidators: true }
     ).populate('parentId', 'name generation');
+    console.log('✅ Updated product family:', productFamily.name, 'requiresHumanAdvisor:', productFamily.requiresHumanAdvisor);
 
     if (!productFamily) {
       return res.status(404).json({
