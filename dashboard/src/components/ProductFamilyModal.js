@@ -51,10 +51,15 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
       submitData.price = formData.price ? parseFloat(formData.price) : null;
       submitData.sku = formData.sku || null;
       submitData.stock = formData.stock ? parseInt(formData.stock, 10) : null;
-      submitData.requiresHumanAdvisor = formData.requiresHumanAdvisor;
+      submitData.requiresHumanAdvisor = Boolean(formData.requiresHumanAdvisor);
       submitData.genericDescription = formData.genericDescription || null;
+    } else {
+      // Clear these fields when product is not sellable
+      submitData.requiresHumanAdvisor = false;
+      submitData.genericDescription = null;
     }
 
+    console.log('Submitting product family data:', submitData);
     onSave(submitData);
   };
 
