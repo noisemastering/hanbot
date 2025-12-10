@@ -4,12 +4,12 @@ import React, { useState } from 'react';
 function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, level = 0, expandedNodes, onToggleExpand }) {
   const isExpanded = expandedNodes.has(product._id);
   const hasChildren = product.children && product.children.length > 0;
-  const indentClass = level > 0 ? `ml-${level * 8}` : '';
+  const indentPixels = level * 32; // 32px per level (equivalent to ml-8 = 2rem = 32px)
 
   return (
     <div className="border-l-2 border-gray-700/50">
       {/* Product Row */}
-      <div className={`flex items-center justify-between px-6 py-4 hover:bg-gray-700/30 transition-colors ${indentClass}`}>
+      <div className="flex items-center justify-between px-6 py-4 hover:bg-gray-700/30 transition-colors" style={{ marginLeft: `${indentPixels}px` }}>
         <div className="flex items-center space-x-4 flex-1">
           {/* Expand/Collapse Button */}
           {hasChildren ? (
