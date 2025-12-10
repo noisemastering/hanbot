@@ -83,6 +83,32 @@ export const AuthProvider = ({ children }) => {
   const canAccess = (section) => {
     if (!user) return false;
 
+    // NEW: Use backend permissions array if available
+    if (user.permissions && Array.isArray(user.permissions)) {
+      console.log(`🔍 Checking access for section "${section}"`, {
+        username: user.username,
+        role: user.role,
+        profile: user.profile,
+        permissions: user.permissions,
+        hasAccess: user.permissions.includes('*') || user.permissions.includes(section)
+      });
+
+      // Check if user has wildcard permission (access to everything)
+      if (user.permissions.includes('*')) {
+        return true;
+      }
+
+      // Check if user has specific section permission
+      return user.permissions.includes(section);
+    }
+
+    console.log(`⚠️ Using fallback permissions for section "${section}"`, {
+      username: user.username,
+      role: user.role,
+      profile: user.profile
+    });
+
+    // FALLBACK: Old hardcoded logic for existing sessions (until they log out/in)
     const permissions = {
       super_admin: ['*'],
       admin: ['*'],

@@ -62,6 +62,11 @@ router.post("/login", async (req, res) => {
       { expiresIn: JWT_EXPIRES_IN }
     );
 
+    // Get user permissions
+    const permissions = await user.getAllPermissions();
+    console.log(`🔐 Login successful for ${user.username} (${user.role}/${user.profile || 'no profile'})`);
+    console.log(`📋 Permissions being sent:`, permissions);
+
     // Send response
     res.json({
       success: true,
@@ -76,7 +81,8 @@ router.post("/login", async (req, res) => {
         role: user.role,
         roleLabel: await user.getRoleLabel(),
         profile: user.profile,
-        profileLabel: await user.getProfileLabel()
+        profileLabel: await user.getProfileLabel(),
+        permissions: permissions
       }
     });
   } catch (error) {
@@ -112,6 +118,9 @@ router.get("/me", async (req, res) => {
       });
     }
 
+    // Get user permissions
+    const permissions = await user.getAllPermissions();
+
     // Send user data
     res.json({
       success: true,
@@ -125,7 +134,8 @@ router.get("/me", async (req, res) => {
         role: user.role,
         roleLabel: await user.getRoleLabel(),
         profile: user.profile,
-        profileLabel: await user.getProfileLabel()
+        profileLabel: await user.getProfileLabel(),
+        permissions: permissions
       }
     });
   } catch (error) {

@@ -180,6 +180,39 @@ dashboardUserSchema.methods.canAccess = async function(section) {
   }
 };
 
+// Method to get all permissions for a user (for frontend caching)
+dashboardUserSchema.methods.getAllPermissions = async function() {
+  try {
+    const Role = mongoose.model("Role");
+    const Profile = mongoose.model("Profile");
+
+    // Get role permissions
+    const roleDoc = await Role.findOne({ name: this.role, active: true });
+    if (!roleDoc) return [];
+
+    // Start with role permissions
+    let permissions = [...roleDoc.permissions];
+
+    // If user has a profile, merge profile permissions
+    if (this.profile) {
+      const profileDoc = await Profile.findOne({
+        name: this.profile,
+        active: true
+      });
+
+      if (profileDoc) {
+        // Merge profile permissions with role permissions (union)
+        permissions = [...new Set([...permissions, ...profileDoc.permissions])];
+      }
+    }
+
+    return permissions;
+  } catch (error) {
+    console.error("Error getting all permissions:", error);
+    return [];
+  }
+};
+
 // Virtual for full name
 dashboardUserSchema.virtual("fullName").get(function() {
   return `${this.firstName} ${this.lastName}`;
