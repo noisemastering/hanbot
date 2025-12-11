@@ -34,9 +34,8 @@ import CampaignProductModal from "./components/CampaignProductModal";
 import CampaignProductsView from "./components/CampaignProductsView";
 import MasterCatalogView from "./components/MasterCatalogView";
 import MasterCatalogModal from "./components/MasterCatalogModal";
-import UsosView from "./components/UsosView";
+import UsosYGruposView from "./components/UsosYGruposView";
 import UsosModal from "./components/UsosModal";
-import GruposView from "./components/GruposView";
 import GruposModal from "./components/GruposModal";
 import ProductFamilyTreeView from "./components/ProductFamilyTreeView";
 import ProductFamilyModal from "./components/ProductFamilyModal";
@@ -132,22 +131,9 @@ const menuItems = [
         )
       },
       {
-        id: "usos",
-        label: "Usos",
-        path: "/usos",
-        icon: (
-          <>
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v7m0 0l-4 4m4-4l4 4" />
-            <circle cx="12" cy="4" r="1.5" fill="currentColor" />
-            <circle cx="8" cy="15" r="1.5" fill="currentColor" />
-            <circle cx="16" cy="15" r="1.5" fill="currentColor" />
-          </>
-        )
-      },
-      {
-        id: "grupos",
-        label: "Grupos",
-        path: "/grupos",
+        id: "usos-grupos",
+        label: "Usos y Grupos",
+        path: "/usos-grupos",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
         )
@@ -1657,37 +1643,31 @@ function App() {
             />
           } />
 
-          {/* Usos Route */}
-          <Route path="/usos" element={
-            <UsosView
+          {/* Usos y Grupos Route */}
+          <Route path="/usos-grupos" element={
+            <UsosYGruposView
               usos={usos}
-              loading={loading}
-              onAdd={() => {
+              usosLoading={loading}
+              onAddUso={() => {
                 setSelectedUso(null);
                 setShowUsosModal(true);
               }}
-              onEdit={(uso) => {
+              onEditUso={(uso) => {
                 setSelectedUso(uso);
                 setShowUsosModal(true);
               }}
-              onDelete={handleDeleteUso}
-            />
-          } />
-
-          {/* Grupos Route */}
-          <Route path="/grupos" element={
-            <GruposView
+              onDeleteUso={handleDeleteUso}
               grupos={grupos}
-              loading={loading}
-              onAdd={() => {
+              gruposLoading={loading}
+              onAddGrupo={() => {
                 setSelectedGrupo(null);
                 setShowGruposModal(true);
               }}
-              onEdit={(grupo) => {
+              onEditGrupo={(grupo) => {
                 setSelectedGrupo(grupo);
                 setShowGruposModal(true);
               }}
-              onDelete={handleDeleteGrupo}
+              onDeleteGrupo={handleDeleteGrupo}
             />
           } />
 

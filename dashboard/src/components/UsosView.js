@@ -75,13 +75,39 @@ function UsosView({
               <tbody className="divide-y divide-gray-700/50">
                 {usos.map((uso) => (
                   <tr key={uso._id} className="hover:bg-gray-700/30 transition-colors">
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-white">{uso.name}</div>
+                    <td className="px-6 py-4">
+                      <div className="flex items-center space-x-3">
+                        <div className="text-sm font-medium text-white">{uso.name}</div>
+                        {!uso.available && (
+                          <span className="px-2 py-0.5 bg-red-500/20 text-red-300 rounded text-xs font-medium">
+                            Inactivo
+                          </span>
+                        )}
+                      </div>
+                      {uso.products && uso.products.length > 0 && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          {uso.productCount || uso.products.length} producto{(uso.productCount || uso.products.length) !== 1 ? 's' : ''}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="text-sm text-gray-300 max-w-md truncate">
+                      <div className="text-sm text-gray-300">
                         {uso.description || '-'}
                       </div>
+                      {uso.products && uso.products.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1">
+                          {uso.products.slice(0, 3).map((product, idx) => (
+                            <span key={idx} className="px-2 py-0.5 bg-primary-500/20 text-primary-300 rounded text-xs">
+                              {typeof product === 'string' ? product : product.name}
+                            </span>
+                          ))}
+                          {uso.products.length > 3 && (
+                            <span className="px-2 py-0.5 bg-gray-700/50 text-gray-400 rounded text-xs">
+                              +{uso.products.length - 3} más
+                            </span>
+                          )}
+                        </div>
+                      )}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end space-x-2">
