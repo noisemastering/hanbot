@@ -67,6 +67,7 @@ const conversationsRoutes = require('./routes/conversationsRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
 const masterCatalogRoutes = require('./routes/masterCatalogRoutes');
 const usosRoutes = require('./routes/usosRoutes');
+const gruposRoutes = require('./routes/gruposRoutes');
 const productFamilyRoutes = require('./routes/productFamilyRoutes');
 const authRoutes = require('./routes/authRoutes');
 const dashboardUsersRoutes = require('./routes/dashboardUsersRoutes');
@@ -94,6 +95,7 @@ app.use('/users', usersRoutes);
 app.use('/analytics', analyticsRoutes);
 app.use('/master-catalog', masterCatalogRoutes);
 app.use('/usos', usosRoutes);
+app.use('/grupos', gruposRoutes);
 app.use('/product-families', productFamilyRoutes);
 
 // ============================================

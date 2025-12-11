@@ -36,6 +36,8 @@ import MasterCatalogView from "./components/MasterCatalogView";
 import MasterCatalogModal from "./components/MasterCatalogModal";
 import UsosView from "./components/UsosView";
 import UsosModal from "./components/UsosModal";
+import GruposView from "./components/GruposView";
+import GruposModal from "./components/GruposModal";
 import ProductFamilyTreeView from "./components/ProductFamilyTreeView";
 import ProductFamilyModal from "./components/ProductFamilyModal";
 import Messages from "./pages/Messages";
@@ -140,6 +142,14 @@ const menuItems = [
             <circle cx="8" cy="15" r="1.5" fill="currentColor" />
             <circle cx="16" cy="15" r="1.5" fill="currentColor" />
           </>
+        )
+      },
+      {
+        id: "grupos",
+        label: "Grupos",
+        path: "/grupos",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
         )
       },
       {
@@ -278,6 +288,11 @@ function App() {
   const [showUsosModal, setShowUsosModal] = useState(false);
   const [selectedUso, setSelectedUso] = useState(null);
   const [usos, setUsos] = useState([]);
+
+  // Grupos state
+  const [showGruposModal, setShowGruposModal] = useState(false);
+  const [selectedGrupo, setSelectedGrupo] = useState(null);
+  const [grupos, setGrupos] = useState([]);
 
   // Product Families state
   const [productFamilyTree, setProductFamilyTree] = useState([]);
@@ -609,6 +624,65 @@ function App() {
     }
   };
 
+  const fetchGrupos = async () => {
+    setLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/grupos`);
+      const data = await res.json();
+      if (data.success) {
+        setGrupos(data.data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching grupos:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDeleteGrupo = async (grupoId) => {
+    try {
+      const res = await fetch(`${API_URL}/grupos/${grupoId}`, {
+        method: "DELETE"
+      });
+      const data = await res.json();
+      if (data.success) {
+        setGrupos(grupos.filter(g => g._id !== grupoId));
+      }
+    } catch (error) {
+      console.error("Error deleting grupo:", error);
+      alert("Error al eliminar el grupo");
+    }
+  };
+
+  const handleSaveGrupo = async (grupoData) => {
+    try {
+      const url = selectedGrupo
+        ? `${API_URL}/grupos/${selectedGrupo._id}`
+        : `${API_URL}/grupos`;
+      const method = selectedGrupo ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(grupoData)
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        if (selectedGrupo) {
+          setGrupos(grupos.map(g => g._id === selectedGrupo._id ? data.data : g));
+        } else {
+          setGrupos([data.data, ...grupos]);
+        }
+        setShowGruposModal(false);
+        setSelectedGrupo(null);
+      }
+    } catch (error) {
+      console.error("Error saving grupo:", error);
+      alert("Error al guardar el grupo");
+    }
+  };
+
   const fetchProductFamilies = async () => {
     setProductFamiliesLoading(true);
     try {
@@ -771,6 +845,12 @@ function App() {
   useEffect(() => {
     if (location.pathname === "/usos") {
       fetchUsos();
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname === "/grupos") {
+      fetchGrupos();
     }
   }, [location.pathname]);
 
@@ -1594,6 +1674,23 @@ function App() {
             />
           } />
 
+          {/* Grupos Route */}
+          <Route path="/grupos" element={
+            <GruposView
+              grupos={grupos}
+              loading={loading}
+              onAdd={() => {
+                setSelectedGrupo(null);
+                setShowGruposModal(true);
+              }}
+              onEdit={(grupo) => {
+                setSelectedGrupo(grupo);
+                setShowGruposModal(true);
+              }}
+              onDelete={handleDeleteGrupo}
+            />
+          } />
+
           {/* Familias Route */}
           <Route path="/familias" element={
             <ProductFamilyTreeView
@@ -1805,6 +1902,18 @@ function App() {
             onClose={() => {
               setShowUsosModal(false);
               setSelectedUso(null);
+            }}
+          />
+        )}
+
+        {/* Grupos Modal */}
+        {showGruposModal && (
+          <GruposModal
+            grupo={selectedGrupo}
+            onSave={handleSaveGrupo}
+            onClose={() => {
+              setShowGruposModal(false);
+              setSelectedGrupo(null);
             }}
           />
         )}
