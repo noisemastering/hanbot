@@ -26,6 +26,7 @@ const { detectEdgeCase, handleUnintelligible, handleComplexQuestion } = require(
 const { isHumanHandoffRequest, handleHumanHandoff, detectFrustration, shouldAutoEscalate } = require("./core/humanHandoff");
 const { handleMultipleSizes } = require("./core/multipleSizes");
 const { handleProductCrossSell, shouldProvideFullCatalog } = require("./core/crossSell");
+const { handleRollQuery } = require("./core/rollQuery");
 
 
 
@@ -233,6 +234,10 @@ async function generateReply(userMessage, psid, referral = null) {
     // 📦 Catálogo general
     const catalogResponse = await handleCatalogOverview(cleanMsg, psid);
     if (catalogResponse) return catalogResponse;
+
+    // 📦 Roll query with enriched product information
+    const rollResponse = await handleRollQuery(userMessage, psid, convo);
+    if (rollResponse) return rollResponse;
 
     // 🔄 Product cross-sell (when customer asks about product not in current context)
     const crossSellResponse = await handleProductCrossSell(userMessage, psid, convo, availableProducts);
