@@ -69,6 +69,30 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       /\b(proceso|pasos?)\s+(de\s+|para\s+)?(compra|comprar|pedir|ordenar)/i.test(msg) ||
       /\b(d[oó]nde|c[oó]mo)\s+(compro|pido|ordeno|puedo\s+comprar)/i.test(msg)) {
 
+    // Check if user is asking about a specific product that requires human advisor
+    if (convo.requestedProduct) {
+      const ProductFamily = require("../../models/ProductFamily");
+
+      try {
+        const product = await ProductFamily.findById(convo.requestedProduct);
+
+        // If product requires human advisor, explain they'll be contacted with process
+        if (product && product.requiresHumanAdvisor) {
+          await updateConversation(psid, { lastIntent: "purchase_process_human_advisor" });
+
+          return {
+            type: "text",
+            text: `Para este producto, uno de nuestros asesores se pondrá en contacto contigo para explicarte el proceso de compra personalizado y resolver todas tus dudas.\n\n` +
+                  `Este tipo de producto requiere asesoría especializada para asegurarnos de ofrecerte la mejor solución. ¿Te conecto con un asesor?`
+          };
+        }
+      } catch (error) {
+        console.error("Error fetching product for purchase process:", error);
+        // Continue with standard ML process if error
+      }
+    }
+
+    // Standard ML purchase process for regular products
     await updateConversation(psid, { lastIntent: "purchase_process" });
 
     const storeUrl = "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob";
@@ -86,7 +110,9 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
             "Ahí puedes:\n" +
             "1. Seleccionar la medida que necesitas\n" +
             "2. Agregar al carrito\n" +
-            "3. Pagar con tarjeta, efectivo o meses sin intereses\n\n" +
+            "3. Pagar con tarjeta, efectivo o meses sin intereses\n" +
+            "4. Proporcionar tu dirección de envío\n" +
+            "5. Esperar la entrega en tu domicilio\n\n" +
             "El envío está incluido en la mayoría de los casos. ¿Te puedo ayudar con algo más?"
     };
   }
