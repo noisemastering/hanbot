@@ -579,9 +579,9 @@ function generateGenericSizeResponse(availableSizes) {
   const largest = availableSizes[availableSizes.length - 1];
 
   const responses = [
-    `Tenemos diferentes medidas y precios, desde $${smallest.price} en tamaño de ${smallest.sizeStr} hasta $${largest.price} en tamaño de ${largest.sizeStr}.\n\n¿Qué medida necesitas?`,
-    `Contamos con varias opciones, desde $${smallest.price} en ${smallest.sizeStr} hasta $${largest.price} en ${largest.sizeStr}.\n\n¿Cuál se adapta mejor a tu proyecto?`,
-    `Manejamos diferentes tamaños y precios, desde $${smallest.price} (${smallest.sizeStr}) hasta $${largest.price} (${largest.sizeStr}).\n\n¿Qué dimensiones estás buscando?`
+    `¡Claro! 😊 Tenemos varias medidas disponibles, desde $${smallest.price} (${smallest.sizeStr}) hasta $${largest.price} (${largest.sizeStr}).\n\n¿Qué medida te vendría mejor?`,
+    `Con gusto te ayudo 🌿 Manejamos desde $${smallest.price} en ${smallest.sizeStr} hasta $${largest.price} en ${largest.sizeStr}.\n\n¿Cuál se adapta mejor a lo que necesitas?`,
+    `¡Por supuesto! Tenemos diferentes tamaños, desde $${smallest.price} (${smallest.sizeStr}) hasta $${largest.price} (${largest.sizeStr}).\n\n¿Qué dimensiones buscas?`
   ];
 
   return responses[Math.floor(Math.random() * responses.length)];
