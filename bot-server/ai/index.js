@@ -13,6 +13,9 @@ const { generateClickLink } = require("../tracking");
 const { classifyIntent } = require("./intentClassifier");
 const { routeByIntent } = require("./intentRouter");
 
+// Customer type classification
+const { identifyCustomerType, getCustomerTypeDetails, hasCustomerTypeIndicators } = require("./customerClassifier");
+
 const { handleGlobalIntents } = require("./global/intents");
 const { handleGreeting, handleThanks, handleOptOut, handleAcknowledgment, handlePurchaseDeferral } = require("./core/greetings");
 const { handleCatalogOverview } = require("./core/catalog");
@@ -43,6 +46,32 @@ async function generateReply(userMessage, psid, referral = null) {
     if (await isHumanActive(psid)) {
       console.log("👨‍💼 Human agent is handling this conversation, bot will not respond");
       return null;
+    }
+
+    // 🎯 CUSTOMER TYPE CLASSIFICATION
+    // Identify customer type based on keywords and conversation history
+    if (hasCustomerTypeIndicators(userMessage)) {
+      const customerType = identifyCustomerType(userMessage, convo);
+
+      // Only update if type changed or wasn't set
+      if (customerType && customerType !== convo.customerType) {
+        const typeDetails = getCustomerTypeDetails(customerType);
+        console.log(`🎯 Cliente clasificado como: ${typeDetails.label} (${typeDetails.description})`);
+
+        await updateConversation(psid, {
+          customerType,
+          customerTypeLabel: typeDetails.label
+        });
+
+        // Store updated type in current convo object
+        convo.customerType = customerType;
+        convo.customerTypeLabel = typeDetails.label;
+      }
+    }
+
+    // Log current customer type if set
+    if (convo.customerType) {
+      console.log(`👤 Tipo de cliente: ${convo.customerTypeLabel || convo.customerType}`);
     }
 
     // 🎯 Detectar campaña activa (MOVED UP - no AI calls needed)
