@@ -17,6 +17,7 @@ const Product = require("../../models/Product");
 const { detectMexicanLocation, isLikelyLocationName } = require("../../mexicanLocations");
 const { generateClickLink } = require("../../tracking");
 const { sendHandoffNotification } = require("../../services/pushNotifications");
+const { selectRelevantAsset, trackAssetMention, insertAssetIntoResponse } = require("../assetManager");
 
 async function handleGlobalIntents(msg, psid, convo = {}) {
 
@@ -424,16 +425,32 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
   // ⏳ PRODUCT LIFESPAN / DURABILITY - Handle questions about how long the product lasts
   if (/\b(tiempo\s+de\s+vida|vida\s+[uú]til|cu[aá]nto\s+(tiempo\s+)?dura|duraci[oó]n|garant[ií]a|cuantos\s+a[ñn]os|por\s+cu[aá]nto\s+tiempo|resistencia)\b/i.test(msg) &&
       !/\b(entrega|env[ií]o|llega|demora|tarda)\b/i.test(msg)) {
-    await updateConversation(psid, { lastIntent: "product_lifespan" });
+
+    // Select relevant asset (UV protection and reinforced quality are highly relevant here)
+    const asset = selectRelevantAsset(msg, convo, {
+      intent: "product_lifespan",
+      excludeAssets: ["uvProtection"] // Already mentioned in main response
+    });
+
+    let responseText = "La malla sombra reforzada tiene una vida útil de 8 a 10 años aproximadamente, dependiendo de:\n\n" +
+          "• Exposición al sol y clima\n" +
+          "• Tensión de la instalación\n" +
+          "• Mantenimiento (limpieza ocasional)\n\n" +
+          "Nuestras mallas son de alta calidad con protección UV, por lo que son muy resistentes a la intemperie 🌞🌧️\n\n" +
+          "¿Qué medida te interesa?";
+
+    // Add asset mention if selected
+    if (asset) {
+      responseText = insertAssetIntoResponse(responseText, asset.text);
+      const mentionedAssets = trackAssetMention(asset.key, convo);
+      await updateConversation(psid, { lastIntent: "product_lifespan", mentionedAssets });
+    } else {
+      await updateConversation(psid, { lastIntent: "product_lifespan" });
+    }
 
     return {
       type: "text",
-      text: "La malla sombra reforzada tiene una vida útil de 8 a 10 años aproximadamente, dependiendo de:\n\n" +
-            "• Exposición al sol y clima\n" +
-            "• Tensión de la instalación\n" +
-            "• Mantenimiento (limpieza ocasional)\n\n" +
-            "Nuestras mallas son de alta calidad con protección UV, por lo que son muy resistentes a la intemperie 🌞🌧️\n\n" +
-            "¿Qué medida te interesa?"
+      text: responseText
     };
   }
 
@@ -455,15 +472,30 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
       return null; // Let fallback handle it with complete answer
     }
 
-    await updateConversation(psid, { lastIntent: "delivery_time_payment" });
+    // Select relevant asset (payment options and immediate stock are relevant here)
+    const asset = selectRelevantAsset(msg, convo, {
+      intent: "delivery_time_payment",
+      excludeAssets: ["paymentOptions"] // Already mentioned in main response
+    });
+
+    let responseText = "💳 El pago se realiza 100% POR ADELANTADO en Mercado Libre al momento de hacer tu pedido (no se paga al recibir).\n\n" +
+          "Aceptamos todas las formas de pago de Mercado Libre: tarjetas, efectivo, meses sin intereses.\n\n" +
+          "⏰ Tiempos de entrega:\n" +
+          "• CDMX y zona metropolitana: 1-2 días hábiles\n" +
+          "• Interior de la República: 3-5 días hábiles";
+
+    // Add asset mention if selected
+    if (asset) {
+      responseText = insertAssetIntoResponse(responseText, asset.text);
+      const mentionedAssets = trackAssetMention(asset.key, convo);
+      await updateConversation(psid, { lastIntent: "delivery_time_payment", mentionedAssets });
+    } else {
+      await updateConversation(psid, { lastIntent: "delivery_time_payment" });
+    }
 
     return {
       type: "text",
-      text: "💳 El pago se realiza 100% POR ADELANTADO en Mercado Libre al momento de hacer tu pedido (no se paga al recibir).\n\n" +
-            "Aceptamos todas las formas de pago de Mercado Libre: tarjetas, efectivo, meses sin intereses.\n\n" +
-            "⏰ Tiempos de entrega:\n" +
-            "• CDMX y zona metropolitana: 1-2 días hábiles\n" +
-            "• Interior de la República: 3-5 días hábiles"
+      text: responseText
     };
   }
 
@@ -475,7 +507,11 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
       // Let the dimension handler below deal with this - it will include shipping info
       // Don't return here, continue to dimension handler
     } else {
-      await updateConversation(psid, { lastIntent: "shipping_info" });
+      // Select relevant asset to mention (shipping is already the main topic)
+      const asset = selectRelevantAsset(msg, convo, {
+        intent: "shipping_info",
+        excludeAssets: ["nationalShipping"] // Already covered in main response
+      });
 
       // If user already asked about a specific size, give them the link directly
       if (convo.requestedSize) {
@@ -502,16 +538,38 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
           adId: convo.adId
         });
 
+        let responseText = `Sí, enviamos a todo el país. El envío está incluido en la mayoría de los casos o se calcula automáticamente en Mercado Libre.\n\nTe dejo el link a esa medida específica:\n\n${trackedLink}`;
+
+        // Add asset mention if selected
+        if (asset) {
+          responseText = insertAssetIntoResponse(responseText, asset.text);
+          const mentionedAssets = trackAssetMention(asset.key, convo);
+          await updateConversation(psid, { lastIntent: "shipping_info", mentionedAssets });
+        } else {
+          await updateConversation(psid, { lastIntent: "shipping_info" });
+        }
+
         return {
           type: "text",
-          text: `Sí, enviamos a todo el país. El envío está incluido en la mayoría de los casos o se calcula automáticamente en Mercado Libre.\n\nTe dejo el link a esa medida específica:\n\n${trackedLink}`
+          text: responseText
         };
       }
     }
 
+      let responseText = `Sí realizamos entregas a todo México.\n\n• En Querétaro zona urbana, el envío normalmente va incluido\n• Para el resto del país, el envío está incluido en la mayoría de los casos o se calcula automáticamente en tu compra\n\nPuedes ver todos nuestros productos con envío aquí:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n¿En qué ciudad te encuentras?`;
+
+      // Add asset mention if selected
+      if (asset) {
+        responseText = insertAssetIntoResponse(responseText, asset.text);
+        const mentionedAssets = trackAssetMention(asset.key, convo);
+        await updateConversation(psid, { lastIntent: "shipping_info", mentionedAssets });
+      } else {
+        await updateConversation(psid, { lastIntent: "shipping_info" });
+      }
+
       return {
         type: "text",
-        text: `Sí realizamos entregas a todo México.\n\n• En Querétaro zona urbana, el envío normalmente va incluido\n• Para el resto del país, el envío está incluido en la mayoría de los casos o se calcula automáticamente en tu compra\n\nPuedes ver todos nuestros productos con envío aquí:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n¿En qué ciudad te encuentras?`
+        text: responseText
       };
     }
   }
