@@ -147,14 +147,8 @@ function ProductFamilyTreeView({
   editingProduct
 }) {
   // Manage expanded nodes state (Set of product IDs)
-  const [expandedNodes, setExpandedNodes] = useState(() => {
-    // Initialize with all root nodes expanded
-    const initialExpanded = new Set();
-    if (products && products.length > 0) {
-      products.forEach(p => initialExpanded.add(p._id));
-    }
-    return initialExpanded;
-  });
+  // Start with all trees collapsed
+  const [expandedNodes, setExpandedNodes] = useState(new Set());
 
   // Helper function to find path from product to root
   const findPathToRoot = (productId, products, path = []) => {
@@ -171,7 +165,7 @@ function ProductFamilyTreeView({
     return null;
   };
 
-  // When editing a product, collapse all except the path to that product
+  // When editing a product, expand the path to that product (collapse all others)
   React.useEffect(() => {
     if (editingProduct && products && products.length > 0) {
       const path = findPathToRoot(editingProduct._id, products);
@@ -181,23 +175,6 @@ function ProductFamilyTreeView({
       }
     }
   }, [editingProduct, products]);
-
-  // Update expanded nodes when products change (to include new root nodes)
-  React.useEffect(() => {
-    // Only run this if we're not editing (to avoid interfering with edit focus)
-    if (!editingProduct && products && products.length > 0) {
-      setExpandedNodes(prev => {
-        const newExpanded = new Set(prev);
-        products.forEach(p => {
-          // Keep root nodes expanded
-          if (!prev.has(p._id)) {
-            newExpanded.add(p._id);
-          }
-        });
-        return newExpanded;
-      });
-    }
-  }, [products, editingProduct]);
 
   // Toggle expand/collapse for a node
   const handleToggleExpand = (productId) => {
