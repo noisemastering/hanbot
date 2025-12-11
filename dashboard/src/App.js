@@ -1599,6 +1599,7 @@ function App() {
             <ProductFamilyTreeView
               products={productFamilyTree}
               loading={productFamiliesLoading}
+              editingProduct={selectedProductFamily}
               onAdd={() => {
                 setSelectedProductFamily(null);
                 setSelectedParentId(null);
