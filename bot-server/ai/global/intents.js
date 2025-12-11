@@ -18,10 +18,30 @@ const { detectMexicanLocation, isLikelyLocationName } = require("../../mexicanLo
 const { generateClickLink } = require("../../tracking");
 const { sendHandoffNotification } = require("../../services/pushNotifications");
 const { selectRelevantAsset, trackAssetMention, insertAssetIntoResponse } = require("../assetManager");
+const { handleRollQuery } = require("../core/rollQuery");
 
 async function handleGlobalIntents(msg, psid, convo = {}) {
 
   console.log("🌍 INTENTOS GLOBALES CHECANDO →", msg);
+
+  // 🔄 FOLLOW-UP: Handle responses to "price_by_meter" question
+  if (convo.lastIntent === "price_by_meter") {
+    // User was asked: "¿Qué te interesa: una medida específica confeccionada o un rollo completo?"
+
+    if (/\b(rollo|rollos?)\b/i.test(msg)) {
+      // User wants rolls - call the roll query handler
+      console.log("✅ User chose rolls after price_by_meter question");
+      return await handleRollQuery(msg, psid, convo);
+    } else if (/\b(confeccionad[ao]|medida|medidas?|espec[ií]fic[ao])\b/i.test(msg)) {
+      // User wants confeccionadas - show available sizes
+      console.log("✅ User chose confeccionadas after price_by_meter question");
+      const availableSizes = await getAvailableSizes(convo);
+      const response = generateGenericSizeResponse(availableSizes);
+      await updateConversation(psid, { lastIntent: "sizes_shown" });
+      return { type: "text", text: response };
+    }
+    // If unclear response, let it continue to normal flow
+  }
 
   // 📏 SKIP if message contains MULTIPLE size requests (let fallback handle comprehensive answer)
   const multipleSizeIndicators = [
