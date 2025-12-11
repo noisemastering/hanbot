@@ -1092,8 +1092,14 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
           // 🎨 Check if user mentioned a color
           const hasColorMention = isColorQuery(msg);
 
-          // Build response text
-          let responseText = `Por supuesto, de ${closest.exact.sizeStr} la tenemos en $${closest.exact.price}`;
+          // Build warm response text
+          const warmOpeners = [
+            `¡Claro! 😊 De ${closest.exact.sizeStr} la tenemos en $${closest.exact.price}`,
+            `¡Perfecto! La ${closest.exact.sizeStr} está disponible por $${closest.exact.price} 🌿`,
+            `Con gusto 😊 La malla de ${closest.exact.sizeStr} la manejamos en $${closest.exact.price}`
+          ];
+
+          let responseText = warmOpeners[Math.floor(Math.random() * warmOpeners.length)];
 
           // Add color info if color was mentioned
           if (hasColorMention) {
@@ -1105,7 +1111,7 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
             responseText += `\n\nEnviamos a todo el país a través de Mercado Libre.`;
           }
 
-          responseText += `\n\nTe dejo el link a esa medida específica:\n\n${trackedLink}`;
+          responseText += `\n\nTe paso el link para que la veas:\n\n${trackedLink}`;
 
           return {
             type: "text",
@@ -1260,11 +1266,21 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
             adId: convo.adId
           });
 
+          // Warm, friendly responses
+          const warmResponses = [
+            `¡Claro! 😊 La malla de ${requestedSizeStr} la tenemos disponible en $${product.price}\n\n` +
+            `Te paso el link para que la veas:\n\n${trackedLink}`,
+
+            `¡Perfecto! La tenemos en ${requestedSizeStr} por $${product.price} 🌿\n\n` +
+            `Aquí está el enlace:\n\n${trackedLink}`,
+
+            `Con gusto 😊 De ${requestedSizeStr} la manejamos en $${product.price}\n\n` +
+            `Te dejo el link directo:\n\n${trackedLink}`
+          ];
+
           return {
             type: "text",
-            text: `Por supuesto, de ${requestedSizeStr} la tenemos en $${product.price}\n\n` +
-                  `Te dejo el link a esa medida específica:\n\n` +
-                  `${trackedLink}`
+            text: warmResponses[Math.floor(Math.random() * warmResponses.length)]
           };
         }
       }

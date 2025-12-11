@@ -489,9 +489,9 @@ function generateSizeResponse(options) {
     // Generic responses WITHOUT ML link (link shown only on buying intent or when user asks for details)
     suggestedSizes.push(exact.sizeStr);
     responses.push(
-      `Por supuesto, de **${exact.sizeStr}** la tenemos en $${exact.price}`,
-      `Claro, **${exact.sizeStr}** la tenemos disponible en $${exact.price}`,
-      `Perfecto, **${exact.sizeStr}** está disponible por $${exact.price}`
+      `¡Claro! 😊 De **${exact.sizeStr}** la tenemos en $${exact.price}`,
+      `¡Perfecto! La **${exact.sizeStr}** está disponible por $${exact.price} 🌿`,
+      `Con gusto 😊 La malla de **${exact.sizeStr}** la manejamos en $${exact.price}`
     );
   } else {
     const parts = [];
