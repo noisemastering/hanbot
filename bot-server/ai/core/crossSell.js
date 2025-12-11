@@ -1,6 +1,7 @@
 // ai/core/crossSell.js
 const { updateConversation } = require("../../conversationManager");
 const ProductFamily = require("../../models/ProductFamily");
+const { formatProductForBot, enrichProductWithContext } = require("../utils/productEnricher");
 
 /**
  * Detects when customer asks about a product different from current conversation context
@@ -25,11 +26,11 @@ async function handleProductCrossSell(userMessage, psid, convo, availableProduct
       return null;
     }
 
-    // Find all sellable products in catalog
+    // Find all sellable products in catalog (with parent populated for context)
     const allProducts = await ProductFamily.find({
       sellable: true,
       available: true
-    }).lean();
+    }).populate('parentId').lean();
 
     if (!allProducts || allProducts.length === 0) {
       return null;
@@ -61,6 +62,26 @@ async function handleProductCrossSell(userMessage, psid, convo, availableProduct
 
     console.log(`🔄 Cross-sell detected: Customer asking about ${mentionedProduct.name}`);
 
+    // Enrich product with parent context and full descriptions
+    const enrichedProduct = await enrichProductWithContext(mentionedProduct);
+
+    // Build product description with parent context
+    let productInfo = enrichedProduct.name;
+
+    // Add parent category context if available
+    if (enrichedProduct.parentContext && enrichedProduct.parentContext.name) {
+      productInfo = `${enrichedProduct.name} (${enrichedProduct.parentContext.name})`;
+    }
+
+    // Add description (prefer contextDescription which includes parent info)
+    const description = enrichedProduct.contextDescription ||
+                       enrichedProduct.genericDescription ||
+                       enrichedProduct.description;
+
+    if (description) {
+      productInfo += ` - ${description}`;
+    }
+
     // Check if product requires human advisor
     if (mentionedProduct.requiresHumanAdvisor) {
       console.log(`👨‍💼 Product requires human advisor, will offer handoff`);
@@ -71,12 +92,12 @@ async function handleProductCrossSell(userMessage, psid, convo, availableProduct
 
       return {
         type: "text",
-        text: `Claro, también manejamos ${mentionedProduct.name}${mentionedProduct.genericDescription ? ` - ${mentionedProduct.genericDescription}` : ''} 🌿\n\n` +
+        text: `Claro, también manejamos ${productInfo} 🌿\n\n` +
               `Este producto requiere asesoría personalizada para asegurarnos de ofrecerte la mejor solución. ¿Te conecto con un asesor?`
       };
     }
 
-    // Product doesn't require human advisor - provide generic info
+    // Product doesn't require human advisor - provide enriched info
     await updateConversation(psid, {
       lastIntent: "cross_sell_info_provided",
       requestedProduct: mentionedProduct._id,
@@ -86,7 +107,7 @@ async function handleProductCrossSell(userMessage, psid, convo, availableProduct
 
     const response = {
       type: "text",
-      text: `¡Claro! También manejamos ${mentionedProduct.name}${mentionedProduct.genericDescription ? ` - ${mentionedProduct.genericDescription}` : ''} 🌿\n\n` +
+      text: `¡Claro! También manejamos ${productInfo} 🌿\n\n` +
             `¿Te gustaría conocer precios y medidas disponibles?`
     };
 
