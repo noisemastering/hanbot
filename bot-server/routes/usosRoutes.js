@@ -7,7 +7,8 @@ const Uso = require("../models/Uso");
 router.get("/", async (req, res) => {
   try {
     const usos = await Uso.find()
-      .sort({ createdAt: -1 });
+      .populate('products', 'name description imageUrl price sellable generation')
+      .sort({ priority: -1, createdAt: -1 });
     res.json({ success: true, data: usos });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
@@ -17,7 +18,8 @@ router.get("/", async (req, res) => {
 // Get a single uso
 router.get("/:id", async (req, res) => {
   try {
-    const uso = await Uso.findById(req.params.id);
+    const uso = await Uso.findById(req.params.id)
+      .populate('products', 'name description imageUrl price sellable generation parentId');
     if (!uso) {
       return res.status(404).json({ success: false, error: "Uso no encontrado" });
     }
@@ -33,6 +35,9 @@ router.post("/", async (req, res) => {
     const uso = new Uso(req.body);
     await uso.save();
 
+    // Populate before returning
+    await uso.populate('products', 'name description imageUrl price sellable generation');
+
     res.status(201).json({ success: true, data: uso });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });
@@ -46,7 +51,8 @@ router.put("/:id", async (req, res) => {
       req.params.id,
       req.body,
       { new: true, runValidators: true }
-    );
+    )
+      .populate('products', 'name description imageUrl price sellable generation');
 
     if (!uso) {
       return res.status(404).json({ success: false, error: "Uso no encontrado" });
