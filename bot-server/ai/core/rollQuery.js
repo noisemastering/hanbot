@@ -10,11 +10,14 @@ const { enrichProductWithContext, formatProductForBot } = require("../utils/prod
  */
 function isRollQuery(msg) {
   const rollPatterns = [
-    /\b(rollo|rollos)\b/i,
-    /\b(precio\s+rollo|rollo\s+precio)\b/i,
-    /\b(rollo\s+completo|rollo\s+entero)\b/i,
+    /\b(rol+[oy]s?)\b/i,  // Matches rollo, rollos, royo, royos (handles typos)
+    /\b(me\s+interesa\s+(?:un\s+)?rol+[oy])\b/i,  // "me interesa un rollo/royo"
+    /\b(quiero\s+(?:un\s+)?rol+[oy])\b/i,  // "quiero un rollo/royo"
+    /\b(necesito\s+(?:un\s+)?rol+[oy])\b/i,  // "necesito un rollo/royo"
+    /\b(precio\s+rol+[oy]|rol+[oy]\s+precio)\b/i,
+    /\b(rol+[oy]\s+completo|rol+[oy]\s+entero)\b/i,
     /\b(4\.?20?\s*[xX×*]\s*100|2\.?10?\s*[xX×*]\s*100)\b/i, // Common roll dimensions
-    /\b(metro\s+completo|por\s+metro)\b/i
+    /\b(comprar\s+rol+[oy]|vender\s+rol+[oy])\b/i
   ];
 
   return rollPatterns.some(pattern => pattern.test(msg));

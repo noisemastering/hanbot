@@ -169,10 +169,10 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   }
 
   // 📏 PRICING BY METER/ROLL - Handle "cuánto vale el metro" questions
+  // NOTE: Removed general "rollo" pattern - that's handled by handleRollQuery in ai/index.js
   if (/\b(cu[aá]nto|precio|vale|cuesta)\s+(?:el\s+)?metro\b/i.test(msg) ||
       /\b(vend[eé]is|vendes|manejan)\s+(?:por\s+)?metros?\b/i.test(msg) ||
-      /\b(comprar|vender)\s+(?:por\s+)?metros?\b/i.test(msg) ||
-      /\b(rollos?|rollo\s+completo)\b/i.test(msg)) {
+      /\b(comprar|vender)\s+(?:por\s+)?metros?\b/i.test(msg)) {
 
     // 🔴 EXPLICIT ROLL REQUEST: If customer explicitly asks for a roll with dimensions,
     // hand off to human immediately without asking clarifying questions
