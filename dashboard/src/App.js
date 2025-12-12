@@ -1651,7 +1651,7 @@ function App() {
                 setSelectedUso(uso);
                 setShowUsosModal(true);
               }}
-              onDeleteUso={handleDeleteUso}
+              onDeleteUso={(uso) => handleDeleteUso(uso._id)}
               grupos={grupos}
               gruposLoading={loading}
               onAddGrupo={() => {
@@ -1662,7 +1662,7 @@ function App() {
                 setSelectedGrupo(grupo);
                 setShowGruposModal(true);
               }}
-              onDeleteGrupo={handleDeleteGrupo}
+              onDeleteGrupo={(grupo) => handleDeleteGrupo(grupo._id)}
             />
           } />
 
