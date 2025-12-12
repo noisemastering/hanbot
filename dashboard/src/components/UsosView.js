@@ -94,20 +94,38 @@ function UsosView({
                       <div className="text-sm text-gray-300">
                         {uso.description || '-'}
                       </div>
-                      {uso.products && uso.products.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1">
-                          {uso.products.slice(0, 3).map((product, idx) => (
-                            <span key={idx} className="px-2 py-0.5 bg-primary-500/20 text-primary-300 rounded text-xs">
-                              {typeof product === 'string' ? product : product.name}
-                            </span>
-                          ))}
-                          {uso.products.length > 3 && (
-                            <span className="px-2 py-0.5 bg-gray-700/50 text-gray-400 rounded text-xs">
-                              +{uso.products.length - 3} más
-                            </span>
-                          )}
-                        </div>
-                      )}
+                      {uso.products && uso.products.length > 0 && (() => {
+                        const populatedProducts = uso.products.filter(p => typeof p === 'object' && p.name);
+                        const unpopulatedCount = uso.products.length - populatedProducts.length;
+
+                        if (populatedProducts.length === 0 && unpopulatedCount > 0) {
+                          return (
+                            <div className="mt-2 text-xs text-yellow-500">
+                              ⚠️ {unpopulatedCount} producto{unpopulatedCount !== 1 ? 's' : ''} no encontrado{unpopulatedCount !== 1 ? 's' : ''}
+                            </div>
+                          );
+                        }
+
+                        return (
+                          <div className="mt-2 flex flex-wrap gap-1">
+                            {populatedProducts.slice(0, 3).map((product, idx) => (
+                              <span key={idx} className="px-2 py-0.5 bg-primary-500/20 text-primary-300 rounded text-xs">
+                                {product.name}
+                              </span>
+                            ))}
+                            {populatedProducts.length > 3 && (
+                              <span className="px-2 py-0.5 bg-gray-700/50 text-gray-400 rounded text-xs">
+                                +{populatedProducts.length - 3} más
+                              </span>
+                            )}
+                            {unpopulatedCount > 0 && (
+                              <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded text-xs">
+                                ⚠️ {unpopulatedCount} no encontrado{unpopulatedCount !== 1 ? 's' : ''}
+                              </span>
+                            )}
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                       <div className="flex items-center justify-end space-x-2">
