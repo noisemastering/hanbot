@@ -28,7 +28,22 @@ const conversationSchema = new mongoose.Schema({
   assignedAgent: { type: String, default: null },      // Agent email/ID who took over
   agentTookOverAt: { type: Date, default: null },      // When agent took over conversation
   handoffResolved: { type: Boolean, default: false },  // Agent marked as resolved
-  handoffResolvedAt: { type: Date, default: null }     // When agent marked as resolved
+  handoffResolvedAt: { type: Date, default: null },    // When agent marked as resolved
+
+  // Human-sellable product flow (multi-step purchase)
+  humanSalesState: {
+    type: String,
+    enum: [null, 'asking_zipcode', 'asking_product_selection', 'asking_quantity', 'asking_more_items'],
+    default: null
+  },
+  humanSalesCart: [{
+    productId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductFamily' },
+    productName: String,
+    quantity: Number,
+    addedAt: { type: Date, default: Date.now }
+  }],
+  humanSalesZipcode: { type: String, default: null },
+  humanSalesCurrentProduct: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductFamily', default: null }
 });
 
 module.exports = mongoose.model("Conversation", conversationSchema);

@@ -27,6 +27,7 @@ const { isHumanHandoffRequest, handleHumanHandoff, detectFrustration, shouldAuto
 const { handleMultipleSizes } = require("./core/multipleSizes");
 const { handleProductCrossSell, shouldProvideFullCatalog } = require("./core/crossSell");
 const { handleRollQuery } = require("./core/rollQuery");
+const { handleHumanSalesFlow } = require("./core/humanSalesHandler");
 
 
 
@@ -226,6 +227,10 @@ async function generateReply(userMessage, psid, referral = null) {
 
     const thanksResponse = await handleThanks(cleanMsg, psid, convo, BOT_PERSONA_NAME);
     if (thanksResponse) return thanksResponse;
+
+    // 🛒 Human-sellable product sales flow (multi-step: zipcode → size/color → quantity)
+    const humanSalesResponse = await handleHumanSalesFlow(userMessage, psid, convo);
+    if (humanSalesResponse) return humanSalesResponse;
 
     // 🌍 Global intents (measures, shipping, location, etc.) - for ALL users
     const globalResponse = await handleGlobalIntents(cleanMsg, psid, convo);
