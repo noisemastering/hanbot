@@ -1,6 +1,7 @@
 // routes/usosRoutes.js
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
 const Uso = require("../models/Uso");
 
 // Get all usos
@@ -33,6 +34,14 @@ router.get("/:id", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     console.log('📝 Creating new uso with data:', JSON.stringify(req.body, null, 2));
+
+    // Convert product IDs to ObjectId type
+    if (req.body.products && Array.isArray(req.body.products)) {
+      req.body.products = req.body.products.map(id =>
+        typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id
+      );
+    }
+
     const uso = new Uso(req.body);
     await uso.save();
 
@@ -51,6 +60,14 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     console.log('📝 Updating uso', req.params.id, 'with data:', JSON.stringify(req.body, null, 2));
+
+    // Convert product IDs to ObjectId type
+    if (req.body.products && Array.isArray(req.body.products)) {
+      req.body.products = req.body.products.map(id =>
+        typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id
+      );
+    }
+
     const uso = await Uso.findByIdAndUpdate(
       req.params.id,
       req.body,

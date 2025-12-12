@@ -1,6 +1,7 @@
 // routes/gruposRoutes.js
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
 const Grupo = require("../models/Grupo");
 
 // Get all grupos
@@ -80,6 +81,18 @@ router.get("/:id", async (req, res) => {
 // Create a new grupo
 router.post("/", async (req, res) => {
   try {
+    // Convert product IDs to ObjectId type
+    if (req.body.products && Array.isArray(req.body.products)) {
+      req.body.products = req.body.products.map(id =>
+        typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id
+      );
+    }
+    if (req.body.suggestedProducts && Array.isArray(req.body.suggestedProducts)) {
+      req.body.suggestedProducts = req.body.suggestedProducts.map(id =>
+        typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id
+      );
+    }
+
     const grupo = new Grupo(req.body);
     await grupo.save();
 
@@ -96,6 +109,18 @@ router.post("/", async (req, res) => {
 // Update a grupo
 router.put("/:id", async (req, res) => {
   try {
+    // Convert product IDs to ObjectId type
+    if (req.body.products && Array.isArray(req.body.products)) {
+      req.body.products = req.body.products.map(id =>
+        typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id
+      );
+    }
+    if (req.body.suggestedProducts && Array.isArray(req.body.suggestedProducts)) {
+      req.body.suggestedProducts = req.body.suggestedProducts.map(id =>
+        typeof id === 'string' ? new mongoose.Types.ObjectId(id) : id
+      );
+    }
+
     const grupo = await Grupo.findByIdAndUpdate(
       req.params.id,
       req.body,
