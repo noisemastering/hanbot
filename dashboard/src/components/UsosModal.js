@@ -56,17 +56,26 @@ function UsosModal({ uso, onSave, onClose }) {
     });
   };
 
-  const handleProductToggle = (productId) => {
+  const handleProductToggle = (productIds, isCurrentlySelected) => {
+    // productIds is an array of IDs (parent + all descendants)
+    // isCurrentlySelected indicates if the parent is currently selected
     setFormData(prev => {
       const currentProducts = prev.products;
-      const isSelected = currentProducts.includes(productId);
 
-      return {
-        ...prev,
-        products: isSelected
-          ? currentProducts.filter(id => id !== productId)
-          : [...currentProducts, productId]
-      };
+      if (isCurrentlySelected) {
+        // Remove all the IDs
+        return {
+          ...prev,
+          products: currentProducts.filter(id => !productIds.includes(id))
+        };
+      } else {
+        // Add all the IDs that aren't already selected
+        const newIds = productIds.filter(id => !currentProducts.includes(id));
+        return {
+          ...prev,
+          products: [...currentProducts, ...newIds]
+        };
+      }
     });
   };
 

@@ -65,17 +65,26 @@ function GruposModal({ grupo, onSave, onClose }) {
     });
   };
 
-  const handleProductToggle = (productId, field) => {
+  const handleProductToggle = (productIds, isCurrentlySelected, field) => {
+    // productIds is an array of IDs (parent + all descendants)
+    // isCurrentlySelected indicates if the parent is currently selected
     setFormData(prev => {
       const currentProducts = prev[field];
-      const isSelected = currentProducts.includes(productId);
 
-      return {
-        ...prev,
-        [field]: isSelected
-          ? currentProducts.filter(id => id !== productId)
-          : [...currentProducts, productId]
-      };
+      if (isCurrentlySelected) {
+        // Remove all the IDs
+        return {
+          ...prev,
+          [field]: currentProducts.filter(id => !productIds.includes(id))
+        };
+      } else {
+        // Add all the IDs that aren't already selected
+        const newIds = productIds.filter(id => !currentProducts.includes(id));
+        return {
+          ...prev,
+          [field]: [...currentProducts, ...newIds]
+        };
+      }
     });
   };
 
@@ -310,7 +319,7 @@ function GruposModal({ grupo, onSave, onClose }) {
 
               <ProductTreeSelector
                 selectedProducts={formData.products}
-                onToggle={(productId) => handleProductToggle(productId, 'products')}
+                onToggle={(productIds, isSelected) => handleProductToggle(productIds, isSelected, 'products')}
                 products={productFamilies}
                 loading={loadingProducts}
               />
@@ -328,7 +337,7 @@ function GruposModal({ grupo, onSave, onClose }) {
 
               <ProductTreeSelector
                 selectedProducts={formData.suggestedProducts}
-                onToggle={(productId) => handleProductToggle(productId, 'suggestedProducts')}
+                onToggle={(productIds, isSelected) => handleProductToggle(productIds, isSelected, 'suggestedProducts')}
                 products={productFamilies}
                 loading={loadingProducts}
               />

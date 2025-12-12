@@ -1,13 +1,35 @@
 import React, { useState } from 'react';
 
+// Helper function to collect all descendant IDs recursively
+function collectAllDescendantIds(product) {
+  let ids = [product._id];
+
+  if (product.children && product.children.length > 0) {
+    product.children.forEach(child => {
+      ids = ids.concat(collectAllDescendantIds(child));
+    });
+  }
+
+  return ids;
+}
+
 function ProductTreeNode({ product, selectedProducts, onToggle, level = 0 }) {
   const [isExpanded, setIsExpanded] = useState(level < 2); // Auto-expand first 2 levels
   const hasChildren = product.children && product.children.length > 0;
   const isSelected = selectedProducts.includes(product._id);
 
+  // Check if all children are selected (for indeterminate state)
+  const allChildIds = hasChildren ? collectAllDescendantIds(product).slice(1) : []; // Exclude parent
+  const selectedChildCount = allChildIds.filter(id => selectedProducts.includes(id)).length;
+  const isIndeterminate = hasChildren && selectedChildCount > 0 && selectedChildCount < allChildIds.length;
+
   const handleToggle = (e) => {
     e.stopPropagation();
-    onToggle(product._id);
+
+    // Collect this product and all its descendants
+    const allIds = collectAllDescendantIds(product);
+
+    onToggle(allIds, isSelected);
   };
 
   const toggleExpand = (e) => {
@@ -50,6 +72,11 @@ function ProductTreeNode({ product, selectedProducts, onToggle, level = 0 }) {
         <input
           type="checkbox"
           checked={isSelected}
+          ref={(input) => {
+            if (input) {
+              input.indeterminate = isIndeterminate;
+            }
+          }}
           onChange={handleToggle}
           onClick={(e) => e.stopPropagation()}
           className="w-4 h-4 text-primary-500 bg-gray-900/50 border-gray-700 rounded focus:ring-primary-500 mr-3"
