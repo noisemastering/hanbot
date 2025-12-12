@@ -829,13 +829,8 @@ function App() {
   }, [location.pathname]);
 
   useEffect(() => {
-    if (location.pathname === "/usos") {
+    if (location.pathname === "/usos-grupos") {
       fetchUsos();
-    }
-  }, [location.pathname]);
-
-  useEffect(() => {
-    if (location.pathname === "/grupos") {
       fetchGrupos();
     }
   }, [location.pathname]);
