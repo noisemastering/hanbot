@@ -32,14 +32,17 @@ router.get("/:id", async (req, res) => {
 // Create a new uso
 router.post("/", async (req, res) => {
   try {
+    console.log('📝 Creating new uso with data:', JSON.stringify(req.body, null, 2));
     const uso = new Uso(req.body);
     await uso.save();
 
     // Populate before returning
     await uso.populate('products', 'name description imageUrl price sellable generation');
 
+    console.log('✅ Uso saved successfully. Products count:', uso.products?.length || 0);
     res.status(201).json({ success: true, data: uso });
   } catch (err) {
+    console.error('❌ Error creating uso:', err.message);
     res.status(400).json({ success: false, error: err.message });
   }
 });
@@ -47,6 +50,7 @@ router.post("/", async (req, res) => {
 // Update a uso
 router.put("/:id", async (req, res) => {
   try {
+    console.log('📝 Updating uso', req.params.id, 'with data:', JSON.stringify(req.body, null, 2));
     const uso = await Uso.findByIdAndUpdate(
       req.params.id,
       req.body,
@@ -57,8 +61,10 @@ router.put("/:id", async (req, res) => {
     if (!uso) {
       return res.status(404).json({ success: false, error: "Uso no encontrado" });
     }
+    console.log('✅ Uso updated successfully. Products count:', uso.products?.length || 0);
     res.json({ success: true, data: uso });
   } catch (err) {
+    console.error('❌ Error updating uso:', err.message);
     res.status(400).json({ success: false, error: err.message });
   }
 });
