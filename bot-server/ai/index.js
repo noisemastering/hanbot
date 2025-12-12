@@ -28,6 +28,7 @@ const { handleMultipleSizes } = require("./core/multipleSizes");
 const { handleProductCrossSell, shouldProvideFullCatalog } = require("./core/crossSell");
 const { handleRollQuery } = require("./core/rollQuery");
 const { handleHumanSalesFlow } = require("./core/humanSalesHandler");
+const { correctTypos, logTypoCorrection } = require("./utils/typoCorrection");
 
 
 
@@ -40,7 +41,11 @@ const productKeywordRegex = /\b(malla|sombra|borde|rollo|beige|monofilamento|inv
 
 async function generateReply(userMessage, psid, referral = null) {
   try {
-    const cleanMsg = userMessage.toLowerCase().trim();
+    // Apply typo correction first
+    const correctedMessage = correctTypos(userMessage);
+    logTypoCorrection(userMessage, correctedMessage);
+
+    const cleanMsg = correctedMessage.toLowerCase().trim();
     const convo = await getConversation(psid);
     console.log("🧩 Conversación actual:", convo);
 
@@ -52,8 +57,8 @@ async function generateReply(userMessage, psid, referral = null) {
 
     // 🎯 CUSTOMER TYPE CLASSIFICATION
     // Identify customer type based on keywords and conversation history
-    if (hasCustomerTypeIndicators(userMessage)) {
-      const customerType = identifyCustomerType(userMessage, convo);
+    if (hasCustomerTypeIndicators(correctedMessage)) {
+      const customerType = identifyCustomerType(correctedMessage, convo);
 
       // Only update if type changed or wasn't set
       if (customerType && customerType !== convo.customerType) {
@@ -162,7 +167,7 @@ async function generateReply(userMessage, psid, referral = null) {
                                 /(?:de|medida)\s+\d+(?:\.\d+)?\s+\d+(?:\.\d+)?/i.test(cleanMsg);
 
     // Check if message contains reference objects (e.g., "tamaño de un carro", "para un patio")
-    const hasReferenceObject = extractReference(userMessage) !== null;
+    const hasReferenceObject = extractReference(correctedMessage) !== null;
 
     // Skip edge case detection if message has clear dimensions, references, or is likely a city name
     const skipEdgeCaseDetection = isLikelyCityResponse || hasDimensionPattern || hasReferenceObject;
@@ -205,7 +210,7 @@ async function generateReply(userMessage, psid, referral = null) {
     if (classification.confidence > 0.6) {
       const intentResponse = await routeByIntent(
         classification.intent,
-        userMessage,
+        correctedMessage,
         psid,
         convo,
         BOT_PERSONA_NAME
@@ -229,7 +234,7 @@ async function generateReply(userMessage, psid, referral = null) {
     if (thanksResponse) return thanksResponse;
 
     // 🛒 Human-sellable product sales flow (multi-step: zipcode → size/color → quantity)
-    const humanSalesResponse = await handleHumanSalesFlow(userMessage, psid, convo);
+    const humanSalesResponse = await handleHumanSalesFlow(correctedMessage, psid, convo);
     if (humanSalesResponse) return humanSalesResponse;
 
     // 🌍 Global intents (measures, shipping, location, etc.) - for ALL users
@@ -241,11 +246,11 @@ async function generateReply(userMessage, psid, referral = null) {
     if (catalogResponse) return catalogResponse;
 
     // 📦 Roll query with enriched product information
-    const rollResponse = await handleRollQuery(userMessage, psid, convo);
+    const rollResponse = await handleRollQuery(correctedMessage, psid, convo);
     if (rollResponse) return rollResponse;
 
     // 🔄 Product cross-sell (when customer asks about product not in current context)
-    const crossSellResponse = await handleProductCrossSell(userMessage, psid, convo, availableProducts);
+    const crossSellResponse = await handleProductCrossSell(correctedMessage, psid, convo, availableProducts);
     if (crossSellResponse) return crossSellResponse;
 
     // 🧩 Familias
@@ -277,7 +282,7 @@ async function generateReply(userMessage, psid, referral = null) {
     // 📏 HANDLE MULTIPLE SIZE REQUESTS
     if (isMultiSize) {
       console.log("📏 Multiple size request detected, using specialized handler");
-      const multiSizeResponse = await handleMultipleSizes(userMessage, psid, convo, convo.campaignRef);
+      const multiSizeResponse = await handleMultipleSizes(correctedMessage, psid, convo, convo.campaignRef);
       if (multiSizeResponse) return multiSizeResponse;
       // If handler returned null (less than 2 dimensions), continue to regular flow
     }
@@ -318,7 +323,7 @@ async function generateReply(userMessage, psid, referral = null) {
     if (autoResponse) return autoResponse;
 
     // 🧠 Fallback IA (si no se detectó ninguna intención conocida)
-    return await handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME);
+    return await handleFallback(correctedMessage, psid, convo, openai, BOT_PERSONA_NAME);
 
   } catch (error) {
     console.error("❌ Error en generateReply:", error);
