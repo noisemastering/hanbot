@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import api from '../api';
+import ProductTreeSelector from './ProductTreeSelector';
 
 function UsosModal({ uso, onSave, onClose }) {
   const [formData, setFormData] = useState({
@@ -14,11 +15,11 @@ function UsosModal({ uso, onSave, onClose }) {
   const [productFamilies, setProductFamilies] = useState([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
 
-  // Fetch sellable products
+  // Fetch product tree
   useEffect(() => {
     const fetchProducts = async () => {
       try {
-        const response = await api.get('/product-families/sellable');
+        const response = await api.get('/product-families/tree');
         setProductFamilies(response.data.data || []);
       } catch (error) {
         console.error('Error fetching products:', error);
@@ -179,35 +180,15 @@ function UsosModal({ uso, onSave, onClose }) {
                 Productos Asociados
               </h3>
 
-              {loadingProducts ? (
-                <div className="text-center py-8 text-gray-400">
-                  Cargando productos...
-                </div>
-              ) : (
-                <div className="grid grid-cols-2 gap-3 max-h-60 overflow-y-auto p-4 bg-gray-900/30 rounded-lg">
-                  {productFamilies.map((product) => (
-                    <label
-                      key={product._id}
-                      className="flex items-start space-x-3 p-3 bg-gray-800/50 rounded-lg cursor-pointer hover:bg-gray-700/50 transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={formData.products.includes(product._id)}
-                        onChange={() => handleProductToggle(product._id)}
-                        className="mt-1 w-4 h-4 text-primary-500 bg-gray-900/50 border-gray-700 rounded focus:ring-primary-500"
-                      />
-                      <div className="flex-1">
-                        <div className="text-sm font-medium text-white">{product.name}</div>
-                        {product.price && (
-                          <div className="text-xs text-gray-400">${product.price}</div>
-                        )}
-                      </div>
-                    </label>
-                  ))}
-                </div>
-              )}
+              <ProductTreeSelector
+                selectedProducts={formData.products}
+                onToggle={handleProductToggle}
+                products={productFamilies}
+                loading={loadingProducts}
+              />
+
               <p className="text-xs text-gray-500">
-                Selecciona los productos asociados con este uso
+                Selecciona los productos asociados con este uso. Puedes expandir las categorías para ver productos específicos.
               </p>
             </div>
           </div>
