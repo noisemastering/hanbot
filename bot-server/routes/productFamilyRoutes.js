@@ -171,10 +171,10 @@ router.delete("/:id", async (req, res) => {
   }
 });
 
-// Copy a product (with or without children)
+// Copy a product (with specific children)
 router.post("/:id/copy", async (req, res) => {
   try {
-    const { includeChildren = false } = req.body;
+    const { childIds = [] } = req.body;  // Array of child IDs to copy
     const productId = req.params.id;
 
     // Get the source product
@@ -184,7 +184,7 @@ router.post("/:id/copy", async (req, res) => {
     }
 
     // Copy the product (create as sibling with same parent)
-    const copiedProduct = await copyProductRecursive(sourceProduct, sourceProduct.parentId, includeChildren);
+    const copiedProduct = await copyProductRecursive(sourceProduct, sourceProduct.parentId, childIds);
 
     res.json({ success: true, data: copiedProduct });
   } catch (err) {
@@ -220,13 +220,13 @@ async function populateChildren(node) {
 }
 
 /**
- * Recursively copy a product and optionally its children
+ * Recursively copy a product and specific children
  * @param {Object} sourceProduct - The product to copy
  * @param {String} newParentId - The parent ID for the copied product
- * @param {Boolean} includeChildren - Whether to copy children recursively
+ * @param {Array} childIds - Array of child IDs to copy (if empty, no children copied)
  * @returns {Object} - The newly created product
  */
-async function copyProductRecursive(sourceProduct, newParentId, includeChildren) {
+async function copyProductRecursive(sourceProduct, newParentId, childIds = []) {
   // Create copy of the product (exclude _id, __v, timestamps, children)
   const { _id, __v, createdAt, updatedAt, children, ...productData } = sourceProduct;
 
@@ -240,24 +240,58 @@ async function copyProductRecursive(sourceProduct, newParentId, includeChildren)
 
   console.log(`✅ Copied product: ${newProduct.name} (ID: ${newProduct._id})`);
 
-  // If includeChildren is true, recursively copy all children
-  if (includeChildren) {
+  // If childIds array has items, copy those specific children
+  if (childIds && childIds.length > 0) {
     // Get all children of the source product
-    const sourceChildren = await ProductFamily.find({ parentId: sourceProduct._id }).lean();
+    const sourceChildren = await ProductFamily.find({
+      parentId: sourceProduct._id
+    }).lean();
 
-    if (sourceChildren.length > 0) {
-      console.log(`📦 Copying ${sourceChildren.length} children for ${newProduct.name}...`);
+    // Filter to only children in the childIds array
+    const childrenToCopy = sourceChildren.filter(child =>
+      childIds.includes(child._id.toString())
+    );
 
-      // Copy each child recursively, setting the new product as parent
+    if (childrenToCopy.length > 0) {
+      console.log(`📦 Copying ${childrenToCopy.length} selected children for ${newProduct.name}...`);
+
+      // For each selected child, copy it and ALL of its descendants
       await Promise.all(
-        sourceChildren.map(child =>
-          copyProductRecursive(child, newProduct._id, true)
-        )
+        childrenToCopy.map(async (child) => {
+          // Get all descendants of this child
+          const allDescendants = await getAllDescendantIds(child._id);
+
+          // Copy this child and all its descendants
+          await copyProductRecursive(child, newProduct._id, allDescendants);
+        })
       );
     }
   }
 
   return newProduct;
+}
+
+/**
+ * Get all descendant IDs of a product
+ * @param {String} productId - The product ID
+ * @returns {Array} - Array of all descendant IDs
+ */
+async function getAllDescendantIds(productId) {
+  const children = await ProductFamily.find({ parentId: productId }).lean();
+
+  if (children.length === 0) {
+    return [];
+  }
+
+  const childIds = children.map(c => c._id.toString());
+
+  // Recursively get descendants of each child
+  const descendantIds = await Promise.all(
+    children.map(child => getAllDescendantIds(child._id))
+  );
+
+  // Flatten and combine
+  return [...childIds, ...descendantIds.flat()];
 }
 
 module.exports = router;
