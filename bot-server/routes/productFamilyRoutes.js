@@ -138,22 +138,10 @@ router.put("/:id", async (req, res) => {
   }
 });
 
-// Delete product family
+// Delete product family (cascade delete - deletes all descendants)
 router.delete("/:id", async (req, res) => {
   try {
-    // Check if this product has children
-    const childrenCount = await ProductFamily.countDocuments({
-      parentId: req.params.id
-    });
-
-    if (childrenCount > 0) {
-      return res.status(400).json({
-        success: false,
-        error: `No se puede eliminar: esta familia tiene ${childrenCount} subfamilia(s). Elimina primero los hijos.`
-      });
-    }
-
-    const productFamily = await ProductFamily.findByIdAndDelete(req.params.id);
+    const productFamily = await ProductFamily.findById(req.params.id);
 
     if (!productFamily) {
       return res.status(404).json({
@@ -162,11 +150,24 @@ router.delete("/:id", async (req, res) => {
       });
     }
 
+    // Count total descendants for logging
+    const childrenCount = await ProductFamily.countDocuments({
+      parentId: req.params.id
+    });
+
+    console.log(`🗑️ Deleting product "${productFamily.name}" with ${childrenCount} direct children...`);
+
+    // Recursively delete this product and all its descendants
+    const deletedCount = await deleteProductRecursive(req.params.id);
+
+    console.log(`✅ Deleted ${deletedCount} product(s) total`);
+
     res.json({
       success: true,
-      message: "Familia de producto eliminada correctamente"
+      message: `Familia de producto eliminada correctamente (${deletedCount} producto(s) eliminado(s))`
     });
   } catch (err) {
+    console.error("Error deleting product:", err);
     res.status(500).json({ success: false, error: err.message });
   }
 });
@@ -292,6 +293,32 @@ async function getAllDescendantIds(productId) {
 
   // Flatten and combine
   return [...childIds, ...descendantIds.flat()];
+}
+
+/**
+ * Recursively delete a product and all its descendants
+ * @param {String} productId - The product ID to delete
+ * @returns {Number} - Total number of products deleted
+ */
+async function deleteProductRecursive(productId) {
+  // Get all direct children
+  const children = await ProductFamily.find({ parentId: productId }).lean();
+
+  let deletedCount = 0;
+
+  // Recursively delete all children first
+  if (children.length > 0) {
+    const childDeletions = await Promise.all(
+      children.map(child => deleteProductRecursive(child._id))
+    );
+    deletedCount += childDeletions.reduce((sum, count) => sum + count, 0);
+  }
+
+  // Delete this product
+  await ProductFamily.findByIdAndDelete(productId);
+  deletedCount += 1;
+
+  return deletedCount;
 }
 
 module.exports = router;

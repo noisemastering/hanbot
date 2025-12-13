@@ -4,6 +4,7 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
   const [formData, setFormData] = useState({
     name: '',
     description: '',
+    marketingDescription: '',
     parentId: '',
     sellable: false,
     price: '',
@@ -18,6 +19,7 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
       setFormData({
         name: product.name || '',
         description: product.description || '',
+        marketingDescription: product.marketingDescription || '',
         parentId: product.parentId || '',
         sellable: product.sellable || false,
         price: product.price || '',
@@ -42,6 +44,7 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
     const submitData = {
       name: formData.name,
       description: formData.description,
+      marketingDescription: formData.marketingDescription || null,
       parentId: formData.parentId || null,
       sellable: formData.sellable
     };
@@ -147,10 +150,10 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
               />
             </div>
 
-            {/* Description Field */}
+            {/* Specifications Field */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Descripción
+                Especificaciones
               </label>
               <textarea
                 name="description"
@@ -158,8 +161,26 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                 onChange={handleChange}
                 rows={3}
                 className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                placeholder="Descripción de esta familia de productos..."
+                placeholder="Especificaciones técnicas del producto (medidas, materiales, características, etc.)..."
               />
+            </div>
+
+            {/* Marketing Description Field */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Descripción de Marketing
+              </label>
+              <textarea
+                name="marketingDescription"
+                value={formData.marketingDescription}
+                onChange={handleChange}
+                rows={3}
+                className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                placeholder="Texto promocional o de marketing para este producto..."
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Contenido promocional que se utilizará en campañas de marketing
+              </p>
             </div>
 
             {/* Parent Dropdown */}

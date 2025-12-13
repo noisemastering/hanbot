@@ -8,6 +8,9 @@ const productFamilySchema = new mongoose.Schema({
   description: {
     type: String
   },
+  marketingDescription: {
+    type: String  // Marketing copy for promotional purposes
+  },
   parentId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: 'ProductFamily',
