@@ -1698,20 +1698,39 @@ function App() {
                 setDeleteConfirmProductFamily(product);
               }}
               onAddChild={handleAddChild}
-              onCopy={(product) => {
-                // Create a copy with the same parent (sibling)
-                const copiedProduct = {
-                  name: product.name + ' (Copia)',
-                  description: product.description,
-                  parentId: product.parentId,
-                  sellable: product.sellable,
-                  price: product.price,
-                  sku: product.sku,
-                  stock: product.stock
-                };
-                setSelectedProductFamily(copiedProduct);
-                setSelectedParentId(null);
-                setShowProductFamilyModal(true);
+              onCopy={async (product) => {
+                // Check if product has children
+                const hasChildren = product.children && product.children.length > 0;
+
+                let includeChildren = false;
+                if (hasChildren) {
+                  const childCount = product.children.length;
+                  const confirmed = window.confirm(
+                    `¿Deseas copiar "${product.name}" con todos sus ${childCount} hijo(s)?\n\n` +
+                    `• Sí: Copiará el producto y toda su jerarquía de hijos\n` +
+                    `• No: Solo copiará este producto sin hijos`
+                  );
+                  includeChildren = confirmed;
+                }
+
+                try {
+                  const res = await fetch(`${API_URL}/product-families/${product._id}/copy`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ includeChildren })
+                  });
+
+                  const data = await res.json();
+                  if (data.success) {
+                    // Refresh the tree to show the copied product
+                    fetchProductFamilies();
+                  } else {
+                    alert('Error al copiar producto: ' + data.error);
+                  }
+                } catch (error) {
+                  console.error('Error copying product:', error);
+                  alert('Error al copiar producto');
+                }
               }}
             />
           } />
