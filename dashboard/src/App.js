@@ -38,6 +38,7 @@ import UsosYGruposView from "./components/UsosYGruposView";
 import UsosModal from "./components/UsosModal";
 import GruposModal from "./components/GruposModal";
 import ProductFamilyTreeView from "./components/ProductFamilyTreeView";
+import CopyProductModal from "./components/CopyProductModal";
 import ProductFamilyModal from "./components/ProductFamilyModal";
 import Messages from "./pages/Messages";
 import Login from "./pages/Login";
@@ -284,6 +285,8 @@ function App() {
   const [productFamilyTree, setProductFamilyTree] = useState([]);
   const [productFamiliesLoading, setProductFamiliesLoading] = useState(false);
   const [showProductFamilyModal, setShowProductFamilyModal] = useState(false);
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [productToCopy, setProductToCopy] = useState(null);
   const [selectedProductFamily, setSelectedProductFamily] = useState(null);
   const [selectedParentId, setSelectedParentId] = useState(null);
   const [deleteConfirmProductFamily, setDeleteConfirmProductFamily] = useState(null);
@@ -753,6 +756,31 @@ function App() {
     setSelectedProductFamily(null);
     setSelectedParentId(parentProduct._id);
     setShowProductFamilyModal(true);
+  };
+
+  const handleCopyProduct = async (selectedChildIds) => {
+    if (!productToCopy) return;
+
+    try {
+      const res = await fetch(`${API_URL}/product-families/${productToCopy._id}/copy`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ childIds: selectedChildIds })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        // Refresh the tree to show the copied product
+        fetchProductFamilies();
+        setShowCopyModal(false);
+        setProductToCopy(null);
+      } else {
+        alert('Error al copiar producto: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error copying product:', error);
+      alert('Error al copiar producto');
+    }
   };
 
   const fetchConversationStatus = async (psid) => {
@@ -1698,39 +1726,9 @@ function App() {
                 setDeleteConfirmProductFamily(product);
               }}
               onAddChild={handleAddChild}
-              onCopy={async (product) => {
-                // Check if product has children
-                const hasChildren = product.children && product.children.length > 0;
-
-                let includeChildren = false;
-                if (hasChildren) {
-                  const childCount = product.children.length;
-                  const confirmed = window.confirm(
-                    `¿Deseas copiar "${product.name}" con todos sus ${childCount} hijo(s)?\n\n` +
-                    `• Sí: Copiará el producto y toda su jerarquía de hijos\n` +
-                    `• No: Solo copiará este producto sin hijos`
-                  );
-                  includeChildren = confirmed;
-                }
-
-                try {
-                  const res = await fetch(`${API_URL}/product-families/${product._id}/copy`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ includeChildren })
-                  });
-
-                  const data = await res.json();
-                  if (data.success) {
-                    // Refresh the tree to show the copied product
-                    fetchProductFamilies();
-                  } else {
-                    alert('Error al copiar producto: ' + data.error);
-                  }
-                } catch (error) {
-                  console.error('Error copying product:', error);
-                  alert('Error al copiar producto');
-                }
+              onCopy={(product) => {
+                setProductToCopy(product);
+                setShowCopyModal(true);
               }}
             />
           } />
@@ -1935,6 +1933,18 @@ function App() {
               setShowProductFamilyModal(false);
               setSelectedProductFamily(null);
               setSelectedParentId(null);
+            }}
+          />
+        )}
+
+        {/* Copy Product Modal */}
+        {showCopyModal && productToCopy && (
+          <CopyProductModal
+            product={productToCopy}
+            onConfirm={handleCopyProduct}
+            onCancel={() => {
+              setShowCopyModal(false);
+              setProductToCopy(null);
             }}
           />
         )}
