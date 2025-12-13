@@ -36,6 +36,10 @@ const productFamilySchema = new mongoose.Schema({
     type: Boolean,
     default: true
   },
+  active: {
+    type: Boolean,
+    default: true  // Whether product is actively being sold
+  },
   // Additional metadata
   imageUrl: {
     type: String
