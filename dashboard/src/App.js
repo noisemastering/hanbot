@@ -566,14 +566,20 @@ function App() {
     }
   };
 
-  const handleDeleteUso = async (usoId) => {
+  const handleDeleteUso = async (uso) => {
+    const confirmed = window.confirm(
+      `¿Estás seguro de eliminar el uso "${uso.name}"?\n\nEsta acción no se puede deshacer.`
+    );
+
+    if (!confirmed) return;
+
     try {
-      const res = await fetch(`${API_URL}/usos/${usoId}`, {
+      const res = await fetch(`${API_URL}/usos/${uso._id}`, {
         method: "DELETE"
       });
       const data = await res.json();
       if (data.success) {
-        setUsos(usos.filter(u => u._id !== usoId));
+        setUsos(usos.filter(u => u._id !== uso._id));
       }
     } catch (error) {
       console.error("Error deleting uso:", error);
@@ -625,14 +631,20 @@ function App() {
     }
   };
 
-  const handleDeleteGrupo = async (grupoId) => {
+  const handleDeleteGrupo = async (grupo) => {
+    const confirmed = window.confirm(
+      `¿Estás seguro de eliminar el grupo "${grupo.name}"?\n\nEsta acción no se puede deshacer.`
+    );
+
+    if (!confirmed) return;
+
     try {
-      const res = await fetch(`${API_URL}/grupos/${grupoId}`, {
+      const res = await fetch(`${API_URL}/grupos/${grupo._id}`, {
         method: "DELETE"
       });
       const data = await res.json();
       if (data.success) {
-        setGrupos(grupos.filter(g => g._id !== grupoId));
+        setGrupos(grupos.filter(g => g._id !== grupo._id));
       }
     } catch (error) {
       console.error("Error deleting grupo:", error);
@@ -1651,7 +1663,7 @@ function App() {
                 setSelectedUso(uso);
                 setShowUsosModal(true);
               }}
-              onDeleteUso={(uso) => handleDeleteUso(uso._id)}
+              onDeleteUso={(uso) => handleDeleteUso(uso)}
               grupos={grupos}
               gruposLoading={loading}
               onAddGrupo={() => {
@@ -1662,7 +1674,7 @@ function App() {
                 setSelectedGrupo(grupo);
                 setShowGruposModal(true);
               }}
-              onDeleteGrupo={(grupo) => handleDeleteGrupo(grupo._id)}
+              onDeleteGrupo={(grupo) => handleDeleteGrupo(grupo)}
             />
           } />
 
