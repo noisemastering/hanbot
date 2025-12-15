@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 // Recursive component to render a single product node and its children
-function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, level = 0, expandedNodes, onToggleExpand }) {
+function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onDetails, level = 0, expandedNodes, onToggleExpand }) {
   const isExpanded = expandedNodes.has(product._id);
   const hasChildren = product.children && product.children.length > 0;
   const indentPixels = level * 32; // 32px per level (equivalent to ml-8 = 2rem = 32px)
@@ -28,8 +28,12 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, level = 0,
 
           {/* Product Info */}
           <div className="flex-1">
-            <div className="flex items-center space-x-3">
-              <h3 className="text-sm font-semibold text-white">{product.name}</h3>
+            <button
+              onClick={() => onDetails(product)}
+              className="flex items-center space-x-3 cursor-pointer hover:opacity-80 transition-opacity text-left"
+              title="Ver detalles"
+            >
+              <h3 className="text-sm font-semibold text-white hover:text-indigo-400 transition-colors">{product.name}</h3>
 
               {/* Generation Badge */}
               <span className="px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded text-xs font-medium">
@@ -50,7 +54,7 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, level = 0,
                   )}
                 </span>
               )}
-            </div>
+            </button>
 
             {/* Description */}
             {product.description && (
@@ -94,6 +98,15 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, level = 0,
             </svg>
           </button>
           <button
+            onClick={() => onDetails(product)}
+            className="p-2 text-indigo-400 hover:bg-indigo-500/20 rounded-lg transition-colors"
+            title="Ver Detalles"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+          <button
             onClick={() => onEdit(product)}
             className="p-2 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
             title="Editar"
@@ -125,6 +138,7 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, level = 0,
               onDelete={onDelete}
               onAddChild={onAddChild}
               onCopy={onCopy}
+              onDetails={onDetails}
               level={level + 1}
               expandedNodes={expandedNodes}
               onToggleExpand={onToggleExpand}
@@ -144,6 +158,7 @@ function ProductFamilyTreeView({
   onDelete,
   onAddChild,
   onCopy,
+  onDetails,
   editingProduct
 }) {
   // Manage expanded nodes state (Set of product IDs)
@@ -264,6 +279,7 @@ function ProductFamilyTreeView({
                 onDelete={onDelete}
                 onAddChild={handleAddChild}
                 onCopy={onCopy}
+                onDetails={onDetails}
                 level={0}
                 expandedNodes={expandedNodes}
                 onToggleExpand={handleToggleExpand}
