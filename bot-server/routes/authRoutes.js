@@ -23,11 +23,14 @@ router.post("/login", async (req, res) => {
     // Find user
     const user = await DashboardUser.findOne({ username });
     if (!user) {
+      console.log(`❌ Login failed: User "${username}" not found`);
       return res.status(401).json({
         success: false,
         error: "Invalid credentials"
       });
     }
+
+    console.log(`🔍 Login attempt for username: "${username}" (ID: ${user._id}, Email: ${user.email})`);
 
     // Check if user is active
     if (!user.active) {
@@ -64,8 +67,9 @@ router.post("/login", async (req, res) => {
 
     // Get user permissions
     const permissions = await user.getAllPermissions();
-    console.log(`🔐 Login successful for ${user.username} (${user.role}/${user.profile || 'no profile'})`);
-    console.log(`📋 Permissions being sent:`, permissions);
+    console.log(`✅ Login successful for username: "${user.username}" (ID: ${user._id}, Email: ${user.email})`);
+    console.log(`👤 User info: ${user.fullName} - Role: ${user.role}, Profile: ${user.profile || 'none'}`);
+    console.log(`📋 Permissions:`, permissions);
 
     // Send response
     res.json({
@@ -108,15 +112,19 @@ router.get("/me", async (req, res) => {
 
     // Verify token
     const decoded = jwt.verify(token, JWT_SECRET);
+    console.log(`🔍 Token verification - Decoded user ID: ${decoded.id}, username from token: ${decoded.username}`);
 
     // Find user
     const user = await DashboardUser.findById(decoded.id).select("-password");
     if (!user || !user.active) {
+      console.log(`❌ Token verification failed: User ID ${decoded.id} not found or inactive`);
       return res.status(401).json({
         success: false,
         error: "Invalid token or inactive user"
       });
     }
+
+    console.log(`✅ Token verified for username: "${user.username}" (ID: ${user._id}, Email: ${user.email})`);
 
     // Get user permissions
     const permissions = await user.getAllPermissions();

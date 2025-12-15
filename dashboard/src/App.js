@@ -927,8 +927,24 @@ function App() {
     if (item.id === 'roles' || item.id === 'profiles') {
       return user?.role === 'super_admin';
     }
+
+    // For items with children, check if user has access to ANY child
+    if (item.children && item.children.length > 0) {
+      const accessibleChildren = item.children.filter(child => canAccess(child.id));
+      return accessibleChildren.length > 0;
+    }
+
     // Filter other sections based on canAccess
     return canAccess(item.id);
+  }).map(item => {
+    // If item has children, filter them based on permissions
+    if (item.children && item.children.length > 0) {
+      return {
+        ...item,
+        children: item.children.filter(child => canAccess(child.id))
+      };
+    }
+    return item;
   });
 
   // Helper function to get today's date range in Mexico City time
