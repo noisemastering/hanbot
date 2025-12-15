@@ -13,6 +13,7 @@ const AVAILABLE_SECTIONS = [
   { value: 'families', label: 'Familias' },
   { value: 'master-catalog', label: 'Catálogo Maestro' },
   { value: 'usos', label: 'Usos' },
+  { value: 'inventario', label: 'Inventario' },
   { value: 'users', label: 'Usuarios' }
 ];
 

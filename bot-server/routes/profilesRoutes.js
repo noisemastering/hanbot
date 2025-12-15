@@ -190,7 +190,7 @@ router.put("/:id", async (req, res) => {
     const { id } = req.params;
     const { label, description, permissions, active } = req.body;
 
-    const profile = await Profile.findById(id);
+    const profile = await Profile.findById(id).populate("role");
     if (!profile) {
       return res.status(404).json({
         success: false,
@@ -201,7 +201,7 @@ router.put("/:id", async (req, res) => {
     // Cannot modify system profile name or role (only if actually changed)
     if (profile.isSystem) {
       const nameChanged = req.body.name && req.body.name !== profile.name;
-      const roleChanged = req.body.role && req.body.role !== profile.role.toString();
+      const roleChanged = req.body.role && req.body.role !== profile.role._id.toString();
 
       if (nameChanged || roleChanged) {
         return res.status(403).json({
@@ -211,6 +211,11 @@ router.put("/:id", async (req, res) => {
       }
     }
 
+    // Detect new permissions being added
+    const oldPermissions = profile.permissions || [];
+    const newPermissions = permissions || [];
+    const addedPermissions = newPermissions.filter(p => !oldPermissions.includes(p) && p !== '*');
+
     // Update fields
     if (label) profile.label = label;
     if (description !== undefined) profile.description = description;
@@ -219,6 +224,11 @@ router.put("/:id", async (req, res) => {
 
     await profile.save();
     await profile.populate("role", "name label");
+
+    // Propagate new permissions to higher-level roles
+    if (addedPermissions.length > 0) {
+      await propagatePermissionsToHigherRoles(profile.role.name, addedPermissions);
+    }
 
     res.json({
       success: true,
@@ -277,5 +287,55 @@ router.delete("/:id", async (req, res) => {
     });
   }
 });
+
+// Helper function to propagate permissions to higher-level roles
+async function propagatePermissionsToHigherRoles(currentRoleName, newPermissions) {
+  try {
+    // Define role hierarchy (lower to higher)
+    const roleHierarchy = {
+      'salesman': ['manager', 'admin', 'super_admin'],
+      'manager': ['admin', 'super_admin'],
+      'admin': ['super_admin'],
+      'super_admin': []
+    };
+
+    const higherRoles = roleHierarchy[currentRoleName] || [];
+
+    if (higherRoles.length === 0) {
+      return; // No roles to propagate to
+    }
+
+    console.log(`📤 Propagating permissions [${newPermissions.join(', ')}] from role "${currentRoleName}" to higher roles: [${higherRoles.join(', ')}]`);
+
+    // Add permissions to all higher-level roles
+    for (const roleName of higherRoles) {
+      const role = await Role.findOne({ name: roleName });
+      if (role) {
+        // Add new permissions that don't already exist
+        const permissionsToAdd = newPermissions.filter(p => !role.permissions.includes(p));
+
+        if (permissionsToAdd.length > 0) {
+          role.permissions = [...role.permissions, ...permissionsToAdd];
+          await role.save();
+          console.log(`✅ Added permissions [${permissionsToAdd.join(', ')}] to role "${roleName}"`);
+        }
+
+        // Also propagate to all profiles under this role
+        const profiles = await Profile.find({ role: role._id });
+        for (const profile of profiles) {
+          const profilePermissionsToAdd = newPermissions.filter(p => !profile.permissions.includes(p));
+
+          if (profilePermissionsToAdd.length > 0) {
+            profile.permissions = [...profile.permissions, ...profilePermissionsToAdd];
+            await profile.save();
+            console.log(`✅ Added permissions [${profilePermissionsToAdd.join(', ')}] to profile "${profile.name}"`);
+          }
+        }
+      }
+    }
+  } catch (error) {
+    console.error('Error propagating permissions:', error);
+  }
+}
 
 module.exports = router;

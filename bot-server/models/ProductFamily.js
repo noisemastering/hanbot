@@ -28,6 +28,9 @@ const productFamilySchema = new mongoose.Schema({
   price: {
     type: Number
   },
+  wholesalePrice: {
+    type: Number
+  },
   sku: {
     type: String
   },

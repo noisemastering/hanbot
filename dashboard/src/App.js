@@ -39,10 +39,12 @@ import UsosModal from "./components/UsosModal";
 import GruposModal from "./components/GruposModal";
 import ProductFamilyTreeView from "./components/ProductFamilyTreeView";
 import CopyProductModal from "./components/CopyProductModal";
+import ProductDetailsModal from "./components/ProductDetailsModal";
 import ProductFamilyModal from "./components/ProductFamilyModal";
 import Messages from "./pages/Messages";
 import Login from "./pages/Login";
 import Settings from "./pages/Settings";
+import InventarioView from "./pages/InventarioView";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import UsersView from "./components/UsersView";
@@ -137,6 +139,14 @@ const menuItems = [
         path: "/usos-grupos",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+        )
+      },
+      {
+        id: "inventario",
+        label: "Inventario",
+        path: "/inventario",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
         )
       },
       {
@@ -286,7 +296,9 @@ function App() {
   const [productFamiliesLoading, setProductFamiliesLoading] = useState(false);
   const [showProductFamilyModal, setShowProductFamilyModal] = useState(false);
   const [showCopyModal, setShowCopyModal] = useState(false);
+  const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [productToCopy, setProductToCopy] = useState(null);
+  const [productToShowDetails, setProductToShowDetails] = useState(null);
   const [selectedProductFamily, setSelectedProductFamily] = useState(null);
   const [selectedParentId, setSelectedParentId] = useState(null);
   const [deleteConfirmProductFamily, setDeleteConfirmProductFamily] = useState(null);
@@ -1730,8 +1742,15 @@ function App() {
                 setProductToCopy(product);
                 setShowCopyModal(true);
               }}
+              onDetails={(product) => {
+                setProductToShowDetails(product);
+                setShowDetailsModal(true);
+              }}
             />
           } />
+
+          {/* Inventario Route */}
+          <Route path="/inventario" element={<InventarioView />} />
 
           {/* Users, Roles, and Profiles Routes */}
           <Route path="/users" element={<UsersView />} />
@@ -1945,6 +1964,17 @@ function App() {
             onCancel={() => {
               setShowCopyModal(false);
               setProductToCopy(null);
+            }}
+          />
+        )}
+
+        {/* Product Details Modal */}
+        {showDetailsModal && productToShowDetails && (
+          <ProductDetailsModal
+            product={productToShowDetails}
+            onClose={() => {
+              setShowDetailsModal(false);
+              setProductToShowDetails(null);
             }}
           />
         )}

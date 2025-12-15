@@ -40,9 +40,24 @@ router.get("/sellable", async (req, res) => {
     const sellableProducts = await ProductFamily.find({
       sellable: true,
       available: true
-    }).sort({ name: 1 });
+    })
+    .populate('parentId')
+    .sort({ name: 1 });
 
-    res.json({ success: true, data: sellableProducts });
+    // Build hierarchical names and categories for each product
+    const productsWithFullNames = await Promise.all(
+      sellableProducts.map(async (product) => {
+        const { displayName, category, subcategory } = await buildHierarchicalName(product);
+        return {
+          ...product.toObject(),
+          displayName,
+          category,
+          subcategory
+        };
+      })
+    );
+
+    res.json({ success: true, data: productsWithFullNames });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
@@ -197,6 +212,56 @@ router.post("/:id/copy", async (req, res) => {
 // ============================================
 // HELPER FUNCTIONS
 // ============================================
+
+/**
+ * Build hierarchical name using only Gen 3+ as the display name
+ * Gen 1 and Gen 2 are used as grouping/category data
+ * @param {Object} product - The product with populated parentId
+ * @returns {Object} - Object with displayName, category (Gen 1), and subcategory (Gen 2)
+ */
+async function buildHierarchicalName(product) {
+  const hierarchy = [];
+  let current = product;
+
+  // Collect the full hierarchy going up the parent chain
+  while (current) {
+    hierarchy.unshift({
+      name: current.name,
+      generation: current.generation
+    });
+
+    if (current.parentId) {
+      // If parentId is already populated as an object, use it
+      if (typeof current.parentId === 'object' && current.parentId.name) {
+        current = current.parentId;
+      } else {
+        // Otherwise fetch the parent
+        current = await ProductFamily.findById(current.parentId).lean();
+      }
+    } else {
+      current = null;  // Reached the root
+    }
+  }
+
+  // Extract Gen 1 (category) and Gen 2 (subcategory)
+  const category = hierarchy.find(h => h.generation === 1)?.name || null;
+  const subcategory = hierarchy.find(h => h.generation === 2)?.name || null;
+
+  // Build display name from Gen 3 onwards
+  const displayParts = hierarchy
+    .filter(h => h.generation >= 3)
+    .map(h => h.name);
+
+  const displayName = displayParts.length > 0
+    ? displayParts.join(' - ')
+    : product.name;  // Fallback to product name if no Gen 3+
+
+  return {
+    displayName,
+    category,
+    subcategory
+  };
+}
 
 /**
  * Recursively populate children for a product family node
