@@ -2,6 +2,46 @@
 const express = require("express");
 const router = express.Router();
 const Campaign = require("../models/Campaign");
+const AdSet = require("../models/AdSet");
+const Ad = require("../models/Ad");
+
+// Get campaigns tree (campaigns with nested adsets and ads)
+router.get("/tree", async (req, res) => {
+  try {
+    // Get all campaigns
+    const campaigns = await Campaign.find().lean().sort({ createdAt: -1 });
+
+    // For each campaign, populate adsets and ads
+    const campaignsWithTree = await Promise.all(
+      campaigns.map(async (campaign) => {
+        // Get adsets for this campaign
+        const adsets = await AdSet.find({ campaignId: campaign._id }).lean();
+
+        // For each adset, get its ads
+        const adsetsWithAds = await Promise.all(
+          adsets.map(async (adset) => {
+            const ads = await Ad.find({ adSetId: adset._id }).lean();
+            return {
+              ...adset,
+              children: ads,
+              type: 'adset'
+            };
+          })
+        );
+
+        return {
+          ...campaign,
+          children: adsetsWithAds,
+          type: 'campaign'
+        };
+      })
+    );
+
+    res.json({ success: true, data: campaignsWithTree });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // Listar todas las campañas
 router.get("/", async (req, res) => {
