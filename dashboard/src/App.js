@@ -28,6 +28,7 @@ import ProductModal from "./components/ProductModal";
 import ProductsView from "./components/ProductsView";
 import CampaignModal from "./components/CampaignModal";
 import CampaignsView from "./components/CampaignsView";
+import CampaignTreeView from "./components/CampaignTreeView";
 import AdSetsView from "./components/AdSetsView";
 import AdsView from "./components/AdsView";
 import CampaignProductModal from "./components/CampaignProductModal";
@@ -387,7 +388,7 @@ function App() {
   const fetchCampaigns = async () => {
     setCampaignsLoading(true);
     try {
-      const res = await fetch(`${API_URL}/campaigns`);
+      const res = await fetch(`${API_URL}/campaigns/tree`);
       const data = await res.json();
       if (data.success) {
         console.log("Campaigns loaded:", data.data);
@@ -1664,9 +1665,10 @@ function App() {
 
           {/* Campaigns Route */}
           <Route path="/campaigns" element={
-            <CampaignsView
+            <CampaignTreeView
               campaigns={campaigns}
               loading={campaignsLoading}
+              editingItem={editingCampaign}
               onAdd={() => {
                 setEditingCampaign(null);
                 setShowCampaignModal(true);
@@ -1677,6 +1679,16 @@ function App() {
               }}
               onDelete={(campaign) => {
                 setDeleteConfirmCampaign(campaign);
+              }}
+              onAddChild={(parent) => {
+                // TODO: Implement add child modal for adsets/ads
+                console.log('Add child to:', parent);
+                alert('Add child functionality will be implemented soon');
+              }}
+              onDetails={(item) => {
+                // TODO: Implement details modal for campaigns/adsets/ads
+                console.log('Show details for:', item);
+                alert('Details modal will be implemented soon');
               }}
             />
           } />
