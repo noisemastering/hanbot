@@ -29,6 +29,9 @@ import ProductsView from "./components/ProductsView";
 import CampaignModal from "./components/CampaignModal";
 import CampaignsView from "./components/CampaignsView";
 import CampaignTreeView from "./components/CampaignTreeView";
+import AdSetModal from "./components/AdSetModal";
+import AdModal from "./components/AdModal";
+import CampaignItemDetailsModal from "./components/CampaignItemDetailsModal";
 import AdSetsView from "./components/AdSetsView";
 import AdsView from "./components/AdsView";
 import CampaignProductModal from "./components/CampaignProductModal";
@@ -42,6 +45,7 @@ import ProductFamilyTreeView from "./components/ProductFamilyTreeView";
 import CopyProductModal from "./components/CopyProductModal";
 import ProductDetailsModal from "./components/ProductDetailsModal";
 import ProductFamilyModal from "./components/ProductFamilyModal";
+import ImportProductsModal from "./components/ImportProductsModal";
 import Messages from "./pages/Messages";
 import Login from "./pages/Login";
 import Settings from "./pages/Settings";
@@ -268,6 +272,23 @@ function App() {
   const [editingCampaign, setEditingCampaign] = useState(null);
   const [deleteConfirmCampaign, setDeleteConfirmCampaign] = useState(null);
 
+  // AdSets state
+  const [adSets, setAdSets] = useState([]);
+  const [showAdSetModal, setShowAdSetModal] = useState(false);
+  const [editingAdSet, setEditingAdSet] = useState(null);
+  const [parentCampaignId, setParentCampaignId] = useState(null);
+
+  // Ads state
+  const [showAdModal, setShowAdModal] = useState(false);
+  const [editingAd, setEditingAd] = useState(null);
+  const [parentAdSetId, setParentAdSetId] = useState(null);
+
+  // Details modal state
+  const [detailsItem, setDetailsItem] = useState(null);
+
+  // Unified delete confirmation
+  const [deleteConfirmItem, setDeleteConfirmItem] = useState(null);
+
   // Campaign Products state
   const [campaignProducts, setCampaignProducts] = useState([]);
   const [campaignProductsLoading, setCampaignProductsLoading] = useState(false);
@@ -298,8 +319,10 @@ function App() {
   const [showProductFamilyModal, setShowProductFamilyModal] = useState(false);
   const [showCopyModal, setShowCopyModal] = useState(false);
   const [showDetailsModal, setShowDetailsModal] = useState(false);
+  const [showImportModal, setShowImportModal] = useState(false);
   const [productToCopy, setProductToCopy] = useState(null);
   const [productToShowDetails, setProductToShowDetails] = useState(null);
+  const [importTargetFamily, setImportTargetFamily] = useState(null);
   const [selectedProductFamily, setSelectedProductFamily] = useState(null);
   const [selectedParentId, setSelectedParentId] = useState(null);
   const [deleteConfirmProductFamily, setDeleteConfirmProductFamily] = useState(null);
@@ -420,31 +443,128 @@ function App() {
 
   const handleSaveCampaign = async (campaignData) => {
     try {
-      const url = editingCampaign
-        ? `${API_URL}/campaigns/${editingCampaign._id}`
-        : `${API_URL}/campaigns`;
-      const method = editingCampaign ? "PUT" : "POST";
+      let response;
+      if (editingCampaign) {
+        response = await API.put(`/campaigns/${editingCampaign._id}`, campaignData);
+      } else {
+        response = await API.post(`/campaigns`, campaignData);
+      }
 
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(campaignData)
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        if (editingCampaign) {
-          setCampaigns(campaigns.map(c => c._id === editingCampaign._id ? data.data : c));
-        } else {
-          setCampaigns([data.data, ...campaigns]);
-        }
+      if (response.data.success) {
         setShowCampaignModal(false);
         setEditingCampaign(null);
+        // Refetch campaigns tree to get updated structure
+        fetchCampaigns();
       }
     } catch (error) {
       console.error("Error saving campaign:", error);
-      alert("Error al guardar la campaña");
+      alert("Error al guardar la campaña: " + (error.response?.data?.error || error.message));
     }
+  };
+
+  // AdSet handlers
+  const fetchAdSets = async () => {
+    try {
+      const res = await fetch(`${API_URL}/adsets`);
+      const data = await res.json();
+      if (data.success) {
+        setAdSets(data.data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching adsets:", error);
+    }
+  };
+
+  const handleSaveAdSet = async (adSetData) => {
+    try {
+      let response;
+      if (editingAdSet) {
+        response = await API.put(`/adsets/${editingAdSet._id}`, adSetData);
+      } else {
+        response = await API.post(`/adsets`, adSetData);
+      }
+
+      if (response.data.success) {
+        setShowAdSetModal(false);
+        setEditingAdSet(null);
+        setParentCampaignId(null);
+        // Refetch campaigns tree to show new adset
+        fetchCampaigns();
+        fetchAdSets(); // Also update adsets list for Ad modal dropdown
+      }
+    } catch (error) {
+      console.error("Error saving adset:", error);
+      alert("Error al guardar el conjunto de anuncios: " + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleDeleteAdSet = async (adSetId) => {
+    try {
+      const res = await fetch(`${API_URL}/adsets/${adSetId}`, {
+        method: "DELETE"
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchCampaigns();
+        fetchAdSets();
+      }
+    } catch (error) {
+      console.error("Error deleting adset:", error);
+      alert("Error al eliminar el conjunto de anuncios");
+    }
+  };
+
+  // Ad handlers
+  const handleSaveAd = async (adData) => {
+    try {
+      let response;
+      if (editingAd) {
+        response = await API.put(`/ads/${editingAd._id}`, adData);
+      } else {
+        response = await API.post(`/ads`, adData);
+      }
+
+      if (response.data.success) {
+        setShowAdModal(false);
+        setEditingAd(null);
+        setParentAdSetId(null);
+        // Refetch campaigns tree to show new ad
+        fetchCampaigns();
+      }
+    } catch (error) {
+      console.error("Error saving ad:", error);
+      alert("Error al guardar el anuncio: " + (error.response?.data?.error || error.message));
+    }
+  };
+
+  const handleDeleteAd = async (adId) => {
+    try {
+      const res = await fetch(`${API_URL}/ads/${adId}`, {
+        method: "DELETE"
+      });
+      const data = await res.json();
+      if (data.success) {
+        fetchCampaigns();
+      }
+    } catch (error) {
+      console.error("Error deleting ad:", error);
+      alert("Error al eliminar el anuncio");
+    }
+  };
+
+  // Unified delete handler for tree view
+  const handleDeleteItem = async (item) => {
+    const itemType = item.type || 'campaign';
+
+    if (itemType === 'campaign') {
+      await handleDeleteCampaign(item._id);
+    } else if (itemType === 'adset') {
+      await handleDeleteAdSet(item._id);
+    } else if (itemType === 'ad') {
+      await handleDeleteAd(item._id);
+    }
+
+    setDeleteConfirmItem(null);
   };
 
   const fetchCampaignProducts = async () => {
@@ -861,6 +981,7 @@ function App() {
   useEffect(() => {
     if (location.pathname === "/campaigns" || location.pathname === "/") {
       fetchCampaigns();
+      fetchAdSets(); // Also fetch adsets for Ad modal dropdown
     }
   }, [location.pathname]);
 
@@ -1673,22 +1794,49 @@ function App() {
                 setEditingCampaign(null);
                 setShowCampaignModal(true);
               }}
-              onEdit={(campaign) => {
-                setEditingCampaign(campaign);
-                setShowCampaignModal(true);
+              onEdit={(item) => {
+                console.log('🔍 Edit clicked - Item:', item);
+                console.log('🔍 Item type:', item.type);
+                console.log('🔍 Item name:', item.name);
+                console.log('🔍 Has fbAdId?', !!item.fbAdId);
+                console.log('🔍 Has adSetId?', !!item.adSetId);
+
+                const itemType = item.type || 'campaign';
+                console.log('🔍 Determined type:', itemType);
+
+                if (itemType === 'campaign') {
+                  console.log('✅ Opening Campaign modal');
+                  setEditingCampaign(item);
+                  setShowCampaignModal(true);
+                } else if (itemType === 'adset') {
+                  console.log('✅ Opening AdSet modal');
+                  setEditingAdSet(item);
+                  setShowAdSetModal(true);
+                } else if (itemType === 'ad') {
+                  console.log('✅ Opening Ad modal');
+                  setEditingAd(item);
+                  setShowAdModal(true);
+                }
               }}
-              onDelete={(campaign) => {
-                setDeleteConfirmCampaign(campaign);
+              onDelete={(item) => {
+                setDeleteConfirmItem(item);
               }}
               onAddChild={(parent) => {
-                // TODO: Implement add child modal for adsets/ads
-                console.log('Add child to:', parent);
-                alert('Add child functionality will be implemented soon');
+                const parentType = parent.type || 'campaign';
+                if (parentType === 'campaign') {
+                  // Add adset to campaign
+                  setParentCampaignId(parent._id);
+                  setEditingAdSet(null);
+                  setShowAdSetModal(true);
+                } else if (parentType === 'adset') {
+                  // Add ad to adset
+                  setParentAdSetId(parent._id);
+                  setEditingAd(null);
+                  setShowAdModal(true);
+                }
               }}
               onDetails={(item) => {
-                // TODO: Implement details modal for campaigns/adsets/ads
-                console.log('Show details for:', item);
-                alert('Details modal will be implemented soon');
+                setDetailsItem(item);
               }}
             />
           } />
@@ -1770,6 +1918,10 @@ function App() {
                 setProductToCopy(product);
                 setShowCopyModal(true);
               }}
+              onImport={(product) => {
+                setImportTargetFamily(product);
+                setShowImportModal(true);
+              }}
               onDetails={(product) => {
                 setProductToShowDetails(product);
                 setShowDetailsModal(true);
@@ -1848,7 +2000,7 @@ function App() {
           />
         )}
 
-        {/* Campaign Delete Confirmation Modal */}
+        {/* Campaign Delete Confirmation Modal (legacy - kept for other campaign delete flows) */}
         {deleteConfirmCampaign && (
           <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-gray-800/95 backdrop-blur-lg border border-gray-700/50 rounded-xl max-w-md w-full p-6">
@@ -1875,6 +2027,80 @@ function App() {
                 </button>
                 <button
                   onClick={() => handleDeleteCampaign(deleteConfirmCampaign._id)}
+                  className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* AdSet Modal */}
+        {showAdSetModal && (
+          <AdSetModal
+            adSet={editingAdSet}
+            campaigns={campaigns}
+            parentCampaignId={parentCampaignId}
+            onSave={handleSaveAdSet}
+            onClose={() => {
+              setShowAdSetModal(false);
+              setEditingAdSet(null);
+              setParentCampaignId(null);
+            }}
+          />
+        )}
+
+        {/* Ad Modal */}
+        {showAdModal && (
+          <AdModal
+            ad={editingAd}
+            adSets={adSets}
+            parentAdSetId={parentAdSetId}
+            onSave={handleSaveAd}
+            onClose={() => {
+              setShowAdModal(false);
+              setEditingAd(null);
+              setParentAdSetId(null);
+            }}
+          />
+        )}
+
+        {/* Campaign Item Details Modal */}
+        {detailsItem && (
+          <CampaignItemDetailsModal
+            item={detailsItem}
+            onClose={() => setDetailsItem(null)}
+          />
+        )}
+
+        {/* Unified Delete Confirmation Modal for Campaigns/AdSets/Ads */}
+        {deleteConfirmItem && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-gray-800/95 backdrop-blur-lg border border-gray-700/50 rounded-xl max-w-md w-full p-6">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">Confirmar Eliminación</h3>
+                  <p className="text-sm text-gray-400">Esta acción no se puede deshacer</p>
+                </div>
+              </div>
+              <p className="text-gray-300 mb-6">
+                ¿Estás seguro de que deseas eliminar "{deleteConfirmItem.name || 'este elemento'}"?
+              </p>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setDeleteConfirmItem(null)}
+                  className="flex-1 px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => handleDeleteItem(deleteConfirmItem)}
                   className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
                 >
                   Eliminar
@@ -1924,6 +2150,97 @@ function App() {
                 </button>
                 <button
                   onClick={() => handleDeleteCampaignProduct(deleteConfirmCampaignProduct._id)}
+                  className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
+                >
+                  Eliminar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Campaign Tree Modals */}
+        {/* Campaign Modal */}
+        {showCampaignModal && (
+          <CampaignModal
+            campaign={editingCampaign}
+            onSave={handleSaveCampaign}
+            onClose={() => {
+              setShowCampaignModal(false);
+              setEditingCampaign(null);
+            }}
+          />
+        )}
+
+        {/* AdSet Modal */}
+        {showAdSetModal && (
+          <AdSetModal
+            adSet={editingAdSet}
+            campaigns={campaigns}
+            parentCampaignId={parentCampaignId}
+            onSave={handleSaveAdSet}
+            onClose={() => {
+              setShowAdSetModal(false);
+              setEditingAdSet(null);
+              setParentCampaignId(null);
+            }}
+          />
+        )}
+
+        {/* Ad Modal */}
+        {showAdModal && (
+          <AdModal
+            ad={editingAd}
+            adSets={adSets}
+            parentAdSetId={parentAdSetId}
+            onSave={handleSaveAd}
+            onClose={() => {
+              setShowAdModal(false);
+              setEditingAd(null);
+              setParentAdSetId(null);
+            }}
+          />
+        )}
+
+        {/* Campaign Item Details Modal */}
+        {detailsItem && (
+          <CampaignItemDetailsModal
+            item={detailsItem}
+            onClose={() => setDetailsItem(null)}
+          />
+        )}
+
+        {/* Campaign Tree Delete Confirmation Modal */}
+        {deleteConfirmItem && (
+          <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+            <div className="bg-gray-800/95 backdrop-blur-lg border border-gray-700/50 rounded-xl max-w-md w-full p-6">
+              <div className="flex items-center space-x-3 mb-4">
+                <div className="w-12 h-12 bg-red-500/20 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6 text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold text-white">
+                    Eliminar {deleteConfirmItem.type === 'campaign' ? 'Campaña' : deleteConfirmItem.type === 'adset' ? 'Ad Set' : 'Anuncio'}
+                  </h3>
+                  <p className="text-sm text-gray-400">Esta acción no se puede deshacer</p>
+                </div>
+              </div>
+              <p className="text-gray-300 mb-6">
+                ¿Estás seguro de que deseas eliminar <span className="font-semibold text-white">{deleteConfirmItem.name}</span>?
+                {deleteConfirmItem.type === 'campaign' && ' Esto también eliminará todos los ad sets y anuncios asociados.'}
+                {deleteConfirmItem.type === 'adset' && ' Esto también eliminará todos los anuncios asociados.'}
+              </p>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setDeleteConfirmItem(null)}
+                  className="flex-1 px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={() => handleDeleteItem(deleteConfirmItem)}
                   className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
                 >
                   Eliminar
@@ -2003,6 +2320,22 @@ function App() {
             onClose={() => {
               setShowDetailsModal(false);
               setProductToShowDetails(null);
+            }}
+          />
+        )}
+
+        {/* Import Products Modal */}
+        {showImportModal && importTargetFamily && (
+          <ImportProductsModal
+            targetFamily={importTargetFamily}
+            onClose={() => {
+              setShowImportModal(false);
+              setImportTargetFamily(null);
+            }}
+            onImport={() => {
+              setShowImportModal(false);
+              setImportTargetFamily(null);
+              fetchProductFamilies();
             }}
           />
         )}

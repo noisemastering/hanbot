@@ -209,6 +209,39 @@ router.post("/:id/copy", async (req, res) => {
   }
 });
 
+// Import products (re-parent existing products to this family)
+router.post("/:id/import", async (req, res) => {
+  try {
+    const { productIds = [] } = req.body;  // Array of product IDs to import
+    const targetFamilyId = req.params.id;
+
+    // Verify target family exists
+    const targetFamily = await ProductFamily.findById(targetFamilyId);
+    if (!targetFamily) {
+      return res.status(404).json({ success: false, error: "Familia de destino no encontrada" });
+    }
+
+    console.log(`📥 Importing ${productIds.length} products to "${targetFamily.name}"...`);
+
+    // Update all products to have the new parent
+    const result = await ProductFamily.updateMany(
+      { _id: { $in: productIds } },
+      { $set: { parentId: targetFamilyId, generation: targetFamily.generation + 1 } }
+    );
+
+    console.log(`✅ Successfully imported ${result.modifiedCount} products`);
+
+    res.json({
+      success: true,
+      message: `${result.modifiedCount} productos importados correctamente`,
+      count: result.modifiedCount
+    });
+  } catch (err) {
+    console.error("Error importing products:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ============================================
 // HELPER FUNCTIONS
 // ============================================

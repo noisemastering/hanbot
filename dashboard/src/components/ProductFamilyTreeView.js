@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 // Recursive component to render a single product node and its children
-function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onDetails, level = 0, expandedNodes, onToggleExpand }) {
+function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, onDetails, level = 0, expandedNodes, onToggleExpand }) {
   const isExpanded = expandedNodes.has(product._id);
   const hasChildren = product.children && product.children.length > 0;
   const indentPixels = level * 32; // 32px per level (equivalent to ml-8 = 2rem = 32px)
@@ -98,6 +98,20 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onDetails,
             </svg>
           </button>
           <button
+            onClick={() => !product.sellable && onImport(product)}
+            disabled={product.sellable}
+            className={`p-2 rounded-lg transition-colors ${
+              product.sellable
+                ? 'text-gray-600 cursor-not-allowed opacity-50'
+                : 'text-amber-400 hover:bg-amber-500/20'
+            }`}
+            title={product.sellable ? "Los productos vendibles no pueden importar hijos" : "Importar Productos"}
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+            </svg>
+          </button>
+          <button
             onClick={() => onDetails(product)}
             className="p-2 text-indigo-400 hover:bg-indigo-500/20 rounded-lg transition-colors"
             title="Ver Detalles"
@@ -138,6 +152,7 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onDetails,
               onDelete={onDelete}
               onAddChild={onAddChild}
               onCopy={onCopy}
+              onImport={onImport}
               onDetails={onDetails}
               level={level + 1}
               expandedNodes={expandedNodes}
@@ -158,6 +173,7 @@ function ProductFamilyTreeView({
   onDelete,
   onAddChild,
   onCopy,
+  onImport,
   onDetails,
   editingProduct
 }) {
@@ -279,6 +295,7 @@ function ProductFamilyTreeView({
                 onDelete={onDelete}
                 onAddChild={handleAddChild}
                 onCopy={onCopy}
+                onImport={onImport}
                 onDetails={onDetails}
                 level={0}
                 expandedNodes={expandedNodes}
