@@ -37,10 +37,9 @@ router.get("/roots", async (req, res) => {
 // Get only sellable products (for campaigns)
 router.get("/sellable", async (req, res) => {
   try {
-    const sellableProducts = await ProductFamily.find({
-      sellable: true,
-      available: true
-    })
+    // Get all products for Inventario management (all product families)
+    // This includes products with and without prices so users can populate pricing
+    const sellableProducts = await ProductFamily.find({})
     .populate('parentId')
     .sort({ name: 1 });
 
@@ -115,16 +114,24 @@ router.get("/:id", async (req, res) => {
 // Create new product family
 router.post("/", async (req, res) => {
   try {
-    console.log('📝 Creating product family with data:', JSON.stringify(req.body, null, 2));
+    console.log('📝 Creating product family');
+    console.log('   Received data:', JSON.stringify(req.body, null, 2));
+    console.log('   onlineStoreLinks in request:', req.body.onlineStoreLinks);
+
     const productFamily = new ProductFamily(req.body);
     await productFamily.save();
-    console.log('✅ Saved product family:', productFamily.name, 'requiresHumanAdvisor:', productFamily.requiresHumanAdvisor);
+
+    console.log('✅ Saved product family:', productFamily.name);
+    console.log('   sellable:', productFamily.sellable);
+    console.log('   requiresHumanAdvisor:', productFamily.requiresHumanAdvisor);
+    console.log('   onlineStoreLinks after save:', productFamily.onlineStoreLinks);
 
     // Populate parent info before returning
     await productFamily.populate('parentId', 'name generation');
 
     res.status(201).json({ success: true, data: productFamily });
   } catch (err) {
+    console.error('❌ Error creating product family:', err);
     res.status(400).json({ success: false, error: err.message });
   }
 });
@@ -132,13 +139,20 @@ router.post("/", async (req, res) => {
 // Update product family
 router.put("/:id", async (req, res) => {
   try {
-    console.log('📝 Updating product family', req.params.id, 'with data:', JSON.stringify(req.body, null, 2));
+    console.log('📝 Updating product family', req.params.id);
+    console.log('   Received data:', JSON.stringify(req.body, null, 2));
+    console.log('   onlineStoreLinks in request:', req.body.onlineStoreLinks);
+
     const productFamily = await ProductFamily.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true, runValidators: true }
     ).populate('parentId', 'name generation');
-    console.log('✅ Updated product family:', productFamily.name, 'requiresHumanAdvisor:', productFamily.requiresHumanAdvisor);
+
+    console.log('✅ Updated product family:', productFamily.name);
+    console.log('   sellable:', productFamily.sellable);
+    console.log('   requiresHumanAdvisor:', productFamily.requiresHumanAdvisor);
+    console.log('   onlineStoreLinks after save:', productFamily.onlineStoreLinks);
 
     if (!productFamily) {
       return res.status(404).json({
@@ -149,6 +163,7 @@ router.put("/:id", async (req, res) => {
 
     res.json({ success: true, data: productFamily });
   } catch (err) {
+    console.error('❌ Error updating product family:', err);
     res.status(400).json({ success: false, error: err.message });
   }
 });
@@ -190,7 +205,7 @@ router.delete("/:id", async (req, res) => {
 // Copy a product (with specific children)
 router.post("/:id/copy", async (req, res) => {
   try {
-    const { childIds = [] } = req.body;  // Array of child IDs to copy
+    const { childIds = [], targetParentId } = req.body;  // Array of child IDs to copy, optional target parent
     const productId = req.params.id;
 
     // Get the source product
@@ -199,8 +214,22 @@ router.post("/:id/copy", async (req, res) => {
       return res.status(404).json({ success: false, error: "Producto no encontrado" });
     }
 
-    // Copy the product (create as sibling with same parent)
-    const copiedProduct = await copyProductRecursive(sourceProduct, sourceProduct.parentId, childIds);
+    // Use provided targetParentId, or default to source product's parent (copy as sibling)
+    const newParentId = targetParentId || sourceProduct.parentId;
+
+    // Verify target parent exists if provided
+    if (targetParentId) {
+      const targetParent = await ProductFamily.findById(targetParentId);
+      if (!targetParent) {
+        return res.status(404).json({ success: false, error: "Padre de destino no encontrado" });
+      }
+      if (targetParent.sellable) {
+        return res.status(400).json({ success: false, error: "Los productos vendibles no pueden tener hijos" });
+      }
+    }
+
+    // Copy the product (create as child of newParentId)
+    const copiedProduct = await copyProductRecursive(sourceProduct, newParentId, childIds);
 
     res.json({ success: true, data: copiedProduct });
   } catch (err) {
@@ -209,10 +238,11 @@ router.post("/:id/copy", async (req, res) => {
   }
 });
 
-// Import products (re-parent existing products to this family)
+// Import products from /products collection into ProductFamily tree
+// Creates NEW ProductFamily documents (not linking - copying data)
 router.post("/:id/import", async (req, res) => {
   try {
-    const { productIds = [] } = req.body;  // Array of product IDs to import
+    const { productIds = [] } = req.body;  // Array of Product IDs to import
     const targetFamilyId = req.params.id;
 
     // Verify target family exists
@@ -221,20 +251,59 @@ router.post("/:id/import", async (req, res) => {
       return res.status(404).json({ success: false, error: "Familia de destino no encontrada" });
     }
 
-    console.log(`📥 Importing ${productIds.length} products to "${targetFamily.name}"...`);
+    console.log(`📥 Importing ${productIds.length} products from /products to "${targetFamily.name}"...`);
 
-    // Update all products to have the new parent
-    const result = await ProductFamily.updateMany(
-      { _id: { $in: productIds } },
-      { $set: { parentId: targetFamilyId, generation: targetFamily.generation + 1 } }
-    );
+    // Load Product model (from /products collection)
+    const Product = require("../models/Product");
 
-    console.log(`✅ Successfully imported ${result.modifiedCount} products`);
+    // Fetch the Product documents
+    const products = await Product.find({ _id: { $in: productIds } });
+
+    if (products.length === 0) {
+      return res.status(404).json({ success: false, error: "No se encontraron productos" });
+    }
+
+    console.log(`Found ${products.length} products to import`);
+
+    // Create new ProductFamily documents from Product data
+    const newProductFamilies = [];
+    for (const product of products) {
+      // Map Product fields to ProductFamily fields
+      const productFamilyData = {
+        name: product.size ? `${product.name} ${product.size}` : product.name,  // Include size in name
+        description: product.description || "",
+        imageUrl: product.imageUrl || "",
+        price: product.price ? parseFloat(product.price) : undefined,  // Convert string to number
+        parentId: targetFamilyId,
+        generation: targetFamily.generation + 1,
+        sellable: true,  // Imported products are sellable leaf nodes
+        available: true,
+        active: true
+      };
+
+      // Import Mercado Libre link if it exists
+      if (product.mLink) {
+        productFamilyData.onlineStoreLinks = [{
+          url: product.mLink,
+          store: "Mercado Libre",
+          isPreferred: true  // Mark as the main/preferred link
+        }];
+      }
+
+      const newProductFamily = new ProductFamily(productFamilyData);
+      await newProductFamily.save();
+      newProductFamilies.push(newProductFamily);
+
+      console.log(`✅ Created ProductFamily: ${newProductFamily.name}`);
+    }
+
+    console.log(`✅ Successfully imported ${newProductFamilies.length} products as new ProductFamily documents`);
 
     res.json({
       success: true,
-      message: `${result.modifiedCount} productos importados correctamente`,
-      count: result.modifiedCount
+      message: `${newProductFamilies.length} productos importados correctamente como nuevas familias`,
+      count: newProductFamilies.length,
+      data: newProductFamilies
     });
   } catch (err) {
     console.error("Error importing products:", err);
@@ -260,7 +329,8 @@ async function buildHierarchicalName(product) {
   while (current) {
     hierarchy.unshift({
       name: current.name,
-      generation: current.generation
+      generation: current.generation,
+      parentId: current.parentId  // Track parentId to identify roots
     });
 
     if (current.parentId) {
@@ -277,7 +347,11 @@ async function buildHierarchicalName(product) {
   }
 
   // Extract Gen 1 (category) and Gen 2 (subcategory)
-  const category = hierarchy.find(h => h.generation === 1)?.name || null;
+  // Gen 1 = either generation===1 OR parentId===null/undefined (root nodes, even with undefined generation)
+  const category = hierarchy.find(h =>
+    h.generation === 1 ||
+    ((h.parentId === null || h.parentId === undefined) && h.generation !== 2)
+  )?.name || null;
   const subcategory = hierarchy.find(h => h.generation === 2)?.name || null;
 
   // Build display name from Gen 3 onwards

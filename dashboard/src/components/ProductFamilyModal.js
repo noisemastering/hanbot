@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import API from '../api';
 
 function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParentId }) {
   const [formData, setFormData] = useState({
@@ -11,8 +12,16 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
     sku: '',
     stock: '',
     requiresHumanAdvisor: false,
-    genericDescription: ''
+    genericDescription: '',
+    thumbnail: '',
+    onlineStoreLinks: []
   });
+
+  // State for importing links from old products
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [oldProducts, setOldProducts] = useState([]);
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loadingProducts, setLoadingProducts] = useState(false);
 
   useEffect(() => {
     if (product) {
@@ -26,7 +35,9 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
         sku: product.sku || '',
         stock: product.stock || '',
         requiresHumanAdvisor: product.requiresHumanAdvisor || false,
-        genericDescription: product.genericDescription || ''
+        genericDescription: product.genericDescription || '',
+        thumbnail: product.thumbnail || '',
+        onlineStoreLinks: product.onlineStoreLinks || []
       });
     } else if (presetParentId) {
       // When adding a child, preset the parent
@@ -56,13 +67,21 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
       submitData.stock = formData.stock ? parseInt(formData.stock, 10) : null;
       submitData.requiresHumanAdvisor = Boolean(formData.requiresHumanAdvisor);
       submitData.genericDescription = formData.genericDescription || null;
+      submitData.thumbnail = formData.thumbnail || null;
+      submitData.onlineStoreLinks = formData.onlineStoreLinks || [];
     } else {
       // Clear these fields when product is not sellable
       submitData.requiresHumanAdvisor = false;
       submitData.genericDescription = null;
+      submitData.thumbnail = null;
+      submitData.onlineStoreLinks = [];
     }
 
-    console.log('Submitting product family data:', submitData);
+    console.log('📤 Submitting product family data:');
+    console.log('   Name:', submitData.name);
+    console.log('   Sellable:', submitData.sellable);
+    console.log('   onlineStoreLinks:', submitData.onlineStoreLinks);
+    console.log('   Full data:', JSON.stringify(submitData, null, 2));
     onSave(submitData);
   };
 
@@ -114,6 +133,76 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
 
     return isDescendant(parent, ancestorId, products);
   }
+
+  // Fetch old products from /products collection
+  const fetchOldProducts = async () => {
+    setLoadingProducts(true);
+    try {
+      const response = await API.get('/products');
+      if (response.data.success) {
+        setOldProducts(response.data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching old products:', error);
+    } finally {
+      setLoadingProducts(false);
+    }
+  };
+
+  // Import mLink from selected old product
+  const handleImportLink = (oldProduct) => {
+    if (oldProduct.mLink) {
+      // Check if Mercado Libre link already exists
+      const hasMLLink = formData.onlineStoreLinks.some(
+        link => link.store === 'Mercado Libre'
+      );
+
+      if (hasMLLink) {
+        // Update existing Mercado Libre link
+        const newLinks = formData.onlineStoreLinks.map(link =>
+          link.store === 'Mercado Libre'
+            ? { ...link, url: oldProduct.mLink, isPreferred: true }
+            : { ...link, isPreferred: false }
+        );
+        setFormData({ ...formData, onlineStoreLinks: newLinks });
+      } else {
+        // Add new Mercado Libre link as preferred
+        const newLinks = formData.onlineStoreLinks.map(l => ({ ...l, isPreferred: false }));
+        newLinks.push({
+          url: oldProduct.mLink,
+          store: 'Mercado Libre',
+          isPreferred: true
+        });
+        setFormData({ ...formData, onlineStoreLinks: newLinks });
+      }
+
+      setShowImportModal(false);
+      setSearchTerm('');
+    }
+  };
+
+  // Open import modal and fetch products
+  const openImportModal = () => {
+    setShowImportModal(true);
+    if (oldProducts.length === 0) {
+      fetchOldProducts();
+    }
+  };
+
+  // Filter products by search term - show all if no search term
+  const filteredOldProducts = !searchTerm
+    ? oldProducts
+    : oldProducts.filter(p => {
+        const searchLower = searchTerm.toLowerCase();
+        // Combine name and size for matching full product names like "Malla Sombra Beige 6x7m"
+        const fullName = `${p.name || ''} ${p.size || ''}`.toLowerCase();
+        return (
+          fullName.includes(searchLower) ||
+          p.name?.toLowerCase().includes(searchLower) ||
+          p.size?.toLowerCase().includes(searchLower) ||
+          p.description?.toLowerCase().includes(searchLower)
+        );
+      });
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -330,6 +419,118 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                     Cuando se marque, el bot ofrecerá conectar al cliente con un asesor humano al preguntar por este producto
                   </p>
                 </div>
+
+                {/* Thumbnail */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Miniatura (Thumbnail)
+                  </label>
+                  <input
+                    type="url"
+                    name="thumbnail"
+                    value={formData.thumbnail}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="https://ejemplo.com/imagen-miniatura.jpg"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    URL de la imagen miniatura del producto
+                  </p>
+                </div>
+
+                {/* Online Store Links */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Enlaces a Tiendas Online
+                  </label>
+                  {formData.onlineStoreLinks.map((link, index) => (
+                    <div key={index} className="flex items-start space-x-2 mb-2 p-3 bg-gray-900/30 rounded-lg border border-gray-700/50">
+                      <div className="flex-1 space-y-2">
+                        <input
+                          type="url"
+                          value={link.url}
+                          onChange={(e) => {
+                            const newLinks = [...formData.onlineStoreLinks];
+                            newLinks[index].url = e.target.value;
+                            setFormData({ ...formData, onlineStoreLinks: newLinks });
+                          }}
+                          className="w-full px-3 py-1.5 bg-gray-900/50 border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                          placeholder="https://..."
+                        />
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="text"
+                            value={link.store}
+                            onChange={(e) => {
+                              const newLinks = [...formData.onlineStoreLinks];
+                              newLinks[index].store = e.target.value;
+                              setFormData({ ...formData, onlineStoreLinks: newLinks });
+                            }}
+                            className="flex-1 px-3 py-1.5 bg-gray-900/50 border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                            placeholder="Tienda (ej: Mercado Libre)"
+                          />
+                          <label className="flex items-center space-x-1.5 text-sm text-gray-300 whitespace-nowrap">
+                            <input
+                              type="checkbox"
+                              checked={link.isPreferred}
+                              onChange={(e) => {
+                                const newLinks = formData.onlineStoreLinks.map((l, i) => ({
+                                  ...l,
+                                  isPreferred: i === index ? e.target.checked : false
+                                }));
+                                setFormData({ ...formData, onlineStoreLinks: newLinks });
+                              }}
+                              className="w-4 h-4 text-primary-500 bg-gray-900 border-gray-700 rounded focus:ring-primary-500"
+                            />
+                            <span>Principal</span>
+                          </label>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newLinks = formData.onlineStoreLinks.filter((_, i) => i !== index);
+                          setFormData({ ...formData, onlineStoreLinks: newLinks });
+                        }}
+                        className="p-1.5 text-red-400 hover:bg-red-500/10 rounded transition-colors"
+                      >
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setFormData({
+                          ...formData,
+                          onlineStoreLinks: [...formData.onlineStoreLinks, { url: '', store: '', isPreferred: false }]
+                        });
+                      }}
+                      className="px-4 py-2 bg-gray-900/50 border border-dashed border-gray-600 rounded-lg text-gray-400 hover:text-white hover:border-primary-500 transition-colors flex items-center justify-center space-x-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                      </svg>
+                      <span>Agregar enlace</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={openImportModal}
+                      className="px-4 py-2 bg-primary-500/10 border border-dashed border-primary-500/50 rounded-lg text-primary-400 hover:text-primary-300 hover:border-primary-500 transition-colors flex items-center justify-center space-x-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                      </svg>
+                      <span>Importar de Productos</span>
+                    </button>
+                  </div>
+                  <p className="text-xs text-gray-500 mt-2">
+                    Agrega enlaces manualmente o importa el link de Mercado Libre desde los productos existentes
+                  </p>
+                </div>
               </div>
             )}
           </div>
@@ -351,6 +552,133 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
           </button>
         </div>
       </div>
+
+      {/* Import Link Modal */}
+      {showImportModal && (
+        <div className="absolute inset-0 bg-black/70 backdrop-blur-sm z-10 flex items-center justify-center p-4">
+          <div className="bg-gray-800/95 backdrop-blur-lg border border-gray-700/50 rounded-xl max-w-3xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between">
+              <div>
+                <h3 className="text-lg font-bold text-white">
+                  Importar Link de Mercado Libre
+                </h3>
+                {formData.name && (
+                  <div className="mt-2 px-3 py-1.5 bg-primary-500/20 border border-primary-500/30 rounded-lg inline-block">
+                    <span className="text-xs text-gray-400">Buscando link para: </span>
+                    <span className="text-sm font-medium text-primary-300">{formData.name}</span>
+                  </div>
+                )}
+                <p className="text-xs text-gray-400 mt-2">
+                  {oldProducts.length} productos disponibles
+                  {searchTerm && ` • ${filteredOldProducts.length} encontrados`}
+                </p>
+              </div>
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  setSearchTerm('');
+                }}
+                className="p-2 rounded-lg text-gray-400 hover:bg-gray-700/50 hover:text-white transition-colors"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="p-4 border-b border-gray-700/50">
+              <input
+                type="text"
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                placeholder="Buscar por nombre, tamaño o descripción..."
+                className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              />
+            </div>
+
+            <div className="flex-1 overflow-y-auto p-4">
+              {loadingProducts ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-gray-400">Cargando productos...</div>
+                </div>
+              ) : filteredOldProducts.length === 0 ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="text-gray-400">
+                    {searchTerm ? 'No se encontraron productos con ese criterio' : 'No hay productos disponibles'}
+                  </div>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {filteredOldProducts.map((oldProd) => (
+                    <button
+                      key={oldProd._id}
+                      onClick={() => handleImportLink(oldProd)}
+                      disabled={!oldProd.mLink}
+                      className={`w-full text-left p-4 rounded-lg border transition-colors ${
+                        oldProd.mLink
+                          ? 'bg-gray-900/30 border-gray-700/50 hover:bg-gray-700/30 hover:border-primary-500/50 cursor-pointer'
+                          : 'bg-gray-900/10 border-gray-700/30 opacity-50 cursor-not-allowed'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="font-medium text-white">
+                            {oldProd.name} {oldProd.size && `(${oldProd.size})`}
+                          </div>
+                          {oldProd.description && (
+                            <div className="text-sm text-gray-400 mt-1">
+                              {oldProd.description}
+                            </div>
+                          )}
+                          {oldProd.mLink && (
+                            <div className="text-xs text-primary-400 mt-2 truncate">
+                              {oldProd.mLink}
+                            </div>
+                          )}
+                        </div>
+                        {oldProd.mLink ? (
+                          <div className="ml-4 px-2 py-1 bg-green-500/20 text-green-400 text-xs rounded flex items-center space-x-1">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                            </svg>
+                            <span>Con Link</span>
+                          </div>
+                        ) : !formData.requiresHumanAdvisor ? (
+                          <div className="ml-4 px-2 py-1 bg-yellow-500/20 text-yellow-400 text-xs rounded flex items-center space-x-1">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                            </svg>
+                            <span>Sin Link</span>
+                          </div>
+                        ) : (
+                          <div className="ml-4 px-2 py-1 bg-gray-700/50 text-gray-500 text-xs rounded flex items-center space-x-1">
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 010 12.728m0 0l-2.829-2.829m2.829 2.829L21 21M15.536 8.464a5 5 0 010 7.072m0 0l-2.829-2.829m-4.243 2.829a4.978 4.978 0 01-1.414-2.83m-1.414 5.658a9 9 0 01-2.167-9.238m7.824 2.167a1 1 0 111.414 1.414m-1.414-1.414L3 3m8.293 8.293l1.414 1.414" />
+                            </svg>
+                            <span>Sin Link</span>
+                          </div>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            <div className="px-6 py-4 border-t border-gray-700/50 flex justify-end">
+              <button
+                onClick={() => {
+                  setShowImportModal(false);
+                  setSearchTerm('');
+                }}
+                className="px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

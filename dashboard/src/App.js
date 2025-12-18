@@ -820,10 +820,10 @@ function App() {
   const fetchProductFamilies = async () => {
     setProductFamiliesLoading(true);
     try {
-      const res = await fetch(`${API_URL}/product-families/tree`);
-      const data = await res.json();
-      if (data.success) {
-        setProductFamilyTree(data.data || []);
+      const response = await API.get('/product-families/tree');
+      if (response.data.success) {
+        console.log('Fetched product families:', response.data.data.length, 'roots');
+        setProductFamilyTree(response.data.data || []);
       }
     } catch (error) {
       console.error("Error fetching product families:", error);
@@ -834,21 +834,24 @@ function App() {
 
   const handleSaveProductFamily = async (productFamilyData) => {
     try {
+      console.log('📥 App.js received data from modal:');
+      console.log('   Name:', productFamilyData.name);
+      console.log('   Sellable:', productFamilyData.sellable);
+      console.log('   onlineStoreLinks:', productFamilyData.onlineStoreLinks);
+      console.log('   Full data:', productFamilyData);
+
       // Use the presence of _id to determine if this is an update (PUT) or create (POST)
       const isUpdate = selectedProductFamily && selectedProductFamily._id;
-      const url = isUpdate
-        ? `${API_URL}/product-families/${selectedProductFamily._id}`
-        : `${API_URL}/product-families`;
-      const method = isUpdate ? "PUT" : "POST";
+      console.log('   Is update?', isUpdate, 'ID:', selectedProductFamily?._id);
 
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(productFamilyData)
-      });
+      const response = isUpdate
+        ? await API.put(`/product-families/${selectedProductFamily._id}`, productFamilyData)
+        : await API.post('/product-families', productFamilyData);
 
-      const data = await res.json();
-      if (data.success) {
+      if (response.data.success) {
+        console.log('✅ Product family saved successfully');
+        console.log('   Response data:', response.data.data);
+        console.log('   onlineStoreLinks in response:', response.data.data.onlineStoreLinks);
         // Refresh the tree view
         await fetchProductFamilies();
         setShowProductFamilyModal(false);
@@ -856,8 +859,8 @@ function App() {
         setSelectedParentId(null);
       }
     } catch (error) {
-      console.error("Error saving product family:", error);
-      alert("Error saving product family");
+      console.error("❌ Error saving product family:", error);
+      alert("Error saving product family: " + (error.response?.data?.error || error.message));
     }
   };
 
@@ -891,14 +894,17 @@ function App() {
     setShowProductFamilyModal(true);
   };
 
-  const handleCopyProduct = async (selectedChildIds) => {
+  const handleCopyProduct = async (selectedChildIds, selectedParentId) => {
     if (!productToCopy) return;
 
     try {
       const res = await fetch(`${API_URL}/product-families/${productToCopy._id}/copy`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ childIds: selectedChildIds })
+        body: JSON.stringify({
+          childIds: selectedChildIds,
+          targetParentId: selectedParentId
+        })
       });
 
       const data = await res.json();
