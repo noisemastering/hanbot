@@ -143,16 +143,8 @@ router.put("/:id", async (req, res) => {
     console.log('   Received data:', JSON.stringify(req.body, null, 2));
     console.log('   onlineStoreLinks in request:', req.body.onlineStoreLinks);
 
-    const productFamily = await ProductFamily.findByIdAndUpdate(
-      req.params.id,
-      req.body,
-      { new: true, runValidators: true }
-    ).populate('parentId', 'name generation');
-
-    console.log('✅ Updated product family:', productFamily.name);
-    console.log('   sellable:', productFamily.sellable);
-    console.log('   requiresHumanAdvisor:', productFamily.requiresHumanAdvisor);
-    console.log('   onlineStoreLinks after save:', productFamily.onlineStoreLinks);
+    // Find the product first
+    const productFamily = await ProductFamily.findById(req.params.id);
 
     if (!productFamily) {
       return res.status(404).json({
@@ -160,6 +152,22 @@ router.put("/:id", async (req, res) => {
         error: "Familia de producto no encontrada"
       });
     }
+
+    // Update fields manually to ensure nested arrays are properly saved
+    Object.keys(req.body).forEach(key => {
+      productFamily[key] = req.body[key];
+    });
+
+    // Save using .save() method which properly handles nested arrays
+    await productFamily.save();
+
+    // Populate after save
+    await productFamily.populate('parentId', 'name generation');
+
+    console.log('✅ Updated product family:', productFamily.name);
+    console.log('   sellable:', productFamily.sellable);
+    console.log('   requiresHumanAdvisor:', productFamily.requiresHumanAdvisor);
+    console.log('   onlineStoreLinks after save:', productFamily.onlineStoreLinks);
 
     res.json({ success: true, data: productFamily });
   } catch (err) {
