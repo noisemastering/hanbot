@@ -501,4 +501,63 @@ async function deleteProductRecursive(productId) {
   return deletedCount;
 }
 
+// ============================================
+// BULK PRICE UPDATE
+// ============================================
+
+// Update price for all sellable descendants of a product
+router.post("/:id/bulk-update-price", async (req, res) => {
+  try {
+    const { price } = req.body;
+    const productId = req.params.id;
+
+    if (price === undefined || price === null) {
+      return res.status(400).json({
+        success: false,
+        error: "Price is required"
+      });
+    }
+
+    console.log(`🏷️  Bulk price update for product ${productId} to $${price}`);
+
+    // Update all sellable descendants
+    const updatedCount = await updateDescendantPrices(productId, parseFloat(price));
+
+    console.log(`✅ Updated ${updatedCount} sellable products`);
+
+    res.json({
+      success: true,
+      message: `Updated ${updatedCount} sellable products`,
+      updatedCount
+    });
+  } catch (err) {
+    console.error("Error bulk updating prices:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Helper function to recursively update prices for all sellable descendants
+async function updateDescendantPrices(productId, price) {
+  let updatedCount = 0;
+
+  // Get all direct children of this product
+  const children = await ProductFamily.find({ parentId: productId });
+
+  // Update each child
+  for (const child of children) {
+    // If child is sellable, update its price
+    if (child.sellable) {
+      await ProductFamily.findByIdAndUpdate(child._id, { price });
+      updatedCount += 1;
+      console.log(`  📝 Updated ${child.name}: $${price}`);
+    }
+
+    // Recursively update this child's descendants (regardless of whether child is sellable)
+    const childUpdatedCount = await updateDescendantPrices(child._id, price);
+    updatedCount += childUpdatedCount;
+  }
+
+  return updatedCount;
+}
+
 module.exports = router;

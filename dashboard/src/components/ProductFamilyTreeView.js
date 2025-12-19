@@ -77,7 +77,6 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, 
             {/* Additional Info for Sellable Products */}
             {product.sellable && (
               <div className="flex items-center space-x-4 mt-2 text-xs text-gray-400">
-                {product.price && <span>Precio: ${product.price}</span>}
                 {product.sku && <span>SKU: {product.sku}</span>}
                 {product.stock !== undefined && <span>Inventario: {product.stock}</span>}
               </div>

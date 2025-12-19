@@ -69,6 +69,25 @@ function ProductDetailsModal({ product, onClose }) {
               )}
             </div>
 
+            {/* Price - Available for both sellable and non-sellable products */}
+            {product.price !== undefined && product.price !== null && (
+              <div className="p-4 bg-primary-500/5 rounded-lg border border-primary-500/20">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-400 mb-1">Precio</label>
+                    <p className="text-3xl font-bold text-primary-400">
+                      ${typeof product.price === 'number' ? product.price.toFixed(2) : product.price}
+                    </p>
+                  </div>
+                  {!product.sellable && (
+                    <div className="text-xs text-gray-400 max-w-xs text-right">
+                      <p>Este precio se puede aplicar a todos los productos vendibles descendientes</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Sellable Product Details */}
             {product.sellable && (
               <div className="p-4 bg-green-500/5 rounded-lg border border-green-500/20 space-y-4">
@@ -80,13 +99,6 @@ function ProductDetailsModal({ product, onClose }) {
                 </h3>
 
                 <div className="grid grid-cols-2 gap-4">
-                  {product.price !== undefined && product.price !== null && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-400 mb-1">Precio</label>
-                      <p className="text-2xl font-bold text-green-400">${product.price}</p>
-                    </div>
-                  )}
-
                   {product.sku && (
                     <div>
                       <label className="block text-sm font-medium text-gray-400 mb-1">SKU</label>

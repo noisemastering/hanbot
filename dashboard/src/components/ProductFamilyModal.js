@@ -23,6 +23,10 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
   const [searchTerm, setSearchTerm] = useState('');
   const [loadingProducts, setLoadingProducts] = useState(false);
 
+  // State for Points of Sale
+  const [pointsOfSale, setPointsOfSale] = useState([]);
+  const [loadingPOS, setLoadingPOS] = useState(false);
+
   useEffect(() => {
     if (product) {
       setFormData({
@@ -48,7 +52,25 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
     }
   }, [product, presetParentId]);
 
-  const handleSubmit = (e) => {
+  // Fetch Points of Sale when component mounts
+  useEffect(() => {
+    const fetchPointsOfSale = async () => {
+      setLoadingPOS(true);
+      try {
+        const response = await API.get('/points-of-sale?active=true');
+        if (response.data.success) {
+          setPointsOfSale(response.data.data || []);
+        }
+      } catch (error) {
+        console.error('Error fetching points of sale:', error);
+      } finally {
+        setLoadingPOS(false);
+      }
+    };
+    fetchPointsOfSale();
+  }, []);
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
 
     // Prepare data for submission
@@ -60,9 +82,13 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
       sellable: formData.sellable
     };
 
-    // Only include sellable fields if product is sellable
+    // Only include price if it has a value (don't send null to avoid overwriting existing prices)
+    if (formData.price !== null && formData.price !== undefined && formData.price !== '') {
+      submitData.price = parseFloat(formData.price);
+    }
+
+    // Only include sellable-specific fields if product is sellable
     if (formData.sellable) {
-      submitData.price = formData.price ? parseFloat(formData.price) : null;
       submitData.sku = formData.sku || null;
       submitData.stock = formData.stock ? parseInt(formData.stock, 10) : null;
       submitData.requiresHumanAdvisor = Boolean(formData.requiresHumanAdvisor);
@@ -70,7 +96,7 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
       submitData.thumbnail = formData.thumbnail || null;
       submitData.onlineStoreLinks = formData.onlineStoreLinks || [];
     } else {
-      // Clear these fields when product is not sellable
+      // Clear sellable-specific fields when product is not sellable
       submitData.requiresHumanAdvisor = false;
       submitData.genericDescription = null;
       submitData.thumbnail = null;
@@ -80,9 +106,34 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
     console.log('📤 Submitting product family data:');
     console.log('   Name:', submitData.name);
     console.log('   Sellable:', submitData.sellable);
+    console.log('   Price:', submitData.price);
     console.log('   onlineStoreLinks:', submitData.onlineStoreLinks);
     console.log('   Full data:', JSON.stringify(submitData, null, 2));
-    onSave(submitData);
+
+    // Call the parent save handler
+    await onSave(submitData);
+
+    // Automatically bulk update children prices if:
+    // 1. This product is being edited (has an ID)
+    // 2. Price was provided in the form
+    // 3. Product has children (check will be done on backend)
+    if (product && product._id && submitData.price) {
+      try {
+        console.log(`🏷️  Auto-updating children prices for product ${product._id} to $${submitData.price}`);
+        const response = await API.post(`/product-families/${product._id}/bulk-update-price`, {
+          price: submitData.price
+        });
+
+        if (response.data.success && response.data.updatedCount > 0) {
+          console.log(`✅ ${response.data.message}`);
+          // Show success message only if some products were actually updated
+          alert(`Actualizado: ${response.data.updatedCount} productos descendientes actualizados con el precio $${submitData.price}`);
+        }
+      } catch (error) {
+        console.error('Error bulk updating prices:', error);
+        // Don't show error alert - this is automatic and shouldn't interrupt the flow
+      }
+    }
   };
 
   const handleChange = (e) => {
@@ -321,6 +372,29 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
               )}
             </div>
 
+            {/* Price Field - Available for both sellable and non-sellable products */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Precio
+              </label>
+              <div className="relative">
+                <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">$</span>
+                <input
+                  type="number"
+                  name="price"
+                  value={formData.price}
+                  onChange={handleChange}
+                  step="0.01"
+                  min="0"
+                  className="w-full pl-8 pr-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="0.00"
+                />
+              </div>
+              <p className="text-xs text-gray-500 mt-1">
+                Los productos no vendibles pueden tener precio para aplicarlo a todos sus hijos
+              </p>
+            </div>
+
             {/* Sellable-Only Fields */}
             {formData.sellable && (
               <div className="space-y-4 p-4 bg-green-500/5 rounded-lg border border-green-500/20">
@@ -329,26 +403,6 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
                   <h3 className="text-sm font-semibold text-green-300">Detalles del Producto Vendible</h3>
-                </div>
-
-                {/* Price */}
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Precio
-                  </label>
-                  <div className="relative">
-                    <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">$</span>
-                    <input
-                      type="number"
-                      name="price"
-                      value={formData.price}
-                      onChange={handleChange}
-                      step="0.01"
-                      min="0"
-                      className="w-full pl-8 pr-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      placeholder="0.00"
-                    />
-                  </div>
                 </div>
 
                 {/* SKU */}
@@ -473,17 +527,28 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                           )}
                         </div>
                         <div className="flex items-center space-x-2">
-                          <input
-                            type="text"
+                          <select
                             value={link.store}
                             onChange={(e) => {
+                              const selectedStore = e.target.value;
+                              const pos = pointsOfSale.find(p => p.name === selectedStore);
                               const newLinks = [...formData.onlineStoreLinks];
-                              newLinks[index].store = e.target.value;
+                              newLinks[index].store = selectedStore;
+                              // Auto-fill URL from POS defaultUrl if available and current URL is empty
+                              if (pos && pos.defaultUrl && !newLinks[index].url) {
+                                newLinks[index].url = pos.defaultUrl;
+                              }
                               setFormData({ ...formData, onlineStoreLinks: newLinks });
                             }}
                             className="flex-1 px-3 py-1.5 bg-gray-900/50 border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                            placeholder="Tienda (ej: Mercado Libre)"
-                          />
+                          >
+                            <option value="">-- Seleccionar tienda --</option>
+                            {pointsOfSale.map((pos) => (
+                              <option key={pos._id} value={pos.name}>
+                                {pos.icon ? `${pos.icon} ` : ''}{pos.name}
+                              </option>
+                            ))}
+                          </select>
                           <label className="flex items-center space-x-1.5 text-sm text-gray-300 whitespace-nowrap">
                             <input
                               type="checkbox"

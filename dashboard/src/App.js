@@ -50,6 +50,8 @@ import Messages from "./pages/Messages";
 import Login from "./pages/Login";
 import Settings from "./pages/Settings";
 import InventarioView from "./pages/InventarioView";
+import PuntosDeVentaView from "./pages/PuntosDeVentaView";
+import PuntoDeVentaModal from "./components/PuntoDeVentaModal";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 import UsersView from "./components/UsersView";
@@ -160,6 +162,14 @@ const menuItems = [
         path: "/products",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+        )
+      },
+      {
+        id: "pos",
+        label: "Puntos de Venta",
+        path: "/pos",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
         )
       }
     ]
@@ -312,6 +322,12 @@ function App() {
   const [showGruposModal, setShowGruposModal] = useState(false);
   const [selectedGrupo, setSelectedGrupo] = useState(null);
   const [grupos, setGrupos] = useState([]);
+
+  // Puntos de Venta state
+  const [showPuntoDeVentaModal, setShowPuntoDeVentaModal] = useState(false);
+  const [selectedPuntoDeVenta, setSelectedPuntoDeVenta] = useState(null);
+  const [pointsOfSale, setPointsOfSale] = useState([]);
+  const [pointsOfSaleLoading, setPointsOfSaleLoading] = useState(false);
 
   // Product Families state
   const [productFamilyTree, setProductFamilyTree] = useState([]);
@@ -817,6 +833,72 @@ function App() {
     }
   };
 
+  // Points of Sale CRUD functions
+  const fetchPointsOfSale = async () => {
+    setPointsOfSaleLoading(true);
+    try {
+      const res = await fetch(`${API_URL}/points-of-sale`);
+      const data = await res.json();
+      if (data.success) {
+        setPointsOfSale(data.data || []);
+      }
+    } catch (error) {
+      console.error("Error fetching points of sale:", error);
+    } finally {
+      setPointsOfSaleLoading(false);
+    }
+  };
+
+  const handleDeletePuntoDeVenta = async (pos) => {
+    const confirmed = window.confirm(
+      `¿Estás seguro de eliminar el punto de venta "${pos.name}"?\n\nEsta acción no se puede deshacer.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      const res = await fetch(`${API_URL}/points-of-sale/${pos._id}`, {
+        method: "DELETE"
+      });
+      const data = await res.json();
+      if (data.success) {
+        setPointsOfSale(pointsOfSale.filter(p => p._id !== pos._id));
+      }
+    } catch (error) {
+      console.error("Error deleting point of sale:", error);
+      alert("Error al eliminar el punto de venta");
+    }
+  };
+
+  const handleSavePuntoDeVenta = async (posData) => {
+    try {
+      const url = selectedPuntoDeVenta
+        ? `${API_URL}/points-of-sale/${selectedPuntoDeVenta._id}`
+        : `${API_URL}/points-of-sale`;
+      const method = selectedPuntoDeVenta ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(posData)
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        if (selectedPuntoDeVenta) {
+          setPointsOfSale(pointsOfSale.map(p => p._id === selectedPuntoDeVenta._id ? data.data : p));
+        } else {
+          setPointsOfSale([data.data, ...pointsOfSale]);
+        }
+        setShowPuntoDeVentaModal(false);
+        setSelectedPuntoDeVenta(null);
+      }
+    } catch (error) {
+      console.error("Error saving point of sale:", error);
+      alert("Error al guardar el punto de venta");
+    }
+  };
+
   const fetchProductFamilies = async () => {
     setProductFamiliesLoading(true);
     try {
@@ -1012,6 +1094,12 @@ function App() {
     if (location.pathname === "/usos-grupos") {
       fetchUsos();
       fetchGrupos();
+    }
+  }, [location.pathname]);
+
+  useEffect(() => {
+    if (location.pathname === "/pos") {
+      fetchPointsOfSale();
     }
   }, [location.pathname]);
 
@@ -1900,6 +1988,23 @@ function App() {
             />
           } />
 
+          {/* Puntos de Venta Route */}
+          <Route path="/pos" element={
+            <PuntosDeVentaView
+              pointsOfSale={pointsOfSale}
+              loading={pointsOfSaleLoading}
+              onAdd={() => {
+                setSelectedPuntoDeVenta(null);
+                setShowPuntoDeVentaModal(true);
+              }}
+              onEdit={(pos) => {
+                setSelectedPuntoDeVenta(pos);
+                setShowPuntoDeVentaModal(true);
+              }}
+              onDelete={(pos) => handleDeletePuntoDeVenta(pos)}
+            />
+          } />
+
           {/* Familias Route */}
           <Route path="/familias" element={
             <ProductFamilyTreeView
@@ -2288,6 +2393,18 @@ function App() {
             onClose={() => {
               setShowGruposModal(false);
               setSelectedGrupo(null);
+            }}
+          />
+        )}
+
+        {/* Punto de Venta Modal */}
+        {showPuntoDeVentaModal && (
+          <PuntoDeVentaModal
+            puntoDeVenta={selectedPuntoDeVenta}
+            onSave={handleSavePuntoDeVenta}
+            onClose={() => {
+              setShowPuntoDeVentaModal(false);
+              setSelectedPuntoDeVenta(null);
             }}
           />
         )}

@@ -69,6 +69,7 @@ const masterCatalogRoutes = require('./routes/masterCatalogRoutes');
 const usosRoutes = require('./routes/usosRoutes');
 const gruposRoutes = require('./routes/gruposRoutes');
 const productFamilyRoutes = require('./routes/productFamilyRoutes');
+const pointsOfSaleRoutes = require('./routes/pointsOfSaleRoutes');
 const authRoutes = require('./routes/authRoutes');
 const dashboardUsersRoutes = require('./routes/dashboardUsersRoutes');
 const rolesRoutes = require('./routes/rolesRoutes');
@@ -97,6 +98,7 @@ app.use('/master-catalog', masterCatalogRoutes);
 app.use('/usos', usosRoutes);
 app.use('/grupos', gruposRoutes);
 app.use('/product-families', productFamilyRoutes);
+app.use('/points-of-sale', pointsOfSaleRoutes);
 
 // ============================================
 // Start the Express Server with Socket.IO
