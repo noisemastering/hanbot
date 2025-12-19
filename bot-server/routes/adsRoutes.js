@@ -1,6 +1,7 @@
 // routes/adsRoutes.js
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
 const Ad = require("../models/Ad");
 const AdSet = require("../models/AdSet");
 
@@ -19,7 +20,7 @@ router.get("/", async (req, res) => {
           select: "name ref"
         }
       })
-      .populate("productIds", "name size price familyId")
+      .populate("productIds", "name description sellable")
       .sort({ createdAt: -1 });
 
     res.json({ success: true, data: ads });
@@ -40,7 +41,7 @@ router.get("/:id", async (req, res) => {
           select: "name ref"
         }
       })
-      .populate("productIds", "name size price familyId");
+      .populate("productIds", "name description sellable");
 
     if (!ad) {
       return res.status(404).json({ success: false, error: "Ad no encontrado" });
@@ -73,6 +74,11 @@ router.post("/", async (req, res) => {
       return res.status(404).json({ success: false, error: "AdSet no encontrado" });
     }
 
+    // Convert product IDs to ObjectId type
+    if (req.body.productIds && Array.isArray(req.body.productIds)) {
+      req.body.productIds = req.body.productIds.map(id => new mongoose.Types.ObjectId(id));
+    }
+
     const ad = new Ad(req.body);
     await ad.save();
 
@@ -85,6 +91,11 @@ router.post("/", async (req, res) => {
 // Update ad
 router.put("/:id", async (req, res) => {
   try {
+    // Convert product IDs to ObjectId type
+    if (req.body.productIds && Array.isArray(req.body.productIds)) {
+      req.body.productIds = req.body.productIds.map(id => new mongoose.Types.ObjectId(id));
+    }
+
     const ad = await Ad.findByIdAndUpdate(
       req.params.id,
       req.body,
@@ -96,7 +107,7 @@ router.put("/:id", async (req, res) => {
         path: "campaignId",
         select: "name ref"
       }
-    }).populate("productIds", "name size price familyId");
+    }).populate("productIds", "name description sellable");
 
     if (!ad) {
       return res.status(404).json({ success: false, error: "Ad no encontrado" });

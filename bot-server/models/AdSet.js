@@ -49,7 +49,7 @@ const adSetSchema = new mongoose.Schema(
     // Products associated with this ad set
     productIds: [{
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Product"
+      ref: "ProductFamily"
     }],
 
     // Metrics

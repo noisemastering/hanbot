@@ -50,6 +50,23 @@ const productFamilySchema = new mongoose.Schema({
   imageUrl: {
     type: String
   },
+  thumbnail: {
+    type: String  // Link to product thumbnail image
+  },
+  onlineStoreLinks: [{
+    url: {
+      type: String,
+      required: true
+    },
+    store: {
+      type: String,  // e.g., "Mercado Libre", "Amazon", "Website"
+      required: true
+    },
+    isPreferred: {
+      type: Boolean,
+      default: false  // Mark the main/preferred link (e.g., Mercado Libre)
+    }
+  }],
   attributes: {
     type: Map,
     of: String  // Flexible attributes like { size: "3x5m", finish: "Reforzada" }

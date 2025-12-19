@@ -44,7 +44,7 @@ const campaignSchema = new mongoose.Schema(
     // Products associated with this campaign
     productIds: [{
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Product"
+      ref: "ProductFamily"
     }],
 
     // Mensajería / flujo

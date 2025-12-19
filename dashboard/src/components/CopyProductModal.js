@@ -1,9 +1,107 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import API from '../api';
+
+// Recursive component to render parent selection tree
+function ParentTreeNode({ node, selectedParentId, onSelectParent, expandedNodes, onToggleExpand, level = 0 }) {
+  const isExpanded = expandedNodes.has(node._id);
+  const hasChildren = node.children && node.children.length > 0;
+  const isSelected = selectedParentId === node._id;
+  const isSellable = node.sellable;
+
+  return (
+    <div>
+      <div
+        className={`flex items-center gap-2 py-2 px-3 rounded cursor-pointer transition-colors ${
+          isSelected ? 'bg-primary-500/20 border border-primary-500/50' : 'hover:bg-gray-700/30'
+        } ${isSellable ? 'opacity-50 cursor-not-allowed' : ''}`}
+        style={{ marginLeft: `${level * 24}px` }}
+        onClick={() => !isSellable && onSelectParent(node._id)}
+      >
+        {hasChildren && (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleExpand(node._id);
+            }}
+            className="p-0.5 hover:bg-gray-600/50 rounded"
+          >
+            <svg
+              className={`w-4 h-4 text-gray-400 transform transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+          </button>
+        )}
+        {!hasChildren && <div className="w-5" />}
+
+        <input
+          type="radio"
+          checked={isSelected}
+          onChange={() => !isSellable && onSelectParent(node._id)}
+          disabled={isSellable}
+          className="w-4 h-4 text-primary-500"
+          onClick={(e) => e.stopPropagation()}
+        />
+
+        <div className="flex-1 flex items-center gap-2">
+          <span className="text-sm text-white">{node.name}</span>
+          <span className="text-xs text-gray-500">Gen {node.generation}</span>
+          {isSellable && (
+            <span className="text-xs text-gray-500">(No puede tener hijos)</span>
+          )}
+        </div>
+      </div>
+
+      {isExpanded && hasChildren && (
+        <div>
+          {node.children.map((child) => (
+            <ParentTreeNode
+              key={child._id}
+              node={child}
+              selectedParentId={selectedParentId}
+              onSelectParent={onSelectParent}
+              expandedNodes={expandedNodes}
+              onToggleExpand={onToggleExpand}
+              level={level + 1}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 function CopyProductModal({ product, onConfirm, onCancel }) {
   const [selectedChildren, setSelectedChildren] = useState(new Set());
+  const [selectedParentId, setSelectedParentId] = useState(product.parentId || '');
+  const [availableParents, setAvailableParents] = useState([]);
+  const [loadingParents, setLoadingParents] = useState(true);
+  const [expandedNodes, setExpandedNodes] = useState(new Set());
 
   const hasChildren = product.children && product.children.length > 0;
+
+  useEffect(() => {
+    fetchAvailableParents();
+  }, []);
+
+  const fetchAvailableParents = async () => {
+    setLoadingParents(true);
+    try {
+      // Fetch tree structure
+      const response = await API.get('/product-families/tree');
+      if (response.data.success) {
+        setAvailableParents(response.data.data || []);
+      }
+    } catch (error) {
+      console.error('Error fetching available parents:', error);
+      alert('Error al cargar familias disponibles');
+    } finally {
+      setLoadingParents(false);
+    }
+  };
 
   const handleToggleChild = (childId) => {
     setSelectedChildren(prev => {
@@ -26,8 +124,28 @@ function CopyProductModal({ product, onConfirm, onCancel }) {
     setSelectedChildren(new Set());
   };
 
+  const handleToggleExpand = (nodeId) => {
+    setExpandedNodes(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(nodeId)) {
+        newSet.delete(nodeId);
+      } else {
+        newSet.add(nodeId);
+      }
+      return newSet;
+    });
+  };
+
+  const handleSelectParent = (parentId) => {
+    setSelectedParentId(parentId);
+  };
+
   const handleConfirm = () => {
-    onConfirm(Array.from(selectedChildren));
+    if (!selectedParentId) {
+      alert('Por favor selecciona un padre para el producto copiado');
+      return;
+    }
+    onConfirm(Array.from(selectedChildren), selectedParentId);
   };
 
   return (
@@ -43,6 +161,48 @@ function CopyProductModal({ product, onConfirm, onCancel }) {
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto px-6 py-4">
+          {/* Parent Selection */}
+          <div className="mb-6">
+            <label className="block text-sm font-medium text-gray-300 mb-3">
+              Selecciona el Padre del Producto Copiado
+            </label>
+            {loadingParents ? (
+              <div className="flex items-center justify-center py-8 text-gray-400">
+                <svg className="animate-spin h-5 w-5 mr-2" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                Cargando familias...
+              </div>
+            ) : (
+              <div className="max-h-64 overflow-y-auto border border-gray-700 rounded-lg bg-gray-800/50 p-2">
+                {availableParents.length === 0 ? (
+                  <div className="text-center text-gray-400 py-4">
+                    No hay familias disponibles
+                  </div>
+                ) : (
+                  availableParents.map((parent) => (
+                    <ParentTreeNode
+                      key={parent._id}
+                      node={parent}
+                      selectedParentId={selectedParentId}
+                      onSelectParent={handleSelectParent}
+                      expandedNodes={expandedNodes}
+                      onToggleExpand={handleToggleExpand}
+                      level={0}
+                    />
+                  ))
+                )}
+              </div>
+            )}
+            <p className="text-xs text-gray-500 mt-2">
+              Click en una familia para seleccionarla como padre del producto copiado. Los productos vendibles no pueden tener hijos.
+            </p>
+          </div>
+
+          {/* Divider */}
+          <div className="border-t border-gray-700 mb-6"></div>
+
           {!hasChildren ? (
             <div className="text-center py-8">
               <p className="text-gray-400">

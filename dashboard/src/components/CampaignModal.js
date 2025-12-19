@@ -1,6 +1,41 @@
 import React, { useState, useEffect } from 'react';
+import ProductTreeSelector from './ProductTreeSelector';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+
+// Helper function to collect only sellable product IDs from tree
+function collectSellableProductIds(productTree) {
+  let sellableIds = [];
+
+  function traverse(products) {
+    products.forEach(product => {
+      if (product.sellable) {
+        sellableIds.push(product._id);
+      }
+      if (product.children && product.children.length > 0) {
+        traverse(product.children);
+      }
+    });
+  }
+
+  traverse(productTree);
+  return sellableIds;
+}
+
+// Helper function to filter out unavailable products from tree
+function filterAvailableProducts(productTree) {
+  return productTree.reduce((acc, product) => {
+    // Only include available products
+    if (product.available !== false) {
+      const filteredProduct = {
+        ...product,
+        children: product.children ? filterAvailableProducts(product.children) : []
+      };
+      acc.push(filteredProduct);
+    }
+    return acc;
+  }, []);
+}
 
 function CampaignModal({ campaign, onSave, onClose }) {
   const [formData, setFormData] = useState({
@@ -23,22 +58,26 @@ function CampaignModal({ campaign, onSave, onClose }) {
     productIds: []
   });
 
-  const [products, setProducts] = useState([]);
+  const [productFamilies, setProductFamilies] = useState([]);
+  const [productsLoading, setProductsLoading] = useState(false);
 
-  // Fetch products on mount
+  // Fetch product families tree on mount
   useEffect(() => {
-    const fetchProducts = async () => {
+    const fetchProductFamilies = async () => {
+      setProductsLoading(true);
       try {
-        const response = await fetch(`${API_URL}/products`);
+        const response = await fetch(`${API_URL}/product-families/tree`);
         const data = await response.json();
         if (data.success) {
-          setProducts(data.data);
+          setProductFamilies(data.data);
         }
       } catch (error) {
-        console.error('Error fetching products:', error);
+        console.error('Error fetching product families:', error);
+      } finally {
+        setProductsLoading(false);
       }
     };
-    fetchProducts();
+    fetchProductFamilies();
   }, []);
 
   useEffect(() => {
@@ -66,7 +105,29 @@ function CampaignModal({ campaign, onSave, onClose }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave(formData);
+
+    // Validate required fields (only for new campaigns)
+    if (!campaign && (!formData.ref || formData.ref.trim() === '')) {
+      alert('Por favor ingresa un valor para el campo "Ref" (usado para tracking con ?ref=)');
+      return;
+    }
+
+    // Filter to only include sellable products
+    const allSellableIds = collectSellableProductIds(productFamilies);
+    const sellableProductIds = formData.productIds.filter(id => allSellableIds.includes(id));
+
+    // Prepare data to save
+    const dataToSave = {
+      ...formData,
+      productIds: sellableProductIds // Only save sellable products
+    };
+
+    // When editing, don't send ref field (it's immutable and disabled)
+    if (campaign) {
+      delete dataToSave.ref;
+    }
+
+    onSave(dataToSave);
   };
 
   const handleChange = (e) => {
@@ -77,23 +138,23 @@ function CampaignModal({ campaign, onSave, onClose }) {
     });
   };
 
-  const handleProductToggle = (productId) => {
-    setFormData(prev => ({
-      ...prev,
-      productIds: prev.productIds.includes(productId)
-        ? prev.productIds.filter(id => id !== productId)
-        : [...prev.productIds, productId]
-    }));
-  };
-
-  const handleSelectAllProducts = () => {
-    if (formData.productIds.length === products.length) {
-      // Deselect all
-      setFormData(prev => ({ ...prev, productIds: [] }));
-    } else {
-      // Select all
-      setFormData(prev => ({ ...prev, productIds: products.map(p => p._id) }));
-    }
+  const handleProductToggle = (productIds, isSelected) => {
+    setFormData(prev => {
+      if (isSelected) {
+        // Remove these IDs
+        return {
+          ...prev,
+          productIds: prev.productIds.filter(id => !productIds.includes(id))
+        };
+      } else {
+        // Add these IDs (avoiding duplicates)
+        const newIds = productIds.filter(id => !prev.productIds.includes(id));
+        return {
+          ...prev,
+          productIds: [...prev.productIds, ...newIds]
+        };
+      }
+    });
   };
 
   return (
@@ -349,45 +410,15 @@ function CampaignModal({ campaign, onSave, onClose }) {
 
             {/* Products Selection */}
             <div className="border-t border-gray-700 pt-4 mt-4">
-              <div className="flex items-center justify-between mb-3">
-                <h3 className="text-sm font-semibold text-gray-300">Productos Asociados</h3>
-                {products.length > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleSelectAllProducts}
-                    className="text-xs text-primary-400 hover:text-primary-300 transition-colors"
-                  >
-                    {formData.productIds.length === products.length ? 'Deseleccionar todos' : 'Seleccionar todos'}
-                  </button>
-                )}
-              </div>
-              <div className="max-h-64 overflow-y-auto space-y-2">
-                {products.length === 0 ? (
-                  <p className="text-sm text-gray-500">No hay productos disponibles</p>
-                ) : (
-                  products.map((product) => (
-                    <label
-                      key={product._id}
-                      className="flex items-center p-3 bg-gray-900/50 rounded-lg hover:bg-gray-700/50 cursor-pointer transition-colors"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={formData.productIds.includes(product._id)}
-                        onChange={() => handleProductToggle(product._id)}
-                        className="w-4 h-4 text-primary-500 bg-gray-700 border-gray-600 rounded focus:ring-primary-500 focus:ring-2"
-                      />
-                      <div className="ml-3 flex-1">
-                        <p className="text-sm font-medium text-white">{product.name}</p>
-                        <p className="text-xs text-gray-400">
-                          {product.size && `${product.size} - `}${product.price ? `$${product.price}` : 'Precio no disponible'}
-                        </p>
-                      </div>
-                    </label>
-                  ))
-                )}
-              </div>
-              <p className="text-xs text-gray-500 mt-2">
-                {formData.productIds.length} producto(s) seleccionado(s)
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">Productos Asociados</h3>
+              <ProductTreeSelector
+                selectedProducts={formData.productIds}
+                onToggle={handleProductToggle}
+                products={filterAvailableProducts(productFamilies)}
+                loading={productsLoading}
+              />
+              <p className="text-xs text-gray-400 mt-2">
+                Nota: Solo se guardarán los productos vendibles seleccionados.
               </p>
             </div>
           </div>

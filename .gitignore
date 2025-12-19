@@ -40,3 +40,4 @@ build/
 # Temporary files
 *.tmp
 .cache/
+bot-server/.env.bak

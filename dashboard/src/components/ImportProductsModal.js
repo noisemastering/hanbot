@@ -14,17 +14,11 @@ function ImportProductsModal({ targetFamily, onClose, onImport }) {
   const fetchProducts = async () => {
     setLoading(true);
     try {
-      // Fetch all product families
-      const response = await API.get('/product-families');
+      // Fetch products from the flat /products list (same as Products page)
+      const response = await API.get('/products');
       if (response.data.success) {
-        // Filter out products that are already children of the target family
-        // and filter out the target family itself
-        const availableProducts = response.data.data.filter(p => {
-          const isNotTarget = p._id !== targetFamily._id;
-          const isNotAlreadyChild = p.parentId?._id !== targetFamily._id && p.parentId !== targetFamily._id;
-          return isNotTarget && isNotAlreadyChild;
-        });
-        setProducts(availableProducts);
+        // Show all products from the flat Productos list
+        setProducts(response.data.data || []);
       }
     } catch (error) {
       console.error('Error fetching products:', error);
@@ -83,10 +77,10 @@ function ImportProductsModal({ targetFamily, onClose, onImport }) {
         <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between">
           <div>
             <h2 className="text-xl font-bold text-white">
-              Importar Productos
+              Importar Productos desde Productos
             </h2>
             <p className="text-sm text-gray-400 mt-1">
-              Selecciona productos para importar a "{targetFamily.name}"
+              Selecciona productos huérfanos (sin familia asignada) para importar a "{targetFamily.name}"
             </p>
           </div>
           <button
@@ -163,9 +157,9 @@ function ImportProductsModal({ targetFamily, onClose, onImport }) {
                           {product.description}
                         </p>
                       )}
-                      {product.parentId && (
+                      {product.price && (
                         <p className="text-xs text-gray-500 mt-1">
-                          Padre actual: {typeof product.parentId === 'object' ? product.parentId.name : product.parentId}
+                          Precio: ${product.price}
                         </p>
                       )}
                     </div>

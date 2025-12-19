@@ -1,6 +1,7 @@
 // routes/campaignsRoutes.js
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
 const Campaign = require("../models/Campaign");
 const AdSet = require("../models/AdSet");
 const Ad = require("../models/Ad");
@@ -20,10 +21,12 @@ router.get("/tree", async (req, res) => {
         // For each adset, get its ads
         const adsetsWithAds = await Promise.all(
           adsets.map(async (adset) => {
-            const ads = await Ad.find({ adSetId: adset._id }).lean();
+            const ads = await Ad.find({ adSetId: adset._id })
+              .populate('productIds', 'name description sellable')
+              .lean();
             return {
               ...adset,
-              children: ads,
+              children: ads.map(ad => ({ ...ad, type: 'ad' })),
               type: 'adset'
             };
           })
@@ -47,7 +50,7 @@ router.get("/tree", async (req, res) => {
 router.get("/", async (req, res) => {
   try {
     const campaigns = await Campaign.find()
-      .populate("productIds", "name size price familyId")
+      .populate("productIds", "name description sellable")
       .sort({ createdAt: -1 });
     res.json({ success: true, data: campaigns });
   } catch (err) {
@@ -59,7 +62,7 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const campaign = await Campaign.findById(req.params.id)
-      .populate("productIds", "name size price familyId");
+      .populate("productIds", "name description sellable");
     if (!campaign) {
       return res.status(404).json({ success: false, error: "Campaña no encontrada" });
     }
@@ -73,7 +76,7 @@ router.get("/:id", async (req, res) => {
 router.get("/ref/:ref", async (req, res) => {
   try {
     const campaign = await Campaign.findOne({ ref: req.params.ref })
-      .populate("productIds", "name size price familyId");
+      .populate("productIds", "name description sellable");
     if (!campaign) {
       return res.status(404).json({ success: false, error: "Campaña no encontrada" });
     }
@@ -86,6 +89,11 @@ router.get("/ref/:ref", async (req, res) => {
 // Crear una nueva campaña
 router.post("/", async (req, res) => {
   try {
+    // Convert product IDs to ObjectId type
+    if (req.body.productIds && Array.isArray(req.body.productIds)) {
+      req.body.productIds = req.body.productIds.map(id => new mongoose.Types.ObjectId(id));
+    }
+
     const campaign = new Campaign(req.body);
     await campaign.save();
     res.status(201).json({ success: true, data: campaign });
@@ -97,14 +105,21 @@ router.post("/", async (req, res) => {
 // Actualizar una campaña
 router.put("/:id", async (req, res) => {
   try {
+    // Convert product IDs to ObjectId type
+    if (req.body.productIds && Array.isArray(req.body.productIds)) {
+      req.body.productIds = req.body.productIds.map(id => new mongoose.Types.ObjectId(id));
+    }
+
     const campaign = await Campaign.findByIdAndUpdate(
       req.params.id,
       req.body,
       { new: true, runValidators: true }
-    ).populate("productIds", "name size price familyId");
+    ).populate("productIds", "name description sellable");
+
     if (!campaign) {
       return res.status(404).json({ success: false, error: "Campaña no encontrada" });
     }
+
     res.json({ success: true, data: campaign });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });

@@ -135,7 +135,7 @@ function InventarioView() {
         onClick={() => handleCellClick(product._id, field, value)}
         className="w-full text-left px-2 py-1 hover:bg-gray-700/50 rounded transition-colors group"
       >
-        <span className="group-hover:text-primary-400 transition-colors">
+        <span className="text-white group-hover:text-primary-400 transition-colors">
           {field === 'stock' ? value || 0 : value ? `$${value.toFixed(2)}` : '-'}
         </span>
       </button>
