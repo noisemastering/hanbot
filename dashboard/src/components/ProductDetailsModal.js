@@ -169,6 +169,46 @@ function ProductDetailsModal({ product, onClose }) {
               </div>
             )}
 
+            {/* Online Store Links */}
+            {product.onlineStoreLinks && product.onlineStoreLinks.length > 0 && (
+              <div>
+                <label className="block text-sm font-medium text-gray-400 mb-2">Enlaces a Tiendas Online</label>
+                <div className="space-y-2">
+                  {product.onlineStoreLinks.map((link, index) => (
+                    <a
+                      key={index}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center justify-between p-3 bg-primary-500/10 border border-primary-500/30 rounded-lg hover:bg-primary-500/20 transition-colors group"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <div className="p-2 bg-primary-500/20 rounded-lg">
+                          <svg className="w-5 h-5 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+                          </svg>
+                        </div>
+                        <div className="flex-1">
+                          <div className="flex items-center space-x-2">
+                            <span className="text-sm font-medium text-white">{link.store || 'Tienda Online'}</span>
+                            {link.isPreferred && (
+                              <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-300 text-xs rounded-full">
+                                Principal
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-gray-400 truncate max-w-md">{link.url}</p>
+                        </div>
+                      </div>
+                      <svg className="w-5 h-5 text-primary-400 group-hover:translate-x-1 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                      </svg>
+                    </a>
+                  ))}
+                </div>
+              </div>
+            )}
+
             {/* Image */}
             {product.imageUrl && (
               <div>

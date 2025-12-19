@@ -446,17 +446,32 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                   {formData.onlineStoreLinks.map((link, index) => (
                     <div key={index} className="flex items-start space-x-2 mb-2 p-3 bg-gray-900/30 rounded-lg border border-gray-700/50">
                       <div className="flex-1 space-y-2">
-                        <input
-                          type="url"
-                          value={link.url}
-                          onChange={(e) => {
-                            const newLinks = [...formData.onlineStoreLinks];
-                            newLinks[index].url = e.target.value;
-                            setFormData({ ...formData, onlineStoreLinks: newLinks });
-                          }}
-                          className="w-full px-3 py-1.5 bg-gray-900/50 border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
-                          placeholder="https://..."
-                        />
+                        <div className="flex items-center space-x-2">
+                          <input
+                            type="url"
+                            value={link.url}
+                            onChange={(e) => {
+                              const newLinks = [...formData.onlineStoreLinks];
+                              newLinks[index].url = e.target.value;
+                              setFormData({ ...formData, onlineStoreLinks: newLinks });
+                            }}
+                            className="flex-1 px-3 py-1.5 bg-gray-900/50 border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+                            placeholder="https://..."
+                          />
+                          {link.url && (
+                            <a
+                              href={link.url}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="p-1.5 bg-primary-500/20 text-primary-400 hover:bg-primary-500/30 rounded transition-colors flex-shrink-0"
+                              title="Abrir enlace en nueva pestaña"
+                            >
+                              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                              </svg>
+                            </a>
+                          )}
+                        </div>
                         <div className="flex items-center space-x-2">
                           <input
                             type="text"
