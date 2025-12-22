@@ -1,7 +1,27 @@
 import React from 'react';
 
-function ProductDetailsModal({ product, onClose }) {
+function ProductDetailsModal({ product, onClose, parentChain = [] }) {
   if (!product) return null;
+
+  // Helper: Get inherited price from parent chain
+  const getInheritedPrice = () => {
+    // Check if product has its own price
+    if (product.price !== undefined && product.price !== null) {
+      return { price: product.price, inherited: false };
+    }
+
+    // Walk up the parent chain to find a price
+    for (let i = parentChain.length - 1; i >= 0; i--) {
+      const parent = parentChain[i];
+      if (parent.price !== undefined && parent.price !== null) {
+        return { price: parent.price, inherited: true };
+      }
+    }
+
+    return { price: null, inherited: false };
+  };
+
+  const priceInfo = getInheritedPrice();
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -69,19 +89,32 @@ function ProductDetailsModal({ product, onClose }) {
               )}
             </div>
 
-            {/* Price - Available for both sellable and non-sellable products */}
-            {product.price !== undefined && product.price !== null && (
-              <div className="p-4 bg-primary-500/5 rounded-lg border border-primary-500/20">
+            {/* Price - Show inherited price if available */}
+            {priceInfo.price !== null && (
+              <div className={`p-4 rounded-lg border ${
+                priceInfo.inherited
+                  ? 'bg-amber-500/5 border-amber-500/20'
+                  : 'bg-primary-500/5 border-primary-500/20'
+              }`}>
                 <div className="flex items-center justify-between">
                   <div>
-                    <label className="block text-sm font-medium text-gray-400 mb-1">Precio</label>
-                    <p className="text-3xl font-bold text-primary-400">
-                      ${typeof product.price === 'number' ? product.price.toFixed(2) : product.price}
+                    <label className="block text-sm font-medium text-gray-400 mb-1">
+                      Precio {priceInfo.inherited && <span className="text-amber-400">(heredado)</span>}
+                    </label>
+                    <p className={`text-3xl font-bold ${
+                      priceInfo.inherited ? 'text-amber-400' : 'text-primary-400'
+                    }`}>
+                      ${priceInfo.price.toFixed(2)}
                     </p>
                   </div>
                   {!product.sellable && (
                     <div className="text-xs text-gray-400 max-w-xs text-right">
                       <p>Este precio se puede aplicar a todos los productos vendibles descendientes</p>
+                    </div>
+                  )}
+                  {priceInfo.inherited && product.sellable && (
+                    <div className="text-xs text-amber-300/80 max-w-xs text-right">
+                      <p>Este precio se hereda de un producto padre en la jerarquía</p>
                     </div>
                   )}
                 </div>

@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 
 // Recursive component to render a single product node and its children
-function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, onDetails, level = 0, expandedNodes, onToggleExpand }) {
+function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, onDetails, level = 0, expandedNodes, onToggleExpand, parentChain = [] }) {
   const isExpanded = expandedNodes.has(product._id);
   const hasChildren = product.children && product.children.length > 0;
   const indentPixels = level * 32; // 32px per level (equivalent to ml-8 = 2rem = 32px)
@@ -29,7 +29,7 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, 
           {/* Product Info */}
           <div className="flex-1">
             <button
-              onClick={() => onDetails(product)}
+              onClick={() => onDetails(product, parentChain)}
               className="flex items-center space-x-3 cursor-pointer hover:opacity-80 transition-opacity text-left"
               title="Ver detalles"
             >
@@ -76,9 +76,9 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, 
 
             {/* Additional Info for Sellable Products */}
             {product.sellable && (
-              <div className="flex items-center space-x-4 mt-2 text-xs text-gray-400">
-                {product.sku && <span>SKU: {product.sku}</span>}
-                {product.stock !== undefined && <span>Inventario: {product.stock}</span>}
+              <div className="flex items-center space-x-4 mt-2 text-xs">
+                {product.sku && <span className="text-gray-400">SKU: {product.sku}</span>}
+                {product.stock !== undefined && <span className="text-gray-400">Inventario: {product.stock}</span>}
               </div>
             )}
           </div>
@@ -124,7 +124,7 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, 
             </svg>
           </button>
           <button
-            onClick={() => onDetails(product)}
+            onClick={() => onDetails(product, parentChain)}
             className="p-2 text-indigo-400 hover:bg-indigo-500/20 rounded-lg transition-colors"
             title="Ver Detalles"
           >
@@ -169,6 +169,7 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, 
               level={level + 1}
               expandedNodes={expandedNodes}
               onToggleExpand={onToggleExpand}
+              parentChain={[...parentChain, product]}
             />
           ))}
         </div>

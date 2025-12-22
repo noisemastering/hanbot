@@ -338,6 +338,7 @@ function App() {
   const [showImportModal, setShowImportModal] = useState(false);
   const [productToCopy, setProductToCopy] = useState(null);
   const [productToShowDetails, setProductToShowDetails] = useState(null);
+  const [productDetailsParentChain, setProductDetailsParentChain] = useState([]);
   const [importTargetFamily, setImportTargetFamily] = useState(null);
   const [selectedProductFamily, setSelectedProductFamily] = useState(null);
   const [selectedParentId, setSelectedParentId] = useState(null);
@@ -2033,8 +2034,9 @@ function App() {
                 setImportTargetFamily(product);
                 setShowImportModal(true);
               }}
-              onDetails={(product) => {
+              onDetails={(product, parentChain = []) => {
                 setProductToShowDetails(product);
+                setProductDetailsParentChain(parentChain);
                 setShowDetailsModal(true);
               }}
             />
@@ -2440,9 +2442,11 @@ function App() {
         {showDetailsModal && productToShowDetails && (
           <ProductDetailsModal
             product={productToShowDetails}
+            parentChain={productDetailsParentChain}
             onClose={() => {
               setShowDetailsModal(false);
               setProductToShowDetails(null);
+              setProductDetailsParentChain([]);
             }}
           />
         )}

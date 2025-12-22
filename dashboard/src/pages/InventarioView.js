@@ -2,23 +2,207 @@ import React, { useState, useEffect } from 'react';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
-function InventarioView() {
-  const [products, setProducts] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [editingCell, setEditingCell] = useState(null); // { productId, field }
-  const [editValue, setEditValue] = useState('');
-  const [selectedCategory, setSelectedCategory] = useState(null); // Currently selected Gen 1 tab
+// Recursive component for rendering product hierarchy with collapsible panels
+function ProductPanel({ product, level = 0, expandedIds, onToggle, onUpdateProduct, parentChain = [] }) {
+  const isExpanded = expandedIds.has(product._id);
+  const hasChildren = product.children && product.children.length > 0;
+  const indentClass = level === 0 ? '' : `ml-${level * 8}`;
 
-  const fetchSellableProducts = async () => {
+  // Get inherited price from parent chain
+  const getInheritedPrice = () => {
+    if (product.price !== undefined && product.price !== null) {
+      return product.price;
+    }
+    for (let i = parentChain.length - 1; i >= 0; i--) {
+      if (parentChain[i].price !== undefined && parentChain[i].price !== null) {
+        return parentChain[i].price;
+      }
+    }
+    return null;
+  };
+
+  const inheritedPrice = getInheritedPrice();
+
+  return (
+    <div className={indentClass}>
+      {/* Panel Header */}
+      <div
+        className={`flex items-center justify-between p-4 border-b border-gray-700/50 hover:bg-gray-700/30 transition-colors ${
+          level === 0 ? 'bg-gray-800/80' : level === 1 ? 'bg-gray-800/60' : 'bg-gray-800/40'
+        }`}
+      >
+        <div className="flex items-center space-x-3 flex-1">
+          {/* Expand/Collapse Button */}
+          {hasChildren ? (
+            <button
+              onClick={() => onToggle(product._id)}
+              className="p-1 text-gray-400 hover:text-white transition-colors"
+            >
+              <svg
+                className={`w-5 h-5 transform transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </button>
+          ) : (
+            <div className="w-7"></div>
+          )}
+
+          {/* Product Name */}
+          <div className="flex-1">
+            <div className="flex items-center space-x-2">
+              <h3 className="text-white font-semibold">{product.name}</h3>
+              <span className="px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded text-xs">
+                Gen {product.generation}
+              </span>
+              {product.sellable && (
+                <span className="px-2 py-0.5 bg-green-500/20 text-green-300 rounded text-xs">
+                  Vendible
+                </span>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Sellable Product Edit Fields */}
+      {product.sellable && (
+        <div className="p-4 bg-gray-900/50 border-b border-gray-700/50">
+          <div className="grid grid-cols-4 gap-4">
+            <EditableField
+              label="SKU"
+              value={product.sku || ''}
+              disabled={true}
+              type="text"
+            />
+            <EditableField
+              label="Stock"
+              value={product.stock}
+              onSave={(value) => onUpdateProduct(product._id, 'stock', parseInt(value))}
+              type="number"
+            />
+            <EditableField
+              label="Precio Menudeo"
+              value={inheritedPrice || 0}
+              onSave={(value) => onUpdateProduct(product._id, 'price', parseFloat(value))}
+              type="number"
+              step="0.01"
+              inherited={product.price === undefined || product.price === null}
+            />
+            <EditableField
+              label="Precio Mayoreo"
+              value={product.wholesalePrice || 0}
+              onSave={(value) => onUpdateProduct(product._id, 'wholesalePrice', parseFloat(value))}
+              type="number"
+              step="0.01"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* Children */}
+      {isExpanded && hasChildren && (
+        <div>
+          {product.children.map((child) => (
+            <ProductPanel
+              key={child._id}
+              product={child}
+              level={level + 1}
+              expandedIds={expandedIds}
+              onToggle={onToggle}
+              onUpdateProduct={onUpdateProduct}
+              parentChain={[...parentChain, product]}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// Editable field component
+function EditableField({ label, value, onSave, type = "text", step, disabled = false, inherited = false }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editValue, setEditValue] = useState(value);
+
+  useEffect(() => {
+    setEditValue(value);
+  }, [value]);
+
+  const handleSave = () => {
+    if (onSave && editValue !== value) {
+      onSave(editValue);
+    }
+    setIsEditing(false);
+  };
+
+  const handleKeyDown = (e) => {
+    if (e.key === 'Enter') {
+      handleSave();
+    } else if (e.key === 'Escape') {
+      setEditValue(value);
+      setIsEditing(false);
+    }
+  };
+
+  if (disabled) {
+    return (
+      <div>
+        <label className="block text-xs font-medium text-gray-400 mb-1">{label}</label>
+        <div className="text-sm text-gray-500 font-mono">{value || '-'}</div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <label className="block text-xs font-medium text-gray-400 mb-1">
+        {label}
+        {inherited && <span className="ml-1 text-amber-400">(heredado)</span>}
+      </label>
+      {isEditing ? (
+        <input
+          type={type}
+          step={step}
+          value={editValue}
+          onChange={(e) => setEditValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          onBlur={handleSave}
+          autoFocus
+          className="w-full px-2 py-1 bg-gray-900 border border-primary-500 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+        />
+      ) : (
+        <button
+          onClick={() => setIsEditing(true)}
+          className="w-full text-left px-2 py-1 hover:bg-gray-700/50 rounded transition-colors text-sm"
+        >
+          <span className={`${inherited ? 'text-amber-400' : 'text-white'}`}>
+            {type === 'number' && step === '0.01' ? `$${parseFloat(value || 0).toFixed(2)}` : value || 0}
+          </span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function InventarioView() {
+  const [productTree, setProductTree] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [expandedIds, setExpandedIds] = useState(new Set());
+
+  const fetchProductTree = async () => {
     try {
       setLoading(true);
-      const res = await fetch(`${API_URL}/product-families/sellable`);
+      const res = await fetch(`${API_URL}/product-families/tree`);
       const data = await res.json();
       if (data.success) {
-        setProducts(data.data);
+        setProductTree(data.data);
       }
     } catch (error) {
-      console.error('Error fetching sellable products:', error);
+      console.error('Error fetching product tree:', error);
       alert('Error al cargar productos');
     } finally {
       setLoading(false);
@@ -26,47 +210,23 @@ function InventarioView() {
   };
 
   useEffect(() => {
-    fetchSellableProducts();
+    fetchProductTree();
   }, []);
 
-  // Auto-select first category when products load
-  useEffect(() => {
-    if (products.length > 0 && !selectedCategory) {
-      const categories = getUniqueCategories();
-      if (categories.length > 0) {
-        setSelectedCategory(categories[0]);
+  const handleToggle = (productId) => {
+    setExpandedIds((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(productId)) {
+        newSet.delete(productId);
+      } else {
+        newSet.add(productId);
       }
-    }
-  }, [products]);
-
-  // Get unique Gen 1 categories
-  const getUniqueCategories = () => {
-    const categories = [...new Set(products.map(p => p.category).filter(c => c !== null && c !== undefined))];
-    return categories.sort();
+      return newSet;
+    });
   };
 
-  // Filter products by selected category
-  const filteredProducts = selectedCategory
-    ? products.filter(p => p.category === selectedCategory)
-    : products;
-
-  const handleCellClick = (productId, field, currentValue) => {
-    setEditingCell({ productId, field });
-    setEditValue(currentValue || '');
-  };
-
-  const handleSave = async (productId) => {
-    if (!editingCell) return;
-
+  const handleUpdateProduct = async (productId, field, value) => {
     try {
-      const field = editingCell.field;
-      const value = field === 'stock' ? parseInt(editValue, 10) : parseFloat(editValue);
-
-      if (isNaN(value)) {
-        alert('Por favor ingresa un valor numérico válido');
-        return;
-      }
-
       const res = await fetch(`${API_URL}/product-families/${productId}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -76,14 +236,8 @@ function InventarioView() {
       const data = await res.json();
 
       if (data.success) {
-        // Update local state
-        setProducts(prevProducts =>
-          prevProducts.map(p =>
-            p._id === productId ? { ...p, [field]: value } : p
-          )
-        );
-        setEditingCell(null);
-        setEditValue('');
+        // Refresh the tree to get updated data
+        fetchProductTree();
       } else {
         alert('Error al actualizar: ' + data.error);
       }
@@ -93,203 +247,79 @@ function InventarioView() {
     }
   };
 
-  const handleKeyDown = (e, productId) => {
-    if (e.key === 'Enter') {
-      handleSave(productId);
-    } else if (e.key === 'Escape') {
-      setEditingCell(null);
-      setEditValue('');
-    }
+  const expandAll = () => {
+    const allIds = new Set();
+    const collectIds = (products) => {
+      products.forEach(product => {
+        if (product.children && product.children.length > 0) {
+          allIds.add(product._id);
+          collectIds(product.children);
+        }
+      });
+    };
+    collectIds(productTree);
+    setExpandedIds(allIds);
   };
 
-  const handleBlur = (productId) => {
-    // Small delay to allow click events on buttons to fire first
-    setTimeout(() => {
-      if (editingCell) {
-        handleSave(productId);
-      }
-    }, 200);
+  const collapseAll = () => {
+    setExpandedIds(new Set());
   };
-
-  const renderEditableCell = (product, field, label) => {
-    const isEditing = editingCell?.productId === product._id && editingCell?.field === field;
-    const value = product[field];
-
-    if (isEditing) {
-      return (
-        <input
-          type="number"
-          step={field === 'stock' ? '1' : '0.01'}
-          value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          onKeyDown={(e) => handleKeyDown(e, product._id)}
-          onBlur={() => handleBlur(product._id)}
-          autoFocus
-          className="w-full px-2 py-1 bg-gray-900 border border-primary-500 rounded text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-        />
-      );
-    }
-
-    return (
-      <button
-        onClick={() => handleCellClick(product._id, field, value)}
-        className="w-full text-left px-2 py-1 hover:bg-gray-700/50 rounded transition-colors group"
-      >
-        <span className="text-white group-hover:text-primary-400 transition-colors">
-          {field === 'stock' ? value || 0 : value ? `$${value.toFixed(2)}` : '-'}
-        </span>
-      </button>
-    );
-  };
-
-  const categories = getUniqueCategories();
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-8">
       {/* Header */}
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white">Inventario</h1>
-        <p className="text-gray-400 mt-2">
-          Gestiona el inventario y precios de productos vendibles. Haz clic en cualquier celda para editar.
-        </p>
-      </div>
-
-      {/* Category Tabs */}
-      {!loading && categories.length > 0 && (
-        <div className="mb-6 border-b border-gray-700/50">
-          <div className="flex space-x-1 overflow-x-auto">
-            {categories.map((category) => (
-              <button
-                key={category}
-                onClick={() => setSelectedCategory(category)}
-                className={`px-6 py-3 font-medium text-sm whitespace-nowrap transition-colors ${
-                  selectedCategory === category
-                    ? 'text-primary-400 border-b-2 border-primary-400 bg-gray-800/50'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-800/30'
-                }`}
-              >
-                {category}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {/* Products Table */}
-      <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-700/50">
-          <h2 className="text-xl font-bold text-white">
-            {selectedCategory || 'Productos Vendibles'}
-          </h2>
-          <p className="text-sm text-gray-400 mt-1">
-            {filteredProducts.length} producto{filteredProducts.length !== 1 ? 's' : ''} en esta categoría
+      <div className="mb-8 flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-white">Inventario</h1>
+          <p className="text-gray-400 mt-2">
+            Gestiona el inventario y precios de productos. Haz clic para expandir/contraer categorías.
           </p>
         </div>
+        <div className="flex space-x-2">
+          <button
+            onClick={expandAll}
+            className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
+          >
+            Expandir Todo
+          </button>
+          <button
+            onClick={collapseAll}
+            className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
+          >
+            Contraer Todo
+          </button>
+        </div>
+      </div>
 
+      {/* Product Tree */}
+      <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl overflow-hidden">
         {loading ? (
           <div className="p-12 text-center">
             <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
             <p className="text-gray-400 mt-4">Cargando inventario...</p>
           </div>
-        ) : filteredProducts.length === 0 ? (
+        ) : productTree.length === 0 ? (
           <div className="p-12 text-center">
             <div className="w-16 h-16 mx-auto mb-4 bg-gray-700/50 rounded-full flex items-center justify-center">
               <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">No hay productos en esta categoría</h3>
-            <p className="text-gray-400">Selecciona otra categoría o agrega productos vendibles</p>
+            <h3 className="text-lg font-semibold text-white mb-2">No hay productos</h3>
+            <p className="text-gray-400">Agrega productos desde el catálogo</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-900/50 border-b border-gray-700/50">
-                <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Producto
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    SKU
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Stock
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Precio Menudeo
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Precio Mayoreo
-                  </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Estado
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-700/50">
-                {filteredProducts.map((product) => (
-                  <tr
-                    key={product._id}
-                    className="hover:bg-gray-700/30 transition-colors"
-                  >
-                    {/* Product Name */}
-                    <td className="px-6 py-4">
-                      <div className="flex items-center space-x-3">
-                        <div>
-                          <div className="text-sm font-medium text-white">{product.displayName || product.name}</div>
-                          <div className="text-xs text-gray-400">
-                            {product.category && product.subcategory && (
-                              <span>{product.category} / {product.subcategory}</span>
-                            )}
-                            {!product.category && !product.subcategory && (
-                              <span>Gen {product.generation}</span>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    </td>
-
-                    {/* SKU */}
-                    <td className="px-6 py-4">
-                      <div className="text-sm text-gray-300 font-mono">{product.sku || '-'}</div>
-                    </td>
-
-                    {/* Stock - Editable */}
-                    <td className="px-6 py-4">
-                      {renderEditableCell(product, 'stock', 'Stock')}
-                    </td>
-
-                    {/* Retail Price - Editable */}
-                    <td className="px-6 py-4">
-                      {renderEditableCell(product, 'price', 'Precio Menudeo')}
-                    </td>
-
-                    {/* Wholesale Price - Editable */}
-                    <td className="px-6 py-4">
-                      {renderEditableCell(product, 'wholesalePrice', 'Precio Mayoreo')}
-                    </td>
-
-                    {/* Status */}
-                    <td className="px-6 py-4">
-                      <div className="flex flex-col space-y-1">
-                        <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
-                          product.available
-                            ? 'bg-green-500/20 text-green-300'
-                            : 'bg-red-500/20 text-red-300'
-                        }`}>
-                          {product.available ? 'Disponible' : 'No Disponible'}
-                        </span>
-                        {product.active && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-500/20 text-blue-300">
-                            Activo
-                          </span>
-                        )}
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div>
+            {productTree.map((product) => (
+              <ProductPanel
+                key={product._id}
+                product={product}
+                level={0}
+                expandedIds={expandedIds}
+                onToggle={handleToggle}
+                onUpdateProduct={handleUpdateProduct}
+              />
+            ))}
           </div>
         )}
       </div>
@@ -303,7 +333,7 @@ function InventarioView() {
           <div className="flex-1">
             <p className="text-sm text-blue-300 font-medium">Edición rápida</p>
             <p className="text-xs text-blue-200/80 mt-1">
-              Haz clic en cualquier celda de Stock o Precio para editarla. Presiona Enter para guardar o Escape para cancelar.
+              Haz clic en los campos de Stock o Precio para editarlos. Presiona Enter para guardar o Escape para cancelar. Los precios heredados se muestran en amarillo.
             </p>
           </div>
         </div>
