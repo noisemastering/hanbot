@@ -6,7 +6,7 @@ const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 function ProductPanel({ product, level = 0, expandedIds, onToggle, onUpdateProduct, parentChain = [] }) {
   const isExpanded = expandedIds.has(product._id);
   const hasChildren = product.children && product.children.length > 0;
-  const indentClass = level === 0 ? '' : `ml-${level * 8}`;
+  const indentPixels = level * 32; // 32px per level
 
   // Get inherited price from parent chain
   const getInheritedPrice = () => {
@@ -24,7 +24,7 @@ function ProductPanel({ product, level = 0, expandedIds, onToggle, onUpdateProdu
   const inheritedPrice = getInheritedPrice();
 
   return (
-    <div className={indentClass}>
+    <div style={{ marginLeft: `${indentPixels}px` }}>
       {/* Panel Header */}
       <div
         className={`flex items-center justify-between p-4 border-b border-gray-700/50 hover:bg-gray-700/30 transition-colors ${
