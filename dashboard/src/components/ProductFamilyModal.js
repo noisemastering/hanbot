@@ -11,11 +11,84 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
     price: '',
     sku: '',
     stock: '',
+    size: '',
     requiresHumanAdvisor: false,
     genericDescription: '',
     thumbnail: '',
-    onlineStoreLinks: []
+    onlineStoreLinks: [],
+    enabledDimensions: [],
+    dimensionUnits: {},  // Maps dimension name to selected unit
+    attributes: {}
   });
+
+  // Available dimensions with their display labels, icon, and available unit options
+  const AVAILABLE_DIMENSIONS = {
+    width: {
+      label: 'Ancho',
+      icon: '↔️',
+      units: ['m', 'cm', 'mm', 'in', 'ft']
+    },
+    length: {
+      label: 'Largo',
+      icon: '↕️',
+      units: ['m', 'cm', 'mm', 'in', 'ft']
+    },
+    height: {
+      label: 'Alto',
+      icon: '⬆️',
+      units: ['m', 'cm', 'mm', 'in', 'ft']
+    },
+    depth: {
+      label: 'Profundidad',
+      icon: '⤵️',
+      units: ['m', 'cm', 'mm', 'in', 'ft']
+    },
+    thickness: {
+      label: 'Grosor',
+      icon: '📏',
+      units: ['mm', 'cm', 'm', 'in']
+    },
+    weight: {
+      label: 'Peso',
+      icon: '⚖️',
+      units: ['kg', 'g', 'lb', 'oz', 'ton']
+    },
+    diameter: {
+      label: 'Diámetro',
+      icon: '⭕',
+      units: ['m', 'cm', 'mm', 'in', 'ft']
+    },
+    side1: {
+      label: 'Lado 1',
+      icon: '📐',
+      units: ['m', 'cm', 'mm', 'in', 'ft']
+    },
+    side2: {
+      label: 'Lado 2',
+      icon: '📐',
+      units: ['m', 'cm', 'mm', 'in', 'ft']
+    },
+    side3: {
+      label: 'Lado 3',
+      icon: '📐',
+      units: ['m', 'cm', 'mm', 'in', 'ft']
+    },
+    side4: {
+      label: 'Lado 4',
+      icon: '📐',
+      units: ['m', 'cm', 'mm', 'in', 'ft']
+    },
+    side5: {
+      label: 'Lado 5',
+      icon: '📐',
+      units: ['m', 'cm', 'mm', 'in', 'ft']
+    },
+    side6: {
+      label: 'Lado 6',
+      icon: '📐',
+      units: ['m', 'cm', 'mm', 'in', 'ft']
+    }
+  };
 
   // State for importing links from old products
   const [showImportModal, setShowImportModal] = useState(false);
@@ -29,6 +102,30 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
 
   useEffect(() => {
     if (product) {
+      // Convert attributes Map to regular object
+      const attributesObj = {};
+      if (product.attributes) {
+        if (product.attributes instanceof Map) {
+          product.attributes.forEach((value, key) => {
+            attributesObj[key] = value;
+          });
+        } else {
+          Object.assign(attributesObj, product.attributes);
+        }
+      }
+
+      // Convert dimensionUnits Map to regular object
+      const dimensionUnitsObj = {};
+      if (product.dimensionUnits) {
+        if (product.dimensionUnits instanceof Map) {
+          product.dimensionUnits.forEach((value, key) => {
+            dimensionUnitsObj[key] = value;
+          });
+        } else {
+          Object.assign(dimensionUnitsObj, product.dimensionUnits);
+        }
+      }
+
       setFormData({
         name: product.name || '',
         description: product.description || '',
@@ -38,10 +135,14 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
         price: product.price || '',
         sku: product.sku || '',
         stock: product.stock || '',
+        size: product.size || '',
         requiresHumanAdvisor: product.requiresHumanAdvisor || false,
         genericDescription: product.genericDescription || '',
         thumbnail: product.thumbnail || '',
-        onlineStoreLinks: product.onlineStoreLinks || []
+        onlineStoreLinks: product.onlineStoreLinks || [],
+        enabledDimensions: product.enabledDimensions || [],
+        dimensionUnits: dimensionUnitsObj,
+        attributes: attributesObj
       });
     } else if (presetParentId) {
       // When adding a child, preset the parent
@@ -70,6 +171,70 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
     fetchPointsOfSale();
   }, []);
 
+  // Calculate inherited dimensions from parent chain
+  const getInheritedDimensions = () => {
+    const inherited = new Set();
+
+    // Add current product's enabled dimensions
+    if (formData.enabledDimensions) {
+      formData.enabledDimensions.forEach(dim => inherited.add(dim));
+    }
+
+    // Walk up the parent chain to collect all enabled dimensions
+    if (formData.parentId) {
+      const flatProducts = allProducts ? flattenProducts(allProducts) : [];
+      let currentParentId = formData.parentId;
+
+      while (currentParentId) {
+        const parent = flatProducts.find(p => p._id === currentParentId);
+        if (parent && parent.enabledDimensions) {
+          parent.enabledDimensions.forEach(dim => inherited.add(dim));
+        }
+        currentParentId = parent?.parentId;
+      }
+    }
+
+    return Array.from(inherited);
+  };
+
+  // Calculate inherited dimension units from parent chain
+  const getInheritedDimensionUnits = () => {
+    const inheritedUnits = {};
+
+    // Walk up the parent chain to collect all dimension units (from bottom to top)
+    if (formData.parentId) {
+      const flatProducts = allProducts ? flattenProducts(allProducts) : [];
+      let currentParentId = formData.parentId;
+      const parentChain = [];
+
+      // Collect parent chain
+      while (currentParentId) {
+        const parent = flatProducts.find(p => p._id === currentParentId);
+        if (parent) {
+          parentChain.unshift(parent); // Add to beginning (root first)
+        }
+        currentParentId = parent?.parentId;
+      }
+
+      // Merge dimension units from root to immediate parent (so closer parents override)
+      parentChain.forEach(parent => {
+        if (parent.dimensionUnits) {
+          const parentUnits = parent.dimensionUnits instanceof Map
+            ? Object.fromEntries(parent.dimensionUnits)
+            : parent.dimensionUnits;
+          Object.assign(inheritedUnits, parentUnits);
+        }
+      });
+    }
+
+    // Current product's dimension units override inherited ones
+    if (formData.dimensionUnits) {
+      Object.assign(inheritedUnits, formData.dimensionUnits);
+    }
+
+    return inheritedUnits;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -79,7 +244,10 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
       description: formData.description,
       marketingDescription: formData.marketingDescription || null,
       parentId: formData.parentId || null,
-      sellable: formData.sellable
+      sellable: formData.sellable,
+      enabledDimensions: formData.enabledDimensions || [],
+      dimensionUnits: formData.dimensionUnits || {},
+      attributes: formData.attributes || {}
     };
 
     // Only include price if it has a value (don't send null to avoid overwriting existing prices)
@@ -91,6 +259,7 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
     if (formData.sellable) {
       submitData.sku = formData.sku || null;
       submitData.stock = formData.stock ? parseInt(formData.stock, 10) : null;
+      submitData.size = formData.size || null;
       submitData.requiresHumanAdvisor = Boolean(formData.requiresHumanAdvisor);
       submitData.genericDescription = formData.genericDescription || null;
       submitData.thumbnail = formData.thumbnail || null;
@@ -107,6 +276,8 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
     console.log('   Name:', submitData.name);
     console.log('   Sellable:', submitData.sellable);
     console.log('   Price:', submitData.price);
+    console.log('   enabledDimensions:', submitData.enabledDimensions);
+    console.log('   attributes:', submitData.attributes);
     console.log('   onlineStoreLinks:', submitData.onlineStoreLinks);
     console.log('   Full data:', JSON.stringify(submitData, null, 2));
 
@@ -346,6 +517,98 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
               </p>
             </div>
 
+            {/* Enabled Dimensions - Only for NON-sellable products */}
+            {!formData.sellable && (
+              <div className="p-4 bg-purple-500/5 rounded-lg border border-purple-500/20">
+                <div className="flex items-center space-x-2 mb-3">
+                  <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                  </svg>
+                  <h3 className="text-sm font-semibold text-purple-300">Dimensiones Habilitadas</h3>
+                </div>
+                <p className="text-xs text-gray-400 mb-3">
+                  Selecciona las dimensiones que se usarán para este producto. Los productos hijos heredarán todas las dimensiones.
+                </p>
+
+                {/* Dimension Checkboxes Grid with Unit Selection */}
+                <div className="grid grid-cols-1 gap-3">
+                  {Object.entries(AVAILABLE_DIMENSIONS).map(([key, info]) => {
+                    const isEnabled = formData.enabledDimensions.includes(key);
+                    return (
+                      <div
+                        key={key}
+                        className="p-3 bg-gray-900/30 rounded border border-gray-700/50 hover:bg-gray-700/30 transition-colors"
+                      >
+                        <div className="flex items-center justify-between">
+                          <label className="flex items-center space-x-2 cursor-pointer flex-1">
+                            <input
+                              type="checkbox"
+                              checked={isEnabled}
+                              onChange={(e) => {
+                                if (e.target.checked) {
+                                  setFormData({
+                                    ...formData,
+                                    enabledDimensions: [...formData.enabledDimensions, key],
+                                    dimensionUnits: {
+                                      ...formData.dimensionUnits,
+                                      [key]: info.units[0] // Set default unit (first in array)
+                                    }
+                                  });
+                                } else {
+                                  const newDimensions = formData.enabledDimensions.filter(d => d !== key);
+                                  const newUnits = { ...formData.dimensionUnits };
+                                  delete newUnits[key];
+                                  setFormData({
+                                    ...formData,
+                                    enabledDimensions: newDimensions,
+                                    dimensionUnits: newUnits
+                                  });
+                                }
+                              }}
+                              className="w-4 h-4 text-purple-500 bg-gray-900 border-gray-700 rounded focus:ring-purple-500"
+                            />
+                            <span className="text-sm text-gray-300 flex items-center space-x-1">
+                              <span>{info.icon}</span>
+                              <span>{info.label}</span>
+                            </span>
+                          </label>
+
+                          {/* Unit Selector - Only visible when dimension is enabled */}
+                          {isEnabled && (
+                            <select
+                              value={formData.dimensionUnits[key] || info.units[0]}
+                              onChange={(e) => {
+                                setFormData({
+                                  ...formData,
+                                  dimensionUnits: {
+                                    ...formData.dimensionUnits,
+                                    [key]: e.target.value
+                                  }
+                                });
+                              }}
+                              className="ml-2 px-2 py-1 text-xs bg-gray-800 border border-gray-600 rounded text-gray-300 focus:ring-2 focus:ring-purple-500 focus:border-purple-500"
+                            >
+                              {info.units.map(unit => (
+                                <option key={unit} value={unit}>{unit}</option>
+                              ))}
+                            </select>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+
+                {formData.enabledDimensions.length > 0 && (
+                  <div className="mt-3 p-2 bg-green-500/10 rounded border border-green-500/20">
+                    <p className="text-xs text-green-300">
+                      {formData.enabledDimensions.length} dimensión(es) habilitada(s). Todos los productos hijos tendrán estas dimensiones.
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Sellable Checkbox */}
             <div className="p-4 bg-gray-900/30 rounded-lg border border-gray-700/50">
               <div className="flex items-center space-x-3">
@@ -435,6 +698,79 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                     placeholder="0"
                   />
                 </div>
+
+                {/* Size - Auto-generated but editable */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Tamaño (Bot Query)
+                    <span className="ml-2 text-xs text-amber-400">(Auto-generado)</span>
+                  </label>
+                  <input
+                    type="text"
+                    name="size"
+                    value={formData.size}
+                    onChange={handleChange}
+                    placeholder="Ej: 6x4m (se genera automáticamente)"
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  />
+                  <p className="text-xs text-gray-500 mt-1">
+                    Se extrae automáticamente del nombre del producto. Puedes modificarlo manualmente si es necesario.
+                  </p>
+                </div>
+
+                {/* Dynamic Dimension Fields - Inherited from Parent Chain */}
+                {(() => {
+                  const inherited = getInheritedDimensions();
+                  const inheritedUnits = getInheritedDimensionUnits();
+                  return inherited.length > 0 && (
+                    <div className="p-3 bg-purple-500/10 rounded-lg border border-purple-500/20">
+                      <h4 className="text-sm font-medium text-purple-300 mb-3 flex items-center space-x-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                        </svg>
+                        <span>Dimensiones del Producto</span>
+                        <span className="text-xs text-purple-400 font-normal">(Heredadas)</span>
+                      </h4>
+                      <div className="grid grid-cols-2 gap-3">
+                        {inherited.map((dimKey) => {
+                          const dimInfo = AVAILABLE_DIMENSIONS[dimKey];
+                          if (!dimInfo) return null;
+                          // Get the inherited unit for this dimension, fallback to first available unit
+                          const unit = inheritedUnits[dimKey] || dimInfo.units[0];
+                          return (
+                            <div key={dimKey}>
+                              <label className="block text-xs font-medium text-gray-400 mb-1 flex items-center space-x-1">
+                                <span>{dimInfo.icon}</span>
+                                <span>{dimInfo.label}</span>
+                              </label>
+                              <div className="flex items-center space-x-2">
+                                <input
+                                  type="text"
+                                  value={formData.attributes[dimKey] || ''}
+                                  onChange={(e) => {
+                                    setFormData({
+                                      ...formData,
+                                      attributes: {
+                                        ...formData.attributes,
+                                        [dimKey]: e.target.value
+                                      }
+                                    });
+                                  }}
+                                  placeholder={`Ej: 6`}
+                                  className="flex-1 px-3 py-2 bg-gray-900/50 border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-purple-500 text-sm"
+                                />
+                                <span className="text-gray-400 text-sm font-medium w-12">{unit}</span>
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-2">
+                        Estas dimensiones se usan para auto-generar el campo "Tamaño" para consultas del bot
+                      </p>
+                    </div>
+                  );
+                })()}
 
                 {/* Generic Description for Cross-Selling */}
                 <div>

@@ -117,14 +117,27 @@ router.post("/", async (req, res) => {
     console.log('📝 Creating product family');
     console.log('   Received data:', JSON.stringify(req.body, null, 2));
     console.log('   onlineStoreLinks in request:', req.body.onlineStoreLinks);
+    console.log('   enabledDimensions in request:', req.body.enabledDimensions);
+    console.log('   attributes in request:', req.body.attributes);
 
     const productFamily = new ProductFamily(req.body);
+
+    // If attributes are provided, ensure they're properly set in the Map
+    if (req.body.attributes) {
+      productFamily.attributes.clear();
+      Object.entries(req.body.attributes).forEach(([attrKey, attrValue]) => {
+        productFamily.attributes.set(attrKey, attrValue);
+      });
+    }
+
     await productFamily.save();
 
     console.log('✅ Saved product family:', productFamily.name);
     console.log('   sellable:', productFamily.sellable);
     console.log('   requiresHumanAdvisor:', productFamily.requiresHumanAdvisor);
     console.log('   onlineStoreLinks after save:', productFamily.onlineStoreLinks);
+    console.log('   enabledDimensions after save:', productFamily.enabledDimensions);
+    console.log('   attributes after save:', productFamily.attributes);
 
     // Populate parent info before returning
     await productFamily.populate('parentId', 'name generation');
@@ -142,6 +155,8 @@ router.put("/:id", async (req, res) => {
     console.log('📝 Updating product family', req.params.id);
     console.log('   Received data:', JSON.stringify(req.body, null, 2));
     console.log('   onlineStoreLinks in request:', req.body.onlineStoreLinks);
+    console.log('   enabledDimensions in request:', req.body.enabledDimensions);
+    console.log('   attributes in request:', req.body.attributes);
 
     // Find the product first
     const productFamily = await ProductFamily.findById(req.params.id);
@@ -153,12 +168,42 @@ router.put("/:id", async (req, res) => {
       });
     }
 
-    // Update fields manually to ensure nested arrays are properly saved
+    // Update fields manually to ensure nested arrays and Maps are properly saved
     Object.keys(req.body).forEach(key => {
-      productFamily[key] = req.body[key];
+      // Special handling for Mongoose Map fields (attributes, dimensionUnits)
+      if (key === 'attributes' && req.body[key]) {
+        // Initialize Map if it doesn't exist
+        if (!productFamily.attributes) {
+          productFamily.attributes = new Map();
+        }
+
+        // Clear existing attributes
+        productFamily.attributes.clear();
+
+        // Repopulate with new attributes
+        Object.entries(req.body[key]).forEach(([attrKey, attrValue]) => {
+          productFamily.attributes.set(attrKey, attrValue);
+        });
+      } else if (key === 'dimensionUnits' && req.body[key]) {
+        // Initialize Map if it doesn't exist
+        if (!productFamily.dimensionUnits) {
+          productFamily.dimensionUnits = new Map();
+        }
+
+        // Clear existing dimension units
+        productFamily.dimensionUnits.clear();
+
+        // Repopulate with new dimension units
+        Object.entries(req.body[key]).forEach(([dimKey, unit]) => {
+          productFamily.dimensionUnits.set(dimKey, unit);
+        });
+      } else {
+        // Normal assignment for other fields
+        productFamily[key] = req.body[key];
+      }
     });
 
-    // Save using .save() method which properly handles nested arrays
+    // Save using .save() method which properly handles nested arrays and Maps
     await productFamily.save();
 
     // Populate after save
@@ -168,6 +213,8 @@ router.put("/:id", async (req, res) => {
     console.log('   sellable:', productFamily.sellable);
     console.log('   requiresHumanAdvisor:', productFamily.requiresHumanAdvisor);
     console.log('   onlineStoreLinks after save:', productFamily.onlineStoreLinks);
+    console.log('   enabledDimensions after save:', productFamily.enabledDimensions);
+    console.log('   attributes after save:', productFamily.attributes);
 
     res.json({ success: true, data: productFamily });
   } catch (err) {

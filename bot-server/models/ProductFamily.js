@@ -46,6 +46,11 @@ const productFamilySchema = new mongoose.Schema({
     type: Boolean,
     default: true  // Whether product is actively being sold
   },
+  size: {
+    type: String  // Dimension string for sellable products (e.g., "6x4m", "3x5m")
+    // Only populated for sellable products that represent physical dimensions
+    // Used by bot for dimension-based queries like "malla sombra de 6x4"
+  },
   // Additional metadata
   imageUrl: {
     type: String
@@ -71,6 +76,28 @@ const productFamilySchema = new mongoose.Schema({
     type: Map,
     of: String  // Flexible attributes like { size: "3x5m", finish: "Reforzada" }
   },
+  // Enabled dimensions - which dimensions are active for this product and its descendants
+  // These cascade down the tree - children inherit all enabled dimensions from ancestors
+  enabledDimensions: [{
+    type: String,
+    enum: ['width', 'length', 'height', 'depth', 'thickness', 'weight', 'diameter',
+           'side1', 'side2', 'side3', 'side4', 'side5', 'side6']
+  }],
+  // Unit preferences for each enabled dimension (e.g., { width: 'm', thickness: 'mm' })
+  // These also cascade down the tree - children inherit unit preferences from ancestors
+  dimensionUnits: {
+    type: Map,
+    of: String  // Maps dimension name to unit (e.g., 'm', 'in', 'cm', 'mm', 'kg', 'lb')
+  },
+  // Display template for inventory tables (defines which columns to show for children)
+  displayTemplate: {
+    name: { type: String },  // Template name (e.g., "Size + Color", "Material", "Direct Sale")
+    columns: [{
+      key: { type: String },      // Column identifier (e.g., 'size', 'color', 'material')
+      label: { type: String },    // Display label (e.g., 'Tamaño', 'Color')
+      source: { type: String }    // Where to get data: 'attribute', 'name', 'description', or field name
+    }]
+  },
   // Cross-selling and human handoff features
   requiresHumanAdvisor: {
     type: Boolean,
@@ -91,10 +118,40 @@ productFamilySchema.virtual('children', {
   foreignField: 'parentId'
 });
 
+// Helper function to extract size from text
+function extractSizeFromText(text) {
+  if (!text) return null;
+
+  // Pattern 1: "6x4m", "6 x 4m", "6x4", "6 x 4"
+  const pattern1 = /(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*m?(?:etros?)?/;
+  const match1 = text.match(pattern1);
+  if (match1) {
+    return `${match1[1]}x${match1[2]}m`;
+  }
+
+  // Pattern 2: "6 metros x 4 metros", "6m x 4m"
+  const pattern2 = /(\d+(?:\.\d+)?)\s*m(?:etros?)?\s*[xX×]\s*(\d+(?:\.\d+)?)\s*m(?:etros?)?/;
+  const match2 = text.match(pattern2);
+  if (match2) {
+    return `${match2[1]}x${match2[2]}m`;
+  }
+
+  // Pattern 3: Triangle - "3x4x5m", "3 x 4 x 5"
+  const pattern3 = /(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*m?/;
+  const match3 = text.match(pattern3);
+  if (match3) {
+    return `${match3[1]}x${match3[2]}x${match3[3]}m`;
+  }
+
+  return null;
+}
+
 // Pre-save hook to calculate generation based on parent and validate sellable
 productFamilySchema.pre('save', async function(next) {
+  let parent = null;
+
   if (this.parentId) {
-    const parent = await mongoose.model('ProductFamily').findById(this.parentId);
+    parent = await mongoose.model('ProductFamily').findById(this.parentId);
     if (parent) {
       this.generation = parent.generation + 1;
 
@@ -123,6 +180,42 @@ productFamilySchema.pre('save', async function(next) {
       const error = new Error('No se puede marcar como vendible un producto que tiene hijos. Elimine los hijos primero.');
       error.name = 'ValidationError';
       return next(error);
+    }
+  }
+
+  // AUTO-GENERATE SIZE FIELD for sellable products
+  if (this.sellable) {
+    // Strategy 1: Try to extract from own name
+    let extractedSize = extractSizeFromText(this.name);
+
+    // Strategy 2: If not found and has parent, try parent's name
+    if (!extractedSize && parent) {
+      extractedSize = extractSizeFromText(parent.name);
+    }
+
+    // Strategy 3: If still not found, try to construct from attributes
+    if (!extractedSize && this.attributes) {
+      const attrs = this.attributes;
+
+      // Triangular (3 sides)
+      if (attrs.get('side1') && attrs.get('side2') && attrs.get('side3')) {
+        const s1 = attrs.get('side1').replace(/[^\d.]/g, '');
+        const s2 = attrs.get('side2').replace(/[^\d.]/g, '');
+        const s3 = attrs.get('side3').replace(/[^\d.]/g, '');
+        extractedSize = `${s1}x${s2}x${s3}m`;
+      }
+      // Rectangular/Roll (width x length)
+      else if (attrs.get('width') && attrs.get('length')) {
+        const w = attrs.get('width').replace(/[^\d.]/g, '');
+        const l = attrs.get('length').replace(/[^\d.]/g, '');
+        extractedSize = `${w}x${l}m`;
+      }
+    }
+
+    // Set the size field if we found something
+    if (extractedSize) {
+      this.size = extractedSize;
+      console.log(`📏 Auto-generated size for "${this.name}": ${extractedSize}`);
     }
   }
 

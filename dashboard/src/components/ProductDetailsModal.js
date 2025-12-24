@@ -1,5 +1,22 @@
 import React from 'react';
 
+// Available dimensions with their display labels and available units
+const AVAILABLE_DIMENSIONS = {
+  width: { label: 'Ancho', icon: '↔️' },
+  length: { label: 'Largo', icon: '↕️' },
+  height: { label: 'Alto', icon: '⬆️' },
+  depth: { label: 'Profundidad', icon: '⤵️' },
+  thickness: { label: 'Grosor', icon: '📏' },
+  weight: { label: 'Peso', icon: '⚖️' },
+  diameter: { label: 'Diámetro', icon: '⭕' },
+  side1: { label: 'Lado 1', icon: '📐' },
+  side2: { label: 'Lado 2', icon: '📐' },
+  side3: { label: 'Lado 3', icon: '📐' },
+  side4: { label: 'Lado 4', icon: '📐' },
+  side5: { label: 'Lado 5', icon: '📐' },
+  side6: { label: 'Lado 6', icon: '📐' }
+};
+
 function ProductDetailsModal({ product, onClose, parentChain = [] }) {
   if (!product) return null;
 
@@ -21,7 +38,60 @@ function ProductDetailsModal({ product, onClose, parentChain = [] }) {
     return { price: null, inherited: false };
   };
 
+  // Helper: Get all inherited dimensions from parent chain
+  const getAllInheritedDimensions = () => {
+    const inherited = new Set();
+
+    // Add current product's enabled dimensions
+    if (product.enabledDimensions) {
+      product.enabledDimensions.forEach(dim => inherited.add(dim));
+    }
+
+    // Walk up the parent chain to collect all enabled dimensions
+    if (parentChain && parentChain.length > 0) {
+      for (let i = parentChain.length - 1; i >= 0; i--) {
+        const parent = parentChain[i];
+        if (parent.enabledDimensions) {
+          parent.enabledDimensions.forEach(dim => inherited.add(dim));
+        }
+      }
+    }
+
+    return Array.from(inherited);
+  };
+
+  // Helper: Get inherited dimension units from parent chain
+  const getAllInheritedDimensionUnits = () => {
+    const inheritedUnits = {};
+
+    // Walk up the parent chain from root to current product
+    if (parentChain && parentChain.length > 0) {
+      // Merge units from root to immediate parent (so closer parents override)
+      for (let i = 0; i < parentChain.length; i++) {
+        const parent = parentChain[i];
+        if (parent.dimensionUnits) {
+          const parentUnits = parent.dimensionUnits instanceof Map
+            ? Object.fromEntries(parent.dimensionUnits)
+            : parent.dimensionUnits;
+          Object.assign(inheritedUnits, parentUnits);
+        }
+      }
+    }
+
+    // Current product's dimension units override inherited ones
+    if (product.dimensionUnits) {
+      const currentUnits = product.dimensionUnits instanceof Map
+        ? Object.fromEntries(product.dimensionUnits)
+        : product.dimensionUnits;
+      Object.assign(inheritedUnits, currentUnits);
+    }
+
+    return inheritedUnits;
+  };
+
   const priceInfo = getInheritedPrice();
+  const allDimensions = getAllInheritedDimensions();
+  const allDimensionUnits = getAllInheritedDimensionUnits();
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -268,6 +338,73 @@ function ProductDetailsModal({ product, onClose, parentChain = [] }) {
                       e.target.parentElement.innerHTML = '<div class="p-8 text-center text-gray-500">Imagen no disponible</div>';
                     }}
                   />
+                </div>
+              </div>
+            )}
+
+            {/* All Dimensions (Own + Inherited) */}
+            {allDimensions.length > 0 && (
+              <div className="p-4 bg-purple-500/5 rounded-lg border border-purple-500/20">
+                <div className="flex items-center space-x-2 mb-3">
+                  <svg className="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                  </svg>
+                  <span className="text-sm text-purple-300 font-medium">Dimensiones Disponibles</span>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {allDimensions.map((dim) => {
+                    const isOwn = product.enabledDimensions && product.enabledDimensions.includes(dim);
+                    const dimInfo = AVAILABLE_DIMENSIONS[dim];
+                    const unit = allDimensionUnits[dim] || '';
+
+                    return (
+                      <span
+                        key={dim}
+                        className={`px-3 py-1 rounded-lg text-sm flex items-center space-x-1 ${
+                          isOwn
+                            ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                            : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                        }`}
+                      >
+                        {dimInfo && <span>{dimInfo.icon}</span>}
+                        <span>{dimInfo ? dimInfo.label : dim}</span>
+                        {unit && <span className="text-xs opacity-75">({unit})</span>}
+                        {!isOwn && <span className="text-xs opacity-75">• heredada</span>}
+                      </span>
+                    );
+                  })}
+                </div>
+                <p className="text-xs text-gray-400 mt-2">
+                  {product.enabledDimensions && product.enabledDimensions.length > 0
+                    ? 'Las propias están en morado, las heredadas en ámbar'
+                    : 'Todas estas dimensiones se heredan de productos padres'}
+                </p>
+              </div>
+            )}
+
+            {/* Attribute Values */}
+            {product.attributes && Object.keys(product.attributes).length > 0 && (
+              <div className="p-4 bg-blue-500/5 rounded-lg border border-blue-500/20">
+                <div className="flex items-center space-x-2 mb-3">
+                  <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  <span className="text-sm text-blue-300 font-medium">Valores de Dimensiones</span>
+                </div>
+                <div className="grid grid-cols-2 gap-3">
+                  {Object.entries(product.attributes).map(([key, value]) => {
+                    const dimInfo = AVAILABLE_DIMENSIONS[key];
+                    const unit = allDimensionUnits[key] || '';
+                    return (
+                      <div key={key} className="p-3 bg-gray-900/50 border border-gray-700 rounded">
+                        <label className="block text-xs font-medium text-gray-400 mb-1 flex items-center space-x-1">
+                          {dimInfo && <span>{dimInfo.icon}</span>}
+                          <span>{dimInfo ? dimInfo.label : key}</span>
+                        </label>
+                        <p className="text-white font-semibold">{value} {unit}</p>
+                      </div>
+                    );
+                  })}
                 </div>
               </div>
             )}
