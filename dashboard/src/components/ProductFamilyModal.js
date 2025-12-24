@@ -98,6 +98,81 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
 
   // State for Points of Sale
   const [pointsOfSale, setPointsOfSale] = useState([]);
+
+  // Function to extract dimension values from text and populate attributes
+  const importDimensionsFromText = () => {
+    const inherited = getInheritedDimensions();
+    if (inherited.length === 0) {
+      alert('No hay dimensiones heredadas para importar');
+      return;
+    }
+
+    // Helper function to extract numbers from text
+    const extractNumbers = (text) => {
+      if (!text) return null;
+
+      // Pattern 1: "6x4m", "6 x 4m", "6x4", "6 x 4" (2 numbers)
+      const pattern2 = /(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/;
+      const match2 = text.match(pattern2);
+      if (match2) {
+        return [match2[1], match2[2]];
+      }
+
+      // Pattern 2: Triangle - "3x4x5m", "3 x 4 x 5" (3 numbers)
+      const pattern3 = /(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/;
+      const match3 = text.match(pattern3);
+      if (match3) {
+        return [match3[1], match3[2], match3[3]];
+      }
+
+      // Pattern 3: More sides - "1x2x3x4", etc.
+      const patternMulti = text.match(/(\d+(?:\.\d+)?)\s*[xX×]/g);
+      if (patternMulti && patternMulti.length >= 2) {
+        return patternMulti.map(m => m.match(/(\d+(?:\.\d+)?)/)[1]);
+      }
+
+      return null;
+    };
+
+    // Try to extract from name, then description, then marketingDescription (in that order of precedence)
+    let numbers = null;
+    let source = '';
+
+    if (formData.name) {
+      numbers = extractNumbers(formData.name);
+      if (numbers) source = 'nombre';
+    }
+
+    if (!numbers && formData.description) {
+      numbers = extractNumbers(formData.description);
+      if (numbers) source = 'descripción';
+    }
+
+    if (!numbers && formData.marketingDescription) {
+      numbers = extractNumbers(formData.marketingDescription);
+      if (numbers) source = 'descripción de marketing';
+    }
+
+    if (!numbers) {
+      alert('No se encontraron dimensiones en el nombre, descripción o descripción de marketing. Formato esperado: "6x4" o "3x4x5"');
+      return;
+    }
+
+    // Map extracted numbers to inherited dimensions in order
+    const newAttributes = { ...formData.attributes };
+    const dimensionsToFill = inherited.slice(0, numbers.length);
+
+    dimensionsToFill.forEach((dimKey, index) => {
+      newAttributes[dimKey] = numbers[index];
+    });
+
+    setFormData({
+      ...formData,
+      attributes: newAttributes
+    });
+
+    alert(`Dimensiones importadas desde ${source}: ${numbers.join(' x ')}\n\nMapeadas a: ${dimensionsToFill.map(d => AVAILABLE_DIMENSIONS[d]?.label || d).join(', ')}`);
+  };
   const [loadingPOS, setLoadingPOS] = useState(false);
 
   useEffect(() => {
@@ -606,6 +681,67 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                     </p>
                   </div>
                 )}
+
+                {/* Dimension Value Inputs for Own Enabled Dimensions */}
+                {formData.enabledDimensions.length > 0 && (
+                  <div className="mt-4 p-3 bg-indigo-500/10 rounded-lg border border-indigo-500/20">
+                    <div className="flex items-center justify-between mb-3">
+                      <h4 className="text-sm font-medium text-indigo-300 flex items-center space-x-2">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                        </svg>
+                        <span>Valores de Dimensiones</span>
+                      </h4>
+                      <button
+                        type="button"
+                        onClick={importDimensionsFromText}
+                        className="px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-lg hover:bg-indigo-500/30 transition-colors text-xs font-medium flex items-center space-x-1 border border-indigo-500/30"
+                        title="Extrae dimensiones del nombre, descripción o descripción de marketing"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                        </svg>
+                        <span>Importar</span>
+                      </button>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      {formData.enabledDimensions.map((dimKey) => {
+                        const dimInfo = AVAILABLE_DIMENSIONS[dimKey];
+                        if (!dimInfo) return null;
+                        const unit = formData.dimensionUnits[dimKey] || dimInfo.units[0];
+                        return (
+                          <div key={dimKey}>
+                            <label className="block text-xs font-medium text-gray-400 mb-1 flex items-center space-x-1">
+                              <span>{dimInfo.icon}</span>
+                              <span>{dimInfo.label}</span>
+                            </label>
+                            <div className="flex items-center space-x-2">
+                              <input
+                                type="text"
+                                value={formData.attributes[dimKey] || ''}
+                                onChange={(e) => {
+                                  setFormData({
+                                    ...formData,
+                                    attributes: {
+                                      ...formData.attributes,
+                                      [dimKey]: e.target.value
+                                    }
+                                  });
+                                }}
+                                placeholder={`Ej: 6`}
+                                className="flex-1 px-3 py-2 bg-gray-900/50 border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                              />
+                              <span className="text-gray-400 text-sm font-medium w-12">{unit}</span>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-xs text-gray-500 mt-2">
+                      Estos valores son opcionales y se pueden heredar a productos hijos
+                    </p>
+                  </div>
+                )}
               </div>
             )}
 
@@ -724,13 +860,26 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                   const inheritedUnits = getInheritedDimensionUnits();
                   return inherited.length > 0 && (
                     <div className="p-3 bg-purple-500/10 rounded-lg border border-purple-500/20">
-                      <h4 className="text-sm font-medium text-purple-300 mb-3 flex items-center space-x-2">
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-                        </svg>
-                        <span>Dimensiones del Producto</span>
-                        <span className="text-xs text-purple-400 font-normal">(Heredadas)</span>
-                      </h4>
+                      <div className="flex items-center justify-between mb-3">
+                        <h4 className="text-sm font-medium text-purple-300 flex items-center space-x-2">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+                          </svg>
+                          <span>Dimensiones del Producto</span>
+                          <span className="text-xs text-purple-400 font-normal">(Heredadas)</span>
+                        </h4>
+                        <button
+                          type="button"
+                          onClick={importDimensionsFromText}
+                          className="px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-lg hover:bg-indigo-500/30 transition-colors text-xs font-medium flex items-center space-x-1 border border-indigo-500/30"
+                          title="Extrae dimensiones del nombre, descripción o descripción de marketing"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                          </svg>
+                          <span>Importar</span>
+                        </button>
+                      </div>
                       <div className="grid grid-cols-2 gap-3">
                         {inherited.map((dimKey) => {
                           const dimInfo = AVAILABLE_DIMENSIONS[dimKey];
