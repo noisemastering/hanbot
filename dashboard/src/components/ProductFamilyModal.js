@@ -865,6 +865,7 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                               </div>
                               <button
                                 type="button"
+                                tabIndex={-1}
                                 onClick={() => {
                                   // Remove dimension value from attributes
                                   const newAttributes = { ...formData.attributes };
@@ -1062,6 +1063,7 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                                 </div>
                                 <button
                                   type="button"
+                                  tabIndex={-1}
                                   onClick={() => {
                                     // Remove dimension value from attributes
                                     const newAttributes = { ...formData.attributes };
