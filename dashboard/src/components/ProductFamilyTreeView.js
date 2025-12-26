@@ -6,6 +6,36 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, 
   const hasChildren = product.children && product.children.length > 0;
   const indentPixels = level * 32; // 32px per level (equivalent to ml-8 = 2rem = 32px)
 
+  // Helper function to get inherited dimensions from parent chain
+  const getInheritedDimensions = () => {
+    const inherited = new Set();
+
+    // Walk through parent chain to collect enabled dimensions
+    [...parentChain, product].forEach(p => {
+      if (p.enabledDimensions && Array.isArray(p.enabledDimensions)) {
+        p.enabledDimensions.forEach(dim => inherited.add(dim));
+      }
+    });
+
+    return Array.from(inherited);
+  };
+
+  // Check if sellable product has missing or zero dimension values
+  const hasMissingDimensions = () => {
+    if (!product.sellable) return false;
+
+    const inheritedDims = getInheritedDimensions();
+    if (inheritedDims.length === 0) return false;
+
+    const attributes = product.attributes || {};
+
+    // Check if any inherited dimension is missing or = 0
+    return inheritedDims.some(dimKey => {
+      const value = attributes[dimKey];
+      return !value || value === '0' || parseFloat(value) === 0;
+    });
+  };
+
   return (
     <div className="border-l-2 border-gray-700/50">
       {/* Product Row */}
@@ -65,6 +95,19 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, 
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                   </svg>
                   <span>Sin Link</span>
+                </span>
+              )}
+
+              {/* Missing Dimensions Warning */}
+              {product.sellable && hasMissingDimensions() && (
+                <span className="px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded text-xs font-medium flex items-center space-x-1" title="Producto con dimensiones faltantes o en cero">
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                  </svg>
+                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
+                  </svg>
+                  <span>Sin Dimensiones</span>
                 </span>
               )}
             </button>
