@@ -225,11 +225,6 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
 
   // Handler to propagate dimension values to all descendants
   const handlePropagateDimensions = async () => {
-    if (!product || !product._id) {
-      alert('Debes guardar el producto primero antes de propagar dimensiones');
-      return;
-    }
-
     // Check if product has dimension values
     const hasDimensionValues = formData.attributes && Object.keys(formData.attributes).some(key => {
       const isDimension = ['width', 'length', 'height', 'depth', 'thickness', 'weight', 'diameter',
@@ -242,22 +237,69 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
       return;
     }
 
-    // Confirm action
-    if (!window.confirm('¿Estás seguro de que quieres propagar estos valores de dimensiones a TODOS los productos descendientes?\n\nEsto sobrescribirá los valores existentes en los productos hijos.')) {
+    // Confirm action BEFORE saving
+    if (!window.confirm('¿Estás seguro de que quieres propagar estos valores de dimensiones a TODOS los productos descendientes?\n\nSe guardarán los cambios actuales y luego se propagarán a los productos hijos.')) {
       return;
     }
 
     try {
-      const response = await API.post(`/product-families/${product._id}/propagate-dimensions`);
+      // STEP 1: Build submit data (same as handleSubmit)
+      const submitData = {
+        name: formData.name,
+        description: formData.description,
+        marketingDescription: formData.marketingDescription || null,
+        parentId: formData.parentId || null,
+        sellable: formData.sellable,
+        enabledDimensions: formData.enabledDimensions || [],
+        dimensionUnits: formData.dimensionUnits || {},
+        attributes: formData.attributes || {}
+      };
+
+      if (formData.price !== null && formData.price !== undefined && formData.price !== '') {
+        submitData.price = parseFloat(formData.price);
+      }
+
+      if (formData.sellable) {
+        submitData.sku = formData.sku || null;
+        submitData.stock = formData.stock ? parseInt(formData.stock, 10) : null;
+        submitData.size = formData.size || null;
+        submitData.requiresHumanAdvisor = Boolean(formData.requiresHumanAdvisor);
+        submitData.genericDescription = formData.genericDescription || null;
+        submitData.thumbnail = formData.thumbnail || null;
+        submitData.onlineStoreLinks = formData.onlineStoreLinks || [];
+      }
+
+      console.log('💾 Saving product before propagation...');
+
+      // STEP 2: Save the product first
+      await onSave(submitData);
+
+      // Wait a moment for DB to update
+      await new Promise(resolve => setTimeout(resolve, 500));
+
+      // STEP 3: Get product ID (might be from newly created product)
+      const productId = product?._id;
+      if (!productId) {
+        alert('Error: No se pudo obtener el ID del producto después de guardar');
+        return;
+      }
+
+      console.log('🔄 Propagating dimensions to descendants...');
+
+      // STEP 4: Propagate dimensions
+      const response = await API.post(`/product-families/${productId}/propagate-dimensions`);
 
       if (response.data.success) {
-        alert(`✅ ${response.data.message}\n\n${response.data.updatedCount} producto(s) actualizado(s)`);
+        alert(`✅ ${response.data.message}\n\n${response.data.updatedCount} producto(s) actualizado(s)\n\nCerrando para actualizar la vista...`);
+
+        // STEP 5: Close modal to trigger refresh in parent
+        onClose();
       } else {
         alert(`Error: ${response.data.error}`);
       }
     } catch (error) {
-      console.error('Error propagating dimensions:', error);
-      alert(`Error al propagar dimensiones: ${error.response?.data?.error || error.message}`);
+      console.error('Error saving or propagating dimensions:', error);
+      alert(`Error al guardar/propagar dimensiones: ${error.response?.data?.error || error.message}`);
     }
   };
 
