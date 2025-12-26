@@ -107,7 +107,56 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
       return;
     }
 
-    // Helper function to extract numbers from text
+    // FIRST: Try to get dimension values from parent chain
+    const inheritedValues = {};
+    let foundInParent = false;
+
+    if (formData.parentId && allProducts) {
+      const flatProducts = flattenProducts(allProducts);
+      let currentParentId = formData.parentId;
+      const parentChain = [];
+
+      // Build parent chain
+      while (currentParentId) {
+        const parent = flatProducts.find(p => p._id === currentParentId);
+        if (parent) {
+          parentChain.unshift(parent);
+          currentParentId = parent.parentId;
+        } else {
+          break;
+        }
+      }
+
+      // Walk through parents and collect dimension values
+      parentChain.forEach(parent => {
+        if (parent.attributes) {
+          inherited.forEach(dimKey => {
+            if (parent.attributes[dimKey] && !inheritedValues[dimKey]) {
+              inheritedValues[dimKey] = parent.attributes[dimKey];
+              foundInParent = true;
+            }
+          });
+        }
+      });
+    }
+
+    // If we found values in parent, use them
+    if (foundInParent) {
+      const newAttributes = { ...formData.attributes, ...inheritedValues };
+      setFormData({
+        ...formData,
+        attributes: newAttributes
+      });
+
+      const importedDims = Object.keys(inheritedValues).map(d =>
+        `${AVAILABLE_DIMENSIONS[d]?.label || d}: ${inheritedValues[d]}`
+      ).join(', ');
+
+      alert(`Dimensiones importadas desde productos padres:\n\n${importedDims}`);
+      return;
+    }
+
+    // SECOND: If no parent values, try to extract from text
     const extractNumbers = (text) => {
       if (!text) return null;
 
@@ -154,7 +203,7 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
     }
 
     if (!numbers) {
-      alert('No se encontraron dimensiones en el nombre, descripción o descripción de marketing. Formato esperado: "6x4" o "3x4x5"');
+      alert('No se encontraron dimensiones ni en productos padres ni en el nombre, descripción o descripción de marketing.\n\nFormato esperado en texto: "6x4" o "3x4x5"');
       return;
     }
 

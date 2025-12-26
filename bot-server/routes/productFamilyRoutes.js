@@ -206,6 +206,14 @@ router.put("/:id", async (req, res) => {
     // Save using .save() method which properly handles nested arrays and Maps
     await productFamily.save();
 
+    // Propagate dimension values to all descendants (if this product has dimension values)
+    if (productFamily.attributes && productFamily.attributes.size > 0) {
+      const updatedCount = await propagateDimensionValuesToDescendants(productFamily._id, productFamily.attributes);
+      if (updatedCount > 0) {
+        console.log(`📊 Propagated dimension values to ${updatedCount} descendant(s)`);
+      }
+    }
+
     // Populate after save
     await productFamily.populate('parentId', 'name generation');
 
@@ -546,6 +554,54 @@ async function deleteProductRecursive(productId) {
   deletedCount += 1;
 
   return deletedCount;
+}
+
+/**
+ * Recursively propagate dimension values to all descendants
+ * Parent dimension values override children's values (parent supersedes children)
+ * @param {String} parentId - The parent product ID
+ * @param {Map} parentAttributes - The parent's attributes Map containing dimension values
+ * @returns {Number} - Total number of products updated
+ */
+async function propagateDimensionValuesToDescendants(parentId, parentAttributes) {
+  let updatedCount = 0;
+
+  // Get all direct children of this product
+  const children = await ProductFamily.find({ parentId: parentId });
+
+  // Update each child
+  for (const child of children) {
+    // Initialize attributes Map if it doesn't exist
+    if (!child.attributes) {
+      child.attributes = new Map();
+    }
+
+    // Copy parent's dimension values to child (overriding existing values)
+    let childModified = false;
+    for (const [dimKey, dimValue] of parentAttributes) {
+      // Only propagate actual dimension fields (not general attributes)
+      const isDimension = ['width', 'length', 'height', 'depth', 'thickness', 'weight', 'diameter',
+                          'side1', 'side2', 'side3', 'side4', 'side5', 'side6'].includes(dimKey);
+
+      if (isDimension) {
+        child.attributes.set(dimKey, dimValue);
+        childModified = true;
+      }
+    }
+
+    // Save the child if it was modified
+    if (childModified) {
+      await child.save();
+      updatedCount += 1;
+      console.log(`  📐 Updated "${child.name}" with parent's dimension values`);
+    }
+
+    // Recursively propagate to this child's descendants (regardless of whether child was modified)
+    const descendantCount = await propagateDimensionValuesToDescendants(child._id, parentAttributes);
+    updatedCount += descendantCount;
+  }
+
+  return updatedCount;
 }
 
 // ============================================
