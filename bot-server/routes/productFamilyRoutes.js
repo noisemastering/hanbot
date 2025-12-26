@@ -555,8 +555,13 @@ async function deleteProductRecursive(productId) {
  * @param {Map} parentAttributes - The parent's attributes Map containing dimension values
  * @returns {Number} - Total number of products updated
  */
-async function propagateDimensionValuesToDescendants(parentId, parentAttributes) {
+async function propagateDimensionValuesToDescendants(parentId, parentData) {
   let updatedCount = 0;
+
+  // Extract parent data
+  const parentAttributes = parentData.attributes || new Map();
+  const parentEnabledDimensions = parentData.enabledDimensions || [];
+  const parentDimensionUnits = parentData.dimensionUnits || new Map();
 
   // Get all direct children of this product
   const children = await ProductFamily.find({ parentId: parentId });
@@ -568,14 +573,36 @@ async function propagateDimensionValuesToDescendants(parentId, parentAttributes)
       child.attributes = new Map();
     }
 
-    // Copy parent's dimension values to child (overriding existing values)
     let childModified = false;
+
+    // STEP 1: Sync dimension structure (enabledDimensions and dimensionUnits)
+    if (parentEnabledDimensions.length > 0) {
+      child.enabledDimensions = [...parentEnabledDimensions];
+      childModified = true;
+    }
+
+    if (parentDimensionUnits && parentDimensionUnits.size > 0) {
+      child.dimensionUnits = new Map(parentDimensionUnits);
+      childModified = true;
+    }
+
+    // STEP 2: Remove dimension values that are no longer in enabledDimensions
+    const allDimensions = ['width', 'length', 'height', 'depth', 'thickness', 'weight', 'diameter',
+                           'side1', 'side2', 'side3', 'side4', 'side5', 'side6'];
+
+    for (const dimKey of allDimensions) {
+      if (child.attributes.has(dimKey) && !parentEnabledDimensions.includes(dimKey)) {
+        child.attributes.delete(dimKey);
+        childModified = true;
+      }
+    }
+
+    // STEP 3: Copy parent's dimension values to child (overriding existing values)
     for (const [dimKey, dimValue] of parentAttributes) {
       // Only propagate actual dimension fields (not general attributes)
-      const isDimension = ['width', 'length', 'height', 'depth', 'thickness', 'weight', 'diameter',
-                          'side1', 'side2', 'side3', 'side4', 'side5', 'side6'].includes(dimKey);
+      const isDimension = allDimensions.includes(dimKey);
 
-      if (isDimension) {
+      if (isDimension && parentEnabledDimensions.includes(dimKey)) {
         child.attributes.set(dimKey, dimValue);
         childModified = true;
       }
@@ -583,15 +610,20 @@ async function propagateDimensionValuesToDescendants(parentId, parentAttributes)
 
     // Save the child if it was modified
     if (childModified) {
-      // CRITICAL: Mark attributes as modified so Mongoose detects the Map changes
+      // CRITICAL: Mark fields as modified so Mongoose detects the Map changes
       child.markModified('attributes');
+      child.markModified('dimensionUnits');
       await child.save();
       updatedCount += 1;
-      console.log(`  📐 Updated "${child.name}" with parent's dimension values`);
+      console.log(`  📐 Updated "${child.name}" with parent's dimension structure and values`);
     }
 
-    // Recursively propagate to this child's descendants (regardless of whether child was modified)
-    const descendantCount = await propagateDimensionValuesToDescendants(child._id, parentAttributes);
+    // Recursively propagate to this child's descendants
+    const descendantCount = await propagateDimensionValuesToDescendants(child._id, {
+      attributes: parentAttributes,
+      enabledDimensions: parentEnabledDimensions,
+      dimensionUnits: parentDimensionUnits
+    });
     updatedCount += descendantCount;
   }
 
@@ -627,8 +659,12 @@ router.post("/:id/propagate-dimensions", async (req, res) => {
 
     console.log(`🔄 Manual propagation requested for "${product.name}"`);
 
-    // Propagate dimension values to all descendants
-    const updatedCount = await propagateDimensionValuesToDescendants(productId, product.attributes);
+    // Propagate dimension structure and values to all descendants
+    const updatedCount = await propagateDimensionValuesToDescendants(productId, {
+      attributes: product.attributes,
+      enabledDimensions: product.enabledDimensions,
+      dimensionUnits: product.dimensionUnits
+    });
 
     console.log(`✅ Propagated dimension values to ${updatedCount} descendant(s)`);
 
