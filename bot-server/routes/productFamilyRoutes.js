@@ -591,6 +591,8 @@ async function propagateDimensionValuesToDescendants(parentId, parentAttributes)
 
     // Save the child if it was modified
     if (childModified) {
+      // CRITICAL: Mark attributes as modified so Mongoose detects the Map changes
+      child.markModified('attributes');
       await child.save();
       updatedCount += 1;
       console.log(`  📐 Updated "${child.name}" with parent's dimension values`);
