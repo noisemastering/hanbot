@@ -160,24 +160,26 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
     const extractNumbers = (text) => {
       if (!text) return null;
 
-      // Pattern 1: "6x4m", "6 x 4m", "6x4", "6 x 4" (2 numbers)
-      const pattern2 = /(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/;
-      const match2 = text.match(pattern2);
-      if (match2) {
-        return [match2[1], match2[2]];
-      }
-
-      // Pattern 2: Triangle - "3x4x5m", "3 x 4 x 5" (3 numbers)
-      const pattern3 = /(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/;
+      // Pattern 1: Triangle/Multi - "3x4x5m", "3 m x 4 m x 5 m" (3+ numbers)
+      // Check this FIRST because it's more specific
+      const pattern3 = /(\d+(?:\.\d+)?)\s*m?(?:etros?)?\s*[xX×]\s*(\d+(?:\.\d+)?)\s*m?(?:etros?)?\s*[xX×]\s*(\d+(?:\.\d+)?)/;
       const match3 = text.match(pattern3);
       if (match3) {
         return [match3[1], match3[2], match3[3]];
       }
 
-      // Pattern 3: More sides - "1x2x3x4", etc.
-      const patternMulti = text.match(/(\d+(?:\.\d+)?)\s*[xX×]/g);
-      if (patternMulti && patternMulti.length >= 2) {
+      // Pattern 2: More sides - "1x2x3x4", etc.
+      const patternMulti = text.match(/(\d+(?:\.\d+)?)\s*m?(?:etros?)?\s*[xX×]/g);
+      if (patternMulti && patternMulti.length >= 3) {
         return patternMulti.map(m => m.match(/(\d+(?:\.\d+)?)/)[1]);
+      }
+
+      // Pattern 3: Rectangle - "6x4m", "6 m x 4 m", "6x4", "6 x 4" (2 numbers)
+      // Check this LAST because it's the most general pattern
+      const pattern2 = /(\d+(?:\.\d+)?)\s*m?(?:etros?)?\s*[xX×]\s*(\d+(?:\.\d+)?)/;
+      const match2 = text.match(pattern2);
+      if (match2) {
+        return [match2[1], match2[2]];
       }
 
       return null;
@@ -856,9 +858,29 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                         const unit = formData.dimensionUnits[dimKey] || dimInfo.units[0];
                         return (
                           <div key={dimKey}>
-                            <label className="block text-xs font-medium text-gray-400 mb-1 flex items-center space-x-1">
-                              <span>{dimInfo.icon}</span>
-                              <span>{dimInfo.label}</span>
+                            <label className="block text-xs font-medium text-gray-400 mb-1 flex items-center justify-between">
+                              <div className="flex items-center space-x-1">
+                                <span>{dimInfo.icon}</span>
+                                <span>{dimInfo.label}</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  // Remove dimension value from attributes
+                                  const newAttributes = { ...formData.attributes };
+                                  delete newAttributes[dimKey];
+                                  setFormData({
+                                    ...formData,
+                                    attributes: newAttributes
+                                  });
+                                }}
+                                className="p-0.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors"
+                                title="Limpiar valor de dimensión"
+                              >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
                             </label>
                             <div className="flex items-center space-x-2">
                               <input
@@ -1033,9 +1055,29 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                           const unit = inheritedUnits[dimKey] || dimInfo.units[0];
                           return (
                             <div key={dimKey}>
-                              <label className="block text-xs font-medium text-gray-400 mb-1 flex items-center space-x-1">
-                                <span>{dimInfo.icon}</span>
-                                <span>{dimInfo.label}</span>
+                              <label className="block text-xs font-medium text-gray-400 mb-1 flex items-center justify-between">
+                                <div className="flex items-center space-x-1">
+                                  <span>{dimInfo.icon}</span>
+                                  <span>{dimInfo.label}</span>
+                                </div>
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    // Remove dimension value from attributes
+                                    const newAttributes = { ...formData.attributes };
+                                    delete newAttributes[dimKey];
+                                    setFormData({
+                                      ...formData,
+                                      attributes: newAttributes
+                                    });
+                                  }}
+                                  className="p-0.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors"
+                                  title="Limpiar valor de dimensión"
+                                >
+                                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                </button>
                               </label>
                               <div className="flex items-center space-x-2">
                                 <input
