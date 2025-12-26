@@ -222,6 +222,45 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
 
     alert(`Dimensiones importadas desde ${source}: ${numbers.join(' x ')}\n\nMapeadas a: ${dimensionsToFill.map(d => AVAILABLE_DIMENSIONS[d]?.label || d).join(', ')}`);
   };
+
+  // Handler to propagate dimension values to all descendants
+  const handlePropagateDimensions = async () => {
+    if (!product || !product._id) {
+      alert('Debes guardar el producto primero antes de propagar dimensiones');
+      return;
+    }
+
+    // Check if product has dimension values
+    const hasDimensionValues = formData.attributes && Object.keys(formData.attributes).some(key => {
+      const isDimension = ['width', 'length', 'height', 'depth', 'thickness', 'weight', 'diameter',
+                          'side1', 'side2', 'side3', 'side4', 'side5', 'side6'].includes(key);
+      return isDimension && formData.attributes[key];
+    });
+
+    if (!hasDimensionValues) {
+      alert('Este producto no tiene valores de dimensiones para propagar');
+      return;
+    }
+
+    // Confirm action
+    if (!window.confirm('¿Estás seguro de que quieres propagar estos valores de dimensiones a TODOS los productos descendientes?\n\nEsto sobrescribirá los valores existentes en los productos hijos.')) {
+      return;
+    }
+
+    try {
+      const response = await API.post(`/product-families/${product._id}/propagate-dimensions`);
+
+      if (response.data.success) {
+        alert(`✅ ${response.data.message}\n\n${response.data.updatedCount} producto(s) actualizado(s)`);
+      } else {
+        alert(`Error: ${response.data.error}`);
+      }
+    } catch (error) {
+      console.error('Error propagating dimensions:', error);
+      alert(`Error al propagar dimensiones: ${error.response?.data?.error || error.message}`);
+    }
+  };
+
   const [loadingPOS, setLoadingPOS] = useState(false);
 
   useEffect(() => {
@@ -741,17 +780,32 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                         </svg>
                         <span>Valores de Dimensiones</span>
                       </h4>
-                      <button
-                        type="button"
-                        onClick={importDimensionsFromText}
-                        className="px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-lg hover:bg-indigo-500/30 transition-colors text-xs font-medium flex items-center space-x-1 border border-indigo-500/30"
-                        title="Extrae dimensiones del nombre, descripción o descripción de marketing"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
-                        </svg>
-                        <span>Importar</span>
-                      </button>
+                      <div className="flex items-center space-x-2">
+                        <button
+                          type="button"
+                          onClick={importDimensionsFromText}
+                          className="px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-lg hover:bg-indigo-500/30 transition-colors text-xs font-medium flex items-center space-x-1 border border-indigo-500/30"
+                          title="Extrae dimensiones del nombre, descripción o descripción de marketing"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+                          </svg>
+                          <span>Importar</span>
+                        </button>
+                        {product && product._id && !formData.sellable && (
+                          <button
+                            type="button"
+                            onClick={handlePropagateDimensions}
+                            className="px-3 py-1 bg-purple-500/20 text-purple-300 rounded-lg hover:bg-purple-500/30 transition-colors text-xs font-medium flex items-center space-x-1 border border-purple-500/30"
+                            title="Propaga estos valores de dimensiones a todos los productos hijos"
+                          >
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                            </svg>
+                            <span>Propagar a Hijos</span>
+                          </button>
+                        )}
+                      </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       {formData.enabledDimensions.map((dimKey) => {

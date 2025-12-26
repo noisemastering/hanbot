@@ -206,14 +206,6 @@ router.put("/:id", async (req, res) => {
     // Save using .save() method which properly handles nested arrays and Maps
     await productFamily.save();
 
-    // Propagate dimension values to all descendants (if this product has dimension values)
-    if (productFamily.attributes && productFamily.attributes.size > 0) {
-      const updatedCount = await propagateDimensionValuesToDescendants(productFamily._id, productFamily.attributes);
-      if (updatedCount > 0) {
-        console.log(`📊 Propagated dimension values to ${updatedCount} descendant(s)`);
-      }
-    }
-
     // Populate after save
     await productFamily.populate('parentId', 'name generation');
 
@@ -605,6 +597,51 @@ async function propagateDimensionValuesToDescendants(parentId, parentAttributes)
 
   return updatedCount;
 }
+
+// ============================================
+// MANUAL DIMENSION PROPAGATION
+// ============================================
+
+// Manually propagate dimension values to all descendants
+router.post("/:id/propagate-dimensions", async (req, res) => {
+  try {
+    const productId = req.params.id;
+
+    // Get the product
+    const product = await ProductFamily.findById(productId);
+
+    if (!product) {
+      return res.status(404).json({
+        success: false,
+        error: "Producto no encontrado"
+      });
+    }
+
+    // Check if product has dimension values to propagate
+    if (!product.attributes || product.attributes.size === 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Este producto no tiene valores de dimensiones para propagar"
+      });
+    }
+
+    console.log(`🔄 Manual propagation requested for "${product.name}"`);
+
+    // Propagate dimension values to all descendants
+    const updatedCount = await propagateDimensionValuesToDescendants(productId, product.attributes);
+
+    console.log(`✅ Propagated dimension values to ${updatedCount} descendant(s)`);
+
+    res.json({
+      success: true,
+      message: `Dimensiones propagadas a ${updatedCount} producto(s) descendiente(s)`,
+      updatedCount
+    });
+  } catch (err) {
+    console.error("Error propagating dimensions:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // ============================================
 // BULK PRICE UPDATE
