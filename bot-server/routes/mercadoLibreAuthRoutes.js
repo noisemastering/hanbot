@@ -122,8 +122,8 @@ router.get("/oauth/callback", async (req, res) => {
       });
     }
 
-    // Validate state (CSRF protection)
-    const { valid, psid, stateDoc } = await validateState(state);
+    // Validate state (CSRF protection) and retrieve PKCE code_verifier
+    const { valid, psid, stateDoc, codeVerifier } = await validateState(state);
 
     if (!valid) {
       console.log(`🚫 Invalid or expired state parameter`);
@@ -133,11 +133,19 @@ router.get("/oauth/callback", async (req, res) => {
       });
     }
 
+    if (!codeVerifier) {
+      console.log(`🚫 Missing PKCE code_verifier`);
+      return res.status(403).json({
+        success: false,
+        error: "Missing PKCE verifier. Please try again."
+      });
+    }
+
     // Mark state as used to prevent replay attacks
     await stateDoc.markAsUsed();
 
-    // Exchange code for tokens
-    const { accessToken, refreshToken, expiresIn } = await exchangeCodeForTokens(code);
+    // Exchange code for tokens using PKCE
+    const { accessToken, refreshToken, expiresIn } = await exchangeCodeForTokens(code, codeVerifier);
 
     // Get seller information
     const sellerInfo = await getSellerInfo(accessToken);

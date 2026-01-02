@@ -4,14 +4,54 @@ const crypto = require("crypto");
 const OAuthState = require("../models/OAuthState");
 const MercadoLibreAuth = require("../models/MercadoLibreAuth");
 
-// Constants
-const ML_AUTH_URL = process.env.ML_AUTH_URL || "https://auth.mercadolibre.com.ar/authorization";
+// Constants - MEXICO URLs
+const ML_AUTH_URL = "https://auth.mercadolibre.com.mx/authorization";
 const ML_TOKEN_URL = "https://api.mercadolibre.com/oauth/token";
 const ML_USER_INFO_URL = "https://api.mercadolibre.com/users/me";
 const STATE_EXPIRY_MINUTES = 10;
 
+// ============================================
+// PKCE (Proof Key for Code Exchange) HELPERS
+// ============================================
+
 /**
- * Generate OAuth authorization URL with encoded state
+ * Generate a cryptographically secure code_verifier (43-128 chars, URL-safe)
+ * @returns {string} code_verifier
+ */
+function generateCodeVerifier() {
+  // Generate 32 random bytes = 64 hex chars, then base64url encode
+  // Result will be ~43 chars (URL-safe)
+  return base64URLEncode(crypto.randomBytes(32));
+}
+
+/**
+ * Generate code_challenge from code_verifier using S256 method
+ * code_challenge = base64url(sha256(code_verifier))
+ * @param {string} codeVerifier
+ * @returns {string} code_challenge
+ */
+function generateCodeChallenge(codeVerifier) {
+  return base64URLEncode(crypto.createHash('sha256').update(codeVerifier).digest());
+}
+
+/**
+ * Base64 URL encoding (RFC 4648 §5)
+ * @param {Buffer} buffer
+ * @returns {string}
+ */
+function base64URLEncode(buffer) {
+  return buffer.toString('base64')
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '');
+}
+
+// ============================================
+// OAUTH FLOW FUNCTIONS
+// ============================================
+
+/**
+ * Generate OAuth authorization URL with PKCE
  * @param {string} psid - Optional PSID from Meta for click tracking
  * @param {object} metadata - Optional metadata (ip, userAgent)
  * @returns {Promise<{url: string, state: string}>}
@@ -22,6 +62,14 @@ async function generateAuthUrl(psid = null, metadata = {}) {
     if (!process.env.ML_CLIENT_ID || !process.env.ML_REDIRECT_URI) {
       throw new Error("Missing ML_CLIENT_ID or ML_REDIRECT_URI in environment variables");
     }
+
+    // Generate PKCE values
+    const codeVerifier = generateCodeVerifier();
+    const codeChallenge = generateCodeChallenge(codeVerifier);
+
+    console.log(`🔐 PKCE Generated:`);
+    console.log(`   code_verifier: ${codeVerifier.substring(0, 20)}... (${codeVerifier.length} chars)`);
+    console.log(`   code_challenge: ${codeChallenge.substring(0, 20)}...`);
 
     // Generate cryptographically secure nonce
     const nonce = crypto.randomBytes(16).toString("hex");
@@ -37,30 +85,36 @@ async function generateAuthUrl(psid = null, metadata = {}) {
     // Encode state as base64
     const state = Buffer.from(JSON.stringify(statePayload)).toString("base64");
 
-    // Store state in database with expiration
+    console.log(`🔐 State Generated: ${state.substring(0, 20)}...`);
+
+    // Store state + code_verifier in database with expiration
     const expiresAt = new Date(Date.now() + STATE_EXPIRY_MINUTES * 60 * 1000);
     await OAuthState.create({
       state,
       psid,
       nonce,
+      codeVerifier,  // Store PKCE verifier
       expiresAt,
       ipAddress: metadata.ipAddress,
       userAgent: metadata.userAgent
     });
 
-    // Build OAuth URL
+    // Build OAuth URL with PKCE
     const params = new URLSearchParams({
       response_type: "code",
       client_id: process.env.ML_CLIENT_ID,
       redirect_uri: process.env.ML_REDIRECT_URI,
       state,
-      // Request offline_access for refresh tokens
+      code_challenge: codeChallenge,
+      code_challenge_method: "S256",
       scope: "read write offline_access"
     });
 
     const url = `${ML_AUTH_URL}?${params.toString()}`;
 
-    console.log(`🔐 Generated ML OAuth URL (PSID: ${psid || 'none'}, State: ${state.substring(0, 20)}...)`);
+    console.log(`✅ OAuth URL Generated (Mexico, PKCE S256)`);
+    console.log(`   PSID: ${psid || 'none'}`);
+    console.log(`   Redirect: ${process.env.ML_REDIRECT_URI}`);
 
     return { url, state };
   } catch (error) {
@@ -70,14 +124,14 @@ async function generateAuthUrl(psid = null, metadata = {}) {
 }
 
 /**
- * Validate state parameter from callback
+ * Validate state parameter from callback and retrieve code_verifier
  * @param {string} state - State parameter from OAuth callback
- * @returns {Promise<{valid: boolean, psid: string|null, stateDoc: object|null}>}
+ * @returns {Promise<{valid: boolean, psid: string|null, stateDoc: object|null, codeVerifier: string|null}>}
  */
 async function validateState(state) {
   try {
     if (!state) {
-      return { valid: false, psid: null, stateDoc: null };
+      return { valid: false, psid: null, stateDoc: null, codeVerifier: null };
     }
 
     // Find state in database
@@ -85,19 +139,19 @@ async function validateState(state) {
 
     if (!stateDoc) {
       console.log(`⚠️ State not found in database: ${state.substring(0, 20)}...`);
-      return { valid: false, psid: null, stateDoc: null };
+      return { valid: false, psid: null, stateDoc: null, codeVerifier: null };
     }
 
     // Check if already used
     if (stateDoc.used) {
-      console.log(`⚠️ State already used: ${state.substring(0, 20)}...`);
-      return { valid: false, psid: null, stateDoc: null };
+      console.log(`⚠️ State already used (replay attack?): ${state.substring(0, 20)}...`);
+      return { valid: false, psid: null, stateDoc: null, codeVerifier: null };
     }
 
-    // Check expiration (redundant with TTL, but good for clarity)
+    // Check expiration
     if (stateDoc.expiresAt < new Date()) {
       console.log(`⚠️ State expired: ${state.substring(0, 20)}...`);
-      return { valid: false, psid: null, stateDoc: null };
+      return { valid: false, psid: null, stateDoc: null, codeVerifier: null };
     }
 
     // Decode and validate structure
@@ -105,33 +159,45 @@ async function validateState(state) {
       const decoded = JSON.parse(Buffer.from(state, "base64").toString("utf-8"));
       if (!decoded.nonce || decoded.nonce !== stateDoc.nonce) {
         console.log(`⚠️ Nonce mismatch in state: ${state.substring(0, 20)}...`);
-        return { valid: false, psid: null, stateDoc: null };
+        return { valid: false, psid: null, stateDoc: null, codeVerifier: null };
       }
     } catch (decodeError) {
       console.log(`⚠️ Invalid state encoding: ${state.substring(0, 20)}...`);
-      return { valid: false, psid: null, stateDoc: null };
+      return { valid: false, psid: null, stateDoc: null, codeVerifier: null };
     }
 
-    console.log(`✅ State validated successfully (PSID: ${stateDoc.psid || 'none'})`);
-    return { valid: true, psid: stateDoc.psid, stateDoc };
+    console.log(`✅ State validated successfully`);
+    console.log(`   PSID: ${stateDoc.psid || 'none'}`);
+    console.log(`   code_verifier: ${stateDoc.codeVerifier.substring(0, 20)}...`);
+
+    return {
+      valid: true,
+      psid: stateDoc.psid,
+      stateDoc,
+      codeVerifier: stateDoc.codeVerifier  // Return PKCE verifier
+    };
   } catch (error) {
     console.error("❌ Error validating state:", error);
-    return { valid: false, psid: null, stateDoc: null };
+    return { valid: false, psid: null, stateDoc: null, codeVerifier: null };
   }
 }
 
 /**
- * Exchange authorization code for tokens
+ * Exchange authorization code for tokens using PKCE
  * @param {string} code - Authorization code from OAuth callback
+ * @param {string} codeVerifier - PKCE code_verifier
  * @returns {Promise<{accessToken, refreshToken, expiresIn}>}
  */
-async function exchangeCodeForTokens(code) {
+async function exchangeCodeForTokens(code, codeVerifier) {
   try {
     if (!process.env.ML_CLIENT_ID || !process.env.ML_CLIENT_SECRET || !process.env.ML_REDIRECT_URI) {
       throw new Error("Missing ML OAuth credentials in environment variables");
     }
 
-    console.log(`🔄 Exchanging code for tokens...`);
+    console.log(`🔄 Exchanging code for tokens (PKCE)...`);
+    console.log(`   code: ${code.substring(0, 20)}...`);
+    console.log(`   code_verifier: ${codeVerifier.substring(0, 20)}...`);
+    console.log(`   redirect_uri: ${process.env.ML_REDIRECT_URI}`);
 
     const response = await axios.post(
       ML_TOKEN_URL,
@@ -140,7 +206,8 @@ async function exchangeCodeForTokens(code) {
         client_id: process.env.ML_CLIENT_ID,
         client_secret: process.env.ML_CLIENT_SECRET,
         code,
-        redirect_uri: process.env.ML_REDIRECT_URI
+        redirect_uri: process.env.ML_REDIRECT_URI,
+        code_verifier: codeVerifier  // PKCE verifier
       }).toString(),
       {
         headers: { "Content-Type": "application/x-www-form-urlencoded" }
@@ -153,7 +220,10 @@ async function exchangeCodeForTokens(code) {
       throw new Error("Missing tokens in ML response");
     }
 
-    console.log(`✅ Tokens obtained successfully (expires in ${expires_in}s)`);
+    console.log(`✅ Tokens obtained successfully`);
+    console.log(`   access_token: ${access_token.substring(0, 20)}...`);
+    console.log(`   refresh_token: ${refresh_token.substring(0, 20)}...`);
+    console.log(`   expires_in: ${expires_in}s`);
 
     return {
       accessToken: access_token,
@@ -161,7 +231,11 @@ async function exchangeCodeForTokens(code) {
       expiresIn: expires_in || 21600  // Default 6 hours
     };
   } catch (error) {
-    console.error("❌ Error exchanging code for tokens:", error.response?.data || error.message);
+    console.error("❌ Error exchanging code for tokens:");
+    console.error("   Status:", error.response?.status);
+    console.error("   Error:", error.response?.data?.error);
+    console.error("   Message:", error.response?.data?.message || error.message);
+    console.error("   Full response:", JSON.stringify(error.response?.data, null, 2));
     throw error;
   }
 }
@@ -181,7 +255,11 @@ async function getSellerInfo(accessToken) {
 
     const { id, nickname, email, first_name, last_name, country_id, site_id } = response.data;
 
-    console.log(`✅ Seller info obtained: ${nickname} (ID: ${id})`);
+    console.log(`✅ Seller info obtained:`);
+    console.log(`   seller_id: ${id}`);
+    console.log(`   nickname: ${nickname}`);
+    console.log(`   email: ${email}`);
+    console.log(`   country: ${country_id}`);
 
     return {
       sellerId: String(id),
@@ -205,7 +283,6 @@ async function getSellerInfo(accessToken) {
  */
 async function refreshTokens(sellerId) {
   try {
-    // Find existing auth
     const auth = await MercadoLibreAuth.findOne({ sellerId, active: true });
 
     if (!auth) {
@@ -229,13 +306,12 @@ async function refreshTokens(sellerId) {
 
     const { access_token, refresh_token, expires_in } = response.data;
 
-    // Update auth document
     auth.accessToken = access_token;
-    auth.refreshToken = refresh_token || auth.refreshToken;  // ML sometimes returns new refresh token
+    auth.refreshToken = refresh_token || auth.refreshToken;
     auth.expiresIn = expires_in || 21600;
     auth.tokenCreatedAt = new Date();
     auth.lastRefreshedAt = new Date();
-    auth.lastError = undefined;  // Clear any previous errors
+    auth.lastError = undefined;
 
     await auth.save();
 
@@ -245,7 +321,6 @@ async function refreshTokens(sellerId) {
   } catch (error) {
     console.error(`❌ Error refreshing tokens for seller ${sellerId}:`, error.response?.data || error.message);
 
-    // Log error to database
     const auth = await MercadoLibreAuth.findOne({ sellerId, active: true });
     if (auth) {
       auth.lastError = {
@@ -273,7 +348,6 @@ async function getValidAccessToken(sellerId) {
       throw new Error(`No active authorization found for seller ${sellerId}`);
     }
 
-    // Check if token is expired
     if (auth.isTokenExpired()) {
       console.log(`🔄 Token expired for seller ${sellerId}, refreshing...`);
       const refreshedAuth = await refreshTokens(sellerId);

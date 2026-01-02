@@ -23,6 +23,12 @@ const oauthStateSchema = new mongoose.Schema(
       required: true  // Random security token
     },
 
+    // PKCE (Proof Key for Code Exchange)
+    codeVerifier: {
+      type: String,
+      required: true  // PKCE code_verifier for S256 challenge
+    },
+
     // Metadata
     ipAddress: String,
     userAgent: String,
