@@ -1,4 +1,7 @@
 // mlTokenManager.js
+// ⚠️ DEPRECATED: This file will be replaced by the new multi-tenant OAuth system
+// ⚠️ Please migrate to: utils/mercadoLibreOAuth.js
+// ⚠️ For multi-seller support, use the /ml/oauth endpoints
 require("dotenv").config();
 const axios = require("axios");
 

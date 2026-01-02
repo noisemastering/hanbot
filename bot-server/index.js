@@ -77,6 +77,7 @@ const profilesRoutes = require('./routes/profilesRoutes');
 const clickLogsRoutes = require('./routes/clickLogsRoutes');
 const pushRoutes = require('./routes/pushRoutes');
 const usersRoutes = require('./routes/usersRoutes');
+const mercadoLibreAuthRoutes = require('./routes/mercadoLibreAuthRoutes');
 
 // Auth routes (no prefix, will be /auth/login, /auth/me, etc.)
 app.use('/auth', authRoutes);
@@ -85,6 +86,7 @@ app.use('/dashboard-users', dashboardUsersRoutes);
 app.use('/roles', rolesRoutes);
 app.use('/profiles', profilesRoutes);
 app.use('/click-logs', clickLogsRoutes);
+app.use('/ml', mercadoLibreAuthRoutes);
 
 app.use('/products', productRoutes);
 app.use('/campaigns', campaignRoutes);
