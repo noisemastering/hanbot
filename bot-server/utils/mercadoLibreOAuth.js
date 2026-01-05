@@ -290,6 +290,10 @@ async function refreshTokens(sellerId) {
     }
 
     console.log(`🔄 Refreshing tokens for seller ${sellerId}...`);
+    console.log(`   client_id: ${process.env.ML_CLIENT_ID || 'NOT SET'}`);
+    console.log(`   client_secret length: ${process.env.ML_CLIENT_SECRET?.length || 0} chars`);
+    console.log(`   refresh_token exists: ${!!auth.refreshToken}`);
+    console.log(`   refresh_token length: ${auth.refreshToken?.length || 0} chars`);
 
     const response = await axios.post(
       ML_TOKEN_URL,
@@ -319,7 +323,11 @@ async function refreshTokens(sellerId) {
 
     return auth;
   } catch (error) {
-    console.error(`❌ Error refreshing tokens for seller ${sellerId}:`, error.response?.data || error.message);
+    console.error(`❌ Error refreshing tokens for seller ${sellerId}:`);
+    console.error(`   Status: ${error.response?.status}`);
+    console.error(`   ML Error: ${error.response?.data?.error}`);
+    console.error(`   ML Message: ${error.response?.data?.message}`);
+    console.error(`   Full ML response:`, JSON.stringify(error.response?.data, null, 2));
 
     const auth = await MercadoLibreAuth.findOne({ sellerId, active: true });
     if (auth) {
@@ -342,21 +350,41 @@ async function refreshTokens(sellerId) {
  */
 async function getValidAccessToken(sellerId) {
   try {
+    console.log(`🔍 Getting valid access token for seller: ${sellerId}`);
     const auth = await MercadoLibreAuth.findOne({ sellerId, active: true });
 
     if (!auth) {
+      console.log(`❌ No active authorization found for seller ${sellerId}`);
       throw new Error(`No active authorization found for seller ${sellerId}`);
     }
 
+    const now = Date.now();
+    const tokenAge = now - auth.tokenCreatedAt.getTime();
+    const tokenAgeMinutes = Math.floor(tokenAge / 60000);
+    const expiresInMinutes = Math.floor(auth.expiresIn / 60);
+    const timeUntilExpiry = auth.getTimeUntilExpiry();
+
+    console.log(`✅ Found authorization for seller ${sellerId}:`);
+    console.log(`   Token created: ${auth.tokenCreatedAt}`);
+    console.log(`   Token age: ${tokenAgeMinutes} minutes`);
+    console.log(`   Expires in: ${expiresInMinutes} minutes (${auth.expiresIn}s total)`);
+    console.log(`   Time until expiry: ${Math.floor(timeUntilExpiry / 60)} minutes`);
+    console.log(`   PSID: ${auth.psid || 'none'}`);
+    console.log(`   Access token: ${auth.accessToken.substring(0, 30)}...`);
+    console.log(`   Refresh token exists: ${!!auth.refreshToken}`);
+    console.log(`   Is expired (with 60s buffer): ${auth.isTokenExpired()}`);
+
+    // Only refresh if token is actually expired (or within 60s of expiry)
     if (auth.isTokenExpired()) {
-      console.log(`🔄 Token expired for seller ${sellerId}, refreshing...`);
+      console.log(`⚠️ Token is expired or expiring soon, refreshing...`);
       const refreshedAuth = await refreshTokens(sellerId);
       return refreshedAuth.accessToken;
     }
 
+    console.log(`✅ Token is still valid, using existing access token`);
     return auth.accessToken;
   } catch (error) {
-    console.error(`❌ Error getting valid access token for seller ${sellerId}:`, error);
+    console.error(`❌ Error getting valid access token for seller ${sellerId}:`, error.message);
     throw error;
   }
 }

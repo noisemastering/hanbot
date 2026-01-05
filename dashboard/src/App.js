@@ -51,6 +51,7 @@ import Login from "./pages/Login";
 import Settings from "./pages/Settings";
 import InventarioView from "./pages/InventarioView";
 import PuntosDeVentaView from "./pages/PuntosDeVentaView";
+import OrdersView from "./pages/OrdersView";
 import PuntoDeVentaModal from "./components/PuntoDeVentaModal";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -58,6 +59,7 @@ import UsersView from "./components/UsersView";
 import RolesView from "./components/RolesView";
 import ProfilesView from "./components/ProfilesView";
 import ClickLogsView from "./components/ClickLogsView";
+import ConversionsView from "./pages/ConversionsView";
 
 const API_URL = process.env.REACT_APP_API_URL || "https://hanbot-production.up.railway.app";
 const socket = io(API_URL, {
@@ -120,6 +122,14 @@ const menuItems = [
         path: "/click-logs",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+        )
+      },
+      {
+        id: "conversions",
+        label: "Conversiones",
+        path: "/conversions",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         )
       }
     ]
@@ -238,6 +248,24 @@ const menuItems = [
         path: "/profiles",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
+        )
+      }
+    ]
+  },
+  {
+    id: "mercadolibre",
+    label: "Mercado Libre",
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+    ),
+    isExpandable: true,
+    children: [
+      {
+        id: "ml-orders",
+        label: "Pedidos",
+        path: "/ml-orders",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
         )
       }
     ]
@@ -2050,6 +2078,11 @@ function App() {
           <Route path="/roles" element={<RolesView />} />
           <Route path="/profiles" element={<ProfilesView />} />
           <Route path="/click-logs" element={<ClickLogsView />} />
+          <Route path="/conversions" element={<ConversionsView />} />
+
+          {/* Mercado Libre Routes */}
+          <Route path="/ml-orders" element={<OrdersView />} />
+
           <Route path="/settings" element={<Settings />} />
         </Routes>
 

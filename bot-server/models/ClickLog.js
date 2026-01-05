@@ -42,15 +42,43 @@ const clickLogSchema = new mongoose.Schema(
     // Conversion tracking
     converted: {
       type: Boolean,
-      default: false
-    },
-
-    conversionData: {
-      type: mongoose.Schema.Types.Mixed,
-      default: null
+      default: false,
+      index: true
     },
 
     convertedAt: Date,
+
+    // ML Order correlation (time-based or webhook)
+    correlatedOrderId: {
+      type: String,
+      index: true
+    },
+
+    correlationConfidence: {
+      type: String,
+      enum: ['high', 'medium', 'low', null],
+      default: null
+    },
+
+    correlationMethod: {
+      type: String,
+      enum: ['time_based', 'webhook', 'manual', null],
+      default: null
+    },
+
+    // Order details snapshot at correlation time
+    conversionData: {
+      orderId: String,
+      orderStatus: String,
+      buyerId: String,
+      buyerNickname: String,
+      totalAmount: Number,
+      paidAmount: Number,
+      currency: String,
+      orderDate: Date,
+      itemTitle: String,
+      itemQuantity: Number
+    },
 
     // Metadata
     userAgent: String,
@@ -66,5 +94,7 @@ const clickLogSchema = new mongoose.Schema(
 clickLogSchema.index({ psid: 1, createdAt: -1 });
 clickLogSchema.index({ clicked: 1, createdAt: -1 });
 clickLogSchema.index({ converted: 1, createdAt: -1 });
+clickLogSchema.index({ productId: 1, clickedAt: -1 }); // For time-based correlation
+clickLogSchema.index({ correlatedOrderId: 1 });
 
 module.exports = mongoose.model("ClickLog", clickLogSchema);

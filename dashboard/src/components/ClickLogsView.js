@@ -196,34 +196,44 @@ function ClickLogsView() {
             <table className="w-full">
               <thead className="bg-gray-900/50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">PSID</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">URL Original</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Producto</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Creado</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Clickeado</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Estado</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-32">PSID</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-36">Link</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase">Producto</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-28">Creado</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-28">Clickeado</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-40">Estado</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-700/50">
                 {clickLogs.map((log) => (
                   <tr key={log._id} className="hover:bg-gray-700/30 transition-colors">
-                    <td className="px-4 py-3 text-sm text-gray-300 font-mono">
-                      {log.psid.slice(0, 12)}...
+                    <td className="px-3 py-2">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                        {log.psid.slice(-8)}
+                      </span>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-300 max-w-xs truncate">
-                      {log.originalUrl}
+                    <td className="px-3 py-2">
+                      <a
+                        href={log.originalUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 hover:bg-cyan-500/30 transition-colors"
+                        title={log.originalUrl}
+                      >
+                        🔗 {log.productId ? log.productId.slice(-6) : 'link'}
+                      </a>
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-300">
+                    <td className="px-3 py-2 text-sm text-gray-300">
                       {log.productName || '-'}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-400">
+                    <td className="px-3 py-2 text-xs text-gray-400">
                       {formatDate(log.createdAt)}
                     </td>
-                    <td className="px-4 py-3 text-sm text-gray-400">
+                    <td className="px-3 py-2 text-xs text-gray-400">
                       {log.clicked ? formatDate(log.clickedAt) : '-'}
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="flex items-center space-x-2">
+                    <td className="px-3 py-2">
+                      <div className="flex items-center space-x-1">
                         <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
                           log.clicked
                             ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
@@ -231,9 +241,13 @@ function ClickLogsView() {
                         }`}>
                           {log.clicked ? '✓ Click' : '○ Pendiente'}
                         </span>
-                        {log.converted && (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-300 border border-green-500/30">
-                            ✓ Convertido
+                        {log.converted && (log.correlationConfidence === 'high' || log.correlationConfidence === 'medium') && (
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                            log.correlationConfidence === 'high'
+                              ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
+                              : 'bg-yellow-600/20 text-yellow-400 border border-yellow-600/30'
+                          }`}>
+                            💰 {log.correlationConfidence === 'high' ? 'Venta' : 'Venta~'}
                           </span>
                         )}
                       </div>

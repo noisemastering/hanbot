@@ -78,6 +78,8 @@ const clickLogsRoutes = require('./routes/clickLogsRoutes');
 const pushRoutes = require('./routes/pushRoutes');
 const usersRoutes = require('./routes/usersRoutes');
 const mercadoLibreAuthRoutes = require('./routes/mercadoLibreAuthRoutes');
+const mercadoLibreOrdersRoutes = require('./routes/mercadoLibreOrdersRoutes');
+const mercadoLibreNotificationsRoutes = require('./routes/mercadoLibreNotificationsRoutes');
 
 // Auth routes (no prefix, will be /auth/login, /auth/me, etc.)
 app.use('/auth', authRoutes);
@@ -87,6 +89,8 @@ app.use('/roles', rolesRoutes);
 app.use('/profiles', profilesRoutes);
 app.use('/click-logs', clickLogsRoutes);
 app.use('/ml', mercadoLibreAuthRoutes);
+app.use('/ml', mercadoLibreOrdersRoutes);
+app.use('/ml', mercadoLibreNotificationsRoutes);
 
 app.use('/products', productRoutes);
 app.use('/campaigns', campaignRoutes);
@@ -956,6 +960,41 @@ app.post("/assign-campaign/:psid", async (req, res) => {
     res.status(500).json({ success: false, error: "Error del servidor" });
   }
 });
+
+// ============================================
+// STARTUP VALIDATION: Required Environment Variables
+// ============================================
+function validateRequiredEnvVars() {
+  const required = [
+    'ML_CLIENT_ID',
+    'ML_CLIENT_SECRET',
+    'ML_REDIRECT_URI'
+  ];
+
+  const missing = [];
+
+  for (const varName of required) {
+    if (!process.env[varName]) {
+      missing.push(varName);
+    }
+  }
+
+  if (missing.length > 0) {
+    console.error('❌ FATAL: Missing required Mercado Libre environment variables:');
+    missing.forEach(v => console.error(`   - ${v}`));
+    console.error('\nPlease add these to your .env file.');
+    process.exit(1);
+  }
+
+  // Log configuration (without leaking secrets)
+  console.log('✅ Mercado Libre OAuth Configuration:');
+  console.log(`   ML_CLIENT_ID: ${process.env.ML_CLIENT_ID}`);
+  console.log(`   ML_CLIENT_SECRET: ${process.env.ML_CLIENT_SECRET.length} chars`);
+  console.log(`   ML_REDIRECT_URI: ${process.env.ML_REDIRECT_URI}`);
+}
+
+// Validate before starting server
+validateRequiredEnvVars();
 
 server.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
