@@ -13,7 +13,14 @@ const {
   generateSizeResponse,
   generateGenericSizeResponse
 } = require("../../measureHandler");
-const Product = require("../../models/Product");
+const ProductFamily = require("../../models/ProductFamily");
+
+// Helper to get preferred link from ProductFamily
+function getProductLink(product) {
+  if (!product) return null;
+  return product.onlineStoreLinks?.find(l => l.isPreferred)?.url ||
+         product.onlineStoreLinks?.[0]?.url || null;
+}
 const { detectMexicanLocation, isLikelyLocationName } = require("../../mexicanLocations");
 const { generateClickLink } = require("../../tracking");
 const { sendHandoffNotification } = require("../../services/pushNotifications");
@@ -215,10 +222,11 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
     await updateConversation(psid, { lastIntent: "catalog_request" });
 
-    // Fetch beige products from database
-    const products = await Product.find({
-      isActive: true,
-      color: /beige/i
+    // Fetch sellable products from ProductFamily (Inventario)
+    const products = await ProductFamily.find({
+      sellable: true,
+      active: true,
+      price: { $gt: 0 }
     }).sort({ size: 1 });
 
     if (!products || products.length === 0) {
@@ -328,15 +336,17 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         sizeVariants.push(swapped, swapped + 'm');
       }
 
-      const product = await Product.findOne({
+      const product = await ProductFamily.findOne({
         size: { $in: sizeVariants },
-        type: "confeccionada"
+        sellable: true,
+        active: true
       });
 
-      if (product?.mLink) {
+      const productLink = getProductLink(product);
+      if (productLink) {
         await updateConversation(psid, { lastIntent: "affirmative_link_provided", unknownCount: 0 });
 
-        const trackedLink = await generateClickLink(psid, product.mLink, {
+        const trackedLink = await generateClickLink(psid, productLink, {
           productName: product.name,
           productId: product._id,
           campaignId: convo.campaignId,
@@ -544,13 +554,15 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
         sizeVariants.push(swapped, swapped + 'm');
       }
 
-      const product = await Product.findOne({
+      const product = await ProductFamily.findOne({
         size: { $in: sizeVariants },
-        type: "confeccionada"
+        sellable: true,
+        active: true
       });
 
-      if (product?.mLink) {
-        const trackedLink = await generateClickLink(psid, product.mLink, {
+      const productLink = getProductLink(product);
+      if (productLink) {
+        const trackedLink = await generateClickLink(psid, productLink, {
           productName: product.name,
           productId: product._id,
           campaignId: convo.campaignId,
@@ -692,13 +704,15 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
         sizeVariants.push(swapped, swapped + 'm');
       }
 
-      const product = await Product.findOne({
+      const product = await ProductFamily.findOne({
         size: { $in: sizeVariants },
-        type: "confeccionada"
+        sellable: true,
+        active: true
       });
 
-      if (product?.mLink) {
-        const trackedLink = await generateClickLink(psid, product.mLink, {
+      const productLink = getProductLink(product);
+      if (productLink) {
+        const trackedLink = await generateClickLink(psid, productLink, {
           productName: product.name,
           productId: product._id,
           campaignId: convo.campaignId,
@@ -801,10 +815,11 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
       // User is confirming they want beige - show products directly
       await updateConversation(psid, { lastIntent: "color_confirmed", unknownCount: 0 });
 
-      // Fetch beige products from database
-      const products = await Product.find({
-        isActive: true,
-        color: /beige/i
+      // Fetch sellable products from ProductFamily
+      const products = await ProductFamily.find({
+        sellable: true,
+        active: true,
+        price: { $gt: 0 }
       }).sort({ size: 1 });
 
       if (!products || products.length === 0) {
@@ -856,15 +871,17 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
       sizeVariants.push(swapped, swapped + 'm');
     }
 
-    const product = await Product.findOne({
+    const product = await ProductFamily.findOne({
       size: { $in: sizeVariants },
-      type: "confeccionada"
+      sellable: true,
+      active: true
     });
 
-    if (product?.mLink) {
+    const productLink = getProductLink(product);
+    if (productLink) {
       await updateConversation(psid, { lastIntent: "size_reference_confirmed", unknownCount: 0 });
 
-      const trackedLink = await generateClickLink(psid, product.mLink, {
+      const trackedLink = await generateClickLink(psid, productLink, {
         productName: product.name,
         productId: product._id,
         campaignId: convo.campaignId,
@@ -1015,13 +1032,15 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
               sizeVariants.push(swapped, swapped + 'm');
             }
 
-            const product = await Product.findOne({
+            const product = await ProductFamily.findOne({
               size: { $in: sizeVariants },
-              type: "confeccionada"
+              sellable: true,
+              active: true
             });
 
-            if (product?.mLink) {
-              const trackedLink = await generateClickLink(psid, product.mLink, {
+            const productLink = getProductLink(product);
+            if (productLink) {
+              const trackedLink = await generateClickLink(psid, productLink, {
                 productName: product.name,
                 productId: product._id,
                 campaignId: convo.campaignId,
@@ -1067,12 +1086,14 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
           sizeVariants.push(swapped, swapped + 'm');
         }
 
-        const product = await Product.findOne({
+        const product = await ProductFamily.findOne({
           size: { $in: sizeVariants },
-          type: "confeccionada"
+          sellable: true,
+          active: true
         });
 
-        if (product?.mLink) {
+        const productLink = getProductLink(product);
+        if (productLink) {
           // Update conversation state with exact match
           await updateConversation(psid, {
             lastIntent: "specific_measure",
@@ -1081,7 +1102,7 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
             lastUnavailableSize: null
           });
 
-          const trackedLink = await generateClickLink(psid, product.mLink, {
+          const trackedLink = await generateClickLink(psid, productLink, {
             productName: product.name,
             productId: product._id,
             campaignId: convo.campaignId,
@@ -1206,16 +1227,17 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
             sizeVariants.push(swapped, swapped + 'm');
           }
 
-          const product = await Product.findOne({
+          const product = await ProductFamily.findOne({
             size: { $in: sizeVariants },
-            type: "confeccionada"
+            sellable: true,
+            active: true
           });
 
           if (product) {
             sizePrices.push({
               size: sizeStr,
               price: product.price,
-              mLink: product.mLink
+              mLink: getProductLink(product)
             });
           }
         }
@@ -1250,15 +1272,17 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
           sizeVariants.push(swapped, swapped + 'm');
         }
 
-        const product = await Product.findOne({
+        const product = await ProductFamily.findOne({
           size: { $in: sizeVariants },
-          type: "confeccionada"
+          sellable: true,
+          active: true
         });
 
-        if (product?.mLink) {
+        const productLink = getProductLink(product);
+        if (productLink) {
           await updateConversation(psid, { lastIntent: "specific_measure_context", unknownCount: 0 });
 
-          const trackedLink = await generateClickLink(psid, product.mLink, {
+          const trackedLink = await generateClickLink(psid, productLink, {
             productName: product.name,
             productId: product._id,
             campaignId: convo.campaignId,
