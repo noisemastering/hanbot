@@ -206,6 +206,18 @@ router.put("/:id", async (req, res) => {
     // Save using .save() method which properly handles nested arrays and Maps
     await productFamily.save();
 
+    // Auto-propagate dimensions to children if this is a non-sellable product with dimensions
+    if (!productFamily.sellable && productFamily.enabledDimensions && productFamily.enabledDimensions.length > 0) {
+      const updatedCount = await propagateDimensionValuesToDescendants(productFamily._id, {
+        attributes: productFamily.attributes,
+        enabledDimensions: productFamily.enabledDimensions,
+        dimensionUnits: productFamily.dimensionUnits
+      });
+      if (updatedCount > 0) {
+        console.log(`🔄 Auto-propagated dimensions to ${updatedCount} descendant(s)`);
+      }
+    }
+
     // Populate after save
     await productFamily.populate('parentId', 'name generation');
 
