@@ -1,7 +1,6 @@
 // hybridSearch.js
 require("dotenv").config();
 const axios = require("axios");
-const Product = require("./models/Product");
 const ProductFamily = require("./models/ProductFamily");
 const { getValidMLToken } = require("./mlTokenManager");
 
@@ -75,24 +74,28 @@ async function findLocalProduct(query) {
       return null;
     }
 
-    console.log("🔍 Ejecutando búsqueda local con regex:", rx);
+    console.log("🔍 Ejecutando búsqueda local en ProductFamily con regex:", rx);
     // 🚫 Evita búsquedas genéricas como "invernadero", "jardín", "huerto"
     const genericContexts = ["invernadero", "jardin", "jardín", "huerto", "plantas"];
     if (genericContexts.some(ctx => query.toLowerCase().includes(ctx))) {
-    console.log("⚠️ Consulta genérica de contexto detectada, sin coincidencia directa de producto.");
-    return null;
+      console.log("⚠️ Consulta genérica de contexto detectada, sin coincidencia directa de producto.");
+      return null;
     }
 
-    const docs = await Product.find({
+    // Search in ProductFamily for sellable, active products with price
+    const docs = await ProductFamily.find({
+      sellable: true,
+      active: true,
+      price: { $exists: true, $gt: 0 },
       $or: [
         { name: rx },
         { description: rx },
-        { category: rx },
+        { marketingDescription: rx },
       ],
     }).lean().exec();
 
-    console.log(`📦 Resultados encontrados en MongoDB (${docs.length}):`);
-    docs.forEach((d, i) => console.log(`   [${i + 1}] ${d.name}`));
+    console.log(`📦 Resultados encontrados en ProductFamily (${docs.length}):`);
+    docs.forEach((d, i) => console.log(`   [${i + 1}] ${d.name} - $${d.price}`));
 
     if (!docs || docs.length === 0) {
       console.log("⚠️ Sin coincidencias locales para:", query);
@@ -116,16 +119,20 @@ async function findLocalProduct(query) {
       }
     }
 
+    // Get preferred link from onlineStoreLinks
+    const preferredLink = bestMatch.onlineStoreLinks?.find(l => l.isPreferred)?.url ||
+                         bestMatch.onlineStoreLinks?.[0]?.url || "";
+
     return {
         name: bestMatch.name,
         price: bestMatch.price || "Consultar precio",
-        permalink: bestMatch.mLink || bestMatch.permalink || "",
-        imageUrl: bestMatch.imageUrl || bestMatch.image || "",
-        source: "mongo",
+        permalink: preferredLink,
+        imageUrl: bestMatch.imageUrl || bestMatch.thumbnail || "",
+        source: "inventario",
         isFromML: false
     };
   } catch (err) {
-    console.error("❌ Error buscando en MongoDB:", err.message || err);
+    console.error("❌ Error buscando en ProductFamily:", err.message || err);
     return null;
   }
 }

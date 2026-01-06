@@ -5,7 +5,7 @@
 // SAME as a 2m x 4m product. The fabric can be oriented either way.
 // All dimension matching functions handle this by checking both orientations.
 //
-const Product = require("./models/Product");
+const ProductFamily = require("./models/ProductFamily");
 const { extractReference } = require("./referenceEstimator");
 
 /**
@@ -258,7 +258,7 @@ function parseSizeString(sizeStr) {
 }
 
 /**
- * Queries all available sizes from Products
+ * Queries all available sizes from ProductFamily (Inventario)
  * @param {object} conversation - Optional conversation object (with availableProducts populated)
  * @returns {Array} - Array of size objects sorted by area
  */
@@ -282,47 +282,50 @@ async function getAvailableSizes(conversation = null) {
             price = product.price;
           }
 
+          // Get preferred online store link (Mercado Libre)
+          const preferredLink = product.onlineStoreLinks?.find(l => l.isPreferred)?.url ||
+                               product.onlineStoreLinks?.[0]?.url || null;
+
           sizes.push({
             ...parsed,
             price: price,
-            source: product.mLink ? 'mercadolibre' : 'product',
+            source: preferredLink ? 'mercadolibre' : 'product',
             productName: product.name,
-            mLink: product.mLink,
-            permalink: product.mLink, // Alias for compatibility
-            imageUrl: product.imageUrl
+            mLink: preferredLink,
+            permalink: preferredLink,
+            imageUrl: product.imageUrl || product.thumbnail
           });
         }
       }
     }
   } else {
-    // Fallback: Get all regular Products (confeccionada type)
-    console.log('📦 Using all confeccionada products from catalog');
-    const products = await Product.find({
-      type: "confeccionada",
-      size: { $exists: true, $ne: null }
+    // Fallback: Get all sellable and active products from ProductFamily (Inventario)
+    console.log('📦 Using sellable products from Inventario (ProductFamily)');
+    const products = await ProductFamily.find({
+      sellable: true,
+      active: true,
+      size: { $exists: true, $ne: null },
+      price: { $exists: true, $gt: 0 }
     }).lean();
+
+    console.log(`📦 Found ${products.length} active sellable products with size and price`);
 
     for (const product of products) {
       if (product.size) {
         const parsed = parseSizeString(product.size);
         if (parsed) {
-          // Parse price (handle both String and Number)
-          let price = 0;
-          if (typeof product.price === 'string') {
-            const cleanPrice = product.price.replace(/[$,\s]/g, '');
-            price = parseFloat(cleanPrice) || 0;
-          } else if (typeof product.price === 'number') {
-            price = product.price;
-          }
+          // Get preferred online store link
+          const preferredLink = product.onlineStoreLinks?.find(l => l.isPreferred)?.url ||
+                               product.onlineStoreLinks?.[0]?.url || null;
 
           sizes.push({
             ...parsed,
-            price: price,
-            source: product.mLink ? 'mercadolibre' : 'product',
+            price: product.price,
+            source: preferredLink ? 'mercadolibre' : 'product',
             productName: product.name,
-            mLink: product.mLink,
-            permalink: product.mLink, // Alias for compatibility
-            imageUrl: product.imageUrl
+            mLink: preferredLink,
+            permalink: preferredLink,
+            imageUrl: product.imageUrl || product.thumbnail
           });
         }
       }

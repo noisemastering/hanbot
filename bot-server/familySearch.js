@@ -1,11 +1,10 @@
 // familySearch.js
 const ProductFamily = require("./models/ProductFamily");
-const Product = require("./models/Product");
 
 async function findFamily(query) {
   try {
     const q = query.toLowerCase();
-    const families = await ProductFamily.find({}).lean();
+    const families = await ProductFamily.find({ active: true }).lean();
 
     // Busca coincidencia parcial en nombre o descripción
     const match = families.find(f =>
@@ -15,13 +14,17 @@ async function findFamily(query) {
 
     if (!match) return null;
 
-    // Contar si tiene productos asociados
-    const productCount = await Product.countDocuments({ familyId: match._id });
+    // Contar si tiene productos vendibles asociados (children that are sellable)
+    const sellableCount = await ProductFamily.countDocuments({
+      parentId: match._id,
+      sellable: true,
+      active: true
+    });
 
     return {
       name: match.name,
       active: match.active,
-      hasProducts: productCount > 0,
+      hasProducts: sellableCount > 0,
       description: match.description,
     };
   } catch (err) {

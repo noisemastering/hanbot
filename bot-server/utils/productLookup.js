@@ -2,7 +2,7 @@
 const Ad = require("../models/Ad");
 const AdSet = require("../models/AdSet");
 const Campaign = require("../models/Campaign");
-const Product = require("../models/Product");
+const ProductFamily = require("../models/ProductFamily");
 
 /**
  * Get products for a user based on their conversation's ad/campaign association
