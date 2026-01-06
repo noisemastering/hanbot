@@ -36,15 +36,34 @@ async function handleRollQuery(userMessage, psid, convo) {
 
     console.log("🎯 Roll query detected, fetching enriched roll products...");
 
-    // Find all sellable roll products
-    const rollProducts = await ProductFamily.find({
+    // Check if user is asking for a specific percentage
+    const percentageMatch = cleanMsg.match(/(\d{2,3})\s*%/);
+    const requestedPercentage = percentageMatch ? percentageMatch[1] : null;
+
+    if (requestedPercentage) {
+      console.log(`📊 User requested ${requestedPercentage}% shade`);
+    }
+
+    // Build query - filter by percentage if specified
+    const query = {
       sellable: true,
-      available: true,
-      name: /rollo/i
-    })
+      active: true,
+      $or: [
+        { name: /rollo/i },
+        { name: new RegExp(`${requestedPercentage || '\\d+'}\\s*%`, 'i') }
+      ]
+    };
+
+    // If specific percentage requested, also search in parent chain
+    if (requestedPercentage) {
+      query.$or.push({ name: new RegExp(requestedPercentage, 'i') });
+    }
+
+    // Find all sellable roll products
+    const rollProducts = await ProductFamily.find(query)
       .populate('parentId')
       .sort({ priority: -1, createdAt: -1 })
-      .limit(10);
+      .limit(20);
 
     if (!rollProducts || rollProducts.length === 0) {
       console.log("⚠️ No roll products found in catalog");
