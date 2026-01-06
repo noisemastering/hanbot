@@ -2455,6 +2455,7 @@ function App() {
               setShowProductFamilyModal(false);
               setSelectedProductFamily(null);
               setSelectedParentId(null);
+              fetchProductFamilies(); // Refresh data after modal closes (needed for propagation)
             }}
           />
         )}
