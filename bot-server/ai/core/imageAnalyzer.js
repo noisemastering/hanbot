@@ -18,32 +18,40 @@ async function analyzeImage(imageUrl, openai) {
           role: "system",
           content: `Eres un asistente experto en mallas sombra para jardines, patios y espacios exteriores.
 
-IMPORTANTE: Solo vendemos mallas sombra en formas RECTANGULARES (incluyendo cuadradas) y TRIANGULARES. NO vendemos formas L, U, o formas irregulares.
+NUESTROS PRODUCTOS:
+- Mallas sombra en formas RECTANGULARES (incluyendo cuadradas) y TRIANGULARES
+- NO vendemos formas L, U, o formas irregulares
+- NO ofrecemos servicios de instalación, reparación, o forrado de estructuras existentes
 
-Tu trabajo es analizar imágenes que los clientes envían para:
-1. Identificar el tipo de espacio (patio, jardín, terraza, estacionamiento, invernadero, etc.)
-2. Identificar la FORMA del espacio (rectangular, cuadrado, L, irregular, etc.)
-3. Estimar dimensiones aproximadas si es posible
-4. Identificar necesidades específicas (sombra, privacidad, protección de plantas, etc.)
-5. Detectar cualquier estructura existente (postes, muros, pérgolas)
+Tu trabajo es analizar imágenes y clasificarlas en una de estas categorías:
 
-Si el espacio es rectangular o cuadrado:
-- Sugiere las medidas que necesitarían
+CATEGORÍA A - ESPACIO QUE NECESITA SOMBRA:
+Si ves un espacio abierto (patio, jardín, terraza, estacionamiento) que podría cubrirse con malla:
+1. Identifica el tipo de espacio
+2. Identifica la FORMA (rectangular, cuadrado, L, irregular)
+3. Estima dimensiones aproximadas si es posible
+4. Sugiere las medidas de malla que necesitarían
 
-Si el espacio es forma L, U, o irregular:
-- Explica que solo vendemos formas rectangulares y triangulares
-- Sugiere cubrir el espacio con DOS O MÁS mallas rectangulares
-- Ayuda a dividir el espacio en secciones rectangulares
-- Da las medidas aproximadas de cada rectángulo necesario
+Si es forma L o irregular, explica que pueden usar DOS mallas rectangulares.
 
-Responde en español de forma concisa y útil. Si la imagen no es clara o no está relacionada con espacios exteriores, indícalo amablemente.`
+CATEGORÍA B - ESTRUCTURA EXISTENTE (sombrilla, toldo, pérgola con tela):
+Si ves una estructura que YA tiene sombra (sombrilla de jardín, toldo, carpa, parasol):
+- Responde: "CUSTOM_SERVICE_REQUEST"
+- NO intentes analizar dimensiones
+- NO sugieras productos
+
+CATEGORÍA C - IMAGEN NO RELACIONADA:
+Si la imagen no es de un espacio exterior o no está relacionada con sombra:
+- Responde: "UNRELATED_IMAGE"
+
+Responde en español de forma concisa. Para categorías B y C, solo responde con el código indicado.`
         },
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: "Analiza esta imagen y dime qué tipo de malla sombra necesitaría este espacio. Incluye: tipo de espacio, dimensiones aproximadas si las puedes estimar, y recomendaciones."
+              text: "Analiza esta imagen. Si es un espacio que necesita sombra, describe el espacio y sugiere medidas. Si es una estructura existente (sombrilla, toldo, etc.) o imagen no relacionada, indica el código correspondiente."
             },
             {
               type: "image_url",
@@ -64,10 +72,17 @@ Responde en español de forma concisa y útil. Si la imagen no es clara o no est
     console.log(`✅ Image analysis completed`);
     console.log(`📝 Analysis: ${analysis.substring(0, 100)}...`);
 
+    // Detect special cases
+    const isCustomServiceRequest = analysis.includes("CUSTOM_SERVICE_REQUEST") ||
+                                    /sombrilla|toldo|parasol|carpa|pérgola.*tela|forrar|reparar|cambiar.*tela/i.test(analysis);
+    const isUnrelated = analysis.includes("UNRELATED_IMAGE");
+
     return {
       success: true,
       analysis,
-      imageUrl
+      imageUrl,
+      isCustomServiceRequest,
+      isUnrelated
     };
 
   } catch (error) {
@@ -92,7 +107,29 @@ function generateImageResponse(analysisResult) {
     };
   }
 
-  // Combine the AI analysis with a call to action
+  // Handle custom service requests (umbrella recovering, repairs, etc.)
+  if (analysisResult.isCustomServiceRequest) {
+    return {
+      type: "text",
+      text: "Gracias por la imagen. Veo que tienes una sombrilla/toldo existente.\n\n" +
+            "Nosotros vendemos mallas sombra en medidas rectangulares y triangulares para cubrir espacios abiertos, " +
+            "pero no ofrecemos servicio de forrado o reparación de estructuras existentes.\n\n" +
+            "Si buscas cubrir un espacio abierto con malla sombra, con gusto te ayudo. " +
+            "¿Tienes algún área descubierta que quieras proteger del sol?"
+    };
+  }
+
+  // Handle unrelated images
+  if (analysisResult.isUnrelated) {
+    return {
+      type: "text",
+      text: "Gracias por la imagen. No estoy seguro de cómo puedo ayudarte con esto.\n\n" +
+            "Nosotros vendemos mallas sombra para cubrir patios, jardines, terrazas y otros espacios exteriores.\n\n" +
+            "¿Tienes algún espacio que quieras proteger del sol? Si me envías una foto del área o me dices las medidas, te puedo asesorar."
+    };
+  }
+
+  // Standard response for spaces that need shade
   const response = `${analysisResult.analysis}\n\n¿Te gustaría ver opciones de mallas sombra que se ajusten a tu espacio? Puedo mostrarte medidas y precios específicos.`;
 
   return {

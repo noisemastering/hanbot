@@ -696,19 +696,38 @@ function InventarioView() {
                               />
                             </td>
                             <td className="px-3 py-2">
-                              <span className="text-sm text-white">
-                                {product.productType &&
-                                 !product.groupName.toLowerCase().includes(product.productType.toLowerCase()) &&
-                                 !product.groupName.toLowerCase().includes('cinta') &&
-                                 !product.name.toLowerCase().includes(product.productType.toLowerCase()) && (
-                                  <span className="text-cyan-400 mr-1">{product.productType}</span>
-                                )}
-                                {product.shadePercentage && <span className="text-cyan-300 mr-1">{product.shadePercentage}</span>}
-                                {product.reinforcementType && <span className="text-purple-400 mr-1">{product.reinforcementType}</span>}
-                                {product.isTriangular && product.productType !== 'Confeccionada' && <span className="text-amber-400 mr-1">Triangular</span>}
-                                {product.subdivision && <span className="text-green-400 mr-1">{product.subdivision}</span>}
-                                {product.name}
-                              </span>
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm text-white">
+                                  {product.productType &&
+                                   !product.groupName.toLowerCase().includes(product.productType.toLowerCase()) &&
+                                   !product.groupName.toLowerCase().includes('cinta') &&
+                                   !product.name.toLowerCase().includes(product.productType.toLowerCase()) && (
+                                    <span className="text-cyan-400 mr-1">{product.productType}</span>
+                                  )}
+                                  {product.shadePercentage && <span className="text-cyan-300 mr-1">{product.shadePercentage}</span>}
+                                  {product.reinforcementType && <span className="text-purple-400 mr-1">{product.reinforcementType}</span>}
+                                  {product.isTriangular && product.productType !== 'Confeccionada' && <span className="text-amber-400 mr-1">Triangular</span>}
+                                  {product.subdivision && <span className="text-green-400 mr-1">{product.subdivision}</span>}
+                                  {product.name}
+                                </span>
+                                {(() => {
+                                  // Only show ML button for valid ML links with real item IDs (MLM-XXXXXXXXX)
+                                  const mlLink = product.onlineStoreLinks?.find(l =>
+                                    l.url?.includes('mercadolibre') && /MLM-\d{6,}/.test(l.url)
+                                  )?.url;
+                                  return mlLink ? (
+                                    <a
+                                      href={mlLink}
+                                      target="_blank"
+                                      rel="noopener noreferrer"
+                                      className="inline-flex items-center px-1.5 py-0.5 bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-400 text-xs font-medium rounded transition-colors"
+                                      title={mlLink}
+                                    >
+                                      ML
+                                    </a>
+                                  ) : null;
+                                })()}
+                              </div>
                             </td>
                             <td className="px-3 py-2">
                               <span className="text-sm text-gray-300 font-mono">{product.sizeInfo}</span>

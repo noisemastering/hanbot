@@ -382,6 +382,105 @@ router.get("/sellers/:sellerId", authenticate, async (req, res) => {
   }
 });
 
+// GET /ml/items - Fetch all items from ML seller account
+router.get("/items", authenticate, async (req, res) => {
+  try {
+    const axios = require("axios");
+    const { getValidMLToken } = require("../mlTokenManager");
+
+    const token = await getValidMLToken();
+
+    // Get user ID
+    const me = await axios.get("https://api.mercadolibre.com/users/me", {
+      headers: { Authorization: `Bearer ${token}` }
+    });
+    const userId = me.data.id;
+
+    // Fetch items using scroll API
+    const items = [];
+    let scrollId = null;
+    const limit = 50;
+
+    // First request
+    const firstResponse = await axios.get(
+      `https://api.mercadolibre.com/users/${userId}/items/search`,
+      {
+        params: { limit, search_type: "scan" },
+        headers: { Authorization: `Bearer ${token}` }
+      }
+    );
+
+    const total = firstResponse.data.paging.total;
+    scrollId = firstResponse.data.scroll_id;
+    let results = firstResponse.data.results;
+
+    while (results && results.length > 0) {
+      // Fetch details for batch of items (max 20 per multiget)
+      for (let i = 0; i < results.length; i += 20) {
+        const batch = results.slice(i, i + 20);
+        try {
+          const multiget = await axios.get(
+            "https://api.mercadolibre.com/items",
+            {
+              params: { ids: batch.join(",") },
+              headers: { Authorization: `Bearer ${token}` }
+            }
+          );
+          for (const item of multiget.data) {
+            if (item.code === 200 && item.body) {
+              items.push({
+                id: item.body.id,
+                title: item.body.title,
+                price: item.body.price,
+                currency: item.body.currency_id,
+                permalink: item.body.permalink,
+                thumbnail: item.body.thumbnail,
+                status: item.body.status,
+                available_quantity: item.body.available_quantity
+              });
+            }
+          }
+        } catch (err) {
+          console.error("❌ Error fetching item batch:", err.message);
+        }
+      }
+
+      // Get next page
+      if (!scrollId) break;
+
+      try {
+        const nextResponse = await axios.get(
+          `https://api.mercadolibre.com/users/${userId}/items/search`,
+          {
+            params: { limit, search_type: "scan", scroll_id: scrollId },
+            headers: { Authorization: `Bearer ${token}` }
+          }
+        );
+        results = nextResponse.data.results;
+        scrollId = nextResponse.data.scroll_id;
+      } catch (err) {
+        console.error("❌ Error fetching next page:", err.message);
+        break;
+      }
+    }
+
+    console.log(`✅ Fetched ${items.length}/${total} ML items`);
+
+    res.json({
+      success: true,
+      total,
+      items
+    });
+  } catch (error) {
+    console.error("❌ Error fetching ML items:", error.response?.data || error.message);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch ML items",
+      details: process.env.NODE_ENV === "development" ? error.message : undefined
+    });
+  }
+});
+
 // DELETE /ml/sellers/:sellerId - Revoke seller authorization
 router.delete("/sellers/:sellerId", authenticate, async (req, res) => {
   try {

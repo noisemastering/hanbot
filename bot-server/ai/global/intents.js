@@ -175,6 +175,20 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 🌧️ RAIN/WATERPROOF QUESTIONS - Clarify malla sombra is NOT waterproof
+  if (/\b(lluvia|lluvias|llueve|agua|mojarse|mojar|impermeable|impermeabiliza|protege\s+de(l)?\s+(agua|lluvia)|cubre\s+de(l)?\s+(agua|lluvia)|sirve\s+(para|contra)\s+(la\s+)?(lluvia|agua)|tapa\s+(la\s+)?(lluvia|agua)|repele|repelente)\b/i.test(msg) &&
+      !/\b(antimaleza|ground\s*cover|maleza|hierba)\b/i.test(msg)) {
+
+    await updateConversation(psid, { lastIntent: "rain_waterproof_question" });
+
+    return {
+      type: "text",
+      text: "No, la malla sombra no tiene propiedades impermeables. Es un tejido permeable que permite el paso del agua y el aire.\n\n" +
+            "Su función principal es reducir la intensidad del sol ☀️ y proporcionar sombra, no proteger de la lluvia.\n\n" +
+            "Si necesitas protección contra lluvia, te recomendaría buscar una lona impermeable o un toldo. ¿Te puedo ayudar con algo más sobre la malla sombra?"
+    };
+  }
+
   // 📏 PRICING BY METER/ROLL - Handle "cuánto vale el metro" questions
   // NOTE: Removed general "rollo" pattern - that's handled by handleRollQuery in ai/index.js
   if (/\b(cu[aá]nto|precio|vale|cuesta)\s+(?:el\s+)?metro\b/i.test(msg) ||
@@ -416,8 +430,8 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     }
   }
 
-  // 📍 Ubicación
-  if (/donde|ubicad[oa]|direccion|qued[ao]|mapa|local|ciudad|encuentran/i.test(msg)) {
+  // 📍 Ubicación (includes common misspellings like "hubicacion")
+  if (/donde|h?ubicaci[oó]n|ubicad[oa]|direcci[oó]n|qued[ao]|mapa|local|ciudad|encuentran/i.test(msg)) {
     await updateConversation(psid, { lastIntent: "location_info" });
 
     return {
