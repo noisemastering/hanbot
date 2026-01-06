@@ -488,6 +488,48 @@ function InventarioView() {
     });
   };
 
+  // Deactivate all products without confirmed prices
+  const deactivateUnconfirmedPrices = async () => {
+    const flatProducts = flattenSellableProducts(productTree);
+    const productsToDeactivate = flatProducts.filter(p => p.priceIsInherited || !p.inheritedPrice || p.inheritedPrice <= 0);
+
+    if (productsToDeactivate.length === 0) {
+      alert('No hay productos con precios sin confirmar');
+      return;
+    }
+
+    if (!window.confirm(`¿Desactivar ${productsToDeactivate.length} productos sin precio confirmado?`)) {
+      return;
+    }
+
+    const idsToDeactivate = productsToDeactivate.map(p => p._id);
+
+    // Optimistic update
+    setProductTree(prev => {
+      let updated = prev;
+      for (const id of idsToDeactivate) {
+        updated = updateProductInTree(updated, id, { active: false });
+      }
+      return updated;
+    });
+
+    try {
+      await Promise.all(
+        idsToDeactivate.map(id =>
+          fetch(`${API_URL}/product-families/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ active: false })
+          })
+        )
+      );
+    } catch (error) {
+      console.error('Error deactivating products:', error);
+      fetchProductTree();
+      alert('Error al desactivar productos');
+    }
+  };
+
   // Flatten and group products
   const flatProducts = flattenSellableProducts(productTree);
   const groups = groupProducts(flatProducts);
@@ -530,6 +572,15 @@ function InventarioView() {
             className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500"
           />
         </div>
+
+        {/* Deactivate unconfirmed prices */}
+        <button
+          onClick={deactivateUnconfirmedPrices}
+          className="px-4 py-2 bg-amber-500/20 border border-amber-500/50 text-amber-300 rounded-lg hover:bg-amber-500/30 transition-colors text-sm font-medium"
+          title="Desactivar productos con precios heredados (amarillo)"
+        >
+          Desactivar sin precio
+        </button>
 
         {/* Bulk Operations */}
         {selectedItems.size > 0 && (
