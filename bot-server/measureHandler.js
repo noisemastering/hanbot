@@ -1,4 +1,10 @@
 // measureHandler.js
+//
+// IMPORTANT: For rectangular products like "malla sombra confeccionada",
+// width and length are INTERCHANGEABLE. A 4m x 2m product is the EXACT
+// SAME as a 2m x 4m product. The fabric can be oriented either way.
+// All dimension matching functions handle this by checking both orientations.
+//
 const Product = require("./models/Product");
 const { extractReference } = require("./referenceEstimator");
 
@@ -329,8 +335,16 @@ async function getAvailableSizes(conversation = null) {
 
 /**
  * Finds closest smaller and bigger sizes to requested dimension
- * IMPORTANT: For physical coverage, we need dimensions that can COVER the requested space,
- * not just match the area. If user wants 10x8m, they need at least 10m width AND 8m height.
+ *
+ * IMPORTANT - DIMENSION INTERCHANGEABILITY:
+ * For rectangular products (malla sombra confeccionada), width and length are
+ * INTERCHANGEABLE. A 4x2m is the SAME product as 2x4m - the fabric can be
+ * oriented either way. This function checks BOTH orientations when matching.
+ *
+ * For physical coverage, we need dimensions that can COVER the requested space,
+ * not just match the area. If user wants 10x8m, they need at least 10m in one
+ * direction AND 8m in the other (in either orientation).
+ *
  * @param {object} requestedDim - {width, height, area}
  * @param {Array} availableSizes - Array from getAvailableSizes()
  * @returns {object} - {smaller, bigger, exact}
@@ -339,7 +353,8 @@ function findClosestSizes(requestedDim, availableSizes) {
   const requestedArea = requestedDim.area;
 
   // Check for exact match by dimensions (not just area!)
-  // Must match either width×height or height×width (swapped dimensions)
+  // INTERCHANGEABLE: Must match either width×height OR height×width (swapped)
+  // Example: 4x2m matches both "4x2" and "2x4" products
   const dimensionTolerance = 0.2; // 20cm tolerance for each dimension
   const exact = availableSizes.find(size => {
     // Check if dimensions match (within tolerance)
