@@ -189,6 +189,26 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // ☀️ SHADE PERCENTAGE QUESTIONS - Explain available shade percentages
+  if (/\b(qu[eé]\s+)?porcenta?je[s]?\s+(de\s+)?(sombra|tiene[ns]?|manejan?|hay)?\b/i.test(msg) ||
+      /\b(qu[eé]\s+)?(sombra|porcentaje)[s]?\s+(tiene[ns]?|manejan?|hay|ofrece[ns]?)\b/i.test(msg) ||
+      /\b(cu[aá]nta?\s+sombra|nivel\s+de\s+sombra|grado\s+de\s+sombra)\b/i.test(msg) ||
+      /\b(diferencia|diferencias)\s+(entre|de)\s+(los\s+)?porcentajes?\b/i.test(msg)) {
+
+    await updateConversation(psid, { lastIntent: "shade_percentage_question" });
+
+    return {
+      type: "text",
+      text: "Manejamos mallas sombra en diferentes porcentajes:\n\n" +
+            "☀️ **35%** - Sombra ligera, ideal para viveros y plantas que necesitan mucha luz\n" +
+            "🌤️ **50%** - Sombra media, buena para hortalizas y estacionamientos\n" +
+            "⛅ **70%** - Sombra media-alta, popular para terrazas y patios\n" +
+            "🌥️ **80%** - Sombra alta, la más vendida para casas y jardines\n" +
+            "☁️ **90%** - Sombra muy alta, máxima protección solar\n\n" +
+            "El más popular es el **80%**, ofrece buena sombra sin oscurecer demasiado. ¿Cuál te interesa?"
+    };
+  }
+
   // 📏 PRICING BY METER/ROLL - Handle "cuánto vale el metro" questions
   // NOTE: Removed general "rollo" pattern - that's handled by handleRollQuery in ai/index.js
   if (/\b(cu[aá]nto|precio|vale|cuesta)\s+(?:el\s+)?metro\b/i.test(msg) ||
