@@ -2,401 +2,8 @@ import React, { useState, useEffect } from 'react';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
-// Table component for sellable products
-function SellableProductsTable({ product, parentChain, selectedItems, setSelectedItems, onUpdateProduct }) {
-  const [bulkOperation, setBulkOperation] = useState('');
-  const [bulkValue, setBulkValue] = useState('');
-
-  const tableKey = product._id;
-  const selected = selectedItems[tableKey] || new Set();
-  const allSelected = product.children.every(child => selected.has(child._id));
-
-  const toggleSelectAll = () => {
-    setSelectedItems(prev => {
-      const newSelected = { ...prev };
-      if (allSelected) {
-        newSelected[tableKey] = new Set();
-      } else {
-        newSelected[tableKey] = new Set(product.children.map(child => child._id));
-      }
-      return newSelected;
-    });
-  };
-
-  const toggleSelect = (childId) => {
-    setSelectedItems(prev => {
-      const newSelected = { ...prev };
-      const tableSelected = new Set(prev[tableKey] || []);
-      if (tableSelected.has(childId)) {
-        tableSelected.delete(childId);
-      } else {
-        tableSelected.add(childId);
-      }
-      newSelected[tableKey] = tableSelected;
-      return newSelected;
-    });
-  };
-
-  const handleBulkUpdate = async () => {
-    const selectedIds = Array.from(selected);
-    if (selectedIds.length === 0) {
-      alert('Por favor selecciona al menos un producto');
-      return;
-    }
-
-    if (!bulkOperation) {
-      alert('Por favor selecciona una operación');
-      return;
-    }
-
-    let updateData = {};
-    if (bulkOperation === 'precio') {
-      if (!bulkValue) {
-        alert('Por favor ingresa un precio');
-        return;
-      }
-      updateData = { price: parseFloat(bulkValue) };
-    } else if (bulkOperation === 'stock') {
-      if (!bulkValue) {
-        alert('Por favor ingresa un stock');
-        return;
-      }
-      updateData = { stock: parseInt(bulkValue) };
-    } else if (bulkOperation === 'inactivo') {
-      updateData = { available: false };
-    }
-
-    try {
-      await Promise.all(
-        selectedIds.map(id =>
-          fetch(`${API_URL}/product-families/${id}`, {
-            method: 'PUT',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(updateData)
-          })
-        )
-      );
-      window.location.reload();
-    } catch (error) {
-      console.error('Error in bulk update:', error);
-      alert('Error al actualizar productos');
-    }
-  };
-
-  return (
-    <div className="p-4 bg-gray-900/30">
-      {/* Bulk Edit Controls */}
-      {selected.size > 0 && (
-        <div className="mb-4 p-3 bg-primary-500/10 border border-primary-500/30 rounded-lg">
-          <div className="flex items-center space-x-4">
-            <span className="text-sm text-primary-300 font-medium">
-              {selected.size} seleccionado{selected.size !== 1 ? 's' : ''}
-            </span>
-            <select
-              value={bulkOperation}
-              onChange={(e) => {
-                setBulkOperation(e.target.value);
-                setBulkValue('');
-              }}
-              className="px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white text-sm"
-            >
-              <option value="">Seleccionar operación...</option>
-              <option value="precio">Actualizar Precio</option>
-              <option value="stock">Actualizar Stock</option>
-              <option value="inactivo">Inactivo</option>
-            </select>
-
-            {bulkOperation === 'precio' && (
-              <input
-                type="number"
-                step="0.01"
-                placeholder="Nuevo precio"
-                value={bulkValue}
-                onChange={(e) => setBulkValue(e.target.value)}
-                className="px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white text-sm w-32"
-              />
-            )}
-
-            {bulkOperation === 'stock' && (
-              <input
-                type="number"
-                placeholder="Nuevo stock"
-                value={bulkValue}
-                onChange={(e) => setBulkValue(e.target.value)}
-                className="px-3 py-2 bg-gray-900 border border-gray-700 rounded text-white text-sm w-24"
-              />
-            )}
-
-            {bulkOperation && (
-              <button
-                onClick={handleBulkUpdate}
-                className="px-4 py-2 bg-primary-500 text-white rounded hover:bg-primary-600 transition-colors text-sm font-medium"
-              >
-                Aplicar
-              </button>
-            )}
-          </div>
-        </div>
-      )}
-
-      <table className="w-full">
-        <thead className="bg-gray-900/50 border-b border-gray-700/50">
-          <tr>
-            <th className="px-4 py-3 text-left w-12">
-              <input
-                type="checkbox"
-                checked={allSelected}
-                onChange={toggleSelectAll}
-                className="rounded border-gray-600 text-primary-500 focus:ring-primary-500 focus:ring-offset-gray-900"
-              />
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Producto
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              SKU
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Stock
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Precio Menudeo
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Precio Mayoreo
-            </th>
-            <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-              Activo
-            </th>
-          </tr>
-        </thead>
-        <tbody className="divide-y divide-gray-700/50">
-          {product.children.map((child) => {
-            const getChildInheritedPrice = () => {
-              if (child.price !== undefined && child.price !== null) {
-                return child.price;
-              }
-              const fullChain = [...parentChain, product];
-              for (let i = fullChain.length - 1; i >= 0; i--) {
-                if (fullChain[i].price !== undefined && fullChain[i].price !== null) {
-                  return fullChain[i].price;
-                }
-              }
-              return null;
-            };
-            const childInheritedPrice = getChildInheritedPrice();
-            const priceIsInherited = child.price === undefined || child.price === null;
-
-            return (
-              <tr key={child._id} className="hover:bg-gray-700/30 transition-colors">
-                <td className="px-4 py-3">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(child._id)}
-                    onChange={() => toggleSelect(child._id)}
-                    className="rounded border-gray-600 text-primary-500 focus:ring-primary-500 focus:ring-offset-gray-900"
-                  />
-                </td>
-                <td className="px-4 py-3">
-                  <span className="text-sm font-medium text-white">{child.name}</span>
-                </td>
-                <td className="px-4 py-3">
-                  <span className="text-sm text-gray-400 font-mono">{child.sku || '-'}</span>
-                </td>
-                <td className="px-4 py-3">
-                  <EditableField
-                    label=""
-                    value={child.stock || 0}
-                    onSave={(value) => onUpdateProduct(child._id, 'stock', parseInt(value))}
-                    type="number"
-                  />
-                </td>
-                <td className="px-4 py-3">
-                  <EditableField
-                    label=""
-                    value={childInheritedPrice || 0}
-                    onSave={(value) => onUpdateProduct(child._id, 'price', parseFloat(value))}
-                    type="number"
-                    step="0.01"
-                    inherited={priceIsInherited}
-                  />
-                </td>
-                <td className="px-4 py-3">
-                  <EditableField
-                    label=""
-                    value={child.wholesalePrice || 0}
-                    onSave={(value) => onUpdateProduct(child._id, 'wholesalePrice', parseFloat(value))}
-                    type="number"
-                    step="0.01"
-                  />
-                </td>
-                <td className="px-4 py-3">
-                  <div className="flex items-center space-x-2">
-                    <button
-                      onClick={() => onUpdateProduct(child._id, 'active', !(child.active ?? true))}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${
-                        (child.active ?? true) ? 'bg-green-500' : 'bg-gray-600'
-                      }`}
-                      title={(child.active ?? true) ? 'Activo - Click para desactivar' : 'Inactivo - Click para activar'}
-                    >
-                      <span
-                        className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${
-                          (child.active ?? true) ? 'translate-x-6' : 'translate-x-1'
-                        }`}
-                      />
-                    </button>
-                    <span className={`text-xs font-medium ${
-                      (child.active ?? true) ? 'text-green-300' : 'text-gray-400'
-                    }`}>
-                      {(child.active ?? true) ? 'Activo' : 'Inactivo'}
-                    </span>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
-  );
-}
-
-// Recursive component for rendering product hierarchy with collapsible panels
-function ProductPanel({ product, level = 0, expandedIds, onToggle, onUpdateProduct, parentChain = [], selectedItems, setSelectedItems }) {
-  const isExpanded = expandedIds.has(product._id);
-  const hasChildren = product.children && product.children.length > 0;
-  const indentPixels = level * 32; // 32px per level
-
-  // Get inherited price from parent chain
-  const getInheritedPrice = () => {
-    if (product.price !== undefined && product.price !== null) {
-      return product.price;
-    }
-    for (let i = parentChain.length - 1; i >= 0; i--) {
-      if (parentChain[i].price !== undefined && parentChain[i].price !== null) {
-        return parentChain[i].price;
-      }
-    }
-    return null;
-  };
-
-  const inheritedPrice = getInheritedPrice();
-
-  return (
-    <div style={{ marginLeft: `${indentPixels}px` }}>
-      {/* Panel Header */}
-      <div
-        className={`flex items-center justify-between p-4 border-b border-gray-700/50 hover:bg-gray-700/30 transition-colors ${
-          level === 0 ? 'bg-gray-800/80' : level === 1 ? 'bg-gray-800/60' : 'bg-gray-800/40'
-        }`}
-      >
-        <div className="flex items-center space-x-3 flex-1">
-          {/* Expand/Collapse Button */}
-          {hasChildren ? (
-            <button
-              onClick={() => onToggle(product._id)}
-              className="p-1 text-gray-400 hover:text-white transition-colors"
-            >
-              <svg
-                className={`w-5 h-5 transform transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          ) : (
-            <div className="w-7"></div>
-          )}
-
-          {/* Product Name */}
-          <div className="flex-1">
-            <div className="flex items-center space-x-2">
-              <h3 className="text-white font-semibold">{product.name}</h3>
-              {product.sellable && (
-                <span className="px-2 py-0.5 bg-green-500/20 text-green-300 rounded text-xs">
-                  Vendible
-                </span>
-              )}
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Sellable Product Edit Fields */}
-      {product.sellable && (
-        <div className="p-4 bg-gray-900/50 border-b border-gray-700/50">
-          <div className="grid grid-cols-4 gap-4">
-            <EditableField
-              label="SKU"
-              value={product.sku || ''}
-              disabled={true}
-              type="text"
-            />
-            <EditableField
-              label="Stock"
-              value={product.stock}
-              onSave={(value) => onUpdateProduct(product._id, 'stock', parseInt(value))}
-              type="number"
-            />
-            <EditableField
-              label="Precio Menudeo"
-              value={inheritedPrice || 0}
-              onSave={(value) => onUpdateProduct(product._id, 'price', parseFloat(value))}
-              type="number"
-              step="0.01"
-              inherited={product.price === undefined || product.price === null}
-            />
-            <EditableField
-              label="Precio Mayoreo"
-              value={product.wholesalePrice || 0}
-              onSave={(value) => onUpdateProduct(product._id, 'wholesalePrice', parseFloat(value))}
-              type="number"
-              step="0.01"
-            />
-          </div>
-        </div>
-      )}
-
-      {/* Children */}
-      {isExpanded && hasChildren && (
-        <div>
-          {/* Check if all children are sellable - if so, render as table */}
-          {product.children.every(child => child.sellable) ? (
-            <SellableProductsTable
-              product={product}
-              parentChain={[...parentChain, product]}
-              selectedItems={selectedItems}
-              setSelectedItems={setSelectedItems}
-              onUpdateProduct={onUpdateProduct}
-            />
-          ) : (
-            // Otherwise render as recursive panels
-            <>
-              {product.children.map((child) => (
-                <ProductPanel
-                  key={child._id}
-                  product={child}
-                  level={level + 1}
-                  expandedIds={expandedIds}
-                  onToggle={onToggle}
-                  onUpdateProduct={onUpdateProduct}
-                  parentChain={[...parentChain, product]}
-                  selectedItems={selectedItems}
-                  setSelectedItems={setSelectedItems}
-                />
-              ))}
-            </>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
-// Editable field component
-function EditableField({ label, value, onSave, type = "text", step, disabled = false, inherited = false }) {
+// Editable cell component for inline editing
+function EditableCell({ value, onSave, type = "text", step, inherited = false }) {
   const [isEditing, setIsEditing] = useState(false);
   const [editValue, setEditValue] = useState(value);
 
@@ -420,51 +27,307 @@ function EditableField({ label, value, onSave, type = "text", step, disabled = f
     }
   };
 
-  if (disabled) {
+  if (isEditing) {
     return (
-      <div>
-        <label className="block text-xs font-medium text-gray-400 mb-1">{label}</label>
-        <div className="text-sm text-gray-500 font-mono">{value || '-'}</div>
-      </div>
+      <input
+        type={type}
+        step={step}
+        value={editValue}
+        onChange={(e) => setEditValue(e.target.value)}
+        onKeyDown={handleKeyDown}
+        onBlur={handleSave}
+        autoFocus
+        className="w-full px-2 py-1 bg-gray-900 border border-primary-500 rounded text-white text-sm focus:outline-none"
+      />
     );
   }
 
   return (
-    <div>
-      <label className="block text-xs font-medium text-gray-400 mb-1">
-        {label}
-        {inherited && <span className="ml-1 text-amber-400">(heredado)</span>}
-      </label>
-      {isEditing ? (
-        <input
-          type={type}
-          step={step}
-          value={editValue}
-          onChange={(e) => setEditValue(e.target.value)}
-          onKeyDown={handleKeyDown}
-          onBlur={handleSave}
-          autoFocus
-          className="w-full px-2 py-1 bg-gray-900 border border-primary-500 rounded text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-        />
-      ) : (
-        <button
-          onClick={() => setIsEditing(true)}
-          className="w-full text-left px-2 py-1 hover:bg-gray-700/50 rounded transition-colors text-sm"
-        >
-          <span className={`${inherited ? 'text-amber-400' : 'text-white'}`}>
-            {type === 'number' && step === '0.01' ? `$${parseFloat(value || 0).toFixed(2)}` : value || 0}
-          </span>
-        </button>
-      )}
-    </div>
+    <button
+      onClick={() => setIsEditing(true)}
+      className={`w-full text-left px-2 py-1 hover:bg-gray-700/50 rounded transition-colors text-sm ${
+        inherited ? 'text-amber-400' : 'text-white'
+      }`}
+    >
+      {type === 'number' && step === '0.01' ? `$${parseFloat(value || 0).toFixed(2)}` : (value || 0)}
+    </button>
   );
+}
+
+// Flatten product tree to get all sellable products with their parent info
+function flattenSellableProducts(products, parentChain = []) {
+  let result = [];
+
+  for (const product of products) {
+    if (product.sellable) {
+      // Build the path/breadcrumb from parents
+      const path = parentChain.map(p => p.name);
+
+      // Get inherited price from parent chain
+      let inheritedPrice = product.price;
+      let priceIsInherited = product.price === undefined || product.price === null;
+      if (priceIsInherited) {
+        for (let i = parentChain.length - 1; i >= 0; i--) {
+          if (parentChain[i].price !== undefined && parentChain[i].price !== null) {
+            inheritedPrice = parentChain[i].price;
+            break;
+          }
+        }
+      }
+
+      const productType = getProductType(product, parentChain);
+
+      // Group by base class + product type (Confeccionada/Rollo)
+      // Skip adding productType for products that are only sold one way
+      const baseClass = parentChain.length >= 1 ? parentChain[0] : null;
+      const baseClassName = baseClass?.name || '';
+      const skipProductType = baseClassName.toLowerCase().includes('cinta') ||
+                              baseClassName.toLowerCase().includes('monofilamento');
+
+      const groupKey = baseClass ? `${baseClass._id}-${productType || 'other'}` : product._id;
+      const groupName = productType && baseClass && !skipProductType
+        ? `${baseClass.name} ${productType}`
+        : baseClass?.name || product.name;
+      result.push({
+        ...product,
+        path,
+        groupKey,
+        groupName,
+        inheritedPrice,
+        priceIsInherited,
+        // Extract size info from path or attributes
+        sizeInfo: extractSizeInfo(product, parentChain),
+        colorInfo: extractColorInfo(product, parentChain),
+        isTriangular: isTriangular(product, parentChain),
+        productType,
+        shadePercentage: productType === 'Rollo' ? getShadePercentage(product, parentChain) : null,
+        reinforcementType: productType === 'Confeccionada' ? getReinforcementType(product, parentChain) : null,
+        subdivision: getSubdivision(product, parentChain)
+      });
+    }
+
+    if (product.children && product.children.length > 0) {
+      result = result.concat(flattenSellableProducts(product.children, [...parentChain, product]));
+    }
+  }
+
+  return result;
+}
+
+// Get product type from parent chain (Confeccionada, Rollo, etc.)
+function getProductType(product, parentChain) {
+  // Check product name first
+  const nameLower = product.name.toLowerCase();
+  if (nameLower.includes('confeccionada')) return 'Confeccionada';
+  if (nameLower.includes('rollo')) return 'Rollo';
+
+  // Check parent chain
+  for (const parent of parentChain) {
+    const parentNameLower = parent.name.toLowerCase();
+    if (parentNameLower.includes('confeccionada')) return 'Confeccionada';
+    if (parentNameLower.includes('rollo')) return 'Rollo';
+  }
+
+  return null;
+}
+
+// Get shade percentage from product or parent chain
+function getShadePercentage(product, parentChain) {
+  // Check product name first
+  const percentMatch = product.name.match(/(\d+)\s*%/);
+  if (percentMatch) return `${percentMatch[1]}%`;
+
+  // Check parent chain
+  for (const parent of parentChain) {
+    const match = parent.name.match(/(\d+)\s*%/);
+    if (match) return `${match[1]}%`;
+  }
+
+  return null;
+}
+
+// Get reinforcement type for Confeccionada products
+function getReinforcementType(product, parentChain) {
+  // Check product name first
+  const nameLower = product.name.toLowerCase();
+  if (nameLower.includes('reforzada') || nameLower.includes('refuerzo')) {
+    return nameLower.includes('sin refuerzo') ? 'Sin refuerzo' : 'Reforzada';
+  }
+
+  // Check parent chain
+  for (const parent of parentChain) {
+    const parentNameLower = parent.name.toLowerCase();
+    if (parentNameLower.includes('reforzada') || parentNameLower.includes('refuerzo')) {
+      return parentNameLower.includes('sin refuerzo') ? 'Sin refuerzo' : 'Reforzada';
+    }
+  }
+
+  return null;
+}
+
+// Get subdivision from parent chain (for products like Cinta Plástica, Cinta Rompevientos)
+function getSubdivision(product, parentChain) {
+  // Skip first parent (base class) and look for intermediate categories
+  if (parentChain.length < 2) return null;
+
+  // Check if any parent contains "rompeviento"
+  const isCintaRompevientos = parentChain.some(p => p.name.toLowerCase().includes('rompeviento'));
+
+  // Get intermediate parents (skip base class and direct parent if it's just a size/color)
+  for (let i = 1; i < parentChain.length; i++) {
+    const parent = parentChain[i];
+    const nameLower = parent.name.toLowerCase();
+
+    // For Cinta Rompevientos, ONLY include dimension classifiers (like "Rollo de 57 mm x 150 m")
+    if (isCintaRompevientos) {
+      // Match patterns with dimensions like "57 mm x 150 m" or "Rollo de..."
+      if (nameLower.includes('rollo de') || /\d+\s*(mm|cm|m)\s*x/i.test(parent.name)) {
+        return parent.name;
+      }
+      // Skip other parents for Cinta Rompevientos - we only want the dimension
+      continue;
+    }
+
+    // Skip if it's a percentage, size, color, or common terms
+    if (/^\d+%?$/.test(parent.name) ||
+        nameLower.includes('medida') ||
+        nameLower.includes('color') ||
+        nameLower.includes('rollo') ||
+        nameLower.includes('confeccionada')) {
+      continue;
+    }
+
+    // This is likely a subdivision
+    return parent.name;
+  }
+
+  return null;
+}
+
+// Check if product has triangular shape (3 sides)
+function isTriangular(product, parentChain) {
+  // Check product attributes
+  if (product.attributes) {
+    const side1 = product.attributes.side1 || product.attributes.get?.('side1');
+    const side2 = product.attributes.side2 || product.attributes.get?.('side2');
+    const side3 = product.attributes.side3 || product.attributes.get?.('side3');
+    const side4 = product.attributes.side4 || product.attributes.get?.('side4');
+
+    if (side1 && side2 && side3 && !side4) {
+      return true;
+    }
+  }
+
+  // Check parent chain
+  for (let i = parentChain.length - 1; i >= 0; i--) {
+    const parent = parentChain[i];
+    if (parent.attributes) {
+      const side1 = parent.attributes.side1 || parent.attributes.get?.('side1');
+      const side2 = parent.attributes.side2 || parent.attributes.get?.('side2');
+      const side3 = parent.attributes.side3 || parent.attributes.get?.('side3');
+      const side4 = parent.attributes.side4 || parent.attributes.get?.('side4');
+
+      if (side1 && side2 && side3 && !side4) {
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+// Extract size information from product or parent chain
+function extractSizeInfo(product, parentChain) {
+  // Check product attributes first
+  if (product.attributes) {
+    // Check for 3 sides
+    const side1 = product.attributes.side1 || product.attributes.get?.('side1');
+    const side2 = product.attributes.side2 || product.attributes.get?.('side2');
+    const side3 = product.attributes.side3 || product.attributes.get?.('side3');
+
+    if (side1 && side2 && side3) {
+      return `${side1}x${side2}x${side3}m`;
+    }
+
+    const width = product.attributes.width || product.attributes.get?.('width');
+    const length = product.attributes.length || product.attributes.get?.('length');
+    if (width && length) {
+      return `${width}x${length}m`;
+    }
+  }
+
+  // Check parent chain for size info
+  for (let i = parentChain.length - 1; i >= 0; i--) {
+    const parent = parentChain[i];
+
+    // Check parent attributes for sides
+    if (parent.attributes) {
+      const side1 = parent.attributes.side1 || parent.attributes.get?.('side1');
+      const side2 = parent.attributes.side2 || parent.attributes.get?.('side2');
+      const side3 = parent.attributes.side3 || parent.attributes.get?.('side3');
+
+      if (side1 && side2 && side3) {
+        return `${side1}x${side2}x${side3}m`;
+      }
+    }
+
+    if (parent.name.toLowerCase().includes('medida') || /\d+x\d+/.test(parent.name)) {
+      // Extract dimensions from name
+      const match = parent.name.match(/(\d+(?:\.\d+)?)\s*[x×]\s*(\d+(?:\.\d+)?)/i);
+      if (match) {
+        return `${match[1]}x${match[2]}m`;
+      }
+      return parent.name.replace(/medida\s*/i, '');
+    }
+  }
+
+  return '-';
+}
+
+// Extract color information from product name or parent chain
+function extractColorInfo(product, parentChain) {
+  const colorKeywords = ['negro', 'beige', 'verde', 'blanco', 'azul', 'rojo', 'gris', 'café', 'naranja'];
+
+  // Check product name
+  for (const color of colorKeywords) {
+    if (product.name.toLowerCase().includes(color)) {
+      return color.charAt(0).toUpperCase() + color.slice(1);
+    }
+  }
+
+  // Check if product name starts with "Color"
+  if (product.name.toLowerCase().startsWith('color ')) {
+    return product.name.replace(/^color\s*/i, '');
+  }
+
+  return '-';
+}
+
+// Group products by their group key
+function groupProducts(flatProducts) {
+  const groups = {};
+
+  for (const product of flatProducts) {
+    if (!groups[product.groupKey]) {
+      groups[product.groupKey] = {
+        name: product.groupName,
+        products: []
+      };
+    }
+    groups[product.groupKey].products.push(product);
+  }
+
+  return groups;
 }
 
 function InventarioView() {
   const [productTree, setProductTree] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [expandedIds, setExpandedIds] = useState(new Set());
-  const [selectedItems, setSelectedItems] = useState({}); // { parentProductId: Set of selected child IDs }
+  const [selectedItems, setSelectedItems] = useState(new Set());
+  const [bulkOperation, setBulkOperation] = useState('');
+  const [bulkValue, setBulkValue] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [expandedGroups, setExpandedGroups] = useState(new Set());
 
   const fetchProductTree = async () => {
     try {
@@ -473,10 +336,13 @@ function InventarioView() {
       const data = await res.json();
       if (data.success) {
         setProductTree(data.data);
+        // Expand all groups by default
+        const flatProducts = flattenSellableProducts(data.data);
+        const groups = groupProducts(flatProducts);
+        setExpandedGroups(new Set(Object.keys(groups)));
       }
     } catch (error) {
       console.error('Error fetching product tree:', error);
-      alert('Error al cargar productos');
     } finally {
       setLoading(false);
     }
@@ -486,8 +352,120 @@ function InventarioView() {
     fetchProductTree();
   }, []);
 
-  const handleToggle = (productId) => {
-    setExpandedIds((prev) => {
+  // Helper to update a product in the tree by ID
+  const updateProductInTree = (tree, productId, updates) => {
+    return tree.map(node => {
+      if (node._id === productId) {
+        return { ...node, ...updates };
+      }
+      if (node.children && node.children.length > 0) {
+        return { ...node, children: updateProductInTree(node.children, productId, updates) };
+      }
+      return node;
+    });
+  };
+
+  const handleUpdateProduct = async (productId, field, value) => {
+    // Optimistically update local state
+    const updates = { [field]: value };
+    setProductTree(prev => updateProductInTree(prev, productId, updates));
+
+    try {
+      const res = await fetch(`${API_URL}/product-families/${productId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(updates)
+      });
+      const data = await res.json();
+      if (!data.success) {
+        // Revert on error
+        fetchProductTree();
+        alert('Error al actualizar: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error updating product:', error);
+    }
+  };
+
+  const handleBulkUpdate = async () => {
+    if (selectedItems.size === 0) {
+      alert('Selecciona al menos un producto');
+      return;
+    }
+    if (!bulkOperation) {
+      alert('Selecciona una operación');
+      return;
+    }
+
+    let updateData = {};
+    if (bulkOperation === 'precio' && bulkValue) {
+      updateData = { price: parseFloat(bulkValue) };
+    } else if (bulkOperation === 'stock' && bulkValue) {
+      updateData = { stock: parseInt(bulkValue) };
+    } else if (bulkOperation === 'activar') {
+      updateData = { active: true };
+    } else if (bulkOperation === 'desactivar') {
+      updateData = { active: false };
+    } else {
+      alert('Ingresa un valor válido');
+      return;
+    }
+
+    // Save selected items before clearing
+    const itemsToUpdate = Array.from(selectedItems);
+
+    // Optimistically update local state
+    setProductTree(prev => {
+      let updated = prev;
+      for (const id of itemsToUpdate) {
+        updated = updateProductInTree(updated, id, updateData);
+      }
+      return updated;
+    });
+
+    setSelectedItems(new Set());
+    setBulkOperation('');
+    setBulkValue('');
+
+    try {
+      const results = await Promise.all(
+        itemsToUpdate.map(id =>
+          fetch(`${API_URL}/product-families/${id}`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(updateData)
+          })
+        )
+      );
+      const hasError = results.some(r => !r.ok);
+      if (hasError) {
+        fetchProductTree();
+        alert('Algunos productos no se pudieron actualizar');
+      }
+    } catch (error) {
+      console.error('Error in bulk update:', error);
+      fetchProductTree();
+      alert('Error al actualizar');
+    }
+  };
+
+  const toggleSelectAll = (groupProducts) => {
+    const groupIds = groupProducts.map(p => p._id);
+    const allSelected = groupIds.every(id => selectedItems.has(id));
+
+    setSelectedItems(prev => {
+      const newSet = new Set(prev);
+      if (allSelected) {
+        groupIds.forEach(id => newSet.delete(id));
+      } else {
+        groupIds.forEach(id => newSet.add(id));
+      }
+      return newSet;
+    });
+  };
+
+  const toggleSelect = (productId) => {
+    setSelectedItems(prev => {
       const newSet = new Set(prev);
       if (newSet.has(productId)) {
         newSet.delete(productId);
@@ -498,121 +476,255 @@ function InventarioView() {
     });
   };
 
-  const handleUpdateProduct = async (productId, field, value) => {
-    try {
-      const res = await fetch(`${API_URL}/product-families/${productId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ [field]: value })
-      });
-
-      const data = await res.json();
-
-      if (data.success) {
-        // Refresh the tree to get updated data
-        fetchProductTree();
+  const toggleGroup = (groupKey) => {
+    setExpandedGroups(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(groupKey)) {
+        newSet.delete(groupKey);
       } else {
-        alert('Error al actualizar: ' + data.error);
+        newSet.add(groupKey);
       }
-    } catch (error) {
-      console.error('Error updating product:', error);
-      alert('Error al actualizar producto');
+      return newSet;
+    });
+  };
+
+  // Flatten and group products
+  const flatProducts = flattenSellableProducts(productTree);
+  const groups = groupProducts(flatProducts);
+
+  // Filter by search term
+  const filteredGroups = Object.entries(groups).reduce((acc, [key, group]) => {
+    const filteredProducts = group.products.filter(p =>
+      p.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.sizeInfo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      p.colorInfo.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      group.name.toLowerCase().includes(searchTerm.toLowerCase())
+    );
+    if (filteredProducts.length > 0) {
+      acc[key] = { ...group, products: filteredProducts };
     }
-  };
+    return acc;
+  }, {});
 
-  const expandAll = () => {
-    const allIds = new Set();
-    const collectIds = (products) => {
-      products.forEach(product => {
-        if (product.children && product.children.length > 0) {
-          allIds.add(product._id);
-          collectIds(product.children);
-        }
-      });
-    };
-    collectIds(productTree);
-    setExpandedIds(allIds);
-  };
-
-  const collapseAll = () => {
-    setExpandedIds(new Set());
-  };
+  const totalProducts = Object.values(filteredGroups).reduce((sum, g) => sum + g.products.length, 0);
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 p-8">
+    <div className="p-6">
       {/* Header */}
-      <div className="mb-8 flex items-center justify-between">
-        <div>
-          <h1 className="text-3xl font-bold text-white">Inventario</h1>
-          <p className="text-gray-400 mt-2">
-            Gestiona el inventario y precios de productos. Haz clic para expandir/contraer categorías.
-          </p>
-        </div>
-        <div className="flex space-x-2">
-          <button
-            onClick={expandAll}
-            className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
-          >
-            Expandir Todo
-          </button>
-          <button
-            onClick={collapseAll}
-            className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
-          >
-            Contraer Todo
-          </button>
-        </div>
+      <div className="mb-6">
+        <h1 className="text-2xl font-bold text-white">Inventario</h1>
+        <p className="text-gray-400 text-sm mt-1">
+          {totalProducts} productos vendibles
+        </p>
       </div>
 
-      {/* Product Tree */}
-      <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl overflow-hidden">
-        {loading ? (
-          <div className="p-12 text-center">
-            <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-gray-400 mt-4">Cargando inventario...</p>
-          </div>
-        ) : productTree.length === 0 ? (
-          <div className="p-12 text-center">
-            <div className="w-16 h-16 mx-auto mb-4 bg-gray-700/50 rounded-full flex items-center justify-center">
-              <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
-              </svg>
-            </div>
-            <h3 className="text-lg font-semibold text-white mb-2">No hay productos</h3>
-            <p className="text-gray-400">Agrega productos desde el catálogo</p>
-          </div>
-        ) : (
-          <div>
-            {productTree.map((product) => (
-              <ProductPanel
-                key={product._id}
-                product={product}
-                level={0}
-                expandedIds={expandedIds}
-                onToggle={handleToggle}
-                onUpdateProduct={handleUpdateProduct}
-                selectedItems={selectedItems}
-                setSelectedItems={setSelectedItems}
+      {/* Search and Bulk Controls */}
+      <div className="mb-4 flex flex-wrap gap-4 items-center">
+        {/* Search */}
+        <div className="flex-1 min-w-64">
+          <input
+            type="text"
+            placeholder="Buscar por nombre, medida o color..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500"
+          />
+        </div>
+
+        {/* Bulk Operations */}
+        {selectedItems.size > 0 && (
+          <div className="flex items-center gap-2 px-4 py-2 bg-primary-500/10 border border-primary-500/30 rounded-lg">
+            <span className="text-sm text-primary-300 font-medium">
+              {selectedItems.size} seleccionados
+            </span>
+            <select
+              value={bulkOperation}
+              onChange={(e) => { setBulkOperation(e.target.value); setBulkValue(''); }}
+              className="px-2 py-1 bg-gray-900 border border-gray-700 rounded text-white text-sm"
+            >
+              <option value="">Operación...</option>
+              <option value="precio">Precio</option>
+              <option value="stock">Stock</option>
+              <option value="activar">Activar</option>
+              <option value="desactivar">Desactivar</option>
+            </select>
+            {(bulkOperation === 'precio' || bulkOperation === 'stock') && (
+              <input
+                type="number"
+                step={bulkOperation === 'precio' ? '0.01' : '1'}
+                placeholder={bulkOperation === 'precio' ? 'Precio' : 'Stock'}
+                value={bulkValue}
+                onChange={(e) => setBulkValue(e.target.value)}
+                className="px-2 py-1 bg-gray-900 border border-gray-700 rounded text-white text-sm w-24"
               />
-            ))}
+            )}
+            <button
+              onClick={handleBulkUpdate}
+              className="px-3 py-1 bg-primary-500 text-white rounded hover:bg-primary-600 text-sm font-medium"
+            >
+              Aplicar
+            </button>
           </div>
         )}
       </div>
 
-      {/* Help Text */}
-      <div className="mt-4 p-4 bg-blue-500/10 border border-blue-500/20 rounded-lg">
-        <div className="flex items-start space-x-3">
-          <svg className="w-5 h-5 text-blue-400 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-          </svg>
-          <div className="flex-1">
-            <p className="text-sm text-blue-300 font-medium">Edición rápida</p>
-            <p className="text-xs text-blue-200/80 mt-1">
-              Haz clic en los campos de Stock o Precio para editarlos. Presiona Enter para guardar o Escape para cancelar. Los precios heredados se muestran en amarillo.
-            </p>
-          </div>
+      {/* Product Tables by Group */}
+      {loading ? (
+        <div className="text-center py-12">
+          <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-gray-400 mt-4">Cargando inventario...</p>
         </div>
-      </div>
+      ) : Object.keys(filteredGroups).length === 0 ? (
+        <div className="text-center py-12 bg-gray-800/30 rounded-lg">
+          <p className="text-gray-400">No se encontraron productos</p>
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {Object.entries(filteredGroups).map(([groupKey, group]) => {
+            const isExpanded = expandedGroups.has(groupKey);
+            const groupProductIds = group.products.map(p => p._id);
+            const allSelected = groupProductIds.every(id => selectedItems.has(id));
+            const someSelected = groupProductIds.some(id => selectedItems.has(id));
+
+            return (
+              <div key={groupKey} className="bg-gray-800/50 border border-gray-700/50 rounded-lg overflow-hidden">
+                {/* Group Header */}
+                <button
+                  onClick={() => toggleGroup(groupKey)}
+                  className="w-full flex items-center justify-between px-4 py-3 bg-gray-800/80 hover:bg-gray-700/50 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <svg
+                      className={`w-5 h-5 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                    <span className="font-semibold text-white">{group.name}</span>
+                    <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">
+                      {group.products.length} productos
+                    </span>
+                  </div>
+                </button>
+
+                {/* Table */}
+                {isExpanded && (
+                  <div className="overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-900/50">
+                        <tr>
+                          <th className="px-3 py-2 text-left w-10">
+                            <input
+                              type="checkbox"
+                              checked={allSelected}
+                              ref={el => el && (el.indeterminate = someSelected && !allSelected)}
+                              onChange={() => toggleSelectAll(group.products)}
+                              className="rounded border-gray-600 text-primary-500"
+                            />
+                          </th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase">Producto</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-24">Medida</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-20">Color</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-20">Stock</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-28">Precio</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-28">Mayoreo</th>
+                          <th className="px-3 py-2 text-center text-xs font-medium text-gray-400 uppercase w-20">Activo</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-gray-700/30">
+                        {group.products.map((product) => (
+                          <tr key={product._id} className="hover:bg-gray-700/20 transition-colors">
+                            <td className="px-3 py-2">
+                              <input
+                                type="checkbox"
+                                checked={selectedItems.has(product._id)}
+                                onChange={() => toggleSelect(product._id)}
+                                className="rounded border-gray-600 text-primary-500"
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <span className="text-sm text-white">
+                                {product.productType &&
+                                 !product.groupName.toLowerCase().includes(product.productType.toLowerCase()) &&
+                                 !product.groupName.toLowerCase().includes('cinta') &&
+                                 !product.name.toLowerCase().includes(product.productType.toLowerCase()) && (
+                                  <span className="text-cyan-400 mr-1">{product.productType}</span>
+                                )}
+                                {product.shadePercentage && <span className="text-cyan-300 mr-1">{product.shadePercentage}</span>}
+                                {product.reinforcementType && <span className="text-purple-400 mr-1">{product.reinforcementType}</span>}
+                                {product.isTriangular && product.productType !== 'Confeccionada' && <span className="text-amber-400 mr-1">Triangular</span>}
+                                {product.subdivision && <span className="text-green-400 mr-1">{product.subdivision}</span>}
+                                {product.name}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2">
+                              <span className="text-sm text-gray-300 font-mono">{product.sizeInfo}</span>
+                            </td>
+                            <td className="px-3 py-2">
+                              <span className="text-sm text-gray-300">{product.colorInfo}</span>
+                            </td>
+                            <td className="px-3 py-2">
+                              <EditableCell
+                                value={product.stock || 0}
+                                onSave={(v) => handleUpdateProduct(product._id, 'stock', parseInt(v))}
+                                type="number"
+                              />
+                            </td>
+                            <td className="px-3 py-2">
+                              <div className="flex items-center gap-1">
+                                <EditableCell
+                                  value={product.inheritedPrice || 0}
+                                  onSave={(v) => handleUpdateProduct(product._id, 'price', parseFloat(v))}
+                                  type="number"
+                                  step="0.01"
+                                  inherited={product.priceIsInherited}
+                                />
+                                {product.priceIsInherited && product.inheritedPrice > 0 && (
+                                  <button
+                                    onClick={() => handleUpdateProduct(product._id, 'price', product.inheritedPrice)}
+                                    className="p-1 text-amber-400 hover:text-green-400 border border-amber-400/50 hover:border-green-400 hover:bg-green-500/20 rounded transition-colors"
+                                    title="Confirmar precio"
+                                  >
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  </button>
+                                )}
+                              </div>
+                            </td>
+                            <td className="px-3 py-2">
+                              <EditableCell
+                                value={product.wholesalePrice || 0}
+                                onSave={(v) => handleUpdateProduct(product._id, 'wholesalePrice', parseFloat(v))}
+                                type="number"
+                                step="0.01"
+                              />
+                            </td>
+                            <td className="px-3 py-2 text-center">
+                              <button
+                                onClick={() => handleUpdateProduct(product._id, 'active', !(product.active ?? true))}
+                                className={`w-8 h-5 rounded-full transition-colors ${
+                                  (product.active ?? true) ? 'bg-green-500' : 'bg-gray-600'
+                                }`}
+                              >
+                                <span className={`block w-3 h-3 rounded-full bg-white transition-transform ${
+                                  (product.active ?? true) ? 'translate-x-4' : 'translate-x-1'
+                                }`} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
