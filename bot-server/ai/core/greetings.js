@@ -110,7 +110,7 @@ async function handlePurchaseDeferral(cleanMsg, psid, convo) {
   }
 
   // Detect deferral phrases - when user wants to think about it, take measurements, contact later, etc.
-  const isDeferral = /\b(voy\s+a\s+tomar\s+medidas?|boy\s+a\s+tomar\s+medidas?|tomar\s+medidas?|despu[eé]s\s+(me\s+)?(pongo\s+en\s+)?contacto|despu[eé]s\s+(te\s+|me\s+)?(hablo|comunico|escribo|contacto)|luego\s+(te\s+|me\s+)?(hablo|comunico|escribo|contacto)|ma[ñn]ana\s+(te\s+|me\s+)?(hablo|comunico|escribo|contacto)|lo\s+(voy\s+a\s+)?analiz[oa]r?|lo\s+(voy\s+a\s+)?pensar|te\s+(escribo|hablo|contacto)\s+(despu[eé]s|luego|m[aá]s\s+tarde)|m[aá]s\s+tarde\s+(te\s+)?(escribo|hablo|contacto)|ahorita\s+no|por\s+ahora\s+no|de\s+momento\s+no)\b/i.test(cleanMsg);
+  const isDeferral = /\b(voy\s+a\s+tomar\s+medidas?|boy\s+a\s+tomar\s+medidas?|tomar\s+medidas?|tomo\s+medidas?|d[ée]ja(me)?\s+tomo\s+medidas?|voy\s+a\s+medir|deja\s+mido|ya\s+(que|k|q)\s+tome\s+medidas?|cuando\s+tome\s+medidas?|despu[eé]s\s+(me\s+)?(pongo\s+en\s+)?contacto|despu[eé]s\s+(te\s+|me\s+)?(hablo|comunico|escribo|contacto|mando)|luego\s+(te\s+|me\s+)?(hablo|comunico|escribo|contacto|mando)|ma[ñn]ana\s+(te\s+|me\s+)?(hablo|comunico|escribo|contacto)|lo\s+(voy\s+a\s+)?analiz[oa]r?|lo\s+(voy\s+a\s+)?pensar|te\s+(escribo|hablo|contacto|mando)\s+(despu[eé]s|luego|m[aá]s\s+tarde)|m[aá]s\s+tarde\s+(te\s+)?(escribo|hablo|contacto)|ahorita\s+no|por\s+ahora\s+no|de\s+momento\s+no|te\s+mando\s+mensaje)\b/i.test(cleanMsg);
 
   if (isDeferral) {
     console.log("📅 Purchase deferral detected:", cleanMsg);
