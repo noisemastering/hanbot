@@ -382,11 +382,12 @@ router.get("/sellers/:sellerId", authenticate, async (req, res) => {
   }
 });
 
-// GET /ml/items - Fetch all items from ML seller account
+// GET /ml/items - Fetch all items from ML seller account (or search)
 router.get("/items", authenticate, async (req, res) => {
   try {
     const axios = require("axios");
     const { getValidMLToken } = require("../mlTokenManager");
+    const { search } = req.query;
 
     const token = await getValidMLToken();
 
@@ -396,7 +397,61 @@ router.get("/items", authenticate, async (req, res) => {
     });
     const userId = me.data.id;
 
-    // Fetch items using scroll API
+    // If search query is provided, use search API (much faster)
+    if (search && search.length >= 3) {
+      const searchResponse = await axios.get(
+        `https://api.mercadolibre.com/users/${userId}/items/search`,
+        {
+          params: { q: search, limit: 50 },
+          headers: { Authorization: `Bearer ${token}` }
+        }
+      );
+
+      const searchResults = searchResponse.data.results || [];
+      if (searchResults.length === 0) {
+        return res.json({ success: true, items: [], total: 0 });
+      }
+
+      // Fetch details for search results
+      const items = [];
+      for (let i = 0; i < searchResults.length; i += 20) {
+        const batch = searchResults.slice(i, i + 20);
+        try {
+          const multiget = await axios.get(
+            "https://api.mercadolibre.com/items",
+            {
+              params: { ids: batch.join(",") },
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Cache-Control': 'no-cache'
+              }
+            }
+          );
+          for (const item of multiget.data) {
+            if (item.code === 200 && item.body) {
+              items.push({
+                id: item.body.id,
+                title: item.body.title,
+                price: item.body.price,
+                original_price: item.body.original_price,
+                currency: item.body.currency_id,
+                permalink: item.body.permalink,
+                thumbnail: item.body.thumbnail,
+                status: item.body.status,
+                available_quantity: item.body.available_quantity
+              });
+            }
+          }
+        } catch (err) {
+          console.error("❌ Error fetching item batch:", err.message);
+        }
+      }
+
+      console.log(`✅ Found ${items.length} ML items matching "${search}"`);
+      return res.json({ success: true, items, total: items.length });
+    }
+
+    // No search - fetch all items using scroll API
     const items = [];
     let scrollId = null;
     const limit = 50;
@@ -423,7 +478,11 @@ router.get("/items", authenticate, async (req, res) => {
             "https://api.mercadolibre.com/items",
             {
               params: { ids: batch.join(",") },
-              headers: { Authorization: `Bearer ${token}` }
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Cache-Control': 'no-cache',
+                'Pragma': 'no-cache'
+              }
             }
           );
           for (const item of multiget.data) {
@@ -432,6 +491,7 @@ router.get("/items", authenticate, async (req, res) => {
                 id: item.body.id,
                 title: item.body.title,
                 price: item.body.price,
+                original_price: item.body.original_price, // Price before discounts
                 currency: item.body.currency_id,
                 permalink: item.body.permalink,
                 thumbnail: item.body.thumbnail,
@@ -478,6 +538,53 @@ router.get("/items", authenticate, async (req, res) => {
       error: "Failed to fetch ML items",
       details: process.env.NODE_ENV === "development" ? error.message : undefined
     });
+  }
+});
+
+// GET /ml/items/status - Get all ML item statuses (inactive, etc.)
+router.get("/items/status", authenticate, async (req, res) => {
+  try {
+    const MLItemStatus = require("../models/MLItemStatus");
+    const statuses = await MLItemStatus.find({}).lean();
+
+    // Convert to a map for easy lookup
+    const statusMap = {};
+    for (const status of statuses) {
+      statusMap[status.mlItemId] = status;
+    }
+
+    res.json({ success: true, statuses: statusMap });
+  } catch (error) {
+    console.error("❌ Error fetching ML item statuses:", error);
+    res.status(500).json({ success: false, error: "Failed to fetch item statuses" });
+  }
+});
+
+// PUT /ml/items/:itemId/status - Update ML item status (inactive, notes, etc.)
+router.put("/items/:itemId/status", authenticate, async (req, res) => {
+  try {
+    const MLItemStatus = require("../models/MLItemStatus");
+    const { itemId } = req.params;
+    const { inactive, inactiveReason, notes, lastMLTitle, lastMLPrice } = req.body;
+
+    const status = await MLItemStatus.findOneAndUpdate(
+      { mlItemId: itemId },
+      {
+        inactive,
+        inactiveReason: inactive ? inactiveReason : null,
+        notes,
+        lastMLTitle,
+        lastMLPrice
+      },
+      { upsert: true, new: true }
+    );
+
+    console.log(`📝 ML item ${itemId} status updated: inactive=${inactive}`);
+
+    res.json({ success: true, status });
+  } catch (error) {
+    console.error("❌ Error updating ML item status:", error);
+    res.status(500).json({ success: false, error: "Failed to update item status" });
   }
 });
 

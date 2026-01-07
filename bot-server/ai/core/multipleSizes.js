@@ -4,11 +4,32 @@ const { getBusinessInfo } = require("../../businessInfoManager");
 const { updateConversation } = require("../../conversationManager");
 
 /**
+ * Normalizes dimension formats in a message
+ * Converts "2 00" → "2.00", "2:00" → "2.00", etc.
+ * @param {string} message - User's message
+ * @returns {string} - Normalized message
+ */
+function normalizeDimensionFormats(message) {
+  // Convert "2 00" or "2  00" to "2.00" (space as decimal separator)
+  let normalized = message.replace(/(\d+)\s+(\d{2})(?=\s*[xX×*]|\s+por\s|\s*$)/g, '$1.$2');
+  // Convert "2:00" to "2.00" (colon as decimal separator, common typo)
+  normalized = normalized.replace(/(\d+):(\d{2})(?=\s*[xX×*]|\s+por\s|\s*$)/g, '$1.$2');
+  // Also handle after the x: "x 10 00" → "x 10.00"
+  normalized = normalized.replace(/([xX×*]\s*)(\d+)\s+(\d{2})(?=\s|$)/g, '$1$2.$3');
+  normalized = normalized.replace(/([xX×*]\s*)(\d+):(\d{2})(?=\s|$)/g, '$1$2.$3');
+  return normalized;
+}
+
+/**
  * Extracts all dimension patterns from a message
  * @param {string} message - User's message
  * @returns {Array} - Array of dimension objects {width, height, area, rawText}
  */
 function extractAllDimensions(message) {
+  // First normalize formats like "2 00" → "2.00" and "2:00" → "2.00"
+  const normalizedMessage = normalizeDimensionFormats(message);
+  console.log("📏 Normalized message:", normalizedMessage);
+
   const dimensions = [];
   const patterns = [
     /(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)\s*m?(?:ts?)?(?:\.)?/g,  // "10x3", "10 x 3", "10*3", "10x3m"
@@ -16,10 +37,10 @@ function extractAllDimensions(message) {
     /(?:de|medida)\s+(\d+(?:\.\d+)?)\s+(\d+(?:\.\d+)?)/gi                // "de 10 3", "medida 10 3"
   ];
 
-  // Try each pattern
+  // Try each pattern on normalized message
   for (const pattern of patterns) {
     let match;
-    while ((match = pattern.exec(message)) !== null) {
+    while ((match = pattern.exec(normalizedMessage)) !== null) {
       const width = parseFloat(match[1]);
       const height = parseFloat(match[2]);
 

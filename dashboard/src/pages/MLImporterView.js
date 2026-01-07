@@ -11,7 +11,8 @@ function MLImporterView() {
   const [selectedMLItem, setSelectedMLItem] = useState(null);
   const [productSearch, setProductSearch] = useState('');
   const [saving, setSaving] = useState(false);
-  const [filter, setFilter] = useState('unlinked'); // 'all', 'unlinked', 'linked'
+  const [filter, setFilter] = useState('unlinked'); // 'all', 'unlinked', 'linked', 'inactive'
+  const [itemStatuses, setItemStatuses] = useState({}); // ML item statuses (inactive, etc.)
 
   // Fetch sellable products from Inventario
   const fetchProducts = async () => {
@@ -53,11 +54,57 @@ function MLImporterView() {
     }
   };
 
+  // Fetch ML item statuses (inactive, etc.)
+  const fetchItemStatuses = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/ml/items/status`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setItemStatuses(data.statuses || {});
+      }
+    } catch (error) {
+      console.error('Error fetching item statuses:', error);
+    }
+  };
+
+  // Toggle inactive status for an ML item
+  const toggleInactive = async (item, inactive) => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/ml/items/${item.id}/status`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          inactive,
+          inactiveReason: inactive ? 'discontinued' : null,
+          lastMLTitle: item.title,
+          lastMLPrice: item.price
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setItemStatuses(prev => ({
+          ...prev,
+          [item.id]: data.status
+        }));
+      }
+    } catch (error) {
+      console.error('Error updating item status:', error);
+    }
+  };
+
   useEffect(() => {
     const init = async () => {
       setLoading(true);
       await fetchProducts();
       await fetchMLItems();
+      await fetchItemStatuses();
       setLoading(false);
     };
     init();
@@ -172,13 +219,23 @@ function MLImporterView() {
     }
   };
 
+  // Check if item is inactive (manually marked OR ML status is paused/closed)
+  const isItemInactive = (item) => itemStatuses[item.id]?.inactive === true;
+  const isItemPaused = (item) => item.status === 'paused' || item.status === 'closed';
+  const isItemUnavailable = (item) => isItemInactive(item) || isItemPaused(item);
+
   // Filter ML items
   const filteredMLItems = mlItems.filter(item => {
     const matchesSearch = item.title.toLowerCase().includes(searchTerm.toLowerCase());
     const linkedProduct = getLinkedProduct(item);
+    const unavailable = isItemUnavailable(item);
+
+    // Hide unavailable unless filter is 'all' or 'inactive'
+    if (unavailable && filter !== 'all' && filter !== 'inactive') return false;
 
     if (filter === 'linked') return matchesSearch && linkedProduct;
-    if (filter === 'unlinked') return matchesSearch && !linkedProduct;
+    if (filter === 'unlinked') return matchesSearch && !linkedProduct && !unavailable;
+    if (filter === 'inactive') return matchesSearch && unavailable;
     return matchesSearch;
   });
 
@@ -188,8 +245,11 @@ function MLImporterView() {
     p.name.toLowerCase().includes(productSearch.toLowerCase())
   );
 
-  const linkedCount = mlItems.filter(item => getLinkedProduct(item)).length;
-  const unlinkedCount = mlItems.length - linkedCount;
+  const linkedCount = mlItems.filter(item => getLinkedProduct(item) && !isItemUnavailable(item)).length;
+  const pausedCount = mlItems.filter(item => isItemPaused(item)).length;
+  const manualInactiveCount = mlItems.filter(item => isItemInactive(item) && !isItemPaused(item)).length;
+  const inactiveCount = pausedCount + manualInactiveCount;
+  const unlinkedCount = mlItems.filter(item => !getLinkedProduct(item) && !isItemUnavailable(item)).length;
 
   return (
     <div className="p-6">
@@ -215,6 +275,16 @@ function MLImporterView() {
           <span className="text-sm text-amber-400">Sin vincular:</span>
           <span className="text-white font-medium">{unlinkedCount}</span>
         </div>
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-red-400">No disponible:</span>
+          <span className="text-white font-medium">{pausedCount}</span>
+        </div>
+        {manualInactiveCount > 0 && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-500">Inactivos:</span>
+            <span className="text-white font-medium">{manualInactiveCount}</span>
+          </div>
+        )}
 
         <div className="flex-1" />
 
@@ -271,6 +341,16 @@ function MLImporterView() {
           >
             Vinculados
           </button>
+          <button
+            onClick={() => setFilter('inactive')}
+            className={`px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
+              filter === 'inactive'
+                ? 'bg-gray-500/30 text-gray-300'
+                : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
+            }`}
+          >
+            Inactivos
+          </button>
         </div>
       </div>
 
@@ -291,14 +371,19 @@ function MLImporterView() {
           ) : (
             filteredMLItems.map((item) => {
               const linkedProduct = getLinkedProduct(item);
+              const paused = isItemPaused(item);
+              const manualInactive = isItemInactive(item);
+              const unavailable = paused || manualInactive;
 
               return (
                 <div
                   key={item.id}
                   className={`flex items-center gap-4 p-4 rounded-lg border transition-colors ${
-                    linkedProduct
-                      ? 'bg-green-500/5 border-green-500/30'
-                      : 'bg-gray-800/50 border-gray-700/50 hover:border-gray-600'
+                    unavailable
+                      ? 'bg-gray-900/50 border-gray-800 opacity-60'
+                      : linkedProduct
+                        ? 'bg-green-500/5 border-green-500/30'
+                        : 'bg-gray-800/50 border-gray-700/50 hover:border-gray-600'
                   }`}
                 >
                   {/* Thumbnail */}
@@ -306,19 +391,41 @@ function MLImporterView() {
                     <img
                       src={item.thumbnail}
                       alt={item.title}
-                      className="w-16 h-16 object-cover rounded-lg bg-gray-700"
+                      className={`w-16 h-16 object-cover rounded-lg bg-gray-700 ${unavailable ? 'grayscale' : ''}`}
                     />
                   )}
 
                   {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <h3 className="text-white font-medium truncate">{item.title}</h3>
+                    <div className="flex items-center gap-2">
+                      <h3 className={`font-medium truncate ${unavailable ? 'text-gray-500' : 'text-white'}`}>{item.title}</h3>
+                      {paused && (
+                        <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-xs font-medium rounded">
+                          No disponible
+                        </span>
+                      )}
+                      {manualInactive && !paused && (
+                        <span className="px-2 py-0.5 bg-gray-700 text-gray-400 text-xs font-medium rounded">
+                          Inactivo
+                        </span>
+                      )}
+                      {linkedProduct && !unavailable && (
+                        <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs font-medium rounded">
+                          Vinculado
+                        </span>
+                      )}
+                    </div>
                     <div className="flex items-center gap-4 mt-1">
-                      <span className="text-yellow-400 font-semibold">
+                      <span className={`font-semibold ${unavailable ? 'text-gray-500' : 'text-yellow-400'}`}>
                         ${item.price?.toLocaleString()}
                       </span>
+                      {item.original_price && item.original_price !== item.price && (
+                        <span className="text-xs text-gray-500 line-through">
+                          ${item.original_price?.toLocaleString()}
+                        </span>
+                      )}
                       <a
-                        href={item.permalink}
+                        href={`https://articulo.mercadolibre.com.mx/${item.id.replace(/^(MLM)(\d+)$/, '$1-$2')}`}
                         target="_blank"
                         rel="noopener noreferrer"
                         className="text-xs text-blue-400 hover:text-blue-300"
@@ -326,7 +433,7 @@ function MLImporterView() {
                         Ver en ML →
                       </a>
                     </div>
-                    {linkedProduct && (
+                    {linkedProduct && !unavailable && (
                       <div className="mt-2 text-sm text-green-400">
                         ✓ Vinculado a: <span className="text-white">{linkedProduct.fullName}</span>
                       </div>
@@ -335,21 +442,48 @@ function MLImporterView() {
 
                   {/* Actions */}
                   <div className="flex items-center gap-2">
-                    {linkedProduct ? (
+                    {paused ? (
+                      <span className="text-xs text-gray-500 italic">Pausado en ML</span>
+                    ) : manualInactive ? (
                       <button
-                        onClick={() => unlinkFromProduct(item, linkedProduct)}
-                        disabled={saving}
-                        className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 transition-colors text-sm"
+                        onClick={() => toggleInactive(item, false)}
+                        className="px-3 py-1.5 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition-colors text-sm"
                       >
-                        Desvincular
+                        Reactivar
                       </button>
+                    ) : linkedProduct ? (
+                      <>
+                        <button
+                          onClick={() => unlinkFromProduct(item, linkedProduct)}
+                          disabled={saving}
+                          className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 transition-colors text-sm"
+                        >
+                          Desvincular
+                        </button>
+                        <button
+                          onClick={() => toggleInactive(item, true)}
+                          className="px-3 py-1.5 bg-gray-700 text-gray-400 rounded hover:bg-gray-600 transition-colors text-sm"
+                          title="Marcar como inactivo"
+                        >
+                          Inactivar
+                        </button>
+                      </>
                     ) : (
-                      <button
-                        onClick={() => setSelectedMLItem(item)}
-                        className="px-3 py-1.5 bg-primary-500 text-white rounded hover:bg-primary-600 transition-colors text-sm font-medium"
-                      >
-                        Vincular
-                      </button>
+                      <>
+                        <button
+                          onClick={() => setSelectedMLItem(item)}
+                          className="px-3 py-1.5 bg-primary-500 text-white rounded hover:bg-primary-600 transition-colors text-sm font-medium"
+                        >
+                          Vincular
+                        </button>
+                        <button
+                          onClick={() => toggleInactive(item, true)}
+                          className="px-3 py-1.5 bg-gray-700 text-gray-400 rounded hover:bg-gray-600 transition-colors text-sm"
+                          title="Marcar como inactivo"
+                        >
+                          Inactivar
+                        </button>
+                      </>
                     )}
                   </div>
                 </div>

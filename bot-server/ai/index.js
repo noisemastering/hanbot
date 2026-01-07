@@ -39,6 +39,21 @@ console.log(`🤖 Asistente asignada para esta sesión: ${BOT_PERSONA_NAME}`);
 
 const productKeywordRegex = /\b(malla|sombra|borde|rollo|beige|monofilamento|invernadero|negra|verde|blanca|azul|90%|70%)\b/i;
 
+/**
+ * Normalizes dimension formats in a message
+ * Converts "2 00" → "2.00", "2:00" → "2.00", etc.
+ */
+function normalizeDimensionFormats(message) {
+  // Convert "2 00" or "2  00" to "2.00" (space as decimal separator)
+  let normalized = message.replace(/(\d+)\s+(\d{2})(?=\s*[xX×*]|\s+por\s|\s*$)/g, '$1.$2');
+  // Convert "2:00" to "2.00" (colon as decimal separator, common typo)
+  normalized = normalized.replace(/(\d+):(\d{2})(?=\s*[xX×*]|\s+por\s|\s*$)/g, '$1.$2');
+  // Also handle after the x: "x 10 00" → "x 10.00"
+  normalized = normalized.replace(/([xX×*]\s*)(\d+)\s+(\d{2})(?=\s|$)/g, '$1$2.$3');
+  normalized = normalized.replace(/([xX×*]\s*)(\d+):(\d{2})(?=\s|$)/g, '$1$2.$3');
+  return normalized;
+}
+
 async function generateReply(userMessage, psid, referral = null) {
   try {
     // Apply typo correction first
@@ -161,10 +176,16 @@ async function generateReply(userMessage, psid, referral = null) {
       cleanMsg.split(/\s+/).length <= 4 &&
       !/\b(precio|cuanto|cuesta|medida|tamaño|dimension|tiene|hay|vende|fabrica|color|hola|buenos|buenas|que tal)\b/i.test(cleanMsg);
 
+    // Normalize dimension formats (e.g., "2 00 x 10 00" → "2.00 x 10.00", "2:00x10:00" → "2.00x10.00")
+    const normalizedMsg = normalizeDimensionFormats(cleanMsg);
+    if (normalizedMsg !== cleanMsg) {
+      console.log(`📏 Normalized dimensions: "${cleanMsg}" → "${normalizedMsg}"`);
+    }
+
     // Check if message contains dimension patterns (e.g., "7x5", "7 x 5", "7*5", "3 por 4")
-    const hasDimensionPattern = /\d+(?:\.\d+)?\s*[xX×*]\s*\d+(?:\.\d+)?/.test(cleanMsg) ||
-                                /\d+(?:\.\d+)?\s+por\s+\d+(?:\.\d+)?/i.test(cleanMsg) ||
-                                /(?:de|medida)\s+\d+(?:\.\d+)?\s+\d+(?:\.\d+)?/i.test(cleanMsg);
+    const hasDimensionPattern = /\d+(?:\.\d+)?\s*[xX×*]\s*\d+(?:\.\d+)?/.test(normalizedMsg) ||
+                                /\d+(?:\.\d+)?\s+por\s+\d+(?:\.\d+)?/i.test(normalizedMsg) ||
+                                /(?:de|medida)\s+\d+(?:\.\d+)?\s+\d+(?:\.\d+)?/i.test(normalizedMsg);
 
     // Check if message contains reference objects (e.g., "tamaño de un carro", "para un patio")
     const hasReferenceObject = extractReference(correctedMessage) !== null;

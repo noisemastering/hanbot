@@ -329,6 +329,13 @@ function InventarioView() {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandedGroups, setExpandedGroups] = useState(new Set());
 
+  // ML Import modal state
+  const [mlImportProduct, setMlImportProduct] = useState(null); // Product being linked
+  const [mlItems, setMlItems] = useState([]);
+  const [mlItemsLoading, setMlItemsLoading] = useState(false);
+  const [mlSearchTerm, setMlSearchTerm] = useState('');
+  const [mlLinking, setMlLinking] = useState(false);
+
   const fetchProductTree = async () => {
     try {
       setLoading(true);
@@ -487,6 +494,97 @@ function InventarioView() {
       return newSet;
     });
   };
+
+  // Fetch ML items matching search term
+  const searchMLItems = async (searchTerm) => {
+    if (!searchTerm || searchTerm.length < 3) {
+      setMlItems([]);
+      return;
+    }
+    setMlItemsLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/ml/items?search=${encodeURIComponent(searchTerm)}`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await res.json();
+      if (data.success) {
+        // Filter to only active items
+        const activeItems = (data.items || []).filter(item => item.status === 'active');
+        setMlItems(activeItems);
+      }
+    } catch (error) {
+      console.error('Error fetching ML items:', error);
+    } finally {
+      setMlItemsLoading(false);
+    }
+  };
+
+  // Open ML import modal for a product
+  const openMLImportModal = (product) => {
+    setMlImportProduct(product);
+    setMlSearchTerm('');
+    setMlItems([]);
+  };
+
+  // Handle ML search with debounce
+  const handleMLSearchChange = (value) => {
+    setMlSearchTerm(value);
+    // Debounce search
+    clearTimeout(window.mlSearchTimeout);
+    window.mlSearchTimeout = setTimeout(() => {
+      searchMLItems(value);
+    }, 300);
+  };
+
+  // Link ML item to product
+  const linkMLToProduct = async (mlItem) => {
+    if (!mlImportProduct) return;
+    setMlLinking(true);
+    try {
+      const token = localStorage.getItem('token');
+      const existingLinks = mlImportProduct.onlineStoreLinks || [];
+      const newLinks = [
+        ...existingLinks.filter(l => l.url !== mlItem.permalink),
+        {
+          url: `https://articulo.mercadolibre.com.mx/${mlItem.id.replace(/^(MLM)(\d+)$/, '$1-$2')}`,
+          store: 'Mercado Libre',
+          isPreferred: existingLinks.length === 0
+        }
+      ];
+
+      const res = await fetch(`${API_URL}/product-families/${mlImportProduct._id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({
+          onlineStoreLinks: newLinks,
+          price: mlItem.price
+        })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        // Update local state
+        setProductTree(prev => updateProductInTree(prev, mlImportProduct._id, {
+          onlineStoreLinks: newLinks,
+          price: mlItem.price
+        }));
+        setMlImportProduct(null);
+        setMlSearchTerm('');
+      } else {
+        alert('Error al vincular: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error linking ML item:', error);
+      alert('Error al vincular producto');
+    } finally {
+      setMlLinking(false);
+    }
+  };
+
 
   // Deactivate all products without confirmed prices
   const deactivateUnconfirmedPrices = async () => {
@@ -715,17 +813,29 @@ function InventarioView() {
                                   const mlLink = product.onlineStoreLinks?.find(l =>
                                     l.url?.includes('mercadolibre') && /MLM-\d{6,}/.test(l.url)
                                   )?.url;
-                                  return mlLink ? (
-                                    <a
-                                      href={mlLink}
-                                      target="_blank"
-                                      rel="noopener noreferrer"
-                                      className="inline-flex items-center px-1.5 py-0.5 bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-400 text-xs font-medium rounded transition-colors"
-                                      title={mlLink}
-                                    >
-                                      ML
-                                    </a>
-                                  ) : null;
+                                  return (
+                                    <div className="flex items-center gap-1">
+                                      {mlLink ? (
+                                        <a
+                                          href={mlLink}
+                                          target="_blank"
+                                          rel="noopener noreferrer"
+                                          className="inline-flex items-center px-1.5 py-0.5 bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-400 text-xs font-medium rounded transition-colors"
+                                          title={mlLink}
+                                        >
+                                          ML
+                                        </a>
+                                      ) : (
+                                        <button
+                                          onClick={() => openMLImportModal(product)}
+                                          className="inline-flex items-center px-1.5 py-0.5 bg-gray-600/50 hover:bg-yellow-500/30 text-gray-400 hover:text-yellow-400 text-xs font-medium rounded transition-colors"
+                                          title="Importar desde ML"
+                                        >
+                                          +ML
+                                        </button>
+                                      )}
+                                    </div>
+                                  );
                                 })()}
                               </div>
                             </td>
@@ -793,6 +903,103 @@ function InventarioView() {
               </div>
             );
           })}
+        </div>
+      )}
+
+      {/* ML Import Modal */}
+      {mlImportProduct && (
+        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
+            {/* Modal Header */}
+            <div className="p-4 border-b border-gray-700">
+              <h2 className="text-lg font-semibold text-white">Importar desde Mercado Libre</h2>
+              <p className="text-sm text-gray-400 mt-1">
+                Vinculando: <span className="text-white">{mlImportProduct.name}</span>
+              </p>
+            </div>
+
+            {/* Search */}
+            <div className="p-4 border-b border-gray-700">
+              <input
+                type="text"
+                placeholder="Escribe al menos 3 caracteres para buscar..."
+                value={mlSearchTerm}
+                onChange={(e) => handleMLSearchChange(e.target.value)}
+                autoFocus
+                className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500"
+              />
+            </div>
+
+            {/* ML Items List */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {mlSearchTerm.length < 3 ? (
+                <div className="text-center py-8">
+                  <p className="text-gray-500">Escribe al menos 3 caracteres para buscar productos en ML</p>
+                </div>
+              ) : mlItemsLoading ? (
+                <div className="text-center py-8">
+                  <div className="inline-block w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+                  <p className="text-gray-400 mt-2">Buscando...</p>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {mlItems.slice(0, 30).map((item) => (
+                    <div
+                      key={item.id}
+                      className="flex items-center gap-3 p-3 bg-gray-900/50 rounded-lg"
+                    >
+                      {item.thumbnail && (
+                        <img
+                          src={item.thumbnail}
+                          alt={item.title}
+                          className="w-12 h-12 object-cover rounded bg-gray-700"
+                        />
+                      )}
+                      <div className="flex-1 min-w-0">
+                        <p className="text-white text-sm truncate">{item.title}</p>
+                        <p className="text-yellow-400 font-semibold">${item.price?.toLocaleString()}</p>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <a
+                          href={`https://articulo.mercadolibre.com.mx/${item.id.replace(/^(MLM)(\d+)$/, '$1-$2')}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="px-2 py-1 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-500/20 rounded transition-colors"
+                        >
+                          Ver
+                        </a>
+                        <button
+                          onClick={() => linkMLToProduct(item)}
+                          disabled={mlLinking}
+                          className="px-3 py-1 bg-primary-500 text-white text-sm rounded hover:bg-primary-600 transition-colors disabled:opacity-50"
+                        >
+                          Vincular
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                  {mlItems.length > 30 && (
+                    <p className="text-center text-gray-500 text-sm py-2">
+                      Mostrando 30 de {mlItems.length} resultados
+                    </p>
+                  )}
+                  {mlItems.length === 0 && !mlItemsLoading && mlSearchTerm.length >= 3 && (
+                    <p className="text-center text-gray-500 py-4">No se encontraron productos</p>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            <div className="p-4 border-t border-gray-700">
+              <button
+                onClick={() => { setMlImportProduct(null); setMlSearchTerm(''); }}
+                className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
+              >
+                Cancelar
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

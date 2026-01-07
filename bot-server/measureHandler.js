@@ -130,6 +130,14 @@ function parseDimensions(message) {
   // This handles cases where users add spaces before decimal points
   let normalized = converted.replace(/(\d)\s+(\.\d+)/g, '$1$2');
 
+  // PREPROCESSING: Handle "2 00" → "2.00" (space as decimal separator)
+  // Also handles "2:00" → "2.00" (colon as decimal separator, common typo)
+  normalized = normalized.replace(/(\d+)\s+(\d{2})(?=\s*[xX×*]|\s+por\s|\s*$)/g, '$1.$2');
+  normalized = normalized.replace(/(\d+):(\d{2})(?=\s*[xX×*]|\s+por\s|\s*$)/g, '$1.$2');
+  // Also handle after the separator: "x 10 00" → "x 10.00"
+  normalized = normalized.replace(/([xX×*]\s*)(\d+)\s+(\d{2})(?=\s|$)/g, '$1$2.$3');
+  normalized = normalized.replace(/([xX×*]\s*)(\d+):(\d{2})(?=\s|$)/g, '$1$2.$3');
+
   // PREPROCESSING: Strip out "m" units (e.g., "6.5 m x 3.17 m" → "6.5 x 3.17")
   // This allows all existing patterns to work with messages that include units
   normalized = normalized.replace(/(\d+(?:\.\d+)?)\s*m\b/gi, '$1');
