@@ -621,4 +621,112 @@ router.delete("/sellers/:sellerId", authenticate, async (req, res) => {
   }
 });
 
+// ============================================
+// ML PRICE SYNC ENDPOINTS
+// ============================================
+
+// POST /ml/sync-prices - Sync ML prices for all products with ML links
+router.post("/sync-prices", authenticate, async (req, res) => {
+  try {
+    const { syncMLPrices } = require("../utils/mlPriceSync");
+
+    console.log(`🔄 ML price sync triggered by user ${req.user.username}`);
+
+    const results = await syncMLPrices();
+
+    res.json({
+      success: true,
+      ...results
+    });
+  } catch (error) {
+    console.error("❌ Error syncing ML prices:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to sync ML prices",
+      details: process.env.NODE_ENV === "development" ? error.message : undefined
+    });
+  }
+});
+
+// POST /ml/sync-prices/:productId - Sync ML price for a single product
+router.post("/sync-prices/:productId", authenticate, async (req, res) => {
+  try {
+    const { syncSingleProductMLPrice } = require("../utils/mlPriceSync");
+    const { productId } = req.params;
+
+    const result = await syncSingleProductMLPrice(productId);
+
+    if (!result) {
+      return res.status(404).json({
+        success: false,
+        error: "Product not found or has no ML link"
+      });
+    }
+
+    res.json({
+      success: true,
+      ...result
+    });
+  } catch (error) {
+    console.error("❌ Error syncing single product ML price:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to sync ML price",
+      details: process.env.NODE_ENV === "development" ? error.message : undefined
+    });
+  }
+});
+
+// GET /ml/price-status - Get products with price discrepancies
+router.get("/price-status", authenticate, async (req, res) => {
+  try {
+    const ProductFamily = require("../models/ProductFamily");
+
+    // Find sellable products with ML links that have mlPrice data
+    const products = await ProductFamily.find({
+      sellable: true,
+      mlPrice: { $exists: true, $ne: null }
+    }).select("_id name price mlPrice mlPriceUpdatedAt onlineStoreLinks");
+
+    // Calculate discrepancies
+    const productsWithStatus = products.map(p => {
+      const discrepancy = p.price && p.mlPrice ? p.price - p.mlPrice : null;
+      const discrepancyPercent = p.price && p.mlPrice
+        ? Math.round((discrepancy / p.mlPrice) * 100)
+        : null;
+
+      return {
+        _id: p._id,
+        name: p.name,
+        price: p.price,
+        mlPrice: p.mlPrice,
+        mlPriceUpdatedAt: p.mlPriceUpdatedAt,
+        discrepancy,
+        discrepancyPercent,
+        hasDiscrepancy: discrepancy !== null && discrepancy !== 0
+      };
+    });
+
+    // Sort by discrepancy (largest differences first)
+    productsWithStatus.sort((a, b) => {
+      const absA = Math.abs(a.discrepancy || 0);
+      const absB = Math.abs(b.discrepancy || 0);
+      return absB - absA;
+    });
+
+    res.json({
+      success: true,
+      total: productsWithStatus.length,
+      withDiscrepancy: productsWithStatus.filter(p => p.hasDiscrepancy).length,
+      products: productsWithStatus
+    });
+  } catch (error) {
+    console.error("❌ Error fetching price status:", error);
+    res.status(500).json({
+      success: false,
+      error: "Failed to fetch price status"
+    });
+  }
+});
+
 module.exports = router;

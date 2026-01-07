@@ -31,6 +31,13 @@ const productFamilySchema = new mongoose.Schema({
   wholesalePrice: {
     type: Number
   },
+  // ML price sync fields
+  mlPrice: {
+    type: Number  // Current price from Mercado Libre (synced periodically)
+  },
+  mlPriceUpdatedAt: {
+    type: Date  // When the ML price was last synced
+  },
   sku: {
     type: String
   },

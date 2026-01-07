@@ -88,6 +88,13 @@ function flattenSellableProducts(products, parentChain = []) {
       const groupName = productType && baseClass && !skipProductType
         ? `${baseClass.name} ${productType}`
         : baseClass?.name || product.name;
+      // Calculate ML price discrepancy
+      const hasMLPrice = product.mlPrice !== undefined && product.mlPrice !== null;
+      const localPrice = product.price || inheritedPrice;
+      const mlPriceDiscrepancy = hasMLPrice && localPrice
+        ? localPrice - product.mlPrice
+        : null;
+
       result.push({
         ...product,
         path,
@@ -95,6 +102,8 @@ function flattenSellableProducts(products, parentChain = []) {
         groupName,
         inheritedPrice,
         priceIsInherited,
+        mlPriceDiscrepancy,
+        hasMLPrice,
         // Extract size info from path or attributes
         sizeInfo: extractSizeInfo(product, parentChain),
         colorInfo: extractColorInfo(product, parentChain),
@@ -102,7 +111,8 @@ function flattenSellableProducts(products, parentChain = []) {
         productType,
         shadePercentage: productType === 'Rollo' ? getShadePercentage(product, parentChain) : null,
         reinforcementType: productType === 'Confeccionada' ? getReinforcementType(product, parentChain) : null,
-        subdivision: getSubdivision(product, parentChain)
+        subdivision: getSubdivision(product, parentChain),
+        isRompevientos: isRompevientos(product, parentChain)
       });
     }
 
@@ -163,6 +173,19 @@ function getReinforcementType(product, parentChain) {
   }
 
   return null;
+}
+
+// Check if product is Rompevientos (windbreak tape)
+function isRompevientos(product, parentChain) {
+  // Check product name
+  if (product.name.toLowerCase().includes('rompeviento')) return true;
+
+  // Check parent chain
+  for (const parent of parentChain) {
+    if (parent.name.toLowerCase().includes('rompeviento')) return true;
+  }
+
+  return false;
 }
 
 // Get subdivision from parent chain (for products like Cinta Plástica, Cinta Rompevientos)
@@ -335,6 +358,10 @@ function InventarioView() {
   const [mlItemsLoading, setMlItemsLoading] = useState(false);
   const [mlSearchTerm, setMlSearchTerm] = useState('');
   const [mlLinking, setMlLinking] = useState(false);
+
+  // ML Price Sync state
+  const [mlSyncing, setMlSyncing] = useState(false);
+  const [mlSyncResult, setMlSyncResult] = useState(null);
 
   const fetchProductTree = async () => {
     try {
@@ -585,6 +612,34 @@ function InventarioView() {
     }
   };
 
+  // Sync ML prices for all products with ML links
+  const syncMLPrices = async () => {
+    setMlSyncing(true);
+    setMlSyncResult(null);
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/ml/sync-prices`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setMlSyncResult({ synced: data.synced, errors: data.errors, skipped: data.skipped });
+        // Refresh product tree to show updated mlPrice values
+        fetchProductTree();
+      } else {
+        alert('Error al sincronizar precios: ' + data.error);
+      }
+    } catch (error) {
+      console.error('Error syncing ML prices:', error);
+      alert('Error al sincronizar precios de ML');
+    } finally {
+      setMlSyncing(false);
+    }
+  };
 
   // Deactivate all products without confirmed prices
   const deactivateUnconfirmedPrices = async () => {
@@ -670,6 +725,29 @@ function InventarioView() {
             className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500"
           />
         </div>
+
+        {/* ML Price Sync */}
+        <button
+          onClick={syncMLPrices}
+          disabled={mlSyncing}
+          className="px-4 py-2 bg-yellow-500/20 border border-yellow-500/50 text-yellow-300 rounded-lg hover:bg-yellow-500/30 transition-colors text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+          title="Sincronizar precios desde Mercado Libre"
+        >
+          {mlSyncing ? (
+            <>
+              <div className="w-4 h-4 border-2 border-yellow-300 border-t-transparent rounded-full animate-spin"></div>
+              Sincronizando...
+            </>
+          ) : (
+            'Sync ML'
+          )}
+        </button>
+        {mlSyncResult && (
+          <span className="text-xs text-gray-400">
+            {mlSyncResult.synced} sincronizados
+            {mlSyncResult.errors > 0 && <span className="text-red-400">, {mlSyncResult.errors} errores</span>}
+          </span>
+        )}
 
         {/* Deactivate unconfirmed prices */}
         <button
@@ -805,26 +883,38 @@ function InventarioView() {
                                   {product.shadePercentage && <span className="text-cyan-300 mr-1">{product.shadePercentage}</span>}
                                   {product.reinforcementType && <span className="text-purple-400 mr-1">{product.reinforcementType}</span>}
                                   {product.isTriangular && product.productType !== 'Confeccionada' && <span className="text-amber-400 mr-1">Triangular</span>}
+                                  {product.isRompevientos && <span className="text-sky-400 mr-1">Rompevientos</span>}
                                   {product.subdivision && <span className="text-green-400 mr-1">{product.subdivision}</span>}
                                   {product.name}
                                 </span>
                                 {(() => {
                                   // Only show ML button for valid ML links with real item IDs (MLM-XXXXXXXXX)
                                   const mlLink = product.onlineStoreLinks?.find(l =>
-                                    l.url?.includes('mercadolibre') && /MLM-\d{6,}/.test(l.url)
+                                    l.url?.includes('mercadolibre') && /MLM[-]?\d{6,}/.test(l.url)
                                   )?.url;
                                   return (
                                     <div className="flex items-center gap-1">
                                       {mlLink ? (
-                                        <a
-                                          href={mlLink}
-                                          target="_blank"
-                                          rel="noopener noreferrer"
-                                          className="inline-flex items-center px-1.5 py-0.5 bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-400 text-xs font-medium rounded transition-colors"
-                                          title={mlLink}
-                                        >
-                                          ML
-                                        </a>
+                                        <>
+                                          <a
+                                            href={mlLink}
+                                            target="_blank"
+                                            rel="noopener noreferrer"
+                                            className="inline-flex items-center px-1.5 py-0.5 bg-yellow-500/20 hover:bg-yellow-500/40 text-yellow-400 text-xs font-medium rounded transition-colors"
+                                            title={mlLink}
+                                          >
+                                            ML
+                                          </a>
+                                          <button
+                                            onClick={() => openMLImportModal(product)}
+                                            className="inline-flex items-center p-0.5 text-gray-500 hover:text-yellow-400 transition-colors"
+                                            title="Cambiar enlace ML"
+                                          >
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                                            </svg>
+                                          </button>
+                                        </>
                                       ) : (
                                         <button
                                           onClick={() => openMLImportModal(product)}
@@ -871,6 +961,27 @@ function InventarioView() {
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                                     </svg>
                                   </button>
+                                )}
+                                {/* ML Price discrepancy indicator */}
+                                {product.hasMLPrice && product.mlPriceDiscrepancy !== null && product.mlPriceDiscrepancy !== 0 && (
+                                  <span
+                                    className={`text-xs px-1.5 py-0.5 rounded ${
+                                      product.mlPriceDiscrepancy > 0
+                                        ? 'bg-green-500/20 text-green-400'
+                                        : 'bg-red-500/20 text-red-400'
+                                    }`}
+                                    title={`ML: $${product.mlPrice?.toLocaleString()} | Diferencia: ${product.mlPriceDiscrepancy > 0 ? '+' : ''}$${product.mlPriceDiscrepancy.toLocaleString()}`}
+                                  >
+                                    {product.mlPriceDiscrepancy > 0 ? '+' : ''}{Math.round(product.mlPriceDiscrepancy)}
+                                  </span>
+                                )}
+                                {product.hasMLPrice && product.mlPriceDiscrepancy === 0 && (
+                                  <span
+                                    className="text-xs px-1 text-green-400"
+                                    title={`Precio sincronizado con ML: $${product.mlPrice?.toLocaleString()}`}
+                                  >
+                                    =ML
+                                  </span>
                                 )}
                               </div>
                             </td>

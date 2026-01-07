@@ -996,6 +996,33 @@ function validateRequiredEnvVars() {
 // Validate before starting server
 validateRequiredEnvVars();
 
+// ============================================
+// BACKGROUND JOBS
+// ============================================
+
+// ML Price Sync - runs every 6 hours
+const ML_PRICE_SYNC_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours in milliseconds
+
+async function runMLPriceSync() {
+  try {
+    const { syncMLPrices } = require('./utils/mlPriceSync');
+    console.log('🔄 [Scheduled] Starting ML price sync...');
+    const results = await syncMLPrices();
+    console.log(`✅ [Scheduled] ML price sync complete: ${results.synced} synced, ${results.errors} errors, ${results.skipped} skipped`);
+  } catch (error) {
+    console.error('❌ [Scheduled] ML price sync failed:', error.message);
+  }
+}
+
+// Start periodic ML price sync after 1 minute (let server fully initialize)
+setTimeout(() => {
+  console.log('⏰ ML price sync scheduled to run every 6 hours');
+  // Run immediately on startup
+  runMLPriceSync();
+  // Then run periodically
+  setInterval(runMLPriceSync, ML_PRICE_SYNC_INTERVAL);
+}, 60000);
+
 server.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
   console.log(`📡 Webhook endpoint: http://localhost:${PORT}/webhook`);
