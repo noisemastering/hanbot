@@ -152,7 +152,9 @@ function parseDimensions(message) {
   const pattern3 = /(\d+(?:\.\d+)?)\s+por\s+(\d+(?:\.\d+)?)/i;
 
   // Pattern 4: "metros por metros" with optional "de"
-  const pattern4 = /(\d+(?:\.\d+)?)\s+metros?\s+(?:de\s+)?(?:ancho\s+)?(?:por|x)\s+(\d+(?:\.\d+)?)\s*metros?/i;
+  // NOTE: Final (?:\s*metros?)? is wrapped to make the entire unit truly optional
+  // Without this fix, "3 metros x 1.70" wouldn't match (requires trailing "metros")
+  const pattern4 = /(\d+(?:\.\d+)?)\s+metros?\s+(?:de\s+)?(?:ancho\s+)?(?:por|x)\s+(\d+(?:\.\d+)?)(?:\s*metros?)?/i;
 
   // Pattern 5: "3 ancho x 5 largo" - dimensions with ancho/largo labels
   const pattern5 = /(\d+(?:\.\d+)?)\s+(?:de\s+)?ancho\s+(?:por|x)\s+(\d+(?:\.\d+)?)\s+(?:de\s+)?largo/i;
