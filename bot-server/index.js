@@ -777,16 +777,64 @@ app.post("/webhook", async (req, res) => {
                 await saveMessage(senderPsid, reply.text, "bot");
 
                 // Update conversation intent
-                const { updateConversation } = require("./conversationManager");
                 await updateConversation(senderPsid, {
                   lastIntent: "image_received",
                   state: "active"
                 });
               } catch (error) {
                 console.error("❌ Error processing image:", error);
-                await callSendAPI(senderPsid, {
-                  text: "Recibí tu imagen, pero tuve problemas al analizarla. ¿Podrías describirme con palabras qué necesitas?"
-                });
+
+                // Check if we're in business hours
+                const now = new Date();
+                const mexicoTime = new Date(now.toLocaleString("en-US", { timeZone: "America/Mexico_City" }));
+                const day = mexicoTime.getDay();
+                const hour = mexicoTime.getHours();
+                const isWeekday = day >= 1 && day <= 5;
+                const isDuringHours = hour >= 9 && hour < 18;
+                const inBusinessHours = isWeekday && isDuringHours;
+
+                // Cancel any pending debounced messages
+                const { cancelDebounce } = require("./messageDebouncer");
+                cancelDebounce(senderPsid);
+
+                if (inBusinessHours) {
+                  // During business hours: silently hand over to human
+                  await updateConversation(senderPsid, {
+                    state: "human_active",
+                    lastIntent: "image_handoff",
+                    handoffRequested: true,
+                    handoffReason: "Bot no pudo analizar imagen enviada por usuario",
+                    handoffTimestamp: new Date()
+                  });
+
+                  // Send push notification to agents
+                  const { sendHandoffNotification } = require("./services/pushNotifications");
+                  await sendHandoffNotification(senderPsid, "Usuario envió imagen que requiere atención humana");
+
+                  // Let user know an agent will help
+                  const { getBusinessInfo } = require("./businessInfoManager");
+                  const businessInfo = await getBusinessInfo();
+                  await callSendAPI(senderPsid, {
+                    text: `Gracias por tu imagen. Un asesor la revisará y te responderá en breve.\n\nSi es urgente, puedes contactarnos:\n📞 ${businessInfo.phones?.join(" / ") || "55 1234 5678"}\n🕓 ${businessInfo.hours || "Lun-Vie 9am-6pm"}`
+                  });
+                  await saveMessage(senderPsid, "[Imagen transferida a asesor humano]", "bot");
+                } else {
+                  // Outside business hours: let user know it will be addressed during business hours
+                  const { getBusinessInfo } = require("./businessInfoManager");
+                  const businessInfo = await getBusinessInfo();
+                  await callSendAPI(senderPsid, {
+                    text: `Gracias por tu imagen. En este momento estamos fuera de horario, pero un asesor la revisará y te contactará en horario de atención.\n\n🕓 ${businessInfo.hours || "Lun-Vie 9am-6pm"}\n📞 ${businessInfo.phones?.join(" / ") || "55 1234 5678"}`
+                  });
+                  await saveMessage(senderPsid, "[Imagen recibida fuera de horario - pendiente de revisión]", "bot");
+
+                  // Mark for follow-up
+                  await updateConversation(senderPsid, {
+                    lastIntent: "image_pending_review",
+                    handoffRequested: true,
+                    handoffReason: "Imagen recibida fuera de horario laboral",
+                    handoffTimestamp: new Date()
+                  });
+                }
               }
             })();
 
