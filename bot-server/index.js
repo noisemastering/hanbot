@@ -720,6 +720,18 @@ app.post("/webhook", async (req, res) => {
 
         // 🎯 Check if the ad associated with this conversation is active
         const conversation = await getConversation(senderPsid);
+
+        // 📊 Log campaign source for this message
+        if (conversation) {
+          const campaignInfo = [];
+          if (conversation.campaignRef) campaignInfo.push(`ref=${conversation.campaignRef}`);
+          if (conversation.campaignId) campaignInfo.push(`campaign=${conversation.campaignId}`);
+          if (conversation.adId) campaignInfo.push(`ad=${conversation.adId}`);
+          if (campaignInfo.length > 0) {
+            console.log(`📊 Campaign source: ${campaignInfo.join(', ')}`);
+          }
+        }
+
         if (conversation && conversation.adId) {
           const Ad = require("./models/Ad");
           const ad = await Ad.findOne({ fbAdId: conversation.adId });
