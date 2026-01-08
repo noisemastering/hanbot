@@ -247,6 +247,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   }
 
   // 📋 CATALOG REQUEST - Handle requests for general pricing, sizes, and colors listing
+  // Instead of dumping a huge list, ask for specific dimensions
   if (/\b(pongan?|den|muestren?|env[ií]en?|pasame?|pasen?|listado?)\s+(de\s+)?(precios?|medidas?|opciones?|tama[ñn]os?|colores?)\b/i.test(msg) ||
       /\b(precios?\s+y\s+medidas?)\b/i.test(msg) ||
       /\b(medidas?\s+y\s+precios?)\b/i.test(msg) ||
@@ -256,34 +257,11 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
     await updateConversation(psid, { lastIntent: "catalog_request" });
 
-    // Fetch sellable products from ProductFamily (Inventario)
-    const products = await ProductFamily.find({
-      sellable: true,
-      active: true,
-      price: { $gt: 0 }
-    }).sort({ size: 1 });
-
-    if (!products || products.length === 0) {
-      return {
-        type: "text",
-        text: "En este momento tenemos disponibles mallas sombra beige desde 2x2m hasta 10x5m.\n\n" +
-              "¿Qué medida necesitas para tu proyecto?"
-      };
-    }
-
-    let response = "📐 MALLAS SOMBRA DISPONIBLES:\n\n";
-    response += "🟤 BEIGE (90% sombra):\n";
-
-    products.forEach(p => {
-      response += `• ${p.size} → $${p.price}\n`;
-    });
-
-    response += "\n✨ También fabricamos medidas personalizadas\n\n";
-    response += "¿Qué medida necesitas?";
-
+    // Don't dump entire product list - ask for dimensions instead
     return {
       type: "text",
-      text: response
+      text: "Tenemos mallas sombra beige en varias medidas, desde 2x2m hasta 6x10m, y también rollos de 100m.\n\n" +
+            "Para darte el precio exacto, ¿qué medida necesitas para tu proyecto? 📐"
     };
   }
 
@@ -849,33 +827,11 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
       // User is confirming they want beige - show products directly
       await updateConversation(psid, { lastIntent: "color_confirmed", unknownCount: 0 });
 
-      // Fetch sellable products from ProductFamily
-      const products = await ProductFamily.find({
-        sellable: true,
-        active: true,
-        price: { $gt: 0 }
-      }).sort({ size: 1 });
-
-      if (!products || products.length === 0) {
-        return {
-          type: "text",
-          text: "En este momento tenemos disponibles mallas sombra beige desde 2x2m hasta 10x5m.\n\n" +
-                "¿Qué medida necesitas para tu proyecto?"
-        };
-      }
-
-      let response = "📐 Perfecto! Aquí están las medidas disponibles en beige:\n\n";
-
-      products.forEach(p => {
-        response += `• ${p.size} → $${p.price}\n`;
-      });
-
-      response += "\n✨ También fabricamos medidas personalizadas\n\n";
-      response += "¿Qué medida necesitas?";
-
+      // Don't dump entire product list - ask for dimensions instead
       return {
         type: "text",
-        text: response
+        text: "¡Perfecto! Tenemos varias medidas disponibles en beige, desde 2x2m hasta rollos de 100m.\n\n" +
+              "¿Qué medida necesitas para tu proyecto?"
       };
     } else {
       // User is asking about colors - ask if they want to see sizes
