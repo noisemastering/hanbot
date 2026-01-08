@@ -310,12 +310,15 @@ async function getAvailableSizes(conversation = null) {
     }
   } else {
     // Fallback: Get all sellable and active products from ProductFamily (Inventario)
+    // Exclude products with dimensions in centimeters (these are rolls like "Borde Separador", not malla sombra)
     console.log('📦 Using sellable products from Inventario (ProductFamily)');
     const products = await ProductFamily.find({
       sellable: true,
       active: true,
       size: { $exists: true, $ne: null },
-      price: { $exists: true, $gt: 0 }
+      price: { $exists: true, $gt: 0 },
+      // Exclude products where width is in cm (rolls/borders, not malla sombra sheets)
+      'dimensionUnits.width': { $ne: 'cm' }
     }).lean();
 
     console.log(`📦 Found ${products.length} active sellable products with size and price`);
