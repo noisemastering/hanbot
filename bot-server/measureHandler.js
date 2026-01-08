@@ -269,28 +269,49 @@ function parseSizeString(sizeStr) {
 
 /**
  * Queries all available sizes from ProductFamily (Inventario)
- * @param {object} conversation - Optional conversation object (with availableProducts populated)
+ * @param {object} conversation - Optional conversation object (with campaign/ad info)
  * @returns {Array} - Array of size objects sorted by area
  */
 async function getAvailableSizes(conversation = null) {
   const sizes = [];
+  let campaignProducts = null;
 
-  // If conversation has specific products associated (from ad/adset/campaign), prioritize those
-  if (conversation && conversation.availableProducts && conversation.availableProducts.length > 0) {
-    console.log(`📦 Using ${conversation.availableProducts.length} products from conversation context`);
+  // Try to get products from campaign/ad if conversation has that info
+  if (conversation && (conversation.campaignRef || conversation.adId)) {
+    try {
+      const Campaign = require("./models/Campaign");
+      const Ad = require("./models/Ad");
 
-    for (const product of conversation.availableProducts) {
-      if (product.size) {
+      // First try to find products from the specific Ad
+      if (conversation.adId) {
+        const ad = await Ad.findOne({ fbAdId: conversation.adId }).populate('productIds');
+        if (ad && ad.productIds && ad.productIds.length > 0) {
+          campaignProducts = ad.productIds;
+          console.log(`📦 Using ${campaignProducts.length} products from Ad (${conversation.adId})`);
+        }
+      }
+
+      // If no products from Ad, try Campaign
+      if (!campaignProducts && conversation.campaignRef) {
+        const campaign = await Campaign.findOne({ ref: conversation.campaignRef }).populate('productIds');
+        if (campaign && campaign.productIds && campaign.productIds.length > 0) {
+          campaignProducts = campaign.productIds;
+          console.log(`📦 Using ${campaignProducts.length} products from Campaign (${conversation.campaignRef})`);
+        }
+      }
+    } catch (err) {
+      console.error('⚠️ Error fetching campaign/ad products:', err.message);
+    }
+  }
+
+  // If we found campaign-specific products, use those
+  if (campaignProducts && campaignProducts.length > 0) {
+    for (const product of campaignProducts) {
+      if (product.size && product.sellable && product.active) {
         const parsed = parseSizeString(product.size);
         if (parsed) {
-          // Parse price (handle both String and Number)
-          let price = 0;
-          if (typeof product.price === 'string') {
-            const cleanPrice = product.price.replace(/[$,\s]/g, '');
-            price = parseFloat(cleanPrice) || 0;
-          } else if (typeof product.price === 'number') {
-            price = product.price;
-          }
+          // Skip products with cm dimensions (not malla sombra)
+          if (product.dimensionUnits?.width === 'cm') continue;
 
           // Get preferred online store link (Mercado Libre)
           const preferredLink = product.onlineStoreLinks?.find(l => l.isPreferred)?.url ||
@@ -298,7 +319,7 @@ async function getAvailableSizes(conversation = null) {
 
           sizes.push({
             ...parsed,
-            price: price,
+            price: product.price || 0,
             source: preferredLink ? 'mercadolibre' : 'product',
             productName: product.name,
             mLink: preferredLink,
@@ -308,39 +329,47 @@ async function getAvailableSizes(conversation = null) {
         }
       }
     }
-  } else {
-    // Fallback: Get all sellable and active products from ProductFamily (Inventario)
-    // Exclude products with dimensions in centimeters (these are rolls like "Borde Separador", not malla sombra)
-    console.log('📦 Using sellable products from Inventario (ProductFamily)');
-    const products = await ProductFamily.find({
-      sellable: true,
-      active: true,
-      size: { $exists: true, $ne: null },
-      price: { $exists: true, $gt: 0 },
-      // Exclude products where width is in cm (rolls/borders, not malla sombra sheets)
-      'dimensionUnits.width': { $ne: 'cm' }
-    }).lean();
 
-    console.log(`📦 Found ${products.length} active sellable products with size and price`);
+    // If we found campaign products with sizes, return them
+    if (sizes.length > 0) {
+      return sizes.sort((a, b) => a.area - b.area);
+    }
+    console.log('⚠️ Campaign products found but none with valid sizes, falling back to all products');
+  } else if (conversation && (conversation.campaignRef || conversation.adId)) {
+    console.log('⚠️ No products found for campaign/ad, falling back to all products');
+  }
 
-    for (const product of products) {
-      if (product.size) {
-        const parsed = parseSizeString(product.size);
-        if (parsed) {
-          // Get preferred online store link
-          const preferredLink = product.onlineStoreLinks?.find(l => l.isPreferred)?.url ||
-                               product.onlineStoreLinks?.[0]?.url || null;
+  // Fallback: Get all sellable and active products from ProductFamily (Inventario)
+  // Exclude products with dimensions in centimeters (these are rolls like "Borde Separador", not malla sombra)
+  console.log('📦 Using sellable products from Inventario (ProductFamily)');
+  const products = await ProductFamily.find({
+    sellable: true,
+    active: true,
+    size: { $exists: true, $ne: null },
+    price: { $exists: true, $gt: 0 },
+    // Exclude products where width is in cm (rolls/borders, not malla sombra sheets)
+    'dimensionUnits.width': { $ne: 'cm' }
+  }).lean();
 
-          sizes.push({
-            ...parsed,
-            price: product.price,
-            source: preferredLink ? 'mercadolibre' : 'product',
-            productName: product.name,
-            mLink: preferredLink,
-            permalink: preferredLink,
-            imageUrl: product.imageUrl || product.thumbnail
-          });
-        }
+  console.log(`📦 Found ${products.length} active sellable products with size and price`);
+
+  for (const product of products) {
+    if (product.size) {
+      const parsed = parseSizeString(product.size);
+      if (parsed) {
+        // Get preferred online store link
+        const preferredLink = product.onlineStoreLinks?.find(l => l.isPreferred)?.url ||
+                             product.onlineStoreLinks?.[0]?.url || null;
+
+        sizes.push({
+          ...parsed,
+          price: product.price,
+          source: preferredLink ? 'mercadolibre' : 'product',
+          productName: product.name,
+          mLink: preferredLink,
+          permalink: preferredLink,
+          imageUrl: product.imageUrl || product.thumbnail
+        });
       }
     }
   }
