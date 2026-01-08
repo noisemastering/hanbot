@@ -1080,10 +1080,14 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
         } else {
           // No standard sizes available - suggest custom fabrication
           responseText += `No tenemos medidas estándar que se ajusten exactamente.\n\n`;
-          responseText += `También fabricamos medidas personalizadas. Para cotizar ${roundedWidth}m x ${roundedHeight}m, contáctanos directamente.`;
         }
 
-        responseText += `\n💡 ¿Te sirve alguna de estas medidas?`;
+        // Always offer custom fabrication option
+        const info = await getBusinessInfo();
+        responseText += `\n📐 **También fabricamos a la medida exacta** (${dimensions.width}m x ${dimensions.height}m).\n`;
+        responseText += `Para cotizar, contáctanos:\n📞 ${info?.phones?.[0] || '442-790-2000'}\n`;
+
+        responseText += `\n💡 ¿Te sirve la medida estándar o prefieres cotizar fabricación a medida?`;
 
         // Update conversation state
         await updateConversation(psid, {
