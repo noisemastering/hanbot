@@ -56,7 +56,9 @@ async function variantLine(v, includeLink = false, psid = null, convo = {}) {
       productId: v.productId || v._id,
       campaignId: convo.campaignId,
       adSetId: convo.adSetId,
-      adId: convo.adId
+      adId: convo.adId,
+      city: convo.city,
+      stateMx: convo.stateMx
     });
     return `• ${v.size} → ${price}  \n${trackedLink}`;
   }

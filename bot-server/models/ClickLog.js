@@ -31,6 +31,10 @@ const clickLogSchema = new mongoose.Schema(
     adSetId: String,
     adId: String,
 
+    // Location tracking (for sales attribution)
+    city: String,
+    stateMx: String,
+
     // Click tracking
     clicked: {
       type: Boolean,

@@ -81,7 +81,9 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       productName: "Tienda Oficial",
       campaignId: convo.campaignId,
       adSetId: convo.adSetId,
-      adId: convo.adId
+      adId: convo.adId,
+      city: convo.city,
+      stateMx: convo.stateMx
     });
 
     return {
@@ -128,7 +130,9 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       productName: "Tienda Oficial",
       campaignId: convo.campaignId,
       adSetId: convo.adSetId,
-      adId: convo.adId
+      adId: convo.adId,
+      city: convo.city,
+      stateMx: convo.stateMx
     });
 
     return {
@@ -363,7 +367,9 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
           productId: product._id,
           campaignId: convo.campaignId,
           adSetId: convo.adSetId,
-          adId: convo.adId
+          adId: convo.adId,
+          city: convo.city,
+          stateMx: convo.stateMx
         });
 
         return {
@@ -549,6 +555,15 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
       // Let the dimension handler below deal with this - it will include shipping info
       // Don't return here, continue to dimension handler
     } else {
+      // Detect and store city if mentioned (e.g., "Envían a Hermosillo?")
+      const shippingLocation = detectMexicanLocation(msg);
+      if (shippingLocation) {
+        const cityUpdate = { city: shippingLocation.normalized };
+        if (shippingLocation.type === 'state') cityUpdate.stateMx = shippingLocation.normalized;
+        await updateConversation(psid, cityUpdate);
+        console.log(`📍 City detected in shipping question: ${shippingLocation.normalized}`);
+      }
+
       // Select relevant asset to mention (shipping is already the main topic)
       const asset = selectRelevantAsset(msg, convo, {
         intent: "shipping_info",
@@ -579,7 +594,9 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
           productId: product._id,
           campaignId: convo.campaignId,
           adSetId: convo.adSetId,
-          adId: convo.adId
+          adId: convo.adId,
+          city: convo.city,
+          stateMx: convo.stateMx
         });
 
         let responseText = `Sí, enviamos a todo el país. El envío está incluido en la mayoría de los casos o se calcula automáticamente en Mercado Libre.\n\nTe dejo el link a esa medida específica:\n\n${trackedLink}`;
@@ -626,7 +643,14 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
     const location = detectMexicanLocation(msg);
     const cityName = location ? (location.normalized.charAt(0).toUpperCase() + location.normalized.slice(1)) : "esa ciudad";
 
-    await updateConversation(psid, { lastIntent: "asking_if_local", unknownCount: 0 });
+    // Store city in conversation for sales attribution
+    const updateData = { lastIntent: "asking_if_local", unknownCount: 0 };
+    if (location) {
+      updateData.city = location.normalized;
+      if (location.type === 'state') updateData.stateMx = location.normalized;
+      console.log(`📍 City detected and stored: ${location.normalized}`);
+    }
+    await updateConversation(psid, updateData);
 
     // Check if they're asking about Querétaro specifically
     if (/quer[ée]taro/i.test(msg)) {
@@ -658,10 +682,15 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
         // Confirmed Mexican city or state
         const cityName = location.normalized;
 
-    await updateConversation(psid, {
+    // Store city in conversation for sales attribution
+    const updateData = {
       lastIntent: "city_provided",
-      unknownCount: 0
-    });
+      unknownCount: 0,
+      city: location.normalized
+    };
+    if (location.type === 'state') updateData.stateMx = location.normalized;
+    console.log(`📍 City detected and stored: ${location.normalized}`);
+    await updateConversation(psid, updateData);
 
     // Build context-aware response
     let response = "";
@@ -729,7 +758,9 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
           productId: product._id,
           campaignId: convo.campaignId,
           adSetId: convo.adSetId,
-          adId: convo.adId
+          adId: convo.adId,
+          city: convo.city,
+          stateMx: convo.stateMx
         });
 
         return {
@@ -876,7 +907,9 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
         productId: product._id,
         campaignId: convo.campaignId,
         adSetId: convo.adSetId,
-        adId: convo.adId
+        adId: convo.adId,
+        city: convo.city,
+        stateMx: convo.stateMx
       });
 
       return {
@@ -1035,7 +1068,9 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
                 productId: product._id,
                 campaignId: convo.campaignId,
                 adSetId: convo.adSetId,
-                adId: convo.adId
+                adId: convo.adId,
+                city: convo.city,
+                stateMx: convo.stateMx
               });
               responseText += `• **${option.sizeStr}** por $${option.price}:\n${trackedLink}\n\n`;
             } else {
@@ -1097,7 +1132,9 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
             productId: product._id,
             campaignId: convo.campaignId,
             adSetId: convo.adSetId,
-            adId: convo.adId
+            adId: convo.adId,
+            city: convo.city,
+            stateMx: convo.stateMx
           });
 
           // 🎨 Check if user mentioned a color
@@ -1277,7 +1314,9 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
             productId: product._id,
             campaignId: convo.campaignId,
             adSetId: convo.adSetId,
-            adId: convo.adId
+            adId: convo.adId,
+            city: convo.city,
+            stateMx: convo.stateMx
           });
 
           // Warm, friendly responses

@@ -17,6 +17,10 @@ const conversationSchema = new mongoose.Schema({
   adId: { type: String, default: null },           // Facebook Ad ID (referral.ad_id)
   campaignId: { type: String, default: null },     // Facebook Campaign ID (referral.campaign_id)
   requestedSize: { type: String, default: null },  // Track last size user asked about
+
+  // Location tracking (for sales attribution)
+  city: { type: String, default: null },           // City mentioned by user (e.g., "Hermosillo")
+  stateMx: { type: String, default: null },        // Mexican state (e.g., "Sonora")
   familyShown: { type: String, default: null },     // Track last family shown
   lastUnavailableSize: { type: String, default: null },  // Track unavailable size to detect insistence
   oversizedRepeatCount: { type: Number, default: 0 },  // Track how many times user asked for same oversized dimension

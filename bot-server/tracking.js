@@ -19,7 +19,9 @@ async function generateClickLink(psid, originalUrl, options = {}) {
     productId: options.productId,
     campaignId: options.campaignId,
     adSetId: options.adSetId,
-    adId: options.adId
+    adId: options.adId,
+    city: options.city,
+    stateMx: options.stateMx
   });
 
   await clickLog.save();
