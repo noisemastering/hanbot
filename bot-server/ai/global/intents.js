@@ -600,7 +600,7 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
       }
     }
 
-      let responseText = `Sí realizamos entregas a todo México.\n\n• En Querétaro zona urbana, el envío normalmente va incluido\n• Para el resto del país, el envío está incluido en la mayoría de los casos o se calcula automáticamente en tu compra\n\nPuedes ver todos nuestros productos con envío aquí:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n¿En qué ciudad te encuentras?`;
+      let responseText = `¡Sí! Enviamos a toda la república 📦\n\n¿Qué medida necesitas?`;
 
       // Add asset mention if selected
       if (asset) {

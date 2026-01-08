@@ -167,11 +167,7 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
 
         return {
             type: "text",
-            text:
-            `Sí, entregamos sin problema 🚚✨\n\n` +
-            `En **Querétaro zona urbana**, el envío normalmente **va incluido** 🏡.\n` +
-            `Para el resto del país también enviamos, y puedes comprar con entrega garantizada desde nuestra **Tienda Oficial en Mercado Libre**.\n\n` +
-            `¿En qué ciudad te encuentras? 😊`
+            text: `¡Sí! Enviamos a toda la república 📦\n\n¿Qué medida necesitas?`
         };
     }
 
