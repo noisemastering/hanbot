@@ -138,6 +138,10 @@ function parseDimensions(message) {
   normalized = normalized.replace(/([xX×*]\s*)(\d+)\s+(\d{2})(?=\s|$)/g, '$1$2.$3');
   normalized = normalized.replace(/([xX×*]\s*)(\d+):(\d{2})(?=\s|$)/g, '$1$2.$3');
 
+  // PREPROCESSING: Normalize "más" typo for "m" (common autocorrect: "3 más" → "3m")
+  // Also handles "mas" without accent
+  normalized = normalized.replace(/(\d+(?:\.\d+)?)\s*m[aá]s\b/gi, '$1m');
+
   // PREPROCESSING: Strip out "m" units (e.g., "6.5 m x 3.17 m" → "6.5 x 3.17")
   // This allows all existing patterns to work with messages that include units
   normalized = normalized.replace(/(\d+(?:\.\d+)?)\s*m\b/gi, '$1');
