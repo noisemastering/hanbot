@@ -131,120 +131,90 @@ function OrdersView() {
   };
 
   return (
-    <div className="p-6">
+    <div>
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Pedidos de Mercado Libre</h1>
-        <p className="text-gray-600 mt-1">Seller ID: {sellerId}</p>
+        <h2 className="text-2xl font-bold text-white">Pedidos de Mercado Libre</h2>
+        <p className="text-sm text-gray-400 mt-1">Ventas y pedidos del seller {sellerId}</p>
       </div>
 
       {/* Sales Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         {/* Total Orders */}
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Total Pedidos</p>
-              <p className="text-2xl font-bold text-gray-900">{metrics.totalOrders}</p>
-              {paging.total && paging.total > metrics.totalOrders && (
-                <p className="text-xs text-gray-500 mt-1">
-                  (Mostrando {metrics.totalOrders} de {paging.total})
-                </p>
-              )}
+        <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
+          <div className="text-gray-400 text-sm">Total Pedidos</div>
+          <div className="text-2xl font-bold text-white mt-1">{metrics.totalOrders}</div>
+          {paging.total && paging.total > metrics.totalOrders && (
+            <div className="text-xs text-gray-500 mt-1">
+              Mostrando {metrics.totalOrders} de {paging.total.toLocaleString()}
             </div>
-            <div className="w-12 h-12 bg-blue-100 rounded-full flex items-center justify-center">
-              <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-              </svg>
-            </div>
-          </div>
+          )}
         </div>
 
         {/* Total Revenue */}
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Ingresos Totales</p>
-              <p className="text-2xl font-bold text-green-600">{formatCurrency(metrics.totalRevenue)}</p>
-              <p className="text-xs text-gray-500 mt-1">Últimos {metrics.totalOrders} pedidos</p>
-            </div>
-            <div className="w-12 h-12 bg-green-100 rounded-full flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
+        <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
+          <div className="text-gray-400 text-sm">Ingresos Totales</div>
+          <div className="text-2xl font-bold text-green-400 mt-1">{formatCurrency(metrics.totalRevenue)}</div>
+          <div className="text-xs text-gray-500 mt-1">Últimos {metrics.totalOrders} pedidos</div>
         </div>
 
         {/* Average Order Value */}
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Ticket Promedio</p>
-              <p className="text-2xl font-bold text-gray-900">{formatCurrency(metrics.avgOrderValue)}</p>
-              <p className="text-xs text-gray-500 mt-1">{metrics.paidOrders} pedidos pagados</p>
-            </div>
-            <div className="w-12 h-12 bg-purple-100 rounded-full flex items-center justify-center">
-              <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
-              </svg>
-            </div>
-          </div>
+        <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
+          <div className="text-gray-400 text-sm">Ticket Promedio</div>
+          <div className="text-2xl font-bold text-white mt-1">{formatCurrency(metrics.avgOrderValue)}</div>
+          <div className="text-xs text-gray-500 mt-1">{metrics.paidOrders} pedidos pagados</div>
         </div>
 
         {/* Facebook Attribution */}
-        <div className="bg-white rounded-lg shadow p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-gray-600">Atribución Facebook</p>
-              {sellerInfo?.psid ? (
-                <>
-                  <p className="text-lg font-bold text-blue-600">Conectado</p>
-                  <p className="text-xs text-gray-500 mt-1">PSID: {sellerInfo.psid.substring(0, 12)}...</p>
-                </>
-              ) : (
-                <>
-                  <p className="text-lg font-bold text-gray-400">No conectado</p>
-                  <p className="text-xs text-gray-500 mt-1">Sin PSID asociado</p>
-                </>
-              )}
-            </div>
-            <div className={`w-12 h-12 ${sellerInfo?.psid ? 'bg-blue-100' : 'bg-gray-100'} rounded-full flex items-center justify-center`}>
-              <svg className={`w-6 h-6 ${sellerInfo?.psid ? 'text-blue-600' : 'text-gray-400'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
-              </svg>
-            </div>
-          </div>
+        <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
+          <div className="text-gray-400 text-sm">Atribución Facebook</div>
+          {sellerInfo?.psid ? (
+            <>
+              <div className="text-lg font-bold text-blue-400 mt-1">Conectado</div>
+              <div className="text-xs text-gray-500 mt-1">PSID: {sellerInfo.psid.substring(0, 12)}...</div>
+            </>
+          ) : (
+            <>
+              <div className="text-lg font-bold text-gray-500 mt-1">No conectado</div>
+              <div className="text-xs text-gray-500 mt-1">Sin PSID asociado</div>
+            </>
+          )}
         </div>
       </div>
 
       {/* Controls */}
-      <div className="mb-6 flex gap-4 items-center">
-        <input
-          type="text"
-          value={sellerId}
-          onChange={(e) => setSellerId(e.target.value)}
-          placeholder="Seller ID"
-          className="border border-gray-300 rounded px-3 py-2 w-48"
-        />
-        <button
-          onClick={fetchOrders}
-          disabled={loading}
-          className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:bg-gray-400"
-        >
-          {loading ? 'Cargando...' : 'Actualizar Pedidos'}
-        </button>
-
-        {paging.total !== undefined && (
-          <span className="text-gray-600">
-            Total: {paging.total} pedidos
-          </span>
-        )}
+      <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4 mb-6">
+        <div className="flex flex-wrap gap-4 items-center">
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Seller ID</label>
+            <input
+              type="text"
+              value={sellerId}
+              onChange={(e) => setSellerId(e.target.value)}
+              placeholder="Seller ID"
+              className="px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500 w-48"
+            />
+          </div>
+          <div className="flex items-end">
+            <button
+              onClick={fetchOrders}
+              disabled={loading}
+              className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg disabled:opacity-50 transition-colors"
+            >
+              {loading ? 'Cargando...' : 'Actualizar Pedidos'}
+            </button>
+          </div>
+          {paging.total !== undefined && (
+            <div className="text-gray-400 ml-auto">
+              Total en ML: <span className="text-white font-semibold">{paging.total.toLocaleString()}</span> pedidos
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Error */}
       {error && (
-        <div className="mb-6 bg-red-50 border border-red-200 text-red-800 px-4 py-3 rounded">
+        <div className="mb-6 bg-red-500/20 border border-red-500/30 text-red-300 px-4 py-3 rounded-lg">
           <strong>Error:</strong> {error}
         </div>
       )}
@@ -252,91 +222,131 @@ function OrdersView() {
       {/* Loading */}
       {loading && (
         <div className="text-center py-12">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600"></div>
-          <p className="mt-4 text-gray-600">Cargando pedidos...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500 mx-auto"></div>
+          <p className="mt-4 text-gray-400">Cargando pedidos...</p>
         </div>
       )}
 
       {/* Orders Table */}
       {!loading && !error && orders.length === 0 && (
-        <div className="text-center py-12 bg-gray-50 rounded">
-          <p className="text-gray-600">No hay pedidos para mostrar</p>
+        <div className="text-center py-12 bg-gray-800/30 rounded-lg border border-gray-700/50">
+          <div className="text-6xl mb-4">📦</div>
+          <h3 className="text-lg font-semibold text-white mb-2">No hay pedidos</h3>
+          <p className="text-gray-400">No se encontraron pedidos para este vendedor</p>
         </div>
       )}
 
       {!loading && orders.length > 0 && (
-        <div className="bg-white shadow-md rounded-lg overflow-hidden">
+        <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="w-full" style={{ minWidth: '1200px' }}>
+              <thead className="bg-gray-900/50">
                 <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-28">
                     ID Pedido
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-24">
                     Estado
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-36">
                     Fecha
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-32">
                     Comprador
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider" style={{ minWidth: '350px' }}>
                     Producto
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider w-16">
                     Cant
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider w-28">
                     Total
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
+                  <th className="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider w-24">
                     Pago
                   </th>
                 </tr>
               </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
+              <tbody className="divide-y divide-gray-700/50">
                 {orders.map((order) => {
                   const firstItem = order.order_items?.[0];
                   const totalQty = order.order_items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
                   const paymentStatus = order.payments?.[0]?.status || 'N/A';
-                  const paymentStatusClass = paymentStatus === 'approved' ? 'text-green-600' :
-                                           paymentStatus === 'pending' ? 'text-yellow-600' :
-                                           paymentStatus === 'rejected' ? 'text-red-600' : 'text-gray-600';
+                  const paymentStatusClass = paymentStatus === 'approved'
+                    ? 'bg-green-500/20 text-green-300 border border-green-500/30'
+                    : paymentStatus === 'pending'
+                    ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
+                    : paymentStatus === 'rejected'
+                    ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                    : 'bg-gray-500/20 text-gray-300 border border-gray-500/30';
+
+                  const orderStatusClass = order.status === 'paid'
+                    ? 'bg-green-500/20 text-green-300 border border-green-500/30'
+                    : order.status === 'confirmed'
+                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                    : order.status === 'cancelled'
+                    ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                    : 'bg-gray-500/20 text-gray-300 border border-gray-500/30';
 
                   return (
-                    <tr key={order.id} className="hover:bg-gray-50">
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-blue-600">
-                        {order.id}
+                    <tr key={order.id} className="hover:bg-gray-700/30 transition-colors">
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <span className="text-sm font-mono text-cyan-400 hover:text-cyan-300 cursor-pointer" title={`Order ID: ${order.id}`}>
+                          {order.id}
+                        </span>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap">
-                        <span className={`px-2 py-1 inline-flex text-xs leading-5 font-semibold rounded-full ${getStatusBadgeClass(order.status)}`}>
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <span className={`px-2 py-0.5 inline-flex text-xs font-medium rounded ${orderStatusClass}`}>
                           {order.status}
                         </span>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
+                      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-300">
                         {formatDate(order.date_created)}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900">
-                        {order.buyer?.nickname || 'N/A'}
+                      <td className="px-3 py-3 whitespace-nowrap">
+                        <span className="text-sm text-white font-medium">{order.buyer?.nickname || 'N/A'}</span>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-900 max-w-xs truncate" title={firstItem?.item?.title}>
-                        {firstItem?.item?.title || 'N/A'}
-                        {order.order_items?.length > 1 && (
-                          <span className="text-xs text-gray-500 ml-1">
-                            (+{order.order_items.length - 1} más)
-                          </span>
-                        )}
+                      <td className="px-3 py-3 text-sm text-gray-300">
+                        <div className="flex items-start gap-2">
+                          {firstItem?.item?.thumbnail && (
+                            <img
+                              src={firstItem.item.thumbnail}
+                              alt=""
+                              className="w-10 h-10 rounded object-cover flex-shrink-0 border border-gray-700"
+                            />
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p
+                              className="text-sm text-gray-200"
+                              style={{
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                                overflow: 'hidden'
+                              }}
+                              title={firstItem?.item?.title}
+                            >
+                              {firstItem?.item?.title || 'N/A'}
+                            </p>
+                            {order.order_items?.length > 1 && (
+                              <span className="text-xs text-cyan-400 font-medium">
+                                +{order.order_items.length - 1} producto(s) más
+                              </span>
+                            )}
+                          </div>
+                        </div>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm text-gray-900 text-center">
-                        {totalQty}
+                      <td className="px-3 py-3 whitespace-nowrap text-sm text-center">
+                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-gray-700 text-white font-semibold text-xs">
+                          {totalQty}
+                        </span>
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm font-semibold text-gray-900">
+                      <td className="px-3 py-3 whitespace-nowrap text-sm font-bold text-green-400 text-right">
                         {formatCurrency(order.paid_amount || order.total_amount)}
                       </td>
-                      <td className="px-4 py-3 whitespace-nowrap text-sm">
-                        <span className={`font-medium ${paymentStatusClass}`}>
+                      <td className="px-3 py-3 whitespace-nowrap text-center">
+                        <span className={`px-2 py-0.5 inline-flex text-xs font-medium rounded ${paymentStatusClass}`}>
                           {paymentStatus}
                         </span>
                       </td>
@@ -354,21 +364,21 @@ function OrdersView() {
         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
           {/* Attribution Details */}
           {sellerInfo && (
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded text-sm">
-              <strong className="text-blue-900">Información de Atribución</strong>
-              <div className="mt-2 space-y-1 text-blue-800">
+            <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg text-sm">
+              <strong className="text-blue-300">Información de Atribución</strong>
+              <div className="mt-2 space-y-1 text-blue-200">
                 <div><strong>Seller:</strong> {sellerInfo.sellerInfo?.nickname || sellerInfo.sellerId}</div>
                 <div><strong>Email:</strong> {sellerInfo.sellerInfo?.email || 'N/A'}</div>
                 {sellerInfo.psid && (
                   <>
                     <div><strong>PSID (Facebook):</strong> {sellerInfo.psid}</div>
-                    <div className="mt-2 px-3 py-2 bg-green-100 border border-green-300 rounded">
+                    <div className="mt-2 px-3 py-2 bg-green-500/20 border border-green-500/30 rounded text-green-300">
                       ✅ <strong>Conversión exitosa:</strong> Este vendedor se conectó desde un click de Facebook
                     </div>
                   </>
                 )}
                 {!sellerInfo.psid && (
-                  <div className="mt-2 px-3 py-2 bg-yellow-100 border border-yellow-300 rounded">
+                  <div className="mt-2 px-3 py-2 bg-yellow-500/20 border border-yellow-500/30 rounded text-yellow-300">
                     ⚠️ No hay PSID asociado - Autorización directa (sin click de Facebook)
                   </div>
                 )}
@@ -378,15 +388,15 @@ function OrdersView() {
           )}
 
           {/* Technical Debug Info */}
-          <div className="p-4 bg-gray-50 border border-gray-200 rounded text-sm text-gray-600">
-            <strong className="text-gray-900">Debug Técnico</strong>
+          <div className="p-4 bg-gray-800/30 border border-gray-700/50 rounded-lg text-sm text-gray-400">
+            <strong className="text-gray-300">Debug Técnico</strong>
             <div className="mt-2 space-y-1">
-              <div>✅ Seller ID: {sellerId}</div>
-              <div>✅ Authorization: Bearer token activo</div>
-              <div>✅ Pedidos obtenidos: {orders.length}</div>
-              <div>✅ URL: {API_URL}/ml/orders/{sellerId}</div>
-              <div>✅ Total en ML: {paging.total || 'N/A'}</div>
-              <div>✅ API Status: Funcionando correctamente</div>
+              <div>✅ Seller ID: <span className="text-white">{sellerId}</span></div>
+              <div>✅ Authorization: <span className="text-green-400">Bearer token activo</span></div>
+              <div>✅ Pedidos obtenidos: <span className="text-white">{orders.length}</span></div>
+              <div>✅ URL: <span className="text-cyan-400 font-mono text-xs">{API_URL}/ml/orders/{sellerId}</span></div>
+              <div>✅ Total en ML: <span className="text-white">{paging.total?.toLocaleString() || 'N/A'}</span></div>
+              <div>✅ API Status: <span className="text-green-400">Funcionando correctamente</span></div>
             </div>
           </div>
         </div>

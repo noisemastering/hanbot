@@ -86,7 +86,7 @@ async function handleTemplateCampaignFlow(msg, psid, convo, campaign) {
     return {
       type: "text",
       text:
-        `Realizamos envíos a todo México 🇲🇽 con entrega de **2 a 5 días hábiles**.\n` +
+        `Realizamos envíos a todo México 🇲🇽 con entrega de 2 a 5 días hábiles.\n` +
         `¿Te gustaría saber el costo de envío para tu zona?`,
     };
   }
@@ -97,17 +97,16 @@ async function handleTemplateCampaignFlow(msg, psid, convo, campaign) {
     return {
       type: "text",
       text:
-        `Puedes comunicarte con nuestro equipo por WhatsApp 📞 al **+52 33 1234 5678** o continuar por aquí si prefieres 🌿.`,
+        `Puedes comunicarte con nuestro equipo por WhatsApp 📞 al +52 33 1234 5678 o continuar por aquí si prefieres 🌿.`,
     };
   }
 
-  // 🧠 9. Fallback general dentro del flujo
+  // 🧠 9. Fallback general dentro del flujo - show price range instead of generic question
   await updateConversation(psid, { lastIntent: "campaign_fallback" });
   return {
     type: "text",
-    text:
-      `Puedo ayudarte con precios, medidas, materiales o cotizaciones de ${campaign.name} 🌿.\n` +
-      `¿Sobre qué te gustaría saber más?`,
+    text: `Los precios de ${campaign.name} van desde $320 hasta $1,800 dependiendo de la medida 📐\n\n` +
+          `¿Qué medida necesitas? Te doy el precio exacto 😊`,
   };
 }
 

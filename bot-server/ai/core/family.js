@@ -25,7 +25,7 @@ async function handleFamilyFlow(cleanMsg, psid, convo) {
 
   if (convo.familyShown === familyDetected.name) {
     await updateConversation(psid, { lastIntent: "family_repeat", unknownCount: 0 });
-    return { type: "text", text: `Claro 😊, seguimos con ${familyDetected.name.toLowerCase()}. ¿Te interesa ver las opciones en **beige confeccionada** o en **rollos monofilamento**?` };
+    return { type: "text", text: `Claro 😊, seguimos con ${familyDetected.name.toLowerCase()}. ¿Te interesa ver las opciones en beige confeccionada o en rollos monofilamento?` };
   }
 
   await updateConversation(psid, { familyShown: familyDetected.name, lastIntent: "family_info", unknownCount: 0 });
@@ -45,14 +45,14 @@ async function handleFamilyFlow(cleanMsg, psid, convo) {
       text:
         `Sí, contamos con ${familyInfo.name.toLowerCase()} 🌿\n` +
         `${familyInfo.description}\n\nUsos comunes:\n- ${familyInfo.commonUses?.join("\n- ") || "Jardines e invernaderos"}\n\n` +
-        `¿Quieres ver opciones **beige confeccionadas** o **en rollo monofilamento**?`,
+        `¿Quieres ver opciones beige confeccionadas o en rollo monofilamento?`,
       imageUrl: familyInfo.imageUrl || "https://i.imgur.com/X3vYt8E.png"
     };
   }
 
   return {
     type: "text",
-    text: `Sí, contamos con ${familyDetected.name.toLowerCase()}. ${familyDetected.description}\n¿Buscas algún tipo en especial, como **beige** o **monofilamento**?`
+    text: `Sí, contamos con ${familyDetected.name.toLowerCase()}. ${familyDetected.description}\n¿Buscas algún tipo en especial, como beige o monofilamento?`
   };
 }
 

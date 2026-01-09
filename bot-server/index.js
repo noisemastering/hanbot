@@ -1083,6 +1083,34 @@ setTimeout(() => {
   setInterval(runMLPriceSync, ML_PRICE_SYNC_INTERVAL);
 }, 60000);
 
+// Conversion Correlation - runs every 4 hours
+const CORRELATION_INTERVAL = 4 * 60 * 60 * 1000; // 4 hours in milliseconds
+const DEFAULT_SELLER_ID = '482595248';
+
+async function runConversionCorrelation() {
+  try {
+    const { correlateClicksToOrders } = require('./utils/conversionCorrelation');
+    console.log('🔗 [Scheduled] Starting conversion correlation...');
+    const results = await correlateClicksToOrders(DEFAULT_SELLER_ID, {
+      timeWindowHours: 48,
+      orderLimit: 50,
+      dryRun: false
+    });
+    console.log(`✅ [Scheduled] Correlation complete: ${results.ordersProcessed} orders processed, ${results.clicksCorrelated} clicks correlated`);
+  } catch (error) {
+    console.error('❌ [Scheduled] Conversion correlation failed:', error.message);
+  }
+}
+
+// Start periodic correlation after 2 minutes (stagger from price sync)
+setTimeout(() => {
+  console.log('⏰ Conversion correlation scheduled to run every 4 hours');
+  // Run immediately on startup
+  runConversionCorrelation();
+  // Then run periodically
+  setInterval(runConversionCorrelation, CORRELATION_INTERVAL);
+}, 120000);
+
 server.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
   console.log(`📡 Webhook endpoint: http://localhost:${PORT}/webhook`);

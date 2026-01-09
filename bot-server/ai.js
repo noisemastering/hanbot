@@ -165,7 +165,7 @@ async function generateReply(userMessage, psid) {
         await updateConversation(psid, { lastIntent: "family_repeat", unknownCount: 0 });
         return {
           type: "text",
-          text: `Claro 😊, seguimos con ${familyDetected.name.toLowerCase()}. ¿Te interesa ver las opciones en **beige confeccionada** o en **rollos monofilamento**?`
+          text: `Claro 😊, seguimos con ${familyDetected.name.toLowerCase()}. ¿Te interesa ver las opciones en beige confeccionada o en rollos monofilamento?`
         };
       }
 
@@ -200,7 +200,7 @@ async function generateReply(userMessage, psid) {
             `Sí, contamos con ${familyInfo.name.toLowerCase()} 🌿\n` +
             `${familyInfo.description}\n\n` +
             `Usos comunes:\n- ${familyInfo.commonUses?.join("\n- ") || "Jardines e invernaderos"}\n\n` +
-            `¿Quieres ver opciones **beige confeccionadas** o **en rollo monofilamento**?`,
+            `¿Quieres ver opciones beige confeccionadas o en rollo monofilamento?`,
           imageUrl: familyInfo.imageUrl || "https://i.imgur.com/X3vYt8E.png"
         };
       }
@@ -210,7 +210,7 @@ async function generateReply(userMessage, psid) {
         type: "text",
         text:
           `Sí, contamos con ${familyDetected.name.toLowerCase()}. ${familyDetected.description}\n` +
-          `¿Buscas algún tipo en especial, como **beige** o **monofilamento**?`
+          `¿Buscas algún tipo en especial, como beige o monofilamento?`
       };
     }
 
@@ -233,9 +233,9 @@ async function generateReply(userMessage, psid) {
     if (isColorQuery(cleanMsg)) {
       await updateConversation(psid, { lastIntent: "color_query", unknownCount: 0 });
       const colorResponses = [
-        `Por ahora solo manejamos **malla sombra beige** en versión confeccionada 🌿. ¿Te gustaría ver las medidas disponibles?`,
-        `Actualmente tenemos disponible solo el color **beige** en malla confeccionada. ¿Quieres que te muestre los tamaños?`,
-        `De momento contamos únicamente con **beige**, que es nuestro color más popular 😊. ¿Te interesa ver precios y medidas?`
+        `Por ahora solo manejamos malla sombra beige en versión confeccionada 🌿. ¿Te gustaría ver las medidas disponibles?`,
+        `Actualmente tenemos disponible solo el color beige en malla confeccionada. ¿Quieres que te muestre los tamaños?`,
+        `De momento contamos únicamente con beige, que es nuestro color más popular 😊. ¿Te interesa ver precios y medidas?`
       ];
       return {
         type: "text",
@@ -247,8 +247,8 @@ async function generateReply(userMessage, psid) {
     if (isApproximateMeasure(cleanMsg)) {
       await updateConversation(psid, { lastIntent: "measurement_guidance", unknownCount: 0 });
       const guidanceResponses = [
-        `¡Perfecto! 📏 Te recomiendo medir el área total y luego elegir una malla aproximadamente **1 metro cuadrado más pequeña** que el espacio. Esto deja espacio para los tensores y asegura una instalación adecuada.\n\nCuando tengas la medida exacta, con gusto te ayudo a elegir el tamaño ideal 🌿`,
-        `Muy bien pensado medir con precisión 👍. Un consejo: la malla debe ser cerca de **1m² más pequeña** que el área total para dejar espacio a los tensores.\n\n¿Ya tienes una idea aproximada de las dimensiones?`,
+        `¡Perfecto! 📏 Te recomiendo medir el área total y luego elegir una malla aproximadamente 1 metro cuadrado más pequeña que el espacio. Esto deja espacio para los tensores y asegura una instalación adecuada.\n\nCuando tengas la medida exacta, con gusto te ayudo a elegir el tamaño ideal 🌿`,
+        `Muy bien pensado medir con precisión 👍. Un consejo: la malla debe ser cerca de 1m² más pequeña que el área total para dejar espacio a los tensores.\n\n¿Ya tienes una idea aproximada de las dimensiones?`,
         `Excelente idea medir bien 📐. Recuerda que la malla debe ser un poco más pequeña que el área (aproximadamente 1m² menos) para los tensores.\n\nCuando tengas las medidas, cuéntame y te sugiero la opción perfecta 🌿`
       ];
       return {
@@ -311,10 +311,10 @@ async function generateReply(userMessage, psid) {
         return {
           type: "text",
           text:
-            `Perfecto. Por ahora **Borde** aún no tiene productos disponibles.\n` +
-            `De **malla sombra** puedo mostrarte:\n` +
-            `• **Beige confeccionada** (medidas listas con refuerzo y ojillos)\n` +
-            `• **Rollos** (beige o monofilamento)\n\n` +
+            `Perfecto. Por ahora Borde aún no tiene productos disponibles.\n` +
+            `De malla sombra puedo mostrarte:\n` +
+            `• Beige confeccionada (medidas listas con refuerzo y ojillos)\n` +
+            `• Rollos (beige o monofilamento)\n\n` +
             `¿Cuál te interesa ver primero?`
         };
       }
@@ -325,14 +325,14 @@ async function generateReply(userMessage, psid) {
         return {
           type: "text",
           text:
-            `¿Prefieres **beige confeccionada** (medidas) o **rollos**?\n` +
-            `Si te interesan rollos, tengo **beige** y **monofilamento (negra)**.`
+            `¿Prefieres beige confeccionada (medidas) o rollos?\n` +
+            `Si te interesan rollos, tengo beige y monofilamento (negra).`
         };
       }
 
       // Si no hay contexto útil, no dispares búsquedas ciegas
       await updateConversation(psid, { lastIntent: "confirm_noop" });
-      return { type: "text", text: `¡Listo! Dime si quieres ver **beige confeccionada** o **rollos** y te paso opciones. 😊` };
+      return { type: "text", text: `¡Listo! Dime si quieres ver beige confeccionada o rollos y te paso opciones. 😊` };
     }
 
     // 6) Búsqueda de productos (solo si hay palabras clave reales)

@@ -523,7 +523,7 @@ function generateSizeResponse(options) {
   if (requestedDim && isCustomOrder(requestedDim)) {
     const inBusinessHours = isBusinessHours();
 
-    let customOrderText = `La medida de **${requestedDim.width}x${requestedDim.height}m** es un pedido especial que requiere fabricación personalizada.\n\n`;
+    let customOrderText = `La medida de ${requestedDim.width}x${requestedDim.height}m es un pedido especial que requiere fabricación personalizada.\n\n`;
     customOrderText += `Este tipo de medidas necesitan cotización directa con nuestro equipo de ventas.\n\n`;
 
     if (businessInfo) {
@@ -549,9 +549,9 @@ function generateSizeResponse(options) {
     // Generic responses WITHOUT ML link (link shown only on buying intent or when user asks for details)
     suggestedSizes.push(exact.sizeStr);
     responses.push(
-      `¡Claro! 😊 De **${exact.sizeStr}** la tenemos en $${exact.price}`,
-      `¡Perfecto! La **${exact.sizeStr}** está disponible por $${exact.price} 🌿`,
-      `Con gusto 😊 La malla de **${exact.sizeStr}** la manejamos en $${exact.price}`
+      `¡Claro! 😊 De ${exact.sizeStr} la tenemos en $${exact.price}`,
+      `¡Perfecto! La ${exact.sizeStr} está disponible por $${exact.price} 🌿`,
+      `Con gusto 😊 La malla de ${exact.sizeStr} la manejamos en $${exact.price}`
     );
   } else {
     const parts = [];
@@ -561,13 +561,13 @@ function generateSizeResponse(options) {
       // We have a size that can cover the requested dimensions
       if (requestedDim) {
         parts.push(`La medida exacta de ${requestedDim.width}x${requestedDim.height}m no la manejamos, pero tengo dos opciones para ti:\n`);
-        parts.push(`\n**Opción 1:** Medida estándar más cercana que cubre tus dimensiones:`);
-        parts.push(`\n• **${bigger.sizeStr}** por $${bigger.price}`);
+        parts.push(`\nOpción 1: Medida estándar más cercana que cubre tus dimensiones:`);
+        parts.push(`\n• ${bigger.sizeStr} por $${bigger.price}`);
         suggestedSizes.push(bigger.sizeStr);
 
         // ALWAYS mention custom fabrication option with contact info
         if (businessInfo) {
-          parts.push(`\n\n**Opción 2:** Fabricación a la medida exacta (${requestedDim.width}x${requestedDim.height}m)`);
+          parts.push(`\n\nOpción 2: Fabricación a la medida exacta (${requestedDim.width}x${requestedDim.height}m)`);
           parts.push(`\nPara cotizar medidas personalizadas, contáctanos:`);
           parts.push(`\n📞 ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}`);
           parts.push(`\n🕓 ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}`);
@@ -577,7 +577,7 @@ function generateSizeResponse(options) {
       } else {
         parts.push(`Esa medida no la manejamos como estándar.\n`);
         parts.push(`\nLa medida más cercana disponible es:`);
-        parts.push(`\n• **${bigger.sizeStr}** por $${bigger.price}`);
+        parts.push(`\n• ${bigger.sizeStr} por $${bigger.price}`);
         suggestedSizes.push(bigger.sizeStr);
         parts.push('\n\n¿Te interesa esta opción?');
       }
@@ -588,22 +588,22 @@ function generateSizeResponse(options) {
 
         if (requestedDim) {
           parts.push(`La medida de ${requestedDim.width}x${requestedDim.height}m excede nuestras medidas estándar.`);
-          parts.push(`\n\nNuestra medida más grande disponible es **${largest.sizeStr}** por $${largest.price}.`);
+          parts.push(`\n\nNuestra medida más grande disponible es ${largest.sizeStr} por $${largest.price}.`);
           suggestedSizes.push(largest.sizeStr);
         } else {
           parts.push(`Esa medida excede nuestras medidas estándar.`);
-          parts.push(`\n\nLa más grande disponible es **${largest.sizeStr}** por $${largest.price}.`);
+          parts.push(`\n\nLa más grande disponible es ${largest.sizeStr} por $${largest.price}.`);
           suggestedSizes.push(largest.sizeStr);
         }
       }
 
       // Offer custom fabrication
       if (businessInfo && requestedDim) {
-        parts.push(`\n\n**Para la medida que necesitas (${requestedDim.width}x${requestedDim.height}m), podemos fabricarla a la medida**. Para cotizar, contáctanos:\n`);
+        parts.push(`\n\nPara la medida que necesitas (${requestedDim.width}x${requestedDim.height}m), podemos fabricarla a la medida. Para cotizar, contáctanos:\n`);
         parts.push(`\n📞 ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}`);
         parts.push(`\n🕓 ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}`);
       } else if (businessInfo) {
-        parts.push(`\n\n**Para medidas personalizadas, contáctanos:**\n`);
+        parts.push(`\n\nPara medidas personalizadas, contáctanos:\n`);
         parts.push(`\n📞 ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}`);
         parts.push(`\n🕓 ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}`);
       }

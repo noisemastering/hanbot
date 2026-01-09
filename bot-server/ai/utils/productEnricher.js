@@ -79,7 +79,7 @@ function buildFullDescription(product) {
   const parts = [];
 
   // Product name
-  parts.push(`**${product.name}**`);
+  parts.push(`${product.name}`);
 
   // Add generation context
   if (product.generation > 1 && product.parentId) {
@@ -181,7 +181,7 @@ async function formatProductForBot(product, options = {}) {
   }
 
   // Default style - balanced
-  response = `**${enriched.name}**`;
+  response = `${enriched.name}`;
 
   // Add parent context
   if (includeParentContext && enriched.parentContext) {

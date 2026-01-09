@@ -97,14 +97,14 @@ async function handleMultipleSizes(message, psid, convo, campaignRef = null) {
 
     if (exact) {
       // We have this size exactly!
-      responseParts.push(`**${dim.width}x${dim.height}m**: Sí tenemos, $${exact.price}`);
+      responseParts.push(`${dim.width}x${dim.height}m: Sí tenemos, $${exact.price}`);
     } else if (bigger) {
       // We have a size that can cover this dimension
-      responseParts.push(`**${dim.width}x${dim.height}m**: No tenemos exacta, pero ${bigger.sizeStr} te cubre ($${bigger.price})`);
+      responseParts.push(`${dim.width}x${dim.height}m: No tenemos exacta, pero ${bigger.sizeStr} te cubre ($${bigger.price})`);
     } else {
       // Size too large - needs custom fabrication
       const largest = availableSizes[availableSizes.length - 1];
-      responseParts.push(`**${dim.width}x${dim.height}m**: Medida especial (nuestra más grande estándar es ${largest?.sizeStr || "10x5m"}). Requiere cotización.`);
+      responseParts.push(`${dim.width}x${dim.height}m: Medida especial (nuestra más grande estándar es ${largest?.sizeStr || "10x5m"}). Requiere cotización.`);
     }
   }
 
@@ -118,7 +118,7 @@ async function handleMultipleSizes(message, psid, convo, campaignRef = null) {
   let finalText = responseParts.join("\n\n");
 
   if (needsCustom && businessInfo) {
-    finalText += `\n\n**Para medidas personalizadas**, contáctanos:\n📞 ${businessInfo.phones?.join(" / ")}\n🕓 ${businessInfo.hours}`;
+    finalText += `\n\nPara medidas personalizadas, contáctanos:\n📞 ${businessInfo.phones?.join(" / ")}\n🕓 ${businessInfo.hours}`;
   }
 
   finalText += `\n\n¿Te interesa alguna de estas opciones?`;

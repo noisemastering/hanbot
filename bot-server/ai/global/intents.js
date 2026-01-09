@@ -204,12 +204,12 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     return {
       type: "text",
       text: "Manejamos mallas sombra en diferentes porcentajes:\n\n" +
-            "☀️ **35%** - Sombra ligera, ideal para viveros y plantas que necesitan mucha luz\n" +
-            "🌤️ **50%** - Sombra media, buena para hortalizas y estacionamientos\n" +
-            "⛅ **70%** - Sombra media-alta, popular para terrazas y patios\n" +
-            "🌥️ **80%** - Sombra alta, la más vendida para casas y jardines\n" +
-            "☁️ **90%** - Sombra muy alta, máxima protección solar\n\n" +
-            "El más popular es el **80%**, ofrece buena sombra sin oscurecer demasiado. ¿Cuál te interesa?"
+            "☀️ 35% - Sombra ligera, ideal para viveros y plantas que necesitan mucha luz\n" +
+            "🌤️ 50% - Sombra media, buena para hortalizas y estacionamientos\n" +
+            "⛅ 70% - Sombra media-alta, popular para terrazas y patios\n" +
+            "🌥️ 80% - Sombra alta, la más vendida para casas y jardines\n" +
+            "☁️ 90% - Sombra muy alta, máxima protección solar\n\n" +
+            "El más popular es el 80%, ofrece buena sombra sin oscurecer demasiado. ¿Cuál te interesa?"
     };
   }
 
@@ -1072,9 +1072,9 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
                 city: convo.city,
                 stateMx: convo.stateMx
               });
-              responseText += `• **${option.sizeStr}** por $${option.price}:\n${trackedLink}\n\n`;
+              responseText += `• ${option.sizeStr} por $${option.price}:\n${trackedLink}\n\n`;
             } else {
-              responseText += `• **${option.sizeStr}** por $${option.price}\n\n`;
+              responseText += `• ${option.sizeStr} por $${option.price}\n\n`;
             }
           }
         } else {
@@ -1084,7 +1084,7 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
 
         // Always offer custom fabrication option
         const info = await getBusinessInfo();
-        responseText += `\n📐 **También fabricamos a la medida exacta** (${dimensions.width}m x ${dimensions.height}m).\n`;
+        responseText += `\n📐 También fabricamos a la medida exacta (${dimensions.width}m x ${dimensions.height}m).\n`;
         responseText += `Para cotizar, contáctanos:\n📞 ${info?.phones?.[0] || '442-790-2000'}\n`;
 
         responseText += `\n💡 ¿Te sirve la medida estándar o prefieres cotizar fabricación a medida?`;

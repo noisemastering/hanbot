@@ -37,7 +37,7 @@ const campaignProductSchema = new mongoose.Schema(
     // Fallback genérico
     fallbackMessage: {
       type: String,
-      default: "Puedo ayudarte con precios, medidas o cotizaciones de la malla sombra confeccionada 🌿. ¿Qué te gustaría saber?"
+      default: "Los precios van desde $320 hasta $1,800 dependiendo de la medida 📐\n\n¿Qué medida necesitas?"
     },
 
     relatedVariants: [

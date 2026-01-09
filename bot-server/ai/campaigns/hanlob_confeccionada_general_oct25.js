@@ -2,6 +2,7 @@
 const { updateConversation } = require("../../conversationManager");
 const { getCampaignProductFromConversation } = require("../../utils/productCompatibility");
 const { generateClickLink } = require("../../tracking");
+const { getAvailableSizes } = require("../../measureHandler");
 
 // --- Helpers ---
 function parseSize(str) {
@@ -77,12 +78,30 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
   // 0) Carga de producto guía de la campaña (usando nuevo sistema de productos)
   const product = getCampaignProductFromConversation(convo, campaign);
 
-  // Si no hay producto asociado, cae a un fallback mínimo de campaña
+  // Si no hay producto asociado, try to show actual price range from available sizes
   if (!product) {
+    // Check if user is asking about prices/sizes - fetch actual data
+    if (/precio|medida|cu[aá]nto|vale|costo|tamañ|dimensi/i.test(clean)) {
+      const availableSizes = await getAvailableSizes(convo);
+
+      if (availableSizes.length > 0) {
+        const smallest = availableSizes[0];
+        const largest = availableSizes[availableSizes.length - 1];
+
+        await updateConversation(psid, { lastIntent: "price_range_shown" });
+        return {
+          type: "text",
+          text: `Los precios dependen de la medida que necesites 📐\n\n` +
+                `Tenemos desde ${smallest.sizeStr} en $${smallest.price} hasta ${largest.sizeStr} en $${largest.price}.\n\n` +
+                `¿Qué medida necesitas? Si me dices las dimensiones te doy el precio exacto 😊`
+        };
+      }
+    }
+
     await updateConversation(psid, { lastIntent: "campaign_fallback" });
     return {
       type: "text",
-      text: "Puedo ayudarte con precios, medidas o cotizaciones de la malla sombra confeccionada 🌿. ¿Qué te gustaría saber?"
+      text: "Los precios van desde $320 hasta $1,800 dependiendo de la medida 📐\n\n¿Qué medida necesitas para tu proyecto?"
     };
   }
 
@@ -116,7 +135,7 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
       return {
         type: "text",
         text:
-          `¡Perfecto! Tengo **${exact.size}** disponible.\n` +
+          `¡Perfecto! Tengo ${exact.size} disponible.\n` +
           `${line}\n\n` +
           `¿Te interesa esta medida o buscas otra? 🌿`
       };
@@ -132,7 +151,7 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     if (upper) suggestions += `${await variantLine(upper, true, psid, convo)}\n`;
 
     // Ofrecer confección a la medida
-    suggestions += `\nTambién puedo confeccionarla **a la medida**. ¿Te interesa alguna de estas o prefieres a la medida?`;
+    suggestions += `\nTambién puedo confeccionarla a la medida. ¿Te interesa alguna de estas o prefieres a la medida?`;
 
     return { type: "text", text: suggestions };
   }
@@ -173,6 +192,18 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
         };
     }
 
+  // 6b) Compra / Mercado Libre / cómo comprar
+  if (/compra|mercado\s*libre|c[oó]mo\s+(compro|pago|ordeno)|pago|forma\s+de\s+pago|d[oó]nde\s+compro/.test(clean)) {
+    await updateConversation(psid, { lastIntent: "purchase_confirmed" });
+
+    return {
+      type: "text",
+      text: `¡Sí! La compra es por Mercado Libre 💚\n\n` +
+            `Puedes pagar con tarjeta, efectivo en OXXO, o meses sin intereses.\n\n` +
+            `¿Qué medida necesitas? Te paso el link directo al producto 😊`
+    };
+  }
+
     // Ubicación / recoger en tienda
     if (/donde|ubicaci[oó]n|direcci[oó]n|est[aá]n|tienda|recoger|pasar/.test(clean)) {
         await updateConversation(psid, { lastIntent: "location_info" });
@@ -181,8 +212,8 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
             type: "text",
             text:
             `Estamos en Querétaro 📍\n\n` +
-            `**HANLOB - Microparque Industrial Navex Park**\n` +
-            `Calle Loma de San Gremal No. 108, **bodega 73**\n` +
+            `HANLOB - Microparque Industrial Navex Park\n` +
+            `Calle Loma de San Gremal No. 108, bodega 73\n` +
             `Col. Ejido Santa María Magdalena\n` +
             `C.P. 76137, Santiago de Querétaro, Qro.\n\n` +
             `Google Maps → https://www.google.com/maps/place/Hanlob\n\n` +
@@ -190,12 +221,36 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
         };
     }
 
-  // 7) Fallback específico de campaña
+  // 7) Fallback específico de campaña - show price range instead of generic message
   await updateConversation(psid, { lastIntent: "campaign_fallback" });
+
+  // If we have variants, show range from variants
+  if (variants.length > 0) {
+    const smallest = variants[0];
+    const largest = variants[variants.length - 1];
+    return {
+      type: "text",
+      text: `Los precios van desde ${smallest.size} en ${formatMoney(smallest.price)} hasta ${largest.size} en ${formatMoney(largest.price)} 📐\n\n` +
+            `¿Qué medida necesitas? Te doy el precio exacto 😊`
+    };
+  }
+
+  // No variants available - fetch from database
+  const fallbackSizes = await getAvailableSizes(convo);
+  if (fallbackSizes.length > 0) {
+    const smallest = fallbackSizes[0];
+    const largest = fallbackSizes[fallbackSizes.length - 1];
+    return {
+      type: "text",
+      text: `Los precios van desde ${smallest.sizeStr} en $${smallest.price} hasta ${largest.sizeStr} en $${largest.price} 📐\n\n` +
+            `¿Qué medida necesitas? Te doy el precio exacto 😊`
+    };
+  }
+
+  // Last resort - hardcoded range
   return {
     type: "text",
-    text: product.fallbackMessage ||
-      "Puedo ayudarte con precios, medidas o cotizaciones de la malla sombra confeccionada 🌿. ¿Qué te gustaría saber?"
+    text: "Los precios van desde $320 hasta $1,800 dependiendo de la medida 📐\n\n¿Qué medida necesitas?"
   };
 }
 

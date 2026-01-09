@@ -3,12 +3,17 @@
 
 const { updateConversation } = require("../../conversationManager");
 const ProductFamily = require("../../models/ProductFamily");
+const { parseDimensions } = require("../../measureHandler");
 
 /**
  * Detects if user mentioned a human-sellable product
+ * If message contains dimensions, validates that the product size matches
  */
 async function detectHumanSellableProduct(userMessage) {
   const msg = userMessage.toLowerCase().trim();
+
+  // Extract dimensions from message (e.g., "4 x 100" → {width: 4, height: 100})
+  const requestedDimensions = parseDimensions(msg);
 
   // Search for product mentions in the message
   const products = await ProductFamily.find({
@@ -23,6 +28,30 @@ async function detectHumanSellableProduct(userMessage) {
 
     // Check if message contains product or parent name
     if (msg.includes(productName) || (parentName && msg.includes(parentName))) {
+      // If message contains dimensions, validate product size matches
+      if (requestedDimensions && product.size) {
+        const sizeMatch = product.size.match(/(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)/i);
+        if (sizeMatch) {
+          const productWidth = parseFloat(sizeMatch[1]);
+          const productHeight = parseFloat(sizeMatch[2]);
+
+          // Check if dimensions match (within 0.2m tolerance for rounding)
+          // This prevents 3.7x100 from matching a 4x100 request
+          const dimensionTolerance = 0.2;
+          const matchesDirect =
+            Math.abs(productWidth - requestedDimensions.width) <= dimensionTolerance &&
+            Math.abs(productHeight - requestedDimensions.height) <= dimensionTolerance;
+          const matchesSwapped =
+            Math.abs(productWidth - requestedDimensions.height) <= dimensionTolerance &&
+            Math.abs(productHeight - requestedDimensions.width) <= dimensionTolerance;
+
+          if (!matchesDirect && !matchesSwapped) {
+            console.log(`⚠️ Product "${product.name}" (${product.size}) doesn't match requested dimensions ${requestedDimensions.width}x${requestedDimensions.height}`);
+            continue; // Skip this product, dimensions don't match
+          }
+        }
+      }
+
       return product;
     }
   }

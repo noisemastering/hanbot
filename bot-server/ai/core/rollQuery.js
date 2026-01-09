@@ -93,7 +93,7 @@ async function handleRollQuery(userMessage, psid, convo) {
     // Build response organized by category
     for (const [category, rolls] of Object.entries(byCategory)) {
       if (category !== "General") {
-        responseText += `**${category}**\n`;
+        responseText += `${category}\n`;
       }
 
       for (const roll of rolls) {
