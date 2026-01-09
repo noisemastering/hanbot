@@ -375,14 +375,29 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
-  // ✅ AFFIRMATIVE RESPONSE - Handle "sí", "si", "yes", "dale" after showing size/price
+  // ✅ AFFIRMATIVE RESPONSE - Handle "sí", "si", "yes", "dale", "me interesa" after showing size/price
   // Using word boundaries (\b) instead of anchors (^$) to catch affirmatives even with additional text
   // e.g., "si de esa medida" or "si con argollas" will now be detected
 
   // Skip if message contains thanks/closing words (avoid redundant messages after user is done)
   const hasThanksClosure = /\b(gracias|muchas gracias|perfecto.*gracias|ok.*gracias|excelente.*gracias|muy amable|adiós|bye|nos vemos|ago\s+mi\s+pedido|hago\s+mi\s+pedido)\b/i.test(msg);
 
-  if (!hasThanksClosure && /\b(s[ií]|yes|dale|ok|claro|perfecto|adelante|exact[oa]|correct[oa]|as[ií]|esa|ese)\b/i.test(msg)) {
+  // Check for "me interesa" - generic interest expression
+  const isInterested = /\b(me\s+interesa|estoy\s+interesad[oa]|interesad[oa])\b/i.test(msg);
+
+  if (!hasThanksClosure && (isInterested || /\b(s[ií]|yes|dale|ok|claro|perfecto|adelante|exact[oa]|correct[oa]|as[ií]|esa|ese)\b/i.test(msg))) {
+
+    // If just "me interesa" without specific context, show basic product info
+    if (isInterested && !convo.lastIntent) {
+      await updateConversation(psid, { lastIntent: "interest_expressed", unknownCount: 0 });
+
+      return {
+        type: "text",
+        text: "¡Perfecto! Vendemos malla sombra beige confeccionada lista para instalar.\n\n" +
+              "Tenemos medidas desde 2x2m hasta 6x10m, y también rollos de 100m.\n\n" +
+              "¿Qué medida necesitas? 📐"
+      };
+    }
 
     // FIRST: Check if bot offered to show all standard sizes
     if (convo.offeredToShowAllSizes) {
