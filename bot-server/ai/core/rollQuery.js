@@ -6,6 +6,23 @@ const ProductFamily = require("../../models/ProductFamily");
 const { enrichProductWithContext, formatProductForBot } = require("../utils/productEnricher");
 
 /**
+ * Detects if user is asking about roll dimensions/meters
+ * "cuánto metro trae cada rollo", "cuantos metros tiene un rollo", etc.
+ */
+function isRollDimensionQuery(msg) {
+  const dimensionPatterns = [
+    /\b(cu[aá]nto|cuanto)s?\s+(metro|mt|mts|m)\s+(tra[ey]|tiene|mide|viene)/i,
+    /\b(cu[aá]nto|cuanto)s?\s+metros?\s+(tra[ey]|tiene|mide|viene)/i,
+    /\b(metros?|mt|mts)\s+(tra[ey]|tiene|mide|viene)\s+(cada|el|un|los)?\s*(rol+[oy])/i,
+    /\b(cu[aá]nto|cuanto)\s+(mide|tra[ey]|viene)\s+(el|cada|un)?\s*(rol+[oy])/i,
+    /\b(medida|dimensi[oó]n|tama[ñn]o)\s+(del?|cada)?\s*(rol+[oy])/i,
+    /\brol+[oy]s?\s+(de\s+)?cu[aá]ntos?\s+metros?/i,
+    /\bde\s+cu[aá]ntos?\s+metros?\s+(son|es|vienen?|tra[ey]n?)\s+(los\s+)?rol+[oy]s?/i
+  ];
+  return dimensionPatterns.some(pattern => pattern.test(msg));
+}
+
+/**
  * Detects if user is asking about rolls
  */
 function isRollQuery(msg) {
@@ -24,11 +41,50 @@ function isRollQuery(msg) {
 }
 
 /**
+ * Handles questions about roll dimensions/meters
+ * Provides direct answer about roll sizes
+ */
+async function handleRollDimensionQuery(userMessage, psid, convo) {
+  const cleanMsg = userMessage.toLowerCase().trim();
+
+  if (!isRollDimensionQuery(cleanMsg)) {
+    return null;
+  }
+
+  console.log("📏 Roll dimension query detected:", cleanMsg);
+
+  await updateConversation(psid, {
+    lastIntent: "roll_dimension_query",
+    state: "active",
+    unknownCount: 0
+  });
+
+  // Direct answer about roll dimensions
+  const responseText =
+    "Los rollos de malla sombra vienen en 100 metros de largo 📏\n\n" +
+    "Anchos disponibles:\n" +
+    "• 4.20m x 100m (420 m² por rollo)\n" +
+    "• 2.10m x 100m (210 m² por rollo)\n\n" +
+    "¿Te interesa cotizar algún rollo?";
+
+  return {
+    type: "text",
+    text: responseText
+  };
+}
+
+/**
  * Handles roll queries with enriched product information
  */
 async function handleRollQuery(userMessage, psid, convo) {
   try {
     const cleanMsg = userMessage.toLowerCase().trim();
+
+    // First check if it's a dimension-specific question
+    const dimensionResponse = await handleRollDimensionQuery(userMessage, psid, convo);
+    if (dimensionResponse) {
+      return dimensionResponse;
+    }
 
     if (!isRollQuery(cleanMsg)) {
       return null;
@@ -153,5 +209,7 @@ async function handleRollQuery(userMessage, psid, convo) {
 
 module.exports = {
   isRollQuery,
-  handleRollQuery
+  isRollDimensionQuery,
+  handleRollQuery,
+  handleRollDimensionQuery
 };
