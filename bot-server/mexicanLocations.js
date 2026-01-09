@@ -14,6 +14,8 @@ const MEXICAN_STATES = [
 const MAJOR_CITIES = [
   // Major cities (100k+ population)
   'guadalajara', 'monterrey', 'puebla', 'tijuana', 'león', 'juárez',
+  // Towns with "agua" in name (to avoid false positives with water questions)
+  'agua prieta', 'aguascalientes', 'agua dulce', 'agua azul',
   'zapopan', 'mérida', 'san luis potosí', 'aguascalientes', 'hermosillo',
   'saltillo', 'mexicali', 'culiacán', 'guadalupe', 'acapulco', 'tlalnepantla',
   'cancún', 'querétaro', 'chihuahua', 'morelia', 'toluca', 'tuxtla gutiérrez',

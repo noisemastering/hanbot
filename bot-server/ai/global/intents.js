@@ -44,6 +44,25 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   console.log("🌍 INTENTOS GLOBALES CHECANDO →", msg);
 
+  // 😤 FRUSTRATION DETECTION - Escalate to human when user is frustrated
+  // Patterns: "estoy diciendo", "no leen", "no entienden", "ya les dije", etc.
+  const frustrationPatterns = /\b(estoy\s+diciendo|no\s+leen|no\s+entienden|ya\s+(te|les?)\s+dije|les?\s+repito|no\s+me\s+escuchan?|no\s+ponen\s+atenci[oó]n|acabo\s+de\s+decir|como\s+te\s+dije|como\s+ya\s+dije|ya\s+lo\s+dije|no\s+est[aá]n?\s+entendiendo|no\s+entendieron|no\s+entendi[oó]|pero\s+ya\s+dije|pero\s+estoy\s+diciendo|dios\s+me\s+los\s+bendiga)\b/i;
+
+  if (frustrationPatterns.test(msg)) {
+    console.log("😤 User frustration detected, escalating to human:", msg);
+    await updateConversation(psid, {
+      lastIntent: "human_handoff",
+      state: "needs_human",
+      frustrationDetected: true
+    });
+    await sendHandoffNotification(psid, convo, "Cliente frustrado - necesita atención humana urgente");
+    return {
+      type: "text",
+      text: "Disculpa la confusión. Te comunico con un asesor para ayudarte mejor.\n\n" +
+            "En un momento te atienden."
+    };
+  }
+
   // 🔄 FOLLOW-UP: Handle responses to "price_by_meter" question
   if (convo.lastIntent === "price_by_meter") {
     // User was asked: "¿Qué te interesa: una medida específica confeccionada o un rollo completo?"
@@ -195,8 +214,25 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   }
 
   // 🌧️ RAIN/WATERPROOF QUESTIONS - Clarify malla sombra is NOT waterproof
-  if (/\b(lluvia|lluvias|llueve|agua|mojarse|mojar|impermeable|impermeabiliza|protege\s+de(l)?\s+(agua|lluvia)|cubre\s+de(l)?\s+(agua|lluvia)|sirve\s+(para|contra)\s+(la\s+)?(lluvia|agua)|tapa\s+(la\s+)?(lluvia|agua)|repele|repelente)\b/i.test(msg) &&
+  // First check if "agua" appears in a location context (e.g., "Agua Prieta")
+  const hasWaterKeyword = /\b(lluvia|lluvias|llueve|agua|mojarse|mojar|impermeable|impermeabiliza|protege\s+de(l)?\s+(agua|lluvia)|cubre\s+de(l)?\s+(agua|lluvia)|sirve\s+(para|contra)\s+(la\s+)?(lluvia|agua)|tapa\s+(la\s+)?(lluvia|agua)|repele|repelente)\b/i.test(msg);
+  const isLocationContext = /\b(vivo\s+en|soy\s+de|estoy\s+en|est[aá]\s+en|ubicad[oa]\s+en|me\s+encuentro\s+en|mando\s+a|env[ií]o\s+a|entregar?\s+en)\b/i.test(msg);
+  const detectedLocation = detectMexicanLocation(msg);
+
+  if (hasWaterKeyword && !isLocationContext && !detectedLocation &&
       !/\b(antimaleza|ground\s*cover|maleza|hierba)\b/i.test(msg)) {
+
+    // Check if we'd be repeating the same response - escalate to human instead
+    if (convo.lastIntent === "rain_waterproof_question") {
+      console.log("🔄 Would repeat waterproof response, escalating to human");
+      await updateConversation(psid, { lastIntent: "human_handoff", state: "needs_human" });
+      await sendHandoffNotification(psid, convo, "Cliente necesita atención - posible malentendido sobre impermeabilidad");
+      return {
+        type: "text",
+        text: "Parece que hay algo que no estoy entendiendo bien. Déjame contactar a un asesor para que te ayude mejor.\n\n" +
+              "En un momento te atienden."
+      };
+    }
 
     await updateConversation(psid, { lastIntent: "rain_waterproof_question" });
 
@@ -205,6 +241,22 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       text: "No, la malla sombra no tiene propiedades impermeables. Es un tejido permeable que permite el paso del agua y el aire.\n\n" +
             "Su función principal es reducir la intensidad del sol ☀️ y proporcionar sombra, no proteger de la lluvia.\n\n" +
             "Si necesitas protección contra lluvia, te recomendaría buscar una lona impermeable o un toldo. ¿Te puedo ayudar con algo más sobre la malla sombra?"
+    };
+  }
+
+  // 📍 LOCATION MENTION - User is saying where they are from/live
+  // Handle "vivo en X", "soy de X", "estoy en X" to acknowledge and continue
+  if (isLocationContext && detectedLocation) {
+    console.log("📍 User mentioned their location:", detectedLocation.normalized);
+    await updateConversation(psid, {
+      lastIntent: "location_mentioned",
+      userLocation: detectedLocation.normalized,
+      unknownCount: 0
+    });
+    return {
+      type: "text",
+      text: `¡Claro! Hacemos envíos a ${detectedLocation.normalized} por paquetería 📦\n\n` +
+            `¿Qué medida de malla sombra necesitas?`
     };
   }
 
