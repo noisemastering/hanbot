@@ -248,6 +248,24 @@ function parseDimensions(message) {
     };
   }
 
+  // Pattern 9: Single dimension implies square - "de 4 metros", "una de 4", "4 metros q sale"
+  // Only match if it's clearly asking for a size (with "de" prefix or "metros" unit)
+  const patternSquare = /\b(?:de|una?\s+de)\s+(\d+(?:\.\d+)?)\s*(?:metros?|m)?\b/i;
+  const matchSquare = normalized.match(patternSquare);
+  if (matchSquare) {
+    const size = parseFloat(matchSquare[1]);
+    // Only treat as square if size is reasonable (2-10 meters)
+    if (size >= 2 && size <= 10) {
+      console.log(`📐 Single dimension detected (${size}m), treating as ${size}x${size} square`);
+      return {
+        width: size,
+        height: size,
+        area: size * size,
+        isSquare: true
+      };
+    }
+  }
+
   return null;
 }
 
