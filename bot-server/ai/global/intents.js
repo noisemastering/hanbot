@@ -492,6 +492,19 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
     };
   }
 
+  // 📷 User claims they sent photos but we can't see them - direct to WhatsApp
+  if (/\b(s[ií]\s+)?mand[eé]|envi[eé]|ya\s+(te\s+)?(mand[eé]|envi[eé])|te\s+(mand[eé]|envi[eé])|las?\s+mand[eé]|las?\s+envi[eé]/i.test(msg) &&
+      /\b(foto|fotos|fotho|fothos|imagen|imagenes|imágenes|picture|pictures)\b/i.test(msg)) {
+    const whatsappLink = "https://wa.me/524425957432";
+    await updateConversation(psid, { lastIntent: "photo_claim" });
+
+    return {
+      type: "text",
+      text: "No me llegó la foto por este medio. Por favor envíala a nuestro WhatsApp para poder verla:\n\n" +
+            `💬 ${whatsappLink}`
+    };
+  }
+
   // 💳 Alternative payment method (in-person at store)
   if (/otra\s+forma|otro\s+(m[eé]todo|modo)|alternativa.*pago|pago.*persona|pago.*local|pago.*tienda|pagar.*efectivo|efectivo.*directo/i.test(msg)) {
     const businessInfo = await getBusinessInfo();
