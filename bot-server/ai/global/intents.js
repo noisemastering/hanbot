@@ -571,6 +571,18 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
     };
   }
 
+  // 🔘 EYELETS/HOLES QUESTION - "ojitos", "argollas", "orificios"
+  // Confeccionada comes with reinforced eyelets every 50cm
+  if (/\b(ojito|ojitos|ojillo|ojillos|argolla|argollas|orificio|orificios|agujero|agujeros|hoyito|hoyitos|para\s+colgar|para\s+amarrar|donde\s+amarro|c[oó]mo\s+se\s+instala)\b/i.test(msg)) {
+    await updateConversation(psid, { lastIntent: "eyelets_question", unknownCount: 0 });
+
+    return {
+      type: "text",
+      text: "Sí, nuestra malla confeccionada viene con ojillos reforzados cada 50cm en todo el perímetro para facilitar la instalación.\n\n" +
+            "Solo necesitas amarrarla o usar ganchos. ¿Qué medida te interesa?"
+    };
+  }
+
   // 💳 Alternative payment method (in-person at store)
   if (/otra\s+forma|otro\s+(m[eé]todo|modo)|alternativa.*pago|pago.*persona|pago.*local|pago.*tienda|pagar.*efectivo|efectivo.*directo/i.test(msg)) {
     const businessInfo = await getBusinessInfo();
