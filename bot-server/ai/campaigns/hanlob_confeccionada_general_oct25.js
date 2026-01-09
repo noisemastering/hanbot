@@ -91,6 +91,14 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     return null;
   }
 
+  // 🔴 SKIP: Deferral phrases - "lo reviso y te aviso", "luego te hablo", etc.
+  // Let the greetings handler close the conversation properly
+  const isDeferral = /\b(lo\s+reviso|te\s+aviso|luego\s+(te\s+|le\s+|me\s+)?(hablo|escribo|contacto|mando|aviso)|despu[eé]s\s+(te\s+|le\s+|me\s+)?(hablo|escribo|contacto|mando|aviso)|voy\s+a\s+(checar|ver|revisar|pensar)|deja\s+(lo\s+)?(checo|reviso|pienso|veo)|m[aá]s\s+tarde|ahorita\s+no|por\s+ahora|coordinamos|lo\s+pienso|lo\s+analizo)\b/i.test(clean);
+  if (isDeferral) {
+    console.log("📅 Deferral phrase detected in campaign, skipping to deferral handler");
+    return null;
+  }
+
   // 0) Carga de producto guía de la campaña (usando nuevo sistema de productos)
   const product = getCampaignProductFromConversation(convo, campaign);
 
