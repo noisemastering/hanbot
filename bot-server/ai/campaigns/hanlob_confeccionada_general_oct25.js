@@ -76,6 +76,13 @@ function variantLineCompact(v) {
 async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign) {
   const clean = String(msg).trim().toLowerCase();
 
+  // 🔴 SKIP: If user is asking about rolls, let the roll handler process it
+  // This campaign is for confeccionada (pre-made sizes), not rolls
+  if (/\b(rol+[oy]s?|rollo|rollos)\b/i.test(clean)) {
+    console.log("📦 Roll request detected in confeccionada campaign, skipping to roll handler");
+    return null;
+  }
+
   // 0) Carga de producto guía de la campaña (usando nuevo sistema de productos)
   const product = getCampaignProductFromConversation(convo, campaign);
 
