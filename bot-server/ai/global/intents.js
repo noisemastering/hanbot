@@ -290,6 +290,44 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 📋 EXPLICIT LIST REQUEST - "dígame las medidas", "muéstreme las opciones", "ver la lista"
+  // User is explicitly asking to see all sizes with prices
+  if (/\b(d[ií]game|mu[eé]str[ea]me|ens[eé][ñn]ame|ver|quiero\s+ver|dame)\s+(l[oa]s\s+)?(medidas|opciones|lista|precios|tama[ñn]os)/i.test(msg) ||
+      /\b(todas?\s+las?\s+medidas?|todas?\s+las?\s+opciones?|lista\s+completa|ver\s+(la\s+)?lista)\b/i.test(msg) ||
+      /\b(usted\s+d[ií]game|dime\s+t[uú]|d[ií]ganme)\b/i.test(msg) ||
+      /\b(s[ií].*mu[eé]str[ea]me|s[ií].*ver\s+la\s+lista|s[ií].*las\s+opciones)\b/i.test(msg)) {
+
+    await updateConversation(psid, { lastIntent: "show_all_sizes_requested", unknownCount: 0 });
+
+    // Fetch all available sizes
+    const availableSizes = await getAvailableSizes(convo);
+
+    if (availableSizes.length > 0) {
+      let response = "📐 Estas son nuestras medidas confeccionadas con precio:\n\n";
+
+      // Show all sizes up to 20
+      const sizesFormatted = availableSizes.slice(0, 20).map(s => `• ${s.sizeStr} - $${s.price}`);
+      response += sizesFormatted.join('\n');
+
+      if (availableSizes.length > 20) {
+        response += `\n\n... y ${availableSizes.length - 20} medidas más en nuestra tienda.`;
+      }
+
+      response += "\n\nTambién manejamos rollos de 4.20x100m y 2.10x100m.\n\n";
+      response += "¿Cuál te interesa?";
+
+      return { type: "text", text: response };
+    }
+
+    // Fallback if no sizes loaded
+    return {
+      type: "text",
+      text: "Puedes ver todas nuestras medidas y precios en la Tienda Oficial:\n" +
+            "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n" +
+            "¿Qué medida necesitas?"
+    };
+  }
+
   // 💰 BULK/VOLUME DISCOUNT INQUIRY - Handle requests for bulk discounts
   // Detect: multiple units, wholesale, volume discounts, special prices
   if (/\b(descuento|rebaja|precio especial|precio mayoreo|mayoreo|volumen)\b/i.test(msg) ||
