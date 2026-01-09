@@ -187,14 +187,16 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     };
   }
 
-  // 5) Mensajes de uso/contexto
-  if (/invernadero|jard[ií]n|cochera|estacionamiento|sombra/.test(clean)) {
+  // 5) Mensajes de uso/contexto - expanded patterns
+  if (/invernadero|jard[ií]n|cochera|estacionamiento|sombra|terraza|patio|vivero|cultivo|plantas?|casa|negocio|local|puesto|taco|comida|calle|afuera|exterior|tendido|toldo|techado|techo|cubrir|tapar/.test(clean)) {
     await updateConversation(psid, { lastIntent: "usage" });
+
+    // If they mentioned a specific project but no size, ask about area
     return {
       type: "text",
       text:
-        `Perfecto 🌞 la *malla sombra beige 90% reforzada* es de larga duración y funciona muy bien para invernadero, jardín y cochera.\n` +
-        `¿Qué medida te gustaría revisar?`
+        `Perfecto, la malla sombra funciona muy bien para eso 🌞\n\n` +
+        `¿Qué área buscas cubrir? (por ejemplo: 4x3 metros, 5x5 metros)`
     };
   }
 
@@ -238,6 +240,16 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     }
 
   // 7) Fallback específico de campaña - show price range instead of generic message
+  // Check if we'd be repeating the fallback - ask a different question instead
+  if (convo.lastIntent === "campaign_fallback") {
+    await updateConversation(psid, { lastIntent: "campaign_fallback_retry" });
+    return {
+      type: "text",
+      text: "Para darte el precio exacto necesito saber la medida 📐\n\n" +
+            "¿Qué área buscas cubrir? (ejemplo: 4x3 metros, 5x5 metros)"
+    };
+  }
+
   await updateConversation(psid, { lastIntent: "campaign_fallback" });
 
   // If we have variants, show range from variants
