@@ -135,18 +135,18 @@ function OrdersView() {
       {/* Header */}
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-white">Pedidos de Mercado Libre</h2>
-        <p className="text-sm text-gray-400 mt-1">Ventas y pedidos del seller {sellerId}</p>
+        <p className="text-sm text-gray-400 mt-1">Ventas del mes actual - Seller {sellerId}</p>
       </div>
 
       {/* Sales Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         {/* Total Orders */}
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
-          <div className="text-gray-400 text-sm">Total Pedidos</div>
+          <div className="text-gray-400 text-sm">Pedidos del Mes</div>
           <div className="text-2xl font-bold text-white mt-1">{metrics.totalOrders}</div>
           {paging.total && paging.total > metrics.totalOrders && (
             <div className="text-xs text-gray-500 mt-1">
-              Mostrando {metrics.totalOrders} de {paging.total.toLocaleString()}
+              Mostrando {metrics.totalOrders} de {paging.total.toLocaleString()} del mes
             </div>
           )}
         </div>
@@ -155,7 +155,7 @@ function OrdersView() {
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
           <div className="text-gray-400 text-sm">Ingresos Totales</div>
           <div className="text-2xl font-bold text-green-400 mt-1">{formatCurrency(metrics.totalRevenue)}</div>
-          <div className="text-xs text-gray-500 mt-1">Últimos {metrics.totalOrders} pedidos</div>
+          <div className="text-xs text-gray-500 mt-1">Mes actual ({metrics.totalOrders} pedidos)</div>
         </div>
 
         {/* Average Order Value */}
@@ -206,7 +206,7 @@ function OrdersView() {
           </div>
           {paging.total !== undefined && (
             <div className="text-gray-400 ml-auto">
-              Total en ML: <span className="text-white font-semibold">{paging.total.toLocaleString()}</span> pedidos
+              Total del mes: <span className="text-white font-semibold">{paging.total.toLocaleString()}</span> pedidos
             </div>
           )}
         </div>
