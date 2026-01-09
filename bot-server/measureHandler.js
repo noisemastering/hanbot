@@ -527,6 +527,8 @@ function generateSizeResponse(options) {
     customOrderText += `Este tipo de medidas necesitan cotización directa con nuestro equipo de ventas.\n\n`;
 
     if (businessInfo) {
+      const whatsappLink = "https://wa.me/524425957432";
+      customOrderText += `💬 WhatsApp: ${whatsappLink}\n`;
       customOrderText += `📞 Contáctanos: ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}\n`;
       customOrderText += `🕓 Horario: ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}\n`;
       customOrderText += `📍 ${businessInfo.address || ''}`;
@@ -567,8 +569,10 @@ function generateSizeResponse(options) {
 
         // ALWAYS mention custom fabrication option with contact info
         if (businessInfo) {
+          const whatsappLink = "https://wa.me/524425957432";
           parts.push(`\n\nOpción 2: Fabricación a la medida exacta (${requestedDim.width}x${requestedDim.height}m)`);
           parts.push(`\nPara cotizar medidas personalizadas, contáctanos:`);
+          parts.push(`\n💬 WhatsApp: ${whatsappLink}`);
           parts.push(`\n📞 ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}`);
           parts.push(`\n🕓 ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}`);
         }
@@ -599,11 +603,15 @@ function generateSizeResponse(options) {
 
       // Offer custom fabrication
       if (businessInfo && requestedDim) {
+        const whatsappLink = "https://wa.me/524425957432";
         parts.push(`\n\nPara la medida que necesitas (${requestedDim.width}x${requestedDim.height}m), podemos fabricarla a la medida. Para cotizar, contáctanos:\n`);
+        parts.push(`\n💬 WhatsApp: ${whatsappLink}`);
         parts.push(`\n📞 ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}`);
         parts.push(`\n🕓 ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}`);
       } else if (businessInfo) {
+        const whatsappLink = "https://wa.me/524425957432";
         parts.push(`\n\nPara medidas personalizadas, contáctanos:\n`);
+        parts.push(`\n💬 WhatsApp: ${whatsappLink}`);
         parts.push(`\n📞 ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}`);
         parts.push(`\n🕓 ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}`);
       }
