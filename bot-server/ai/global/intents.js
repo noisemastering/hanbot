@@ -254,6 +254,23 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 💬 DIRECT QUOTE REQUEST - "cotízame", "me la puedes cotizar", etc.
+  // These require human attention, direct to WhatsApp
+  if (/\b(cot[ií]za(me|la|lo)?|me\s+(la\s+)?puedes?\s+cotizar|puedes?\s+cotizar(me|la|lo)?|dame\s+cotizaci[oó]n|hazme\s+cotizaci[oó]n|necesito\s+cotizaci[oó]n)\b/i.test(msg)) {
+    const info = await getBusinessInfo();
+    const whatsappLink = "https://wa.me/524425957432";
+
+    await updateConversation(psid, { lastIntent: "direct_quote_request", state: "needs_human" });
+
+    return {
+      type: "text",
+      text: "Con gusto te cotizamos. Para atención personalizada, contáctanos:\n\n" +
+            `💬 WhatsApp: ${whatsappLink}\n` +
+            `📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n` +
+            `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`
+    };
+  }
+
   // 📋 CATALOG REQUEST - Handle requests for general pricing, sizes, and colors listing
   // Instead of dumping a huge list, ask for specific dimensions
   if (/\b(pongan?|den|muestren?|env[ií]en?|pasame?|pasen?|listado?)\s+(de\s+)?(precios?|medidas?|opciones?|tama[ñn]os?|colores?)\b/i.test(msg) ||
