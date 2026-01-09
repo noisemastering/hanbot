@@ -83,6 +83,14 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     return null;
   }
 
+  // 🔴 SKIP: If user is saying thanks/goodbye, let the global handler close the conversation
+  // Don't intercept closing phrases - they should end the conversation, not get a product response
+  const isClosingPhrase = /^(gracias|muchas gracias|ok gracias|perfecto gracias|excelente|muy amable|adi[oó]s|bye|nos vemos|hasta luego)\.?!?$/i.test(clean);
+  if (isClosingPhrase) {
+    console.log("👋 Closing phrase detected in campaign, skipping to thanks handler");
+    return null;
+  }
+
   // 0) Carga de producto guía de la campaña (usando nuevo sistema de productos)
   const product = getCampaignProductFromConversation(convo, campaign);
 
