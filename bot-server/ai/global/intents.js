@@ -462,6 +462,19 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
     };
   }
 
+  // 💰 Where to pay/deposit - Direct ML payment answer
+  if (/\b(d[oó]nde|donde|a\s+d[oó]nde)\s+(deposito|pago|se\s+paga|se\s+deposita|hago\s+el\s+pago|realizo\s+el\s+pago)\b/i.test(msg) ||
+      /\b(pago|deposito)\s+(al\s+entregar|contra\s+entrega)\b/i.test(msg)) {
+    await updateConversation(psid, { lastIntent: "payment_location" });
+
+    return {
+      type: "text",
+      text: "El pago se realiza a través de Mercado Libre al momento de hacer tu pedido.\n\n" +
+            "Aceptan tarjeta, efectivo en OXXO, o meses sin intereses.\n\n" +
+            "¿Te paso el link del producto?"
+    };
+  }
+
   // 💳 Alternative payment method (in-person at store)
   if (/otra\s+forma|otro\s+(m[eé]todo|modo)|alternativa.*pago|pago.*persona|pago.*local|pago.*tienda|pagar.*efectivo|efectivo.*directo/i.test(msg)) {
     const businessInfo = await getBusinessInfo();
