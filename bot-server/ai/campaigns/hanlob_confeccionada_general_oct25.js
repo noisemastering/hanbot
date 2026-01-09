@@ -83,19 +83,23 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     return null;
   }
 
-  // 🔴 SKIP: If user is saying thanks/goodbye, let the global handler close the conversation
-  // Don't intercept closing phrases - they should end the conversation, not get a product response
-  const isClosingPhrase = /^(gracias|muchas gracias|ok gracias|perfecto gracias|excelente|muy amable|adi[oó]s|bye|nos vemos|hasta luego)\.?!?$/i.test(clean);
-  if (isClosingPhrase) {
-    console.log("👋 Closing phrase detected in campaign, skipping to thanks handler");
-    return null;
-  }
+  // 🔴 SKIP: Deferral and closing phrases - let greetings.js handle them
+  const hasDeferralPattern = /\b(lo\s+reviso|te\s+aviso|luego\s+(te\s+|le\s+|me\s+)?(hablo|escribo|contacto|mando|aviso)|despu[eé]s\s+(te\s+|le\s+|me\s+)?(hablo|escribo|contacto|mando|aviso)|voy\s+a\s+(checar|ver|revisar|pensar)|deja\s+(lo\s+)?(checo|reviso|pienso|veo)|m[aá]s\s+tarde|ahorita\s+no|por\s+ahora|coordinamos|lo\s+pienso|lo\s+analizo)\b/i.test(clean);
+  const hasThanks = /\b(gracias|muchas\s+gracias|muy\s+amable)\b/i.test(clean);
+  const isExplicitGoodbye = /^(gracias|muchas gracias|ok gracias|perfecto gracias|excelente|muy amable|adi[oó]s|bye|nos vemos|hasta luego)\.?!?$/i.test(clean);
 
-  // 🔴 SKIP: Deferral phrases - "lo reviso y te aviso", "luego te hablo", etc.
-  // Let the greetings handler close the conversation properly
-  const isDeferral = /\b(lo\s+reviso|te\s+aviso|luego\s+(te\s+|le\s+|me\s+)?(hablo|escribo|contacto|mando|aviso)|despu[eé]s\s+(te\s+|le\s+|me\s+)?(hablo|escribo|contacto|mando|aviso)|voy\s+a\s+(checar|ver|revisar|pensar)|deja\s+(lo\s+)?(checo|reviso|pienso|veo)|m[aá]s\s+tarde|ahorita\s+no|por\s+ahora|coordinamos|lo\s+pienso|lo\s+analizo)\b/i.test(clean);
-  if (isDeferral) {
-    console.log("📅 Deferral phrase detected in campaign, skipping to deferral handler");
+  // Deferral + gracias = definitely goodbye (e.g., "Lo reviso y te aviso, gracias")
+  // Pure deferral = let deferral handler respond
+  // Pure thanks/goodbye = let thanks handler close
+  // Gracias after already deferred = closing
+  const isGoodbye = hasDeferralPattern ||
+                    isExplicitGoodbye ||
+                    (hasThanks && hasDeferralPattern) ||  // Same message: "lo reviso, gracias"
+                    (hasThanks && convo.lastIntent === "purchase_deferred") ||  // After deferral
+                    (hasThanks && convo.state === "deferred");  // State is deferred
+
+  if (isGoodbye) {
+    console.log("👋 Closing/deferral detected in campaign, skipping to global handlers");
     return null;
   }
 
