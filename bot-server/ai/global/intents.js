@@ -27,6 +27,19 @@ const { sendHandoffNotification } = require("../../services/pushNotifications");
 const { selectRelevantAsset, trackAssetMention, insertAssetIntoResponse } = require("../assetManager");
 const { handleRollQuery } = require("../core/rollQuery");
 
+// Helper to check if location is also being asked in a multi-question message
+function isAlsoAskingLocation(msg) {
+  return /\b(d[oó]nde\s+est[aá]n|d[oó]nde\s+quedan|ubicaci[oó]n|direcci[oó]n|d[oó]nde\s+se\s+encuentran)\b/i.test(msg);
+}
+
+// Helper to get location text for combined responses
+function getLocationAppendix() {
+  return "\n\n📍 Estamos en Querétaro:\n" +
+         "Calle Loma de San Gremal 108, bodega 73, Navex Park\n" +
+         "C.P. 76137, Santiago de Querétaro\n\n" +
+         "Enviamos a todo el país por Mercado Libre.";
+}
+
 async function handleGlobalIntents(msg, psid, convo = {}) {
 
   console.log("🌍 INTENTOS GLOBALES CHECANDO →", msg);
@@ -1000,12 +1013,16 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
         stateMx: convo.stateMx
       });
 
-      return {
-        type: "text",
-        text: `Perfecto, para la medida de ${requestedSizeStr} que mencionaste:\n\n` +
+      let responseText = `Perfecto, para la medida de ${requestedSizeStr} que mencionaste:\n\n` +
               `Te dejo el link a esa medida específica:\n\n` +
-              `${trackedLink}`
-      };
+              `${trackedLink}`;
+
+      // Append location if also asked
+      if (isAlsoAskingLocation(msg)) {
+        responseText += getLocationAppendix();
+      }
+
+      return { type: "text", text: responseText };
     } else {
       // No exact match - provide alternatives
       const availableSizes = await getAvailableSizes();
@@ -1053,10 +1070,12 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
         });
       }
 
-      return {
-        type: "text",
-        text: sizeResponse.text
-      };
+      let responseText = sizeResponse.text;
+      // Append location if also asked
+      if (isAlsoAskingLocation(msg)) {
+        responseText += getLocationAppendix();
+      }
+      return { type: "text", text: responseText };
     }
   }
 
@@ -1253,10 +1272,12 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
 
           responseText += `\n\nTe paso el link para que la veas:\n\n${trackedLink}`;
 
-          return {
-            type: "text",
-            text: responseText
-          };
+          // Append location if also asked
+          if (isAlsoAskingLocation(msg)) {
+            responseText += getLocationAppendix();
+          }
+
+          return { type: "text", text: responseText };
         }
       }
 
