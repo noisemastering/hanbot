@@ -638,22 +638,15 @@ function generateSizeResponse(options) {
 
 /**
  * Generates response for generic size/price inquiry
- * @param {Array} availableSizes
+ * @param {Array} availableSizes - not used, kept for compatibility
  * @returns {string}
  */
 function generateGenericSizeResponse(availableSizes) {
-  if (availableSizes.length === 0) {
-    return "Por el momento no tengo medidas disponibles en stock. ¿Te gustaría que te avise cuando tengamos nuevas opciones?";
-  }
-
-  // Show range: smallest to largest
-  const smallest = availableSizes[0];
-  const largest = availableSizes[availableSizes.length - 1];
-
+  // Simple response asking for size - don't quote specific prices that may be outdated
   const responses = [
-    `¡Claro! 😊 Tenemos varias medidas disponibles, desde $${smallest.price} (${smallest.sizeStr}) hasta $${largest.price} (${largest.sizeStr}).\n\n¿Qué medida te vendría mejor?`,
-    `Con gusto te ayudo 🌿 Manejamos desde $${smallest.price} en ${smallest.sizeStr} hasta $${largest.price} en ${largest.sizeStr}.\n\n¿Cuál se adapta mejor a lo que necesitas?`,
-    `¡Por supuesto! Tenemos diferentes tamaños, desde $${smallest.price} (${smallest.sizeStr}) hasta $${largest.price} (${largest.sizeStr}).\n\n¿Qué dimensiones buscas?`
+    "El precio depende de la medida, manejamos desde 2x2m hasta 6x10m. ¿Deseas ver la lista?",
+    "El precio varía según la medida. Tenemos desde 2x2m hasta 6x10m. ¿Te muestro las opciones?",
+    "Manejamos medidas desde 2x2m hasta 6x10m. ¿Qué medida necesitas para darte el precio exacto?"
   ];
 
   return responses[Math.floor(Math.random() * responses.length)];
