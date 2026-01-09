@@ -30,17 +30,21 @@ const authenticate = async (req, res, next) => {
 };
 
 // GET /ml/orders/:sellerId - Fetch orders for a specific seller
+// By default returns current month orders (not all-time)
+// Query params: sort, limit, offset, dateFrom, dateTo
 router.get("/orders/:sellerId", authenticate, async (req, res) => {
   try {
     const { sellerId } = req.params;
-    const { sort, limit, offset } = req.query;
+    const { sort, limit, offset, dateFrom, dateTo } = req.query;
 
     console.log(`📦 Orders request for seller ${sellerId} by user ${req.user.username}`);
 
     const result = await getOrders(sellerId, {
       sort: sort || "date_desc",
       limit: limit ? parseInt(limit) : 50,
-      offset: offset ? parseInt(offset) : 0
+      offset: offset ? parseInt(offset) : 0,
+      dateFrom: dateFrom || undefined,  // undefined = use default (start of month)
+      dateTo: dateTo || undefined        // undefined = use default (now)
     });
 
     res.json(result);

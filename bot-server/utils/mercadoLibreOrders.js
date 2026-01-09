@@ -5,14 +5,26 @@ const { getValidAccessToken } = require("./mercadoLibreOAuth");
 const ML_ORDERS_API = "https://api.mercadolibre.com/orders/search";
 
 /**
+ * Get start of current month in ISO format for ML API
+ * @returns {string} ISO date string (e.g., "2024-01-01T00:00:00.000-00:00")
+ */
+function getStartOfMonth() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  return start.toISOString();
+}
+
+/**
  * Fetch orders for a specific seller from Mercado Libre
- * CRITICAL: Must include caller.id parameter (same as seller_id)
+ * By default fetches current month orders (not all-time)
  *
  * @param {string} sellerId - Seller ID (e.g., "482595248")
  * @param {object} options - Query options
  * @param {string} options.sort - Sort order (default: "date_desc")
  * @param {number} options.limit - Max results (default: 50)
  * @param {number} options.offset - Pagination offset (default: 0)
+ * @param {string} options.dateFrom - Start date filter (ISO format, default: start of current month)
+ * @param {string} options.dateTo - End date filter (ISO format, default: now)
  * @returns {Promise<object>} Orders response from ML API
  */
 async function getOrders(sellerId, options = {}) {
@@ -35,16 +47,27 @@ async function getOrders(sellerId, options = {}) {
       throw new Error("Empty access token after trim()");
     }
 
-    // Build query string (caller.id removed - was causing WAF blocking)
+    // Build query parameters
     const sort = options.sort || "date_desc";
     const limit = options.limit || 50;
     const offset = options.offset || 0;
 
-    // Construct query string WITHOUT caller.id
-    const queryString = `seller=${sellerId}&sort=${encodeURIComponent(
-      sort
-    )}&limit=${limit}&offset=${offset}`;
-    fullUrl = `${ML_ORDERS_API}?${queryString}`;
+    // Date filtering - default to current month
+    const dateFrom = options.dateFrom || getStartOfMonth();
+    const dateTo = options.dateTo || new Date().toISOString();
+
+    // Construct query string with date range filter
+    const queryParams = new URLSearchParams({
+      seller: sellerId,
+      sort: sort,
+      limit: limit.toString(),
+      offset: offset.toString(),
+      "order.date_created.from": dateFrom,
+      "order.date_created.to": dateTo
+    });
+    fullUrl = `${ML_ORDERS_API}?${queryParams.toString()}`;
+
+    console.log(`📅 Date range: ${dateFrom} to ${dateTo}`);
 
     // Check for proxy configuration
     if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {
