@@ -52,6 +52,7 @@ async function routeByIntent(intent, message, psid, convo, botName) {
             campaignId: convo.campaignId,
             adSetId: convo.adSetId,
             adId: convo.adId,
+            userName: convo.userName,
             city: convo.city,
             stateMx: convo.stateMx
           });

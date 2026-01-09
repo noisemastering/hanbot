@@ -58,6 +58,7 @@ async function variantLine(v, includeLink = false, psid = null, convo = {}) {
       campaignId: convo.campaignId,
       adSetId: convo.adSetId,
       adId: convo.adId,
+      userName: convo.userName,
       city: convo.city,
       stateMx: convo.stateMx
     });

@@ -20,6 +20,7 @@ async function generateClickLink(psid, originalUrl, options = {}) {
     campaignId: options.campaignId,
     adSetId: options.adSetId,
     adId: options.adId,
+    userName: options.userName,
     city: options.city,
     stateMx: options.stateMx
   });
