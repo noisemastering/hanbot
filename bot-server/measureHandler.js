@@ -146,6 +146,9 @@ function parseDimensions(message) {
   // This allows all existing patterns to work with messages that include units
   normalized = normalized.replace(/(\d+(?:\.\d+)?)\s*m\b/gi, '$1');
 
+  // PREPROCESSING: Normalize "k" separator to "x" (common text abbreviation: "4 k 4" → "4 x 4")
+  normalized = normalized.replace(/(\d+(?:\.\d+)?)\s*k\s*(\d+(?:\.\d+)?)/gi, '$1 x $2');
+
   // Pattern 1: "15 x 25" or "15x25" or "15*25"
   const pattern1 = /(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)/;
 
