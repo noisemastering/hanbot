@@ -79,12 +79,18 @@ const clickLogSchema = new mongoose.Schema(
       orderStatus: String,
       buyerId: String,
       buyerNickname: String,
+      buyerFirstName: String,
+      buyerLastName: String,
       totalAmount: Number,
       paidAmount: Number,
       currency: String,
       orderDate: Date,
       itemTitle: String,
-      itemQuantity: Number
+      itemQuantity: Number,
+      // Shipping address (from ML shipments API)
+      shippingCity: String,
+      shippingState: String,
+      shippingZipCode: String
     },
 
     // Metadata

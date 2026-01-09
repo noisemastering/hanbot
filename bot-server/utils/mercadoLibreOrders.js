@@ -263,7 +263,77 @@ async function getOrderById(sellerId, orderId) {
   }
 }
 
+/**
+ * Get shipment details including receiver address
+ * @param {string} sellerId - Seller ID
+ * @param {string} shipmentId - Shipment ID
+ * @returns {Promise<object>} Shipment details with receiver address
+ */
+async function getShipmentById(sellerId, shipmentId) {
+  try {
+    if (!sellerId || !shipmentId) {
+      throw new Error("seller_id and shipment_id are required");
+    }
+
+    console.log(`📦 Fetching shipment ${shipmentId} for seller ${sellerId}`);
+
+    const accessToken = (await getValidAccessToken(sellerId)).trim();
+    if (!accessToken) throw new Error("Empty access token after trim()");
+
+    const response = await axios.get(`https://api.mercadolibre.com/shipments/${shipmentId}`, {
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        Accept: "application/json",
+        "User-Agent": "HanlobBot/1.0",
+      },
+      maxRedirects: 0,
+      validateStatus: (status) => status < 500,
+      proxy: false,
+    });
+
+    const contentType = response.headers["content-type"] || "";
+    if (contentType.includes("text/html")) {
+      throw new Error(`ML returned HTML instead of JSON for shipment ${shipmentId}`);
+    }
+
+    if (response.status >= 400) {
+      throw Object.assign(new Error(`ML API returned ${response.status}`), { response });
+    }
+
+    const shipment = response.data;
+    console.log(`✅ Shipment ${shipmentId} fetched successfully`);
+
+    // Extract receiver address
+    const receiverAddress = shipment.receiver_address || {};
+
+    return {
+      success: true,
+      shipment: {
+        id: shipment.id,
+        status: shipment.status,
+        substatus: shipment.substatus,
+        receiverAddress: {
+          city: receiverAddress.city?.name || null,
+          state: receiverAddress.state?.name || null,
+          zipCode: receiverAddress.zip_code || null,
+          streetName: receiverAddress.street_name || null,
+          streetNumber: receiverAddress.street_number || null,
+          country: receiverAddress.country?.name || null
+        },
+        receiverName: shipment.receiver_name || null
+      }
+    };
+  } catch (error) {
+    console.error(`❌ Error fetching shipment ${shipmentId}:`, error.response?.data || error.message);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
+}
+
 module.exports = {
   getOrders,
   getOrderById,
+  getShipmentById,
 };

@@ -1,6 +1,6 @@
 // utils/conversionCorrelation.js
 const ClickLog = require("../models/ClickLog");
-const { getOrders } = require("./mercadoLibreOrders");
+const { getOrders, getShipmentById } = require("./mercadoLibreOrders");
 
 /**
  * Extract ML item ID from various URL formats
@@ -153,6 +153,23 @@ async function correlateClicksToOrders(sellerId, options = {}) {
       console.log(`   ⏱️ Time to purchase: ${correlationData.timeBetweenClickAndPurchase} minutes`);
 
       if (!dryRun) {
+        // Fetch shipping address if shipment ID is available
+        let shippingData = {};
+        if (order.shipping?.id) {
+          console.log(`   📍 Fetching shipping address for shipment ${order.shipping.id}...`);
+          const shipmentResult = await getShipmentById(sellerId, order.shipping.id);
+          if (shipmentResult.success) {
+            shippingData = {
+              shippingCity: shipmentResult.shipment.receiverAddress.city,
+              shippingState: shipmentResult.shipment.receiverAddress.state,
+              shippingZipCode: shipmentResult.shipment.receiverAddress.zipCode
+            };
+            console.log(`   📍 Shipping to: ${shippingData.shippingCity}, ${shippingData.shippingState} (${shippingData.shippingZipCode})`);
+          } else {
+            console.log(`   ⚠️ Could not fetch shipping address: ${shipmentResult.error}`);
+          }
+        }
+
         // Update the click with conversion data
         await ClickLog.findByIdAndUpdate(clickToCorrelate._id, {
           converted: true,
@@ -165,12 +182,15 @@ async function correlateClicksToOrders(sellerId, options = {}) {
             orderStatus: order.status,
             buyerId: order.buyer?.id,
             buyerNickname: order.buyer?.nickname,
+            buyerFirstName: order.buyer?.first_name,
+            buyerLastName: order.buyer?.last_name,
             totalAmount: order.total_amount,
             paidAmount: order.paid_amount,
             currency: order.currency_id,
             orderDate: orderDate,
             itemTitle: matchedItem?.item?.title,
-            itemQuantity: matchedItem?.quantity
+            itemQuantity: matchedItem?.quantity,
+            ...shippingData
           }
         });
 
