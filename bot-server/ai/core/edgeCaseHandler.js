@@ -89,9 +89,11 @@ async function handleUnintelligible(psid, convo, BOT_PERSONA_NAME) {
       state: "needs_human"
     });
 
+    const whatsappLink = "https://wa.me/524425957432";
+
     return {
       type: "text",
-      text: `Lo siento 😔 sigo sin comprender bien.\n\nTe paso con alguien de nuestro equipo que puede ayudarte mejor 👇\n\n📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n🕓 ${info?.hours || "Lun-Vie 9am-6pm"}\n\nTambién puedes escribirnos aquí y te responderemos pronto 💬`
+      text: `Lo siento 😔 sigo sin comprender bien.\n\nTe paso con alguien de nuestro equipo que puede ayudarte mejor 👇\n\n💬 WhatsApp: ${whatsappLink}\n📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`
     };
   }
 }
@@ -107,9 +109,11 @@ async function handleComplexQuestion(psid, reason) {
     state: "needs_human"
   });
 
+  const whatsappLink = "https://wa.me/524425957432";
+
   return {
     type: "text",
-    text: `Entiendo que tu consulta requiere una atención más especializada 🤓\n\nPermíteme conectarte con un asesor que podrá ayudarte mejor con esto:\n\n📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n🕓 ${info?.hours || "Lun-Vie 9am-6pm"}\n\nTambién puedes escribirnos aquí por Messenger y te respondemos pronto 💬`
+    text: `Entiendo que tu consulta requiere una atención más especializada 🤓\n\nPermíteme conectarte con un asesor que podrá ayudarte mejor con esto:\n\n💬 WhatsApp: ${whatsappLink}\n📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`
   };
 }
 

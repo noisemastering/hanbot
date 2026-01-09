@@ -229,13 +229,15 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       const info = await getBusinessInfo();
       await updateConversation(psid, { lastIntent: "roll_explicit_request", state: "needs_human" });
 
+      const whatsappLink = "https://wa.me/524425957432";
+
       return {
         type: "text",
         text: "Perfecto, con gusto te ayudamos con el rollo que necesitas.\n\n" +
               "Para cotizar rollos, comunícate directamente con uno de nuestros asesores:\n\n" +
+              `💬 WhatsApp: ${whatsappLink}\n` +
               `📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n` +
-              `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}\n\n` +
-              "También puedes escribirnos aquí por Messenger y te atenderemos con gusto."
+              `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`
       };
     }
 
@@ -279,12 +281,15 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
     const info = await getBusinessInfo();
 
+    const whatsappLink = "https://wa.me/524425957432";
+
     // Check if we already gave the bulk discount response recently
     if (convo.lastIntent === "bulk_discount_inquiry") {
       // Give a shorter follow-up response
       return {
         type: "text",
         text: "Como te comenté, para cotizaciones de volumen necesitas comunicarte con nuestros asesores:\n\n" +
+              `💬 WhatsApp: ${whatsappLink}\n` +
               `📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n\n` +
               "Ellos podrán darte el precio exacto para la cantidad que necesitas."
       };
@@ -296,9 +301,9 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       type: "text",
       text: "Los descuentos por volumen aplican para pedidos desde $20,000 MXN en adelante.\n\n" +
             "Para cotizar tu pedido y conocer los descuentos disponibles, te comunico con uno de nuestros asesores:\n\n" +
+            `💬 WhatsApp: ${whatsappLink}\n` +
             `📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n` +
-            `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}\n\n` +
-            "También puedes escribirnos aquí por Messenger y te atenderemos con gusto."
+            `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`
     };
   }
 

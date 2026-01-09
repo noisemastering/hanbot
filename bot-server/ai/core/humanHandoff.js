@@ -47,21 +47,24 @@ async function handleHumanHandoff(userMessage, psid, convo, reason = "explicit")
 
   console.log(`🤝 Human handoff requested by ${psid} - Reason: ${reason}`);
 
+  // WhatsApp link for direct contact
+  const whatsappLink = "https://wa.me/524425957432";
+
   // Different responses based on reason
   const responses = {
     explicit: [
-      `Perfecto, te conectaré con uno de nuestros asesores.\n\nMientras tanto, puedes contactarnos por:\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nUn asesor tomará tu conversación pronto 👍`,
-      `Claro, con gusto te paso con nuestro equipo.\n\nPuedes llamarnos directamente:\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nO si prefieres, un asesor atenderá tu mensaje en breve 💬`,
-      `Entendido, voy a transferir tu conversación con un asesor.\n\nSi es urgente, puedes comunicarte:\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\n¡Un asesor estará contigo pronto! 😊`
+      `Perfecto, te conectaré con uno de nuestros asesores.\n\nPuedes contactarnos directamente por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nUn asesor tomará tu conversación pronto 👍`,
+      `Claro, con gusto te paso con nuestro equipo.\n\nEscríbenos por WhatsApp para atención inmediata:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nO si prefieres, un asesor atenderá tu mensaje aquí en breve 😊`,
+      `Entendido, voy a transferir tu conversación con un asesor.\n\nSi es urgente, escríbenos por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\n¡Un asesor estará contigo pronto! 👍`
     ],
     frustrated: [
-      `Entiendo tu frustración, déjame conectarte con uno de nuestros asesores para ayudarte mejor.\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nUn asesor atenderá tu caso personalmente 🙏`
+      `Entiendo tu frustración, déjame conectarte con uno de nuestros asesores para ayudarte mejor.\n\nEscríbenos directo por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nUn asesor atenderá tu caso personalmente 🙏`
     ],
     complex: [
-      `Esta consulta requiere atención especializada. Te paso con un asesor que podrá ayudarte mejor.\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nUn experto revisará tu caso pronto 🤓`
+      `Esta consulta requiere atención especializada. Te paso con un asesor que podrá ayudarte mejor.\n\nContáctanos por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nUn experto revisará tu caso pronto 🤓`
     ],
     auto_escalation: [
-      `Disculpa que no haya podido ayudarte como esperabas. Déjame conectarte con un asesor.\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nNuestro equipo te atenderá pronto 💚`
+      `Disculpa que no haya podido ayudarte como esperabas. Déjame conectarte con un asesor.\n\nEscríbenos por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nNuestro equipo te atenderá pronto 💚`
     ]
   };
 
