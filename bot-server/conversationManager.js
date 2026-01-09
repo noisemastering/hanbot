@@ -1,6 +1,7 @@
 // conversationManager.js
 const mongoose = require("mongoose");
 const Conversation = require("./models/Conversation");
+const User = require("./models/User");
 
 const ConversationSchema = new mongoose.Schema({
   psid: { type: String, required: true, unique: true },
@@ -26,11 +27,23 @@ async function getConversation(psid) {
       convo = await Conversation.create({ psid });
       console.log(`🆕 Nueva conversación iniciada para usuario ${psid}`);
     } else {
-      // Actualiza el timestamp para mantener “activa” la sesión
+      // Actualiza el timestamp para mantener "activa" la sesión
       convo.lastMessageAt = new Date();
       await convo.save();
     }
-    return convo.toObject(); // 🔥 devuelve snapshot limpio del documento actualizado
+
+    // Fetch user's name from User model
+    const convoObj = convo.toObject();
+    try {
+      const user = await User.findOne({ psid });
+      if (user && user.first_name) {
+        convoObj.userName = user.first_name;
+      }
+    } catch (userErr) {
+      console.log("⚠️ Could not fetch user name:", userErr.message);
+    }
+
+    return convoObj; // 🔥 devuelve snapshot limpio del documento actualizado
   } catch (err) {
     console.error("❌ Error en getConversation:", err);
     return { psid, state: "new", greeted: false, lastIntent: null };

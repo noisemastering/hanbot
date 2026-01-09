@@ -31,6 +31,10 @@ async function handleGreeting(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
     const greetedRecently = convo.greeted && (now - lastGreetTime) < oneHour;
 
     if (greetedRecently) {
+      const userName = convo.userName;
+      if (userName) {
+        return { type: "text", text: `¡Hola de nuevo, ${userName}! Soy ${BOT_PERSONA_NAME}. ¿Qué estás buscando esta vez?` };
+      }
       return { type: "text", text: `¡Hola de nuevo! Soy ${BOT_PERSONA_NAME}. ¿Qué estás buscando esta vez?` };
     }
 
@@ -42,11 +46,21 @@ async function handleGreeting(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
       unknownCount: 0
     });
 
-    const greetings = [
-      `¡Hola! Soy ${BOT_PERSONA_NAME}, tu asesora virtual en Hanlob. ¿Qué tipo de producto te interesa ver?`,
-      `¡Qué gusto saludarte! Soy ${BOT_PERSONA_NAME} del equipo de Hanlob.`,
-      `¡Hola! Soy ${BOT_PERSONA_NAME}, asesora de Hanlob. Cuéntame, ¿qué producto te interesa?`,
-    ];
+    const userName = convo.userName;
+    let greetings;
+    if (userName) {
+      greetings = [
+        `¡Hola, ${userName}! Soy ${BOT_PERSONA_NAME}, tu asesora virtual en Hanlob. ¿Qué tipo de producto te interesa ver?`,
+        `¡Qué gusto saludarte, ${userName}! Soy ${BOT_PERSONA_NAME} del equipo de Hanlob.`,
+        `¡Hola, ${userName}! Soy ${BOT_PERSONA_NAME}, asesora de Hanlob. Cuéntame, ¿qué producto te interesa?`,
+      ];
+    } else {
+      greetings = [
+        `¡Hola! Soy ${BOT_PERSONA_NAME}, tu asesora virtual en Hanlob. ¿Qué tipo de producto te interesa ver?`,
+        `¡Qué gusto saludarte! Soy ${BOT_PERSONA_NAME} del equipo de Hanlob.`,
+        `¡Hola! Soy ${BOT_PERSONA_NAME}, asesora de Hanlob. Cuéntame, ¿qué producto te interesa?`,
+      ];
+    }
     return { type: "text", text: greetings[Math.floor(Math.random() * greetings.length)] };
   }
   return null;
@@ -77,6 +91,13 @@ async function handleThanks(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
   // Only treat as goodbye if: no continuation, has goodbye words, AND no product request
   if (!hasContinuation && !hasProductRequest && isGoodbye) {
     await updateConversation(psid, { state: "closed", unknownCount: 0, lastIntent: "closed" });
+    const userName = convo.userName;
+    if (userName) {
+      return {
+        type: "text",
+        text: `¡Gracias a ti, ${userName}! Soy ${BOT_PERSONA_NAME} y fue un gusto ayudarte. ¡Que tengas un excelente día!`
+      };
+    }
     return {
       type: "text",
       text: `¡Gracias a ti! Soy ${BOT_PERSONA_NAME} y fue un gusto ayudarte. ¡Que tengas un excelente día!`
@@ -126,9 +147,16 @@ async function handlePurchaseDeferral(cleanMsg, psid, convo) {
       unknownCount: 0
     });
 
+    const userName = convo.userName;
+    if (userName) {
+      return {
+        type: "text",
+        text: `Perfecto ${userName}, quedamos a tus órdenes.\n\nVer tienda en línea:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n¡Cuando estés listo, con gusto te ayudo!`
+      };
+    }
     return {
       type: "text",
-      text: "Perfecto, quedamos a tus órdenes.\n\nVer tienda en línea\nIngresa al siguiente link:\n\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n¡Cuando estés listo, con gusto te ayudo!"
+      text: "Perfecto, quedamos a tus órdenes.\n\nVer tienda en línea:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n¡Cuando estés listo, con gusto te ayudo!"
     };
   }
 
@@ -152,6 +180,13 @@ async function handleAcknowledgment(cleanMsg, psid, convo) {
     console.log("👍 Acknowledgment detected:", cleanMsg);
     await updateConversation(psid, { lastIntent: "acknowledgment", unknownCount: 0 });
 
+    const userName = convo.userName;
+    if (userName) {
+      return {
+        type: "text",
+        text: `Perfecto, ${userName}! ¿Hay algo más en lo que pueda ayudarte?`
+      };
+    }
     return {
       type: "text",
       text: "Perfecto! ¿Hay algo más en lo que pueda ayudarte?"
