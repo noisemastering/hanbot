@@ -133,12 +133,14 @@ async function handlePurchaseDeferral(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
   // Detect deferral phrases - when user wants to think about it, take measurements, contact later, etc.
   // Common patterns:
   // - "voy a checar que me conviene" / "voy a ver" / "déjame checar"
+  // - "deja checo medidas" / "deja checo primero" (check measurements first)
   // - "hay luego le mando mensaje" / "ay luego te escribo" (with "hay/ay" prefix)
   // - "luego te hablo" / "luego me comunico" / "luego le mando mensaje"
   // - "después te contacto" / "te escribo más tarde"
   // - "voy a tomar medidas" / "deja tomo medidas"
   // - "lo voy a pensar/analizar" / "ahorita no"
-  const isDeferral = /\b(voy\s+a\s+chec?ar|voy\s+a\s+ver|d[ée]ja(me)?\s+chec?ar|d[ée]ja(me)?\s+ver|voy\s+a\s+tomar\s+medidas?|boy\s+a\s+tomar\s+medidas?|tomar\s+medidas?|tomo\s+medidas?|d[ée]ja(me)?\s+tomo\s+medidas?|voy\s+a\s+medir|deja\s+mido|ya\s+(que|k|q)\s+tome\s+medidas?|cuando\s+tome\s+medidas?|despu[eé]s\s+(me\s+)?(pongo\s+en\s+)?contacto|despu[eé]s\s+(te\s+|me\s+|le\s+)?(hablo|comunico|escribo|contacto|mando)|(h?ay\s+)?luego\s+(te\s+|me\s+|le\s+)?(hablo|comunico|escribo|contacto|mando(\s+mensaje)?)|ma[ñn]ana\s+(te\s+|me\s+|le\s+)?(hablo|comunico|escribo|contacto)|lo\s+(voy\s+a\s+)?analiz[oa]r?|lo\s+(voy\s+a\s+)?pensar|(te\s+|le\s+)?(escribo|hablo|contacto|mando)\s+(despu[eé]s|luego|m[aá]s\s+tarde)|m[aá]s\s+tarde\s+(te\s+|le\s+)?(escribo|hablo|contacto|mando)|ahorita\s+no|por\s+ahora\s+no|de\s+momento\s+no|(te\s+|le\s+)?mando\s+mensaje|me\s+pongo\s+en\s+contacto)\b/i.test(cleanMsg);
+  // - "coordinamos" (we'll coordinate later)
+  const isDeferral = /\b(voy\s+a\s+chec?ar|voy\s+a\s+ver|d[ée]ja(me)?\s+chec?[oa]r?|d[ée]ja(me)?\s+ver|d[ée]ja\s+checo|voy\s+a\s+tomar\s+medidas?|boy\s+a\s+tomar\s+medidas?|tomar\s+medidas?|tomo\s+medidas?|d[ée]ja(me)?\s+tomo\s+medidas?|voy\s+a\s+medir|deja\s+mido|ya\s+(que|k|q)\s+tome\s+medidas?|cuando\s+tome\s+medidas?|despu[eé]s\s+(me\s+)?(pongo\s+en\s+)?contacto|despu[eé]s\s+(te\s+|me\s+|le\s+)?(hablo|comunico|escribo|contacto|mando)|(h?ay\s+)?luego\s+(te\s+|me\s+|le\s+)?(hablo|comunico|escribo|contacto|mando(\s+mensaje)?)|ma[ñn]ana\s+(te\s+|me\s+|le\s+)?(hablo|comunico|escribo|contacto)|lo\s+(voy\s+a\s+)?analiz[oa]r?|lo\s+(voy\s+a\s+)?pensar|(te\s+|le\s+)?(escribo|hablo|contacto|mando)\s+(despu[eé]s|luego|m[aá]s\s+tarde)|m[aá]s\s+tarde\s+(te\s+|le\s+)?(escribo|hablo|contacto|mando)|ahorita\s+no|por\s+ahora\s+no|de\s+momento\s+no|(te\s+|le\s+)?mando\s+mensaje|me\s+pongo\s+en\s+contacto|y\s+coordinamos|luego\s+coordinamos)\b/i.test(cleanMsg);
 
   if (isDeferral) {
     console.log("📅 Purchase deferral detected:", cleanMsg);
