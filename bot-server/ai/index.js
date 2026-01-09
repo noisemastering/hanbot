@@ -144,7 +144,7 @@ async function generateReply(userMessage, psid, referral = null) {
     if (acknowledgmentResponse) return acknowledgmentResponse;
 
     // 📅 PURCHASE DEFERRAL: Handle when user wants to think about it, take measurements, etc.
-    const deferralResponse = await handlePurchaseDeferral(cleanMsg, psid, convo);
+    const deferralResponse = await handlePurchaseDeferral(cleanMsg, psid, convo, BOT_PERSONA_NAME);
     if (deferralResponse) return deferralResponse;
 
     // 🧠 Si hay campaña activa, intentar intención global primero

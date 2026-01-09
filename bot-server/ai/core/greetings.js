@@ -123,7 +123,7 @@ async function handleOptOut(cleanMsg, convo) {
 }
 
 // 📅 Handle purchase deferral: when user says they'll take measurements or contact later
-async function handlePurchaseDeferral(cleanMsg, psid, convo) {
+async function handlePurchaseDeferral(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
   // Don't respond to deferrals if human is active
   if (await isHumanActive(psid)) {
     console.log("🚫 Human is active, ignoring deferral");
@@ -132,12 +132,13 @@ async function handlePurchaseDeferral(cleanMsg, psid, convo) {
 
   // Detect deferral phrases - when user wants to think about it, take measurements, contact later, etc.
   // Common patterns:
+  // - "voy a checar que me conviene" / "voy a ver" / "déjame checar"
   // - "hay luego le mando mensaje" / "ay luego te escribo" (with "hay/ay" prefix)
   // - "luego te hablo" / "luego me comunico" / "luego le mando mensaje"
   // - "después te contacto" / "te escribo más tarde"
   // - "voy a tomar medidas" / "deja tomo medidas"
   // - "lo voy a pensar/analizar" / "ahorita no"
-  const isDeferral = /\b(voy\s+a\s+tomar\s+medidas?|boy\s+a\s+tomar\s+medidas?|tomar\s+medidas?|tomo\s+medidas?|d[ée]ja(me)?\s+tomo\s+medidas?|voy\s+a\s+medir|deja\s+mido|ya\s+(que|k|q)\s+tome\s+medidas?|cuando\s+tome\s+medidas?|despu[eé]s\s+(me\s+)?(pongo\s+en\s+)?contacto|despu[eé]s\s+(te\s+|me\s+|le\s+)?(hablo|comunico|escribo|contacto|mando)|(h?ay\s+)?luego\s+(te\s+|me\s+|le\s+)?(hablo|comunico|escribo|contacto|mando(\s+mensaje)?)|ma[ñn]ana\s+(te\s+|me\s+|le\s+)?(hablo|comunico|escribo|contacto)|lo\s+(voy\s+a\s+)?analiz[oa]r?|lo\s+(voy\s+a\s+)?pensar|(te\s+|le\s+)?(escribo|hablo|contacto|mando)\s+(despu[eé]s|luego|m[aá]s\s+tarde)|m[aá]s\s+tarde\s+(te\s+|le\s+)?(escribo|hablo|contacto|mando)|ahorita\s+no|por\s+ahora\s+no|de\s+momento\s+no|(te\s+|le\s+)?mando\s+mensaje)\b/i.test(cleanMsg);
+  const isDeferral = /\b(voy\s+a\s+chec?ar|voy\s+a\s+ver|d[ée]ja(me)?\s+chec?ar|d[ée]ja(me)?\s+ver|voy\s+a\s+tomar\s+medidas?|boy\s+a\s+tomar\s+medidas?|tomar\s+medidas?|tomo\s+medidas?|d[ée]ja(me)?\s+tomo\s+medidas?|voy\s+a\s+medir|deja\s+mido|ya\s+(que|k|q)\s+tome\s+medidas?|cuando\s+tome\s+medidas?|despu[eé]s\s+(me\s+)?(pongo\s+en\s+)?contacto|despu[eé]s\s+(te\s+|me\s+|le\s+)?(hablo|comunico|escribo|contacto|mando)|(h?ay\s+)?luego\s+(te\s+|me\s+|le\s+)?(hablo|comunico|escribo|contacto|mando(\s+mensaje)?)|ma[ñn]ana\s+(te\s+|me\s+|le\s+)?(hablo|comunico|escribo|contacto)|lo\s+(voy\s+a\s+)?analiz[oa]r?|lo\s+(voy\s+a\s+)?pensar|(te\s+|le\s+)?(escribo|hablo|contacto|mando)\s+(despu[eé]s|luego|m[aá]s\s+tarde)|m[aá]s\s+tarde\s+(te\s+|le\s+)?(escribo|hablo|contacto|mando)|ahorita\s+no|por\s+ahora\s+no|de\s+momento\s+no|(te\s+|le\s+)?mando\s+mensaje|me\s+pongo\s+en\s+contacto)\b/i.test(cleanMsg);
 
   if (isDeferral) {
     console.log("📅 Purchase deferral detected:", cleanMsg);
@@ -147,16 +148,9 @@ async function handlePurchaseDeferral(cleanMsg, psid, convo) {
       unknownCount: 0
     });
 
-    const userName = convo.userName;
-    if (userName) {
-      return {
-        type: "text",
-        text: `Perfecto ${userName}, quedamos a tus órdenes.\n\nVer tienda en línea:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n¡Cuando estés listo, con gusto te ayudo!`
-      };
-    }
     return {
       type: "text",
-      text: "Perfecto, quedamos a tus órdenes.\n\nVer tienda en línea:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n¡Cuando estés listo, con gusto te ayudo!"
+      text: `Excelente, quedamos a tus órdenes. Te atendió ${BOT_PERSONA_NAME || 'Hanlob'}.`
     };
   }
 
