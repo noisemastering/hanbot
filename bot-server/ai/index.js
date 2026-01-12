@@ -117,6 +117,13 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
       return null;
     }
 
+    // 🚨 CRITICAL: If conversation needs human (handoff requested), bot should NOT respond
+    // This happens for custom orders, frustrated users, explicit handoff requests, etc.
+    if (convo.state === "needs_human") {
+      console.log("🚨 Conversation is waiting for human (needs_human state), bot will not respond");
+      return null;
+    }
+
     // 🎯 CUSTOMER TYPE CLASSIFICATION
     // Identify customer type based on keywords and conversation history
     if (hasCustomerTypeIndicators(correctedMessage)) {
