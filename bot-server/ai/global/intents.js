@@ -577,7 +577,8 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   }
 
   // 📍 Ubicación - return null to let Facebook automated responses handle it
-  if (/d[oó]nde|h?ubicaci[oó]n|ubicad[oa]|direcci[oó]n|qued[ao]|mapa|local|ciudad|encuentran/i.test(msg)) {
+  // Note: "ciudad" removed - too broad, matches "Ciudad de México" when user answers where they're from
+  if (/d[oó]nde|h?ubicaci[oó]n|ubicad[oa]|direcci[oó]n|qued[ao]|mapa|local|encuentran/i.test(msg)) {
     console.log("📍 Location question detected, deferring to Facebook automated response");
     await updateConversation(psid, { lastIntent: "location_info" });
     return null;
