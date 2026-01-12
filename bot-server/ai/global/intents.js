@@ -579,12 +579,15 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     }
   }
 
-  // 📍 Ubicación - return null to let Facebook automated responses handle it
+  // 📍 Ubicación - respond with simple location info
   // Note: "ciudad" removed - too broad, matches "Ciudad de México" when user answers where they're from
-  if (/d[oó]nde|h?ubicaci[oó]n|ubicad[oa]|direcci[oó]n|qued[ao]|mapa|local|encuentran/i.test(msg)) {
-    console.log("📍 Location question detected, deferring to Facebook automated response");
+  if (/d[oó]nde\s+(est[aá]n|se\s+ubican|quedan)|h?ubicaci[oó]n|direcci[oó]n|qued[ao]n?|encuentran/i.test(msg)) {
+    console.log("📍 Location question detected");
     await updateConversation(psid, { lastIntent: "location_info" });
-    return null;
+    return {
+      type: "text",
+      text: "Estamos en Querétaro, pero enviamos a todo el país por Mercado Libre 📦"
+    };
   }
 
   // 💰 Where to pay/deposit - Direct ML payment answer

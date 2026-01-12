@@ -402,10 +402,14 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
     const autoResponse = await autoResponder(cleanMsg);
     if (autoResponse) return autoResponse;
 
-    // 📍 Location questions - skip fallback, let Facebook automated responses handle it
-    if (/d[oó]nde|h?ubicaci[oó]n|ubicad[oa]|direcci[oó]n|qued[ao]|mapa|local|encuentran/i.test(cleanMsg)) {
-      console.log("📍 Location question detected at fallback stage, skipping response");
-      return null;
+    // 📍 Location questions - respond with simple location info
+    if (/d[oó]nde\s+(est[aá]n|se\s+ubican|quedan)|h?ubicaci[oó]n|direcci[oó]n|qued[ao]n?|encuentran/i.test(cleanMsg)) {
+      console.log("📍 Location question detected at fallback stage");
+      await updateConversation(psid, { lastIntent: "location_info" });
+      return {
+        type: "text",
+        text: "Estamos en Querétaro, pero enviamos a todo el país por Mercado Libre 📦"
+      };
     }
 
     // 🧠 Fallback IA (si no se detectó ninguna intención conocida)

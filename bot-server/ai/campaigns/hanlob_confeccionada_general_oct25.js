@@ -264,11 +264,14 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     };
   }
 
-    // Ubicación / recoger en tienda - return null to let Facebook automated responses handle it
-    if (/d[oó]nde|ubica[n]?|ubicaci[oó]n|direcci[oó]n|est[aá]n|tienda|recoger|pasar/.test(clean)) {
-        console.log("📍 Location question detected, deferring to Facebook automated response");
+    // Ubicación / recoger en tienda
+    if (/d[oó]nde\s+(est[aá]n|se\s+ubican|quedan)|ubica[n]?|ubicaci[oó]n|direcci[oó]n|tienda|recoger|pasar/.test(clean)) {
+        console.log("📍 Location question detected");
         await updateConversation(psid, { lastIntent: "location_info" });
-        return null;
+        return {
+            type: "text",
+            text: "Estamos en Querétaro, pero enviamos a todo el país por Mercado Libre 📦"
+        };
     }
 
   // 7) Fallback específico de campaña - show price range instead of generic message
