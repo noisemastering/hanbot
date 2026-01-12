@@ -255,7 +255,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     });
     return {
       type: "text",
-      text: `¡Claro! Hacemos envíos a ${detectedLocation.normalized} por paquetería 📦\n\n` +
+      text: `¡Sí! Enviamos a ${detectedLocation.normalized} a través de Mercado Libre 📦\n\n` +
             `¿Qué medida de malla sombra necesitas?`
     };
   }
@@ -859,23 +859,16 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     console.log(`📍 City detected and stored: ${location.normalized}`);
     await updateConversation(psid, updateData);
 
-    // Build context-aware response
+    // Build response - just confirm ML shipping, no extra info
+    const capitalizedCity = cityName.charAt(0).toUpperCase() + cityName.slice(1);
     let response = "";
 
     if (convo.requestedSize) {
       // User mentioned a size earlier
-      if (/quer[ée]taro/i.test(cityName)) {
-        response = `Perfecto, estás en Querétaro 🏡. Para la malla sombra de ${convo.requestedSize} que te interesa, el envío va incluido en zona urbana.\n\nPuedes verlo en nuestra Tienda Oficial de ML:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n¿Te gustaría más información? 😊`;
-      } else {
-        response = `Perfecto, enviamos a ${cityName.charAt(0).toUpperCase() + cityName.slice(1)} sin problema 🚚.\n\nPara la malla sombra de ${convo.requestedSize}, el envío es garantizado a través de Mercado Libre:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n¿Te gustaría más información? 😊`;
-      }
+      response = `¡Sí! Enviamos a ${capitalizedCity} a través de Mercado Libre 📦\n\n¿Qué medida necesitas?`;
     } else {
       // No size mentioned yet
-      if (/quer[ée]taro/i.test(cityName)) {
-        response = `Perfecto, estás en Querétaro 🏡. El envío va incluido en zona urbana.\n\nPuedes ver nuestras medidas en la Tienda Oficial:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n¿Qué medida te interesa?`;
-      } else {
-        response = `Perfecto, enviamos a ${cityName.charAt(0).toUpperCase() + cityName.slice(1)} sin problema 🚚.\n\nPuedes ver todas las medidas en nuestra Tienda Oficial:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n¿Qué medida necesitas?`;
-      }
+      response = `¡Sí! Enviamos a ${capitalizedCity} a través de Mercado Libre 📦\n\n¿Qué medida necesitas?`;
     }
 
         return {
