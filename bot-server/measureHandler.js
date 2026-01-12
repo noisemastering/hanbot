@@ -544,34 +544,7 @@ function generateSizeResponse(options) {
   const responses = [];
   const suggestedSizes = []; // Track suggested sizes for context
 
-  // Check if this is a custom order (both sides >= 8m)
-  if (requestedDim && isCustomOrder(requestedDim)) {
-    const inBusinessHours = isBusinessHours();
-
-    let customOrderText = `La medida de ${requestedDim.width}x${requestedDim.height}m es un pedido especial que requiere fabricación personalizada.\n\n`;
-    customOrderText += `Este tipo de medidas necesitan cotización directa con nuestro equipo de ventas.\n\n`;
-
-    if (businessInfo) {
-      const whatsappLink = "https://wa.me/524425957432";
-      customOrderText += `💬 WhatsApp: ${whatsappLink}\n`;
-      customOrderText += `📞 Contáctanos: ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}\n`;
-      customOrderText += `🕓 Horario: ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}\n`;
-      customOrderText += `📍 ${businessInfo.address || ''}`;
-    }
-
-    if (inBusinessHours) {
-      customOrderText += `\n\n✅ Estamos en horario de atención. Un asesor te contactará en breve para ayudarte con tu cotización.`;
-    }
-
-    return {
-      text: customOrderText,
-      suggestedSizes: [],
-      offeredToShowAllSizes: false,
-      isCustomOrder: true,
-      requiresHandoff: inBusinessHours
-    };
-  }
-
+  // FIRST: Check for exact match - even for large sizes like 8x8
   if (exact) {
     // Generic responses WITHOUT ML link (link shown only on buying intent or when user asks for details)
     suggestedSizes.push(exact.sizeStr);
@@ -582,6 +555,35 @@ function generateSizeResponse(options) {
     );
   } else {
     const parts = [];
+
+    // No exact match - check if this is a custom order (both sides >= 8m)
+    // Only trigger custom order flow if product doesn't exist in inventory
+    if (requestedDim && isCustomOrder(requestedDim)) {
+      const inBusinessHours = isBusinessHours();
+
+      let customOrderText = `La medida de ${requestedDim.width}x${requestedDim.height}m es un pedido especial que requiere fabricación personalizada.\n\n`;
+      customOrderText += `Este tipo de medidas necesitan cotización directa con nuestro equipo de ventas.\n\n`;
+
+      if (businessInfo) {
+        const whatsappLink = "https://wa.me/524425957432";
+        customOrderText += `💬 WhatsApp: ${whatsappLink}\n`;
+        customOrderText += `📞 Contáctanos: ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}\n`;
+        customOrderText += `🕓 Horario: ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}\n`;
+        customOrderText += `📍 ${businessInfo.address || ''}`;
+      }
+
+      if (inBusinessHours) {
+        customOrderText += `\n\n✅ Estamos en horario de atención. Un asesor te contactará en breve para ayudarte con tu cotización.`;
+      }
+
+      return {
+        text: customOrderText,
+        suggestedSizes: [],
+        offeredToShowAllSizes: false,
+        isCustomOrder: true,
+        requiresHandoff: inBusinessHours
+      };
+    }
 
     // No exact match - suggest closest size that can cover the dimensions, or custom fabrication
     if (bigger) {
