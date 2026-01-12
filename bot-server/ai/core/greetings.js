@@ -50,15 +50,11 @@ async function handleGreeting(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
     let greetings;
     if (userName) {
       greetings = [
-        `¡Hola, ${userName}! Soy ${BOT_PERSONA_NAME}, tu asesora virtual en Hanlob. ¿Qué tipo de producto te interesa ver?`,
-        `¡Qué gusto saludarte, ${userName}! Soy ${BOT_PERSONA_NAME} del equipo de Hanlob.`,
-        `¡Hola, ${userName}! Soy ${BOT_PERSONA_NAME}, asesora de Hanlob. Cuéntame, ¿qué producto te interesa?`,
+        `Hola ${userName}, te atiende ${BOT_PERSONA_NAME} ¿en qué puedo ayudarte?`
       ];
     } else {
       greetings = [
-        `¡Hola! Soy ${BOT_PERSONA_NAME}, tu asesora virtual en Hanlob. ¿Qué tipo de producto te interesa ver?`,
-        `¡Qué gusto saludarte! Soy ${BOT_PERSONA_NAME} del equipo de Hanlob.`,
-        `¡Hola! Soy ${BOT_PERSONA_NAME}, asesora de Hanlob. Cuéntame, ¿qué producto te interesa?`,
+        `¡Hola! Te atiende ${BOT_PERSONA_NAME} ¿en qué puedo ayudarte?`
       ];
     }
     return { type: "text", text: greetings[Math.floor(Math.random() * greetings.length)] };

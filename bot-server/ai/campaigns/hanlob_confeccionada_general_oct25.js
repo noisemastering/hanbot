@@ -6,7 +6,19 @@ const { getAvailableSizes } = require("../../measureHandler");
 
 // --- Helpers ---
 function parseSize(str) {
-  const m = String(str).match(/(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)/i);
+  // Pattern 1: Simple "3x4" or "3 x 4"
+  let m = String(str).match(/(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)/i);
+
+  // Pattern 2: "3 metros x 1.70" - handles "metros" between number and x
+  if (!m) {
+    m = String(str).match(/(\d+(?:\.\d+)?)\s*metros?\s*x\s*(\d+(?:\.\d+)?)/i);
+  }
+
+  // Pattern 3: "3 por 4" or "3 metros por 4"
+  if (!m) {
+    m = String(str).match(/(\d+(?:\.\d+)?)\s*(?:metros?\s+)?por\s+(\d+(?:\.\d+)?)/i);
+  }
+
   if (!m) return null;
   const w = parseFloat(m[1]);
   const h = parseFloat(m[2]);
@@ -143,19 +155,28 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     return { type: "text", text: intro };
   }
 
-  // 2) Mensajes tipo precio
-  if (/precio|cu[aá]nto|vale|costo/.test(clean)) {
-    await updateConversation(psid, { lastIntent: "price_info" });
-    return {
-      type: "text",
-      text: `La tenemos desde *$450* en medida 4x3 🌿\n¿Qué medida estás buscando?`
-    };
-  }
-
-  // 3) Detección de medida (6x5, 4 x 3, 3.5x7, etc.)
+  // 2) Detección de medida FIRST (6x5, 4 x 3, 3.5x7, 3 metros x 1.70, etc.)
+  // This must come BEFORE generic price check so "precio de 3x4" handles the dimension
   const requested = parseSize(clean);
   if (requested) {
-    // 3a) ¿Existe exacta?
+    // Check for fractional meters
+    const hasFractions = (requested.w % 1 !== 0) || (requested.h % 1 !== 0);
+
+    if (hasFractions) {
+      // Explain we only have whole meters and show closest options
+      await updateConversation(psid, { lastIntent: "size_fractional" });
+
+      const { lower, upper } = findClosestUpDown(variants, requested);
+      let response = `📏 Solo manejamos medidas en metros completos.\n\n`;
+      response += `Para ${requested.w}x${requested.h}m, las opciones más cercanas son:\n`;
+      if (lower) response += `${await variantLine(lower, true, psid, convo)}\n`;
+      if (upper) response += `${await variantLine(upper, true, psid, convo)}\n`;
+      response += `\n¿Te interesa alguna de estas medidas?`;
+
+      return { type: "text", text: response };
+    }
+
+    // 2a) ¿Existe exacta?
     const exact = findExactVariant(variants, requested);
     if (exact) {
       await updateConversation(psid, { lastIntent: "size_exact" });
@@ -169,7 +190,7 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
       };
     }
 
-    // 3b) Si no existe exacta → sugerir lo más cercano (abajo/arriba)
+    // 2b) Si no existe exacta → sugerir lo más cercano (abajo/arriba)
     const { lower, upper } = findClosestUpDown(variants, requested);
     await updateConversation(psid, { lastIntent: "size_suggested" });
 
@@ -182,6 +203,15 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     suggestions += `\nTambién puedo confeccionarla a la medida. ¿Te interesa alguna de estas o prefieres a la medida?`;
 
     return { type: "text", text: suggestions };
+  }
+
+  // 3) Mensajes tipo precio (only if no dimension was detected)
+  if (/precio|cu[aá]nto|vale|costo/.test(clean)) {
+    await updateConversation(psid, { lastIntent: "price_info" });
+    return {
+      type: "text",
+      text: `La tenemos desde *$450* en medida 4x3 🌿\n¿Qué medida estás buscando?`
+    };
   }
 
   // 4) Mensajes tipo "medidas"

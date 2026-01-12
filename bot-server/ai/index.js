@@ -201,6 +201,11 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
     const deferralResponse = await handlePurchaseDeferral(cleanMsg, psid, convo, BOT_PERSONA_NAME);
     if (deferralResponse) return deferralResponse;
 
+    // 👋 GREETING: Handle simple greetings BEFORE campaign flow
+    // This ensures "hola" gets a friendly greeting, not product info
+    const greetingResponse = await handleGreeting(cleanMsg, psid, convo, BOT_PERSONA_NAME);
+    if (greetingResponse) return greetingResponse;
+
     // 🧠 Si hay campaña activa, intentar intención global primero
     if (campaign) {
       const globalResponse = await handleGlobalIntents(cleanMsg, psid, convo);
@@ -301,10 +306,7 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
     // 🔄 FALLBACK: Pattern-based handlers (if AI classification didn't work)
     // These still run as backup for reliability
 
-    // 💬 Saludos / agradecimientos
-    const greetingResponse = await handleGreeting(cleanMsg, psid, convo, BOT_PERSONA_NAME);
-    if (greetingResponse) return greetingResponse;
-
+    // 💬 Agradecimientos (greeting already handled earlier, before campaign flow)
     const thanksResponse = await handleThanks(cleanMsg, psid, convo, BOT_PERSONA_NAME);
     if (thanksResponse) return thanksResponse;
 
