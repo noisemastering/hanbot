@@ -235,7 +235,7 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
   }
 
     // Ubicación / recoger en tienda
-    if (/donde|ubicaci[oó]n|direcci[oó]n|est[aá]n|tienda|recoger|pasar/.test(clean)) {
+    if (/d[oó]nde|ubica[n]?|ubicaci[oó]n|direcci[oó]n|est[aá]n|tienda|recoger|pasar/.test(clean)) {
         await updateConversation(psid, { lastIntent: "location_info" });
 
         return {
