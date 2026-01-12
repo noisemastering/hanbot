@@ -1104,7 +1104,7 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
       return { type: "text", text: responseText };
     } else {
       // No exact match - provide alternatives
-      const availableSizes = await getAvailableSizes();
+      const availableSizes = await getAvailableSizes(convo);
       const businessInfo = await getBusinessInfo();
       const dimensions = {
         width: parseFloat(match[1]),
@@ -1180,7 +1180,7 @@ https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
                                   !dimensions;
 
   if (dimensions || isGenericMeasureQuery) {
-    const availableSizes = await getAvailableSizes();
+    const availableSizes = await getAvailableSizes(convo);
 
     if (dimensions) {
       // User specified exact dimensions
