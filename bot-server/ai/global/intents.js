@@ -63,6 +63,15 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 📦 ROLL QUERIES - Handle roll questions directly before other handlers
+  // "cuánto cuesta el rollo", "precio del rollo", "rollo de 50%", etc.
+  if (/\b(rol+[oy]s?)\b/i.test(msg)) {
+    console.log("📦 Roll query detected in global intents, calling roll handler");
+    const rollResponse = await handleRollQuery(msg, psid, convo);
+    if (rollResponse) return rollResponse;
+    // If roll handler returns null, continue to other handlers
+  }
+
   // 🔄 FOLLOW-UP: Handle responses to "price_by_meter" question
   if (convo.lastIntent === "price_by_meter") {
     // User was asked: "¿Qué te interesa: una medida específica confeccionada o un rollo completo?"
@@ -1161,8 +1170,9 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   // Generic measure/price inquiry (no specific dimensions mentioned)
   // Simplified: just asking about price, sizes, or cost
+  // EXCLUDES: rollo queries should go to roll handler, not confeccionada sizes
   const isGenericMeasureQuery = /\b(precio|cuestan?|cu[aá]nto|medidas?|tamaños?|dimensiones|disponibles?)\b/i.test(msg) &&
-                                  !/\b(instalaci[oó]n|color|material|env[ií]o|ubicaci[oó]n|donde)\b/i.test(msg) &&
+                                  !/\b(instalaci[oó]n|color|material|env[ií]o|ubicaci[oó]n|donde|rol+[oy]s?)\b/i.test(msg) &&
                                   !dimensions;
 
   if (dimensions || isGenericMeasureQuery) {
