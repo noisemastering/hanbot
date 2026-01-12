@@ -37,6 +37,54 @@ const botNames = ["Paula", "Sofía", "Camila", "Valeria", "Daniela"];
 const BOT_PERSONA_NAME = botNames[Math.floor(Math.random() * botNames.length)];
 console.log(`🤖 Asistente asignada para esta sesión: ${BOT_PERSONA_NAME}`);
 
+// Import for push notifications (for repetition escalation)
+const { sendHandoffNotification } = require("../services/pushNotifications");
+
+/**
+ * Check if response is a repetition and escalate to human if so
+ * Returns modified response if repetition detected, otherwise returns original
+ */
+async function checkForRepetition(response, psid, convo) {
+  if (!response || !response.text) return response;
+
+  // Normalize for comparison (remove emojis, extra spaces, lowercase)
+  const normalizeText = (text) => {
+    if (!text) return '';
+    return text
+      .replace(/[\u{1F300}-\u{1F9FF}]/gu, '') // Remove emojis
+      .replace(/\s+/g, ' ')
+      .trim()
+      .toLowerCase()
+      .substring(0, 200); // Compare first 200 chars
+  };
+
+  const currentNormalized = normalizeText(response.text);
+  const lastNormalized = normalizeText(convo.lastBotResponse);
+
+  // Check if this is a repetition (same response as last time)
+  if (lastNormalized && currentNormalized === lastNormalized) {
+    console.log("🔄 REPETITION DETECTED - escalating to human instead of repeating");
+
+    await updateConversation(psid, {
+      lastIntent: "human_handoff",
+      state: "needs_human",
+      handoffReason: "Bot attempted to repeat same response"
+    });
+
+    await sendHandoffNotification(psid, convo, "Bot detectó repetición - necesita atención humana");
+
+    return {
+      type: "text",
+      text: "Déjame comunicarte con un asesor que pueda ayudarte mejor.\n\nEn un momento te atienden."
+    };
+  }
+
+  // Save this response for future comparison
+  await updateConversation(psid, { lastBotResponse: response.text });
+
+  return response;
+}
+
 const productKeywordRegex = /\b(malla|sombra|borde|rollo|beige|monofilamento|invernadero|negra|verde|blanca|azul|90%|70%)\b/i;
 
 /**
@@ -54,14 +102,13 @@ function normalizeDimensionFormats(message) {
   return normalized;
 }
 
-async function generateReply(userMessage, psid, referral = null) {
+async function generateReplyInternal(userMessage, psid, convo, referral = null) {
   try {
     // Apply typo correction first
     const correctedMessage = correctTypos(userMessage);
     logTypoCorrection(userMessage, correctedMessage);
 
     const cleanMsg = correctedMessage.toLowerCase().trim();
-    const convo = await getConversation(psid);
     console.log("🧩 Conversación actual:", convo);
 
     // 👨‍💼 CRITICAL: If human agent is active, bot should NOT respond at all
@@ -353,6 +400,19 @@ async function generateReply(userMessage, psid, referral = null) {
     console.error("❌ Error en generateReply:", error);
     return { type: "text", text: "Lo siento 😔 hubo un problema al generar la respuesta." };
   }
+}
+
+/**
+ * Main entry point - wraps generateReplyInternal with repetition detection
+ */
+async function generateReply(userMessage, psid, referral = null) {
+  const convo = await getConversation(psid);
+
+  // Get the response from internal logic
+  const response = await generateReplyInternal(userMessage, psid, convo, referral);
+
+  // Check for repetition and escalate if needed
+  return await checkForRepetition(response, psid, convo);
 }
 
 module.exports = { generateReply };

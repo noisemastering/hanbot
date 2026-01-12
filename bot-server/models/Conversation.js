@@ -11,6 +11,7 @@ const conversationSchema = new mongoose.Schema({
   unknownCount: { type: Number, default: 0 },
   clarificationCount: { type: Number, default: 0 },  // Track unintelligible message attempts
   lastMessageAt: { type: Date, default: Date.now },
+  lastBotResponse: { type: String, default: null },  // Track last bot response to detect repetition
 
   // Campaign & context tracking
   campaignRef: { type: String, default: null },
