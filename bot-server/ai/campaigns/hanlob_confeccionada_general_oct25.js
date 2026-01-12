@@ -234,21 +234,11 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     };
   }
 
-    // Ubicación / recoger en tienda
+    // Ubicación / recoger en tienda - return null to let Facebook automated responses handle it
     if (/d[oó]nde|ubica[n]?|ubicaci[oó]n|direcci[oó]n|est[aá]n|tienda|recoger|pasar/.test(clean)) {
+        console.log("📍 Location question detected, deferring to Facebook automated response");
         await updateConversation(psid, { lastIntent: "location_info" });
-
-        return {
-            type: "text",
-            text:
-            `Estamos en Querétaro 📍\n\n` +
-            `HANLOB - Microparque Industrial Navex Park\n` +
-            `Calle Loma de San Gremal No. 108, bodega 73\n` +
-            `Col. Ejido Santa María Magdalena\n` +
-            `C.P. 76137, Santiago de Querétaro, Qro.\n\n` +
-            `Google Maps → https://www.google.com/maps/place/Hanlob\n\n` +
-            `Puedes pasar a recoger o te enviamos a domicilio 🚚✨`
-        };
+        return null;
     }
 
   // 7) Fallback específico de campaña - show price range instead of generic message

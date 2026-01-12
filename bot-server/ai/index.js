@@ -393,6 +393,12 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
     const autoResponse = await autoResponder(cleanMsg);
     if (autoResponse) return autoResponse;
 
+    // 📍 Location questions - skip fallback, let Facebook automated responses handle it
+    if (/d[oó]nde|h?ubicaci[oó]n|ubicad[oa]|direcci[oó]n|qued[ao]|mapa|local|encuentran/i.test(cleanMsg)) {
+      console.log("📍 Location question detected at fallback stage, skipping response");
+      return null;
+    }
+
     // 🧠 Fallback IA (si no se detectó ninguna intención conocida)
     return await handleFallback(correctedMessage, psid, convo, openai, BOT_PERSONA_NAME);
 

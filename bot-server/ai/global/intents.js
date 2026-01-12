@@ -576,25 +576,11 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     }
   }
 
-  // 📍 Ubicación (includes common misspellings like "hubicacion")
-  if (/donde|h?ubicaci[oó]n|ubicad[oa]|direcci[oó]n|qued[ao]|mapa|local|ciudad|encuentran/i.test(msg)) {
+  // 📍 Ubicación - return null to let Facebook automated responses handle it
+  if (/d[oó]nde|h?ubicaci[oó]n|ubicad[oa]|direcci[oó]n|qued[ao]|mapa|local|ciudad|encuentran/i.test(msg)) {
+    console.log("📍 Location question detected, deferring to Facebook automated response");
     await updateConversation(psid, { lastIntent: "location_info" });
-
-    return {
-      type: "text",
-      text: `Estamos en Querétaro:
-
-Hanlob - Microparque Industrial Navex Park
-Calle Loma de San Gremal No. 108, bodega 73,
-Col. Ejido Santa María Magdalena, C.P. 76137, Santiago de Querétaro, Qro.
-
-Google Maps: https://www.google.com/maps/place/Hanlob/
-
-Enviamos a todo el país a través de nuestra Tienda Oficial en Mercado Libre:
-https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob
-
-¿En qué ciudad te encuentras?`
-    };
+    return null;
   }
 
   // 💰 Where to pay/deposit - Direct ML payment answer
