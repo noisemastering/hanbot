@@ -248,11 +248,14 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   // Handle "vivo en X", "soy de X", "estoy en X" to acknowledge and continue
   if (isLocationContext && detectedLocation) {
     console.log("📍 User mentioned their location:", detectedLocation.normalized);
-    await updateConversation(psid, {
+    const locationUpdate = {
       lastIntent: "location_mentioned",
-      userLocation: detectedLocation.normalized,
+      city: detectedLocation.normalized,
       unknownCount: 0
-    });
+    };
+    if (detectedLocation.type === 'state') locationUpdate.stateMx = detectedLocation.normalized;
+    await updateConversation(psid, locationUpdate);
+
     return {
       type: "text",
       text: `¡Sí! Enviamos a ${detectedLocation.normalized} a través de Mercado Libre 📦\n\n` +
