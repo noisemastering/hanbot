@@ -108,12 +108,16 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   // Normalize common misspellings
   msg = msg.replace(/\bmaya\b/gi, 'malla')
            .replace(/\bmaia\b/gi, 'malla')
-           .replace(/\broyo\b/gi, 'rollo');
+           .replace(/\broyo\b/gi, 'rollo')
+           .replace(/\bm[we]rcado\s*libre\b/gi, 'mercado libre')
+           .replace(/\bmercadolibre\b/gi, 'mercado libre');
 
   // 🏪 MERCADO LIBRE STORE LINK - Handle requests to see the online store
+  // Also handles "tienes mercado libre?" type questions
   if (/\b(ver|visitar|ir a|mostrar|enviar|dar|darme|dame|quiero)\s+(la\s+)?(tienda|catalogo|cat[aá]logo)\b/i.test(msg) ||
       /\b(tienda\s+(en\s+l[ií]nea|online|virtual|mercado\s+libre))\b/i.test(msg) ||
-      /\b(link|enlace)\s+(de\s+)?(la\s+)?(tienda|catalogo)\b/i.test(msg)) {
+      /\b(link|enlace)\s+(de\s+)?(la\s+)?(tienda|catalogo)\b/i.test(msg) ||
+      /\b(tienes?|tienen?|venden?|est[aá]n?)\s+(en\s+|por\s+)?mercado\s*libre\b/i.test(msg)) {
 
     await updateConversation(psid, { lastIntent: "store_link_requested" });
 
