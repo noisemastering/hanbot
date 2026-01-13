@@ -603,6 +603,24 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 🏪 RETAIL SALES / STORE VISIT - "venta al público", "si voy a Querétaro", "puedo ir/pasar"
+  if (/\b(venta\s+al\s+p[uú]blico|venden\s+al\s+p[uú]blico|atienden\s+al\s+p[uú]blico)\b/i.test(msg) ||
+      /\b(si\s+voy|puedo\s+ir|puedo\s+pasar|paso\s+a|pasar\s+a\s+comprar|comprar\s+en\s+persona|comprar\s+directo|recoger\s+en)\b/i.test(msg) ||
+      /\b(tienen\s+tienda|hay\s+tienda|tienda\s+f[ií]sica|local\s+f[ií]sico|showroom)\b/i.test(msg)) {
+    const businessInfo = await getBusinessInfo();
+    console.log("🏪 Store visit / retail sales question detected");
+    await updateConversation(psid, { lastIntent: "store_visit" });
+
+    return {
+      type: "text",
+      text: `¡Sí! Tenemos venta al público en nuestra bodega en Querétaro 🏪\n\n` +
+            `📍 ${businessInfo.address}\n` +
+            `📞 ${businessInfo.phones.join(" / ")}\n` +
+            `🕓 ${businessInfo.hours}\n\n` +
+            `Puedes venir a ver el producto y pagar en efectivo o con tarjeta. ¿Qué medida te interesa?`
+    };
+  }
+
   // 🔧 Measurement/Installation services - We don't offer these
   if (/\b(venir\s+a\s+medir|pasan\s+a\s+medir|van\s+a\s+medir|pueden\s+medir|podr[ií]an\s+(venir|pasar)\s+(a\s+)?medir|mandan\s+a\s+alguien|env[ií]an\s+a\s+alguien|hacen\s+instalaci[oó]n|instalan|colocan|ponen\s+la\s+malla|servicio\s+de\s+(instalaci[oó]n|medici[oó]n|colocaci[oó]n)|instalador|quien\s+(la\s+)?instale|quien\s+(la\s+)?coloque)\b/i.test(msg)) {
     console.log("🔧 Measurement/installation service request detected");
