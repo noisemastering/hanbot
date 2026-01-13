@@ -398,11 +398,16 @@ router.post('/correlate-conversions', async (req, res) => {
 // GET /analytics/conversions - Get conversion statistics
 router.get('/conversions', async (req, res) => {
   try {
-    const stats = await getConversionStats();
+    const { dateFrom, dateTo } = req.query;
+
+    console.log(`📊 Conversions request - dateFrom: ${dateFrom}, dateTo: ${dateTo}`);
+
+    const stats = await getConversionStats({ dateFrom, dateTo });
 
     res.json({
       success: true,
-      stats
+      stats,
+      filters: { dateFrom, dateTo }
     });
   } catch (error) {
     console.error('❌ Error fetching conversion stats:', error);

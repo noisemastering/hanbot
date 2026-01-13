@@ -38,6 +38,7 @@ router.get("/orders/:sellerId", authenticate, async (req, res) => {
     const { sort, limit, offset, dateFrom, dateTo } = req.query;
 
     console.log(`📦 Orders request for seller ${sellerId} by user ${req.user.username}`);
+    console.log(`📅 Query params - dateFrom: ${dateFrom}, dateTo: ${dateTo}, limit: ${limit}, offset: ${offset}`);
 
     const result = await getOrders(sellerId, {
       sort: sort || "date_desc",

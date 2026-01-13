@@ -79,10 +79,12 @@ async function handleThanks(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
   const hasContinuation = /\b(pero|aun|todavía|todavia|aún|tengo\s+(una\s+)?(duda|pregunta)|quiero\s+saber|me\s+gustaría|quisiera)\b/i.test(cleanMsg);
 
   // Check if message contains actual product/size requests
-  const hasProductRequest = /\b(\d+\s*x\s*\d+|precio|medida|rollo|metro|malla|sombra|tien[ea]s?|cuanto|cuánto|cotiz|ofrece|disponible)\b/i.test(cleanMsg);
+  // Exclude "gracias por la cotización" - that's a thank you, not a quote request
+  const isThankingForQuote = /\b(gracias\s+por\s+(la\s+)?cotizaci[oó]n|gracias\s+por\s+cotizar)\b/i.test(cleanMsg);
+  const hasProductRequest = !isThankingForQuote && /\b(\d+\s*x\s*\d+|precio|medida|rollo|metro|malla|sombra|tien[ea]s?|cuanto|cuánto|cotiz|ofrece|disponible)\b/i.test(cleanMsg);
 
   // Expanded goodbye patterns to include common Mexican closing phrases and deferment messages
-  const isGoodbye = /\b(gracias|perfecto|excelente|muy amable|adiós|adios|bye|nos vemos|hasta luego|nos hablamos|te hablo|luego hablo|después|despu[ée]s\s+(te\s+)?(contacto|hablo|comunico|escribo)|ma[ñn]ana\s+(me\s+|te\s+)?(comunico|hablo|contacto|escribo)|analizar|lo\s+(voy\s+a\s+)?analizo|escribo\s+(más\s+|mas\s+)?tarde|te\s+escribo|lo\s+pienso|más\s+tarde|mas\s+tarde)\b/i.test(cleanMsg);
+  const isGoodbye = /\b(gracias|perfecto|excelente|muy amable|adiós|adios|bye|nos vemos|hasta luego|nos hablamos|te hablo|luego hablo|después|despu[ée]s\s+(te\s+)?(contacto|hablo|comunico|escribo)|ma[ñn]ana\s+(me\s+|te\s+)?(comunico|hablo|contacto|escribo)|analizar|lo\s+(voy\s+a\s+)?analizo|escribo\s+(más\s+|mas\s+)?tarde|te\s+escribo|lo\s+pienso|más\s+tarde|mas\s+tarde|estamos\s+en\s+contacto|estaremos\s+en\s+contacto|seguimos\s+en\s+contacto)\b/i.test(cleanMsg);
 
   // Only treat as goodbye if: no continuation, has goodbye words, AND no product request
   if (!hasContinuation && !hasProductRequest && isGoodbye) {

@@ -353,7 +353,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   if (/\b(pongan?|den|muestren?|env[ií]en?|pasame?|pasen?|listado?)\s+(de\s+)?(precios?|medidas?|opciones?|tama[ñn]os?|colores?)\b/i.test(msg) ||
       /\b(precios?\s+y\s+medidas?)\b/i.test(msg) ||
       /\b(medidas?\s+y\s+precios?)\b/i.test(msg) ||
-      /\b(hacer\s+presupuesto|cotizaci[oó]n)\b/i.test(msg) ||
+      /\b(hacer\s+presupuesto|cotizaci[oó]n|cotizar)\b/i.test(msg) ||
       /\b(opciones?\s+disponibles?|qu[eé]\s+tienen|todo\s+lo\s+que\s+tienen)\b/i.test(msg) ||
       /\b(medidas?\s+est[aá]ndares?)\b/i.test(msg)) {
 
@@ -596,6 +596,18 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     return {
       type: "text",
       text: "Estamos en Querétaro, pero enviamos a todo el país por Mercado Libre 📦"
+    };
+  }
+
+  // 🔧 Measurement/Installation services - We don't offer these
+  if (/\b(venir\s+a\s+medir|pasan\s+a\s+medir|van\s+a\s+medir|pueden\s+medir|podr[ií]an\s+(venir|pasar)\s+(a\s+)?medir|mandan\s+a\s+alguien|env[ií]an\s+a\s+alguien|hacen\s+instalaci[oó]n|instalan|colocan|ponen\s+la\s+malla|servicio\s+de\s+(instalaci[oó]n|medici[oó]n|colocaci[oó]n)|instalador|quien\s+(la\s+)?instale|quien\s+(la\s+)?coloque)\b/i.test(msg)) {
+    console.log("🔧 Measurement/installation service request detected");
+    await updateConversation(psid, { lastIntent: "service_request" });
+    return {
+      type: "text",
+      text: "Por el momento en Hanlob no proveemos servicios de medición ni instalación 🔧\n\n" +
+            "Solo vendemos la malla sombra y la enviamos a tu domicilio.\n\n" +
+            "¿Ya tienes la medida que necesitas?"
     };
   }
 

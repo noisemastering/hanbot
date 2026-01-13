@@ -6,12 +6,22 @@ const ML_ORDERS_API = "https://api.mercadolibre.com/orders/search";
 
 /**
  * Get start of current month in ISO format for ML API
- * @returns {string} ISO date string (e.g., "2024-01-01T00:00:00.000-00:00")
+ * ML expects format: "2024-01-01T00:00:00.000-00:00" (with offset, not Z)
+ * @returns {string} ISO date string with offset format
  */
 function getStartOfMonth() {
   const now = new Date();
   const start = new Date(now.getFullYear(), now.getMonth(), 1);
-  return start.toISOString();
+  // ML API expects offset format (-00:00) not Z
+  return start.toISOString().replace('Z', '-00:00');
+}
+
+/**
+ * Get current date/time in ISO format for ML API
+ * @returns {string} ISO date string with offset format
+ */
+function getNowISO() {
+  return new Date().toISOString().replace('Z', '-00:00');
 }
 
 /**
@@ -53,8 +63,9 @@ async function getOrders(sellerId, options = {}) {
     const offset = options.offset || 0;
 
     // Date filtering - default to current month
+    // ML API expects offset format (-00:00) not Z
     const dateFrom = options.dateFrom || getStartOfMonth();
-    const dateTo = options.dateTo || new Date().toISOString();
+    const dateTo = options.dateTo || getNowISO();
 
     // Construct query string with date range filter
     const queryParams = new URLSearchParams({

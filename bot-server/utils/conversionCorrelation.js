@@ -222,8 +222,29 @@ async function correlateClicksToOrders(sellerId, options = {}) {
 
 /**
  * Get conversion statistics
+ * @param {object} options - Filter options
+ * @param {Date|string} options.dateFrom - Start date filter
+ * @param {Date|string} options.dateTo - End date filter
  */
-async function getConversionStats() {
+async function getConversionStats(options = {}) {
+  const { dateFrom, dateTo } = options;
+
+  // Build date filter for conversions (based on convertedAt)
+  const dateFilter = {};
+  if (dateFrom || dateTo) {
+    dateFilter.convertedAt = {};
+    if (dateFrom) dateFilter.convertedAt.$gte = new Date(dateFrom);
+    if (dateTo) dateFilter.convertedAt.$lte = new Date(dateTo);
+  }
+
+  // Build date filter for clicks (based on clickedAt)
+  const clickDateFilter = {};
+  if (dateFrom || dateTo) {
+    clickDateFilter.clickedAt = {};
+    if (dateFrom) clickDateFilter.clickedAt.$gte = new Date(dateFrom);
+    if (dateTo) clickDateFilter.clickedAt.$lte = new Date(dateTo);
+  }
+
   const [
     totalClicks,
     clickedLinks,
@@ -232,24 +253,27 @@ async function getConversionStats() {
     mediumConfidence,
     lowConfidence
   ] = await Promise.all([
-    ClickLog.countDocuments({}),
-    ClickLog.countDocuments({ clicked: true }),
-    ClickLog.countDocuments({ converted: true }),
-    ClickLog.countDocuments({ converted: true, correlationConfidence: 'high' }),
-    ClickLog.countDocuments({ converted: true, correlationConfidence: 'medium' }),
-    ClickLog.countDocuments({ converted: true, correlationConfidence: 'low' })
+    ClickLog.countDocuments(dateFrom || dateTo ? { createdAt: dateFilter.convertedAt } : {}),
+    ClickLog.countDocuments({ clicked: true, ...clickDateFilter }),
+    ClickLog.countDocuments({ converted: true, ...dateFilter }),
+    ClickLog.countDocuments({ converted: true, correlationConfidence: 'high', ...dateFilter }),
+    ClickLog.countDocuments({ converted: true, correlationConfidence: 'medium', ...dateFilter }),
+    ClickLog.countDocuments({ converted: true, correlationConfidence: 'low', ...dateFilter })
   ]);
 
-  // Get total revenue from conversions
+  // Get total revenue from conversions (with date filter)
+  const revenueMatch = { converted: true };
+  if (dateFilter.convertedAt) revenueMatch.convertedAt = dateFilter.convertedAt;
+
   const revenueAgg = await ClickLog.aggregate([
-    { $match: { converted: true } },
+    { $match: revenueMatch },
     { $group: { _id: null, total: { $sum: '$conversionData.totalAmount' } } }
   ]);
   const totalRevenue = revenueAgg[0]?.total || 0;
 
-  // Get conversions by PSID
+  // Get conversions by PSID (with date filter)
   const conversionsByPSID = await ClickLog.aggregate([
-    { $match: { converted: true } },
+    { $match: revenueMatch },
     {
       $group: {
         _id: '$psid',

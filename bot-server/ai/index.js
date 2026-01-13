@@ -206,6 +206,11 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
     const greetingResponse = await handleGreeting(cleanMsg, psid, convo, BOT_PERSONA_NAME);
     if (greetingResponse) return greetingResponse;
 
+    // 💬 THANKS/GOODBYE: Handle thank you messages BEFORE campaign/global intents
+    // This ensures "Gracias por la cotización" closes the conversation properly
+    const earlyThanksResponse = await handleThanks(cleanMsg, psid, convo, BOT_PERSONA_NAME);
+    if (earlyThanksResponse) return earlyThanksResponse;
+
     // 🧠 Si hay campaña activa, intentar intención global primero
     if (campaign) {
       const globalResponse = await handleGlobalIntents(cleanMsg, psid, convo);
@@ -364,7 +369,11 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
       // If handler returned null (less than 2 dimensions), continue to regular flow
     }
 
-    if (!isMultiQuestion && !isMultiSize && productKeywordRegex.test(cleanMsg)) {
+    // Skip product search for generic quote requests without specific size
+    const isGenericQuoteRequest = /\b(cotizar|cotiza|cotizaci[oó]n)\b/i.test(cleanMsg) &&
+                                   !/\d+\s*x\s*\d+/.test(cleanMsg);
+
+    if (!isMultiQuestion && !isMultiSize && !isGenericQuoteRequest && productKeywordRegex.test(cleanMsg)) {
       const product = await getProduct(cleanMsg);
       if (product) {
         await updateConversation(psid, { lastIntent: "product_search", state: "active", unknownCount: 0 });

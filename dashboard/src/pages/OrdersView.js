@@ -3,45 +3,42 @@ import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
+// Get start of current month in YYYY-MM-DD format for date input
+function getStartOfMonthStr() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  return start.toISOString().split('T')[0];
+}
+
+// Get today's date in YYYY-MM-DD format for date input
+function getTodayStr() {
+  return new Date().toISOString().split('T')[0];
+}
+
+const ITEMS_PER_PAGE = 50;
+const ML_MAX_OFFSET = 10000; // ML API limit
+
 function OrdersView() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [sellerId, setSellerId] = useState('482595248'); // Hanlob default
+  const [dateFrom, setDateFrom] = useState(getStartOfMonthStr());
+  const [dateTo, setDateTo] = useState(getTodayStr());
+  const [offset, setOffset] = useState(0);
   const [paging, setPaging] = useState({});
-  const [sellerInfo, setSellerInfo] = useState(null);
   const [metrics, setMetrics] = useState({
     totalOrders: 0,
     totalRevenue: 0,
     avgOrderValue: 0,
     paidOrders: 0
   });
-
-  const fetchSellerInfo = async () => {
-    try {
-      const token = localStorage.getItem('token');
-      if (!token) return;
-
-      console.log(`🔍 Fetching seller info for: ${sellerId}`);
-
-      const response = await axios.get(
-        `${API_URL}/ml/sellers/${sellerId}`,
-        {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        }
-      );
-
-      console.log('✅ Seller info received:', response.data);
-      setSellerInfo(response.data.auth || null);
-
-    } catch (err) {
-      console.error('⚠️ Error fetching seller info:', err);
-      // Don't set error state - seller might not be authorized yet
-      setSellerInfo(null);
-    }
-  };
+  const [fbAttribution, setFbAttribution] = useState({
+    conversionRate: null,
+    conversions: 0,
+    totalRevenue: 0,
+    loading: true
+  });
 
   const fetchOrders = async () => {
     setLoading(true);
@@ -56,10 +53,23 @@ function OrdersView() {
         return;
       }
 
+      // Convert date inputs to ISO format for API
+      const dateFromISO = dateFrom ? `${dateFrom}T00:00:00.000-00:00` : undefined;
+      const dateToISO = dateTo ? `${dateTo}T23:59:59.999-00:00` : undefined;
+
       console.log(`📦 Fetching orders for seller: ${sellerId}`);
+      console.log(`📅 Date range: ${dateFrom} to ${dateTo}`);
+
+      const params = new URLSearchParams({
+        sort: 'date_desc',
+        limit: ITEMS_PER_PAGE.toString(),
+        offset: offset.toString()
+      });
+      if (dateFromISO) params.append('dateFrom', dateFromISO);
+      if (dateToISO) params.append('dateTo', dateToISO);
 
       const response = await axios.get(
-        `${API_URL}/ml/orders/${sellerId}?sort=date_desc&limit=50`,
+        `${API_URL}/ml/orders/${sellerId}?${params.toString()}`,
         {
           headers: {
             Authorization: `Bearer ${token}`
@@ -95,9 +105,75 @@ function OrdersView() {
 
   useEffect(() => {
     fetchOrders();
-    fetchSellerInfo();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [offset, dateFrom, dateTo]); // Re-fetch when offset or dates change
+
+  // Fetch Facebook attribution data (filtered by date range)
+  useEffect(() => {
+    const fetchAttribution = async () => {
+      try {
+        setFbAttribution(prev => ({ ...prev, loading: true }));
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        // Build date params matching the order filters
+        const params = new URLSearchParams();
+        if (dateFrom) params.append('dateFrom', `${dateFrom}T00:00:00.000Z`);
+        if (dateTo) params.append('dateTo', `${dateTo}T23:59:59.999Z`);
+
+        const response = await axios.get(`${API_URL}/analytics/conversions?${params.toString()}`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+
+        if (response.data.success) {
+          const stats = response.data.stats;
+          setFbAttribution({
+            conversionRate: stats.conversionRate,
+            conversions: stats.conversions,
+            totalRevenue: stats.totalRevenue,
+            loading: false
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching attribution:', err);
+        setFbAttribution(prev => ({ ...prev, loading: false }));
+      }
+    };
+
+    fetchAttribution();
+  }, [dateFrom, dateTo]);
+
+  // Reset offset when dates change
+  const handleDateChange = (type, value) => {
+    setOffset(0); // Reset to first page
+    if (type === 'from') setDateFrom(value);
+    else setDateTo(value);
+  };
+
+  const currentPage = Math.floor(offset / ITEMS_PER_PAGE) + 1;
+  const maxAccessibleItems = Math.min(paging.total || 0, ML_MAX_OFFSET);
+  const totalAccessiblePages = Math.ceil(maxAccessibleItems / ITEMS_PER_PAGE);
+
+  const goToNextPage = () => {
+    const nextOffset = offset + ITEMS_PER_PAGE;
+    if (nextOffset < maxAccessibleItems) {
+      setOffset(nextOffset);
+    }
+  };
+
+  const goToPrevPage = () => {
+    if (offset > 0) {
+      setOffset(Math.max(0, offset - ITEMS_PER_PAGE));
+    }
+  };
+
+  const goToFirstPage = () => setOffset(0);
+  const goToLastPage = () => {
+    if (maxAccessibleItems > 0) {
+      const lastPageOffset = Math.floor((maxAccessibleItems - 1) / ITEMS_PER_PAGE) * ITEMS_PER_PAGE;
+      setOffset(Math.min(lastPageOffset, ML_MAX_OFFSET - ITEMS_PER_PAGE));
+    }
+  };
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
@@ -135,18 +211,18 @@ function OrdersView() {
       {/* Header */}
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-white">Pedidos de Mercado Libre</h2>
-        <p className="text-sm text-gray-400 mt-1">Ventas del mes actual - Seller {sellerId}</p>
+        <p className="text-sm text-gray-400 mt-1">Seller {sellerId}</p>
       </div>
 
       {/* Sales Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         {/* Total Orders */}
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
-          <div className="text-gray-400 text-sm">Pedidos del Mes</div>
+          <div className="text-gray-400 text-sm">Pedidos</div>
           <div className="text-2xl font-bold text-white mt-1">{metrics.totalOrders}</div>
           {paging.total && paging.total > metrics.totalOrders && (
             <div className="text-xs text-gray-500 mt-1">
-              Mostrando {metrics.totalOrders} de {paging.total.toLocaleString()} del mes
+              Mostrando {metrics.totalOrders} de {paging.total.toLocaleString()}
             </div>
           )}
         </div>
@@ -155,7 +231,7 @@ function OrdersView() {
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
           <div className="text-gray-400 text-sm">Ingresos Totales</div>
           <div className="text-2xl font-bold text-green-400 mt-1">{formatCurrency(metrics.totalRevenue)}</div>
-          <div className="text-xs text-gray-500 mt-1">Mes actual ({metrics.totalOrders} pedidos)</div>
+          <div className="text-xs text-gray-500 mt-1">{metrics.totalOrders} pedidos en período</div>
         </div>
 
         {/* Average Order Value */}
@@ -168,15 +244,16 @@ function OrdersView() {
         {/* Facebook Attribution */}
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
           <div className="text-gray-400 text-sm">Atribución Facebook</div>
-          {sellerInfo?.psid ? (
-            <>
-              <div className="text-lg font-bold text-blue-400 mt-1">Conectado</div>
-              <div className="text-xs text-gray-500 mt-1">PSID: {sellerInfo.psid.substring(0, 12)}...</div>
-            </>
+          {fbAttribution.loading ? (
+            <div className="text-lg font-bold text-gray-500 mt-1">Cargando...</div>
           ) : (
             <>
-              <div className="text-lg font-bold text-gray-500 mt-1">No conectado</div>
-              <div className="text-xs text-gray-500 mt-1">Sin PSID asociado</div>
+              <div className="text-2xl font-bold text-blue-400 mt-1">
+                {paging.total > 0 ? ((fbAttribution.conversions / paging.total) * 100).toFixed(1) : 0}%
+              </div>
+              <div className="text-xs text-gray-500 mt-1">
+                {fbAttribution.conversions} de {paging.total || 0} pedidos
+              </div>
             </>
           )}
         </div>
@@ -190,9 +267,26 @@ function OrdersView() {
             <input
               type="text"
               value={sellerId}
-              onChange={(e) => setSellerId(e.target.value)}
-              placeholder="Seller ID"
-              className="px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500 w-48"
+              readOnly
+              className="px-4 py-2 bg-gray-900/70 border border-gray-700 rounded-lg text-gray-400 w-40 cursor-not-allowed"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Desde</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => handleDateChange('from', e.target.value)}
+              className="px-3 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-1">Hasta</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => handleDateChange('to', e.target.value)}
+              className="px-3 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
             />
           </div>
           <div className="flex items-end">
@@ -201,12 +295,12 @@ function OrdersView() {
               disabled={loading}
               className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg disabled:opacity-50 transition-colors"
             >
-              {loading ? 'Cargando...' : 'Actualizar Pedidos'}
+              {loading ? 'Cargando...' : 'Buscar Pedidos'}
             </button>
           </div>
           {paging.total !== undefined && (
             <div className="text-gray-400 ml-auto">
-              Total del mes: <span className="text-white font-semibold">{paging.total.toLocaleString()}</span> pedidos
+              Total: <span className="text-white font-semibold">{paging.total.toLocaleString()}</span> pedidos
             </div>
           )}
         </div>
@@ -239,32 +333,29 @@ function OrdersView() {
       {!loading && orders.length > 0 && (
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full" style={{ minWidth: '1200px' }}>
+            <table className="w-full table-fixed">
               <thead className="bg-gray-900/50">
                 <tr>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-28">
-                    ID Pedido
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider" style={{ width: '130px' }}>
+                    Pedido
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-24">
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider" style={{ width: '55px' }}>
                     Estado
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-36">
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider" style={{ width: '90px' }}>
                     Fecha
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider w-32">
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider" style={{ width: '100px' }}>
                     Comprador
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider" style={{ minWidth: '350px' }}>
+                  <th className="px-2 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider" style={{ width: '35%' }}>
                     Producto
                   </th>
-                  <th className="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider w-16">
-                    Cant
+                  <th className="px-2 py-2 text-center text-xs font-medium text-gray-400 uppercase tracking-wider" style={{ width: '35px' }}>
+                    #
                   </th>
-                  <th className="px-3 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider w-28">
+                  <th className="px-2 py-2 text-right text-xs font-medium text-gray-400 uppercase tracking-wider" style={{ width: '75px' }}>
                     Total
-                  </th>
-                  <th className="px-3 py-3 text-center text-xs font-medium text-gray-400 uppercase tracking-wider w-24">
-                    Pago
                   </th>
                 </tr>
               </thead>
@@ -272,83 +363,56 @@ function OrdersView() {
                 {orders.map((order) => {
                   const firstItem = order.order_items?.[0];
                   const totalQty = order.order_items?.reduce((sum, item) => sum + (item.quantity || 0), 0) || 0;
-                  const paymentStatus = order.payments?.[0]?.status || 'N/A';
-                  const paymentStatusClass = paymentStatus === 'approved'
-                    ? 'bg-green-500/20 text-green-300 border border-green-500/30'
-                    : paymentStatus === 'pending'
-                    ? 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30'
-                    : paymentStatus === 'rejected'
-                    ? 'bg-red-500/20 text-red-300 border border-red-500/30'
-                    : 'bg-gray-500/20 text-gray-300 border border-gray-500/30';
 
                   const orderStatusClass = order.status === 'paid'
-                    ? 'bg-green-500/20 text-green-300 border border-green-500/30'
+                    ? 'bg-green-500/20 text-green-300'
                     : order.status === 'confirmed'
-                    ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+                    ? 'bg-blue-500/20 text-blue-300'
                     : order.status === 'cancelled'
-                    ? 'bg-red-500/20 text-red-300 border border-red-500/30'
-                    : 'bg-gray-500/20 text-gray-300 border border-gray-500/30';
+                    ? 'bg-red-500/20 text-red-300'
+                    : 'bg-gray-500/20 text-gray-300';
+
+                  // Show full order ID
+                  const orderId = String(order.id);
+
+                  // Date format with year to verify
+                  const shortDate = order.date_created
+                    ? new Date(order.date_created).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit' })
+                    : 'N/A';
 
                   return (
                     <tr key={order.id} className="hover:bg-gray-700/30 transition-colors">
-                      <td className="px-3 py-3 whitespace-nowrap">
-                        <span className="text-sm font-mono text-cyan-400 hover:text-cyan-300 cursor-pointer" title={`Order ID: ${order.id}`}>
-                          {order.id}
+                      <td className="px-2 py-2 overflow-hidden">
+                        <span className="text-xs font-mono text-cyan-400 truncate block" title={orderId}>
+                          {orderId}
                         </span>
                       </td>
-                      <td className="px-3 py-3 whitespace-nowrap">
-                        <span className={`px-2 py-0.5 inline-flex text-xs font-medium rounded ${orderStatusClass}`}>
+                      <td className="px-2 py-2">
+                        <span className={`px-1.5 py-0.5 text-xs font-medium rounded ${orderStatusClass}`}>
                           {order.status}
                         </span>
                       </td>
-                      <td className="px-3 py-3 whitespace-nowrap text-sm text-gray-300">
-                        {formatDate(order.date_created)}
+                      <td className="px-2 py-2 text-xs text-gray-300">
+                        {shortDate}
                       </td>
-                      <td className="px-3 py-3 whitespace-nowrap">
-                        <span className="text-sm text-white font-medium">{order.buyer?.nickname || 'N/A'}</span>
-                      </td>
-                      <td className="px-3 py-3 text-sm text-gray-300">
-                        <div className="flex items-start gap-2">
-                          {firstItem?.item?.thumbnail && (
-                            <img
-                              src={firstItem.item.thumbnail}
-                              alt=""
-                              className="w-10 h-10 rounded object-cover flex-shrink-0 border border-gray-700"
-                            />
-                          )}
-                          <div className="min-w-0 flex-1">
-                            <p
-                              className="text-sm text-gray-200"
-                              style={{
-                                display: '-webkit-box',
-                                WebkitLineClamp: 2,
-                                WebkitBoxOrient: 'vertical',
-                                overflow: 'hidden'
-                              }}
-                              title={firstItem?.item?.title}
-                            >
-                              {firstItem?.item?.title || 'N/A'}
-                            </p>
-                            {order.order_items?.length > 1 && (
-                              <span className="text-xs text-cyan-400 font-medium">
-                                +{order.order_items.length - 1} producto(s) más
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap text-sm text-center">
-                        <span className="inline-flex items-center justify-center w-7 h-7 rounded-full bg-gray-700 text-white font-semibold text-xs">
-                          {totalQty}
+                      <td className="px-2 py-2 overflow-hidden">
+                        <span className="text-xs text-white truncate block" title={order.buyer?.nickname}>
+                          {order.buyer?.nickname || 'N/A'}
                         </span>
                       </td>
-                      <td className="px-3 py-3 whitespace-nowrap text-sm font-bold text-green-400 text-right">
+                      <td className="px-2 py-2 text-xs text-gray-300 overflow-hidden">
+                        <p className="truncate" title={firstItem?.item?.title}>
+                          {firstItem?.item?.title || 'N/A'}
+                        </p>
+                        {order.order_items?.length > 1 && (
+                          <span className="text-xs text-cyan-400">+{order.order_items.length - 1} más</span>
+                        )}
+                      </td>
+                      <td className="px-2 py-2 text-center">
+                        <span className="text-xs text-white font-semibold">{totalQty}</span>
+                      </td>
+                      <td className="px-2 py-2 text-xs font-bold text-green-400 text-right">
                         {formatCurrency(order.paid_amount || order.total_amount)}
-                      </td>
-                      <td className="px-3 py-3 whitespace-nowrap text-center">
-                        <span className={`px-2 py-0.5 inline-flex text-xs font-medium rounded ${paymentStatusClass}`}>
-                          {paymentStatus}
-                        </span>
                       </td>
                     </tr>
                   );
@@ -356,49 +420,53 @@ function OrdersView() {
               </tbody>
             </table>
           </div>
-        </div>
-      )}
 
-      {/* Attribution & Debug Info */}
-      {!loading && orders.length > 0 && (
-        <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-4">
-          {/* Attribution Details */}
-          {sellerInfo && (
-            <div className="p-4 bg-blue-500/10 border border-blue-500/30 rounded-lg text-sm">
-              <strong className="text-blue-300">Información de Atribución</strong>
-              <div className="mt-2 space-y-1 text-blue-200">
-                <div><strong>Seller:</strong> {sellerInfo.sellerInfo?.nickname || sellerInfo.sellerId}</div>
-                <div><strong>Email:</strong> {sellerInfo.sellerInfo?.email || 'N/A'}</div>
-                {sellerInfo.psid && (
-                  <>
-                    <div><strong>PSID (Facebook):</strong> {sellerInfo.psid}</div>
-                    <div className="mt-2 px-3 py-2 bg-green-500/20 border border-green-500/30 rounded text-green-300">
-                      ✅ <strong>Conversión exitosa:</strong> Este vendedor se conectó desde un click de Facebook
-                    </div>
-                  </>
+          {/* Pagination Controls */}
+          {paging.total > ITEMS_PER_PAGE && (
+            <div className="flex items-center justify-between px-4 py-3 border-t border-gray-700/50">
+              <div className="text-sm text-gray-400">
+                Mostrando {offset + 1} - {Math.min(offset + ITEMS_PER_PAGE, maxAccessibleItems)} de {paging.total.toLocaleString()} pedidos
+                {paging.total > ML_MAX_OFFSET && (
+                  <span className="text-yellow-400 ml-2">(máx. {ML_MAX_OFFSET.toLocaleString()} accesibles)</span>
                 )}
-                {!sellerInfo.psid && (
-                  <div className="mt-2 px-3 py-2 bg-yellow-500/20 border border-yellow-500/30 rounded text-yellow-300">
-                    ⚠️ No hay PSID asociado - Autorización directa (sin click de Facebook)
-                  </div>
-                )}
-                <div><strong>Autorizado:</strong> {new Date(sellerInfo.authorizedAt).toLocaleString('es-MX')}</div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={goToFirstPage}
+                  disabled={offset === 0 || loading}
+                  className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Primera página"
+                >
+                  ««
+                </button>
+                <button
+                  onClick={goToPrevPage}
+                  disabled={offset === 0 || loading}
+                  className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Anterior
+                </button>
+                <span className="px-3 py-1 text-white">
+                  Página {currentPage} de {totalAccessiblePages.toLocaleString()}
+                </span>
+                <button
+                  onClick={goToNextPage}
+                  disabled={offset + ITEMS_PER_PAGE >= maxAccessibleItems || loading}
+                  className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                >
+                  Siguiente
+                </button>
+                <button
+                  onClick={goToLastPage}
+                  disabled={offset + ITEMS_PER_PAGE >= maxAccessibleItems || loading}
+                  className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  title="Última página"
+                >
+                  »»
+                </button>
               </div>
             </div>
           )}
-
-          {/* Technical Debug Info */}
-          <div className="p-4 bg-gray-800/30 border border-gray-700/50 rounded-lg text-sm text-gray-400">
-            <strong className="text-gray-300">Debug Técnico</strong>
-            <div className="mt-2 space-y-1">
-              <div>✅ Seller ID: <span className="text-white">{sellerId}</span></div>
-              <div>✅ Authorization: <span className="text-green-400">Bearer token activo</span></div>
-              <div>✅ Pedidos obtenidos: <span className="text-white">{orders.length}</span></div>
-              <div>✅ URL: <span className="text-cyan-400 font-mono text-xs">{API_URL}/ml/orders/{sellerId}</span></div>
-              <div>✅ Total en ML: <span className="text-white">{paging.total?.toLocaleString() || 'N/A'}</span></div>
-              <div>✅ API Status: <span className="text-green-400">Funcionando correctamente</span></div>
-            </div>
-          </div>
         </div>
       )}
     </div>

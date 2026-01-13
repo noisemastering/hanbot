@@ -29,6 +29,36 @@ function Messages() {
     return { icon: '👥', label: 'Facebook', color: '#1877F2' };
   };
 
+  // Helper function to determine handoff type and colors
+  const getHandoffStyle = (handoffReason) => {
+    // Sales opportunity handoffs (green/teal)
+    const isSalesOpportunity = handoffReason && (
+      handoffReason === 'human_sellable_product_order' ||
+      handoffReason.startsWith('Custom order') ||
+      handoffReason.includes('requiere cotización') ||
+      handoffReason.includes('pedido especial')
+    );
+
+    if (isSalesOpportunity) {
+      return {
+        backgroundColor: '#0d3320',      // Dark green
+        borderColor: '#4caf50',          // Green
+        textColor: '#4caf50',
+        icon: '💰',
+        label: 'Oportunidad de Venta'
+      };
+    }
+
+    // Error/escalation handoffs (red - default)
+    return {
+      backgroundColor: '#4a1515',        // Dark red
+      borderColor: '#ff5252',            // Red
+      textColor: '#ff5252',
+      icon: '🚨',
+      label: 'Necesita Ayuda'
+    };
+  };
+
   // Get date range based on filter using Mexico City timezone
   const getDateRange = (filter) => {
     const now = new Date();
@@ -283,6 +313,7 @@ function Messages() {
               const isHumanActive = status?.humanActive;
               const needsHelp = status?.handoffRequested && !isHumanActive;
               const channelDisplay = getChannelDisplay(msg.channel);
+              const handoffStyle = needsHelp ? getHandoffStyle(status?.handoffReason) : null;
 
               return (
                 <tr
@@ -295,8 +326,8 @@ function Messages() {
                   style={{
                     borderBottom: "1px solid #555",
                     cursor: "pointer",
-                    backgroundColor: needsHelp ? "#4a1515" : "transparent",
-                    borderLeft: needsHelp ? "4px solid #ff5252" : "none"
+                    backgroundColor: handoffStyle ? handoffStyle.backgroundColor : "transparent",
+                    borderLeft: handoffStyle ? `4px solid ${handoffStyle.borderColor}` : "none"
                   }}
                 >
                   <td style={{ padding: "10px", textAlign: "center" }}>
@@ -317,9 +348,9 @@ function Messages() {
                     <span style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)" }}>{msg.senderType === "bot" ? "🤖" : "👤"}</span>
                   </td>
                   <td style={{ padding: "10px" }}>
-                    {needsHelp ? (
+                    {needsHelp && handoffStyle ? (
                       <div>
-                        <span style={{ color: "#ff5252", fontWeight: "bold", fontSize: "0.9rem" }}>🚨 Necesita Ayuda</span>
+                        <span style={{ color: handoffStyle.textColor, fontWeight: "bold", fontSize: "0.9rem" }}>{handoffStyle.icon} {handoffStyle.label}</span>
                         {status?.handoffReason && (
                           <div style={{ fontSize: "0.75em", color: "#aaa", marginTop: "4px" }}>
                             {status.handoffReason}
@@ -487,6 +518,7 @@ function Messages() {
             const isHumanActive = status?.humanActive;
             const needsHelp = status?.handoffRequested && !isHumanActive;
             const channelDisplay = getChannelDisplay(msg.channel);
+            const handoffStyle = needsHelp ? getHandoffStyle(status?.handoffReason) : null;
 
             return (
               <tr
@@ -499,8 +531,8 @@ function Messages() {
                 style={{
                   borderBottom: "1px solid #555",
                   cursor: "pointer",
-                  backgroundColor: needsHelp ? "#4a1515" : "transparent",
-                  borderLeft: needsHelp ? "4px solid #ff5252" : "none"
+                  backgroundColor: handoffStyle ? handoffStyle.backgroundColor : "transparent",
+                  borderLeft: handoffStyle ? `4px solid ${handoffStyle.borderColor}` : "none"
                 }}
               >
                 <td style={{ padding: "8px", textAlign: "center" }}>
@@ -517,9 +549,9 @@ function Messages() {
                   {msg.senderType}
                 </td>
                 <td style={{ padding: "8px" }}>
-                  {needsHelp ? (
+                  {needsHelp && handoffStyle ? (
                     <div>
-                      <span style={{ color: "#ff5252", fontWeight: "bold" }}>🚨 Necesita Ayuda</span>
+                      <span style={{ color: handoffStyle.textColor, fontWeight: "bold" }}>{handoffStyle.icon} {handoffStyle.label}</span>
                       {status?.handoffReason && (
                         <div style={{ fontSize: "0.75em", color: "#aaa", marginTop: "4px" }}>
                           {status.handoffReason}
