@@ -556,8 +556,7 @@ function generateSizeResponse(options) {
       const whatsappLink = "https://wa.me/524425957432";
       customOrderText += `💬 WhatsApp: ${whatsappLink}\n`;
       customOrderText += `📞 Contáctanos: ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}\n`;
-      customOrderText += `🕓 Horario: ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}\n`;
-      customOrderText += `📍 ${businessInfo.address || ''}`;
+      customOrderText += `🕓 Horario: ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}`;
     }
 
     if (inBusinessHours) {

@@ -75,9 +75,17 @@ async function resetConversation(psid) {
 
 // 🤝 Check if human agent is currently handling this conversation
 // Returns true if human took over within last 2 hours OR if last message was from human
+// Also returns true if conversation needs_human (custom orders, handoff requests)
 async function isHumanActive(psid) {
   try {
     const convo = await Conversation.findOne({ psid });
+
+    // Check if conversation is waiting for human (custom orders, explicit handoff)
+    // Bot should NEVER respond when needs_human - only human can clear this state
+    if (convo && convo.state === "needs_human") {
+      console.log(`🚨 Conversation needs human attention (state: needs_human). Bot will not respond.`);
+      return true;
+    }
 
     // Check if conversation state is human_active
     if (convo && convo.state === "human_active") {

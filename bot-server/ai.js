@@ -401,8 +401,7 @@ Si no tienes información sobre algo, discúlpate de forma amable (sin usar emoj
           `Lo siento 😔, por el momento no tengo información disponible sobre eso.\n` +
           `Si deseas hablar directamente con alguien de nuestro equipo, puedes comunicarte 📞:\n\n` +
           `${info.phones.join(" / ")}\n` +
-          `🕓 Horarios de atención: ${info.hours}\n` +
-          `📍 ${info.address}`
+          `🕓 Horarios de atención: ${info.hours}`
       };
     }
 

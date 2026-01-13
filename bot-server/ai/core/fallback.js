@@ -189,8 +189,7 @@ async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME
         `Voy a transferir tu caso con un especialista que te dará una cotización personalizada. ` +
         `Por favor comunícate con nuestro equipo:\n\n` +
         `📞 ${businessInfo.phones.join(" / ")}\n` +
-        `🕓 ${businessInfo.hours}\n` +
-        `📍 ${businessInfo.address}`
+        `🕓 ${businessInfo.hours}`
     };
   }
 
@@ -269,7 +268,7 @@ async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME
       text:
         `Lo siento 😔, por el momento no tengo información disponible.\n` +
         `Si deseas hablar directamente con alguien de nuestro equipo, puedes comunicarte 📞:\n\n` +
-        `${info.phones.join(" / ")}\n🕓 Horarios de atención: ${info.hours}\n📍 ${info.address}`
+        `${info.phones.join(" / ")}\n🕓 Horarios de atención: ${info.hours}`
     };
   }
 
