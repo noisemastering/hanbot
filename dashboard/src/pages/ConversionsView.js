@@ -170,9 +170,9 @@ function ConversionsView() {
             <div className="flex items-center justify-between">
               <div>
                 <p className="text-sm text-gray-400">Ingresos Atribuidos a FB</p>
-                <p className="text-2xl font-bold text-blue-400">{formatCurrency(stats.attributedRevenue)}</p>
+                <p className="text-2xl font-bold text-blue-400">{formatCurrency(stats.totalRevenue)}</p>
                 <p className="text-xs text-gray-500 mt-1">
-                  {stats.attributedOrders} de {stats.totalMLOrders} pedidos ({stats.attributionRate}%)
+                  de {stats.conversions} pedidos correlacionados
                 </p>
               </div>
               <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center">
@@ -471,15 +471,12 @@ function ConversionsView() {
             {/* Attributed Revenue */}
             <div className="text-center flex-1">
               <div className="w-24 h-20 mx-auto bg-yellow-500/20 rounded-lg flex items-center justify-center mb-2">
-                <span className="text-lg font-bold text-yellow-400">{formatCurrency(stats.attributedRevenue)}</span>
+                <span className="text-lg font-bold text-yellow-400">{formatCurrency(stats.totalRevenue)}</span>
               </div>
               <p className="text-sm text-gray-400">Ingresos FB</p>
-              <p className="text-xs text-gray-500">{stats.attributionRate}% del total</p>
+              <p className="text-xs text-gray-500">{stats.conversions} pedidos</p>
             </div>
           </div>
-          <p className="text-xs text-gray-500 mt-4 text-center">
-            * Ingresos verificados contra ML API. Total en ML: {formatCurrency(stats.totalMLRevenue)} de {stats.totalMLOrders} pedidos.
-          </p>
         </div>
       )}
     </div>
