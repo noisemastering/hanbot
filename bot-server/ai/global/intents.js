@@ -75,7 +75,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       state: "needs_human",
       outOfStockReported: true
     });
-    await sendHandoffNotification(psid, convo, "Cliente reporta producto agotado - verificar inventario");
+    await sendHandoffNotification(psid, convo, "Cliente reporta producto agotado - verificar inventario o link de ML");
     return {
       type: "text",
       text: "Gracias por avisarnos. Déjame verificar la disponibilidad con nuestro equipo.\n\n" +
