@@ -100,98 +100,57 @@ async function handleRollQuery(userMessage, psid, convo) {
       console.log(`📊 User requested ${requestedPercentage}% shade`);
     }
 
-    // Build query - ONLY match actual malla sombra rolls (not plastic tapes, borders, etc.)
-    // Malla sombra rolls are characterized by:
-    // - Large dimensions like "x 100m", "4.20", "2.10"
-    // - Shade percentages like "70%", "80%", "90%"
-    // - Keywords like "malla sombra", "shade"
-    const mallaSombraRollPatterns = [
-      /\b(malla\s*sombra|shade\s*cloth|sombra)\b/i,
-      /\b(4\.?20?|2\.?10?)\s*[xX×*]\s*100\b/i,  // Standard roll dimensions
-      /\b\d{2,3}\s*%\s*(sombra|shade)?\b/i,      // Shade percentages
-      /\bx\s*100\s*m/i                            // "x 100m" pattern
-    ];
+    // PROPER FAMILY-BASED FILTERING
+    // Only include products that are descendants of "Malla Sombra Raschel" family
+    // This correctly excludes Borde Separador, Cinta Rígida, etc.
 
-    // Base query for malla sombra rolls
-    const query = {
-      sellable: true,
-      active: true,
-      $and: [
-        // Must have "rollo" in name
-        { name: /rollo/i },
-        // Must match at least one malla sombra pattern (in name OR description)
-        {
-          $or: [
-            { name: { $in: mallaSombraRollPatterns.map(p => p) } },
-            { description: { $in: mallaSombraRollPatterns.map(p => p) } },
-            // OR have a parent that's malla sombra (will check after query)
-          ]
-        }
-      ]
-    };
+    const MALLA_SOMBRA_ROOT_ID = '68f6c372bfaca6a28884afd7'; // Malla Sombra Raschel root
 
-    // If specific percentage requested, add it to the query
-    if (requestedPercentage) {
-      query.$and.push({
-        $or: [
-          { name: new RegExp(`${requestedPercentage}\\s*%`, 'i') },
-          { description: new RegExp(`${requestedPercentage}\\s*%`, 'i') }
-        ]
-      });
+    // Helper to get all descendant IDs of a family
+    async function getDescendantIds(parentId, depth = 0) {
+      if (depth > 6) return []; // Prevent infinite recursion
+      const children = await ProductFamily.find({ parentId, active: true });
+      let ids = children.map(c => c._id);
+      for (const child of children) {
+        const grandIds = await getDescendantIds(child._id, depth + 1);
+        ids = ids.concat(grandIds);
+      }
+      return ids;
     }
 
-    // Find potential roll products
-    let rollProducts = await ProductFamily.find({
+    // Get all product IDs in the Malla Sombra family
+    const mallaSombraFamilyIds = await getDescendantIds(MALLA_SOMBRA_ROOT_ID);
+    console.log(`📊 Found ${mallaSombraFamilyIds.length} products in Malla Sombra family`);
+
+    // Build query for sellable roll products ONLY in Malla Sombra family
+    const query = {
+      _id: { $in: mallaSombraFamilyIds },
       sellable: true,
-      active: true,
-      name: /rollo/i
-    })
+      active: true
+    };
+
+    // If specific percentage requested, filter by it
+    if (requestedPercentage) {
+      // Find the percentage category first, then get its descendants
+      const percentageCategory = await ProductFamily.findOne({
+        parentId: MALLA_SOMBRA_ROOT_ID,
+        name: new RegExp(`^${requestedPercentage}%?$`, 'i')
+      });
+
+      if (percentageCategory) {
+        const percentageDescendants = await getDescendantIds(percentageCategory._id);
+        query._id = { $in: percentageDescendants };
+        console.log(`📊 Filtering to ${requestedPercentage}%: ${percentageDescendants.length} products`);
+      }
+    }
+
+    // Find sellable products (rolls or roll-like products)
+    let rollProducts = await ProductFamily.find(query)
       .populate('parentId')
       .sort({ priority: -1, createdAt: -1 })
-      .limit(50);
+      .limit(20);
 
-    // Filter to only include actual malla sombra products
-    // Exclude: Borde Separador, Cinta, Polipropileno, etc.
-    const excludePatterns = [
-      /borde\s*separador/i,
-      /cinta\s*(r[ií]gida|pl[aá]stica)?/i,
-      /polipropileno/i,
-      /pulgadas?/i,
-      /\bcm\s+de\s+ancho/i  // Small widths in cm, not meters
-    ];
-
-    rollProducts = rollProducts.filter(product => {
-      const fullText = `${product.name} ${product.description || ''}`;
-
-      // Exclude if matches any exclude pattern
-      if (excludePatterns.some(pattern => pattern.test(fullText))) {
-        console.log(`🚫 Excluding non-malla product: ${product.name}`);
-        return false;
-      }
-
-      // Include if matches malla sombra patterns
-      if (mallaSombraRollPatterns.some(pattern => pattern.test(fullText))) {
-        return true;
-      }
-
-      // Include if parent is malla sombra related
-      if (product.parentId) {
-        const parentName = product.parentId.name || '';
-        if (/malla\s*sombra|shade|sombra/i.test(parentName)) {
-          return true;
-        }
-      }
-
-      // If percentage requested and product has it, include
-      if (requestedPercentage && new RegExp(`${requestedPercentage}\\s*%`, 'i').test(fullText)) {
-        return true;
-      }
-
-      return false;
-    });
-
-    // Limit results
-    rollProducts = rollProducts.slice(0, 20);
+    console.log(`✅ Found ${rollProducts.length} sellable malla sombra products`);
 
     if (!rollProducts || rollProducts.length === 0) {
       console.log("⚠️ No malla sombra roll products found in catalog, using default response");
