@@ -276,6 +276,34 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 📍 LOCATION-ONLY MESSAGE - User just says a location name (possibly with "En" prefix)
+  // Examples: "En Xalapa Veracruz", "Monterrey", "Jalisco", "En CDMX"
+  // Responds with nationwide shipping info
+  const locationOnlyPattern = /^(en\s+)?([A-ZÁÉÍÓÚÑa-záéíóúñ\s,]+)$/i;
+  const locationOnlyMatch = msg.trim().match(locationOnlyPattern);
+  if (locationOnlyMatch && !isLocationContext) {
+    const potentialLocation = locationOnlyMatch[2] || locationOnlyMatch[0];
+    const locationDetected = detectMexicanLocation(potentialLocation);
+
+    if (locationDetected && isLikelyLocationName(msg)) {
+      console.log("📍 Location-only message detected:", locationDetected.normalized);
+
+      const locationUpdate = {
+        lastIntent: "location_only_mentioned",
+        city: locationDetected.normalized,
+        unknownCount: 0
+      };
+      if (locationDetected.type === 'state') locationUpdate.stateMx = locationDetected.normalized;
+      await updateConversation(psid, locationUpdate);
+
+      return {
+        type: "text",
+        text: `¡Sí! Enviamos a ${locationDetected.normalized} y a todo el país a través de Mercado Libre 📦\n\n` +
+              `¿Qué medida necesitas?`
+      };
+    }
+  }
+
   // ☀️ SHADE PERCENTAGE QUESTIONS - Explain available shade percentages
   if (/\b(qu[eé]\s+)?porcenta?je[s]?\s+(de\s+)?(sombra|tiene[ns]?|manejan?|hay)?\b/i.test(msg) ||
       /\b(qu[eé]\s+)?(sombra|porcentaje)[s]?\s+(tiene[ns]?|manejan?|hay|ofrece[ns]?)\b/i.test(msg) ||
@@ -359,7 +387,8 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       /\b(medidas?\s+y\s+precios?)\b/i.test(msg) ||
       /\b(hacer\s+presupuesto|cotizaci[oó]n|cotizar)\b/i.test(msg) ||
       /\b(opciones?\s+disponibles?|qu[eé]\s+tienen|todo\s+lo\s+que\s+tienen)\b/i.test(msg) ||
-      /\b(medidas?\s+est[aá]ndares?)\b/i.test(msg)) {
+      /\b(medidas?\s+est[aá]ndares?)\b/i.test(msg) ||
+      /^costo[s]?$/i.test(msg.trim())) { // Just "costo" by itself
 
     await updateConversation(psid, { lastIntent: "catalog_request" });
 
