@@ -5,12 +5,6 @@ const Message = require('../models/Message');
 const Conversation = require('../models/Conversation');
 const ClickLog = require('../models/ClickLog');
 const MercadoLibreAuth = require('../models/MercadoLibreAuth');
-const {
-  correlateClicksToOrders,
-  getConversionStats,
-  getAccurateConversionStats,
-  getRecentConversions
-} = require('../utils/conversionCorrelation');
 
 // GET /analytics - Get analytics data
 router.get('/', async (req, res) => {
@@ -349,126 +343,6 @@ router.get('/attribution/:psid', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to fetch PSID attribution',
-      details: error.message
-    });
-  }
-});
-
-// ============================================
-// CONVERSION CORRELATION ENDPOINTS
-// ============================================
-
-// POST /analytics/correlate-conversions - Run time-based correlation
-router.post('/correlate-conversions', async (req, res) => {
-  try {
-    const {
-      sellerId = '482595248',
-      timeWindowHours = 48,
-      orderLimit = 100,
-      dryRun = false
-    } = req.body;
-
-    console.log(`\n🚀 Correlation requested:`, {
-      sellerId,
-      timeWindowHours,
-      orderLimit,
-      dryRun
-    });
-
-    // Run correlation
-    const results = await correlateClicksToOrders(sellerId, {
-      timeWindowHours,
-      orderLimit,
-      dryRun
-    });
-
-    res.json({
-      success: true,
-      ...results
-    });
-  } catch (error) {
-    console.error('❌ Error running correlation:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to run correlation',
-      details: error.message
-    });
-  }
-});
-
-// GET /analytics/conversions - Get conversion statistics
-router.get('/conversions', async (req, res) => {
-  try {
-    const { dateFrom, dateTo } = req.query;
-
-    console.log(`📊 Conversions request - dateFrom: ${dateFrom}, dateTo: ${dateTo}`);
-
-    const stats = await getConversionStats({ dateFrom, dateTo });
-
-    res.json({
-      success: true,
-      stats,
-      filters: { dateFrom, dateTo }
-    });
-  } catch (error) {
-    console.error('❌ Error fetching conversion stats:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch conversion stats',
-      details: error.message
-    });
-  }
-});
-
-// GET /analytics/conversions/recent - Get recent conversions
-router.get('/conversions/recent', async (req, res) => {
-  try {
-    const { limit = 20 } = req.query;
-
-    const conversions = await getRecentConversions(parseInt(limit));
-
-    res.json({
-      success: true,
-      conversions,
-      count: conversions.length
-    });
-  } catch (error) {
-    console.error('❌ Error fetching recent conversions:', error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch recent conversions',
-      details: error.message
-    });
-  }
-});
-
-// GET /analytics/conversions/by-psid/:psid - Get conversions for a specific PSID
-router.get('/conversions/by-psid/:psid', async (req, res) => {
-  try {
-    const { psid } = req.params;
-
-    const conversions = await ClickLog.find({
-      psid,
-      converted: true
-    }).sort({ convertedAt: -1 });
-
-    const totalRevenue = conversions.reduce(
-      (sum, c) => sum + (c.conversionData?.totalAmount || 0),
-      0
-    );
-
-    res.json({
-      success: true,
-      psid,
-      conversions,
-      count: conversions.length,
-      totalRevenue
-    });
-  } catch (error) {
-    console.error(`❌ Error fetching conversions for PSID ${req.params.psid}:`, error);
-    res.status(500).json({
-      success: false,
-      error: 'Failed to fetch PSID conversions',
       details: error.message
     });
   }
