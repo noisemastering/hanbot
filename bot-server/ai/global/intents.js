@@ -727,6 +727,21 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 🛒 WHERE TO BUY + MEASUREMENTS - "a donde puedo ir para comprar y darle las medidas"
+  // User wants to know where to buy AND wants to provide measurements
+  if (/\b(donde|d[oó]nde|a\s+donde)\s+(puedo|puede)\s+(ir\s+)?(para\s+)?(comprar|pedir)/i.test(msg) &&
+      /\b(medidas?|tama[ñn]os?|darle|decirle)\b/i.test(msg)) {
+    console.log("🛒 Where to buy + measurements question detected");
+    await updateConversation(psid, { lastIntent: "where_to_buy_with_measures" });
+
+    return {
+      type: "text",
+      text: "Puedes comprar en nuestra tienda digital en Mercado Libre 🛒\n\n" +
+            "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n" +
+            "¿Qué medida necesitas? 📐"
+    };
+  }
+
   // 🏪 RETAIL SALES / STORE VISIT - "venta al público", "si voy a Querétaro", "puedo ir/pasar"
   if (/\b(venta\s+al\s+p[uú]blico|venden\s+al\s+p[uú]blico|atienden\s+al\s+p[uú]blico)\b/i.test(msg) ||
       /\b(si\s+voy|puedo\s+ir|puedo\s+pasar|paso\s+a|pasar\s+a\s+comprar|comprar\s+en\s+persona|comprar\s+directo|recoger\s+en)\b/i.test(msg) ||
