@@ -100,30 +100,126 @@ async function handleRollQuery(userMessage, psid, convo) {
       console.log(`📊 User requested ${requestedPercentage}% shade`);
     }
 
-    // Build query - filter by percentage if specified
+    // Build query - ONLY match actual malla sombra rolls (not plastic tapes, borders, etc.)
+    // Malla sombra rolls are characterized by:
+    // - Large dimensions like "x 100m", "4.20", "2.10"
+    // - Shade percentages like "70%", "80%", "90%"
+    // - Keywords like "malla sombra", "shade"
+    const mallaSombraRollPatterns = [
+      /\b(malla\s*sombra|shade\s*cloth|sombra)\b/i,
+      /\b(4\.?20?|2\.?10?)\s*[xX×*]\s*100\b/i,  // Standard roll dimensions
+      /\b\d{2,3}\s*%\s*(sombra|shade)?\b/i,      // Shade percentages
+      /\bx\s*100\s*m/i                            // "x 100m" pattern
+    ];
+
+    // Base query for malla sombra rolls
     const query = {
       sellable: true,
       active: true,
-      $or: [
+      $and: [
+        // Must have "rollo" in name
         { name: /rollo/i },
-        { name: new RegExp(`${requestedPercentage || '\\d+'}\\s*%`, 'i') }
+        // Must match at least one malla sombra pattern (in name OR description)
+        {
+          $or: [
+            { name: { $in: mallaSombraRollPatterns.map(p => p) } },
+            { description: { $in: mallaSombraRollPatterns.map(p => p) } },
+            // OR have a parent that's malla sombra (will check after query)
+          ]
+        }
       ]
     };
 
-    // If specific percentage requested, also search in parent chain
+    // If specific percentage requested, add it to the query
     if (requestedPercentage) {
-      query.$or.push({ name: new RegExp(requestedPercentage, 'i') });
+      query.$and.push({
+        $or: [
+          { name: new RegExp(`${requestedPercentage}\\s*%`, 'i') },
+          { description: new RegExp(`${requestedPercentage}\\s*%`, 'i') }
+        ]
+      });
     }
 
-    // Find all sellable roll products
-    const rollProducts = await ProductFamily.find(query)
+    // Find potential roll products
+    let rollProducts = await ProductFamily.find({
+      sellable: true,
+      active: true,
+      name: /rollo/i
+    })
       .populate('parentId')
       .sort({ priority: -1, createdAt: -1 })
-      .limit(20);
+      .limit(50);
+
+    // Filter to only include actual malla sombra products
+    // Exclude: Borde Separador, Cinta, Polipropileno, etc.
+    const excludePatterns = [
+      /borde\s*separador/i,
+      /cinta\s*(r[ií]gida|pl[aá]stica)?/i,
+      /polipropileno/i,
+      /pulgadas?/i,
+      /\bcm\s+de\s+ancho/i  // Small widths in cm, not meters
+    ];
+
+    rollProducts = rollProducts.filter(product => {
+      const fullText = `${product.name} ${product.description || ''}`;
+
+      // Exclude if matches any exclude pattern
+      if (excludePatterns.some(pattern => pattern.test(fullText))) {
+        console.log(`🚫 Excluding non-malla product: ${product.name}`);
+        return false;
+      }
+
+      // Include if matches malla sombra patterns
+      if (mallaSombraRollPatterns.some(pattern => pattern.test(fullText))) {
+        return true;
+      }
+
+      // Include if parent is malla sombra related
+      if (product.parentId) {
+        const parentName = product.parentId.name || '';
+        if (/malla\s*sombra|shade|sombra/i.test(parentName)) {
+          return true;
+        }
+      }
+
+      // If percentage requested and product has it, include
+      if (requestedPercentage && new RegExp(`${requestedPercentage}\\s*%`, 'i').test(fullText)) {
+        return true;
+      }
+
+      return false;
+    });
+
+    // Limit results
+    rollProducts = rollProducts.slice(0, 20);
 
     if (!rollProducts || rollProducts.length === 0) {
-      console.log("⚠️ No roll products found in catalog");
-      return null;
+      console.log("⚠️ No malla sombra roll products found in catalog, using default response");
+
+      // Provide standard roll information
+      await updateConversation(psid, {
+        lastIntent: "roll_query",
+        state: "active",
+        unknownCount: 0
+      });
+
+      let responseText = "Manejamos rollos de malla sombra en las siguientes medidas:\n\n";
+      responseText += "📏 **Rollos de 100 metros:**\n";
+      responseText += "• 4.20m x 100m (420 m² por rollo)\n";
+      responseText += "• 2.10m x 100m (210 m² por rollo)\n\n";
+      responseText += "Disponibles en 35%, 50%, 70%, 80% y 90% de sombra.\n\n";
+
+      if (requestedPercentage) {
+        responseText += `Para cotizar rollos de ${requestedPercentage}%, contáctanos:\n`;
+        responseText += "💬 WhatsApp: https://wa.me/524425957432\n";
+      } else {
+        responseText += "¿Qué porcentaje de sombra necesitas?";
+      }
+
+      return {
+        type: "text",
+        text: responseText
+      };
     }
 
     console.log(`✅ Found ${rollProducts.length} roll products`);
