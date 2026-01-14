@@ -676,6 +676,37 @@ function generateGenericSizeResponse(availableSizes) {
   return responses[Math.floor(Math.random() * responses.length)];
 }
 
+/**
+ * Checks if a dimension looks like it might be missing a decimal point
+ * e.g., 380 might mean 3.80, 450 might mean 4.50
+ * @param {object} dimensions - {width, height, area}
+ * @returns {object|null} - {original, corrected, dimension} if suspicious, null otherwise
+ */
+function hasSuspiciousLargeDimension(dimensions) {
+  if (!dimensions) return null;
+
+  const checkDimension = (value, name) => {
+    // Check if value is >= 100 and when divided by 100 gives reasonable meters (1.5-10m)
+    if (value >= 100 && value <= 1000) {
+      const corrected = value / 100;
+      // Only flag if corrected value is reasonable (1.5m to 10m)
+      if (corrected >= 1.5 && corrected <= 10) {
+        return { original: value, corrected, dimension: name };
+      }
+    }
+    return null;
+  };
+
+  // Check width first, then height
+  const widthCheck = checkDimension(dimensions.width, 'width');
+  if (widthCheck) return widthCheck;
+
+  const heightCheck = checkDimension(dimensions.height, 'height');
+  if (heightCheck) return heightCheck;
+
+  return null;
+}
+
 module.exports = {
   parseDimensions,
   parseSizeString,
@@ -687,6 +718,7 @@ module.exports = {
   isWeedControlQuery,
   isApproximateMeasure,
   hasFractionalMeters,
+  hasSuspiciousLargeDimension,
   generateSizeResponse,
   generateGenericSizeResponse,
   isCustomOrder,

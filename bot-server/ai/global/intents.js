@@ -10,6 +10,7 @@ const {
   isWeedControlQuery,
   isApproximateMeasure,
   hasFractionalMeters,
+  hasSuspiciousLargeDimension,
   generateSizeResponse,
   generateGenericSizeResponse
 } = require("../../measureHandler");
@@ -89,6 +90,78 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       return { type: "text", text: response };
     }
     // If unclear response, let it continue to normal flow
+  }
+
+  // 🔄 FOLLOW-UP: Handle responses to dimension clarification (380 → 3.80?)
+  if (convo.lastIntent === "dimension_clarification_pending" && convo.suspiciousDimension) {
+    const suspicious = convo.suspiciousDimension;
+    const pendingDims = convo.pendingDimensions;
+
+    // Check if user confirmed the corrected dimension (3.80)
+    const confirmsCorrection = /\b(s[ií]|correcto|exacto|eso|as[ií]|afirmativo)\b/i.test(msg) ||
+                               new RegExp(`\\b${suspicious.corrected}\\b`).test(msg);
+
+    // Check if user insists on the large number
+    const confirmsLarge = /\b(no|metros?|realmente|grande|completo)\b/i.test(msg) &&
+                          new RegExp(`\\b${suspicious.original}\\b`).test(msg);
+
+    if (confirmsCorrection) {
+      // User meant the decimal version (e.g., 3.80m not 380m)
+      console.log(`✅ User confirmed corrected dimension: ${suspicious.corrected}m`);
+
+      // Create corrected dimensions
+      const correctedDims = suspicious.dimension === 'width'
+        ? { width: suspicious.corrected, height: pendingDims.height, area: suspicious.corrected * pendingDims.height }
+        : { width: pendingDims.width, height: suspicious.corrected, area: pendingDims.width * suspicious.corrected };
+
+      const correctedSizeStr = `${correctedDims.width}x${correctedDims.height}`;
+
+      // Clear pending state and process with corrected dimensions
+      await updateConversation(psid, {
+        lastIntent: "specific_measure",
+        pendingDimensions: null,
+        suspiciousDimension: null,
+        requestedSize: correctedSizeStr,
+        unknownCount: 0
+      });
+
+      // Now find closest sizes for the corrected dimensions
+      const availableSizes = await getAvailableSizes(convo);
+      const closest = findClosestSizes(correctedDims, availableSizes);
+      const businessInfo = await getBusinessInfo();
+
+      const sizeResponse = generateSizeResponse({
+        smaller: closest.smaller,
+        bigger: closest.bigger,
+        exact: closest.exact,
+        requestedDim: correctedDims,
+        availableSizes,
+        isRepeated: false,
+        businessInfo
+      });
+
+      return { type: "text", text: sizeResponse.text };
+    } else if (confirmsLarge) {
+      // User really wants the large dimension - let them continue
+      console.log(`✅ User confirmed large dimension: ${suspicious.original}m`);
+      await updateConversation(psid, {
+        lastIntent: "dimension_clarification_confirmed",
+        pendingDimensions: null,
+        suspiciousDimension: null,
+        unknownCount: 0
+      });
+      // Continue to normal dimension handling below
+    } else {
+      // Unclear response - ask again
+      const correctedSize = suspicious.dimension === 'width'
+        ? `${suspicious.corrected}x${pendingDims.height}`
+        : `${pendingDims.width}x${suspicious.corrected}`;
+
+      return {
+        type: "text",
+        text: `Disculpa, no entendí. ¿Necesitas ${suspicious.corrected} metros (${correctedSize}m) o ${suspicious.original} metros?`
+      };
+    }
   }
 
   // 📏 SKIP if message contains MULTIPLE size requests (let fallback handle comprehensive answer)
@@ -1069,6 +1142,37 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   // Parse specific dimensions from message EARLY (before color/other checks)
   // This allows us to handle multi-intent messages like "quiero una 6x4 azul"
   const dimensions = parseDimensions(msg);
+
+  // 🔍 Check for suspicious large dimensions that might be missing decimal point
+  // e.g., "2x380" might mean "2x3.80" not "2x380 meters"
+  if (dimensions) {
+    const suspicious = hasSuspiciousLargeDimension(dimensions);
+    if (suspicious) {
+      // Check if we're in clarification flow (user already confirmed)
+      if (convo.lastIntent === "dimension_clarification_pending") {
+        // User confirmed they really mean the large number - continue with original
+        console.log(`✅ User confirmed large dimension: ${suspicious.original}m`);
+      } else {
+        // Ask for clarification
+        const correctedSize = suspicious.dimension === 'width'
+          ? `${suspicious.corrected}x${dimensions.height}`
+          : `${dimensions.width}x${suspicious.corrected}`;
+
+        await updateConversation(psid, {
+          lastIntent: "dimension_clarification_pending",
+          pendingDimensions: dimensions,
+          suspiciousDimension: suspicious,
+          unknownCount: 0
+        });
+
+        return {
+          type: "text",
+          text: `¿Te refieres a ${suspicious.corrected} metros (${correctedSize}m)?\n\n` +
+                `O realmente necesitas ${suspicious.original} metros?`
+        };
+      }
+    }
+  }
 
   // Check for approximate measurement / need to measure properly
   // BUT only if no dimensions were parsed (including from reference objects)
