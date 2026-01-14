@@ -255,7 +255,14 @@ async function getConversionStats(options = {}) {
   ]);
 
   // Get total revenue from UNIQUE orders only (same order can be linked to multiple clicks)
-  const revenueMatch = { converted: true, 'conversionData.orderId': { $exists: true }, ...createdAtFilter };
+  // Filter by convertedAt (order date), not createdAt (link creation date)
+  const revenueDateFilter = {};
+  if (dateFrom || dateTo) {
+    revenueDateFilter.convertedAt = {};
+    if (dateFrom) revenueDateFilter.convertedAt.$gte = new Date(dateFrom);
+    if (dateTo) revenueDateFilter.convertedAt.$lte = new Date(dateTo);
+  }
+  const revenueMatch = { converted: true, 'conversionData.orderId': { $exists: true }, ...revenueDateFilter };
 
   const revenueAgg = await ClickLog.aggregate([
     { $match: revenueMatch },
