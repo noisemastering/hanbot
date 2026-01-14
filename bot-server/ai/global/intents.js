@@ -64,6 +64,25 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 📦 OUT OF STOCK - Hand off to human when customer reports product is unavailable
+  // This is critical: customer clicked a link and product shows as "agotado"
+  const outOfStockPatterns = /\b(agotad[oa]s?|sin\s+stock|no\s+hay\s+(en\s+)?stock|no\s+tienen|no\s+est[aá]\s+disponible|producto\s+no\s+disponible|dice\s+(que\s+)?(no\s+hay|agotado)|sale\s+(que\s+)?(agotado|no\s+disponible)|aparece\s+(como\s+)?agotado|fuera\s+de\s+stock)\b/i;
+
+  if (outOfStockPatterns.test(msg)) {
+    console.log("📦 Out of stock reported by customer, escalating to human:", msg);
+    await updateConversation(psid, {
+      lastIntent: "human_handoff",
+      state: "needs_human",
+      outOfStockReported: true
+    });
+    await sendHandoffNotification(psid, convo, "Cliente reporta producto agotado - verificar inventario");
+    return {
+      type: "text",
+      text: "Gracias por avisarnos. Déjame verificar la disponibilidad con nuestro equipo.\n\n" +
+            "En un momento te atienden para confirmar el stock."
+    };
+  }
+
   // 📦 ROLL QUERIES - Handle roll questions directly before other handlers
   // "cuánto cuesta el rollo", "precio del rollo", "rollo de 50%", etc.
   if (/\b(rol+[oy]s?)\b/i.test(msg)) {
