@@ -790,11 +790,23 @@ app.post("/webhook", async (req, res) => {
                 await callSendAPI(senderPsid, { text: reply.text });
                 await saveMessage(senderPsid, reply.text, "bot");
 
-                // Update conversation intent
-                await updateConversation(senderPsid, {
-                  lastIntent: "image_received",
-                  state: "active"
-                });
+                // Check if we need to hand off to human
+                if (reply.needsHandoff) {
+                  const convo = await Conversation.findOne({ psid: senderPsid });
+                  await updateConversation(senderPsid, {
+                    lastIntent: "human_handoff",
+                    state: "needs_human"
+                  });
+                  sendHandoffNotification(senderPsid, convo, reply.handoffReason || "Imagen requiere atención humana").catch(err => {
+                    console.error("❌ Failed to send push notification:", err);
+                  });
+                } else {
+                  // Update conversation intent
+                  await updateConversation(senderPsid, {
+                    lastIntent: "image_received",
+                    state: "active"
+                  });
+                }
               } catch (error) {
                 console.error("❌ Error processing image:", error);
 

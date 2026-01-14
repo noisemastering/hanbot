@@ -103,7 +103,9 @@ function generateImageResponse(analysisResult) {
   if (!analysisResult.success) {
     return {
       type: "text",
-      text: "Lo siento, tuve problemas al analizar la imagen. ¿Podrías enviármela de nuevo o describirme con palabras qué necesitas?"
+      text: "Gracias por la imagen. Te comunico con un asesor para ayudarte mejor.\n\nEn un momento te atienden.",
+      needsHandoff: true,
+      handoffReason: "No se pudo analizar la imagen del cliente"
     };
   }
 
