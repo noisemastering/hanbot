@@ -494,10 +494,13 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   // 📋 EXPLICIT LIST REQUEST - "dígame las medidas", "muéstreme las opciones", "ver la lista"
   // User is explicitly asking to see all sizes with prices
+  // Also catches: "qué medidas tienen", "que tamaños manejan", "cuánto cuesta y que medidas tienen"
   if (/\b(d[ií]game|mu[eé]str[ea]me|ens[eé][ñn]ame|ver|quiero\s+ver|dame)\s+(l[oa]s\s+)?(medidas|opciones|lista|precios|tama[ñn]os)/i.test(msg) ||
       /\b(todas?\s+las?\s+medidas?|todas?\s+las?\s+opciones?|lista\s+completa|ver\s+(la\s+)?lista)\b/i.test(msg) ||
       /\b(usted\s+d[ií]game|dime\s+t[uú]|d[ií]ganme)\b/i.test(msg) ||
-      /\b(s[ií].*mu[eé]str[ea]me|s[ií].*ver\s+la\s+lista|s[ií].*las\s+opciones)\b/i.test(msg)) {
+      /\b(s[ií].*mu[eé]str[ea]me|s[ií].*ver\s+la\s+lista|s[ií].*las\s+opciones)\b/i.test(msg) ||
+      /\bqu[eé]\s+(medidas|tama[ñn]os|opciones)\s+(tienen|manejan|hay|venden|ofrecen)\b/i.test(msg) ||
+      /\b(cu[aá]nto|precio).*\by\s+qu[eé]?\s+(medidas|tama[ñn]os)\b/i.test(msg)) {
 
     await updateConversation(psid, { lastIntent: "show_all_sizes_requested", unknownCount: 0 });
 
