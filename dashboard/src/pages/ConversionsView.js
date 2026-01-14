@@ -3,6 +3,18 @@ import axios from 'axios';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
+// Get start of current month in YYYY-MM-DD format for date input
+function getStartOfMonthStr() {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), now.getMonth(), 1);
+  return start.toISOString().split('T')[0];
+}
+
+// Get today's date in YYYY-MM-DD format for date input
+function getTodayStr() {
+  return new Date().toISOString().split('T')[0];
+}
+
 function ConversionsView() {
   const [stats, setStats] = useState(null);
   const [recentConversions, setRecentConversions] = useState([]);
@@ -10,6 +22,10 @@ function ConversionsView() {
   const [correlating, setCorrelating] = useState(false);
   const [error, setError] = useState(null);
   const [correlationResult, setCorrelationResult] = useState(null);
+
+  // Date filters
+  const [dateFrom, setDateFrom] = useState(getStartOfMonthStr());
+  const [dateTo, setDateTo] = useState(getTodayStr());
 
   // Correlation options
   const [timeWindowHours, setTimeWindowHours] = useState(48);
@@ -20,8 +36,15 @@ function ConversionsView() {
     setError(null);
 
     try {
+      const dateFromISO = dateFrom ? `${dateFrom}T00:00:00.000Z` : undefined;
+      const dateToISO = dateTo ? `${dateTo}T23:59:59.999Z` : undefined;
+
+      const params = new URLSearchParams();
+      if (dateFromISO) params.append('dateFrom', dateFromISO);
+      if (dateToISO) params.append('dateTo', dateToISO);
+
       const [statsRes, conversionsRes] = await Promise.all([
-        axios.get(`${API_URL}/analytics/conversions`),
+        axios.get(`${API_URL}/analytics/conversions?${params.toString()}`),
         axios.get(`${API_URL}/analytics/conversions/recent?limit=20`)
       ]);
 
@@ -66,7 +89,7 @@ function ConversionsView() {
 
   useEffect(() => {
     fetchData();
-  }, []);
+  }, [dateFrom, dateTo]);
 
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return 'N/A';
@@ -142,13 +165,15 @@ function ConversionsView() {
             </div>
           </div>
 
-          {/* Total Revenue */}
+          {/* Attributed Revenue */}
           <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-400">Ingresos Atribuidos</p>
-                <p className="text-2xl font-bold text-blue-400">{formatCurrency(stats.totalRevenue)}</p>
-                <p className="text-xs text-gray-500 mt-1">De {stats.conversions} conversiones</p>
+                <p className="text-sm text-gray-400">Ingresos Atribuidos a FB</p>
+                <p className="text-2xl font-bold text-blue-400">{formatCurrency(stats.attributedRevenue)}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  {stats.attributedOrders} de {stats.totalMLOrders} pedidos ({stats.attributionRate}%)
+                </p>
               </div>
               <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center">
                 <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -193,6 +218,35 @@ function ConversionsView() {
           </div>
         </div>
       )}
+
+      {/* Date Filters */}
+      <div className="mb-6 flex flex-wrap items-end gap-4 bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1">Desde</label>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="px-3 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-1">Hasta</label>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="px-3 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+        <button
+          onClick={fetchData}
+          disabled={loading}
+          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 transition-colors"
+        >
+          {loading ? 'Cargando...' : 'Actualizar'}
+        </button>
+      </div>
 
       {/* Correlation Controls */}
       <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4 mb-6">
@@ -328,9 +382,6 @@ function ConversionsView() {
                         <p className="text-xs text-gray-500">{converter.conversions} compra(s)</p>
                       </div>
                     </div>
-                    <div className="text-right">
-                      <p className="text-sm font-bold text-green-400">{formatCurrency(converter.revenue)}</p>
-                    </div>
                   </div>
                 ))}
               </div>
@@ -417,14 +468,18 @@ function ConversionsView() {
 
             <div className="text-gray-600 text-2xl">→</div>
 
-            {/* Revenue */}
+            {/* Attributed Revenue */}
             <div className="text-center flex-1">
               <div className="w-24 h-20 mx-auto bg-yellow-500/20 rounded-lg flex items-center justify-center mb-2">
-                <span className="text-lg font-bold text-yellow-400">{formatCurrency(stats.totalRevenue)}</span>
+                <span className="text-lg font-bold text-yellow-400">{formatCurrency(stats.attributedRevenue)}</span>
               </div>
-              <p className="text-sm text-gray-400">Ingresos</p>
+              <p className="text-sm text-gray-400">Ingresos FB</p>
+              <p className="text-xs text-gray-500">{stats.attributionRate}% del total</p>
             </div>
           </div>
+          <p className="text-xs text-gray-500 mt-4 text-center">
+            * Ingresos verificados contra ML API. Total en ML: {formatCurrency(stats.totalMLRevenue)} de {stats.totalMLOrders} pedidos.
+          </p>
         </div>
       )}
     </div>

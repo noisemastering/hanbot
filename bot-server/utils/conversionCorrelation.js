@@ -229,56 +229,62 @@ async function correlateClicksToOrders(sellerId, options = {}) {
 async function getConversionStats(options = {}) {
   const { dateFrom, dateTo } = options;
 
-  // Build date filter for conversions (based on convertedAt)
-  const dateFilter = {};
+  // Build date filter for link creation (based on createdAt)
+  // All metrics use createdAt for consistency - we're measuring links created in period
+  const createdAtFilter = {};
   if (dateFrom || dateTo) {
-    dateFilter.convertedAt = {};
-    if (dateFrom) dateFilter.convertedAt.$gte = new Date(dateFrom);
-    if (dateTo) dateFilter.convertedAt.$lte = new Date(dateTo);
-  }
-
-  // Build date filter for clicks (based on clickedAt)
-  const clickDateFilter = {};
-  if (dateFrom || dateTo) {
-    clickDateFilter.clickedAt = {};
-    if (dateFrom) clickDateFilter.clickedAt.$gte = new Date(dateFrom);
-    if (dateTo) clickDateFilter.clickedAt.$lte = new Date(dateTo);
+    createdAtFilter.createdAt = {};
+    if (dateFrom) createdAtFilter.createdAt.$gte = new Date(dateFrom);
+    if (dateTo) createdAtFilter.createdAt.$lte = new Date(dateTo);
   }
 
   const [
-    totalClicks,
+    totalLinks,
     clickedLinks,
     conversions,
     highConfidence,
     mediumConfidence,
     lowConfidence
   ] = await Promise.all([
-    ClickLog.countDocuments(dateFrom || dateTo ? { createdAt: dateFilter.convertedAt } : {}),
-    ClickLog.countDocuments({ clicked: true, ...clickDateFilter }),
-    ClickLog.countDocuments({ converted: true, ...dateFilter }),
-    ClickLog.countDocuments({ converted: true, correlationConfidence: 'high', ...dateFilter }),
-    ClickLog.countDocuments({ converted: true, correlationConfidence: 'medium', ...dateFilter }),
-    ClickLog.countDocuments({ converted: true, correlationConfidence: 'low', ...dateFilter })
+    ClickLog.countDocuments(createdAtFilter),
+    ClickLog.countDocuments({ clicked: true, ...createdAtFilter }),
+    ClickLog.countDocuments({ converted: true, ...createdAtFilter }),
+    ClickLog.countDocuments({ converted: true, correlationConfidence: 'high', ...createdAtFilter }),
+    ClickLog.countDocuments({ converted: true, correlationConfidence: 'medium', ...createdAtFilter }),
+    ClickLog.countDocuments({ converted: true, correlationConfidence: 'low', ...createdAtFilter })
   ]);
 
-  // Get total revenue from conversions (with date filter)
-  const revenueMatch = { converted: true };
-  if (dateFilter.convertedAt) revenueMatch.convertedAt = dateFilter.convertedAt;
+  // Get total revenue from UNIQUE orders only (same order can be linked to multiple clicks)
+  const revenueMatch = { converted: true, 'conversionData.orderId': { $exists: true }, ...createdAtFilter };
 
   const revenueAgg = await ClickLog.aggregate([
     { $match: revenueMatch },
-    { $group: { _id: null, total: { $sum: '$conversionData.totalAmount' } } }
+    // First group by orderId to get unique orders
+    { $group: {
+      _id: '$conversionData.orderId',
+      totalAmount: { $first: '$conversionData.totalAmount' }
+    }},
+    // Then sum all unique orders
+    { $group: { _id: null, total: { $sum: '$totalAmount' }, uniqueOrders: { $sum: 1 } } }
   ]);
   const totalRevenue = revenueAgg[0]?.total || 0;
+  const uniqueOrderCount = revenueAgg[0]?.uniqueOrders || 0;
 
-  // Get conversions by PSID (with date filter)
+  // Get conversions by PSID (with date filter) - also dedupe by orderId
   const conversionsByPSID = await ClickLog.aggregate([
     { $match: revenueMatch },
+    // First dedupe by orderId, keeping first PSID that clicked
+    { $group: {
+      _id: '$conversionData.orderId',
+      psid: { $first: '$psid' },
+      totalAmount: { $first: '$conversionData.totalAmount' }
+    }},
+    // Then group by PSID
     {
       $group: {
         _id: '$psid',
         conversions: { $sum: 1 },
-        revenue: { $sum: '$conversionData.totalAmount' }
+        revenue: { $sum: '$totalAmount' }
       }
     },
     { $sort: { revenue: -1 } },
@@ -286,11 +292,11 @@ async function getConversionStats(options = {}) {
   ]);
 
   return {
-    totalLinks: totalClicks,
+    totalLinks,
     clickedLinks,
-    conversions,
-    clickRate: clickedLinks > 0 ? ((clickedLinks / totalClicks) * 100).toFixed(2) : 0,
-    conversionRate: clickedLinks > 0 ? ((conversions / clickedLinks) * 100).toFixed(2) : 0,
+    conversions: uniqueOrderCount, // Use unique orders, not duplicate click attributions
+    clickRate: totalLinks > 0 ? ((clickedLinks / totalLinks) * 100).toFixed(2) : 0,
+    conversionRate: clickedLinks > 0 ? ((uniqueOrderCount / clickedLinks) * 100).toFixed(2) : 0,
     confidenceBreakdown: {
       high: highConfidence,
       medium: mediumConfidence,
@@ -299,6 +305,104 @@ async function getConversionStats(options = {}) {
     totalRevenue,
     topConverters: conversionsByPSID
   };
+}
+
+/**
+ * Get accurate conversion stats by cross-referencing ML API orders with click data
+ * This uses ML API as source of truth for orders, then checks attribution in ClickLog
+ */
+async function getAccurateConversionStats(sellerId, options = {}) {
+  const { dateFrom, dateTo } = options;
+  const { getOrders } = require('./mercadoLibreOrders');
+
+  // Convert Z format to -00:00 offset format for ML API
+  const formatDateForML = (dateStr) => {
+    if (!dateStr) return undefined;
+    return dateStr.replace('Z', '-00:00').replace('.000-', '-').replace(/\.\d{3}-/, '-');
+  };
+
+  const mlDateFrom = formatDateForML(dateFrom);
+  const mlDateTo = formatDateForML(dateTo);
+
+  console.log(`📊 Calculating accurate conversion stats for seller ${sellerId}`);
+  console.log(`   Date range: ${mlDateFrom || 'start of month'} to ${mlDateTo || 'now'}`);
+
+  try {
+    // Step 1: Fetch all orders from ML API for the period
+    let allOrders = [];
+    let offset = 0;
+    const limit = 50;
+
+    while (true) {
+      const result = await getOrders(sellerId, {
+        dateFrom: mlDateFrom,
+        dateTo: mlDateTo,
+        limit,
+        offset
+      });
+
+      if (!result.success || !result.orders?.length) break;
+      allOrders = allOrders.concat(result.orders);
+      if (result.orders.length < limit) break;
+      offset += limit;
+    }
+
+    console.log(`   📦 Fetched ${allOrders.length} orders from ML API`);
+
+    // Step 2: Calculate total ML revenue
+    const totalMLRevenue = allOrders.reduce((sum, order) => sum + (order.total_amount || 0), 0);
+
+    // Step 3: Check which orders have matching clicks in ClickLog
+    const orderIds = allOrders.map(o => String(o.id));
+
+    const attributedOrders = await ClickLog.find({
+      'conversionData.orderId': { $in: orderIds },
+      converted: true
+    }).distinct('conversionData.orderId');
+
+    console.log(`   🔗 Found ${attributedOrders.length} orders with FB click attribution`);
+
+    // Step 4: Calculate attributed revenue (only orders with clicks)
+    const attributedOrdersSet = new Set(attributedOrders.map(String));
+    let attributedRevenue = 0;
+    const attributedOrderDetails = [];
+
+    for (const order of allOrders) {
+      if (attributedOrdersSet.has(String(order.id))) {
+        attributedRevenue += order.total_amount || 0;
+        attributedOrderDetails.push({
+          orderId: order.id,
+          amount: order.total_amount,
+          date: order.date_created
+        });
+      }
+    }
+
+    const attributionRate = allOrders.length > 0
+      ? ((attributedOrders.length / allOrders.length) * 100).toFixed(1)
+      : 0;
+
+    console.log(`   💰 Total ML revenue: $${totalMLRevenue.toFixed(2)}`);
+    console.log(`   🎯 Attributed revenue: $${attributedRevenue.toFixed(2)} (${attributionRate}%)`);
+
+    return {
+      success: true,
+      totalOrders: allOrders.length,
+      totalMLRevenue,
+      attributedOrders: attributedOrders.length,
+      attributedRevenue,
+      attributionRate: parseFloat(attributionRate),
+      // For debugging
+      attributedOrderDetails: attributedOrderDetails.slice(0, 10)
+    };
+
+  } catch (error) {
+    console.error(`❌ Error calculating accurate stats:`, error.message);
+    return {
+      success: false,
+      error: error.message
+    };
+  }
 }
 
 /**
@@ -314,6 +418,7 @@ async function getRecentConversions(limit = 20) {
 module.exports = {
   correlateClicksToOrders,
   getConversionStats,
+  getAccurateConversionStats,
   getRecentConversions,
   extractMLItemId
 };

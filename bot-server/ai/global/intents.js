@@ -1074,12 +1074,12 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
               "¿Qué medida necesitas para tu proyecto?"
       };
     } else {
-      // User is asking about colors - ask if they want to see sizes
+      // User is asking about colors - just inform we only have beige (don't ask about prices if we already gave them)
       await updateConversation(psid, { lastIntent: "color_query", unknownCount: 0 });
       const colorResponses = [
-        `Por ahora solo manejamos malla sombra beige en versión confeccionada 🌿. ¿Te gustaría ver las medidas disponibles?`,
-        `Actualmente tenemos disponible solo el color beige en malla confeccionada. ¿Quieres que te muestre los tamaños?`,
-        `De momento contamos únicamente con beige, que es nuestro color más popular 😊. ¿Te interesa ver precios y medidas?`
+        `Por ahora solo manejamos malla sombra beige en versión confeccionada 🌿`,
+        `Actualmente solo tenemos disponible el color beige en malla confeccionada.`,
+        `De momento contamos únicamente con beige, que es nuestro color más popular 😊`
       ];
       return {
         type: "text",

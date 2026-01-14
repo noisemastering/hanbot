@@ -37,6 +37,9 @@ function OrdersView() {
     conversionRate: null,
     conversions: 0,
     totalRevenue: 0,
+    totalMLOrders: null,
+    totalMLRevenue: null,
+    attributionRate: null,
     loading: true
   });
 
@@ -129,8 +132,11 @@ function OrdersView() {
           const stats = response.data.stats;
           setFbAttribution({
             conversionRate: stats.conversionRate,
-            conversions: stats.conversions,
-            totalRevenue: stats.totalRevenue,
+            conversions: stats.attributedOrders || stats.conversions,
+            totalRevenue: stats.attributedRevenue || stats.totalRevenue,
+            totalMLOrders: stats.totalMLOrders,
+            totalMLRevenue: stats.totalMLRevenue,
+            attributionRate: stats.attributionRate,
             loading: false
           });
         }
@@ -218,20 +224,20 @@ function OrdersView() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         {/* Total Orders */}
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
-          <div className="text-gray-400 text-sm">Pedidos</div>
+          <div className="text-gray-400 text-sm">Pedidos en Tabla</div>
           <div className="text-2xl font-bold text-white mt-1">{metrics.totalOrders}</div>
           {paging.total && paging.total > metrics.totalOrders && (
             <div className="text-xs text-gray-500 mt-1">
-              Mostrando {metrics.totalOrders} de {paging.total.toLocaleString()}
+              de {paging.total.toLocaleString()} total en ML
             </div>
           )}
         </div>
 
         {/* Total Revenue */}
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
-          <div className="text-gray-400 text-sm">Ingresos Totales</div>
+          <div className="text-gray-400 text-sm">Ingresos en Tabla</div>
           <div className="text-2xl font-bold text-green-400 mt-1">{formatCurrency(metrics.totalRevenue)}</div>
-          <div className="text-xs text-gray-500 mt-1">{metrics.totalOrders} pedidos en período</div>
+          <div className="text-xs text-gray-500 mt-1">{metrics.totalOrders} pedidos mostrados</div>
         </div>
 
         {/* Average Order Value */}
@@ -252,7 +258,7 @@ function OrdersView() {
                 {paging.total > 0 ? ((fbAttribution.conversions / paging.total) * 100).toFixed(1) : 0}%
               </div>
               <div className="text-xs text-gray-500 mt-1">
-                {fbAttribution.conversions} de {paging.total || 0} pedidos
+                {fbAttribution.conversions} de {paging.total?.toLocaleString() || 0} pedidos
               </div>
             </>
           )}

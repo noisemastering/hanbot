@@ -8,6 +8,7 @@ const MercadoLibreAuth = require('../models/MercadoLibreAuth');
 const {
   correlateClicksToOrders,
   getConversionStats,
+  getAccurateConversionStats,
   getRecentConversions
 } = require('../utils/conversionCorrelation');
 
