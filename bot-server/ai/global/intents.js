@@ -64,6 +64,26 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 💰 PRICE CONFUSION - Customer confused about different prices shown
+  // "y está de 650 es otra??", "por qué dice otro precio", "no es el mismo precio"
+  const priceConfusionPatterns = /\b(es\s+otr[ao]|son\s+diferente|es\s+diferente|otro\s+precio|diferente\s+precio|por\s*qu[eé]\s+(dice|sale|aparece)\s+(otro|diferente)|no\s+(es\s+)?el\s+mismo\s+precio|cu[aá]l\s+es\s+el\s+(precio\s+)?correcto|me\s+(dijiste|dijeron)\s+(otro|diferente)|estaba\s+en\s+\d+|no\s+era\s+de\s+\d+)\b/i;
+
+  if (priceConfusionPatterns.test(msg) ||
+      (/\b(de\s+)?\d{3,4}\b/i.test(msg) && /\b(es\s+otr[ao]|otr[ao]\s*\??|es\s+diferente|diferente\s*\??)\b/i.test(msg))) {
+    console.log("💰 Price confusion detected, escalating to human:", msg);
+    await updateConversation(psid, {
+      lastIntent: "human_handoff",
+      state: "needs_human",
+      priceConfusion: true
+    });
+    await sendHandoffNotification(psid, convo, "Cliente confundido por precios - verificar cotización");
+    return {
+      type: "text",
+      text: "Disculpa la confusión con los precios. Te comunico con un asesor para verificar y darte el precio correcto.\n\n" +
+            "En un momento te atienden."
+    };
+  }
+
   // 📦 OUT OF STOCK - Hand off to human when customer reports product is unavailable
   // This is critical: customer clicked a link and product shows as "agotado"
   const outOfStockPatterns = /\b(agotad[oa]s?|sin\s+stock|no\s+hay\s+(en\s+)?stock|no\s+tienen|no\s+est[aá]\s+disponible|producto\s+no\s+disponible|dice\s+(que\s+)?(no\s+hay|agotado)|sale\s+(que\s+)?(agotado|no\s+disponible)|aparece\s+(como\s+)?agotado|fuera\s+de\s+stock)\b/i;
