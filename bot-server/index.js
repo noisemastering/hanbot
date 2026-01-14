@@ -30,7 +30,9 @@ const corsOptions = {
     if (!origin) return callback(null, true);
 
     const allowedOrigins = [
+      "http://localhost:3000",
       "http://localhost:3001",
+      "http://localhost:3002",
       "https://dashboard.hanlob.com.mx",
       "https://hanbot-nu.vercel.app",
       "https://emanational-leeanna-impressionable.ngrok-free.dev"

@@ -884,6 +884,19 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 💰 PRICE INCLUDES SHIPPING? - Quick answer for "ya incluye envío/entrega?" follow-ups
+  // This catches: "el precio incluye envío", "ya con entrega incluida?", "incluye el flete?", etc.
+  const priceIncludesShippingPattern = /\b(precio|costo)\s+(es\s+)?(ya\s+)?(incluye|con|tiene)\s+(el\s+|la\s+)?(env[ií]o|entrega|flete)|ya\s+(incluye|con)\s+(el\s+|la\s+)?(env[ií]o|entrega|flete)|incluye\s+(el\s+|la\s+)?(env[ií]o|entrega|flete)|con\s+(el\s+|la\s+)?(entrega|env[ií]o)\s+(ya\s+)?incluid[ao]|es\s+con\s+entrega|(env[ií]o|entrega|flete)\s+(ya\s+)?incluid[ao]/i;
+
+  if (priceIncludesShippingPattern.test(msg)) {
+    console.log("💰 Price includes shipping question detected:", msg);
+    await updateConversation(psid, { lastIntent: "shipping_included_confirmation" });
+    return {
+      type: "text",
+      text: "¡Sí! El envío está incluido en el precio o se calcula automáticamente en Mercado Libre dependiendo de tu ubicación.\n\nEn la mayoría de los casos el envío es gratis. 🚚"
+    };
+  }
+
   // 🚚 Envíos / entregas
   if (/env[ií]o|entregan|domicilio|reparto|llega|envias?|envian|paquete/i.test(msg)) {
     // Check if message also contains dimensions - if so, skip shipping handler and let dimension handler process it
