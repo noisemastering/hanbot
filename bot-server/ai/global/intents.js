@@ -780,6 +780,21 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 🏗️ STRUCTURE FABRICATION - We only make the mesh, not the structure
+  // "ustedes realizan la estructura", "hacen la estructura", "venden estructura"
+  if (/\b(realizan|hacen|fabrican|venden|tienen|ofrecen|instalan)\s+(la\s+)?estructura/i.test(msg) ||
+      /\b(estructura\s+(met[aá]lica|de\s+metal|de\s+fierro|de\s+tubo))\b/i.test(msg) ||
+      /\b(incluye|viene\s+con|trae)\s+(la\s+)?estructura\b/i.test(msg)) {
+    console.log("🏗️ Structure fabrication question detected");
+    await updateConversation(psid, { lastIntent: "structure_question" });
+    return {
+      type: "text",
+      text: "No, mil disculpas, nosotros solo realizamos la fabricación de la malla 🌿\n\n" +
+            "No vendemos ni instalamos estructuras.\n\n" +
+            "¿Te puedo ayudar con alguna medida de malla?"
+    };
+  }
+
   // 🔧 Measurement/Installation services - We don't offer these
   if (/\b(venir\s+a\s+medir|pasan\s+a\s+medir|van\s+a\s+medir|pueden\s+medir|podr[ií]an\s+(venir|pasar)\s+(a\s+)?medir|mandan\s+a\s+alguien|env[ií]an\s+a\s+alguien|hacen\s+instalaci[oó]n|instalan|colocan|ponen\s+la\s+malla|servicio\s+de\s+(instalaci[oó]n|medici[oó]n|colocaci[oó]n)|instalador|quien\s+(la\s+)?instale|quien\s+(la\s+)?coloque)\b/i.test(msg)) {
     console.log("🔧 Measurement/installation service request detected");
