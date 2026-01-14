@@ -1,6 +1,7 @@
 // ai/core/edgeCaseHandler.js
 const { updateConversation } = require("../../conversationManager");
 const { getBusinessInfo } = require("../../businessInfoManager");
+const { sendHandoffNotification } = require("../../services/pushNotifications");
 
 /**
  * Detects if a message is unintelligible or too complex
@@ -89,6 +90,11 @@ async function handleUnintelligible(psid, convo, BOT_PERSONA_NAME) {
       state: "needs_human"
     });
 
+    // Send push notification
+    sendHandoffNotification(psid, convo, "Bot no pudo entender después de 2 intentos").catch(err => {
+      console.error("❌ Failed to send push notification:", err);
+    });
+
     const whatsappLink = "https://wa.me/524425957432";
 
     return {
@@ -101,12 +107,17 @@ async function handleUnintelligible(psid, convo, BOT_PERSONA_NAME) {
 /**
  * Handles complex questions - immediate human handoff
  */
-async function handleComplexQuestion(psid, reason) {
+async function handleComplexQuestion(psid, convo, reason) {
   const info = await getBusinessInfo();
 
   await updateConversation(psid, {
     lastIntent: "complex_query",
     state: "needs_human"
+  });
+
+  // Send push notification
+  sendHandoffNotification(psid, convo, `Consulta compleja: ${reason || 'requiere especialista'}`).catch(err => {
+    console.error("❌ Failed to send push notification:", err);
   });
 
   const whatsappLink = "https://wa.me/524425957432";

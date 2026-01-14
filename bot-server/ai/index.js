@@ -273,7 +273,7 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
     if (!skipEdgeCaseDetection) {
       if (edgeCase.isComplex && edgeCase.confidence > 0.9) {
         console.log(`🔴 Mensaje complejo detectado (${edgeCase.confidence}): ${edgeCase.reason}`);
-        return await handleComplexQuestion(psid, edgeCase.reason);
+        return await handleComplexQuestion(psid, convo, edgeCase.reason);
       }
 
       if (edgeCase.isUnintelligible && edgeCase.confidence > 0.9) {

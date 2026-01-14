@@ -142,9 +142,12 @@ function parseDimensions(message) {
   // Also handles "mas" without accent
   normalized = normalized.replace(/(\d+(?:\.\d+)?)\s*m[aá]s\b/gi, '$1m');
 
-  // PREPROCESSING: Strip out "m" units (e.g., "6.5 m x 3.17 m" → "6.5 x 3.17")
+  // PREPROCESSING: Strip out "m", "mts", "metros" units (e.g., "6.5 m x 3.17 m" → "6.5 x 3.17")
   // This allows all existing patterns to work with messages that include units
-  normalized = normalized.replace(/(\d+(?:\.\d+)?)\s*m\b/gi, '$1');
+  // Handle "mts" BEFORE "m" to avoid partial matches
+  // Use lookahead for word boundary OR separator to handle "mtsx" (no space before x)
+  normalized = normalized.replace(/(\d+(?:\.\d+)?)\s*mts(?=\s|[xX×*]|$)/gi, '$1');
+  normalized = normalized.replace(/(\d+(?:\.\d+)?)\s*m(?=\s|[xX×*]|$)/gi, '$1');
 
   // PREPROCESSING: Normalize "k" separator to "x" (common text abbreviation: "4 k 4" → "4 x 4")
   normalized = normalized.replace(/(\d+(?:\.\d+)?)\s*k\s*(\d+(?:\.\d+)?)/gi, '$1 x $2');
