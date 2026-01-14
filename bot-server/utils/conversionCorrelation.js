@@ -255,14 +255,43 @@ async function getConversionStats(options = {}) {
   ]);
 
   // Get total revenue from UNIQUE orders only (same order can be linked to multiple clicks)
-  // Filter by convertedAt (order date), not createdAt (link creation date)
-  const revenueDateFilter = {};
+  // Filter by order date - check both convertedAt AND conversionData.orderDate for backwards compatibility
+  let revenueMatch = { converted: true, 'conversionData.orderId': { $exists: true } };
+
   if (dateFrom || dateTo) {
-    revenueDateFilter.convertedAt = {};
-    if (dateFrom) revenueDateFilter.convertedAt.$gte = new Date(dateFrom);
-    if (dateTo) revenueDateFilter.convertedAt.$lte = new Date(dateTo);
+    const dateFromObj = dateFrom ? new Date(dateFrom) : null;
+    const dateToObj = dateTo ? new Date(dateTo) : null;
+
+    // Build date conditions for BOTH possible date fields
+    const dateConditions = [];
+
+    // Condition 1: convertedAt field
+    const convertedAtCondition = {};
+    if (dateFromObj) convertedAtCondition.$gte = dateFromObj;
+    if (dateToObj) convertedAtCondition.$lte = dateToObj;
+    if (Object.keys(convertedAtCondition).length > 0) {
+      dateConditions.push({ convertedAt: convertedAtCondition });
+    }
+
+    // Condition 2: conversionData.orderDate field (fallback for old records)
+    const orderDateCondition = {};
+    if (dateFromObj) orderDateCondition.$gte = dateFromObj;
+    if (dateToObj) orderDateCondition.$lte = dateToObj;
+    if (Object.keys(orderDateCondition).length > 0) {
+      dateConditions.push({ 'conversionData.orderDate': orderDateCondition });
+    }
+
+    // Match if EITHER date field is in range
+    if (dateConditions.length > 0) {
+      revenueMatch = {
+        converted: true,
+        'conversionData.orderId': { $exists: true },
+        $or: dateConditions
+      };
+    }
+
+    console.log(`📊 Revenue date filter: ${dateFromObj?.toISOString()} to ${dateToObj?.toISOString()}`);
   }
-  const revenueMatch = { converted: true, 'conversionData.orderId': { $exists: true }, ...revenueDateFilter };
 
   const revenueAgg = await ClickLog.aggregate([
     { $match: revenueMatch },
