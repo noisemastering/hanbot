@@ -87,45 +87,39 @@ async function isHumanActive(psid) {
       return true;
     }
 
-    // Check if conversation state is human_active
-    if (convo && convo.state === "human_active") {
-      // Check if human took over recently (within 2 hours)
-      if (convo.agentTookOverAt) {
-        const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-        if (convo.agentTookOverAt > twoHoursAgo) {
-          console.log(`👨‍💼 Human is still active (took over ${Math.round((Date.now() - convo.agentTookOverAt.getTime()) / 60000)} minutes ago)`);
-          return true;
-        } else {
-          // More than 2 hours passed, auto-resume bot
-          console.log(`🤖 Auto-resuming bot after 2+ hours of human inactivity`);
-          await updateConversation(psid, {
-            state: "active",
-            lastIntent: "bot_resumed",
-            agentTookOverAt: null
-          });
-          return false;
-        }
+    // Check if conversation state is human_active with timestamp
+    if (convo && convo.state === "human_active" && convo.agentTookOverAt) {
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      if (convo.agentTookOverAt > twoHoursAgo) {
+        console.log(`👨‍💼 Human is still active (took over ${Math.round((Date.now() - convo.agentTookOverAt.getTime()) / 60000)} minutes ago)`);
+        return true;
+      } else {
+        // More than 2 hours passed, auto-resume bot
+        console.log(`🤖 Auto-resuming bot after 2+ hours of human inactivity`);
+        await updateConversation(psid, {
+          state: "active",
+          lastIntent: "bot_resumed",
+          agentTookOverAt: null
+        });
+        return false;
       }
+    }
 
-      // If no timestamp but state is human_active, check message history
-      const Message = require('./models/Message');
-      const lastMessage = await Message.findOne({ psid }).sort({ createdAt: -1 }).limit(1);
+    // ALWAYS check message history - even if state isn't human_active
+    // This catches cases where human message wasn't detected via webhook
+    const Message = require('./models/Message');
+    const lastMessage = await Message.findOne({ psid }).sort({ createdAt: -1 }).limit(1);
 
-      if (lastMessage && lastMessage.senderType === "human") {
-        const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
-        if (lastMessage.createdAt > twoHoursAgo) {
-          console.log(`👨‍💼 Human is active (last human message ${Math.round((Date.now() - lastMessage.createdAt.getTime()) / 60000)} minutes ago)`);
-          return true;
-        } else {
-          // More than 2 hours since last human message, auto-resume bot
-          console.log(`🤖 Auto-resuming bot after 2+ hours since last human message`);
-          await updateConversation(psid, {
-            state: "active",
-            lastIntent: "bot_resumed",
-            agentTookOverAt: null
-          });
-          return false;
-        }
+    if (lastMessage && lastMessage.senderType === "human") {
+      const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
+      if (lastMessage.createdAt > twoHoursAgo) {
+        console.log(`👨‍💼 Human is active (last human message ${Math.round((Date.now() - lastMessage.createdAt.getTime()) / 60000)} minutes ago)`);
+        // Also update state to human_active for consistency
+        await updateConversation(psid, {
+          state: "human_active",
+          agentTookOverAt: lastMessage.createdAt
+        });
+        return true;
       }
     }
 
