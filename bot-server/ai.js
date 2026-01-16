@@ -385,23 +385,30 @@ Si no tienes información sobre algo, discúlpate de forma amable (sin usar emoj
 
     if (newUnknownCount >= 2) {
       const info = await getBusinessInfo();
-      await updateConversation(psid, { unknownCount: 0 });
+      await updateConversation(psid, {
+        unknownCount: 0,
+        state: "needs_human",
+        handoffRequested: true,
+        handoffReason: "Bot unable to help after 2 unknown messages",
+        handoffTimestamp: new Date()
+      });
+
+      const whatsappLink = "https://wa.me/524425957432";
 
       if (!info) {
         console.warn("⚠️ No se encontró información de negocio en la base de datos.");
         return {
           type: "text",
-          text: `Lo siento 😔, por ahora no tengo información disponible sobre eso. Si deseas hablar con un asesor, puedo darte los teléfonos de contacto.`
+          text: `Déjame conectarte con un asesor que pueda ayudarte mejor 😊\n\n💬 WhatsApp: ${whatsappLink}`
         };
       }
 
       return {
         type: "text",
         text:
-          `Lo siento 😔, por el momento no tengo información disponible sobre eso.\n` +
-          `Si deseas hablar directamente con alguien de nuestro equipo, puedes comunicarte 📞:\n\n` +
-          `${info.phones.join(" / ")}\n` +
-          `🕓 Horarios de atención: ${info.hours}`
+          `Déjame conectarte con un asesor que pueda ayudarte mejor 😊\n\n` +
+          `💬 WhatsApp: ${whatsappLink}\n\n` +
+          `📞 ${info.phones.join(" / ")}\n🕓 ${info.hours}`
       };
     }
 

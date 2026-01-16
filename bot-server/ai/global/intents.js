@@ -181,12 +181,8 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         /\b(suelo|tierra|piso|c[oó]mo|con\s+qu[eé])\b/i.test(msg)) {
       return {
         type: "text",
-        text: "El borde separador se sujeta fácilmente al suelo con estacas de jardín 🌱\n\n" +
-              "Solo tienes que:\n" +
-              "1. Colocar el borde en la posición deseada\n" +
-              "2. Clavar estacas cada 50-60cm aproximadamente\n\n" +
-              "Las estacas se venden por separado en cualquier ferretería o vivero.\n\n" +
-              "¿Te interesa algún largo en específico? Tenemos 6m, 9m, 18m y 54m."
+        text: "El borde separador se sujeta al suelo con estacas de jardín, que se consiguen en cualquier ferretería o vivero 🌱\n\n" +
+              "¿Te interesa algún largo? Tenemos 6m, 9m, 18m y 54m."
       };
     }
 
@@ -223,12 +219,8 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         /\bcon\s+qu[eé]\b/i.test(msg)) {
       return {
         type: "text",
-        text: "El borde separador se sujeta fácilmente al suelo con estacas de jardín 🌱\n\n" +
-              "Solo tienes que:\n" +
-              "1. Colocar el borde en la posición deseada\n" +
-              "2. Clavar estacas cada 50-60cm aproximadamente\n\n" +
-              "Las estacas se venden por separado en cualquier ferretería o vivero.\n\n" +
-              "¿Te interesa algún largo en específico? Tenemos 6m, 9m, 18m y 54m."
+        text: "El borde separador se sujeta al suelo con estacas de jardín, que se consiguen en cualquier ferretería o vivero 🌱\n\n" +
+              "¿Te interesa algún largo? Tenemos 6m, 9m, 18m y 54m."
       };
     }
 

@@ -333,16 +333,19 @@ async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME
       console.error("❌ Failed to send push notification:", err);
     });
 
+    // WhatsApp link for direct contact
+    const whatsappLink = "https://wa.me/524425957432";
+
     if (!info) {
-      return { type: "text", text: `Lo siento 😔, no tengo información disponible. Si deseas hablar con un asesor, puedo darte los teléfonos.` };
+      return { type: "text", text: `Déjame conectarte con un asesor que pueda ayudarte mejor 😊\n\n💬 WhatsApp: ${whatsappLink}` };
     }
 
     return {
       type: "text",
       text:
-        `Lo siento 😔, por el momento no tengo información disponible.\n` +
-        `Si deseas hablar directamente con alguien de nuestro equipo, puedes comunicarte 📞:\n\n` +
-        `${info.phones.join(" / ")}\n🕓 Horarios de atención: ${info.hours}`
+        `Déjame conectarte con un asesor que pueda ayudarte mejor 😊\n\n` +
+        `💬 WhatsApp: ${whatsappLink}\n\n` +
+        `📞 ${info.phones.join(" / ")}\n🕓 ${info.hours}`
     };
   }
 
