@@ -99,8 +99,6 @@ function MLImporterView() {
     }
   };
 
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const init = async () => {
       setLoading(true);
@@ -110,6 +108,7 @@ function MLImporterView() {
       setLoading(false);
     };
     init();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Flatten product tree to get sellable products
