@@ -22,7 +22,7 @@ function OrdersView() {
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [sellerId, setSellerId] = useState('482595248'); // Hanlob default
+  const [sellerId] = useState('482595248'); // Hanlob default
   const [dateFrom, setDateFrom] = useState(getStartOfMonthStr());
   const [dateTo, setDateTo] = useState(getTodayStr());
   const [offset, setOffset] = useState(0);
@@ -181,6 +181,7 @@ function OrdersView() {
     }
   };
 
+  // eslint-disable-next-line no-unused-vars
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
@@ -201,6 +202,7 @@ function OrdersView() {
     }).format(amount);
   };
 
+  // eslint-disable-next-line no-unused-vars
   const getStatusBadgeClass = (status) => {
     const statusClasses = {
       'paid': 'bg-green-100 text-green-800',

@@ -43,6 +43,7 @@ function UserModal({ user, onClose, onSave }) {
   }, [user]);
 
   // Update profile options when role changes
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (!loadingRoles && formData.role) {
       const selectedRole = roles.find(r => r.name === formData.role);

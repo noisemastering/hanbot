@@ -118,6 +118,7 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
 
       // Build parent chain
       while (currentParentId) {
+        // eslint-disable-next-line no-loop-func
         const parent = flatProducts.find(p => p._id === currentParentId);
         if (parent) {
           parentChain.unshift(parent);
@@ -308,6 +309,7 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
       let currentParentId = formData.parentId;
 
       while (currentParentId) {
+        // eslint-disable-next-line no-loop-func
         const parent = flatProducts.find(p => p._id === currentParentId);
         if (parent && parent.enabledDimensions) {
           parent.enabledDimensions.forEach(dim => inherited.add(dim));
@@ -331,6 +333,7 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
 
       // Collect parent chain
       while (currentParentId) {
+        // eslint-disable-next-line no-loop-func
         const parent = flatProducts.find(p => p._id === currentParentId);
         if (parent) {
           parentChain.unshift(parent); // Add to beginning (root first)

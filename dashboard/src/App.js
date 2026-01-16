@@ -27,7 +27,7 @@ import {
 import ProductModal from "./components/ProductModal";
 import ProductsView from "./components/ProductsView";
 import CampaignModal from "./components/CampaignModal";
-import CampaignsView from "./components/CampaignsView";
+// import CampaignsView from "./components/CampaignsView"; // Unused - using CampaignTreeView instead
 import CampaignTreeView from "./components/CampaignTreeView";
 import AdSetModal from "./components/AdSetModal";
 import AdModal from "./components/AdModal";
@@ -35,7 +35,7 @@ import CampaignItemDetailsModal from "./components/CampaignItemDetailsModal";
 import AdSetsView from "./components/AdSetsView";
 import AdsView from "./components/AdsView";
 import CampaignProductModal from "./components/CampaignProductModal";
-import CampaignProductsView from "./components/CampaignProductsView";
+// import CampaignProductsView from "./components/CampaignProductsView"; // Unused
 import MasterCatalogView from "./components/MasterCatalogView";
 import MasterCatalogModal from "./components/MasterCatalogModal";
 import UsosYGruposView from "./components/UsosYGruposView";
@@ -53,8 +53,8 @@ import InventarioView from "./pages/InventarioView";
 import PuntosDeVentaView from "./pages/PuntosDeVentaView";
 import OrdersView from "./pages/OrdersView";
 import PuntoDeVentaModal from "./components/PuntoDeVentaModal";
-import { AuthProvider, useAuth } from "./contexts/AuthContext";
-import ProtectedRoute from "./components/ProtectedRoute";
+import { useAuth } from "./contexts/AuthContext";
+// AuthProvider and ProtectedRoute used in index.js
 import UsersView from "./components/UsersView";
 import RolesView from "./components/RolesView";
 import ProfilesView from "./components/ProfilesView";
@@ -330,7 +330,7 @@ function App() {
 
   // Campaign Products state
   const [campaignProducts, setCampaignProducts] = useState([]);
-  const [campaignProductsLoading, setCampaignProductsLoading] = useState(false);
+  const [, setCampaignProductsLoading] = useState(false);
   const [showCampaignProductModal, setShowCampaignProductModal] = useState(false);
   const [editingCampaignProduct, setEditingCampaignProduct] = useState(null);
   const [deleteConfirmCampaignProduct, setDeleteConfirmCampaignProduct] = useState(null);

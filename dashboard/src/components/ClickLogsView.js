@@ -26,6 +26,7 @@ function ClickLogsView() {
     endDate: getCurrentDate()
   });
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     fetchStats();
     fetchClickLogs();

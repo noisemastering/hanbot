@@ -99,6 +99,7 @@ function MLImporterView() {
     }
   };
 
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     const init = async () => {
       setLoading(true);
@@ -248,6 +249,7 @@ function MLImporterView() {
   const linkedCount = mlItems.filter(item => getLinkedProduct(item) && !isItemUnavailable(item)).length;
   const pausedCount = mlItems.filter(item => isItemPaused(item)).length;
   const manualInactiveCount = mlItems.filter(item => isItemInactive(item) && !isItemPaused(item)).length;
+  // eslint-disable-next-line no-unused-vars
   const inactiveCount = pausedCount + manualInactiveCount;
   const unlinkedCount = mlItems.filter(item => !getLinkedProduct(item) && !isItemUnavailable(item)).length;
 

@@ -261,6 +261,7 @@ function CampaignTreeView({
   };
 
   // When editing an item, expand the path to that item (collapse all others)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   React.useEffect(() => {
     if (editingItem && campaigns && campaigns.length > 0) {
       const path = findPathToRoot(editingItem._id, campaigns);

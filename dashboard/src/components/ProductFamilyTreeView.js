@@ -253,6 +253,7 @@ function ProductFamilyTreeView({
   };
 
   // When editing a product, expand the path to that product (collapse all others)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   React.useEffect(() => {
     if (editingProduct && products && products.length > 0) {
       const path = findPathToRoot(editingProduct._id, products);
