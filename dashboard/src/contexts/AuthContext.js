@@ -11,6 +11,7 @@ export const AuthProvider = ({ children }) => {
 
   // Check if user is logged in on mount
   // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (token) {
       verifyToken();
