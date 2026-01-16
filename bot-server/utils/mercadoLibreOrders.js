@@ -366,8 +366,112 @@ async function getShipmentById(sellerId, shipmentId) {
   }
 }
 
+/**
+ * Get summary stats by fetching ALL orders in a date range
+ * WARNING: This can be slow for large date ranges (many API calls)
+ *
+ * @param {string} sellerId - Seller ID
+ * @param {object} options - Query options
+ * @param {string} options.dateFrom - Start date filter (ISO format)
+ * @param {string} options.dateTo - End date filter (ISO format)
+ * @returns {Promise<object>} Summary with totalOrders, totalRevenue
+ */
+async function getOrdersSummary(sellerId, options = {}) {
+  try {
+    const dateFrom = options.dateFrom || getStartOfMonth();
+    const dateTo = options.dateTo || getNowISO();
+
+    console.log(`📊 Calculating orders summary for seller ${sellerId}`);
+    console.log(`📅 Date range: ${dateFrom} to ${dateTo}`);
+
+    // First call to get total count
+    const firstPage = await getOrders(sellerId, {
+      dateFrom,
+      dateTo,
+      limit: 50,
+      offset: 0
+    });
+
+    const totalOrders = firstPage.paging?.total || 0;
+
+    if (totalOrders === 0) {
+      return {
+        success: true,
+        totalOrders: 0,
+        totalRevenue: 0,
+        avgOrderValue: 0,
+        paidOrders: 0,
+        paidRevenue: 0,
+        dateRange: { from: dateFrom, to: dateTo }
+      };
+    }
+
+    // Accumulate from first page
+    let totalRevenue = 0;
+    let paidOrders = 0;
+    let paidRevenue = 0;
+
+    const processOrders = (orders) => {
+      for (const order of orders) {
+        const amount = order.total_amount || order.paid_amount || 0;
+        totalRevenue += amount;
+        if (order.status === 'paid') {
+          paidOrders++;
+          paidRevenue += order.paid_amount || amount;
+        }
+      }
+    };
+
+    processOrders(firstPage.orders);
+
+    // Fetch remaining pages if needed
+    const ML_MAX_OFFSET = 10000;
+    const BATCH_SIZE = 50;
+    let offset = BATCH_SIZE;
+    let fetchedCount = firstPage.orders.length;
+
+    while (offset < totalOrders && offset < ML_MAX_OFFSET) {
+      console.log(`   Fetching page at offset ${offset}/${Math.min(totalOrders, ML_MAX_OFFSET)}...`);
+
+      const page = await getOrders(sellerId, {
+        dateFrom,
+        dateTo,
+        limit: BATCH_SIZE,
+        offset
+      });
+
+      processOrders(page.orders);
+      fetchedCount += page.orders.length;
+      offset += BATCH_SIZE;
+
+      // Small delay to avoid rate limiting
+      await new Promise(resolve => setTimeout(resolve, 100));
+    }
+
+    const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+
+    console.log(`✅ Summary calculated: ${totalOrders} orders, $${totalRevenue.toFixed(2)} revenue`);
+
+    return {
+      success: true,
+      totalOrders,
+      totalRevenue,
+      avgOrderValue,
+      paidOrders,
+      paidRevenue,
+      fetchedCount,
+      truncated: totalOrders > ML_MAX_OFFSET,
+      dateRange: { from: dateFrom, to: dateTo }
+    };
+  } catch (error) {
+    console.error(`❌ Error calculating orders summary:`, error.message);
+    throw error;
+  }
+}
+
 module.exports = {
   getOrders,
   getOrderById,
   getShipmentById,
+  getOrdersSummary,
 };

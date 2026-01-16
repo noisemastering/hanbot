@@ -72,6 +72,80 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /analytics/conversions - Get conversion/attribution stats for orders view
+// Returns FB attributed conversions and ML order totals for a date range
+router.get('/conversions', async (req, res) => {
+  try {
+    const { dateFrom, dateTo } = req.query;
+
+    // Build date filter
+    const dateFilter = {};
+    if (dateFrom) {
+      dateFilter.$gte = new Date(dateFrom);
+    }
+    if (dateTo) {
+      dateFilter.$lte = new Date(dateTo);
+    }
+
+    // Query ClickLog for FB attributed conversions in date range
+    const clickQuery = { converted: true };
+    if (Object.keys(dateFilter).length > 0) {
+      // Use conversionData.orderDate or convertedAt for date filtering
+      clickQuery.$or = [
+        { 'conversionData.orderDate': dateFilter },
+        { convertedAt: dateFilter }
+      ];
+    }
+
+    // Get attributed conversions
+    const attributedClicks = await ClickLog.find(clickQuery).lean();
+
+    // Calculate attributed revenue from conversions
+    const attributedOrders = attributedClicks.length;
+    const attributedRevenue = attributedClicks.reduce((sum, click) => {
+      return sum + (click.conversionData?.totalAmount || click.conversionData?.paidAmount || 0);
+    }, 0);
+
+    // Note: totalMLOrders and totalMLRevenue require ML API calls
+    // The frontend gets totalMLOrders from paging.total in the orders endpoint
+    // totalMLRevenue would require fetching ALL pages (expensive)
+    // We return null to indicate it's not available from this endpoint
+
+    res.json({
+      success: true,
+      stats: {
+        // FB Attribution stats
+        attributedOrders,
+        attributedRevenue,
+        conversions: attributedOrders,
+        totalRevenue: attributedRevenue,
+
+        // ML totals - these come from the ML orders endpoint, not here
+        // totalMLOrders comes from paging.total in /ml/orders/:sellerId
+        // totalMLRevenue is not available without fetching all pages
+        totalMLOrders: null,
+        totalMLRevenue: null,
+
+        // Rates
+        conversionRate: null, // Can't calculate without total ML orders
+        attributionRate: null
+      },
+      dateRange: {
+        from: dateFrom || 'not specified',
+        to: dateTo || 'not specified'
+      },
+      note: 'totalMLOrders comes from ML API paging.total. totalMLRevenue requires fetching all order pages.'
+    });
+  } catch (error) {
+    console.error('❌ Error fetching conversion stats:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch conversion stats',
+      details: error.message
+    });
+  }
+});
+
 // GET /analytics/attribution - Meta to ML attribution tracking
 router.get('/attribution', async (req, res) => {
   try {

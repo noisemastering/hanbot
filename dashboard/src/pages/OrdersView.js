@@ -27,6 +27,7 @@ function OrdersView() {
   const [dateTo, setDateTo] = useState(getTodayStr());
   const [offset, setOffset] = useState(0);
   const [paging, setPaging] = useState({});
+  // eslint-disable-next-line no-unused-vars
   const [metrics, setMetrics] = useState({
     totalOrders: 0,
     totalRevenue: 0,
@@ -41,6 +42,14 @@ function OrdersView() {
     totalMLRevenue: null,
     attributionRate: null,
     loading: true
+  });
+  const [summary, setSummary] = useState({
+    totalOrders: 0,
+    totalRevenue: 0,
+    avgOrderValue: 0,
+    paidOrders: 0,
+    loading: false,
+    error: null
   });
 
   const fetchOrders = async () => {
@@ -111,6 +120,49 @@ function OrdersView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [offset, dateFrom, dateTo]); // Re-fetch when offset or dates change
 
+  // Fetch summary stats (total revenue for the period)
+  useEffect(() => {
+    const fetchSummary = async () => {
+      try {
+        setSummary(prev => ({ ...prev, loading: true, error: null }));
+        const token = localStorage.getItem('token');
+        if (!token) return;
+
+        // Build date params matching the order filters
+        const dateFromISO = dateFrom ? `${dateFrom}T00:00:00.000-00:00` : undefined;
+        const dateToISO = dateTo ? `${dateTo}T23:59:59.999-00:00` : undefined;
+
+        const params = new URLSearchParams();
+        if (dateFromISO) params.append('dateFrom', dateFromISO);
+        if (dateToISO) params.append('dateTo', dateToISO);
+
+        console.log('📊 Fetching orders summary...');
+        const response = await axios.get(
+          `${API_URL}/ml/orders/${sellerId}/summary?${params.toString()}`,
+          { headers: { Authorization: `Bearer ${token}` } }
+        );
+
+        if (response.data.success) {
+          console.log('✅ Summary received:', response.data);
+          setSummary({
+            totalOrders: response.data.totalOrders,
+            totalRevenue: response.data.totalRevenue,
+            avgOrderValue: response.data.avgOrderValue,
+            paidOrders: response.data.paidOrders,
+            loading: false,
+            error: null
+          });
+        }
+      } catch (err) {
+        console.error('Error fetching summary:', err);
+        setSummary(prev => ({ ...prev, loading: false, error: err.message }));
+      }
+    };
+
+    fetchSummary();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dateFrom, dateTo, sellerId]);
+
   // Fetch Facebook attribution data (filtered by date range)
   useEffect(() => {
     const fetchAttribution = async () => {
@@ -147,6 +199,7 @@ function OrdersView() {
     };
 
     fetchAttribution();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dateFrom, dateTo]);
 
   // Reset offset when dates change
@@ -224,43 +277,51 @@ function OrdersView() {
 
       {/* Sales Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        {/* Total Orders */}
+        {/* Total Orders - FULL MONTH from summary */}
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
-          <div className="text-gray-400 text-sm">Pedidos en Tabla</div>
-          <div className="text-2xl font-bold text-white mt-1">{metrics.totalOrders}</div>
-          {paging.total && paging.total > metrics.totalOrders && (
-            <div className="text-xs text-gray-500 mt-1">
-              de {paging.total.toLocaleString()} total en ML
-            </div>
-          )}
+          <div className="text-gray-400 text-sm">Pedidos del Periodo</div>
+          <div className="text-2xl font-bold text-white mt-1">
+            {summary.loading ? '...' : summary.totalOrders.toLocaleString()}
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            {dateFrom} a {dateTo}
+          </div>
         </div>
 
-        {/* Total Revenue */}
+        {/* Total Revenue - FULL MONTH from summary */}
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
-          <div className="text-gray-400 text-sm">Ingresos en Tabla</div>
-          <div className="text-2xl font-bold text-green-400 mt-1">{formatCurrency(metrics.totalRevenue)}</div>
-          <div className="text-xs text-gray-500 mt-1">{metrics.totalOrders} pedidos mostrados</div>
+          <div className="text-gray-400 text-sm">Ingresos del Periodo</div>
+          <div className="text-2xl font-bold text-green-400 mt-1">
+            {summary.loading ? '...' : formatCurrency(summary.totalRevenue)}
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            {summary.loading ? 'Calculando...' : `Total de ${summary.totalOrders.toLocaleString()} pedidos`}
+          </div>
         </div>
 
         {/* Average Order Value */}
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
           <div className="text-gray-400 text-sm">Ticket Promedio</div>
-          <div className="text-2xl font-bold text-white mt-1">{formatCurrency(metrics.avgOrderValue)}</div>
-          <div className="text-xs text-gray-500 mt-1">{metrics.paidOrders} pedidos pagados</div>
+          <div className="text-2xl font-bold text-white mt-1">
+            {summary.loading ? '...' : formatCurrency(summary.avgOrderValue)}
+          </div>
+          <div className="text-xs text-gray-500 mt-1">
+            Basado en total del periodo
+          </div>
         </div>
 
         {/* Facebook Attribution */}
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
           <div className="text-gray-400 text-sm">Atribución Facebook</div>
-          {fbAttribution.loading ? (
+          {fbAttribution.loading || summary.loading ? (
             <div className="text-lg font-bold text-gray-500 mt-1">Cargando...</div>
           ) : (
             <>
               <div className="text-2xl font-bold text-blue-400 mt-1">
-                {paging.total > 0 ? ((fbAttribution.conversions / paging.total) * 100).toFixed(1) : 0}%
+                {summary.totalOrders > 0 ? ((fbAttribution.conversions / summary.totalOrders) * 100).toFixed(1) : 0}%
               </div>
               <div className="text-xs text-gray-500 mt-1">
-                {fbAttribution.conversions} de {paging.total?.toLocaleString() || 0} pedidos
+                {fbAttribution.conversions} de {summary.totalOrders.toLocaleString()} pedidos
               </div>
             </>
           )}
@@ -306,9 +367,12 @@ function OrdersView() {
               {loading ? 'Cargando...' : 'Buscar Pedidos'}
             </button>
           </div>
-          {paging.total !== undefined && (
+          {!summary.loading && (
             <div className="text-gray-400 ml-auto">
-              Total: <span className="text-white font-semibold">{paging.total.toLocaleString()}</span> pedidos
+              Total: <span className="text-white font-semibold">{summary.totalOrders.toLocaleString()}</span> pedidos
+              {summary.totalOrders > 0 && (
+                <span className="text-green-400 ml-2">({formatCurrency(summary.totalRevenue)})</span>
+              )}
             </div>
           )}
         </div>

@@ -3,7 +3,7 @@ const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
 const DashboardUser = require("../models/DashboardUser");
-const { getOrders, getOrderById } = require("../utils/mercadoLibreOrders");
+const { getOrders, getOrderById, getOrdersSummary } = require("../utils/mercadoLibreOrders");
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-jwt-key-change-in-production";
 
@@ -70,6 +70,32 @@ router.get("/orders/:sellerId", authenticate, async (req, res) => {
       status: error.response?.status,
       cause: error.response?.data?.cause,
       ml_response: error.response?.data  // Full ML response for debugging
+    });
+  }
+});
+
+// GET /ml/orders/:sellerId/summary - Get summary stats (fetches ALL orders in date range)
+// WARNING: This can be slow for large date ranges
+router.get("/orders/:sellerId/summary", authenticate, async (req, res) => {
+  try {
+    const { sellerId } = req.params;
+    const { dateFrom, dateTo } = req.query;
+
+    console.log(`📊 Summary request for seller ${sellerId} by user ${req.user.username}`);
+
+    const result = await getOrdersSummary(sellerId, {
+      dateFrom: dateFrom || undefined,
+      dateTo: dateTo || undefined
+    });
+
+    res.json(result);
+  } catch (error) {
+    console.error("❌ Error in summary endpoint:", error.message);
+
+    res.status(error.response?.status || 500).json({
+      success: false,
+      error: error.response?.data?.error || error.code || "summary_error",
+      message: error.response?.data?.message || error.message
     });
   }
 });
