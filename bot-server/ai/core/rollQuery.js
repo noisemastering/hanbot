@@ -201,52 +201,75 @@ async function handleRollQuery(userMessage, psid, convo) {
     });
     console.log(`📊 After deduplication: ${uniqueRolls.length} unique products (from ${enrichedRolls.length})`);
 
+    // If user didn't specify percentage and we have multiple percentages, ask first
+    // Get unique percentages from the products
+    const percentages = new Set();
+    for (const roll of uniqueRolls) {
+      // Get percentage from ancestry (e.g., "80%" from grandparent)
+      if (roll.ancestryPath) {
+        const percentMatch = roll.ancestryPath.match(/(\d{2,3})%/);
+        if (percentMatch) percentages.add(percentMatch[1]);
+      }
+    }
+
+    // If multiple percentages and user didn't specify, ask first
+    if (percentages.size > 1 && !requestedPercentage) {
+      const percList = Array.from(percentages).sort((a, b) => parseInt(a) - parseInt(b));
+      await updateConversation(psid, {
+        lastIntent: "roll_query_need_percentage",
+        state: "active",
+        unknownCount: 0
+      });
+
+      return {
+        type: "text",
+        text: `¡Claro! Manejamos rollos de malla sombra en diferentes porcentajes de sombra:\n\n` +
+              percList.map(p => `• ${p}%`).join('\n') +
+              `\n\n¿Qué porcentaje necesitas?`
+      };
+    }
+
     // Build response with enriched information
     let responseText = "¡Claro! Manejamos rollos completos de malla sombra 🌿\n\n";
 
-    // Group by parent/category if possible
-    const byCategory = {};
+    // Group by percentage (from ancestry path)
+    const byPercentage = {};
     for (const roll of uniqueRolls) {
-      const category = roll.parentContext?.name || "General";
-      if (!byCategory[category]) {
-        byCategory[category] = [];
+      let percentage = "General";
+      if (roll.ancestryPath) {
+        const percentMatch = roll.ancestryPath.match(/(\d{2,3})%/);
+        if (percentMatch) percentage = `${percentMatch[1]}%`;
       }
-      byCategory[category].push(roll);
+      if (!byPercentage[percentage]) {
+        byPercentage[percentage] = [];
+      }
+      byPercentage[percentage].push(roll);
     }
 
-    // Build response organized by category
-    for (const [category, rolls] of Object.entries(byCategory)) {
-      if (category !== "General") {
-        responseText += `${category}\n`;
+    // Build response organized by percentage
+    for (const [percentage, rolls] of Object.entries(byPercentage)) {
+      if (percentage !== "General") {
+        responseText += `**${percentage} de sombra:**\n`;
       }
 
       for (const roll of rolls) {
-        // Product name and dimensions
-        responseText += `• ${roll.name}`;
+        // Get size from parent context (e.g., "Medida 4x100")
+        const size = roll.parentContext?.name || '';
 
-        // Add description if available
-        const description = roll.contextDescription || roll.genericDescription || roll.description;
-        if (description && description.length < 100) {
-          responseText += ` - ${description}`;
+        // Product name with size context
+        responseText += `• ${roll.name}`;
+        if (size && !roll.name.includes(size)) {
+          responseText += ` (${size})`;
         }
 
         // Add price
         if (roll.price) {
-          responseText += `\n  💰 $${roll.price}`;
+          responseText += ` - $${roll.price}`;
         }
 
-        // Add key specs if available
-        if (roll.attributes) {
-          const specs = [];
-          if (roll.attributes.get('material')) specs.push(`Material: ${roll.attributes.get('material')}`);
-          if (roll.attributes.get('shade')) specs.push(`Sombra: ${roll.attributes.get('shade')}`);
-          if (specs.length > 0) {
-            responseText += `\n  📋 ${specs.join(" | ")}`;
-          }
-        }
-
-        responseText += "\n\n";
+        responseText += "\n";
       }
+      responseText += "\n";
     }
 
     // Add context based on customer type
