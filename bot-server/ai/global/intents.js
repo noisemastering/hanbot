@@ -176,6 +176,20 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       }
     }
 
+    // Check for installation questions - "con qué se sujeta", "cómo se instala", etc.
+    if (/\b(sujet|ancl|clav|instala|pone|fij|asegur|enterr)/i.test(msg) &&
+        /\b(suelo|tierra|piso|c[oó]mo|con\s+qu[eé])\b/i.test(msg)) {
+      return {
+        type: "text",
+        text: "El borde separador se sujeta fácilmente al suelo con estacas de jardín 🌱\n\n" +
+              "Solo tienes que:\n" +
+              "1. Colocar el borde en la posición deseada\n" +
+              "2. Clavar estacas cada 50-60cm aproximadamente\n\n" +
+              "Las estacas se venden por separado en cualquier ferretería o vivero.\n\n" +
+              "¿Te interesa algún largo en específico? Tenemos 6m, 9m, 18m y 54m."
+      };
+    }
+
     // Check for price/availability questions without specific length
     if (/\b(precio|cu[aá]nto|cuesta|costo|vale|ocupo|necesito|quiero)\b/i.test(msg)) {
       return {
@@ -199,8 +213,26 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
-  // 🌿 BORDE SEPARADOR FOLLOW-UP - User specifies length
-  if (convo.lastIntent === "borde_separador" || convo.productInterest === "borde_separador") {
+  // 🌿 BORDE SEPARADOR FOLLOW-UP - Handle questions when in borde context
+  if (convo.lastIntent === "borde_separador" || convo.productInterest === "borde_separador" ||
+      convo.lastIntent === "borde_link_sent") {
+
+    // Installation question - "con qué se sujeta", "cómo se instala", etc.
+    if (/\b(sujet|ancl|clav|instala|pone|fij|asegur|enterr)/i.test(msg) ||
+        /\bc[oó]mo\s+(se\s+)?(pone|coloca|usa)/i.test(msg) ||
+        /\bcon\s+qu[eé]\b/i.test(msg)) {
+      return {
+        type: "text",
+        text: "El borde separador se sujeta fácilmente al suelo con estacas de jardín 🌱\n\n" +
+              "Solo tienes que:\n" +
+              "1. Colocar el borde en la posición deseada\n" +
+              "2. Clavar estacas cada 50-60cm aproximadamente\n\n" +
+              "Las estacas se venden por separado en cualquier ferretería o vivero.\n\n" +
+              "¿Te interesa algún largo en específico? Tenemos 6m, 9m, 18m y 54m."
+      };
+    }
+
+    // User specifies length
     const lengthMatch = msg.match(/\b(6|9|18|54)\s*(m|metros?|mts?)?\b/i);
     if (lengthMatch) {
       const length = lengthMatch[1];
