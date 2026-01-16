@@ -820,12 +820,24 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   }
 
   // 🔧 Measurement/Installation services - We don't offer these
-  if (/\b(venir\s+a\s+medir|pasan\s+a\s+medir|van\s+a\s+medir|pueden\s+medir|podr[ií]an\s+(venir|pasar)\s+(a\s+)?medir|mandan\s+a\s+alguien|env[ií]an\s+a\s+alguien|hacen\s+instalaci[oó]n|instalan|colocan|ponen\s+la\s+malla|servicio\s+de\s+(instalaci[oó]n|medici[oó]n|colocaci[oó]n)|instalador|quien\s+(la\s+)?instale|quien\s+(la\s+)?coloque)\b/i.test(msg)) {
+  // Patterns: poner postes, instalar, colocar, medir, etc.
+  const installationPattern =
+    /\b(venir\s+a\s+medir|pasan\s+a\s+medir|van\s+a\s+medir|pueden\s+medir|podr[ií]an\s+(venir|pasar)\s+(a\s+)?medir)\b/i.test(msg) ||
+    /\b(mandan\s+a\s+alguien|env[ií]an\s+a\s+alguien)\b/i.test(msg) ||
+    /\b(hacen\s+instalaci[oó]n|instalan|colocan|ponen\s+la\s+malla)\b/i.test(msg) ||
+    /\b(servicio\s+de\s+(instalaci[oó]n|medici[oó]n|colocaci[oó]n))\b/i.test(msg) ||
+    /\b(instalador|quien\s+(la\s+)?instale|quien\s+(la\s+)?coloque)\b/i.test(msg) ||
+    // NEW: posts/structure installation
+    /\b(poner|instalar|colocar)\s+(los\s+)?(postes?|tubos?|estructura)\b/i.test(msg) ||
+    /\bquien\s+(pueda\s+)?(poner|instalar|colocar|armar)\b/i.test(msg) ||
+    /\b(tienen|hay)\s+quien\s+(ponga|instale|coloque|arme)\b/i.test(msg);
+
+  if (installationPattern) {
     console.log("🔧 Measurement/installation service request detected");
     await updateConversation(psid, { lastIntent: "service_request" });
     return {
       type: "text",
-      text: "Por el momento en Hanlob no proveemos servicios de medición ni instalación 🔧\n\n" +
+      text: "No, mil disculpas, en Hanlob no proveemos servicios de instalación 🔧\n\n" +
             "Solo vendemos la malla sombra y la enviamos a tu domicilio.\n\n" +
             "¿Ya tienes la medida que necesitas?"
     };

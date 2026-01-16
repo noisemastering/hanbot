@@ -65,8 +65,9 @@ function OrdersView() {
       }
 
       // Convert date inputs to ISO format for API
+      // ML API format: 2015-07-01T00:00:00.000-00:00
       const dateFromISO = dateFrom ? `${dateFrom}T00:00:00.000-00:00` : undefined;
-      const dateToISO = dateTo ? `${dateTo}T23:59:59.999-00:00` : undefined;
+      const dateToISO = dateTo ? `${dateTo}T23:59:59.000-00:00` : undefined;
 
       console.log(`📦 Fetching orders for seller: ${sellerId}`);
       console.log(`📅 Date range: ${dateFrom} to ${dateTo}`);
