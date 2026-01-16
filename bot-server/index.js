@@ -627,36 +627,50 @@ app.post("/webhook", async (req, res) => {
           campaignId: referral.campaign_id || null,
         });
 
-        // 💬 Mensaje inicial según la campaña + set product interest
-        // Check ref for known products (case-insensitive matching)
-        const refLower = (referral.ref || '').toLowerCase();
-        const adId = referral.ad_id || '';
+        // 🔍 Look up ad in database to get linked products
+        let adProductInterest = null;
+        let adGreeting = null;
 
-        // Known ad_id → product mappings (for ads without ref parameter)
-        const BORDE_AD_IDS = ['120229181879840686'];
+        if (referral.ad_id) {
+          const Ad = require("./models/Ad");
+          const ad = await Ad.findOne({ fbAdId: referral.ad_id }).populate('productIds');
 
-        if (BORDE_AD_IDS.includes(adId)) {
-          // Borde separador ad detected by ad_id
-          console.log(`🌿 Borde separador ad detected (ad_id: ${adId})`);
-          await updateConversation(senderPsid, { productInterest: 'borde_separador' });
-          await callSendAPI(senderPsid, {
-            text: "🌱 ¡Hola! Te cuento sobre nuestros *bordes para jardín*. Tenemos rollos de 6m, 9m, 18m y 54m. ¿Qué largo necesitas?",
-          });
-        } else if (refLower.includes('malla') || refLower.includes('sombra') || refLower === 'malla_beige') {
-          await updateConversation(senderPsid, { productInterest: 'malla_sombra' });
-          await callSendAPI(senderPsid, {
-            text: "👋 ¡Hola! Soy Camila de Hanlob. Veo que te interesa la *malla sombra beige* 🌿 ¿Deseas ver precios o medidas?",
-          });
-        } else if (refLower.includes('borde') || refLower.includes('separador') || refLower.includes('jardin')) {
-          // Set product interest so follow-up messages know the context
-          await updateConversation(senderPsid, { productInterest: 'borde_separador' });
-          await callSendAPI(senderPsid, {
-            text: "🌱 ¡Hola! Te cuento sobre nuestros *bordes para jardín*. Tenemos rollos de 6m, 9m, 18m y 54m. ¿Qué largo necesitas?",
-          });
-        } else if (referral.ad_id && !referral.ref) {
-          // Ad click without ref parameter - log for debugging
-          console.log(`⚠️ Ad click without ref parameter - ad_id: ${referral.ad_id}`);
-          // Generic greeting - let the AI figure out the product from the message
+          if (ad && ad.productIds && ad.productIds.length > 0) {
+            // Get product names to determine interest
+            const productNames = ad.productIds.map(p => (p.name || '').toLowerCase()).join(' ');
+            console.log(`📦 Ad ${referral.ad_id} linked to products: ${ad.productIds.map(p => p.name).join(', ')}`);
+
+            if (productNames.includes('borde') || productNames.includes('separador')) {
+              adProductInterest = 'borde_separador';
+              adGreeting = "🌱 ¡Hola! Te cuento sobre nuestros *bordes para jardín*. Tenemos rollos de 6m, 9m, 18m y 54m. ¿Qué largo necesitas?";
+            } else if (productNames.includes('malla') || productNames.includes('sombra')) {
+              adProductInterest = 'malla_sombra';
+              adGreeting = "👋 ¡Hola! Soy Camila de Hanlob. Veo que te interesa la *malla sombra* 🌿 ¿Deseas ver precios o medidas?";
+            }
+          } else {
+            console.log(`⚠️ Ad ${referral.ad_id} not found in database or has no linked products`);
+          }
+        }
+
+        // Fallback to ref-based detection if no ad products found
+        if (!adProductInterest && referral.ref) {
+          const refLower = referral.ref.toLowerCase();
+          if (refLower.includes('borde') || refLower.includes('separador') || refLower.includes('jardin')) {
+            adProductInterest = 'borde_separador';
+            adGreeting = "🌱 ¡Hola! Te cuento sobre nuestros *bordes para jardín*. Tenemos rollos de 6m, 9m, 18m y 54m. ¿Qué largo necesitas?";
+          } else if (refLower.includes('malla') || refLower.includes('sombra')) {
+            adProductInterest = 'malla_sombra';
+            adGreeting = "👋 ¡Hola! Soy Camila de Hanlob. Veo que te interesa la *malla sombra beige* 🌿 ¿Deseas ver precios o medidas?";
+          }
+        }
+
+        // Set product interest and send greeting
+        if (adProductInterest) {
+          await updateConversation(senderPsid, { productInterest: adProductInterest });
+          await callSendAPI(senderPsid, { text: adGreeting });
+        } else if (referral.ad_id) {
+          // Ad click but couldn't determine product - generic greeting
+          console.log(`⚠️ Could not determine product for ad_id: ${referral.ad_id}`);
           await callSendAPI(senderPsid, {
             text: "👋 ¡Hola! Gracias por contactarnos. ¿En qué producto te puedo ayudar?",
           });
