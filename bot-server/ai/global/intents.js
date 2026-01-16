@@ -1080,8 +1080,10 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   // 🏢 ASKING IF WE'RE PHYSICALLY LOCATED IN THEIR CITY
   // "Trabajan aquí en Reynosa?" / "Están en Monterrey?" / "Tienen tienda en Guadalajara?"
+  // "Pensé que estaban en Tijuana" / "Creí que estaban en Monterrey"
   if (/\b(trabajan?|est[aá]n?|tienen?|hay)\s+(aqu[ií]|all[aá]|alguna?|tienda|local|sucursal)?\s*(en|aqui en|alla en)\s+(\w+)/i.test(msg) ||
-      /\b(son|eres|est[aá]s?)\s+(de|en)\s+(\w+)/i.test(msg)) {
+      /\b(son|eres|est[aá]s?|estaban?)\s+(de|en)\s+(\w+)/i.test(msg) ||
+      /\b(pens[eé]|cre[ií]|pensaba|cre[ií]a)\s+que\s+(estaban?|eran?|son)\s+(de|en)\s+/i.test(msg)) {
 
     const location = await detectLocationEnhanced(msg);
     const cityName = location ? (location.normalized.charAt(0).toUpperCase() + location.normalized.slice(1)) : "esa ciudad";
