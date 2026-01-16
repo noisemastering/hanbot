@@ -276,26 +276,25 @@ function OrdersView() {
 
       {/* Sales Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        {/* Total Orders - FULL MONTH from summary (fallback to paging.total) */}
+        {/* Total Orders - from paging.total (already available from orders endpoint) */}
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
           <div className="text-gray-400 text-sm">Pedidos del Periodo</div>
           <div className="text-2xl font-bold text-white mt-1">
-            {summary.loading ? '...' : (summary.totalOrders || paging.total || 0).toLocaleString()}
+            {loading ? '...' : (paging.total || 0).toLocaleString()}
           </div>
           <div className="text-xs text-gray-500 mt-1">
             {dateFrom} a {dateTo}
-            {summary.error && <span className="text-red-400 ml-2">(error)</span>}
           </div>
         </div>
 
-        {/* Total Revenue - FULL MONTH from summary */}
+        {/* Total Revenue - from summary (fetches all pages) */}
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
           <div className="text-gray-400 text-sm">Ingresos del Periodo</div>
           <div className="text-2xl font-bold text-green-400 mt-1">
             {summary.loading ? '...' : summary.error ? formatCurrency(metrics.totalRevenue) : formatCurrency(summary.totalRevenue)}
           </div>
           <div className="text-xs text-gray-500 mt-1">
-            {summary.loading ? 'Calculando...' : summary.error ? 'De página actual' : `Total de ${summary.totalOrders.toLocaleString()} pedidos`}
+            {summary.loading ? 'Calculando total...' : summary.error ? 'De página actual' : `Total de ${(paging.total || 0).toLocaleString()} pedidos`}
           </div>
         </div>
 
@@ -313,15 +312,15 @@ function OrdersView() {
         {/* Facebook Attribution */}
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
           <div className="text-gray-400 text-sm">Atribución Facebook</div>
-          {fbAttribution.loading || summary.loading ? (
+          {fbAttribution.loading || loading ? (
             <div className="text-lg font-bold text-gray-500 mt-1">Cargando...</div>
           ) : (
             <>
               <div className="text-2xl font-bold text-blue-400 mt-1">
-                {summary.totalOrders > 0 ? ((fbAttribution.conversions / summary.totalOrders) * 100).toFixed(1) : 0}%
+                {paging.total > 0 ? ((fbAttribution.conversions / paging.total) * 100).toFixed(1) : 0}%
               </div>
               <div className="text-xs text-gray-500 mt-1">
-                {fbAttribution.conversions} de {summary.totalOrders.toLocaleString()} pedidos
+                {fbAttribution.conversions} de {(paging.total || 0).toLocaleString()} pedidos
               </div>
             </>
           )}
