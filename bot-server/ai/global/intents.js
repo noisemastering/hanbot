@@ -932,7 +932,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   }
 
   // ⏰ Delivery time and payment questions (BEFORE shipping handler to catch "cuando llega")
-  if (/cu[aá]nto\s+tiempo|cuando\s+llega|tiempo\s+de\s+entrega|tarda|demora|anticipo|pago\s+contra\s+entrega|forma\s+de\s+pago|c[oó]mo\s+pag/i.test(msg)) {
+  if (/cu[aá]ntos?\s+d[ií]as|cu[aá]nto\s+tiempo|cuando\s+llega|en\s+cu[aá]nto\s+llega|tiempo\s+de\s+entrega|tarda|demora|anticipo|pago\s+contra\s+entrega|forma\s+de\s+pago|c[oó]mo\s+pag/i.test(msg)) {
     // 🔴 SKIP if message contains MULTIPLE questions (let fallback handle comprehensive answer)
     const multiQuestionIndicators = [
       /precio|costo|cu[aá]nto.*(?:cuesta|vale)/i, // Price questions
@@ -990,7 +990,11 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   }
 
   // 🚚 Envíos / entregas
-  if (/env[ií]o|entregan|domicilio|reparto|llega|envias?|envian|paquete/i.test(msg)) {
+  // Skip if it's a THANK YOU for shipping (not a question about shipping)
+  const isThankingForShipping = /\b(gracias|grax|thx|thanks)\s+(por\s+)?(el\s+|la\s+)?(env[ií]o|entrega|paquete)/i.test(msg);
+  const isAskingAboutShipping = /env[ií]o|entregan|domicilio|reparto|llega|envias?|envian|paquete/i.test(msg);
+
+  if (isAskingAboutShipping && !isThankingForShipping) {
     // Check if message also contains dimensions - if so, skip shipping handler and let dimension handler process it
     const dimensions = parseDimensions(msg);
     if (dimensions) {

@@ -501,7 +501,8 @@ function isInstallationQuery(message) {
  * @returns {boolean}
  */
 function isColorQuery(message) {
-  return /\b(color|colores|qu[eé]\s+color|tonos?|verde|azul|negra?|blanca?|beige|bex)\b/i.test(message);
+  return /\b(color|colores|qu[eé]\s+colou?r|qu[eé]\s+colores|tonos?|verde|azul|negra?|blanca?|beige|bex)\b/i.test(message) ||
+         /\b(tienes?|tienen?|hay|manejan?)\s+(otros?\s+)?colou?res?\b/i.test(message);
 }
 
 /**
