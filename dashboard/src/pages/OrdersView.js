@@ -27,7 +27,6 @@ function OrdersView() {
   const [dateTo, setDateTo] = useState(getTodayStr());
   const [offset, setOffset] = useState(0);
   const [paging, setPaging] = useState({});
-  // eslint-disable-next-line no-unused-vars
   const [metrics, setMetrics] = useState({
     totalOrders: 0,
     totalRevenue: 0,
@@ -248,7 +247,7 @@ function OrdersView() {
   };
 
   const formatCurrency = (amount) => {
-    if (!amount) return 'N/A';
+    if (amount === null || amount === undefined) return 'N/A';
     return new Intl.NumberFormat('es-MX', {
       style: 'currency',
       currency: 'MXN'
@@ -277,14 +276,15 @@ function OrdersView() {
 
       {/* Sales Metrics Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
-        {/* Total Orders - FULL MONTH from summary */}
+        {/* Total Orders - FULL MONTH from summary (fallback to paging.total) */}
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
           <div className="text-gray-400 text-sm">Pedidos del Periodo</div>
           <div className="text-2xl font-bold text-white mt-1">
-            {summary.loading ? '...' : summary.totalOrders.toLocaleString()}
+            {summary.loading ? '...' : (summary.totalOrders || paging.total || 0).toLocaleString()}
           </div>
           <div className="text-xs text-gray-500 mt-1">
             {dateFrom} a {dateTo}
+            {summary.error && <span className="text-red-400 ml-2">(error)</span>}
           </div>
         </div>
 
@@ -292,10 +292,10 @@ function OrdersView() {
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
           <div className="text-gray-400 text-sm">Ingresos del Periodo</div>
           <div className="text-2xl font-bold text-green-400 mt-1">
-            {summary.loading ? '...' : formatCurrency(summary.totalRevenue)}
+            {summary.loading ? '...' : summary.error ? formatCurrency(metrics.totalRevenue) : formatCurrency(summary.totalRevenue)}
           </div>
           <div className="text-xs text-gray-500 mt-1">
-            {summary.loading ? 'Calculando...' : `Total de ${summary.totalOrders.toLocaleString()} pedidos`}
+            {summary.loading ? 'Calculando...' : summary.error ? 'De página actual' : `Total de ${summary.totalOrders.toLocaleString()} pedidos`}
           </div>
         </div>
 
@@ -303,10 +303,10 @@ function OrdersView() {
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
           <div className="text-gray-400 text-sm">Ticket Promedio</div>
           <div className="text-2xl font-bold text-white mt-1">
-            {summary.loading ? '...' : formatCurrency(summary.avgOrderValue)}
+            {summary.loading ? '...' : summary.error ? formatCurrency(metrics.avgOrderValue) : formatCurrency(summary.avgOrderValue)}
           </div>
           <div className="text-xs text-gray-500 mt-1">
-            Basado en total del periodo
+            {summary.error ? 'De página actual' : 'Basado en total del periodo'}
           </div>
         </div>
 
