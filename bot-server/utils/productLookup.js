@@ -56,6 +56,48 @@ async function getProductsForConversation(conversation) {
   }
 }
 
+/**
+ * Get ad context (adIntent, adAngle) for tailoring responses
+ * @param {Object} conversation - The conversation object with adId
+ * @returns {Object|null} - Ad context object or null if not found
+ */
+async function getAdContextForConversation(conversation) {
+  try {
+    if (!conversation.adId) {
+      return null;
+    }
+
+    const ad = await Ad.findOne({ fbAdId: conversation.adId });
+    if (!ad) {
+      return null;
+    }
+
+    // Build context object
+    const context = {
+      adName: ad.name,
+      adAngle: ad.adAngle || null,
+      adIntent: ad.adIntent || null,
+      creative: {
+        headline: ad.creative?.headline || null,
+        callToAction: ad.creative?.callToAction || null,
+        offerHook: ad.adIntent?.offerHook || null
+      }
+    };
+
+    // Only return if we have meaningful context
+    if (context.adAngle || context.adIntent?.primaryUse || context.adIntent?.audienceType) {
+      console.log(`🎯 Ad context loaded: angle=${context.adAngle}, audience=${context.adIntent?.audienceType}`);
+      return context;
+    }
+
+    return null;
+  } catch (error) {
+    console.error("❌ Error getting ad context:", error);
+    return null;
+  }
+}
+
 module.exports = {
-  getProductsForConversation
+  getProductsForConversation,
+  getAdContextForConversation
 };

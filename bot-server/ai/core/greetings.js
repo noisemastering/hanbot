@@ -1,5 +1,6 @@
 // ai/core/greetings.js
 const { updateConversation, isHumanActive } = require("../../conversationManager");
+const { getAudienceLanguage } = require("../utils/adContextHelper");
 
 async function handleGreeting(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
   // Don't respond to greetings if human is active
@@ -47,17 +48,28 @@ async function handleGreeting(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
     });
 
     const userName = convo.userName;
-    let greetings;
-    if (userName) {
-      greetings = [
-        `Hola ${userName}, te atiende ${BOT_PERSONA_NAME} ¿en qué puedo ayudarte?`
-      ];
+
+    // Check for audience-specific greeting from ad context
+    const adContext = convo.adContext;
+    const audienceLanguage = adContext?.adIntent?.audienceType
+      ? getAudienceLanguage(adContext.adIntent.audienceType)
+      : null;
+
+    let greeting;
+    if (audienceLanguage?.greeting) {
+      // Use audience-specific greeting
+      greeting = userName
+        ? `¡Hola ${userName}! ${audienceLanguage.greeting.replace(/^¡?Hola!?\s*/i, '')} Soy ${BOT_PERSONA_NAME}.`
+        : `${audienceLanguage.greeting} Soy ${BOT_PERSONA_NAME}.`;
+      console.log(`🎯 Using audience-specific greeting for: ${adContext.adIntent.audienceType}`);
     } else {
-      greetings = [
-        `¡Hola! Te atiende ${BOT_PERSONA_NAME} ¿en qué puedo ayudarte?`
-      ];
+      // Default greeting
+      greeting = userName
+        ? `Hola ${userName}, te atiende ${BOT_PERSONA_NAME} ¿en qué puedo ayudarte?`
+        : `¡Hola! Te atiende ${BOT_PERSONA_NAME} ¿en qué puedo ayudarte?`;
     }
-    return { type: "text", text: greetings[Math.floor(Math.random() * greetings.length)] };
+
+    return { type: "text", text: greeting };
   }
   return null;
 }

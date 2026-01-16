@@ -22,11 +22,29 @@ function getProductLink(product) {
   return product.onlineStoreLinks?.find(l => l.isPreferred)?.url ||
          product.onlineStoreLinks?.[0]?.url || null;
 }
-const { detectMexicanLocation, isLikelyLocationName } = require("../../mexicanLocations");
+const { detectMexicanLocation, detectLocationEnhanced, isLikelyLocationName, detectZipCode } = require("../../mexicanLocations");
 const { generateClickLink } = require("../../tracking");
 const { sendHandoffNotification } = require("../../services/pushNotifications");
 const { selectRelevantAsset, trackAssetMention, insertAssetIntoResponse } = require("../assetManager");
 const { handleRollQuery } = require("../core/rollQuery");
+const { getOfferHook, shouldMentionOffer, applyAdContext, getAngleMessaging } = require("../utils/adContextHelper");
+
+// Helper to add offer hook to responses when appropriate
+function addOfferHookIfRelevant(responseText, convo) {
+  if (!convo?.adContext || !shouldMentionOffer(convo.adContext, convo)) {
+    return responseText;
+  }
+
+  const offerHook = getOfferHook(convo.adContext);
+  if (!offerHook) return responseText;
+
+  // Don't add if the offer is already mentioned in the response
+  if (responseText.toLowerCase().includes(offerHook.toLowerCase())) {
+    return responseText;
+  }
+
+  return `${responseText}\n\n🎁 ${offerHook}`;
+}
 
 // Helper to check if location is also being asked in a multi-question message
 function isAlsoAskingLocation(msg) {
@@ -244,11 +262,13 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       stateMx: convo.stateMx
     });
 
+    const baseResponse = "Ver tienda en línea\nIngresa al siguiente link:\n\n" +
+          trackedLink + "\n\n" +
+          "Estamos disponibles para ayudarte con cualquier duda sobre nuestros productos.";
+
     return {
       type: "text",
-      text: "Ver tienda en línea\nIngresa al siguiente link:\n\n" +
-            trackedLink + "\n\n" +
-            "Estamos disponibles para ayudarte con cualquier duda sobre nuestros productos."
+      text: addOfferHookIfRelevant(baseResponse, convo)
     };
   }
 
@@ -342,7 +362,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   // First check if "agua" appears in a location context (e.g., "Agua Prieta")
   const hasWaterKeyword = /\b(lluvia|lluvias|llueve|agua|mojarse|mojar|impermeable|impermeabiliza|protege\s+de(l)?\s+(agua|lluvia)|cubre\s+de(l)?\s+(agua|lluvia)|sirve\s+(para|contra)\s+(la\s+)?(lluvia|agua)|tapa\s+(la\s+)?(lluvia|agua)|repele|repelente)\b/i.test(msg);
   const isLocationContext = /\b(vivo\s+en|soy\s+de|estoy\s+en|est[aá]\s+en|ubicad[oa]\s+en|me\s+encuentro\s+en|mando\s+a|env[ií]o\s+a|entregar?\s+en)\b/i.test(msg);
-  const detectedLocation = detectMexicanLocation(msg);
+  const detectedLocation = await detectLocationEnhanced(msg);
 
   if (hasWaterKeyword && !isLocationContext && !detectedLocation &&
       !/\b(antimaleza|ground\s*cover|maleza|hierba)\b/i.test(msg)) {
@@ -389,23 +409,24 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   }
 
   // 📍 LOCATION-ONLY MESSAGE - User just says a location name (possibly with "En" prefix)
-  // Examples: "En Xalapa Veracruz", "Monterrey", "Jalisco", "En CDMX"
+  // Examples: "En Xalapa Veracruz", "Monterrey", "Jalisco", "En CDMX", or zipcode "76137"
   // Responds with nationwide shipping info
-  const locationOnlyPattern = /^(en\s+)?([A-ZÁÉÍÓÚÑa-záéíóúñ\s,]+)$/i;
+  const locationOnlyPattern = /^(en\s+)?([A-ZÁÉÍÓÚÑa-záéíóúñ\s,0-9]+)$/i;
   const locationOnlyMatch = msg.trim().match(locationOnlyPattern);
   if (locationOnlyMatch && !isLocationContext) {
     const potentialLocation = locationOnlyMatch[2] || locationOnlyMatch[0];
-    const locationDetected = detectMexicanLocation(potentialLocation);
+    const locationDetected = await detectLocationEnhanced(potentialLocation);
 
-    if (locationDetected && isLikelyLocationName(msg)) {
-      console.log("📍 Location-only message detected:", locationDetected.normalized);
+    if (locationDetected && (isLikelyLocationName(msg) || locationDetected.type === 'zipcode')) {
+      console.log("📍 Location detected:", locationDetected.normalized, locationDetected.type === 'zipcode' ? `(CP: ${locationDetected.code})` : '');
 
       const locationUpdate = {
         lastIntent: "location_only_mentioned",
-        city: locationDetected.normalized,
+        city: locationDetected.location || locationDetected.normalized,
         unknownCount: 0
       };
-      if (locationDetected.type === 'state') locationUpdate.stateMx = locationDetected.normalized;
+      if (locationDetected.state) locationUpdate.stateMx = locationDetected.state;
+      if (locationDetected.code) locationUpdate.zipcode = locationDetected.code;
       await updateConversation(psid, locationUpdate);
 
       return {
@@ -494,11 +515,10 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   // 📋 CATALOG REQUEST - Handle requests for general pricing, sizes, and colors listing
   // Instead of dumping a huge list, ask for specific dimensions
+  // NOTE: "precios y medidas" is handled by EXPLICIT LIST REQUEST below to show the full list
   if (/\b(pongan?|den|muestren?|env[ií]en?|pasame?|pasen?|listado?)\s+(de\s+)?(precios?|medidas?|opciones?|tama[ñn]os?|colores?)\b/i.test(msg) ||
-      /\b(precios?\s+y\s+medidas?)\b/i.test(msg) ||
-      /\b(medidas?\s+y\s+precios?)\b/i.test(msg) ||
       /\b(hacer\s+presupuesto|cotizaci[oó]n|cotizar)\b/i.test(msg) ||
-      /\b(opciones?\s+disponibles?|qu[eé]\s+tienen|todo\s+lo\s+que\s+tienen)\b/i.test(msg) ||
+      /\b(opciones?\s+disponibles?)\b/i.test(msg) ||
       /\b(medidas?\s+est[aá]ndares?)\b/i.test(msg) ||
       /^costo[s]?$/i.test(msg.trim())) { // Just "costo" by itself
 
@@ -514,13 +534,15 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   // 📋 EXPLICIT LIST REQUEST - "dígame las medidas", "muéstreme las opciones", "ver la lista"
   // User is explicitly asking to see all sizes with prices
-  // Also catches: "qué medidas tienen", "que tamaños manejan", "cuánto cuesta y que medidas tienen"
+  // Also catches: "qué medidas tienen", "que tamaños manejan", "cuánto cuesta y que medidas tienen", "precios y medidas"
   if (/\b(d[ií]game|mu[eé]str[ea]me|ens[eé][ñn]ame|ver|quiero\s+ver|dame)\s+(l[oa]s\s+)?(medidas|opciones|lista|precios|tama[ñn]os)/i.test(msg) ||
       /\b(todas?\s+las?\s+medidas?|todas?\s+las?\s+opciones?|lista\s+completa|ver\s+(la\s+)?lista)\b/i.test(msg) ||
       /\b(usted\s+d[ií]game|dime\s+t[uú]|d[ií]ganme)\b/i.test(msg) ||
       /\b(s[ií].*mu[eé]str[ea]me|s[ií].*ver\s+la\s+lista|s[ií].*las\s+opciones)\b/i.test(msg) ||
       /\bqu[eé]\s+(medidas|tama[ñn]os|opciones)\s+(tienen|manejan|hay|venden|ofrecen)\b/i.test(msg) ||
-      /\b(cu[aá]nto|precio).*\by\s+qu[eé]?\s+(medidas|tama[ñn]os)\b/i.test(msg)) {
+      /\b(cu[aá]nto|precio).*\by\s+qu[eé]?\s+(medidas|tama[ñn]os)\b/i.test(msg) ||
+      /\b(precios?\s+y\s+medidas?|medidas?\s+y\s+precios?)\b/i.test(msg) ||
+      /\b(qu[eé]\s+tienen|todo\s+lo\s+que\s+tienen)\b/i.test(msg)) {
 
     await updateConversation(psid, { lastIntent: "show_all_sizes_requested", unknownCount: 0 });
 
@@ -541,7 +563,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       response += "\n\nTambién manejamos rollos de 4.20x100m y 2.10x100m.\n\n";
       response += "¿Cuál te interesa?";
 
-      return { type: "text", text: response };
+      return { type: "text", text: addOfferHookIfRelevant(response, convo) };
     }
 
     // Fallback if no sizes loaded
@@ -674,11 +696,13 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
           stateMx: convo.stateMx
         });
 
+        const baseResponse = `Te dejo el link a esa medida específica:\n\n` +
+              `${trackedLink}\n\n` +
+              `Estamos disponibles para cualquier información adicional.`;
+
         return {
           type: "text",
-          text: `Te dejo el link a esa medida específica:\n\n` +
-                `${trackedLink}\n\n` +
-                `Estamos disponibles para cualquier información adicional.`
+          text: addOfferHookIfRelevant(baseResponse, convo)
         };
       } else {
         // If no exact product found, provide alternatives
@@ -808,9 +832,24 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   }
 
   // 💰 Where to pay/deposit - Direct ML payment answer
-  if (/\b(d[oó]nde|donde|a\s+d[oó]nde)\s+(deposito|pago|se\s+paga|se\s+deposita|hago\s+el\s+pago|realizo\s+el\s+pago)\b/i.test(msg) ||
-      /\b(pago|deposito)\s+(al\s+entregar|contra\s+entrega)\b/i.test(msg)) {
+  // Patterns: donde deposito, donde pago, onde te mando $$, pago al entregar, hasta que llegue
+  const payOnDeliveryPattern = /\b(pago|deposito)\s+(al\s+entregar|contra\s+entrega)\b/i.test(msg) ||
+                               /\b(hasta\s+que\s+llegue|cuando\s+llegue\s+pago|pago\s+cuando\s+llegue)\b/i.test(msg);
+  const whereToPayPattern = /\b(d[oó]nde|donde|onde|a\s+d[oó]nde)\s+(deposito|pago|se\s+paga|se\s+deposita|hago\s+el\s+pago|realizo\s+el\s+pago|te\s+mando|mando)\b/i.test(msg) ||
+                            /\b(donde|onde)\s+(te\s+)?(mando|envio|transfiero)\s*(\$|\$\$|dinero|lana|pago)\b/i.test(msg);
+
+  if (whereToPayPattern || payOnDeliveryPattern) {
     await updateConversation(psid, { lastIntent: "payment_location" });
+
+    // Different response if asking about pay-on-delivery
+    if (payOnDeliveryPattern) {
+      return {
+        type: "text",
+        text: "El pago es 100% POR ADELANTADO en Mercado Libre al momento de hacer tu pedido.\n\n" +
+              "❌ No manejamos pago contra entrega.\n\n" +
+              "Aceptan tarjeta, efectivo en OXXO, o meses sin intereses. ¿Te paso el link para que puedas hacer tu pedido?"
+      };
+    }
 
     return {
       type: "text",
@@ -958,13 +997,14 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       // Let the dimension handler below deal with this - it will include shipping info
       // Don't return here, continue to dimension handler
     } else {
-      // Detect and store city if mentioned (e.g., "Envían a Hermosillo?")
-      const shippingLocation = detectMexicanLocation(msg);
+      // Detect and store city if mentioned (e.g., "Envían a Hermosillo?" or "Envían a 76137?")
+      const shippingLocation = await detectLocationEnhanced(msg);
       if (shippingLocation) {
         const cityUpdate = { city: shippingLocation.normalized };
-        if (shippingLocation.type === 'state') cityUpdate.stateMx = shippingLocation.normalized;
+        if (shippingLocation.state) cityUpdate.stateMx = shippingLocation.state;
+        if (shippingLocation.code) cityUpdate.zipcode = shippingLocation.code;
         await updateConversation(psid, cityUpdate);
-        console.log(`📍 City detected in shipping question: ${shippingLocation.normalized}`);
+        console.log(`📍 Location detected in shipping question: ${shippingLocation.normalized}`);
       }
 
       // Select relevant asset to mention (shipping is already the main topic)
@@ -1015,7 +1055,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
         return {
           type: "text",
-          text: responseText
+          text: addOfferHookIfRelevant(responseText, convo)
         };
       }
     }
@@ -1043,15 +1083,16 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   if (/\b(trabajan?|est[aá]n?|tienen?|hay)\s+(aqu[ií]|all[aá]|alguna?|tienda|local|sucursal)?\s*(en|aqui en|alla en)\s+(\w+)/i.test(msg) ||
       /\b(son|eres|est[aá]s?)\s+(de|en)\s+(\w+)/i.test(msg)) {
 
-    const location = detectMexicanLocation(msg);
+    const location = await detectLocationEnhanced(msg);
     const cityName = location ? (location.normalized.charAt(0).toUpperCase() + location.normalized.slice(1)) : "esa ciudad";
 
     // Store city in conversation for sales attribution
     const updateData = { lastIntent: "asking_if_local", unknownCount: 0 };
     if (location) {
-      updateData.city = location.normalized;
-      if (location.type === 'state') updateData.stateMx = location.normalized;
-      console.log(`📍 City detected and stored: ${location.normalized}`);
+      updateData.city = location.location || location.normalized;
+      if (location.state) updateData.stateMx = location.state;
+      if (location.code) updateData.zipcode = location.code;
+      console.log(`📍 Location detected and stored: ${location.normalized}`);
     }
     await updateConversation(psid, updateData);
 
@@ -1070,29 +1111,32 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
-  // 🏙️ City/Location response after shipping question (context-aware)
-  // If user was just asked about shipping and responds with a city name
-  // Use actual Mexican location lookup instead of pattern matching
+  // 🏙️ City/Location response - catches standalone city names like "En Mérida", "Monterrey", "76137", etc.
+  // Works regardless of lastIntent - if message is short and is a valid Mexican location, handle it
+  // Use actual Mexican location lookup including zipcode detection
   const acceptCityAfterMeasure = convo.lastIntent === "specific_measure" && convo.requestedSize;
+  const hasZipCode = detectZipCode(msg);
+  const standaloneLocation = isLikelyLocationName(msg) || hasZipCode ? await detectLocationEnhanced(msg) : null;
 
-  if (convo.lastIntent === "shipping_info" || convo.lastIntent === "location_info" || convo.lastIntent === "city_provided" || acceptCityAfterMeasure) {
-    // Check if message is likely a location name (short, not a question)
-    if (isLikelyLocationName(msg)) {
-      // Try to detect actual Mexican location
-      const location = detectMexicanLocation(msg);
+  if (convo.lastIntent === "shipping_info" || convo.lastIntent === "location_info" || convo.lastIntent === "city_provided" || acceptCityAfterMeasure || standaloneLocation) {
+    // Check if message is likely a location name (short, not a question) or contains a zipcode
+    if (isLikelyLocationName(msg) || hasZipCode) {
+      // Try to detect actual Mexican location (already done above if standalone)
+      const location = standaloneLocation || await detectLocationEnhanced(msg);
 
       if (location) {
-        // Confirmed Mexican city or state
+        // Confirmed Mexican city, state, or zipcode
         const cityName = location.normalized;
 
     // Store city in conversation for sales attribution
     const updateData = {
       lastIntent: "city_provided",
       unknownCount: 0,
-      city: location.normalized
+      city: location.location || location.normalized
     };
-    if (location.type === 'state') updateData.stateMx = location.normalized;
-    console.log(`📍 City detected and stored: ${location.normalized}`);
+    if (location.state) updateData.stateMx = location.state;
+    if (location.code) updateData.zipcode = location.code;
+    console.log(`📍 Location detected and stored: ${location.normalized}${location.code ? ` (CP: ${location.code})` : ''}`);
     await updateConversation(psid, updateData);
 
     // Build response - just confirm ML shipping, no extra info
@@ -1159,11 +1203,13 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
           stateMx: convo.stateMx
         });
 
+        const baseResponse = `Te dejo el link a esa medida específica:\n\n` +
+              `${trackedLink}\n\n` +
+              `Estamos disponibles para cualquier información adicional.`;
+
         return {
           type: "text",
-          text: `Te dejo el link a esa medida específica:\n\n` +
-                `${trackedLink}\n\n` +
-                `Estamos disponibles para cualquier información adicional.`
+          text: addOfferHookIfRelevant(baseResponse, convo)
         };
       }
     }
@@ -1348,7 +1394,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         responseText += getLocationAppendix();
       }
 
-      return { type: "text", text: responseText };
+      return { type: "text", text: addOfferHookIfRelevant(responseText, convo) };
     } else {
       // No exact match - provide alternatives
       const availableSizes = await getAvailableSizes(convo);
@@ -1534,7 +1580,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
         return {
           type: "text",
-          text: responseText
+          text: addOfferHookIfRelevant(responseText, convo)
         };
       }
 
@@ -1604,7 +1650,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
             responseText += getLocationAppendix();
           }
 
-          return { type: "text", text: responseText };
+          return { type: "text", text: addOfferHookIfRelevant(responseText, convo) };
         }
       }
 
@@ -1771,9 +1817,10 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
             `Te dejo el link directo:\n\n${trackedLink}`
           ];
 
+          const selectedResponse = warmResponses[Math.floor(Math.random() * warmResponses.length)];
           return {
             type: "text",
-            text: warmResponses[Math.floor(Math.random() * warmResponses.length)]
+            text: addOfferHookIfRelevant(selectedResponse, convo)
           };
         }
       }
@@ -1793,7 +1840,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
       return {
         type: "text",
-        text: responseText
+        text: addOfferHookIfRelevant(responseText, convo)
       };
     }
   }

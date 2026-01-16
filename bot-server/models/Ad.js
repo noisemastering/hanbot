@@ -49,6 +49,27 @@ const adSchema = new mongoose.Schema(
       ref: "ProductFamily"
     }],
 
+    // Ad intent - context for tailoring responses
+    adIntent: {
+      primaryUse: String,        // e.g., "protección solar agrícola", "sombra para patio"
+      audienceType: String,      // e.g., "agricultor / vivero", "dueño de casa"
+      offerHook: String          // e.g., "envío gratis por tiempo limitado"
+    },
+
+    // Ad angle - messaging strategy
+    adAngle: {
+      type: String,
+      enum: [
+        "price_sensitive",       // Focus on value/affordable pricing
+        "quality_premium",       // Focus on quality/durability
+        "urgency_offer",         // Limited time offers
+        "problem_pain",          // Solving a specific problem (sun damage, heat)
+        "bulk_b2b",              // Business/wholesale focus
+        "diy_ease",              // Easy to install/use yourself
+        "comparison_switching"   // Better than alternatives
+      ]
+    },
+
     // Tracking
     tracking: {
       utmSource: String,

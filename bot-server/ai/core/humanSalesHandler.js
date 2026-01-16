@@ -3,6 +3,7 @@
 
 const { updateConversation } = require("../../conversationManager");
 const ProductFamily = require("../../models/ProductFamily");
+const ZipCode = require("../../models/ZipCode");
 const { parseDimensions } = require("../../measureHandler");
 
 /**
@@ -138,6 +139,16 @@ async function handleZipcodeResponse(msg, psid, convo) {
 
   const zipcode = zipcodeMatch[1];
 
+  // Lookup zipcode in database
+  const zipInfo = await ZipCode.lookup(zipcode);
+
+  if (!zipInfo) {
+    return {
+      type: "text",
+      text: `No encontré el código postal ${zipcode}. ¿Podrías verificarlo? Debe ser un CP de 5 dígitos de México.`
+    };
+  }
+
   // Get available product options (sizes/colors) for the current product
   const currentProduct = await ProductFamily.findById(convo.humanSalesCurrentProduct)
     .populate('parentId');
@@ -164,8 +175,31 @@ async function handleZipcodeResponse(msg, psid, convo) {
     };
   }
 
-  // Build numbered list with prices
-  let responseText = `✅ Código postal registrado: ${zipcode}\n\n`;
+  // Build location confirmation
+  const locationText = `📍 ${zipInfo.city}, ${zipInfo.state}`;
+
+  // If only 1 option, auto-select it
+  if (options.length === 1) {
+    const selectedProduct = options[0];
+    const price = selectedProduct.price ? `$${selectedProduct.price}` : 'Consultar precio';
+
+    await updateConversation(psid, {
+      humanSalesState: 'asking_quantity',
+      humanSalesZipcode: zipcode,
+      humanSalesLocation: zipInfo,
+      humanSalesCurrentProduct: selectedProduct._id
+    });
+
+    return {
+      type: "text",
+      text: `✅ ¡Perfecto! Veo que estás en:\n${locationText}\n\n` +
+            `El producto disponible es: ${selectedProduct.name} - ${price}\n\n` +
+            `¿Cuántos rollos necesitas?`
+    };
+  }
+
+  // Build numbered list with prices (2+ options)
+  let responseText = `✅ ¡Perfecto! Veo que estás en:\n${locationText}\n\n`;
   responseText += `Tenemos las siguientes opciones de ${currentProduct.parentId?.name || currentProduct.name}:\n\n`;
 
   options.forEach((option, index) => {
@@ -177,7 +211,8 @@ async function handleZipcodeResponse(msg, psid, convo) {
 
   await updateConversation(psid, {
     humanSalesState: 'asking_product_selection',
-    humanSalesZipcode: zipcode
+    humanSalesZipcode: zipcode,
+    humanSalesLocation: zipInfo
   });
 
   return {
@@ -225,7 +260,9 @@ async function handleProductSelectionResponse(msg, psid, convo) {
   if (selection < 1 || selection > options.length) {
     return {
       type: "text",
-      text: `Por favor selecciona un número entre 1 y ${options.length}`
+      text: options.length === 1
+        ? "Solo hay una opción disponible. Responde con 1 para seleccionarla."
+        : `Por favor selecciona un número entre 1 y ${options.length}`
     };
   }
 

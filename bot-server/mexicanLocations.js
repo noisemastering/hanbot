@@ -1,6 +1,8 @@
 // mexicanLocations.js
 // Mexican states and major cities for location detection
 
+const ZipCode = require('./models/ZipCode');
+
 const MEXICAN_STATES = [
   'aguascalientes', 'baja california', 'baja california sur', 'campeche',
   'chiapas', 'chihuahua', 'coahuila', 'colima', 'durango', 'guanajuato',
@@ -158,8 +160,83 @@ function isLikelyLocationName(message) {
   return cleaned.length > 2 && cleaned.length < 50 && wordCount <= 4;
 }
 
+/**
+ * Detects if a message contains a Mexican zipcode (5 digits)
+ * @param {string} message - User's message
+ * @returns {string|null} - The zipcode if found, null otherwise
+ */
+function detectZipCode(message) {
+  const match = message.match(/\b(\d{5})\b/);
+  return match ? match[1] : null;
+}
+
+/**
+ * Validates a location using the ZipCode database (async)
+ * Works with both zipcodes and city/state names
+ * @param {string} input - Zipcode or city/state name
+ * @returns {Promise<object|null>} - Location info or null
+ */
+async function validateLocationFromDB(input) {
+  try {
+    return await ZipCode.validateLocation(input);
+  } catch (err) {
+    console.error('❌ Error validating location from DB:', err);
+    return null;
+  }
+}
+
+/**
+ * Enhanced location detection that checks both hardcoded lists AND database
+ * @param {string} message - User's message
+ * @returns {Promise<object|null>} - Location info or null
+ */
+async function detectLocationEnhanced(message) {
+  // First check for zipcode
+  const zipcode = detectZipCode(message);
+  if (zipcode) {
+    const dbResult = await validateLocationFromDB(zipcode);
+    if (dbResult) {
+      return {
+        location: dbResult.city,
+        state: dbResult.state,
+        type: 'zipcode',
+        code: dbResult.code,
+        normalized: `${dbResult.city}, ${dbResult.state}`,
+        original: message.trim()
+      };
+    }
+  }
+
+  // Then check hardcoded lists (fast, sync)
+  const quickMatch = detectMexicanLocation(message);
+  if (quickMatch) {
+    return quickMatch;
+  }
+
+  // Finally, try database lookup for city names not in hardcoded list
+  const cleaned = message.toLowerCase().trim();
+  if (isLikelyLocationName(message)) {
+    const dbResult = await validateLocationFromDB(cleaned);
+    if (dbResult) {
+      return {
+        location: dbResult.city || dbResult.state,
+        state: dbResult.state,
+        type: dbResult.code ? 'city' : 'state',
+        code: dbResult.code,
+        normalized: dbResult.city ? `${dbResult.city}, ${dbResult.state}` : dbResult.state,
+        original: message.trim()
+      };
+    }
+  }
+
+  return null;
+}
+
 module.exports = {
   detectMexicanLocation,
+  detectLocationEnhanced,
+  detectZipCode,
+  validateLocationFromDB,
   isLikelyLocationName,
   MEXICAN_STATES,
   MAJOR_CITIES

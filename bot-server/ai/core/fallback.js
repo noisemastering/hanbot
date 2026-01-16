@@ -2,6 +2,7 @@
 const { getBusinessInfo } = require("../../businessInfoManager");
 const { updateConversation } = require("../../conversationManager");
 const { sendHandoffNotification } = require("../../services/pushNotifications");
+const { getAngleMessaging } = require("../utils/adContextHelper");
 
 // Helper function to check if we're in business hours (Mon-Fri, 9am-6pm Mexico City time)
 function isBusinessHours() {
@@ -36,12 +37,67 @@ async function getRecentConversationHistory(psid, limit = 4) {
   }
 }
 
+// Helper function to build ad context section for the prompt
+function buildAdContextPrompt(adContext) {
+  if (!adContext) return "";
+
+  let prompt = "\n\n🎯 CONTEXTO DEL ANUNCIO QUE TRAJO AL CLIENTE:";
+
+  // Add angle-specific guidance
+  if (adContext.adAngle) {
+    const angleMsg = getAngleMessaging(adContext.adAngle);
+    const angleDescriptions = {
+      price_sensitive: "El cliente llegó por un anuncio enfocado en PRECIO/VALOR. Enfatiza precios competitivos y buena relación calidad-precio.",
+      quality_premium: "El cliente llegó por un anuncio enfocado en CALIDAD. Enfatiza durabilidad, garantía y calidad premium.",
+      urgency_offer: "El cliente llegó por un anuncio con OFERTA/PROMOCIÓN. Menciona que la promoción está vigente.",
+      problem_pain: "El cliente llegó por un anuncio sobre PROTECCIÓN SOLAR. Enfatiza cómo la malla resuelve problemas de sol/calor.",
+      bulk_b2b: "El cliente llegó por un anuncio para NEGOCIOS/MAYOREO. Usa tono profesional, menciona precios por volumen.",
+      diy_ease: "El cliente llegó por un anuncio de FÁCIL INSTALACIÓN. Enfatiza que es fácil de instalar uno mismo.",
+      comparison_switching: "El cliente llegó por un anuncio COMPARATIVO. Enfatiza por qué somos mejor opción que la competencia."
+    };
+    prompt += `\n- Ángulo: ${angleDescriptions[adContext.adAngle] || adContext.adAngle}`;
+    if (angleMsg?.emphasis) {
+      prompt += ` (énfasis en: ${angleMsg.emphasis})`;
+    }
+  }
+
+  // Add audience context
+  if (adContext.adIntent?.audienceType) {
+    prompt += `\n- Audiencia: ${adContext.adIntent.audienceType}`;
+
+    // Adjust tone based on audience
+    const audience = adContext.adIntent.audienceType.toLowerCase();
+    if (audience.includes("agricultor") || audience.includes("invernadero") || audience.includes("vivero") || audience.includes("agr")) {
+      prompt += "\n- Tono: TÉCNICO/PROFESIONAL - usa términos como 'protección de cultivos', 'sombreado agrícola', 'regulación de temperatura'";
+    } else if (audience.includes("casa") || audience.includes("hogar") || audience.includes("residencial") || audience.includes("jardín")) {
+      prompt += "\n- Tono: AMIGABLE/CASUAL - usa términos como 'patio', 'jardín', 'terraza', 'disfrutar tu espacio'";
+    } else if (audience.includes("negocio") || audience.includes("comercial") || audience.includes("distribuidor")) {
+      prompt += "\n- Tono: PROFESIONAL/B2B - menciona volumen, disponibilidad inmediata, pedidos masivos";
+    }
+  }
+
+  // Add primary use context
+  if (adContext.adIntent?.primaryUse) {
+    prompt += `\n- Uso principal del anuncio: ${adContext.adIntent.primaryUse}`;
+  }
+
+  // Add offer hook reminder
+  if (adContext.adIntent?.offerHook) {
+    prompt += `\n- Gancho de la oferta: "${adContext.adIntent.offerHook}" (puedes mencionarlo cuando sea relevante)`;
+  }
+
+  return prompt;
+}
+
 // Helper function to try understanding a message with AI
-async function tryUnderstandMessage(message, convo, openai, BOT_PERSONA_NAME, businessInfo, conversationHistory = []) {
+async function tryUnderstandMessage(message, convo, openai, BOT_PERSONA_NAME, businessInfo, conversationHistory = [], adContext = null) {
   const isOngoingConversation = convo.greeted === true || convo.state !== 'new';
   const conversationContext = isOngoingConversation
     ? "\n⚠️ CRÍTICO: Esta es una conversación EN CURSO. NO saludes con 'Hola', '¡Hola!', 'Buenas', etc. Ve directo al punto de la respuesta."
     : "\n✅ Esta es una conversación NUEVA. Puedes saludar brevemente si es apropiado.";
+
+  // Build ad context section
+  const adContextPrompt = buildAdContextPrompt(adContext);
 
   // Build conversation history context
   let historyContext = "";
@@ -61,7 +117,7 @@ async function tryUnderstandMessage(message, convo, openai, BOT_PERSONA_NAME, bu
         {
           role: "system",
           content: `Eres ${BOT_PERSONA_NAME}, asesora de ventas de Hanlob, empresa mexicana de mallas sombra en Querétaro.
-${conversationContext}${historyContext}
+${conversationContext}${historyContext}${adContextPrompt}
 
 PRODUCTOS Y CARACTERÍSTICAS:
 - Ofrecemos una amplia variedad de mallas sombra en diferentes medidas y precios
@@ -110,6 +166,19 @@ INSTRUCCIONES CRÍTICAS:
 - Si una medida pedida no está disponible, sugerir revisar el catálogo completo en Mercado Libre
 - Si no sabes algo: discúlpate y ofrece contacto directo
 - NUNCA inventes información o servicios que no ofrecemos
+
+🚨 REGLAS APRENDIDAS (MUY IMPORTANTE):
+- **NUNCA des respuestas genéricas como "Puedo ayudarte con precios, medidas o cotizaciones" en medio de una conversación** - esto hace que el bot parezca tonto
+- **Si preguntaste la ciudad del cliente y responde con una ciudad (ej: "En Mérida", "Monterrey")**: Confirma que envías ahí y pregunta qué medida necesita
+- **Si preguntaste qué medida necesita y responde con dimensiones**: Da el precio y el link de esa medida
+- **Si el cliente dice "precios y medidas" o similar**: Muestra la lista de medidas disponibles con precios
+- **Si el cliente ya está en medio de la conversación, NUNCA vuelvas a preguntar "¿en qué te puedo ayudar?"** - continúa la conversación naturalmente
+- **Si el cliente responde algo corto después de tu pregunta**: Interpreta su respuesta en contexto de lo que preguntaste
+- **Revisa el HISTORIAL antes de responder** - si ya preguntaste algo, la respuesta del cliente probablemente es la respuesta a eso
+- **Si preguntan por "hule" o "plástico" SIN contexto claro**: Pregunta si se refieren a BORDE SEPARADOR o CINTA ROMPEVIENTOS (productos que sí vendemos)
+- **Si preguntan por "hule calibre", "plástico calibre", "germinador", "invernadero"**: Esto es plástico agrícola que NO vendemos - ofrece contacto directo para orientarle
+- **Si preguntan por lona impermeable**: Aclara que la malla sombra es PERMEABLE (deja pasar agua), no vendemos lonas impermeables, y ofrece contacto directo
+- **Si preguntan "donde pago", "donde deposito", "onde te mando $$", "como pago", "pago al recibir", "hasta que llegue", "pago contra entrega"**: Explica que el pago es 100% POR ADELANTADO en Mercado Libre al momento de hacer el pedido. NO aceptamos pago contra entrega. Alternativa: pagar en persona en nuestras oficinas en Querétaro
 
 **IMPORTANTE: Si el mensaje es confuso, fragmentado, o no puedes entender qué pregunta el cliente, responde exactamente: "MENSAJE_NO_ENTENDIDO"**`
         },
@@ -198,7 +267,8 @@ async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME
   console.log(`📜 Retrieved ${conversationHistory.length} messages for conversation context`);
 
   // 🧠 Try to understand the message with full conversation context
-  const contextualResponse = await tryUnderstandMessage(userMessage, convo, openai, BOT_PERSONA_NAME, businessInfo, conversationHistory);
+  const adContext = convo.adContext || null;
+  const contextualResponse = await tryUnderstandMessage(userMessage, convo, openai, BOT_PERSONA_NAME, businessInfo, conversationHistory, adContext);
 
   if (contextualResponse && !contextualResponse.isGeneric) {
     console.log(`✅ Message understood with conversation context!`);
@@ -213,7 +283,7 @@ async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME
     console.log(`🧩 Trying stitched message: "${stitchedMessage}"`);
 
     // Try to understand the stitched message
-    const stitchedResponse = await tryUnderstandMessage(stitchedMessage, convo, openai, BOT_PERSONA_NAME, businessInfo, conversationHistory);
+    const stitchedResponse = await tryUnderstandMessage(stitchedMessage, convo, openai, BOT_PERSONA_NAME, businessInfo, conversationHistory, adContext);
 
     if (stitchedResponse && !stitchedResponse.isGeneric) {
       console.log(`✅ Stitched message understood!`);

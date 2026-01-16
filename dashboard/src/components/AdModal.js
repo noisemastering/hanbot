@@ -31,7 +31,12 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
     description: '',
     callToAction: 'LEARN_MORE',
     linkUrl: '',
-    productIds: []
+    productIds: [],
+    // Ad Intent - for tailoring bot responses
+    adAngle: '',
+    primaryUse: '',
+    audienceType: '',
+    offerHook: ''
   });
 
   const [productFamilies, setProductFamilies] = useState([]);
@@ -66,7 +71,12 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
         description: ad.creative?.description || '',
         callToAction: ad.creative?.callToAction || 'LEARN_MORE',
         linkUrl: ad.creative?.linkUrl || '',
-        productIds: ad.productIds?.map(p => p._id || p) || []
+        productIds: ad.productIds?.map(p => p._id || p) || [],
+        // Ad Intent fields
+        adAngle: ad.adAngle || '',
+        primaryUse: ad.adIntent?.primaryUse || '',
+        audienceType: ad.adIntent?.audienceType || '',
+        offerHook: ad.adIntent?.offerHook || ''
       });
     }
   }, [ad]);
@@ -88,6 +98,13 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
         description: formData.description,
         callToAction: formData.callToAction,
         linkUrl: formData.linkUrl
+      },
+      // Ad Intent - for tailoring bot responses
+      adAngle: formData.adAngle || null,
+      adIntent: {
+        primaryUse: formData.primaryUse || null,
+        audienceType: formData.audienceType || null,
+        offerHook: formData.offerHook || null
       }
     };
 
@@ -264,6 +281,88 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                       placeholder="https://m.me/..."
                     />
                   </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Bot Response Customization */}
+            <div className="border-t border-gray-700 pt-4 mt-4">
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">🤖 Personalización de Respuestas del Bot</h3>
+              <p className="text-xs text-gray-400 mb-4">
+                Estos campos ayudan al bot a personalizar sus respuestas según el contexto del anuncio.
+              </p>
+
+              <div className="space-y-4">
+                {/* Ad Angle */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Ángulo del Anuncio
+                  </label>
+                  <select
+                    name="adAngle"
+                    value={formData.adAngle}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Sin ángulo específico</option>
+                    <option value="price_sensitive">💰 Precio - Enfoque en valor/precio accesible</option>
+                    <option value="quality_premium">⭐ Calidad Premium - Enfoque en durabilidad</option>
+                    <option value="urgency_offer">⏰ Urgencia - Oferta por tiempo limitado</option>
+                    <option value="problem_pain">☀️ Problema/Dolor - Solución al sol/calor</option>
+                    <option value="bulk_b2b">🏢 Mayoreo/B2B - Enfoque en negocios</option>
+                    <option value="diy_ease">🔧 Fácil Instalación - Hazlo tú mismo</option>
+                    <option value="comparison_switching">🔄 Comparación - Mejor que alternativas</option>
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  {/* Primary Use */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Uso Principal
+                    </label>
+                    <input
+                      type="text"
+                      name="primaryUse"
+                      value={formData.primaryUse}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      placeholder="ej: protección solar agrícola, sombra para patio"
+                    />
+                  </div>
+
+                  {/* Audience Type */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Tipo de Audiencia
+                    </label>
+                    <input
+                      type="text"
+                      name="audienceType"
+                      value={formData.audienceType}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      placeholder="ej: agricultor/vivero, dueño de casa, negocio"
+                    />
+                  </div>
+                </div>
+
+                {/* Offer Hook */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    🎁 Gancho de Oferta
+                  </label>
+                  <input
+                    type="text"
+                    name="offerHook"
+                    value={formData.offerHook}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="ej: envío gratis por tiempo limitado, 10% descuento esta semana"
+                  />
+                  <p className="text-xs text-gray-400 mt-1">
+                    Este texto se agregará al final de las respuestas del bot cuando sea relevante.
+                  </p>
                 </div>
               </div>
             </div>

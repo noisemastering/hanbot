@@ -6,7 +6,7 @@ const { getBusinessInfo } = require("../businessInfoManager");
 const { getProduct } = require("../hybridSearch");
 const Campaign = require("../models/Campaign");
 const { extractReference } = require("../referenceEstimator");
-const { getProductsForConversation } = require("../utils/productLookup");
+const { getProductsForConversation, getAdContextForConversation } = require("../utils/productLookup");
 const { generateClickLink } = require("../tracking");
 
 // AI-powered intent classification
@@ -168,6 +168,13 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
 
     // Store products in conversation context for AI to use
     convo.availableProducts = availableProducts;
+
+    // 🎯 Get ad context (adIntent, adAngle) for tailoring responses
+    const adContext = await getAdContextForConversation(convo);
+    if (adContext) {
+      convo.adContext = adContext;
+      console.log(`🎯 Ad context: angle=${adContext.adAngle}, audience=${adContext.adIntent?.audienceType}, use=${adContext.adIntent?.primaryUse}`);
+    }
 
     // 🚫 Check for opt-out (when conversation is closed and user confirms with "no")
     const optOutResponse = await handleOptOut(cleanMsg, convo);

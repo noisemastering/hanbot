@@ -91,6 +91,12 @@ router.post("/", async (req, res) => {
 // Update ad
 router.put("/:id", async (req, res) => {
   try {
+    // Debug logging
+    console.log('🔍 PUT /ads/:id received:', {
+      adAngle: req.body.adAngle,
+      adIntent: req.body.adIntent
+    });
+
     // Convert product IDs to ObjectId type
     if (req.body.productIds && Array.isArray(req.body.productIds)) {
       req.body.productIds = req.body.productIds.map(id => new mongoose.Types.ObjectId(id));
@@ -113,8 +119,14 @@ router.put("/:id", async (req, res) => {
       return res.status(404).json({ success: false, error: "Ad no encontrado" });
     }
 
+    console.log('🔍 PUT /ads/:id saved:', {
+      adAngle: ad.adAngle,
+      adIntent: ad.adIntent
+    });
+
     res.json({ success: true, data: ad });
   } catch (err) {
+    console.error('❌ PUT /ads/:id error:', err.message);
     res.status(400).json({ success: false, error: err.message });
   }
 });
