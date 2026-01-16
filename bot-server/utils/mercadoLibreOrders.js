@@ -78,7 +78,9 @@ async function getOrders(sellerId, options = {}) {
     });
     fullUrl = `${ML_ORDERS_API}?${queryParams.toString()}`;
 
-    console.log(`📅 Date range: ${dateFrom} to ${dateTo}`);
+    console.log(`📅 Date filter params:`);
+    console.log(`   order.date_created.from: ${dateFrom}`);
+    console.log(`   order.date_created.to: ${dateTo}`);
 
     // Check for proxy configuration
     if (process.env.HTTP_PROXY || process.env.HTTPS_PROXY) {
@@ -163,6 +165,14 @@ async function getOrders(sellerId, options = {}) {
     console.log(`✅ Orders fetched successfully:`);
     console.log(`   Total: ${orders.paging?.total || 0}`);
     console.log(`   Returned: ${orders.results?.length || 0}`);
+
+    // Log date range of returned orders to verify filter is working
+    if (orders.results?.length > 0) {
+      const dates = orders.results.map(o => new Date(o.date_created));
+      const minDate = new Date(Math.min(...dates));
+      const maxDate = new Date(Math.max(...dates));
+      console.log(`   Date range in results: ${minDate.toISOString().split('T')[0]} to ${maxDate.toISOString().split('T')[0]}`);
+    }
 
     // Format orders with all required fields
     const formattedOrders = (orders.results || []).map(order => ({
@@ -411,6 +421,10 @@ async function getOrdersSummary(sellerId, options = {}) {
     let paidOrders = 0;
     let paidRevenue = 0;
 
+    // Track top products and buyers
+    const productCounts = {}; // { itemId: { title, quantity, revenue } }
+    const buyerCounts = {};   // { oderId: { nickname, orders, totalSpent } }
+
     const processOrders = (orders) => {
       for (const order of orders) {
         const amount = order.total_amount || order.paid_amount || 0;
@@ -418,6 +432,40 @@ async function getOrdersSummary(sellerId, options = {}) {
         if (order.status === 'paid') {
           paidOrders++;
           paidRevenue += order.paid_amount || amount;
+        }
+
+        // Track products
+        for (const item of (order.order_items || [])) {
+          const itemId = item.item?.id;
+          if (itemId) {
+            if (!productCounts[itemId]) {
+              productCounts[itemId] = {
+                id: itemId,
+                title: item.item?.title || 'Unknown',
+                quantity: 0,
+                revenue: 0,
+                orders: 0
+              };
+            }
+            productCounts[itemId].quantity += item.quantity || 1;
+            productCounts[itemId].revenue += (item.unit_price || 0) * (item.quantity || 1);
+            productCounts[itemId].orders += 1;
+          }
+        }
+
+        // Track buyers
+        const buyerId = order.buyer?.id;
+        if (buyerId) {
+          if (!buyerCounts[buyerId]) {
+            buyerCounts[buyerId] = {
+              id: buyerId,
+              nickname: order.buyer?.nickname || 'Unknown',
+              orders: 0,
+              totalSpent: 0
+            };
+          }
+          buyerCounts[buyerId].orders += 1;
+          buyerCounts[buyerId].totalSpent += amount;
         }
       }
     };
@@ -450,7 +498,19 @@ async function getOrdersSummary(sellerId, options = {}) {
 
     const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
+    // Get top 5 products by quantity sold
+    const topProducts = Object.values(productCounts)
+      .sort((a, b) => b.quantity - a.quantity)
+      .slice(0, 5);
+
+    // Get top 5 buyers by number of orders
+    const topBuyers = Object.values(buyerCounts)
+      .sort((a, b) => b.orders - a.orders)
+      .slice(0, 5);
+
     console.log(`✅ Summary calculated: ${totalOrders} orders, $${totalRevenue.toFixed(2)} revenue`);
+    console.log(`   Top product: ${topProducts[0]?.title || 'N/A'} (${topProducts[0]?.quantity || 0} units)`);
+    console.log(`   Top buyer: ${topBuyers[0]?.nickname || 'N/A'} (${topBuyers[0]?.orders || 0} orders)`);
 
     return {
       success: true,
@@ -461,7 +521,9 @@ async function getOrdersSummary(sellerId, options = {}) {
       paidRevenue,
       fetchedCount,
       truncated: totalOrders > ML_MAX_OFFSET,
-      dateRange: { from: dateFrom, to: dateTo }
+      dateRange: { from: dateFrom, to: dateTo },
+      topProducts,
+      topBuyers
     };
   } catch (error) {
     console.error(`❌ Error calculating orders summary:`, error.message);

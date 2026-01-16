@@ -121,6 +121,71 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 🌿 BORDE SEPARADOR - Garden edging product (different from malla sombra!)
+  // Detect: "borde", "separador", "borde separador", "orilla de jardín", "delimitar jardín"
+  const bordeSeparadorPattern = /\b(borde|separador|bordes?|delineador|delimitar|orilla)\s*(de\s+)?(jard[ií]n|pasto|c[eé]sped)?/i;
+
+  if (bordeSeparadorPattern.test(msg) || convo.productInterest === 'borde_separador') {
+    console.log("🌿 Borde separador query detected:", msg);
+    await updateConversation(psid, { lastIntent: "borde_separador", productInterest: "borde_separador" });
+
+    // Check for price/availability questions
+    if (/\b(precio|cu[aá]nto|cuesta|costo|vale)\b/i.test(msg)) {
+      return {
+        type: "text",
+        text: "¡Claro! Manejamos borde separador para jardín en diferentes presentaciones:\n\n" +
+              "• Rollo de 6 metros\n" +
+              "• Rollo de 9 metros\n" +
+              "• Rollo de 18 metros\n" +
+              "• Rollo de 54 metros\n\n" +
+              "¿Qué largo necesitas? Te paso el link con precio."
+      };
+    }
+
+    // General borde separador inquiry
+    return {
+      type: "text",
+      text: "¡Hola! Sí manejamos borde separador para jardín 🌿\n\n" +
+            "Sirve para delimitar áreas de pasto, crear caminos y separar zonas de tu jardín.\n\n" +
+            "Tenemos rollos de 6m, 9m, 18m y 54m.\n\n" +
+            "¿Qué largo te interesa?"
+    };
+  }
+
+  // 🌿 BORDE SEPARADOR FOLLOW-UP - User specifies length
+  if (convo.lastIntent === "borde_separador" || convo.productInterest === "borde_separador") {
+    const lengthMatch = msg.match(/\b(6|9|18|54)\s*(m|metros?|mts?)?\b/i);
+    if (lengthMatch) {
+      const length = lengthMatch[1];
+      console.log(`🌿 Borde separador length selected: ${length}m`);
+
+      // ML links for borde separador products
+      const bordeLinks = {
+        '6': 'https://articulo.mercadolibre.com.mx/MLM-923085679-borde-separador-grueso-para-jardin-rollo-de-6-metros-_JM',
+        '9': 'https://articulo.mercadolibre.com.mx/MLM-923081079-borde-separador-grueso-para-jardin-rollo-de-9-metros-_JM',
+        '18': 'https://articulo.mercadolibre.com.mx/MLM-801430874-borde-separador-grueso-para-jardin-rollo-de-18-metros-_JM',
+        '54': 'https://articulo.mercadolibre.com.mx/MLM-1493170566-borde-separador-para-jardin-rollo-de-54-m-_JM'
+      };
+
+      const link = bordeLinks[length];
+      if (link) {
+        const trackedLink = await generateClickLink(psid, link, {
+          productName: `Borde Separador ${length}m`,
+          city: convo.city,
+          stateMx: convo.stateMx
+        });
+
+        await updateConversation(psid, { lastIntent: "borde_link_sent" });
+
+        return {
+          type: "text",
+          text: `¡Perfecto! Aquí está el borde separador de ${length} metros:\n\n${trackedLink}\n\n` +
+                `Ahí puedes ver el precio, fotos y realizar tu compra con envío incluido 📦`
+        };
+      }
+    }
+  }
+
   // 📦 ROLL QUERIES - Handle roll questions directly before other handlers
   // "cuánto cuesta el rollo", "precio del rollo", "rollo de 50%", etc.
   if (/\b(rol+[oy]s?)\b/i.test(msg)) {
@@ -1016,11 +1081,25 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       // Detect and store city if mentioned (e.g., "Envían a Hermosillo?" or "Envían a 76137?")
       const shippingLocation = await detectLocationEnhanced(msg);
       if (shippingLocation) {
-        const cityUpdate = { city: shippingLocation.normalized };
-        if (shippingLocation.state) cityUpdate.stateMx = shippingLocation.state;
+        const cityUpdate = {};
+
+        // Store city vs state appropriately based on location type
+        if (shippingLocation.type === 'state') {
+          // User mentioned a state (e.g., "Jalisco") - store as state, not city
+          cityUpdate.stateMx = shippingLocation.normalized || shippingLocation.location;
+        } else if (shippingLocation.type === 'city' || shippingLocation.type === 'zipcode') {
+          // User mentioned a city or zipcode - we have actual city data
+          cityUpdate.city = shippingLocation.location || shippingLocation.normalized;
+          if (shippingLocation.state) cityUpdate.stateMx = shippingLocation.state;
+        } else {
+          // Fallback - store as city
+          cityUpdate.city = shippingLocation.normalized;
+          if (shippingLocation.state) cityUpdate.stateMx = shippingLocation.state;
+        }
+
         if (shippingLocation.code) cityUpdate.zipcode = shippingLocation.code;
         await updateConversation(psid, cityUpdate);
-        console.log(`📍 Location detected in shipping question: ${shippingLocation.normalized}`);
+        console.log(`📍 Location detected (${shippingLocation.type}): ${JSON.stringify(cityUpdate)}`);
       }
 
       // Select relevant asset to mention (shipping is already the main topic)
@@ -1076,15 +1155,23 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       }
     }
 
-      let responseText = `¡Sí! Enviamos a toda la república 📦\n\n¿Qué medida necesitas?`;
+      // If we don't have their location yet, ask for zip code to confirm coverage
+      let responseText;
+      if (!convo.city && !convo.stateMx && !convo.zipcode) {
+        responseText = `¡Sí! Enviamos a toda la república 📦\n\n¿Me compartes tu código postal para confirmar la cobertura de envío?`;
+        await updateConversation(psid, { lastIntent: "awaiting_zipcode" });
+      } else {
+        // We already have their location
+        const locationStr = convo.city || convo.stateMx || '';
+        responseText = `¡Sí! Enviamos a ${locationStr} y toda la república 📦\n\n¿Qué medida necesitas?`;
+        await updateConversation(psid, { lastIntent: "shipping_info" });
+      }
 
       // Add asset mention if selected
       if (asset) {
         responseText = insertAssetIntoResponse(responseText, asset.text);
         const mentionedAssets = trackAssetMention(asset.key, convo);
-        await updateConversation(psid, { lastIntent: "shipping_info", mentionedAssets });
-      } else {
-        await updateConversation(psid, { lastIntent: "shipping_info" });
+        await updateConversation(psid, { mentionedAssets });
       }
 
       return {
@@ -1136,7 +1223,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   const hasZipCode = detectZipCode(msg);
   const standaloneLocation = isLikelyLocationName(msg) || hasZipCode ? await detectLocationEnhanced(msg) : null;
 
-  if (convo.lastIntent === "shipping_info" || convo.lastIntent === "location_info" || convo.lastIntent === "city_provided" || acceptCityAfterMeasure || standaloneLocation) {
+  if (convo.lastIntent === "shipping_info" || convo.lastIntent === "location_info" || convo.lastIntent === "city_provided" || convo.lastIntent === "awaiting_zipcode" || acceptCityAfterMeasure || standaloneLocation) {
     // Check if message is likely a location name (short, not a question) or contains a zipcode
     if (isLikelyLocationName(msg) || hasZipCode) {
       // Try to detect actual Mexican location (already done above if standalone)
@@ -1146,28 +1233,27 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         // Confirmed Mexican city, state, or zipcode
         const cityName = location.normalized;
 
-    // Store city in conversation for sales attribution
-    const updateData = {
-      lastIntent: "city_provided",
-      unknownCount: 0,
-      city: location.location || location.normalized
-    };
-    if (location.state) updateData.stateMx = location.state;
-    if (location.code) updateData.zipcode = location.code;
-    console.log(`📍 Location detected and stored: ${location.normalized}${location.code ? ` (CP: ${location.code})` : ''}`);
-    await updateConversation(psid, updateData);
+        // Store city in conversation for sales attribution
+        const updateData = {
+          lastIntent: "city_provided",
+          unknownCount: 0
+        };
 
-    // Build response - just confirm ML shipping, no extra info
-    const capitalizedCity = cityName.charAt(0).toUpperCase() + cityName.slice(1);
-    let response = "";
+        // Store location properly based on type
+        if (location.type === 'state') {
+          updateData.stateMx = location.normalized || location.location;
+        } else {
+          updateData.city = location.location || location.normalized;
+          if (location.state) updateData.stateMx = location.state;
+        }
+        if (location.code) updateData.zipcode = location.code;
 
-    if (convo.requestedSize) {
-      // User mentioned a size earlier
-      response = `¡Sí! Enviamos a ${capitalizedCity} a través de Mercado Libre 📦\n\n¿Qué medida necesitas?`;
-    } else {
-      // No size mentioned yet
-      response = `¡Sí! Enviamos a ${capitalizedCity} a través de Mercado Libre 📦\n\n¿Qué medida necesitas?`;
-    }
+        console.log(`📍 Location detected and stored: ${location.normalized}${location.code ? ` (CP: ${location.code})` : ''}`);
+        await updateConversation(psid, updateData);
+
+        // Build response - confirm coverage
+        const capitalizedCity = cityName.charAt(0).toUpperCase() + cityName.slice(1);
+        const response = `¡Perfecto! Sí tenemos cobertura en ${capitalizedCity} 📦\n\n¿Qué medida te interesa?`;
 
         return {
           type: "text",

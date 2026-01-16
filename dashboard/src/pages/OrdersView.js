@@ -47,6 +47,8 @@ function OrdersView() {
     totalRevenue: 0,
     avgOrderValue: 0,
     paidOrders: 0,
+    topProducts: [],
+    topBuyers: [],
     loading: false,
     error: null
   });
@@ -149,6 +151,8 @@ function OrdersView() {
             totalRevenue: response.data.totalRevenue,
             avgOrderValue: response.data.avgOrderValue,
             paidOrders: response.data.paidOrders,
+            topProducts: response.data.topProducts || [],
+            topBuyers: response.data.topBuyers || [],
             loading: false,
             error: null
           });
@@ -324,6 +328,48 @@ function OrdersView() {
                 {fbAttribution.conversions} de {(paging.total || 0).toLocaleString()} pedidos
               </div>
             </>
+          )}
+        </div>
+      </div>
+
+      {/* Top Product & Top Buyer */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+        {/* Top Product */}
+        <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
+          <div className="text-gray-400 text-sm mb-2">Producto Más Vendido</div>
+          {summary.loading ? (
+            <div className="text-gray-500">Calculando...</div>
+          ) : summary.topProducts?.[0] ? (
+            <div>
+              <div className="text-white font-medium truncate" title={summary.topProducts[0].title}>
+                {summary.topProducts[0].title}
+              </div>
+              <div className="flex items-center gap-4 mt-2 text-sm">
+                <span className="text-yellow-400 font-bold">{summary.topProducts[0].quantity} unidades</span>
+                <span className="text-green-400">{formatCurrency(summary.topProducts[0].revenue)}</span>
+                <span className="text-gray-500">{summary.topProducts[0].orders} pedidos</span>
+              </div>
+            </div>
+          ) : (
+            <div className="text-gray-500">Sin datos</div>
+          )}
+        </div>
+
+        {/* Top Buyer */}
+        <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
+          <div className="text-gray-400 text-sm mb-2">Comprador Principal</div>
+          {summary.loading ? (
+            <div className="text-gray-500">Calculando...</div>
+          ) : summary.topBuyers?.[0] ? (
+            <div>
+              <div className="text-white font-medium">{summary.topBuyers[0].nickname}</div>
+              <div className="flex items-center gap-4 mt-2 text-sm">
+                <span className="text-purple-400 font-bold">{summary.topBuyers[0].orders} pedidos</span>
+                <span className="text-green-400">{formatCurrency(summary.topBuyers[0].totalSpent)}</span>
+              </div>
+            </div>
+          ) : (
+            <div className="text-gray-500">Sin datos</div>
           )}
         </div>
       </div>

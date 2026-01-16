@@ -64,7 +64,20 @@ const mercadoLibreOrderEventSchema = new mongoose.Schema(
       message: String,
       code: String,
       timestamp: Date
-    }
+    },
+
+    // Correlation tracking
+    correlated: {
+      type: Boolean,
+      default: false,
+      index: true
+    },
+    correlatedClickId: String,
+    correlationConfidence: {
+      type: String,
+      enum: ['high', 'medium', 'low', null]
+    },
+    correlatedAt: Date
   },
   {
     timestamps: true

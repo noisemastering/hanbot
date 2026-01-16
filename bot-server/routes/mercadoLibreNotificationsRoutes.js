@@ -4,6 +4,7 @@ const router = express.Router();
 const axios = require("axios");
 const MercadoLibreOrderEvent = require("../models/MercadoLibreOrderEvent");
 const { getValidAccessToken } = require("../utils/mercadoLibreOAuth");
+const { correlateOrder } = require("../utils/conversionCorrelation");
 
 /**
  * Process ML notification asynchronously (don't block webhook response)
@@ -78,8 +79,29 @@ async function processNotification(notificationData) {
 
     console.log(`✅ Order event saved to DB: ${event._id}`);
 
-    // TODO: Correlate with ClickLog to attribute to PSID
-    // This will be implemented in the correlation algorithm
+    // Correlate with ClickLog to attribute to PSID
+    // Only correlate paid orders (successful purchases)
+    if (orderDetail.status === 'paid') {
+      console.log(`💰 Order ${orderId} is paid - attempting correlation...`);
+      const correlationResult = await correlateOrder(orderDetail, sellerId);
+
+      if (correlationResult?.success) {
+        // Update the order event with correlation info
+        await MercadoLibreOrderEvent.findByIdAndUpdate(event._id, {
+          correlated: true,
+          correlatedClickId: correlationResult.clickLog.clickId,
+          correlationConfidence: correlationResult.confidence,
+          correlatedAt: new Date()
+        });
+        console.log(`✅ Order ${orderId} correlated with click ${correlationResult.clickLog.clickId}`);
+      } else if (correlationResult?.alreadyCorrelated) {
+        console.log(`⏭️ Order ${orderId} was already correlated`);
+      } else {
+        console.log(`⚠️ Could not correlate order ${orderId} - no matching clicks found`);
+      }
+    } else {
+      console.log(`⏸️ Order ${orderId} status is '${orderDetail.status}' - skipping correlation`);
+    }
 
   } catch (error) {
     console.error(`❌ Error processing notification:`, error.message);

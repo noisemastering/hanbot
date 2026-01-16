@@ -5,6 +5,8 @@ const Message = require('../models/Message');
 const Conversation = require('../models/Conversation');
 const ClickLog = require('../models/ClickLog');
 const MercadoLibreAuth = require('../models/MercadoLibreAuth');
+const { correlateOrders } = require('../utils/conversionCorrelation');
+const { getOrders } = require('../utils/mercadoLibreOrders');
 
 // GET /analytics - Get analytics data
 router.get('/', async (req, res) => {
@@ -418,6 +420,124 @@ router.get('/attribution/:psid', async (req, res) => {
       success: false,
       error: 'Failed to fetch PSID attribution',
       details: error.message
+    });
+  }
+});
+
+// POST /analytics/correlate - Run correlation on existing orders
+// This will match ML orders with ClickLog entries based on city + timestamp
+router.post('/correlate', async (req, res) => {
+  try {
+    const { sellerId = '482595248', dateFrom, dateTo, limit = 100 } = req.body;
+
+    console.log(`🔄 Starting batch correlation for seller ${sellerId}...`);
+
+    // Convert dates to ML API format
+    const dateFromISO = dateFrom ? `${dateFrom}T00:00:00.000-00:00` : undefined;
+    const dateToISO = dateTo ? `${dateTo}T23:59:59.000-00:00` : undefined;
+
+    // Fetch orders from ML API
+    const ordersResult = await getOrders(sellerId, {
+      dateFrom: dateFromISO,
+      dateTo: dateToISO,
+      limit: parseInt(limit),
+      sort: 'date_desc'
+    });
+
+    if (!ordersResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch orders from ML API'
+      });
+    }
+
+    // Filter to only paid orders
+    const paidOrders = ordersResult.orders.filter(o => o.status === 'paid');
+
+    console.log(`📦 Found ${ordersResult.orders.length} orders, ${paidOrders.length} paid`);
+
+    // Run correlation on paid orders
+    const correlationResult = await correlateOrders(paidOrders, sellerId);
+
+    res.json({
+      success: true,
+      message: `Correlation complete for ${paidOrders.length} paid orders`,
+      results: {
+        totalOrders: ordersResult.orders.length,
+        paidOrders: paidOrders.length,
+        newCorrelations: correlationResult.correlated,
+        alreadyCorrelated: correlationResult.alreadyCorrelated,
+        noMatch: correlationResult.noMatch,
+        errors: correlationResult.errors
+      },
+      details: correlationResult.details
+    });
+  } catch (error) {
+    console.error('❌ Error running batch correlation:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to run correlation',
+      details: error.message
+    });
+  }
+});
+
+// GET /analytics/correlation-stats - Get correlation statistics
+router.get('/correlation-stats', async (req, res) => {
+  try {
+    // Get conversion stats by confidence level
+    const stats = await ClickLog.aggregate([
+      {
+        $match: { converted: true }
+      },
+      {
+        $group: {
+          _id: '$correlationConfidence',
+          count: { $sum: 1 },
+          totalRevenue: { $sum: '$conversionData.totalAmount' }
+        }
+      }
+    ]);
+
+    // Get total clicks with city info
+    const clicksWithCity = await ClickLog.countDocuments({
+      clicked: true,
+      city: { $exists: true, $ne: null, $ne: '' }
+    });
+
+    const totalClicks = await ClickLog.countDocuments({ clicked: true });
+    const totalConverted = await ClickLog.countDocuments({ converted: true });
+
+    // Format stats by confidence
+    const byConfidence = {
+      high: { count: 0, revenue: 0 },
+      medium: { count: 0, revenue: 0 },
+      low: { count: 0, revenue: 0 }
+    };
+
+    stats.forEach(s => {
+      if (s._id && byConfidence[s._id]) {
+        byConfidence[s._id].count = s.count;
+        byConfidence[s._id].revenue = s.totalRevenue || 0;
+      }
+    });
+
+    res.json({
+      success: true,
+      stats: {
+        totalClicks,
+        clicksWithCity,
+        cityTrackingRate: totalClicks > 0 ? ((clicksWithCity / totalClicks) * 100).toFixed(1) : 0,
+        totalConverted,
+        conversionRate: totalClicks > 0 ? ((totalConverted / totalClicks) * 100).toFixed(1) : 0,
+        byConfidence
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching correlation stats:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
     });
   }
 });
