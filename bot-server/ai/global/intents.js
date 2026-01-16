@@ -123,14 +123,61 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   // 🌿 BORDE SEPARADOR - Garden edging product (different from malla sombra!)
   // Detect: "borde", "separador", "borde separador", "orilla de jardín", "delimitar jardín"
+  // Also detect borde-specific lengths: 6m, 9m, 18m, 54m (malla sombra uses 100m rolls)
   const bordeSeparadorPattern = /\b(borde|separador|bordes?|delineador|delimitar|orilla)\s*(de\s+)?(jard[ií]n|pasto|c[eé]sped)?/i;
 
-  if (bordeSeparadorPattern.test(msg) || convo.productInterest === 'borde_separador') {
+  // Detect borde-specific lengths in rollo context (6, 9, 18, 54 meters are ONLY for borde separador)
+  const bordeLengthPattern = /\b(rol+[oy]s?|metros?|mts?)\b.*\b(6|9|18|54)\s*(m|metros?|mts?)?\b|\b(6|9|18|54)\s*(m|metros?|mts?)\b.*\b(rol+[oy]s?)\b/i;
+  const isBordeByLength = bordeLengthPattern.test(msg) && !/\b(100|4x100|5x100|6x100)\b/i.test(msg);
+
+  if (bordeSeparadorPattern.test(msg) || convo.productInterest === 'borde_separador' || isBordeByLength) {
     console.log("🌿 Borde separador query detected:", msg);
     await updateConversation(psid, { lastIntent: "borde_separador", productInterest: "borde_separador" });
 
-    // Check for price/availability questions
-    if (/\b(precio|cu[aá]nto|cuesta|costo|vale)\b/i.test(msg)) {
+    // ML links for borde separador products
+    const bordeLinks = {
+      '6': 'https://articulo.mercadolibre.com.mx/MLM-923085679-borde-separador-grueso-para-jardin-rollo-de-6-metros-_JM',
+      '9': 'https://articulo.mercadolibre.com.mx/MLM-923081079-borde-separador-grueso-para-jardin-rollo-de-9-metros-_JM',
+      '18': 'https://articulo.mercadolibre.com.mx/MLM-801430874-borde-separador-grueso-para-jardin-rollo-de-18-metros-_JM',
+      '54': 'https://articulo.mercadolibre.com.mx/MLM-1493170566-borde-separador-para-jardin-rollo-de-54-m-_JM'
+    };
+
+    // Check if user already specified a borde length (6, 9, 18, or 54m)
+    const lengthMatch = msg.match(/\b(6|9|18|54)\s*(m|metros?|mts?)?\b/i);
+    if (lengthMatch) {
+      const length = lengthMatch[1];
+      const link = bordeLinks[length];
+
+      if (link) {
+        // Extract quantity if mentioned (e.g., "6 rollos de 54m")
+        const quantityMatch = msg.match(/(\d+)\s*(rol+[oy]s?|piezas?|unidades?)/i);
+        const quantity = quantityMatch ? parseInt(quantityMatch[1]) : null;
+
+        // Store city if mentioned (e.g., "en león")
+        const cityMatch = msg.match(/\ben\s+([a-záéíóúñ]+)/i);
+        if (cityMatch) {
+          await updateConversation(psid, { city: cityMatch[1] });
+        }
+
+        const trackedLink = await generateClickLink(psid, link, {
+          productName: `Borde Separador ${length}m`,
+          city: convo.city || cityMatch?.[1],
+          stateMx: convo.stateMx
+        });
+
+        await updateConversation(psid, { lastIntent: "borde_link_sent" });
+
+        const quantityText = quantity ? `Para ${quantity} rollos, ` : '';
+        return {
+          type: "text",
+          text: `¡Claro! ${quantityText}aquí está el borde separador de ${length} metros:\n\n${trackedLink}\n\n` +
+                `Ahí puedes ver el precio y realizar tu compra. El envío está incluido 📦`
+        };
+      }
+    }
+
+    // Check for price/availability questions without specific length
+    if (/\b(precio|cu[aá]nto|cuesta|costo|vale|ocupo|necesito|quiero)\b/i.test(msg)) {
       return {
         type: "text",
         text: "¡Claro! Manejamos borde separador para jardín en diferentes presentaciones:\n\n" +
