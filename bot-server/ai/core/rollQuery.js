@@ -188,12 +188,25 @@ async function handleRollQuery(userMessage, psid, convo) {
       rollProducts.map(product => enrichProductWithContext(product))
     );
 
+    // Deduplicate by name + price (remove exact duplicates)
+    const seen = new Set();
+    const uniqueRolls = enrichedRolls.filter(roll => {
+      const key = `${roll.name}|${roll.price || 0}`;
+      if (seen.has(key)) {
+        console.log(`⚠️ Skipping duplicate: ${roll.name} $${roll.price}`);
+        return false;
+      }
+      seen.add(key);
+      return true;
+    });
+    console.log(`📊 After deduplication: ${uniqueRolls.length} unique products (from ${enrichedRolls.length})`);
+
     // Build response with enriched information
     let responseText = "¡Claro! Manejamos rollos completos de malla sombra 🌿\n\n";
 
     // Group by parent/category if possible
     const byCategory = {};
-    for (const roll of enrichedRolls) {
+    for (const roll of uniqueRolls) {
       const category = roll.parentContext?.name || "General";
       if (!byCategory[category]) {
         byCategory[category] = [];
