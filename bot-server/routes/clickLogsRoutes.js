@@ -100,6 +100,11 @@ router.get("/stats", async (req, res) => {
   try {
     const { startDate, endDate, campaignId, adSetId, adId } = req.query;
 
+    // Run correlation in background (non-blocking) to catch any missed orders
+    runBackgroundCorrelation().catch(err => {
+      console.error("Background correlation error:", err.message);
+    });
+
     // Build filter
     const filter = {};
     if (campaignId) filter.campaignId = campaignId;
@@ -144,6 +149,43 @@ router.get("/stats", async (req, res) => {
     });
   }
 });
+
+// Background correlation function - runs without blocking the response
+async function runBackgroundCorrelation() {
+  try {
+    const { correlateOrders } = require("../utils/conversionCorrelation");
+    const { getRecentOrders } = require("../utils/mercadoLibreOrders");
+    const MercadoLibreAuth = require("../models/MercadoLibreAuth");
+
+    // Get active seller
+    const seller = await MercadoLibreAuth.findOne({ active: true });
+    if (!seller) return;
+
+    const sellerId = seller.sellerId;
+
+    // Get orders from last 7 days
+    const endDate = new Date();
+    const startDate = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
+
+    console.log("🔄 Running background correlation check...");
+
+    const ordersResult = await getRecentOrders(sellerId, startDate, endDate, 50);
+    if (!ordersResult.success || !ordersResult.orders?.length) return;
+
+    // Filter to paid orders only
+    const paidOrders = ordersResult.orders.filter(o => o.status === 'paid');
+    if (paidOrders.length === 0) return;
+
+    const result = await correlateOrders(paidOrders, sellerId);
+
+    if (result.correlated > 0) {
+      console.log(`✅ Background correlation: ${result.correlated} new correlations found`);
+    }
+  } catch (error) {
+    // Silent fail - don't disrupt the main request
+    console.error("Background correlation error:", error.message);
+  }
+}
 
 // GET /click-logs/by-user/:psid - Get click logs for a specific user
 router.get("/by-user/:psid", async (req, res) => {
