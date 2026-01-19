@@ -11,7 +11,7 @@
  */
 
 import React, { useEffect, useState } from "react";
-import { Routes, Route, NavLink, useLocation, useNavigate } from "react-router-dom";
+import { Routes, Route, NavLink, Link, useLocation, useNavigate } from "react-router-dom";
 import io from "socket.io-client";
 import { Toaster } from 'react-hot-toast';
 import API from "./api";
@@ -1235,6 +1235,16 @@ function App() {
   console.log("Campaigns state:", campaigns);
   console.log("Active campaigns count:", activeCampaigns);
 
+  // Find best performing ad (by clicks)
+  const allAds = campaigns.flatMap(c =>
+    (c.adSets || []).flatMap(as => as.ads || [])
+  );
+  const bestAd = allAds.reduce((best, ad) => {
+    const adClicks = ad.stats?.clicks || 0;
+    const bestClicks = best?.stats?.clicks || 0;
+    return adClicks > bestClicks ? ad : best;
+  }, null);
+
   let filteredMessages = messages;
 
   // Apply sender type filter
@@ -1882,6 +1892,22 @@ function App() {
                         <svg className="w-6 h-6 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z" />
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
+                        </svg>
+                      </div>
+                    </div>
+                  </Link>
+
+                  {/* Best Ad */}
+                  <Link to="/campaigns" className="bg-gradient-to-br from-rose-500/10 to-rose-600/5 backdrop-blur-lg border border-rose-500/20 rounded-xl p-6 hover:border-rose-500/40 transition-colors cursor-pointer">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-400 mb-1">Mejor Anuncio</p>
+                        <h3 className="text-lg font-bold text-white truncate max-w-[150px]">{bestAd?.name || '-'}</h3>
+                        <p className="text-sm text-rose-400">{bestAd?.stats?.clicks || 0} clicks</p>
+                      </div>
+                      <div className="w-12 h-12 bg-rose-500/20 rounded-lg flex items-center justify-center">
+                        <svg className="w-6 h-6 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
                         </svg>
                       </div>
                     </div>
