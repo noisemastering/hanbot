@@ -1463,6 +1463,14 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   // This allows us to handle multi-intent messages like "quiero una 6x4 azul"
   const dimensions = parseDimensions(msg);
 
+  // 🎯 Detect roll dimensions (e.g., 4x100, 2.10x100) - skip confeccionada handler
+  // Roll dimensions have one side = 100 (standard roll length)
+  const isRollDimension = dimensions && (dimensions.width === 100 || dimensions.height === 100);
+  if (isRollDimension) {
+    console.log(`📦 Roll dimension detected (${dimensions.width}x${dimensions.height}) - skipping confeccionada handler`);
+    return null; // Let handleRollQuery process this
+  }
+
   // 🔍 Check for suspicious large dimensions that might be missing decimal point
   // e.g., "2x380" might mean "2x3.80" not "2x380 meters"
   if (dimensions) {

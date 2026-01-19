@@ -33,7 +33,7 @@ function isRollQuery(msg) {
     /\b(necesito\s+(?:un\s+)?rol+[oy])\b/i,  // "necesito un rollo/royo"
     /\b(precio\s+rol+[oy]|rol+[oy]\s+precio)\b/i,
     /\b(rol+[oy]\s+completo|rol+[oy]\s+entero)\b/i,
-    /\b(4\.?20?\s*[xX×*]\s*100|2\.?10?\s*[xX×*]\s*100)\b/i, // Common roll dimensions
+    /\b(\d+(?:\.\d+)?\s*[xX×*]\s*100|100\s*[xX×*]\s*\d+(?:\.\d+)?)\b/i, // Any roll dimension (Nx100 or 100xN)
     /\b(comprar\s+rol+[oy]|vender\s+rol+[oy])\b/i
   ];
 
@@ -91,6 +91,51 @@ async function handleRollQuery(userMessage, psid, convo) {
     }
 
     console.log("🎯 Roll query detected, fetching enriched roll products...");
+
+    // 📏 Check if user is asking for a SPECIFIC roll dimension (e.g., "4x100", "precio del 4x100")
+    const rollDimMatch = cleanMsg.match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(100)\b|(100)\s*[xX×*]\s*(\d+(?:\.\d+)?)/i);
+    if (rollDimMatch) {
+      const width = rollDimMatch[1] || rollDimMatch[4];
+      const length = rollDimMatch[2] || rollDimMatch[3];
+      const requestedRollSize = `${width}x${length}`;
+      console.log(`📦 Specific roll dimension requested: ${requestedRollSize}`);
+
+      await updateConversation(psid, {
+        lastIntent: "roll_query_specific",
+        state: "active",
+        unknownCount: 0,
+        productInterest: "rollo"
+      });
+
+      // Common roll widths: 4.20m and 2.10m
+      const standardWidths = [4.20, 2.10, 4.2, 2.1, 4, 2];
+      const parsedWidth = parseFloat(width);
+      const isStandardWidth = standardWidths.some(w => Math.abs(w - parsedWidth) < 0.1);
+
+      if (isStandardWidth) {
+        // Standard roll size - provide info and quote contact
+        return {
+          type: "text",
+          text: `El rollo de ${width}m x 100m lo manejamos en varios porcentajes de sombra 📦\n\n` +
+                `Disponibles:\n` +
+                `• 35% sombra\n` +
+                `• 50% sombra\n` +
+                `• 70% sombra\n` +
+                `• 80% sombra\n` +
+                `• 90% sombra\n\n` +
+                `¿Qué porcentaje necesitas? Te paso la cotización.`
+        };
+      } else {
+        // Non-standard width - inform of available widths
+        return {
+          type: "text",
+          text: `Los rollos de malla sombra los manejamos en anchos estándar de:\n\n` +
+                `• 4.20m x 100m (420 m² por rollo)\n` +
+                `• 2.10m x 100m (210 m² por rollo)\n\n` +
+                `¿Te interesa alguno de estos? Te paso la cotización.`
+        };
+      }
+    }
 
     // Check if user is asking for a specific percentage
     const percentageMatch = cleanMsg.match(/(\d{2,3})\s*%/);
