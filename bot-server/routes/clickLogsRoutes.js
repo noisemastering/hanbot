@@ -154,7 +154,7 @@ router.get("/stats", async (req, res) => {
 async function runBackgroundCorrelation() {
   try {
     const { correlateOrders } = require("../utils/conversionCorrelation");
-    const { getRecentOrders } = require("../utils/mercadoLibreOrders");
+    const { getOrders } = require("../utils/mercadoLibreOrders");
     const MercadoLibreAuth = require("../models/MercadoLibreAuth");
 
     // Get active seller
@@ -169,7 +169,11 @@ async function runBackgroundCorrelation() {
 
     console.log("🔄 Running background correlation check...");
 
-    const ordersResult = await getRecentOrders(sellerId, startDate, endDate, 50);
+    const ordersResult = await getOrders(sellerId, {
+      dateFrom: startDate.toISOString().replace('Z', '-00:00'),
+      dateTo: endDate.toISOString().replace('Z', '-00:00'),
+      limit: 50
+    });
     if (!ordersResult.success || !ordersResult.orders?.length) return;
 
     // Filter to paid orders only

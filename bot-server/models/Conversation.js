@@ -18,6 +18,7 @@ const conversationSchema = new mongoose.Schema({
   adId: { type: String, default: null },           // Facebook Ad ID (referral.ad_id)
   campaignId: { type: String, default: null },     // Facebook Campaign ID (referral.campaign_id)
   requestedSize: { type: String, default: null },  // Track last size user asked about
+  productInterest: { type: String, default: null }, // Product type user is interested in (malla_sombra, borde_separador, rollo)
 
   // Location tracking (for sales attribution)
   city: { type: String, default: null },           // City mentioned by user (e.g., "Hermosillo")
@@ -25,6 +26,7 @@ const conversationSchema = new mongoose.Schema({
   familyShown: { type: String, default: null },     // Track last family shown
   lastUnavailableSize: { type: String, default: null },  // Track unavailable size to detect insistence
   oversizedRepeatCount: { type: Number, default: 0 },  // Track how many times user asked for same oversized dimension
+  offeredToShowAllSizes: { type: Boolean, default: false },  // Track if bot offered to show all sizes
 
   // Human handoff tracking
   handoffRequested: { type: Boolean, default: false },  // User explicitly requested human

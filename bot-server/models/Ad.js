@@ -49,6 +49,15 @@ const adSchema = new mongoose.Schema(
       ref: "ProductFamily"
     }],
 
+    // Main product for determining productInterest (optional)
+    // When set: use this to determine product family/interest
+    // When null: fall back to first product in productIds array
+    mainProductId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ProductFamily",
+      default: null
+    },
+
     // Ad intent - context for tailoring responses
     adIntent: {
       primaryUse: String,        // e.g., "protección solar agrícola", "sombra para patio"
