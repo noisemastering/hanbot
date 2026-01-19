@@ -1143,7 +1143,10 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   // 🚚 Envíos / entregas
   // Skip if it's a THANK YOU for shipping (not a question about shipping)
   const isThankingForShipping = /\b(gracias|grax|thx|thanks)\s+(por\s+)?(el\s+|la\s+)?(env[ií]o|entrega|paquete)/i.test(msg);
-  const isAskingAboutShipping = /env[ií]o|entregan|domicilio|reparto|llega|envias?|envian|paquete/i.test(msg);
+  // Also catch "mandar a mi lugar/estado", "pueden mandar", etc.
+  const isAskingAboutShipping = /env[ií]o|entregan|domicilio|reparto|llega|envias?|envian|paquete/i.test(msg) ||
+                                /\b(mand[ae]n?|pueden?\s+mandar)\s*(a\s+)?(mi\s+)?(lugar|estado|ciudad|domicilio)/i.test(msg) ||
+                                /\bmandar\s+(lugar|estado)\b/i.test(msg);
 
   if (isAskingAboutShipping && !isThankingForShipping) {
     // Check if message also contains dimensions - if so, skip shipping handler and let dimension handler process it
@@ -1229,15 +1232,23 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       }
     }
 
-      // If we don't have their location yet, ask for zip code to confirm coverage
+      // Shipping rules response
       let responseText;
-      if (!convo.city && !convo.stateMx && !convo.zipcode) {
-        responseText = `¡Sí! Enviamos a toda la república 📦\n\n¿Me compartes tu código postal para confirmar la cobertura de envío?`;
+      // Check if user is interested in rolls/wholesale (human sale products)
+      const isRollInterest = convo.productInterest === 'rollo' || convo.lastIntent?.includes('roll') || /\b(rol+[oy]|mayoreo|monofilamento)\b/i.test(msg);
+
+      if (isRollInterest) {
+        // Rolls and wholesale need zip code for custom shipping quote
+        responseText = `Enviamos a todo el país 📦\n\nPara rollos de malla sombra, monofilamento y pedidos de mayoreo, necesitamos tu código postal para calcular el envío.\n\n¿Me lo compartes?`;
         await updateConversation(psid, { lastIntent: "awaiting_zipcode" });
+      } else if (!convo.city && !convo.stateMx && !convo.zipcode) {
+        // General shipping info
+        responseText = `Enviamos a todo el país 📦\n\nEn rollos de malla sombra, monofilamento y pedidos de mayoreo, necesitamos tu código postal para calcular el envío.\n\nEn todos nuestros demás productos, enviamos a través de Mercado Libre con envío incluido.\n\n¿Qué producto te interesa?`;
+        await updateConversation(psid, { lastIntent: "shipping_info" });
       } else {
         // We already have their location
         const locationStr = convo.city || convo.stateMx || '';
-        responseText = `¡Sí! Enviamos a ${locationStr} y toda la república 📦\n\n¿Qué medida necesitas?`;
+        responseText = `¡Sí! Enviamos a ${locationStr} y toda la república 📦\n\nLa mayoría de productos se envían por Mercado Libre con envío incluido.\n\n¿Qué medida necesitas?`;
         await updateConversation(psid, { lastIntent: "shipping_info" });
       }
 
