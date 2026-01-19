@@ -758,7 +758,10 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   if (!hasThanksClosure && (isInterested || /\b(s[ií]|yes|dale|ok|claro|perfecto|adelante|exact[oa]|correct[oa]|as[ií]|esa|ese)\b/i.test(msg))) {
 
     // If just "me interesa" without specific context, show basic product info
-    if (isInterested && !convo.lastIntent) {
+    // BUT skip if message contains specific product keywords like "rollo" - let those handlers process it
+    const hasSpecificProduct = /\b(rol+[oy]s?|borde|separador|\d+\.?\d*\s*[xX×]\s*\d+)\b/i.test(msg);
+
+    if (isInterested && !convo.lastIntent && !hasSpecificProduct) {
       await updateConversation(psid, { lastIntent: "interest_expressed", unknownCount: 0 });
 
       return {
