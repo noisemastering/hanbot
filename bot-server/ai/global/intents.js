@@ -1,4 +1,9 @@
 // ai/global/intents.js
+// ⚠️ MIGRATION IN PROGRESS: This file contains legacy regex-based intent handling.
+// It is being replaced by ai/flows/* (product state machines) and ai/classifier/*
+// (AI-based classification). This file remains as fallback during migration.
+// See REFACTOR_PLAN.md for the migration plan.
+
 const { updateConversation } = require("../../conversationManager");
 const { getBusinessInfo } = require("../../businessInfoManager");
 const {

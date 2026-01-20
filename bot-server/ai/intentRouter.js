@@ -1,4 +1,9 @@
 // ai/intentRouter.js
+// ⚠️ DEPRECATED: This file is being replaced by ai/flows/index.js
+// The new flow router uses product-specific state machines.
+// This file remains as fallback during migration. Remove after validation.
+// See REFACTOR_PLAN.md for details.
+//
 // Smart routing based on AI-classified intents
 
 const { updateConversation } = require("../conversationManager");

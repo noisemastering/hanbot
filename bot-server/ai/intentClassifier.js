@@ -1,4 +1,9 @@
 // ai/intentClassifier.js
+// ⚠️ DEPRECATED: This file is being replaced by ai/classifier/intentClassifier.js
+// The new classifier uses a layered architecture with better intent handling.
+// This file remains as fallback during migration. Remove after validation.
+// See REFACTOR_PLAN.md for details.
+
 const { OpenAI } = require("openai");
 const mongoose = require("mongoose");
 
