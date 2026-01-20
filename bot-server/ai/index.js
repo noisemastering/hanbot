@@ -9,7 +9,9 @@ const { extractReference } = require("../referenceEstimator");
 const { getProductsForConversation, getAdContextForConversation } = require("../utils/productLookup");
 const { generateClickLink } = require("../tracking");
 
-// AI-powered intent classification
+// ====== OLD SYSTEM - DEACTIVATED ======
+// These imports are kept for reference but the old system is no longer used.
+// See generateReplyInternal() below - it's preserved but not called.
 const { classifyIntent } = require("./intentClassifier");
 const { routeByIntent } = require("./intentRouter");
 
@@ -112,6 +114,10 @@ function normalizeDimensionFormats(message) {
   return normalized;
 }
 
+// ====== OLD SYSTEM - DEACTIVATED ======
+// This function is preserved for reference but is NO LONGER CALLED.
+// The new flow system (Layer 0-3) handles all messages now.
+// To re-enable: uncomment the call in generateReply() above.
 async function generateReplyInternal(userMessage, psid, convo, referral = null) {
   try {
     // Apply typo correction first
@@ -482,7 +488,6 @@ async function generateReply(userMessage, psid, referral = null) {
   // ====== END LAYER 1 ======
 
   // ====== LAYER 2-3: FLOW ROUTING ======
-  // Try new flow system first
   let response = null;
 
   try {
@@ -491,16 +496,41 @@ async function generateReply(userMessage, psid, referral = null) {
     if (response) {
       console.log(`✅ New flow system handled message (${response.handledBy})`);
     } else {
-      console.log(`⚠️ New flow system returned null, falling back to old system`);
+      console.log(`⚠️ New flow system returned null`);
     }
   } catch (flowError) {
-    console.error(`❌ Error in new flow system, falling back to old:`, flowError.message);
+    console.error(`❌ Error in new flow system:`, flowError.message);
   }
   // ====== END LAYER 2-3 ======
 
-  // Fall back to old system if new system didn't handle it
+  // ====== FALLBACK: Simple response when flows don't handle ======
+  // OLD SYSTEM DEACTIVATED - keeping files for reference only
   if (!response) {
-    response = await generateReplyInternal(userMessage, psid, convo, referral);
+    const unhandledCount = (convo.unhandledCount || 0) + 1;
+    await updateConversation(psid, { unhandledCount });
+
+    console.log(`🔴 Unhandled message (count: ${unhandledCount}): "${userMessage}"`);
+
+    if (unhandledCount >= 3) {
+      // After 3 unhandled messages, hand off to human
+      await updateConversation(psid, {
+        handoffRequested: true,
+        handoffReason: "Multiple unhandled messages",
+        handoffTimestamp: new Date(),
+        state: "needs_human"
+      });
+
+      response = {
+        type: "text",
+        text: "Déjame comunicarte con un asesor que pueda ayudarte mejor.\n\nEn un momento te atienden."
+      };
+    } else {
+      // Ask clarifying question
+      response = {
+        type: "text",
+        text: "¿Qué producto te interesa?\n\n• Malla sombra\n• Rollos de malla\n• Borde separador para jardín"
+      };
+    }
   }
 
   // Check for repetition and escalate if needed
