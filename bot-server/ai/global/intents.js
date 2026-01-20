@@ -584,13 +584,9 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
     return {
       type: "text",
-      text: "Manejamos mallas sombra en diferentes porcentajes:\n\n" +
-            "☀️ 35% - Sombra ligera, ideal para viveros y plantas que necesitan mucha luz\n" +
-            "🌤️ 50% - Sombra media, buena para hortalizas y estacionamientos\n" +
-            "⛅ 70% - Sombra media-alta, popular para terrazas y patios\n" +
-            "🌥️ 80% - Sombra alta, la más vendida para casas y jardines\n" +
-            "☁️ 90% - Sombra muy alta, máxima protección solar\n\n" +
-            "El más popular es el 80%, ofrece buena sombra sin oscurecer demasiado. ¿Cuál te interesa?"
+      text: "Manejamos malla sombra desde 35% (sombra ligera) hasta 90% (máxima protección).\n\n" +
+            "El más popular es el 80%, ofrece buena sombra sin oscurecer demasiado.\n\n" +
+            "¿Qué porcentaje te interesa?"
     };
   }
 

@@ -116,14 +116,8 @@ async function handleRollQuery(userMessage, psid, convo) {
         // Standard roll size - provide info and quote contact
         return {
           type: "text",
-          text: `El rollo de ${width}m x 100m lo manejamos en varios porcentajes de sombra 📦\n\n` +
-                `Disponibles:\n` +
-                `• 35% sombra\n` +
-                `• 50% sombra\n` +
-                `• 70% sombra\n` +
-                `• 80% sombra\n` +
-                `• 90% sombra\n\n` +
-                `¿Qué porcentaje necesitas? Te paso la cotización.`
+          text: `El rollo de ${width}m x 100m lo tenemos desde 35% hasta 90% de sombra.\n\n` +
+                `¿Qué porcentaje necesitas?`
         };
       } else {
         // Non-standard width - inform of available widths
@@ -211,7 +205,7 @@ async function handleRollQuery(userMessage, psid, convo) {
       responseText += "📏 **Rollos de 100 metros:**\n";
       responseText += "• 4.20m x 100m (420 m² por rollo)\n";
       responseText += "• 2.10m x 100m (210 m² por rollo)\n\n";
-      responseText += "Disponibles en 35%, 50%, 70%, 80% y 90% de sombra.\n\n";
+      responseText += "Disponibles desde 35% hasta 90% de sombra.\n\n";
 
       if (requestedPercentage) {
         responseText += `Para cotizar rollos de ${requestedPercentage}%, contáctanos:\n`;
@@ -266,11 +260,19 @@ async function handleRollQuery(userMessage, psid, convo) {
         unknownCount: 0
       });
 
+      // If more than 3 options, show range; otherwise list them
+      let optionsText;
+      if (percList.length > 3) {
+        const minPerc = percList[0];
+        const maxPerc = percList[percList.length - 1];
+        optionsText = `desde ${minPerc}% hasta ${maxPerc}%`;
+      } else {
+        optionsText = `en ${percList.map(p => `${p}%`).join(', ')}`;
+      }
+
       return {
         type: "text",
-        text: `¡Claro! Manejamos rollos de malla sombra en diferentes porcentajes de sombra:\n\n` +
-              percList.map(p => `• ${p}%`).join('\n') +
-              `\n\n¿Qué porcentaje necesitas?`
+        text: `¡Claro! Manejamos rollos de malla sombra ${optionsText}.\n\n¿Qué porcentaje necesitas?`
       };
     }
 

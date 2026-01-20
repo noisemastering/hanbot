@@ -198,16 +198,36 @@ async function handleZipcodeResponse(msg, psid, convo) {
     };
   }
 
-  // Build numbered list with prices (2+ options)
+  // Build response based on number of options
   let responseText = `✅ ¡Perfecto! Veo que estás en:\n${locationText}\n\n`;
-  responseText += `Tenemos las siguientes opciones de ${currentProduct.parentId?.name || currentProduct.name}:\n\n`;
+  const productName = currentProduct.parentId?.name || currentProduct.name;
 
-  options.forEach((option, index) => {
-    const price = option.price ? `$${option.price}` : 'Consultar precio';
-    responseText += `${index + 1}. ${option.name} - ${price}\n`;
-  });
+  if (options.length > 3) {
+    // More than 3 options: show range (smallest to largest)
+    // Extract numeric values from names for sorting (e.g., "35%" -> 35)
+    const optionsWithValues = options.map(opt => {
+      const numMatch = opt.name.match(/(\d+)/);
+      return { ...opt.toObject(), numValue: numMatch ? parseInt(numMatch[1]) : 0 };
+    }).sort((a, b) => a.numValue - b.numValue);
 
-  responseText += `\n¿Cuál opción te interesa?`;
+    const smallest = optionsWithValues[0];
+    const largest = optionsWithValues[optionsWithValues.length - 1];
+    const smallPrice = smallest.price ? `$${smallest.price}` : 'consultar precio';
+    const largePrice = largest.price ? `$${largest.price}` : 'consultar precio';
+
+    responseText += `Tenemos ${productName} desde ${smallest.name} (${smallPrice}) hasta ${largest.name} (${largePrice}).\n\n`;
+    responseText += `¿Qué porcentaje o medida necesitas?`;
+  } else {
+    // 2-3 options: list them all naturally
+    responseText += `Tenemos ${productName} en:\n\n`;
+
+    options.forEach((option) => {
+      const price = option.price ? `$${option.price}` : 'Consultar precio';
+      responseText += `• ${option.name} - ${price}\n`;
+    });
+
+    responseText += `\n¿Cuál te interesa?`;
+  }
 
   await updateConversation(psid, {
     humanSalesState: 'asking_product_selection',
