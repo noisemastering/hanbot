@@ -1,7 +1,12 @@
 // ai/utils/productMatcher.js
 // Utility for matching products by name or aliases
+// Supports alias inheritance from ancestors (root → children → grandchildren)
 
 const ProductFamily = require("../../models/ProductFamily");
+
+// Cache for ancestor lookups (cleared on server restart)
+const ancestorCache = new Map();
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
  * Normalize text for matching (lowercase, remove accents, trim)
@@ -16,12 +21,88 @@ function normalizeForMatch(text) {
 }
 
 /**
- * Check if a message mentions a product by name or alias
+ * Get all ancestors of a product (parent, grandparent, etc. up to root)
+ * Results are cached for performance
+ * @param {string} productId - Product ID
+ * @returns {Promise<Array>} - Array of ancestor documents from immediate parent to root
+ */
+async function getAncestors(productId) {
+  if (!productId) return [];
+
+  const cacheKey = productId.toString();
+  const cached = ancestorCache.get(cacheKey);
+  if (cached && Date.now() - cached.timestamp < CACHE_TTL) {
+    return cached.ancestors;
+  }
+
+  const ancestors = [];
+  let currentId = productId;
+  const maxDepth = 10; // Prevent infinite loops
+
+  for (let i = 0; i < maxDepth; i++) {
+    const product = await ProductFamily.findById(currentId).lean();
+    if (!product || !product.parentId) break;
+
+    const parent = await ProductFamily.findById(product.parentId).lean();
+    if (!parent) break;
+
+    ancestors.push(parent);
+    currentId = parent._id;
+  }
+
+  ancestorCache.set(cacheKey, { ancestors, timestamp: Date.now() });
+  return ancestors;
+}
+
+/**
+ * Get all aliases for a product, including inherited from ancestors
+ * @param {object} product - ProductFamily document
+ * @returns {Promise<Array<string>>} - Combined array of all aliases
+ */
+async function getAllAliases(product) {
+  const allAliases = new Set();
+
+  // Add own aliases
+  if (product.aliases && product.aliases.length > 0) {
+    product.aliases.forEach(a => allAliases.add(normalizeForMatch(a)));
+  }
+
+  // Add ancestor aliases (inherited)
+  const ancestors = await getAncestors(product._id);
+  for (const ancestor of ancestors) {
+    if (ancestor.aliases && ancestor.aliases.length > 0) {
+      ancestor.aliases.forEach(a => allAliases.add(normalizeForMatch(a)));
+    }
+  }
+
+  return Array.from(allAliases);
+}
+
+/**
+ * Get the root family for a product
+ * @param {object|string} product - ProductFamily document or ID
+ * @returns {Promise<object|null>} - Root ProductFamily document
+ */
+async function getRootFamily(product) {
+  const productDoc = typeof product === 'string'
+    ? await ProductFamily.findById(product).lean()
+    : product;
+
+  if (!productDoc) return null;
+  if (!productDoc.parentId) return productDoc; // Already root
+
+  const ancestors = await getAncestors(productDoc._id);
+  return ancestors.length > 0 ? ancestors[ancestors.length - 1] : productDoc;
+}
+
+/**
+ * Check if a message mentions a product by name or alias (including inherited aliases)
  * @param {string} message - User's message
  * @param {object} product - ProductFamily document with name and aliases
- * @returns {boolean}
+ * @param {boolean} includeInherited - Whether to check inherited aliases from ancestors
+ * @returns {Promise<boolean>}
  */
-function messageMatchesProduct(message, product) {
+async function messageMatchesProduct(message, product, includeInherited = true) {
   const normalizedMsg = normalizeForMatch(message);
 
   // Check product name
@@ -30,15 +111,17 @@ function messageMatchesProduct(message, product) {
     return true;
   }
 
+  // Get aliases (own + inherited if requested)
+  const aliases = includeInherited
+    ? await getAllAliases(product)
+    : (product.aliases || []).map(normalizeForMatch);
+
   // Check aliases
-  if (product.aliases && product.aliases.length > 0) {
-    for (const alias of product.aliases) {
-      const normalizedAlias = normalizeForMatch(alias);
-      // Use word boundary-like matching for aliases
-      const aliasRegex = new RegExp(`\\b${normalizedAlias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
-      if (aliasRegex.test(normalizedMsg)) {
-        return true;
-      }
+  for (const alias of aliases) {
+    // Use word boundary-like matching for aliases
+    const aliasRegex = new RegExp(`\\b${alias.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'i');
+    if (aliasRegex.test(normalizedMsg)) {
+      return true;
     }
   }
 
@@ -165,11 +248,57 @@ function isContextualMention(message, keyword) {
   return contextualPatterns.some(pattern => pattern.test(normalized));
 }
 
+/**
+ * Clear the ancestor cache (useful after product updates)
+ */
+function clearCache() {
+  ancestorCache.clear();
+  console.log("🗑️ Product matcher cache cleared");
+}
+
+/**
+ * Find all products (including children) that match a message via inherited aliases
+ * Useful for finding specific variants when user mentions a product family alias
+ * @param {string} message - User's message
+ * @param {object} options - { sellableOnly: boolean, activeOnly: boolean }
+ * @returns {Promise<Array>} - Array of matching ProductFamily documents
+ */
+async function findAllMatchingProducts(message, options = {}) {
+  const { sellableOnly = false, activeOnly = true } = options;
+
+  // First, detect which root family the message refers to
+  const detected = await detectProductFromMessage(message);
+  if (!detected) return [];
+
+  // Build query for descendants of that family
+  const query = { active: activeOnly };
+  if (sellableOnly) query.sellable = true;
+
+  // Get all products and filter to those in this family tree
+  const allProducts = await ProductFamily.find(query).lean();
+
+  const matchingProducts = [];
+  for (const product of allProducts) {
+    // Check if this product belongs to the detected family
+    const root = await getRootFamily(product);
+    if (root && root._id.toString() === detected.product._id.toString()) {
+      matchingProducts.push(product);
+    }
+  }
+
+  return matchingProducts;
+}
+
 module.exports = {
   normalizeForMatch,
+  getAncestors,
+  getAllAliases,
+  getRootFamily,
   messageMatchesProduct,
   findProductByNameOrAlias,
   detectProductFromMessage,
+  findAllMatchingProducts,
   isExplicitProductRequest,
-  isContextualMention
+  isContextualMention,
+  clearCache
 };
