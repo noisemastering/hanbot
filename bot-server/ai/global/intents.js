@@ -122,6 +122,43 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 🔄 PRODUCT COMPARISON - "diferencia entre X y Y", "cual es mejor"
+  // Handle questions comparing products (raschel vs monofilamento, etc.)
+  const comparisonPatterns = /\b(diferencia|diferencias|distinto|distinta|comparar|comparaci[oó]n|vs|versus)\b.*\b(malla|raschel|monofilamento|beige|negro)/i;
+  const whichIsBetterPattern = /\b(cu[aá]l|qu[eé])\s+(es\s+)?(mejor|conviene|recomienda|me\s+sirve)/i;
+
+  if (comparisonPatterns.test(msg) ||
+      (whichIsBetterPattern.test(msg) && /\b(malla|raschel|monofilamento|sombra)\b/i.test(msg))) {
+    console.log("🔄 Product comparison question detected:", msg);
+
+    // Load product descriptions from ProductSubfamily
+    const ProductSubfamily = require("../../models/ProductSubfamily");
+    const subfamilies = await ProductSubfamily.find({}).lean();
+
+    const raschel = subfamilies.find(s => /malla\s*sombra|raschel|beige/i.test(s.name));
+    const mono = subfamilies.find(s => /monofilamento/i.test(s.name));
+
+    await updateConversation(psid, { lastIntent: "product_comparison" });
+
+    // Build comparison response using available data
+    let response = "**Raschel (Malla Sombra tradicional):**\n";
+    response += raschel?.description || "Tejido raschel, permeable, varios colores disponibles.";
+    response += "\n\n**Monofilamento:**\n";
+    response += mono?.description || "Más resistente y duradera, ideal para uso intensivo.";
+    response += "\n\n";
+
+    // Add recommendation based on common use cases
+    response += "**¿Cuál elegir?**\n";
+    response += "• Raschel: Mejor relación precio-calidad, ideal para casas, patios y jardines.\n";
+    response += "• Monofilamento: Mayor durabilidad, recomendada para uso comercial o agrícola intensivo.\n\n";
+    response += "¿Para qué uso la necesitas?";
+
+    return {
+      type: "text",
+      text: response
+    };
+  }
+
   // 🌿 BORDE SEPARADOR - Garden edging product (different from malla sombra!)
   // Detect: "borde", "separador", "borde separador", "orilla de jardín", "delimitar jardín"
   // Also detect borde-specific lengths: 6m, 9m, 18m, 54m (malla sombra uses 100m rolls)
