@@ -28,6 +28,7 @@ const { sendHandoffNotification } = require("../../services/pushNotifications");
 const { selectRelevantAsset, trackAssetMention, insertAssetIntoResponse } = require("../assetManager");
 const { handleRollQuery } = require("../core/rollQuery");
 const { getOfferHook, shouldMentionOffer, applyAdContext, getAngleMessaging } = require("../utils/adContextHelper");
+const { getProductDisplayName, determineVerbosity } = require("../utils/productEnricher");
 
 // Helper to add offer hook to responses when appropriate
 function addOfferHookIfRelevant(responseText, convo) {

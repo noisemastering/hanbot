@@ -8,6 +8,7 @@ const { handleCatalogOverview } = require("./core/catalog");
 const { handleFamilyFlow } = require("./core/family");
 const { getProduct } = require("../hybridSearch");
 const { generateClickLink } = require("../tracking");
+const { getProductDisplayName, determineVerbosity } = require("./utils/productEnricher");
 
 /**
  * Route message to appropriate handler based on AI-classified intent
@@ -45,6 +46,9 @@ async function routeByIntent(intent, message, psid, convo, botName) {
           unknownCount: 0
         });
 
+        const verbosity = determineVerbosity(message, convo);
+        const displayName = await getProductDisplayName(product, verbosity);
+
         if (product.source === "ml") {
           const trackedLink = await generateClickLink(psid, product.permalink, {
             productName: product.name,
@@ -59,14 +63,14 @@ async function routeByIntent(intent, message, psid, convo, botName) {
 
           return {
             type: "image",
-            text: `Encontré "${product.name}" en nuestro catálogo de Mercado Libre 💚\nPuedes comprarlo directamente aquí 👉 ${trackedLink}`,
+            text: `Encontré "${displayName}" en nuestro catálogo de Mercado Libre 💚\nPuedes comprarlo directamente aquí 👉 ${trackedLink}`,
             imageUrl: product.imageUrl
           };
         }
 
         return {
           type: "image",
-          text: `Tenemos "${product.name}" disponible por $${product.price}.\n¿Quieres que te envíe más detalles o medidas?`,
+          text: `Tenemos "${displayName}" disponible por $${product.price}.\n¿Quieres que te envíe más detalles o medidas?`,
           imageUrl: product.imageUrl
         };
       }

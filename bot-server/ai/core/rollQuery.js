@@ -3,7 +3,7 @@
 
 const { updateConversation } = require("../../conversationManager");
 const ProductFamily = require("../../models/ProductFamily");
-const { enrichProductWithContext, formatProductForBot } = require("../utils/productEnricher");
+const { enrichProductWithContext, formatProductForBot, getProductDisplayName } = require("../utils/productEnricher");
 
 /**
  * Detects if user is asking about roll dimensions/meters
@@ -298,14 +298,10 @@ async function handleRollQuery(userMessage, psid, convo) {
       }
 
       for (const roll of rolls) {
-        // Get size from parent context (e.g., "Medida 4x100")
-        const size = roll.parentContext?.name || '';
+        // Get proper display name using naming templates (mini verbosity for listings)
+        const displayName = await getProductDisplayName(roll, 'mini');
 
-        // Product name with size context
-        responseText += `• ${roll.name}`;
-        if (size && !roll.name.includes(size)) {
-          responseText += ` (${size})`;
-        }
+        responseText += `• ${displayName}`;
 
         // Add price
         if (roll.price) {

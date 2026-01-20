@@ -29,6 +29,7 @@ const { handleProductCrossSell, shouldProvideFullCatalog } = require("./core/cro
 const { handleRollQuery } = require("./core/rollQuery");
 const { handleHumanSalesFlow } = require("./core/humanSalesHandler");
 const { correctTypos, logTypoCorrection } = require("./utils/typoCorrection");
+const { getProductDisplayName, determineVerbosity } = require("./utils/productEnricher");
 
 
 
@@ -386,6 +387,8 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
         await updateConversation(psid, { lastIntent: "product_search", state: "active", unknownCount: 0 });
 
         if (product.source === "ml") {
+          const verbosity = determineVerbosity(userMessage, convo);
+          const displayName = await getProductDisplayName(product, verbosity);
           const trackedLink = await generateClickLink(psid, product.permalink, {
             productName: product.name,
             productId: product._id || product.id,
@@ -399,14 +402,16 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
 
           return {
             type: "image",
-            text: `Encontré "${product.name}" en nuestro catálogo de Mercado Libre 💚\nPuedes comprarlo directamente aquí 👉 ${trackedLink}`,
+            text: `Encontré "${displayName}" en nuestro catálogo de Mercado Libre 💚\nPuedes comprarlo directamente aquí 👉 ${trackedLink}`,
             imageUrl: product.imageUrl
           };
         }
 
+        const verbosity = determineVerbosity(userMessage, convo);
+        const displayName = await getProductDisplayName(product, verbosity);
         return {
           type: "image",
-          text: `Tenemos "${product.name}" disponible por $${product.price}.\n¿Quieres que te envíe más detalles o medidas?`,
+          text: `Tenemos "${displayName}" disponible por $${product.price}.\n¿Quieres que te envíe más detalles o medidas?`,
           imageUrl: product.imageUrl
         };
       }
