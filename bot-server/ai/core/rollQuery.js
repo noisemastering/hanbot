@@ -26,6 +26,13 @@ function isRollDimensionQuery(msg) {
  * Detects if user is asking about rolls
  */
 function isRollQuery(msg) {
+  // Exclude quantity patterns like "15 rollos", "10 unidades", etc.
+  // These are quantity responses, not roll queries
+  const quantityPatterns = /^\s*\d+\s*(rol+[oy]s?|unidades?|piezas?)\s*$/i;
+  if (quantityPatterns.test(msg)) {
+    return false;
+  }
+
   const rollPatterns = [
     /\b(rol+[oy]s?)\b/i,  // Matches rollo, rollos, royo, royos (handles typos)
     /\b(me\s+interesa\s+(?:un\s+)?rol+[oy])\b/i,  // "me interesa un rollo/royo"
@@ -227,17 +234,24 @@ async function handleRollQuery(userMessage, psid, convo) {
       rollProducts.map(product => enrichProductWithContext(product))
     );
 
-    // Deduplicate by name + price (remove exact duplicates)
-    const seen = new Set();
-    const uniqueRolls = enrichedRolls.filter(roll => {
-      const key = `${roll.name}|${roll.price || 0}`;
-      if (seen.has(key)) {
-        console.log(`⚠️ Skipping duplicate: ${roll.name} $${roll.price}`);
-        return false;
+    // Deduplicate by name only (keep the one with lowest price if duplicates)
+    const byName = new Map();
+    for (const roll of enrichedRolls) {
+      const key = roll.name;
+      if (!byName.has(key)) {
+        byName.set(key, roll);
+      } else {
+        // Keep the one with the lower price
+        const existing = byName.get(key);
+        if (roll.price && (!existing.price || roll.price < existing.price)) {
+          console.log(`⚠️ Replacing ${key} $${existing.price} with $${roll.price}`);
+          byName.set(key, roll);
+        } else {
+          console.log(`⚠️ Skipping duplicate: ${key} $${roll.price} (keeping $${existing.price})`);
+        }
       }
-      seen.add(key);
-      return true;
-    });
+    }
+    const uniqueRolls = Array.from(byName.values());
     console.log(`📊 After deduplication: ${uniqueRolls.length} unique products (from ${enrichedRolls.length})`);
 
     // If user didn't specify percentage and we have multiple percentages, ask first
@@ -299,18 +313,31 @@ async function handleRollQuery(userMessage, psid, convo) {
         responseText += `**${percentage} de sombra:**\n`;
       }
 
-      for (const roll of rolls) {
-        // Get proper display name using naming templates (mini verbosity for listings)
-        const displayName = await getProductDisplayName(roll, 'mini');
+      // If more than 3 products in this group, show range instead of listing all
+      if (rolls.length > 3) {
+        // Sort by price or by numeric value in name
+        const sorted = [...rolls].sort((a, b) => {
+          if (a.price && b.price) return a.price - b.price;
+          const aNum = parseInt(String(a.name).match(/\d+/)?.[0] || 0);
+          const bNum = parseInt(String(b.name).match(/\d+/)?.[0] || 0);
+          return aNum - bNum;
+        });
+        const smallest = sorted[0];
+        const largest = sorted[sorted.length - 1];
+        const smallPrice = smallest.price ? `$${smallest.price}` : 'consultar';
+        const largePrice = largest.price ? `$${largest.price}` : 'consultar';
 
-        responseText += `• ${displayName}`;
-
-        // Add price
-        if (roll.price) {
-          responseText += ` - $${roll.price}`;
+        responseText += `Desde ${smallest.name} (${smallPrice}) hasta ${largest.name} (${largePrice})\n`;
+      } else {
+        // List all (3 or fewer)
+        for (const roll of rolls) {
+          const displayName = await getProductDisplayName(roll, 'mini');
+          responseText += `• ${displayName}`;
+          if (roll.price) {
+            responseText += ` - $${roll.price}`;
+          }
+          responseText += "\n";
         }
-
-        responseText += "\n";
       }
       responseText += "\n";
     }
