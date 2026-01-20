@@ -28,6 +28,7 @@ const { sendHandoffNotification } = require("../../services/pushNotifications");
 const { selectRelevantAsset, trackAssetMention, insertAssetIntoResponse } = require("../assetManager");
 const { handleRollQuery } = require("../core/rollQuery");
 const { getOfferHook, shouldMentionOffer, applyAdContext, getAngleMessaging } = require("../utils/adContextHelper");
+const { isContextualMention, isExplicitProductRequest } = require("../utils/productMatcher");
 const { getProductDisplayName, determineVerbosity } = require("../utils/productEnricher");
 
 // Helper to add offer hook to responses when appropriate
@@ -503,33 +504,48 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   }
 
   // 🌿 WEED CONTROL / MALLA ANTIMALEZA - Handle questions about weed control
+  // BUT only if it's an explicit request, not a contextual mention
+  // e.g., "quiero malla antimaleza" = product request
+  // e.g., "90% para que no salga maleza" = contextual, user wants malla sombra
   if (isWeedControlQuery(msg)) {
-    await updateConversation(psid, { lastIntent: "weed_control_query" });
+    // Check if "maleza" is just contextual (explaining why they want malla sombra)
+    const isJustContext = isContextualMention(msg, "maleza");
+    const isExplicitRequest = isExplicitProductRequest(msg, "antimaleza") ||
+                              isExplicitProductRequest(msg, "ground cover") ||
+                              /\b(quiero|necesito|busco|ocupo)\s+(malla\s+)?(antimaleza|ground\s*cover)/i.test(msg);
 
-    // Check if they're also asking about water permeability
-    const asksAboutWater = /\b(agua|permeable|impermeable|lluvia|filtra|pasa|transmina|repele)\b/i.test(msg);
-
-    let response = "";
-
-    if (asksAboutWater) {
-      // They're asking if malla sombra blocks weeds AND about water
-      response = "La malla sombra es PERMEABLE, permite que el agua pase a través de ella. No repele el agua.\n\n";
-      response += "Sin embargo, tenemos un producto específico para control de maleza: la MALLA ANTIMALEZA (Ground Cover), ";
-      response += "que también es permeable y está diseñada especialmente para bloquear el crecimiento de maleza.\n\n";
+    // Skip if contextual and not explicit request
+    if (isJustContext && !isExplicitRequest) {
+      console.log("🌿 Skipping weed control - contextual mention, not product request");
+      // Don't handle - let other handlers process (e.g., malla sombra 90%)
     } else {
-      // General weed control question
-      response = "¡Tenemos justo lo que necesitas! Contamos con MALLA ANTIMALEZA (Ground Cover), ";
-      response += "un producto especializado para bloquear el crecimiento de maleza.\n\n";
+      await updateConversation(psid, { lastIntent: "weed_control_query" });
+
+      // Check if they're also asking about water permeability
+      const asksAboutWater = /\b(agua|permeable|impermeable|lluvia|filtra|pasa|transmina|repele)\b/i.test(msg);
+
+      let response = "";
+
+      if (asksAboutWater) {
+        // They're asking if malla sombra blocks weeds AND about water
+        response = "La malla sombra es PERMEABLE, permite que el agua pase a través de ella. No repele el agua.\n\n";
+        response += "Sin embargo, tenemos un producto específico para control de maleza: la MALLA ANTIMALEZA (Ground Cover), ";
+        response += "que también es permeable y está diseñada especialmente para bloquear el crecimiento de maleza.\n\n";
+      } else {
+        // General weed control question
+        response = "¡Tenemos justo lo que necesitas! Contamos con MALLA ANTIMALEZA (Ground Cover), ";
+        response += "un producto especializado para bloquear el crecimiento de maleza.\n\n";
+      }
+
+      response += "Puedes ver todas las medidas disponibles en nuestra Tienda Oficial de Mercado Libre:\n\n";
+      response += "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n";
+      response += "¿Qué medida necesitas para tu proyecto?";
+
+      return {
+        type: "text",
+        text: response
+      };
     }
-
-    response += "Puedes ver todas las medidas disponibles en nuestra Tienda Oficial de Mercado Libre:\n\n";
-    response += "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n";
-    response += "¿Qué medida necesitas para tu proyecto?";
-
-    return {
-      type: "text",
-      text: response
-    };
   }
 
   // 🌧️ RAIN/WATERPROOF QUESTIONS - Clarify malla sombra is NOT waterproof

@@ -113,7 +113,15 @@ const productFamilySchema = new mongoose.Schema({
   genericDescription: {
     type: String  // Brief description for cross-selling (when customer asks about this product)
     // e.g., "Rollo antimaleza - ideal para control de hierbas en cultivos"
-  }
+  },
+  // Alternative names/keywords that users might use to refer to this product
+  // e.g., ["ground cover", "groundcover", "antimaleza"] for Malla Antimaleza
+  // Used by bot for product recognition when user doesn't use exact product name
+  aliases: [{
+    type: String,
+    lowercase: true,
+    trim: true
+  }]
 }, {
   timestamps: true
 });
