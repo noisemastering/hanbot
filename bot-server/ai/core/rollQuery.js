@@ -1,9 +1,113 @@
 // ai/core/rollQuery.js
 // Handles queries about rolls (rollos) with enriched product information
+// Now with proper state tracking - remembers specs across messages
 
 const { updateConversation } = require("../../conversationManager");
 const ProductFamily = require("../../models/ProductFamily");
 const { enrichProductWithContext, formatProductForBot, getProductDisplayName } = require("../utils/productEnricher");
+
+/**
+ * Extract product specs from a user message
+ * @param {string} msg - User's message
+ * @returns {object} - Extracted specs { size, width, length, percentage, quantity, color, customerName }
+ */
+function extractSpecsFromMessage(msg) {
+  const specs = {};
+  const cleanMsg = msg.toLowerCase().trim();
+
+  // Extract roll dimension (e.g., "2x100", "4.2x100")
+  const rollDimMatch = cleanMsg.match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(100)\b|(100)\s*[xX×*]\s*(\d+(?:\.\d+)?)/i);
+  if (rollDimMatch) {
+    specs.width = parseFloat(rollDimMatch[1] || rollDimMatch[4]);
+    specs.length = 100;
+    specs.size = `${specs.width}x100`;
+  }
+
+  // Extract percentage (e.g., "90%", "al 80%", "80 por ciento")
+  const percentMatch = cleanMsg.match(/(?:al\s+)?(\d{2,3})\s*(?:%|por\s*ciento)/i);
+  if (percentMatch) {
+    specs.percentage = parseInt(percentMatch[1]);
+  }
+
+  // Extract quantity (e.g., "15 rollos", "quiero 10", "necesito 5")
+  const qtyMatch = cleanMsg.match(/(\d+)\s*(?:rol+[oy]s?|unidades?|piezas?)/i) ||
+                   cleanMsg.match(/(?:quiero|necesito|ocupo|son)\s+(\d+)/i) ||
+                   cleanMsg.match(/(?:por\s+lo\s+menos|minimo|mínimo)\s+(\d+)/i);
+  if (qtyMatch) {
+    specs.quantity = parseInt(qtyMatch[1]);
+  }
+
+  // Extract color
+  const colorMatch = cleanMsg.match(/\b(negro|verde|beige|blanco|azul|gris)\b/i);
+  if (colorMatch) {
+    specs.color = colorMatch[1].toLowerCase();
+  }
+
+  // Extract customer name (e.g., "a nombre de Juan Perez")
+  const nameMatch = msg.match(/(?:nombre\s+de|para|cliente)\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+)*)/i);
+  if (nameMatch) {
+    specs.customerName = nameMatch[1];
+  }
+
+  return specs;
+}
+
+/**
+ * Merge new specs with existing specs (new values override)
+ * @param {object} existing - Existing specs from conversation
+ * @param {object} newSpecs - Newly extracted specs
+ * @returns {object} - Merged specs
+ */
+function mergeSpecs(existing, newSpecs) {
+  const merged = { ...existing };
+  for (const [key, value] of Object.entries(newSpecs)) {
+    if (value !== undefined && value !== null) {
+      merged[key] = value;
+    }
+  }
+  merged.updatedAt = new Date();
+  return merged;
+}
+
+/**
+ * Check what specs are still missing for a roll quote
+ * @param {object} specs - Current specs
+ * @returns {Array<string>} - Array of missing spec names
+ */
+function getMissingSpecs(specs) {
+  const missing = [];
+  if (!specs.width && !specs.size) missing.push('size');
+  if (!specs.percentage) missing.push('percentage');
+  // quantity is optional - we can ask at the end
+  return missing;
+}
+
+/**
+ * Generate response asking for the next missing spec
+ * @param {object} specs - Current specs
+ * @param {Array<string>} missing - Missing spec names
+ * @returns {string} - Response text
+ */
+function generateMissingSpecQuestion(specs, missing) {
+  // Acknowledge what we already know
+  let ack = "";
+  if (specs.size || specs.width) {
+    ack += `Rollo de ${specs.width || specs.size?.split('x')[0]}m x 100m`;
+    if (specs.percentage) ack += ` al ${specs.percentage}%`;
+    if (specs.quantity) ack += `, ${specs.quantity} unidades`;
+    ack += ".\n\n";
+  }
+
+  // Ask for the first missing spec
+  if (missing.includes('size')) {
+    return ack + "¿Qué ancho necesitas? Manejamos rollos de 2.10m y 4.20m de ancho (100m de largo).";
+  }
+  if (missing.includes('percentage')) {
+    return ack + "¿Qué porcentaje de sombra necesitas? Tenemos desde 35% hasta 90%.";
+  }
+
+  return ack;
+}
 
 /**
  * Detects if user is asking about roll dimensions/meters
@@ -82,6 +186,7 @@ async function handleRollDimensionQuery(userMessage, psid, convo) {
 
 /**
  * Handles roll queries with enriched product information
+ * Now with proper state tracking across messages
  */
 async function handleRollQuery(userMessage, psid, convo) {
   try {
@@ -93,273 +198,126 @@ async function handleRollQuery(userMessage, psid, convo) {
       return dimensionResponse;
     }
 
-    if (!isRollQuery(cleanMsg)) {
+    // Check if this is a roll-related query OR if we're in the middle of a roll flow
+    const isRollFlow = convo.productSpecs?.productType === 'rollo' && convo.lastIntent?.startsWith('roll_');
+
+    if (!isRollQuery(cleanMsg) && !isRollFlow) {
       return null;
     }
 
-    console.log("🎯 Roll query detected, fetching enriched roll products...");
+    console.log("🎯 Roll query detected, checking conversation state...");
 
-    // 📏 Check if user is asking for a SPECIFIC roll dimension (e.g., "4x100", "precio del 4x100")
-    const rollDimMatch = cleanMsg.match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(100)\b|(100)\s*[xX×*]\s*(\d+(?:\.\d+)?)/i);
-    if (rollDimMatch) {
-      const width = rollDimMatch[1] || rollDimMatch[4];
-      const length = rollDimMatch[2] || rollDimMatch[3];
-      const requestedRollSize = `${width}x${length}`;
-      console.log(`📦 Specific roll dimension requested: ${requestedRollSize}`);
+    // ============================================================
+    // STEP 1: Extract specs from current message
+    // ============================================================
+    const newSpecs = extractSpecsFromMessage(userMessage);
+    console.log("📝 Extracted specs from message:", newSpecs);
 
-      await updateConversation(psid, {
-        lastIntent: "roll_query_specific",
-        state: "active",
-        unknownCount: 0,
-        productInterest: "rollo"
-      });
+    // ============================================================
+    // STEP 2: Merge with existing specs from conversation
+    // ============================================================
+    const existingSpecs = convo.productSpecs || {};
+    const mergedSpecs = mergeSpecs(existingSpecs, newSpecs);
+    mergedSpecs.productType = 'rollo';
 
-      // Common roll widths: 4.20m and 2.10m
-      const standardWidths = [4.20, 2.10, 4.2, 2.1, 4, 2];
-      const parsedWidth = parseFloat(width);
-      const isStandardWidth = standardWidths.some(w => Math.abs(w - parsedWidth) < 0.1);
+    console.log("📋 Merged specs:", mergedSpecs);
 
-      if (isStandardWidth) {
-        // Standard roll size - provide info and quote contact
-        return {
-          type: "text",
-          text: `El rollo de ${width}m x 100m lo tenemos desde 35% hasta 90% de sombra.\n\n` +
-                `¿Qué porcentaje necesitas?`
-        };
-      } else {
-        // Non-standard width - inform of available widths
-        return {
-          type: "text",
-          text: `Los rollos de malla sombra los manejamos en anchos estándar de:\n\n` +
-                `• 4.20m x 100m (420 m² por rollo)\n` +
-                `• 2.10m x 100m (210 m² por rollo)\n\n` +
-                `¿Te interesa alguno de estos? Te paso la cotización.`
-        };
-      }
-    }
+    // ============================================================
+    // STEP 3: Check what's still missing
+    // ============================================================
+    const missing = getMissingSpecs(mergedSpecs);
+    console.log("❓ Missing specs:", missing);
 
-    // Check if user is asking for a specific percentage
-    const percentageMatch = cleanMsg.match(/(\d{2,3})\s*%/);
-    const requestedPercentage = percentageMatch ? percentageMatch[1] : null;
-
-    if (requestedPercentage) {
-      console.log(`📊 User requested ${requestedPercentage}% shade`);
-    }
-
-    // PROPER FAMILY-BASED FILTERING
-    // Only include products that are descendants of "Malla Sombra Raschel" family
-    // This correctly excludes Borde Separador, Cinta Rígida, etc.
-
-    const MALLA_SOMBRA_ROOT_ID = '68f6c372bfaca6a28884afd7'; // Malla Sombra Raschel root
-
-    // Helper to get all descendant IDs of a family
-    async function getDescendantIds(parentId, depth = 0) {
-      if (depth > 6) return []; // Prevent infinite recursion
-      const children = await ProductFamily.find({ parentId, active: true });
-      let ids = children.map(c => c._id);
-      for (const child of children) {
-        const grandIds = await getDescendantIds(child._id, depth + 1);
-        ids = ids.concat(grandIds);
-      }
-      return ids;
-    }
-
-    // Get all product IDs in the Malla Sombra family
-    const mallaSombraFamilyIds = await getDescendantIds(MALLA_SOMBRA_ROOT_ID);
-    console.log(`📊 Found ${mallaSombraFamilyIds.length} products in Malla Sombra family`);
-
-    // Build query for sellable roll products ONLY in Malla Sombra family
-    const query = {
-      _id: { $in: mallaSombraFamilyIds },
-      sellable: true,
-      active: true
-    };
-
-    // If specific percentage requested, filter by it
-    if (requestedPercentage) {
-      // Find the percentage category first, then get its descendants
-      const percentageCategory = await ProductFamily.findOne({
-        parentId: MALLA_SOMBRA_ROOT_ID,
-        name: new RegExp(`^${requestedPercentage}%?$`, 'i')
-      });
-
-      if (percentageCategory) {
-        const percentageDescendants = await getDescendantIds(percentageCategory._id);
-        query._id = { $in: percentageDescendants };
-        console.log(`📊 Filtering to ${requestedPercentage}%: ${percentageDescendants.length} products`);
-      }
-    }
-
-    // Find sellable products (rolls or roll-like products)
-    let rollProducts = await ProductFamily.find(query)
-      .populate('parentId')
-      .sort({ priority: -1, createdAt: -1 })
-      .limit(20);
-
-    console.log(`✅ Found ${rollProducts.length} sellable malla sombra products`);
-
-    if (!rollProducts || rollProducts.length === 0) {
-      console.log("⚠️ No malla sombra roll products found in catalog, using default response");
-
-      // Provide standard roll information
-      await updateConversation(psid, {
-        lastIntent: "roll_query",
-        state: "active",
-        unknownCount: 0
-      });
-
-      let responseText = "Manejamos rollos de malla sombra en las siguientes medidas:\n\n";
-      responseText += "📏 **Rollos de 100 metros:**\n";
-      responseText += "• 4.20m x 100m (420 m² por rollo)\n";
-      responseText += "• 2.10m x 100m (210 m² por rollo)\n\n";
-      responseText += "Disponibles desde 35% hasta 90% de sombra.\n\n";
-
-      if (requestedPercentage) {
-        responseText += `Para cotizar rollos de ${requestedPercentage}%, contáctanos:\n`;
-        responseText += "💬 WhatsApp: https://wa.me/524425957432\n";
-      } else {
-        responseText += "¿Qué porcentaje de sombra necesitas?";
-      }
-
-      return {
-        type: "text",
-        text: responseText
-      };
-    }
-
-    console.log(`✅ Found ${rollProducts.length} roll products`);
-
-    // Enrich products with parent context
-    const enrichedRolls = await Promise.all(
-      rollProducts.map(product => enrichProductWithContext(product))
-    );
-
-    // Deduplicate by name only (keep the one with lowest price if duplicates)
-    const byName = new Map();
-    for (const roll of enrichedRolls) {
-      const key = roll.name;
-      if (!byName.has(key)) {
-        byName.set(key, roll);
-      } else {
-        // Keep the one with the lower price
-        const existing = byName.get(key);
-        if (roll.price && (!existing.price || roll.price < existing.price)) {
-          console.log(`⚠️ Replacing ${key} $${existing.price} with $${roll.price}`);
-          byName.set(key, roll);
-        } else {
-          console.log(`⚠️ Skipping duplicate: ${key} $${roll.price} (keeping $${existing.price})`);
-        }
-      }
-    }
-    const uniqueRolls = Array.from(byName.values());
-    console.log(`📊 After deduplication: ${uniqueRolls.length} unique products (from ${enrichedRolls.length})`);
-
-    // If user didn't specify percentage and we have multiple percentages, ask first
-    // Get unique percentages from the products
-    const percentages = new Set();
-    for (const roll of uniqueRolls) {
-      // Get percentage from ancestry (e.g., "80%" from grandparent)
-      if (roll.ancestryPath) {
-        const percentMatch = roll.ancestryPath.match(/(\d{2,3})%/);
-        if (percentMatch) percentages.add(percentMatch[1]);
-      }
-    }
-
-    // If multiple percentages and user didn't specify, ask first
-    if (percentages.size > 1 && !requestedPercentage) {
-      const percList = Array.from(percentages).sort((a, b) => parseInt(a) - parseInt(b));
-      await updateConversation(psid, {
-        lastIntent: "roll_query_need_percentage",
-        state: "active",
-        unknownCount: 0
-      });
-
-      // If more than 3 options, show range; otherwise list them
-      let optionsText;
-      if (percList.length > 3) {
-        const minPerc = percList[0];
-        const maxPerc = percList[percList.length - 1];
-        optionsText = `desde ${minPerc}% hasta ${maxPerc}%`;
-      } else {
-        optionsText = `en ${percList.map(p => `${p}%`).join(', ')}`;
-      }
-
-      return {
-        type: "text",
-        text: `¡Claro! Manejamos rollos de malla sombra ${optionsText}.\n\n¿Qué porcentaje necesitas?`
-      };
-    }
-
-    // Build response with enriched information
-    let responseText = "¡Claro! Manejamos rollos completos de malla sombra 🌿\n\n";
-
-    // Group by percentage (from ancestry path)
-    const byPercentage = {};
-    for (const roll of uniqueRolls) {
-      let percentage = "General";
-      if (roll.ancestryPath) {
-        const percentMatch = roll.ancestryPath.match(/(\d{2,3})%/);
-        if (percentMatch) percentage = `${percentMatch[1]}%`;
-      }
-      if (!byPercentage[percentage]) {
-        byPercentage[percentage] = [];
-      }
-      byPercentage[percentage].push(roll);
-    }
-
-    // Build response organized by percentage
-    for (const [percentage, rolls] of Object.entries(byPercentage)) {
-      if (percentage !== "General") {
-        responseText += `**${percentage} de sombra:**\n`;
-      }
-
-      // If more than 3 products in this group, show range instead of listing all
-      if (rolls.length > 3) {
-        // Sort by price or by numeric value in name
-        const sorted = [...rolls].sort((a, b) => {
-          if (a.price && b.price) return a.price - b.price;
-          const aNum = parseInt(String(a.name).match(/\d+/)?.[0] || 0);
-          const bNum = parseInt(String(b.name).match(/\d+/)?.[0] || 0);
-          return aNum - bNum;
-        });
-        const smallest = sorted[0];
-        const largest = sorted[sorted.length - 1];
-        const smallPrice = smallest.price ? `$${smallest.price}` : 'consultar';
-        const largePrice = largest.price ? `$${largest.price}` : 'consultar';
-
-        responseText += `Desde ${smallest.name} (${smallPrice}) hasta ${largest.name} (${largePrice})\n`;
-      } else {
-        // List all (3 or fewer)
-        for (const roll of rolls) {
-          const displayName = await getProductDisplayName(roll, 'mini');
-          responseText += `• ${displayName}`;
-          if (roll.price) {
-            responseText += ` - $${roll.price}`;
-          }
-          responseText += "\n";
-        }
-      }
-      responseText += "\n";
-    }
-
-    // Add context based on customer type
-    if (convo.customerType === 'distributor') {
-      responseText += "Como distribuidor, podemos ofrecerte precios especiales en volumen. ¿Te interesa algún rollo en particular?";
-    } else if (convo.customerType === 'fabricator') {
-      responseText += "Estos rollos son ideales para confeccionar tus propias medidas. ¿Cuál te interesa?";
-    } else {
-      responseText += "¿Te interesa alguno de estos rollos? También tenemos medidas ya confeccionadas si las prefieres.";
-    }
-
+    // ============================================================
+    // STEP 4: Save updated specs to conversation
+    // ============================================================
     await updateConversation(psid, {
-      lastIntent: "roll_query",
+      lastIntent: missing.length > 0 ? "roll_query_incomplete" : "roll_query_complete",
       state: "active",
-      unknownCount: 0
+      unknownCount: 0,
+      productInterest: "rollo",
+      productSpecs: mergedSpecs
     });
 
+    // ============================================================
+    // STEP 5: If specs are complete, provide quote or hand off
+    // ============================================================
+    if (missing.length === 0) {
+      // We have size and percentage - provide quote info
+      const width = mergedSpecs.width;
+      const percentage = mergedSpecs.percentage;
+      const quantity = mergedSpecs.quantity || 1;
+      const color = mergedSpecs.color;
+
+      let response = `✅ Perfecto, te confirmo:\n\n`;
+      response += `📦 Rollo de ${width}m x 100m al ${percentage}%`;
+      if (color) response += ` color ${color}`;
+      response += `\n📊 Cantidad: ${quantity} rollo${quantity > 1 ? 's' : ''}`;
+
+      if (mergedSpecs.customerName) {
+        response += `\n👤 Cliente: ${mergedSpecs.customerName}`;
+      }
+
+      response += `\n\nUn asesor te contactará para confirmar precio y disponibilidad. `;
+      response += `¿Necesitas algo más?`;
+
+      // Mark for human handoff
+      await updateConversation(psid, {
+        lastIntent: "roll_quote_ready",
+        handoffRequested: true,
+        handoffReason: `Roll quote: ${quantity}x ${width}m x 100m @ ${percentage}%${color ? ' ' + color : ''}`
+      });
+
+      return { type: "text", text: response };
+    }
+
+    // ============================================================
+    // STEP 6: Ask for missing info (respecting what we already know)
+    // ============================================================
+
+    // If we have size but missing percentage
+    if (!missing.includes('size') && missing.includes('percentage')) {
+      const width = mergedSpecs.width;
+      return {
+        type: "text",
+        text: `El rollo de ${width}m x 100m lo tenemos desde 35% hasta 90% de sombra.\n\n¿Qué porcentaje necesitas?`
+      };
+    }
+
+    // If we're missing size
+    if (missing.includes('size')) {
+      // Check if user mentioned a non-standard width
+      const rollDimMatch = cleanMsg.match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(100)\b|(100)\s*[xX×*]\s*(\d+(?:\.\d+)?)/i);
+      if (rollDimMatch) {
+        const width = parseFloat(rollDimMatch[1] || rollDimMatch[4]);
+        const standardWidths = [4.20, 2.10, 4.2, 2.1, 4, 2];
+        const isStandardWidth = standardWidths.some(w => Math.abs(w - width) < 0.1);
+
+        if (!isStandardWidth) {
+          return {
+            type: "text",
+            text: `Los rollos de malla sombra los manejamos en anchos estándar de:\n\n` +
+                  `• 4.20m x 100m (420 m² por rollo)\n` +
+                  `• 2.10m x 100m (210 m² por rollo)\n\n` +
+                  `¿Te interesa alguno de estos?`
+          };
+        }
+      }
+
+      // Generic roll query - ask for size
+      return {
+        type: "text",
+        text: `¡Claro! Manejamos rollos de malla sombra en:\n\n` +
+              `• 4.20m x 100m (420 m² por rollo)\n` +
+              `• 2.10m x 100m (210 m² por rollo)\n\n` +
+              `¿Qué ancho necesitas?`
+      };
+    }
+
+    // Fallback - ask for the first missing spec
     return {
       type: "text",
-      text: responseText
+      text: generateMissingSpecQuestion(mergedSpecs, missing)
     };
 
   } catch (error) {

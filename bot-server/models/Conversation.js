@@ -20,6 +20,20 @@ const conversationSchema = new mongoose.Schema({
   requestedSize: { type: String, default: null },  // Track last size user asked about
   productInterest: { type: String, default: null }, // Product type user is interested in (malla_sombra, borde_separador, rollo)
 
+  // Product specifications tracking (remembers what user already told us)
+  productSpecs: {
+    productType: { type: String, default: null },    // "rollo", "confeccionada", "ground_cover"
+    familyId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductFamily', default: null },
+    size: { type: String, default: null },           // "2x100", "4x100", "3x5"
+    width: { type: Number, default: null },          // 2, 4 (meters)
+    length: { type: Number, default: null },         // 100 (meters for rolls)
+    percentage: { type: Number, default: null },     // 90, 80, 50 (shade percentage)
+    color: { type: String, default: null },          // "negro", "verde", "beige"
+    quantity: { type: Number, default: null },       // 15 (number of units)
+    customerName: { type: String, default: null },   // "Francisco Zamudio"
+    updatedAt: { type: Date, default: null }         // When specs were last updated
+  },
+
   // Location tracking (for sales attribution)
   city: { type: String, default: null },           // City mentioned by user (e.g., "Hermosillo")
   stateMx: { type: String, default: null },        // Mexican state (e.g., "Sonora")

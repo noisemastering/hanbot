@@ -298,8 +298,14 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   // 📦 ROLL QUERIES - Handle roll questions directly before other handlers
   // "cuánto cuesta el rollo", "precio del rollo", "rollo de 50%", etc.
-  if (/\b(rol+[oy]s?)\b/i.test(msg)) {
-    console.log("📦 Roll query detected in global intents, calling roll handler");
+  // Also handles follow-up messages when user is already in a roll flow
+  const isRollMention = /\b(rol+[oy]s?)\b/i.test(msg);
+  const isInRollFlow = convo.productSpecs?.productType === 'rollo' && convo.lastIntent?.startsWith('roll_');
+
+  if (isRollMention || isInRollFlow) {
+    console.log(isInRollFlow
+      ? "📦 In roll flow, routing to roll handler"
+      : "📦 Roll query detected in global intents, calling roll handler");
     const rollResponse = await handleRollQuery(msg, psid, convo);
     if (rollResponse) return rollResponse;
     // If roll handler returns null, continue to other handlers
@@ -699,14 +705,52 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 💰 SIMPLE PRICE QUERY - "Precio!", "Precio?", "Precio", "Costo"
+  // This is a standalone intent - user is asking for pricing without specifying product
+  // Route based on their existing product interest, or ask what they need
+  const isSimplePriceQuery = /^precio[s]?[!?]*$/i.test(msg.trim()) || /^costo[s]?[!?]*$/i.test(msg.trim());
+
+  if (isSimplePriceQuery) {
+    console.log("💰 Simple price intent detected:", msg);
+
+    // Route based on existing product interest
+    if (convo.productInterest === 'borde_separador') {
+      console.log("💰 → Routing to borde separador (existing interest)");
+      await updateConversation(psid, { lastIntent: "price_query_borde" });
+      return {
+        type: "text",
+        text: "¡Claro! Manejamos borde separador para jardín en diferentes presentaciones:\n\n" +
+              "• Rollo de 6 metros\n" +
+              "• Rollo de 9 metros\n" +
+              "• Rollo de 18 metros\n" +
+              "• Rollo de 54 metros\n\n" +
+              "¿Qué largo necesitas? Te paso el link con precio."
+      };
+    }
+
+    if (convo.productInterest === 'rollo' || convo.productSpecs?.productType === 'rollo') {
+      console.log("💰 → Routing to roll handler (existing interest)");
+      await updateConversation(psid, { lastIntent: "price_query_rollo" });
+      return await handleRollQuery(msg, psid, convo);
+    }
+
+    // Default: malla sombra confeccionada
+    console.log("💰 → Default to malla sombra (no specific interest)");
+    await updateConversation(psid, { lastIntent: "price_query_general" });
+    return {
+      type: "text",
+      text: "Tenemos mallas sombra beige en varias medidas, desde 2x2m hasta 6x10m, y también rollos de 100m.\n\n" +
+            "Para darte el precio exacto, ¿qué medida necesitas para tu proyecto? 📐"
+    };
+  }
+
   // 📋 CATALOG REQUEST - Handle requests for general pricing, sizes, and colors listing
   // Instead of dumping a huge list, ask for specific dimensions
   // NOTE: "precios y medidas" is handled by EXPLICIT LIST REQUEST below to show the full list
   if (/\b(pongan?|den|muestren?|env[ií]en?|pasame?|pasen?|listado?)\s+(de\s+)?(precios?|medidas?|opciones?|tama[ñn]os?|colores?)\b/i.test(msg) ||
       /\b(hacer\s+presupuesto|cotizaci[oó]n|cotizar)\b/i.test(msg) ||
       /\b(opciones?\s+disponibles?)\b/i.test(msg) ||
-      /\b(medidas?\s+est[aá]ndares?)\b/i.test(msg) ||
-      /^costo[s]?$/i.test(msg.trim())) { // Just "costo" by itself
+      /\b(medidas?\s+est[aá]ndares?)\b/i.test(msg)) {
 
     await updateConversation(psid, { lastIntent: "catalog_request" });
 

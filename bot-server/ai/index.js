@@ -31,6 +31,15 @@ const { handleHumanSalesFlow } = require("./core/humanSalesHandler");
 const { correctTypos, logTypoCorrection } = require("./utils/typoCorrection");
 const { getProductDisplayName, determineVerbosity } = require("./utils/productEnricher");
 
+// Layer 0: Source Context Detection
+const { buildSourceContext, logSourceContext, getProductFromSource } = require("./context");
+
+// Layer 1: Intent Classification
+const { classify, logClassification } = require("./classifier");
+
+// Layer 2-3: Flow Router
+const { processMessage: processWithFlows } = require("./flows");
+
 
 
 const openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
@@ -448,8 +457,51 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
 async function generateReply(userMessage, psid, referral = null) {
   const convo = await getConversation(psid);
 
-  // Get the response from internal logic
-  const response = await generateReplyInternal(userMessage, psid, convo, referral);
+  // ====== LAYER 0: SOURCE CONTEXT ======
+  // Detect where this conversation came from (ad, comment, cold DM, returning user)
+  const sourceContext = await buildSourceContext(
+    referral ? { referral, sender: { id: psid } } : { sender: { id: psid } },
+    convo,
+    convo?.channel || "facebook"
+  );
+
+  // Log source context for analytics
+  logSourceContext(psid, sourceContext, userMessage);
+  // ====== END LAYER 0 ======
+
+  // ====== LAYER 1: INTENT CLASSIFICATION ======
+  // Classify the user's intent using AI (runs in parallel, logging only for now)
+  const conversationFlow = convo?.productSpecs ? {
+    product: convo.productSpecs.productType,
+    stage: convo.lastIntent,
+    collected: convo.productSpecs
+  } : null;
+
+  const classification = await classify(userMessage, sourceContext, conversationFlow);
+  logClassification(psid, userMessage, classification);
+  // ====== END LAYER 1 ======
+
+  // ====== LAYER 2-3: FLOW ROUTING ======
+  // Try new flow system first
+  let response = null;
+
+  try {
+    response = await processWithFlows(classification, sourceContext, convo, psid, userMessage);
+
+    if (response) {
+      console.log(`✅ New flow system handled message (${response.handledBy})`);
+    } else {
+      console.log(`⚠️ New flow system returned null, falling back to old system`);
+    }
+  } catch (flowError) {
+    console.error(`❌ Error in new flow system, falling back to old:`, flowError.message);
+  }
+  // ====== END LAYER 2-3 ======
+
+  // Fall back to old system if new system didn't handle it
+  if (!response) {
+    response = await generateReplyInternal(userMessage, psid, convo, referral);
+  }
 
   // Check for repetition and escalate if needed
   return await checkForRepetition(response, psid, convo);
