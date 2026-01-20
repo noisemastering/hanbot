@@ -109,6 +109,9 @@ async function handleCurrentStep(msg, psid, convo) {
     case 'asking_zipcode':
       return await handleZipcodeResponse(msg, psid, convo);
 
+    case 'asking_neighborhood':
+      return await handleNeighborhoodResponse(msg, psid, convo);
+
     case 'asking_product_selection':
       return await handleProductSelectionResponse(msg, psid, convo);
 
@@ -149,6 +152,117 @@ async function handleZipcodeResponse(msg, psid, convo) {
     };
   }
 
+  // Check if there are multiple neighborhoods for this zip code
+  if (zipInfo.hasMultipleNeighborhoods && zipInfo.neighborhoods.length > 1) {
+    console.log(`🏘️ Zip code ${zipcode} has ${zipInfo.neighborhoods.length} neighborhoods, asking user to pick`);
+
+    await updateConversation(psid, {
+      humanSalesState: 'asking_neighborhood',
+      humanSalesZipcode: zipcode,
+      humanSalesPendingNeighborhoods: zipInfo.neighborhoods
+    });
+
+    // Build neighborhood list
+    let responseText = `📍 El código postal ${zipcode} tiene varias colonias:\n\n`;
+
+    // If more than 5 neighborhoods, show first 5 with message about more
+    const maxToShow = 5;
+    const toShow = zipInfo.neighborhoods.slice(0, maxToShow);
+
+    toShow.forEach((n, i) => {
+      responseText += `${i + 1}. ${n.name}\n`;
+    });
+
+    if (zipInfo.neighborhoods.length > maxToShow) {
+      responseText += `... y ${zipInfo.neighborhoods.length - maxToShow} más\n`;
+    }
+
+    responseText += `\n¿En cuál colonia estás? (puedes escribir el nombre o el número)`;
+
+    return {
+      type: "text",
+      text: responseText
+    };
+  }
+
+  // Single neighborhood or none - proceed with normal flow
+  return await proceedAfterLocation(zipcode, zipInfo, psid, convo);
+}
+
+/**
+ * Handle neighborhood selection response
+ */
+async function handleNeighborhoodResponse(msg, psid, convo) {
+  const neighborhoods = convo.humanSalesPendingNeighborhoods || [];
+  const msgLower = msg.toLowerCase().trim();
+
+  // Try to match by number
+  const numMatch = msg.match(/^(\d+)$/);
+  if (numMatch) {
+    const idx = parseInt(numMatch[1]) - 1;
+    if (idx >= 0 && idx < neighborhoods.length) {
+      const selected = neighborhoods[idx];
+      return await selectNeighborhoodAndProceed(selected.name, psid, convo);
+    }
+  }
+
+  // Try to match by name (partial match)
+  const normalizedMsg = msgLower.normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+
+  for (const n of neighborhoods) {
+    const normalizedName = n.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    if (normalizedName.includes(normalizedMsg) || normalizedMsg.includes(normalizedName)) {
+      return await selectNeighborhoodAndProceed(n.name, psid, convo);
+    }
+  }
+
+  // Check if there are similar matches
+  const closeMatches = neighborhoods.filter(n => {
+    const normalizedName = n.name.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+    // Check if any word matches
+    const msgWords = normalizedMsg.split(/\s+/);
+    const nameWords = normalizedName.split(/\s+/);
+    return msgWords.some(w => nameWords.some(nw => nw.includes(w) || w.includes(nw)));
+  });
+
+  if (closeMatches.length === 1) {
+    return await selectNeighborhoodAndProceed(closeMatches[0].name, psid, convo);
+  } else if (closeMatches.length > 1 && closeMatches.length <= 3) {
+    let responseText = "Encontré varias colonias similares:\n\n";
+    closeMatches.forEach((n, i) => {
+      responseText += `${i + 1}. ${n.name}\n`;
+    });
+    responseText += "\n¿Cuál es la tuya?";
+    return { type: "text", text: responseText };
+  }
+
+  // No match found
+  return {
+    type: "text",
+    text: "No encontré esa colonia. Por favor escribe el nombre o número de la lista, o si prefieres dame otro código postal."
+  };
+}
+
+/**
+ * Select neighborhood and proceed to product options
+ */
+async function selectNeighborhoodAndProceed(neighborhoodName, psid, convo) {
+  const zipcode = convo.humanSalesZipcode;
+  const zipInfo = await ZipCode.lookup(zipcode);
+
+  await updateConversation(psid, {
+    humanSalesNeighborhood: neighborhoodName,
+    humanSalesPendingNeighborhoods: []
+  });
+
+  console.log(`✅ User selected neighborhood: ${neighborhoodName}`);
+  return await proceedAfterLocation(zipcode, zipInfo, psid, convo, neighborhoodName);
+}
+
+/**
+ * Continue flow after location is confirmed (zipcode + optional neighborhood)
+ */
+async function proceedAfterLocation(zipcode, zipInfo, psid, convo, neighborhood = null) {
   // Get available product options (sizes/colors) for the current product
   const currentProduct = await ProductFamily.findById(convo.humanSalesCurrentProduct)
     .populate('parentId');
@@ -176,7 +290,10 @@ async function handleZipcodeResponse(msg, psid, convo) {
   }
 
   // Build location confirmation
-  const locationText = `📍 ${zipInfo.city}, ${zipInfo.state}`;
+  let locationText = `📍 ${zipInfo.city}, ${zipInfo.state}`;
+  if (neighborhood) {
+    locationText = `📍 ${neighborhood}, ${zipInfo.city}, ${zipInfo.state}`;
+  }
 
   // If only 1 option, auto-select it
   if (options.length === 1) {
@@ -186,6 +303,7 @@ async function handleZipcodeResponse(msg, psid, convo) {
     await updateConversation(psid, {
       humanSalesState: 'asking_quantity',
       humanSalesZipcode: zipcode,
+      humanSalesNeighborhood: neighborhood,
       humanSalesLocation: zipInfo,
       humanSalesCurrentProduct: selectedProduct._id
     });
@@ -232,6 +350,7 @@ async function handleZipcodeResponse(msg, psid, convo) {
   await updateConversation(psid, {
     humanSalesState: 'asking_product_selection',
     humanSalesZipcode: zipcode,
+    humanSalesNeighborhood: neighborhood,
     humanSalesLocation: zipInfo
   });
 
@@ -465,7 +584,10 @@ async function handleQuantityResponse(msg, psid, convo) {
     summaryText += `${index + 1}. ${item.quantity}x ${item.productName}\n`;
   });
 
-  summaryText += `\n📍 Código postal: ${convo.humanSalesZipcode}\n\n`;
+  const locationLine = convo.humanSalesNeighborhood
+    ? `📍 ${convo.humanSalesNeighborhood}, CP ${convo.humanSalesZipcode}`
+    : `📍 Código postal: ${convo.humanSalesZipcode}`;
+  summaryText += `\n${locationLine}\n\n`;
   summaryText += `¿Deseas agregar otro producto? (Sí/No)`;
 
   return {
@@ -497,12 +619,16 @@ async function handleMoreItemsResponse(msg, psid, convo) {
     // Finalize order and notify human advisor
     const cart = convo.humanSalesCart || [];
     const zipcode = convo.humanSalesZipcode;
+    const neighborhood = convo.humanSalesNeighborhood;
 
     let orderSummary = `🛒 NUEVO PEDIDO - Requiere cotización de envío\n\n`;
     orderSummary += `📋 Productos:\n`;
     cart.forEach((item, index) => {
       orderSummary += `${index + 1}. ${item.quantity}x ${item.productName}\n`;
     });
+    if (neighborhood) {
+      orderSummary += `\n📍 Colonia: ${neighborhood}\n`;
+    }
     orderSummary += `\n📍 Código Postal: ${zipcode}\n`;
     orderSummary += `\n⏰ ${new Date().toLocaleString('es-MX')}\n`;
 
@@ -511,6 +637,8 @@ async function handleMoreItemsResponse(msg, psid, convo) {
       humanSalesState: null,
       humanSalesCart: [],
       humanSalesZipcode: null,
+      humanSalesNeighborhood: null,
+      humanSalesPendingNeighborhoods: [],
       humanSalesCurrentProduct: null,
       handoffRequested: true,
       handoffReason: 'human_sellable_product_order',

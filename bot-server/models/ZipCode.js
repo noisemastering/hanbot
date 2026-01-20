@@ -12,7 +12,12 @@ const zipCodeSchema = new mongoose.Schema({
     type: String,
     enum: ['metro', 'near', 'far', 'remote'],
     default: 'far'
-  }
+  },
+  // Neighborhoods (colonias) covered by this zip code
+  neighborhoods: [{
+    name: { type: String, required: true },
+    type: { type: String } // Colonia, Fraccionamiento, Unidad habitacional, etc.
+  }]
 }, { timestamps: true });
 
 // Helper to get shipping estimate based on zone
@@ -42,7 +47,9 @@ zipCodeSchema.statics.lookup = async function(code) {
     municipality: zip.municipality,
     city: zip.city || zip.municipality,
     zone: zip.zone,
-    shipping: zip.getShippingEstimate()
+    shipping: zip.getShippingEstimate(),
+    neighborhoods: zip.neighborhoods || [],
+    hasMultipleNeighborhoods: (zip.neighborhoods?.length || 0) > 1
   };
 };
 

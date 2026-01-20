@@ -52,7 +52,7 @@ async function importZipCodes(filePath) {
   // Skip header lines (first 2 lines)
   const dataLines = lines.slice(2);
 
-  // Group by zipcode (take first occurrence for each)
+  // Group by zipcode, collecting all neighborhoods
   const zipCodes = new Map();
 
   for (const line of dataLines) {
@@ -61,10 +61,16 @@ async function importZipCodes(filePath) {
     const parts = line.split('|');
     if (parts.length < 6) continue;
 
-    const [code, , , municipality, state, city, , stateCode, , , , , , zone] = parts;
+    // SEPOMEX format: d_codigo|d_asenta|d_tipo_asenta|D_mnpio|d_estado|d_ciudad|d_CP|c_estado|...
+    const [code, neighborhood, neighborhoodType, municipality, state, city, , stateCode, , , , , , zone] = parts;
 
-    // Only store first occurrence per zipcode
+    const neighborhoodEntry = {
+      name: neighborhood?.trim() || '',
+      type: neighborhoodType?.trim() || 'Colonia'
+    };
+
     if (!zipCodes.has(code)) {
+      // First occurrence - create the zip code entry
       zipCodes.set(code, {
         code: code.padStart(5, '0'),
         state: state.trim(),
@@ -72,12 +78,22 @@ async function importZipCodes(filePath) {
         municipality: municipality.trim(),
         city: city?.trim() || municipality.trim(),
         zone: zone?.trim() || 'Urbano',
-        shippingZone: getShippingZone(state.trim(), zone?.trim())
+        shippingZone: getShippingZone(state.trim(), zone?.trim()),
+        neighborhoods: neighborhoodEntry.name ? [neighborhoodEntry] : []
       });
+    } else {
+      // Additional neighborhood for existing zip code
+      if (neighborhoodEntry.name) {
+        zipCodes.get(code).neighborhoods.push(neighborhoodEntry);
+      }
     }
   }
 
   console.log(`📍 Found ${zipCodes.size} unique postal codes`);
+
+  // Count zip codes with multiple neighborhoods
+  const multiNeighborhood = Array.from(zipCodes.values()).filter(z => z.neighborhoods.length > 1);
+  console.log(`🏘️  ${multiNeighborhood.length} zip codes have multiple neighborhoods`);
 
   // Clear existing data
   await ZipCode.deleteMany({});

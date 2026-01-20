@@ -40,7 +40,7 @@ const conversationSchema = new mongoose.Schema({
   // Human-sellable product flow (multi-step purchase)
   humanSalesState: {
     type: String,
-    enum: [null, 'asking_zipcode', 'asking_product_selection', 'asking_quantity', 'asking_more_items'],
+    enum: [null, 'asking_zipcode', 'asking_neighborhood', 'asking_product_selection', 'asking_quantity', 'asking_more_items'],
     default: null
   },
   humanSalesCart: [{
@@ -50,6 +50,8 @@ const conversationSchema = new mongoose.Schema({
     addedAt: { type: Date, default: Date.now }
   }],
   humanSalesZipcode: { type: String, default: null },
+  humanSalesNeighborhood: { type: String, default: null },
+  humanSalesPendingNeighborhoods: [{ name: String, type: String }],
   humanSalesCurrentProduct: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductFamily', default: null }
 });
 
