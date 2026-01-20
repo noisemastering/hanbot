@@ -207,7 +207,7 @@ async function handleZipcodeResponse(msg, psid, convo) {
     responseText += `${index + 1}. ${option.name} - ${price}\n`;
   });
 
-  responseText += `\n¿Cuál opción te interesa? Responde con el número.`;
+  responseText += `\n¿Cuál opción te interesa?`;
 
   await updateConversation(psid, {
     humanSalesState: 'asking_product_selection',
@@ -223,21 +223,10 @@ async function handleZipcodeResponse(msg, psid, convo) {
 }
 
 /**
- * Handle product selection response
+ * Handle product selection response - understands natural language
+ * Examples: "50 y 70%", "el de 80", "35%", "1 y 3", "la primera"
  */
 async function handleProductSelectionResponse(msg, psid, convo) {
-  // Extract number selection (1-based)
-  const numberMatch = msg.match(/\b(\d+)\b/);
-
-  if (!numberMatch) {
-    return {
-      type: "text",
-      text: "Por favor responde con el número de la opción que te interesa (ejemplo: 1)"
-    };
-  }
-
-  const selection = parseInt(numberMatch[1]);
-
   // Get current product to find available options
   const currentProduct = await ProductFamily.findById(convo.humanSalesCurrentProduct)
     .populate('parentId');
@@ -257,16 +246,48 @@ async function handleProductSelectionResponse(msg, psid, convo) {
     requiresHumanAdvisor: true
   }).sort({ priority: -1, name: 1 });
 
-  if (selection < 1 || selection > options.length) {
+  if (options.length === 0) {
     return {
       type: "text",
-      text: options.length === 1
-        ? "Solo hay una opción disponible. Responde con 1 para seleccionarla."
-        : `Por favor selecciona un número entre 1 y ${options.length}`
+      text: "No hay opciones disponibles. Un asesor te contactará pronto."
     };
   }
 
-  const selectedProduct = options[selection - 1];
+  // Parse user selection - try multiple methods
+  const selectedIndices = parseProductSelection(msg, options);
+
+  if (selectedIndices.length === 0) {
+    // Couldn't understand, ask again with examples
+    const exampleOptions = options.slice(0, 2).map(o => {
+      const percentMatch = o.name.match(/(\d+)%?/);
+      return percentMatch ? percentMatch[1] + "%" : o.name;
+    }).join(" o ");
+
+    return {
+      type: "text",
+      text: `No entendí tu selección. ¿Cuál opción te interesa? Por ejemplo: "${exampleOptions}"`
+    };
+  }
+
+  // Handle multiple selections (e.g., "50 y 70%")
+  if (selectedIndices.length > 1) {
+    const selectedNames = selectedIndices.map(i => options[i].name).join(" y ");
+
+    // Store multiple selections for sequential processing
+    await updateConversation(psid, {
+      humanSalesState: 'asking_quantity',
+      humanSalesCurrentProduct: options[selectedIndices[0]]._id,
+      humanSalesPendingSelections: selectedIndices.slice(1).map(i => options[i]._id)
+    });
+
+    return {
+      type: "text",
+      text: `¡Perfecto! Has seleccionado: ${selectedNames} 📦\n\nEmpecemos con ${options[selectedIndices[0]].name}. ¿Cuántos rollos necesitas de este?`
+    };
+  }
+
+  // Single selection
+  const selectedProduct = options[selectedIndices[0]];
 
   await updateConversation(psid, {
     humanSalesState: 'asking_quantity',
@@ -275,8 +296,71 @@ async function handleProductSelectionResponse(msg, psid, convo) {
 
   return {
     type: "text",
-    text: `Perfecto! Has seleccionado: ${selectedProduct.name} 📦\n\n¿Cuántos rollos necesitas?`
+    text: `¡Perfecto! Has seleccionado: ${selectedProduct.name} 📦\n\n¿Cuántos rollos necesitas?`
   };
+}
+
+/**
+ * Parse user's product selection from natural language
+ * Returns array of indices (0-based) of matched options
+ */
+function parseProductSelection(msg, options) {
+  const selectedIndices = [];
+  const msgLower = msg.toLowerCase();
+
+  // Extract all numbers and percentages from message
+  // Matches: "50", "50%", "70 %", etc.
+  const numbersInMsg = [...msgLower.matchAll(/(\d+)\s*%?/g)].map(m => parseInt(m[1]));
+
+  // Try to match by percentage/number in option name
+  for (let i = 0; i < options.length; i++) {
+    const optionName = options[i].name.toLowerCase();
+
+    // Extract percentage from option name (e.g., "35%" from "35% - Rollo...")
+    const optionPercentMatch = optionName.match(/(\d+)%?/);
+    const optionPercent = optionPercentMatch ? parseInt(optionPercentMatch[1]) : null;
+
+    // Check if any number in message matches this option's percentage
+    if (optionPercent && numbersInMsg.includes(optionPercent)) {
+      if (!selectedIndices.includes(i)) {
+        selectedIndices.push(i);
+      }
+    }
+  }
+
+  // If we found matches by percentage, return them
+  if (selectedIndices.length > 0) {
+    return selectedIndices;
+  }
+
+  // Try matching by list number (1, 2, 3, etc.) - but only if no percentage match
+  for (const num of numbersInMsg) {
+    if (num >= 1 && num <= options.length) {
+      const idx = num - 1;
+      if (!selectedIndices.includes(idx)) {
+        selectedIndices.push(idx);
+      }
+    }
+  }
+
+  // Try matching ordinals (primero, segundo, etc.)
+  const ordinals = [
+    { pattern: /\b(primer[oa]?|1er[oa]?)\b/i, index: 0 },
+    { pattern: /\b(segund[oa]?|2d[oa]?)\b/i, index: 1 },
+    { pattern: /\b(tercer[oa]?|3er[oa]?)\b/i, index: 2 },
+    { pattern: /\b(cuart[oa]?|4t[oa]?)\b/i, index: 3 },
+    { pattern: /\b(quint[oa]?|5t[oa]?)\b/i, index: 4 }
+  ];
+
+  for (const ord of ordinals) {
+    if (ord.pattern.test(msgLower) && ord.index < options.length) {
+      if (!selectedIndices.includes(ord.index)) {
+        selectedIndices.push(ord.index);
+      }
+    }
+  }
+
+  return selectedIndices;
 }
 
 /**
@@ -321,10 +405,35 @@ async function handleQuantityResponse(msg, psid, convo) {
 
   const updatedCart = [...(convo.humanSalesCart || []), cartItem];
 
+  // Check if there are pending selections (user selected multiple products like "50 y 70%")
+  const pendingSelections = convo.humanSalesPendingSelections || [];
+
+  if (pendingSelections.length > 0) {
+    // Move to next pending selection
+    const nextProductId = pendingSelections[0];
+    const remainingSelections = pendingSelections.slice(1);
+    const nextProduct = await ProductFamily.findById(nextProductId);
+
+    await updateConversation(psid, {
+      humanSalesState: 'asking_quantity',
+      humanSalesCart: updatedCart,
+      humanSalesCurrentProduct: nextProductId,
+      humanSalesPendingSelections: remainingSelections
+    });
+
+    return {
+      type: "text",
+      text: `✅ Agregado: ${quantity}x ${selectedProduct.name}\n\n` +
+            `Ahora para ${nextProduct?.name || 'el siguiente producto'}, ¿cuántos rollos necesitas?`
+    };
+  }
+
+  // No pending selections - go to "more items?" flow
   await updateConversation(psid, {
     humanSalesState: 'asking_more_items',
     humanSalesCart: updatedCart,
-    humanSalesCurrentProduct: null
+    humanSalesCurrentProduct: null,
+    humanSalesPendingSelections: []
   });
 
   // Build cart summary
