@@ -542,4 +542,62 @@ router.get('/correlation-stats', async (req, res) => {
   }
 });
 
+// GET /analytics/clicks-by-ad - Get click stats aggregated by ad
+router.get('/clicks-by-ad', async (req, res) => {
+  try {
+    // Aggregate clicks from ClickLog grouped by adId
+    const clickStats = await ClickLog.aggregate([
+      {
+        $match: {
+          adId: { $ne: null },
+          clicked: true
+        }
+      },
+      {
+        $group: {
+          _id: '$adId',
+          clicks: { $sum: 1 },
+          conversions: {
+            $sum: { $cond: ['$converted', 1, 0] }
+          }
+        }
+      },
+      { $sort: { clicks: -1 } }
+    ]);
+
+    // Get ad details for the top ads (adId in ClickLog is the Facebook Ad ID = fbAdId)
+    const Ad = require('../models/Ad');
+    const fbAdIds = clickStats.map(s => s._id);
+    const ads = await Ad.find({ fbAdId: { $in: fbAdIds } }).lean();
+
+    // Merge ad details with click stats
+    const result = clickStats.map(stat => {
+      const ad = ads.find(a => a.fbAdId === stat._id);
+      return {
+        adId: stat._id,
+        mongoId: ad?._id,
+        name: ad?.name || 'Unknown Ad',
+        clicks: stat.clicks,
+        conversions: stat.conversions,
+        conversionRate: stat.clicks > 0 ? ((stat.conversions / stat.clicks) * 100).toFixed(1) : 0
+      };
+    });
+
+    // Find best ad (most clicks)
+    const bestAd = result.length > 0 ? result[0] : null;
+
+    res.json({
+      success: true,
+      bestAd,
+      allAds: result
+    });
+  } catch (error) {
+    console.error('❌ Error fetching clicks by ad:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 module.exports = router;

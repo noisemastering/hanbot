@@ -373,6 +373,9 @@ function App() {
   const [selectedParentId, setSelectedParentId] = useState(null);
   const [deleteConfirmProductFamily, setDeleteConfirmProductFamily] = useState(null);
 
+  // Click stats from ClickLog (for analytics)
+  const [clickStats, setClickStats] = useState({ bestAd: null, allAds: [] });
+
   const fetchMessages = async () => {
     try {
       const res = await fetch(`${API_URL}/conversations`, {
@@ -468,6 +471,18 @@ function App() {
       console.error("Error fetching campaigns:", error);
     } finally {
       setCampaignsLoading(false);
+    }
+  };
+
+  const fetchClickStats = async () => {
+    try {
+      const res = await fetch(`${API_URL}/analytics/clicks-by-ad`);
+      const data = await res.json();
+      if (data.success) {
+        setClickStats({ bestAd: data.bestAd, allAds: data.allAds || [] });
+      }
+    } catch (error) {
+      console.error("Error fetching click stats:", error);
     }
   };
 
@@ -1097,9 +1112,12 @@ function App() {
   }, [location.pathname]);
 
   useEffect(() => {
-    if (location.pathname === "/campaigns" || location.pathname === "/") {
+    if (location.pathname === "/campaigns" || location.pathname === "/" || location.pathname === "/analytics") {
       fetchCampaigns();
       fetchAdSets(); // Also fetch adsets for Ad modal dropdown
+    }
+    if (location.pathname === "/analytics") {
+      fetchClickStats(); // Fetch click stats from ClickLog for analytics
     }
   }, [location.pathname]);
 
@@ -1235,15 +1253,8 @@ function App() {
   console.log("Campaigns state:", campaigns);
   console.log("Active campaigns count:", activeCampaigns);
 
-  // Find best performing ad (by clicks)
-  const allAds = campaigns.flatMap(c =>
-    (c.adSets || []).flatMap(as => as.ads || [])
-  );
-  const bestAd = allAds.reduce((best, ad) => {
-    const adClicks = ad.stats?.clicks || 0;
-    const bestClicks = best?.stats?.clicks || 0;
-    return adClicks > bestClicks ? ad : best;
-  }, null);
+  // Best ad comes from clickStats (aggregated from ClickLog)
+  const bestAd = clickStats.bestAd;
 
   let filteredMessages = messages;
 
@@ -1901,9 +1912,9 @@ function App() {
                   <Link to="/campaigns" className="bg-gradient-to-br from-rose-500/10 to-rose-600/5 backdrop-blur-lg border border-rose-500/20 rounded-xl p-6 hover:border-rose-500/40 transition-colors cursor-pointer">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-gray-400 mb-1">Mejor Anuncio</p>
+                        <p className="text-sm font-medium text-gray-400 mb-1">Anuncio con más clics</p>
                         <h3 className="text-lg font-bold text-white truncate max-w-[150px]">{bestAd?.name || '-'}</h3>
-                        <p className="text-sm text-rose-400">{bestAd?.stats?.clicks || 0} clicks</p>
+                        <p className="text-sm text-rose-400">{bestAd?.clicks || 0} clics</p>
                       </div>
                       <div className="w-12 h-12 bg-rose-500/20 rounded-lg flex items-center justify-center">
                         <svg className="w-6 h-6 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
