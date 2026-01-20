@@ -30,19 +30,25 @@ const FLOWS = [
  * @param {object} sourceContext - From Layer 0 (channel, entry point, ad context)
  * @param {object} convo - Current conversation state
  * @param {string} psid - User's PSID
+ * @param {object} campaign - Campaign document (optional)
  * @returns {object|null} Response { text, type } or null if no flow handles it
  */
-async function routeToFlow(classification, sourceContext, convo, psid) {
+async function routeToFlow(classification, sourceContext, convo, psid, campaign = null) {
   const { intent, product, entities, confidence } = classification;
 
   console.log(`🔀 Flow router - Product: ${product}, Intent: ${intent}, Confidence: ${confidence}`);
+
+  if (campaign) {
+    console.log(`📣 Campaign active: ${campaign.name} (goal: ${campaign.conversationGoal})`);
+  }
 
   // Check each flow in priority order
   for (const { name, flow } of FLOWS) {
     if (flow.shouldHandle(classification, sourceContext, convo)) {
       console.log(`✅ Routing to ${name} flow`);
 
-      const response = await flow.handle(classification, sourceContext, convo, psid);
+      // Pass campaign to flow handler
+      const response = await flow.handle(classification, sourceContext, convo, psid, campaign);
 
       if (response) {
         return {
@@ -61,10 +67,24 @@ async function routeToFlow(classification, sourceContext, convo, psid) {
 /**
  * Determine the primary product from classification and context
  */
-function determinePrimaryProduct(classification, sourceContext, convo) {
+function determinePrimaryProduct(classification, sourceContext, convo, campaign = null) {
   // Explicit product from classification
   if (classification.product && classification.product !== PRODUCTS.UNKNOWN) {
     return classification.product;
+  }
+
+  // Product from campaign
+  if (campaign?.products?.length > 0) {
+    // Map campaign product to our product types
+    const campaignProduct = campaign.products[0];
+    if (campaignProduct.category === "agricultura" || campaignProduct.sku?.includes("AGR")) {
+      return PRODUCTS.ROLLO;
+    }
+    if (campaignProduct.name?.toLowerCase().includes("borde")) {
+      return PRODUCTS.BORDE_SEPARADOR;
+    }
+    // Default to malla sombra for confeccionada
+    return PRODUCTS.MALLA_SOMBRA;
   }
 
   // Product from ad context
@@ -88,7 +108,10 @@ function determinePrimaryProduct(classification, sourceContext, convo) {
  * Check if the conversation is in a "cold start" state
  * (no product context established yet)
  */
-function isColdStart(classification, sourceContext, convo) {
+function isColdStart(classification, sourceContext, convo, campaign = null) {
+  // Has campaign = not cold (we know the product context)
+  if (campaign?.products?.length > 0) return false;
+
   // Has ad context with product = not cold
   if (sourceContext?.ad?.product) return false;
 
@@ -135,46 +158,65 @@ async function handleColdStart(classification, sourceContext, convo, psid) {
 /**
  * Log the routing decision for debugging
  */
-function logRouting(psid, classification, sourceContext, handledBy) {
+function logRouting(psid, classification, sourceContext, handledBy, campaign = null) {
   console.log(`📊 [${psid?.slice(-4) || '????'}] Routing decision:`, {
     intent: classification.intent,
     product: classification.product,
     handledBy: handledBy || "none",
-    sourceProduct: sourceContext?.inferredProduct || "none"
+    sourceProduct: sourceContext?.inferredProduct || "none",
+    campaign: campaign?.ref || "none",
+    goal: campaign?.conversationGoal || "none"
   });
+}
+
+/**
+ * Check if we should hand off to human based on campaign goal
+ */
+function shouldHandoffForQuote(campaign) {
+  if (!campaign) return false;
+
+  // Check conversation goal
+  if (campaign.conversationGoal === "cotizacion") return true;
+
+  // Check if any product requires quote
+  if (typeof campaign.requiresQuote === 'function') {
+    return campaign.requiresQuote();
+  }
+
+  return false;
 }
 
 /**
  * Main entry point for Layer 2-3
  * Called from ai/index.js after classification
  */
-async function processMessage(classification, sourceContext, convo, psid, userMessage) {
-  // Check for cold start
-  if (isColdStart(classification, sourceContext, convo) &&
+async function processMessage(classification, sourceContext, convo, psid, userMessage, campaign = null) {
+  // Check for cold start (but campaign context means not cold)
+  if (isColdStart(classification, sourceContext, convo, campaign) &&
       classification.intent !== INTENTS.GREETING) {
     // But first check if this is a general query that we can handle
-    const generalResponse = await generalFlow.handle(classification, sourceContext, convo, psid);
+    const generalResponse = await generalFlow.handle(classification, sourceContext, convo, psid, campaign);
     if (generalResponse) {
-      logRouting(psid, classification, sourceContext, "general");
+      logRouting(psid, classification, sourceContext, "general", campaign);
       return generalResponse;
     }
 
     // True cold start
     const coldResponse = await handleColdStart(classification, sourceContext, convo, psid);
-    logRouting(psid, classification, sourceContext, "cold_start");
+    logRouting(psid, classification, sourceContext, "cold_start", campaign);
     return coldResponse;
   }
 
   // Route to appropriate flow
-  const response = await routeToFlow(classification, sourceContext, convo, psid);
+  const response = await routeToFlow(classification, sourceContext, convo, psid, campaign);
 
   if (response) {
-    logRouting(psid, classification, sourceContext, response.handledBy);
+    logRouting(psid, classification, sourceContext, response.handledBy, campaign);
     return response;
   }
 
   // Fallback: No flow handled it
-  logRouting(psid, classification, sourceContext, null);
+  logRouting(psid, classification, sourceContext, null, campaign);
   return null;
 }
 
@@ -184,5 +226,6 @@ module.exports = {
   determinePrimaryProduct,
   isColdStart,
   handleColdStart,
+  shouldHandoffForQuote,
   FLOWS
 };

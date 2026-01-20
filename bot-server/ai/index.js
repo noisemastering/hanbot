@@ -475,15 +475,39 @@ async function generateReply(userMessage, psid, referral = null) {
   logSourceContext(psid, sourceContext, userMessage);
   // ====== END LAYER 0 ======
 
+  // ====== LOAD CAMPAIGN CONTEXT ======
+  let campaign = null;
+  let campaignContext = null;
+
+  // Check for campaign from referral or existing conversation
+  const campaignRef = referral?.ref || convo?.campaignRef;
+  if (campaignRef) {
+    try {
+      campaign = await Campaign.findOne({ ref: campaignRef, active: true });
+      if (campaign) {
+        campaignContext = campaign.toAIContext();
+        console.log(`📣 Campaign loaded: ${campaign.name} (goal: ${campaign.conversationGoal})`);
+
+        // Save campaign ref to conversation if new
+        if (!convo?.campaignRef && referral?.ref) {
+          await updateConversation(psid, { campaignRef: campaign.ref });
+        }
+      }
+    } catch (err) {
+      console.error(`⚠️ Error loading campaign:`, err.message);
+    }
+  }
+  // ====== END CAMPAIGN CONTEXT ======
+
   // ====== LAYER 1: INTENT CLASSIFICATION ======
-  // Classify the user's intent using AI (runs in parallel, logging only for now)
   const conversationFlow = convo?.productSpecs ? {
     product: convo.productSpecs.productType,
     stage: convo.lastIntent,
     collected: convo.productSpecs
   } : null;
 
-  const classification = await classify(userMessage, sourceContext, conversationFlow);
+  // Pass campaign context to classifier
+  const classification = await classify(userMessage, sourceContext, conversationFlow, campaignContext);
   logClassification(psid, userMessage, classification);
   // ====== END LAYER 1 ======
 
@@ -491,7 +515,8 @@ async function generateReply(userMessage, psid, referral = null) {
   let response = null;
 
   try {
-    response = await processWithFlows(classification, sourceContext, convo, psid, userMessage);
+    // Pass campaign to flows for goal/constraint handling
+    response = await processWithFlows(classification, sourceContext, convo, psid, userMessage, campaign);
 
     if (response) {
       console.log(`✅ New flow system handled message (${response.handledBy})`);

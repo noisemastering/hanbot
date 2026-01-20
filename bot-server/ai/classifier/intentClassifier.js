@@ -66,9 +66,95 @@ const PRODUCTS = {
 };
 
 /**
+ * Build campaign context section for the prompt
+ */
+function buildCampaignContext(campaignContext) {
+  if (!campaignContext) return "";
+
+  let context = "\n\n===== CAMPAIGN CONTEXT =====";
+
+  // Traffic source and ad info
+  if (campaignContext.traffic_source) {
+    context += `\nTraffic source: ${campaignContext.traffic_source}`;
+  }
+
+  if (campaignContext.ad) {
+    if (campaignContext.ad.angle) {
+      context += `\nAd angle: ${campaignContext.ad.angle}`;
+    }
+    if (campaignContext.ad.summary) {
+      context += `\nAd message: "${campaignContext.ad.summary}"`;
+    }
+    if (campaignContext.ad.offer_hook) {
+      context += `\nOffer: ${campaignContext.ad.offer_hook}`;
+    }
+  }
+
+  // Audience info
+  if (campaignContext.audience) {
+    if (campaignContext.audience.type) {
+      context += `\nAudience type: ${campaignContext.audience.type}`;
+    }
+    if (campaignContext.audience.experience_level) {
+      context += `\nExperience level: ${campaignContext.audience.experience_level}`;
+    }
+  }
+
+  // Products in this campaign
+  if (campaignContext.products && campaignContext.products.length > 0) {
+    context += `\n\nCAMPAIGN PRODUCTS:`;
+    for (const p of campaignContext.products) {
+      context += `\n- ${p.name} (SKU: ${p.sku})`;
+      if (p.primary_benefit) {
+        context += `: ${p.primary_benefit}`;
+      }
+      if (p.constraints?.requires_quote) {
+        context += ` [REQUIRES QUOTE]`;
+      }
+      if (p.constraints?.sold_by) {
+        context += ` [Sold by: ${p.constraints.sold_by}]`;
+      }
+    }
+  }
+
+  // Conversation goal
+  if (campaignContext.conversation_goal) {
+    context += `\n\nCONVERSATION GOAL: ${campaignContext.conversation_goal}`;
+    if (campaignContext.conversation_goal === "cotizacion") {
+      context += ` (collect requirements, then hand off to human for quote)`;
+    } else if (campaignContext.conversation_goal === "venta_directa") {
+      context += ` (direct user to Mercado Libre link to purchase)`;
+    }
+  }
+
+  // Response guidelines
+  if (campaignContext.response_guidelines) {
+    const rg = campaignContext.response_guidelines;
+    if (rg.tone) {
+      context += `\n\nTONE: ${rg.tone}`;
+    }
+    if (rg.must_not && rg.must_not.length > 0) {
+      context += `\n\nMUST NOT:`;
+      for (const rule of rg.must_not) {
+        context += `\n- ${rule}`;
+      }
+    }
+    if (rg.should_do && rg.should_do.length > 0) {
+      context += `\n\nSHOULD DO:`;
+      for (const rule of rg.should_do) {
+        context += `\n- ${rule}`;
+      }
+    }
+  }
+
+  context += "\n===== END CAMPAIGN CONTEXT =====";
+  return context;
+}
+
+/**
  * Build the classification prompt
  */
-function buildClassificationPrompt(sourceContext, conversationFlow) {
+function buildClassificationPrompt(sourceContext, conversationFlow, campaignContext) {
   // Add context about current conversation state
   let flowContext = "";
   if (conversationFlow?.product) {
@@ -93,6 +179,9 @@ function buildClassificationPrompt(sourceContext, conversationFlow) {
     }
   }
 
+  // Add campaign context
+  const campaignSection = buildCampaignContext(campaignContext);
+
   return `You are a classifier for a Mexican shade mesh (malla sombra) company chatbot.
 
 PRODUCTS WE SELL:
@@ -101,7 +190,7 @@ PRODUCTS WE SELL:
 - borde_separador: Plastic garden edging, comes in 6m, 9m, 18m, or 54m lengths
 - groundcover: Anti-weed ground cover fabric (also called "antimaleza")
 - monofilamento: Monofilament shade mesh (agricultural use)
-${flowContext}${sourceInfo}
+${flowContext}${sourceInfo}${campaignSection}
 
 CLASSIFICATION RULES:
 1. If user just says "Precio", "Precio!", "Cuánto cuesta?" without specifying product → intent: "price_query", product: use context or "unknown"
@@ -117,6 +206,7 @@ CLASSIFICATION RULES:
 11. If user asks about installation → intent: "installation_query"
 12. If user mentions "maleza" in context of WANTING ground cover → product: "groundcover"
 13. If user mentions "maleza" explaining WHY they need shade (para que no salga maleza) → keep original product context
+14. If campaign context specifies products, prefer those products in classification
 
 ENTITY EXTRACTION:
 - width: number in meters (e.g., 4.20, 2.10, 3)
@@ -125,6 +215,8 @@ ENTITY EXTRACTION:
 - quantity: number of units
 - color: negro, verde, beige, blanco, azul
 - borde_length: 6, 9, 18, or 54 (only for borde_separador)
+- dimensions: full dimension string if detected (e.g., "4x5")
+- location: city or state if mentioned
 
 Respond with ONLY valid JSON, no explanation:
 {
@@ -136,9 +228,12 @@ Respond with ONLY valid JSON, no explanation:
     "percentage": <number or null>,
     "quantity": <number or null>,
     "color": "<string or null>",
-    "borde_length": <number or null>
+    "borde_length": <number or null>,
+    "dimensions": "<string or null>",
+    "location": "<string or null>"
   },
-  "confidence": <0.0-1.0>
+  "confidence": <0.0-1.0>,
+  "suggested_action": "<optional: what the bot should do next>"
 }`;
 }
 
@@ -148,13 +243,14 @@ Respond with ONLY valid JSON, no explanation:
  * @param {string} message - User's message
  * @param {object} sourceContext - Source context from Layer 0
  * @param {object} conversationFlow - Current conversation flow state
+ * @param {object} campaignContext - Campaign context from Campaign.toAIContext()
  * @returns {object} Classification result
  */
-async function classifyMessage(message, sourceContext = null, conversationFlow = null) {
+async function classifyMessage(message, sourceContext = null, conversationFlow = null, campaignContext = null) {
   const startTime = Date.now();
 
   try {
-    const systemPrompt = buildClassificationPrompt(sourceContext, conversationFlow);
+    const systemPrompt = buildClassificationPrompt(sourceContext, conversationFlow, campaignContext);
 
     const response = await openai.chat.completions.create({
       model: process.env.CLASSIFIER_MODEL || "gpt-4o-mini",
@@ -163,7 +259,7 @@ async function classifyMessage(message, sourceContext = null, conversationFlow =
         { role: "user", content: message }
       ],
       temperature: 0.1, // Low temperature for consistent classification
-      max_tokens: 200,
+      max_tokens: 250,
       response_format: { type: "json_object" }
     });
 
@@ -179,9 +275,12 @@ async function classifyMessage(message, sourceContext = null, conversationFlow =
         percentage: result.entities?.percentage || null,
         quantity: result.entities?.quantity || null,
         color: result.entities?.color || null,
-        borde_length: result.entities?.borde_length || null
+        borde_length: result.entities?.borde_length || null,
+        dimensions: result.entities?.dimensions || null,
+        location: result.entities?.location || null
       },
       confidence: result.confidence || 0.5,
+      suggestedAction: result.suggested_action || null,
       raw: result,
       latencyMs: Date.now() - startTime
     };
@@ -194,7 +293,9 @@ async function classifyMessage(message, sourceContext = null, conversationFlow =
         Object.entries(classification.entities).filter(([_, v]) => v !== null)
       ),
       confidence: classification.confidence,
-      latencyMs: classification.latencyMs
+      suggestedAction: classification.suggestedAction,
+      latencyMs: classification.latencyMs,
+      hasCampaign: !!campaignContext
     });
 
     return classification;
@@ -264,10 +365,19 @@ function quickClassify(message) {
  * @param {string} message - User's message
  * @param {object} sourceContext - Source context from Layer 0
  * @param {object} conversationFlow - Current conversation flow state
+ * @param {object} campaignContext - Campaign context from Campaign.toAIContext()
  * @returns {object} Classification result
  */
-async function classify(message, sourceContext = null, conversationFlow = null) {
+async function classify(message, sourceContext = null, conversationFlow = null, campaignContext = null) {
   console.log(`\n🧠 ===== LAYER 1: INTENT CLASSIFIER =====`);
+
+  if (campaignContext) {
+    console.log(`📣 Campaign context provided:`, {
+      goal: campaignContext.conversation_goal,
+      products: campaignContext.products?.length || 0,
+      audience: campaignContext.audience?.type
+    });
+  }
 
   // Try quick classification first
   const quickResult = quickClassify(message);
@@ -278,7 +388,7 @@ async function classify(message, sourceContext = null, conversationFlow = null) 
   }
 
   // Use AI classification
-  const aiResult = await classifyMessage(message, sourceContext, conversationFlow);
+  const aiResult = await classifyMessage(message, sourceContext, conversationFlow, campaignContext);
   console.log(`🧠 ===== END LAYER 1 =====\n`);
   return { ...aiResult, source: "ai" };
 }
@@ -307,6 +417,7 @@ module.exports = {
   classifyMessage,
   quickClassify,
   logClassification,
+  buildCampaignContext,
   INTENTS,
   PRODUCTS
 };
