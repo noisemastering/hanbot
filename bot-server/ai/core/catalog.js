@@ -11,41 +11,41 @@ async function handleCatalogOverview(cleanMsg, psid) {
     ) {
       console.log("📋 Catalog overview requested");
 
-      const families = await ProductFamily.find({ active: true }).lean();
-      if (!families || families.length === 0) {
+      // Only get ROOT-LEVEL categories (parentId: null), not every product variant
+      const rootFamilies = await ProductFamily.find({
+        active: true,
+        parentId: null
+      }).lean();
+
+      if (!rootFamilies || rootFamilies.length === 0) {
         await updateConversation(psid, { lastIntent: "catalog_overview" });
-        return { type: "text", text: `En este momento no tengo productos registrados 😔, pero pronto actualizaremos nuestro catálogo.` };
+        return { type: "text", text: `En este momento no tengo productos registrados, pero pronto actualizaremos nuestro catálogo.` };
       }
 
-      const familyNames = families.map(f => f.name).join(" y ");
-      const subfamilies = await ProductSubfamily.find({ available: true }).lean();
-      const mallaFamily = families.find(f => f.name && f.name.toLowerCase().includes("malla sombra"));
-      let mallaSubs = "";
-
-      if (mallaFamily) {
-        const relatedSubs = subfamilies.filter(s => s.familyId && mallaFamily._id && s.familyId.toString() === mallaFamily._id.toString());
-        if (relatedSubs.length > 0) {
-          mallaSubs = relatedSubs.map(s => s.name).join(" y ");
-        }
+      // Format nicely: "Malla Sombra, Malla Antiáfido y Cinta Plástica"
+      let familyNames;
+      if (rootFamilies.length === 1) {
+        familyNames = rootFamilies[0].name;
+      } else if (rootFamilies.length === 2) {
+        familyNames = rootFamilies.map(f => f.name).join(" y ");
+      } else {
+        const lastFamily = rootFamilies.pop();
+        familyNames = rootFamilies.map(f => f.name).join(", ") + " y " + lastFamily.name;
       }
 
       await updateConversation(psid, { lastIntent: "catalog_overview" });
       return {
         type: "text",
-        text:
-          `En Hanlob manejamos actualmente ${familyNames.toLowerCase()} 🌿.\n` +
-          (mallaSubs ? `La malla sombra está disponible en versiones ${mallaSubs}.\n` : "") +
-          `¿Quieres que te muestre algunas opciones o precios?`
+        text: `Manejamos ${familyNames}. ¿Qué producto te interesa?`
       };
     }
     return null;
   } catch (error) {
     console.error("❌ Error in handleCatalogOverview:", error);
-    // Return a fallback response instead of throwing
     await updateConversation(psid, { lastIntent: "catalog_overview" });
     return {
       type: "text",
-      text: `Manejo malla sombra en diferentes medidas y colores 🌿\n\n¿Qué medida necesitas o quieres ver el catálogo completo?`
+      text: `Manejamos malla sombra en diferentes medidas y colores. ¿Qué medida necesitas?`
     };
   }
 }
