@@ -218,7 +218,19 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
   if (/medidas|dimensiones|tamañ|opciones/.test(clean)) {
     await updateConversation(psid, { lastIntent: "sizes_list" });
 
-    // Lista compacta (sin links) para respuesta genérica
+    // If more than 3 variants, show range instead of listing all
+    if (variants.length > 3) {
+      const smallest = variants[0];
+      const largest = variants[variants.length - 1];
+      return {
+        type: "text",
+        text:
+          `Tenemos medidas desde ${smallest.size} (${formatMoney(smallest.price)}) hasta ${largest.size} (${formatMoney(largest.price)}).\n\n` +
+          `¿Qué medida necesitas? Mándame las dimensiones y te paso el precio exacto 😊`
+      };
+    }
+
+    // 3 or fewer - list them all
     const compactList = variants.map(variantLineCompact).join("\n");
     return {
       type: "text",
