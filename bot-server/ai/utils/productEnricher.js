@@ -513,7 +513,7 @@ function determineVerbosity(userMessage, convo, options = {}) {
     // Mentioned percentage
     /\d{2,3}\s*%/.test(msg) ||
     // Mentioned specific product type
-    /\b(malla\s*sombra|borde|separador|confeccionada|rollo|ground\s*cover)\b/i.test(msg);
+    /\b(malla\s*sombra|borde|separador|confeccionada|rollo|ground\s*cover|gran\s*cover)\b/i.test(msg);
 
   if (userMentionedDetails) {
     // User set the context, use mini

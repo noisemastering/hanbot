@@ -539,7 +539,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   const detectedLocation = await detectLocationEnhanced(msg);
 
   if (hasWaterKeyword && !isLocationContext && !detectedLocation &&
-      !/\b(antimaleza|ground\s*cover|maleza|hierba)\b/i.test(msg)) {
+      !/\b(antimaleza|ground\s*cover|gran\s*cover|maleza|hierba)\b/i.test(msg)) {
 
     // Check if we'd be repeating the same response - escalate to human instead
     if (convo.lastIntent === "rain_waterproof_question") {

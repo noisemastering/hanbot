@@ -55,7 +55,7 @@ const CUSTOMER_TYPES = {
     description: "Control de maleza",
     keywords: [
       /\b(anti.?maleza|antimaleza)\b/i,
-      /\b(ground\s*cover|groundcover)\b/i,
+      /\b(ground\s*cover|groundcover|gran\s*cover)\b/i,
       /\b(control\s+(?:de\s+)?maleza)\b/i,
       /\b(hierbas?|yerbas?|malas?\s+hierbas?)\b/i,
       /\b(bloquear\s+maleza|evitar\s+maleza)\b/i

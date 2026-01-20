@@ -525,7 +525,7 @@ function hasFractionalMeters(dimensions) {
  * @returns {boolean}
  */
 function isWeedControlQuery(message) {
-  return /\b(maleza|antimaleza|anti-maleza|hierba|malas?\s+hierbas?|ground\s*cover|crec[eé]\s+(la\s+)?maleza|quita\s+maleza|evita\s+maleza|bloquea\s+maleza)\b/i.test(message);
+  return /\b(maleza|antimaleza|anti-maleza|hierba|malas?\s+hierbas?|ground\s*cover|gran\s*cover|crec[eé]\s+(la\s+)?maleza|quita\s+maleza|evita\s+maleza|bloquea\s+maleza)\b/i.test(message);
 }
 
 /**
