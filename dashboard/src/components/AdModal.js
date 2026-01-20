@@ -22,6 +22,27 @@ function collectSellableProductIds(productTree) {
   return sellableIds;
 }
 
+// Helper function to get product info by ID from tree
+function getProductById(productTree, id) {
+  let found = null;
+
+  function traverse(products, path = []) {
+    for (const product of products) {
+      const currentPath = [...path, product.name];
+      if (product._id === id) {
+        found = { ...product, fullPath: currentPath.join(' > ') };
+        return;
+      }
+      if (product.children && product.children.length > 0) {
+        traverse(product.children, currentPath);
+      }
+    }
+  }
+
+  traverse(productTree);
+  return found;
+}
+
 function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
   const [formData, setFormData] = useState({
     name: '',
@@ -32,6 +53,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
     callToAction: 'LEARN_MORE',
     linkUrl: '',
     productIds: [],
+    mainProductId: '', // Main product for determining productInterest
     // Ad Intent - for tailoring bot responses
     adAngle: '',
     primaryUse: '',
@@ -72,6 +94,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
         callToAction: ad.creative?.callToAction || 'LEARN_MORE',
         linkUrl: ad.creative?.linkUrl || '',
         productIds: ad.productIds?.map(p => p._id || p) || [],
+        mainProductId: ad.mainProductId?._id || ad.mainProductId || '',
         // Ad Intent fields
         adAngle: ad.adAngle || '',
         primaryUse: ad.adIntent?.primaryUse || '',
@@ -94,6 +117,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
       adSetId: formData.adSetId,
       status: formData.status,
       productIds: sellableProductIds, // Only save sellable products
+      mainProductId: formData.mainProductId || null, // Main product for productInterest
       creative: {
         description: formData.description,
         callToAction: formData.callToAction,
@@ -379,6 +403,34 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
               <p className="text-xs text-gray-400 mt-2">
                 Nota: Solo se guardarán los productos vendibles seleccionados.
               </p>
+
+              {/* Main Product Selection */}
+              {formData.productIds.length > 0 && (
+                <div className="mt-4 p-3 bg-gray-900/30 rounded-lg border border-gray-700/50">
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Producto Principal (para detección de interés)
+                  </label>
+                  <select
+                    name="mainProductId"
+                    value={formData.mainProductId}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Usar primer producto de la lista</option>
+                    {formData.productIds.map(id => {
+                      const product = getProductById(productFamilies, id);
+                      return product ? (
+                        <option key={id} value={id}>
+                          {product.fullPath}
+                        </option>
+                      ) : null;
+                    })}
+                  </select>
+                  <p className="text-xs text-gray-400 mt-1">
+                    Este producto determina cómo el bot identifica el tipo de producto del anuncio.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </form>
