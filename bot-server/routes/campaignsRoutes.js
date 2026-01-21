@@ -105,6 +105,9 @@ router.post("/", async (req, res) => {
 // Actualizar una campaña
 router.put("/:id", async (req, res) => {
   try {
+    console.log('📝 PUT /campaigns/:id - Received body:', JSON.stringify(req.body, null, 2));
+    console.log('📝 conversationGoal in request:', req.body.conversationGoal);
+
     // Convert product IDs to ObjectId type
     if (req.body.productIds && Array.isArray(req.body.productIds)) {
       req.body.productIds = req.body.productIds.map(id => new mongoose.Types.ObjectId(id));
@@ -120,8 +123,10 @@ router.put("/:id", async (req, res) => {
       return res.status(404).json({ success: false, error: "Campaña no encontrada" });
     }
 
+    console.log('📝 Updated campaign conversationGoal:', campaign.conversationGoal);
     res.json({ success: true, data: campaign });
   } catch (err) {
+    console.error('❌ Error updating campaign:', err);
     res.status(400).json({ success: false, error: err.message });
   }
 });

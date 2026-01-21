@@ -504,12 +504,18 @@ function App() {
 
   const handleSaveCampaign = async (campaignData) => {
     try {
+      console.log('App.js sending to API:', campaignData);
+      console.log('conversationGoal being sent:', campaignData.conversationGoal);
+
       let response;
       if (editingCampaign) {
         response = await API.put(`/campaigns/${editingCampaign._id}`, campaignData);
       } else {
         response = await API.post(`/campaigns`, campaignData);
       }
+
+      console.log('API response:', response.data);
+      console.log('conversationGoal in response:', response.data?.data?.conversationGoal);
 
       if (response.data.success) {
         setShowCampaignModal(false);
@@ -2347,18 +2353,6 @@ function App() {
           </div>
         )}
 
-        {/* Campaign Tree Modals */}
-        {/* Campaign Modal */}
-        {showCampaignModal && (
-          <CampaignModal
-            campaign={editingCampaign}
-            onSave={handleSaveCampaign}
-            onClose={() => {
-              setShowCampaignModal(false);
-              setEditingCampaign(null);
-            }}
-          />
-        )}
 
         {/* AdSet Modal */}
         {showAdSetModal && (

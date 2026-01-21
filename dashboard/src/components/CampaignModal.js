@@ -247,6 +247,8 @@ function CampaignModal({ campaign, onSave, onClose }) {
       delete dataToSave.ref;
     }
 
+    console.log('Saving campaign data:', dataToSave);
+    console.log('conversationGoal:', dataToSave.conversationGoal);
     onSave(dataToSave);
   };
 
