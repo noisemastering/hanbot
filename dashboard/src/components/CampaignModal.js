@@ -14,12 +14,12 @@ const TRAFFIC_SOURCES = [
 ];
 
 const AD_ANGLES = [
-  { value: 'problem_pain', label: 'Problema/Dolor', desc: 'Evita quemaduras en tus cultivos' },
-  { value: 'price_value', label: 'Precio/Valor', desc: 'Desde $320' },
-  { value: 'quality', label: 'Calidad', desc: 'La mejor malla del mercado' },
-  { value: 'urgency', label: 'Urgencia', desc: 'Últimas piezas' },
-  { value: 'social_proof', label: 'Prueba Social', desc: 'Miles de clientes satisfechos' },
-  { value: 'convenience', label: 'Conveniencia', desc: 'Envío gratis a todo México' }
+  { value: 'problem_pain', label: 'Problema/Dolor', desc: 'Resuelve un problema del cliente' },
+  { value: 'price_value', label: 'Precio/Valor', desc: 'Enfocado en precio accesible' },
+  { value: 'quality', label: 'Calidad', desc: 'Enfocado en calidad del producto' },
+  { value: 'urgency', label: 'Urgencia', desc: 'Disponibilidad limitada' },
+  { value: 'social_proof', label: 'Prueba Social', desc: 'Testimonios y casos de éxito' },
+  { value: 'convenience', label: 'Conveniencia', desc: 'Facilidad de compra o envío' }
 ];
 
 const AUDIENCE_TYPES = [
