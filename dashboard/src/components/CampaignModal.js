@@ -148,11 +148,8 @@ function CampaignModal({ campaign, onSave, onClose }) {
     dailyBudget: '',
     lifetimeBudget: '',
 
-    // Legacy product IDs
-    productIds: [],
-
-    // New campaign products
-    products: []
+    // Product IDs from catalog
+    productIds: []
   });
 
   const [productFamilies, setProductFamilies] = useState([]);
@@ -163,17 +160,6 @@ function CampaignModal({ campaign, onSave, onClose }) {
   const [newMustNot, setNewMustNot] = useState('');
   const [newShouldDo, setNewShouldDo] = useState('');
 
-  // New campaign product
-  const [newProduct, setNewProduct] = useState({
-    sku: '',
-    name: '',
-    category: '',
-    primaryBenefit: '',
-    commonUses: '',
-    soldBy: '',
-    requiresQuote: false,
-    mlLink: ''
-  });
 
   // Fetch product families tree on mount
   useEffect(() => {
@@ -236,8 +222,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
         dailyBudget: campaign.dailyBudget || '',
         lifetimeBudget: campaign.lifetimeBudget || '',
 
-        productIds: campaign.productIds?.map(p => p._id || p) || [],
-        products: campaign.products || []
+        productIds: campaign.productIds?.map(p => p._id || p) || []
       });
     }
   }, [campaign]);
@@ -347,46 +332,6 @@ function CampaignModal({ campaign, onSave, onClose }) {
     });
   };
 
-  // Campaign Products management
-  const addCampaignProduct = () => {
-    if (newProduct.sku && newProduct.name) {
-      const productToAdd = {
-        sku: newProduct.sku,
-        name: newProduct.name,
-        category: newProduct.category || undefined,
-        primaryBenefit: newProduct.primaryBenefit || undefined,
-        commonUses: newProduct.commonUses ? newProduct.commonUses.split(',').map(s => s.trim()) : [],
-        constraints: {
-          soldBy: newProduct.soldBy || undefined,
-          requiresQuote: newProduct.requiresQuote
-        },
-        mlLink: newProduct.mlLink || undefined
-      };
-
-      setFormData({
-        ...formData,
-        products: [...formData.products, productToAdd]
-      });
-
-      setNewProduct({
-        sku: '',
-        name: '',
-        category: '',
-        primaryBenefit: '',
-        commonUses: '',
-        soldBy: '',
-        requiresQuote: false,
-        mlLink: ''
-      });
-    }
-  };
-
-  const removeCampaignProduct = (index) => {
-    setFormData({
-      ...formData,
-      products: formData.products.filter((_, i) => i !== index)
-    });
-  };
 
   const tabs = [
     { id: 'basic', label: 'Básico' },
@@ -668,101 +613,9 @@ function CampaignModal({ campaign, onSave, onClose }) {
           {/* Products Tab */}
           {activeTab === 'products' && (
             <div className="space-y-4">
-              {/* Campaign Products (new) */}
               <div>
-                <h3 className="text-sm font-semibold text-gray-300 mb-3">Productos de la Campaña (para IA)</h3>
-
-                {formData.products.length > 0 && (
-                  <div className="space-y-2 mb-4">
-                    {formData.products.map((p, idx) => (
-                      <div key={idx} className="flex items-center justify-between p-3 bg-gray-900/30 rounded-lg">
-                        <div>
-                          <span className="font-medium text-white">{p.name}</span>
-                          <span className="text-gray-500 text-sm ml-2">({p.sku})</span>
-                          {p.constraints?.requiresQuote && (
-                            <span className="ml-2 px-2 py-0.5 bg-yellow-500/20 text-yellow-400 text-xs rounded">Requiere cotización</span>
-                          )}
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => removeCampaignProduct(idx)}
-                          className="text-red-400 hover:text-red-300"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                          </svg>
-                        </button>
-                      </div>
-                    ))}
-                  </div>
-                )}
-
-                {/* Add new product form */}
-                <div className="p-4 bg-gray-900/30 rounded-lg space-y-3">
-                  <h4 className="text-sm font-medium text-gray-400">Agregar producto</h4>
-                  <div className="grid grid-cols-2 gap-3">
-                    <input
-                      type="text"
-                      value={newProduct.sku}
-                      onChange={(e) => setNewProduct({...newProduct, sku: e.target.value})}
-                      placeholder="SKU (ej: MS-80-AGR)"
-                      className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white text-sm"
-                    />
-                    <input
-                      type="text"
-                      value={newProduct.name}
-                      onChange={(e) => setNewProduct({...newProduct, name: e.target.value})}
-                      placeholder="Nombre"
-                      className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white text-sm"
-                    />
-                  </div>
-                  <input
-                    type="text"
-                    value={newProduct.primaryBenefit}
-                    onChange={(e) => setNewProduct({...newProduct, primaryBenefit: e.target.value})}
-                    placeholder="Beneficio principal"
-                    className="w-full px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white text-sm"
-                  />
-                  <div className="grid grid-cols-2 gap-3">
-                    <input
-                      type="text"
-                      value={newProduct.soldBy}
-                      onChange={(e) => setNewProduct({...newProduct, soldBy: e.target.value})}
-                      placeholder="Se vende por (metro, rollo, pieza)"
-                      className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white text-sm"
-                    />
-                    <input
-                      type="text"
-                      value={newProduct.mlLink}
-                      onChange={(e) => setNewProduct({...newProduct, mlLink: e.target.value})}
-                      placeholder="Link ML (opcional)"
-                      className="px-3 py-2 bg-gray-800 border border-gray-700 rounded text-white text-sm"
-                    />
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <label className="flex items-center space-x-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={newProduct.requiresQuote}
-                        onChange={(e) => setNewProduct({...newProduct, requiresQuote: e.target.checked})}
-                        className="w-4 h-4 rounded bg-gray-800 border-gray-700"
-                      />
-                      <span className="text-sm text-gray-400">Requiere cotización (no venta directa)</span>
-                    </label>
-                    <button
-                      type="button"
-                      onClick={addCampaignProduct}
-                      className="px-3 py-1 bg-primary-500 text-white rounded text-sm hover:bg-primary-600"
-                    >
-                      Agregar
-                    </button>
-                  </div>
-                </div>
-              </div>
-
-              {/* Legacy ProductIds */}
-              <div className="border-t border-gray-700 pt-4 mt-4">
-                <h3 className="text-sm font-semibold text-gray-300 mb-3">Productos del Catálogo (legacy)</h3>
+                <h3 className="text-sm font-semibold text-gray-300 mb-3">Productos de la Campaña</h3>
+                <p className="text-xs text-gray-500 mb-4">Selecciona los productos disponibles en esta campaña</p>
                 <ProductTreeSelector
                   selectedProducts={formData.productIds}
                   onToggle={handleProductToggle}
