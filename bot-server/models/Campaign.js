@@ -51,6 +51,7 @@ const campaignSchema = new mongoose.Schema(
       angle: {
         type: String,
         enum: [
+          null, "",          // Allow empty
           "problem_pain",    // "Evita quemaduras en tus cultivos"
           "price_value",     // "Desde $320"
           "quality",         // "La mejor malla del mercado"
@@ -69,6 +70,7 @@ const campaignSchema = new mongoose.Schema(
       type: {
         type: String,
         enum: [
+          null, "",          // Allow empty
           "homeowner",       // Casa/jardín personal
           "farmer",          // Agricultor
           "greenhouse",      // Invernadero/vivero
@@ -79,7 +81,7 @@ const campaignSchema = new mongoose.Schema(
       },
       experienceLevel: {
         type: String,
-        enum: ["beginner", "practical", "expert"],
+        enum: [null, "", "beginner", "practical", "expert"],
         default: "practical"
       }
     },
