@@ -34,6 +34,30 @@ const CTA_OPTIONS = [
   { value: 'SIGN_UP', label: 'Registrarse' }
 ];
 
+const OFFER_HOOK_OPTIONS = [
+  { value: '', label: 'Sin oferta', group: '' },
+  // Shipping & Delivery
+  { value: 'envio_gratis', label: 'Envío gratis (productos seleccionados)', group: 'Envío' },
+  { value: 'entrega_24_48', label: 'Entrega en 24-48 hrs (productos seleccionados)', group: 'Envío' },
+  { value: 'envio_mex_usa', label: 'Envío a todo México y Estados Unidos', group: 'Envío' },
+  // Pricing
+  { value: 'precio_mayoreo', label: 'Precio de mayoreo', group: 'Precio' },
+  { value: 'precio_fabrica', label: 'Precio especial de Fábrica', group: 'Precio' },
+  { value: 'precio_mayoristas', label: 'Precio especial a mayoristas', group: 'Precio' },
+  // Discounts
+  { value: 'descuento_50', label: '50% descuento', group: 'Descuento' },
+  { value: 'descuento_temporada', label: '10% descuento por temporada', group: 'Descuento' },
+  // Financing
+  { value: 'meses_sin_intereses', label: 'Hasta 12 meses sin intereses', group: 'Financiamiento' },
+  { value: 'pago_seguro', label: 'Pago seguro', group: 'Financiamiento' },
+  // Value-add
+  { value: 'variedad_medidas', label: 'Variedad de medidas', group: 'Valor agregado' },
+  { value: 'asesoria', label: 'Asesoría profesional', group: 'Valor agregado' },
+  { value: 'resenas_favorables', label: 'Reseñas favorables de miles de clientes', group: 'Valor agregado' },
+  // Urgency
+  { value: 'oferta_limitada', label: 'Oferta por tiempo limitado', group: 'Urgencia' }
+];
+
 const AUDIENCE_TYPES = [
   { value: 'homeowner', label: 'Hogar/Jardín' },
   { value: 'farmer', label: 'Agricultor' },
@@ -56,17 +80,43 @@ const CONVERSATION_GOALS = [
   { value: 'informacion', label: 'Información', desc: 'Solo informar' }
 ];
 
-const DEFAULT_MUST_NOT = [
-  'inventar precios',
-  'prometer disponibilidad sin confirmar',
-  'ofrecer descuentos no autorizados'
+const TONE_OPTIONS = [
+  { value: 'amigable', label: 'Amigable' },
+  { value: 'profesional', label: 'Profesional' },
+  { value: 'claro_directo', label: 'Claro y directo' },
+  { value: 'casual', label: 'Casual' },
+  { value: 'formal', label: 'Formal' },
+  { value: 'tecnico', label: 'Técnico' },
+  { value: 'empatico', label: 'Empático' }
 ];
 
-const DEFAULT_SHOULD_DO = [
-  'confirmar el producto de interés',
-  'preguntar medidas si aplica',
-  'ofrecer ayuda de asesor si es necesario'
+const MUST_NOT_OPTIONS = [
+  { value: 'inventar_precios', label: 'Inventar precios' },
+  { value: 'prometer_disponibilidad', label: 'Prometer disponibilidad sin confirmar' },
+  { value: 'descuentos_no_autorizados', label: 'Ofrecer descuentos no autorizados' },
+  { value: 'mentir', label: 'Mentir' },
+  { value: 'dar_info_incorrecta', label: 'Dar información incorrecta' },
+  { value: 'ignorar_preguntas', label: 'Ignorar preguntas del cliente' },
+  { value: 'ser_insistente', label: 'Ser demasiado insistente' },
+  { value: 'hablar_competencia', label: 'Hablar mal de la competencia' },
+  { value: 'prometer_tiempos', label: 'Prometer tiempos de entrega sin confirmar' }
 ];
+
+const SHOULD_DO_OPTIONS = [
+  { value: 'confirmar_producto', label: 'Confirmar el producto de interés' },
+  { value: 'preguntar_medidas', label: 'Preguntar medidas si aplica' },
+  { value: 'ofrecer_asesor', label: 'Ofrecer ayuda de asesor si es necesario' },
+  { value: 'ayudar', label: 'Ayudar al cliente' },
+  { value: 'ser_claro', label: 'Ser claro en las respuestas' },
+  { value: 'dar_opciones', label: 'Dar opciones al cliente' },
+  { value: 'confirmar_ubicacion', label: 'Confirmar ubicación para envío' },
+  { value: 'preguntar_uso', label: 'Preguntar el uso que le dará al producto' },
+  { value: 'ofrecer_alternativas', label: 'Ofrecer alternativas si no hay stock' },
+  { value: 'agradecer', label: 'Agradecer al cliente' }
+];
+
+const DEFAULT_MUST_NOT = ['inventar_precios', 'prometer_disponibilidad', 'descuentos_no_autorizados'];
+const DEFAULT_SHOULD_DO = ['confirmar_producto', 'preguntar_medidas', 'ofrecer_asesor'];
 
 // Helper function to collect only sellable product IDs from tree
 function collectSellableProductIds(productTree) {
@@ -132,7 +182,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
 
     // Response Guidelines
     responseGuidelines: {
-      tone: 'claro, directo y útil',
+      tone: 'claro_directo',
       mustNot: [...DEFAULT_MUST_NOT],
       shouldDo: [...DEFAULT_SHOULD_DO]
     },
@@ -208,7 +258,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
         conversationGoal: campaign.conversationGoal || 'cotizacion',
 
         responseGuidelines: {
-          tone: campaign.responseGuidelines?.tone || 'claro, directo y útil',
+          tone: campaign.responseGuidelines?.tone || 'claro_directo',
           mustNot: campaign.responseGuidelines?.mustNot || [...DEFAULT_MUST_NOT],
           shouldDo: campaign.responseGuidelines?.shouldDo || [...DEFAULT_SHOULD_DO]
         },
@@ -247,26 +297,33 @@ function CampaignModal({ campaign, onSave, onClose }) {
       delete dataToSave.ref;
     }
 
-    console.log('Saving campaign data:', dataToSave);
-    console.log('conversationGoal:', dataToSave.conversationGoal);
+    console.log('=== CAMPAIGN MODAL SUBMIT ===');
+    console.log('formData.ad:', JSON.stringify(formData.ad, null, 2));
+    console.log('dataToSave.ad:', JSON.stringify(dataToSave.ad, null, 2));
+    console.log('Full dataToSave:', JSON.stringify(dataToSave, null, 2));
     onSave(dataToSave);
   };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setFormData({
-      ...formData,
+    setFormData(prev => ({
+      ...prev,
       [name]: type === 'checkbox' ? checked : value
-    });
+    }));
   };
 
   const handleNestedChange = (parent, field, value) => {
-    setFormData({
-      ...formData,
-      [parent]: {
-        ...formData[parent],
-        [field]: value
-      }
+    console.log(`handleNestedChange: ${parent}.${field} = "${value}"`);
+    setFormData(prev => {
+      const newState = {
+        ...prev,
+        [parent]: {
+          ...prev[parent],
+          [field]: value
+        }
+      };
+      console.log(`New ${parent}:`, JSON.stringify(newState[parent], null, 2));
+      return newState;
     });
   };
 
@@ -290,48 +347,48 @@ function CampaignModal({ campaign, onSave, onClose }) {
   // Add/Remove rules
   const addMustNot = () => {
     if (newMustNot.trim()) {
-      setFormData({
-        ...formData,
+      setFormData(prev => ({
+        ...prev,
         responseGuidelines: {
-          ...formData.responseGuidelines,
-          mustNot: [...formData.responseGuidelines.mustNot, newMustNot.trim()]
+          ...prev.responseGuidelines,
+          mustNot: [...prev.responseGuidelines.mustNot, newMustNot.trim()]
         }
-      });
+      }));
       setNewMustNot('');
     }
   };
 
   const removeMustNot = (index) => {
-    setFormData({
-      ...formData,
+    setFormData(prev => ({
+      ...prev,
       responseGuidelines: {
-        ...formData.responseGuidelines,
-        mustNot: formData.responseGuidelines.mustNot.filter((_, i) => i !== index)
+        ...prev.responseGuidelines,
+        mustNot: prev.responseGuidelines.mustNot.filter((_, i) => i !== index)
       }
-    });
+    }));
   };
 
   const addShouldDo = () => {
     if (newShouldDo.trim()) {
-      setFormData({
-        ...formData,
+      setFormData(prev => ({
+        ...prev,
         responseGuidelines: {
-          ...formData.responseGuidelines,
-          shouldDo: [...formData.responseGuidelines.shouldDo, newShouldDo.trim()]
+          ...prev.responseGuidelines,
+          shouldDo: [...prev.responseGuidelines.shouldDo, newShouldDo.trim()]
         }
-      });
+      }));
       setNewShouldDo('');
     }
   };
 
   const removeShouldDo = (index) => {
-    setFormData({
-      ...formData,
+    setFormData(prev => ({
+      ...prev,
       responseGuidelines: {
-        ...formData.responseGuidelines,
-        shouldDo: formData.responseGuidelines.shouldDo.filter((_, i) => i !== index)
+        ...prev.responseGuidelines,
+        shouldDo: prev.responseGuidelines.shouldDo.filter((_, i) => i !== index)
       }
-    });
+    }));
   };
 
 
@@ -377,7 +434,8 @@ function CampaignModal({ campaign, onSave, onClose }) {
         </div>
 
         {/* Modal Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-6">
+        <form onSubmit={handleSubmit} className="flex-1 flex flex-col overflow-hidden">
+          <div className="flex-1 overflow-y-auto p-6">
           {/* Basic Tab */}
           {activeTab === 'basic' && (
             <div className="space-y-4">
@@ -559,13 +617,15 @@ function CampaignModal({ campaign, onSave, onClose }) {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">Oferta/Gancho</label>
-                  <input
-                    type="text"
+                  <select
                     value={formData.ad.offerHook}
                     onChange={(e) => handleNestedChange('ad', 'offerHook', e.target.value)}
                     className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white"
-                    placeholder="Envío gratis, 20% descuento, Desde $320"
-                  />
+                  >
+                    {OFFER_HOOK_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
                 </div>
               </div>
             </div>
@@ -633,13 +693,15 @@ function CampaignModal({ campaign, onSave, onClose }) {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">Tono de Respuesta</label>
-                <input
-                  type="text"
+                <select
                   value={formData.responseGuidelines.tone}
                   onChange={(e) => handleNestedChange('responseGuidelines', 'tone', e.target.value)}
                   className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white"
-                  placeholder="claro, directo y útil"
-                />
+                >
+                  {TONE_OPTIONS.map(opt => (
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
+                  ))}
+                </select>
               </div>
 
               {/* Must Not */}
@@ -648,7 +710,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
                 <div className="space-y-2 mb-2">
                   {formData.responseGuidelines.mustNot.map((rule, idx) => (
                     <div key={idx} className="flex items-center justify-between p-2 bg-red-900/20 border border-red-800/30 rounded">
-                      <span className="text-red-300 text-sm">{rule}</span>
+                      <span className="text-red-300 text-sm">{MUST_NOT_OPTIONS.find(o => o.value === rule)?.label || rule}</span>
                       <button type="button" onClick={() => removeMustNot(idx)} className="text-red-400 hover:text-red-300">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -658,14 +720,16 @@ function CampaignModal({ campaign, onSave, onClose }) {
                   ))}
                 </div>
                 <div className="flex space-x-2">
-                  <input
-                    type="text"
+                  <select
                     value={newMustNot}
                     onChange={(e) => setNewMustNot(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addMustNot())}
-                    placeholder="Agregar regla..."
                     className="flex-1 px-3 py-2 bg-gray-900/50 border border-gray-700 rounded text-white text-sm"
-                  />
+                  >
+                    <option value="">Seleccionar regla...</option>
+                    {MUST_NOT_OPTIONS.filter(opt => !formData.responseGuidelines.mustNot.includes(opt.value)).map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
                   <button type="button" onClick={addMustNot} className="px-3 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700">
                     Agregar
                   </button>
@@ -678,7 +742,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
                 <div className="space-y-2 mb-2">
                   {formData.responseGuidelines.shouldDo.map((rule, idx) => (
                     <div key={idx} className="flex items-center justify-between p-2 bg-green-900/20 border border-green-800/30 rounded">
-                      <span className="text-green-300 text-sm">{rule}</span>
+                      <span className="text-green-300 text-sm">{SHOULD_DO_OPTIONS.find(o => o.value === rule)?.label || rule}</span>
                       <button type="button" onClick={() => removeShouldDo(idx)} className="text-green-400 hover:text-green-300">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -688,14 +752,16 @@ function CampaignModal({ campaign, onSave, onClose }) {
                   ))}
                 </div>
                 <div className="flex space-x-2">
-                  <input
-                    type="text"
+                  <select
                     value={newShouldDo}
                     onChange={(e) => setNewShouldDo(e.target.value)}
-                    onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addShouldDo())}
-                    placeholder="Agregar regla..."
                     className="flex-1 px-3 py-2 bg-gray-900/50 border border-gray-700 rounded text-white text-sm"
-                  />
+                  >
+                    <option value="">Seleccionar regla...</option>
+                    {SHOULD_DO_OPTIONS.filter(opt => !formData.responseGuidelines.shouldDo.includes(opt.value)).map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
                   <button type="button" onClick={addShouldDo} className="px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700">
                     Agregar
                   </button>
@@ -769,24 +835,26 @@ function CampaignModal({ campaign, onSave, onClose }) {
               </div>
             </div>
           )}
-        </form>
+          </div>
 
-        {/* Modal Footer */}
-        <div className="px-6 py-4 border-t border-gray-700/50 flex justify-end space-x-2">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
-          >
-            Cancelar
-          </button>
-          <button
-            onClick={handleSubmit}
-            className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
-          >
-            {campaign ? 'Actualizar' : 'Crear'} Campaña
-          </button>
-        </div>
+          {/* Modal Footer - inside form */}
+          <div className="px-6 py-4 border-t border-gray-700/50 flex justify-end space-x-2 mt-auto">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={handleSubmit}
+              className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
+            >
+              {campaign ? 'Actualizar' : 'Crear'} Campaña
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

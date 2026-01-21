@@ -82,6 +82,7 @@ const usersRoutes = require('./routes/usersRoutes');
 const mercadoLibreAuthRoutes = require('./routes/mercadoLibreAuthRoutes');
 const mercadoLibreOrdersRoutes = require('./routes/mercadoLibreOrdersRoutes');
 const mercadoLibreNotificationsRoutes = require('./routes/mercadoLibreNotificationsRoutes');
+const healthRoutes = require('./routes/healthRoutes');
 
 // Auth routes (no prefix, will be /auth/login, /auth/me, etc.)
 app.use('/auth', authRoutes);
@@ -93,6 +94,7 @@ app.use('/click-logs', clickLogsRoutes);
 app.use('/ml', mercadoLibreAuthRoutes);
 app.use('/ml', mercadoLibreOrdersRoutes);
 app.use('/ml', mercadoLibreNotificationsRoutes);
+app.use('/health', healthRoutes);
 
 app.use('/products', productRoutes);
 app.use('/campaigns', campaignRoutes);

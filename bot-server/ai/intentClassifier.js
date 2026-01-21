@@ -187,6 +187,16 @@ Clasifica esta intención:`;
 
     const result = JSON.parse(response.choices[0].message.content);
 
+    // Log API health success (non-blocking)
+    try {
+      const ApiHealth = require("../models/ApiHealth");
+      ApiHealth.logSuccess("openai").catch(err =>
+        console.error("⚠️ Error logging API health success:", err.message)
+      );
+    } catch (logErr) {
+      // Ignore logging errors
+    }
+
     // Log for learning (non-blocking - don't await)
     logIntent({
       psid: context.psid,
@@ -206,6 +216,18 @@ Clasifica esta intención:`;
 
   } catch (error) {
     console.error("❌ Error clasificando intención:", error.message);
+
+    // Log API health error
+    try {
+      const ApiHealth = require("../models/ApiHealth");
+      const errorCode = error.status || error.code || "unknown";
+      await ApiHealth.logError("openai", String(errorCode), error.message, {
+        endpoint: "chat.completions",
+        model: "gpt-4o-mini"
+      });
+    } catch (logErr) {
+      console.error("⚠️ Error logging API health:", logErr.message);
+    }
 
     // Fallback to pattern-based detection
     return {

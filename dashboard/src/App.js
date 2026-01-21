@@ -61,6 +61,7 @@ import ProfilesView from "./components/ProfilesView";
 import ClickLogsView from "./components/ClickLogsView";
 import ConversionsView from "./pages/ConversionsView";
 import MLImporterView from "./pages/MLImporterView";
+import ApiHealthAlerts from "./components/ApiHealthAlerts";
 
 const API_URL = process.env.REACT_APP_API_URL || "https://hanbot-production.up.railway.app";
 const socket = io(API_URL, {
@@ -503,29 +504,41 @@ function App() {
   };
 
   const handleSaveCampaign = async (campaignData) => {
-    try {
-      console.log('App.js sending to API:', campaignData);
-      console.log('conversationGoal being sent:', campaignData.conversationGoal);
+    const fullUrl = `${API_URL}/campaigns/${editingCampaign?._id}`;
+    console.log('=== SAVE CAMPAIGN ===');
+    console.log('URL:', fullUrl);
+    console.log('DATA:', JSON.stringify(campaignData, null, 2));
 
+    try {
       let response;
       if (editingCampaign) {
-        response = await API.put(`/campaigns/${editingCampaign._id}`, campaignData);
+        const fetchResponse = await fetch(fullUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(campaignData)
+        });
+        const data = await fetchResponse.json();
+        console.log('RESPONSE:', JSON.stringify(data, null, 2));
+
+        if (data.success) {
+          alert('¡Guardado exitosamente! ad.summary: ' + data.data?.ad?.summary);
+          setShowCampaignModal(false);
+          setEditingCampaign(null);
+          fetchCampaigns();
+        } else {
+          alert('Error: ' + data.error);
+        }
       } else {
         response = await API.post(`/campaigns`, campaignData);
-      }
-
-      console.log('API response:', response.data);
-      console.log('conversationGoal in response:', response.data?.data?.conversationGoal);
-
-      if (response.data.success) {
-        setShowCampaignModal(false);
-        setEditingCampaign(null);
-        // Refetch campaigns tree to get updated structure
-        fetchCampaigns();
+        if (response.data.success) {
+          setShowCampaignModal(false);
+          setEditingCampaign(null);
+          fetchCampaigns();
+        }
       }
     } catch (error) {
-      console.error("Error saving campaign:", error);
-      alert("Error al guardar la campaña: " + (error.response?.data?.error || error.message));
+      console.error("ERROR:", error);
+      alert("Error: " + error.message);
     }
   };
 
@@ -1552,6 +1565,11 @@ function App() {
             </div>
           </div>
         </header>
+
+      {/* API Health Alerts */}
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+        <ApiHealthAlerts />
+      </div>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">

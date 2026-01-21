@@ -244,6 +244,7 @@ function CampaignTreeView({
   // Manage expanded nodes state (Set of item IDs)
   // Start with all trees collapsed
   const [expandedNodes, setExpandedNodes] = useState(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
 
   // Helper function to find path from item to root
   const findPathToRoot = (itemId, campaigns, path = []) => {
@@ -298,6 +299,35 @@ function CampaignTreeView({
     onAddChild(item);
   };
 
+  // Filter campaigns by search query (matches ID, fbCampaignId, ref, or name)
+  const filterCampaigns = (items, query) => {
+    if (!query.trim()) return items;
+    const lowerQuery = query.toLowerCase().trim();
+
+    return items.filter(item => {
+      const matchesItem =
+        item._id?.toLowerCase().includes(lowerQuery) ||
+        item.fbCampaignId?.toLowerCase().includes(lowerQuery) ||
+        item.fbAdSetId?.toLowerCase().includes(lowerQuery) ||
+        item.fbAdId?.toLowerCase().includes(lowerQuery) ||
+        item.ref?.toLowerCase().includes(lowerQuery) ||
+        item.name?.toLowerCase().includes(lowerQuery);
+
+      // Also check children recursively
+      const matchingChildren = item.children ? filterCampaigns(item.children, query) : [];
+
+      if (matchesItem || matchingChildren.length > 0) {
+        return true;
+      }
+      return false;
+    }).map(item => ({
+      ...item,
+      children: item.children ? filterCampaigns(item.children, query) : []
+    }));
+  };
+
+  const filteredCampaigns = filterCampaigns(campaigns || [], searchQuery);
+
   return (
     <div>
       {/* Header with Add Button */}
@@ -317,12 +347,39 @@ function CampaignTreeView({
         </button>
       </div>
 
+      {/* Search Box */}
+      <div className="mb-6">
+        <div className="relative">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Buscar por ID, fbCampaignId, ref o nombre..."
+            className="w-full px-4 py-3 pl-12 bg-gray-800/50 border border-gray-700/50 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          />
+          <svg className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-white"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+
       {/* Campaign Tree */}
       <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-700/50">
           <h2 className="text-xl font-bold text-white">Árbol de Campañas</h2>
           <p className="text-sm text-gray-400 mt-1">
             Vista de árbol expandible mostrando campañas, conjuntos de anuncios y anuncios individuales.
+            {searchQuery && <span className="ml-2 text-primary-400">({filteredCampaigns.length} resultados)</span>}
           </p>
         </div>
 
@@ -331,28 +388,41 @@ function CampaignTreeView({
             <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
             <p className="text-gray-400 mt-4">Cargando campañas...</p>
           </div>
-        ) : !campaigns || campaigns.length === 0 ? (
+        ) : !filteredCampaigns || filteredCampaigns.length === 0 ? (
           <div className="p-12 text-center">
             <div className="w-16 h-16 mx-auto mb-4 bg-gray-700/50 rounded-full flex items-center justify-center">
               <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                {searchQuery ? (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+                ) : (
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+                )}
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">No se encontraron campañas</h3>
-            <p className="text-gray-400 mb-6">Comienza agregando tu primera campaña publicitaria</p>
-            <button
-              onClick={onAdd}
-              className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors inline-flex items-center space-x-2"
-            >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              <span>Agregar Campaña</span>
-            </button>
+            <h3 className="text-lg font-semibold text-white mb-2">
+              {searchQuery ? 'No se encontraron resultados' : 'No se encontraron campañas'}
+            </h3>
+            <p className="text-gray-400 mb-6">
+              {searchQuery
+                ? `No hay campañas que coincidan con "${searchQuery}"`
+                : 'Comienza agregando tu primera campaña publicitaria'
+              }
+            </p>
+            {!searchQuery && (
+              <button
+                onClick={onAdd}
+                className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors inline-flex items-center space-x-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                </svg>
+                <span>Agregar Campaña</span>
+              </button>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-gray-700/50">
-            {campaigns.map((campaign) => (
+            {filteredCampaigns.map((campaign) => (
               <CampaignNode
                 key={campaign._id}
                 item={campaign}
