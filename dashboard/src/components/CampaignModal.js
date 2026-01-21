@@ -22,6 +22,18 @@ const AD_ANGLES = [
   { value: 'convenience', label: 'Conveniencia', desc: 'Facilidad de compra o envío' }
 ];
 
+const CTA_OPTIONS = [
+  { value: '', label: 'Sin CTA' },
+  { value: 'SEND_MESSAGE', label: 'Enviar mensaje' },
+  { value: 'GET_QUOTE', label: 'Cotizar ahora' },
+  { value: 'LEARN_MORE', label: 'Más información' },
+  { value: 'SHOP_NOW', label: 'Comprar ahora' },
+  { value: 'GET_OFFER', label: 'Obtener oferta' },
+  { value: 'CONTACT_US', label: 'Contáctanos' },
+  { value: 'ORDER_NOW', label: 'Ordenar ahora' },
+  { value: 'SIGN_UP', label: 'Registrarse' }
+];
+
 const AUDIENCE_TYPES = [
   { value: 'homeowner', label: 'Hogar/Jardín' },
   { value: 'farmer', label: 'Agricultor' },
@@ -588,13 +600,15 @@ function CampaignModal({ campaign, onSave, onClose }) {
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">Call to Action (CTA)</label>
-                  <input
-                    type="text"
+                  <select
                     value={formData.ad.cta}
                     onChange={(e) => handleNestedChange('ad', 'cta', e.target.value)}
                     className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white"
-                    placeholder="Cotizar ahora"
-                  />
+                  >
+                    {CTA_OPTIONS.map(opt => (
+                      <option key={opt.value} value={opt.value}>{opt.label}</option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">Oferta/Gancho</label>
