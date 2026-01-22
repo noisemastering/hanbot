@@ -6,6 +6,40 @@ const { OpenAI } = require("openai");
 
 const openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 
+// ========== INTENT CACHE FOR DB-DRIVEN INTENTS ==========
+let intentCache = null;
+let cacheExpiry = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Get intents from database with caching
+ */
+async function getIntentsFromDB() {
+  if (intentCache && Date.now() < cacheExpiry) {
+    return intentCache;
+  }
+
+  try {
+    const Intent = require("../../models/Intent");
+    intentCache = await Intent.find({ active: true }).sort({ priority: -1 }).lean();
+    cacheExpiry = Date.now() + CACHE_TTL;
+    console.log(`🔄 Intent cache refreshed: ${intentCache.length} intents loaded from DB`);
+    return intentCache;
+  } catch (error) {
+    console.error("❌ Error loading intents from DB, using fallback:", error.message);
+    return null; // Will use hardcoded INTENTS as fallback
+  }
+}
+
+/**
+ * Clear intent cache (called when intents are updated via API)
+ */
+function clearIntentCache() {
+  intentCache = null;
+  cacheExpiry = 0;
+  console.log("🗑️ Intent cache cleared");
+}
+
 /**
  * All possible intents the classifier can return
  */
@@ -152,9 +186,41 @@ function buildCampaignContext(campaignContext) {
 }
 
 /**
+ * Build intent list for prompt from DB intents
+ */
+function buildIntentListForPrompt(dbIntents) {
+  if (!dbIntents || dbIntents.length === 0) {
+    return null; // Use hardcoded rules
+  }
+
+  let intentList = "AVAILABLE INTENTS:\n";
+  const intentsByCategory = {};
+
+  for (const intent of dbIntents) {
+    if (!intentsByCategory[intent.category]) {
+      intentsByCategory[intent.category] = [];
+    }
+    intentsByCategory[intent.category].push(intent);
+  }
+
+  for (const [category, intents] of Object.entries(intentsByCategory)) {
+    intentList += `\n[${category.toUpperCase()}]\n`;
+    for (const intent of intents) {
+      intentList += `- ${intent.key}: ${intent.description || intent.name}`;
+      if (intent.keywords && intent.keywords.length > 0) {
+        intentList += ` (keywords: ${intent.keywords.slice(0, 5).join(", ")}${intent.keywords.length > 5 ? "..." : ""})`;
+      }
+      intentList += "\n";
+    }
+  }
+
+  return intentList;
+}
+
+/**
  * Build the classification prompt
  */
-function buildClassificationPrompt(sourceContext, conversationFlow, campaignContext) {
+function buildClassificationPrompt(sourceContext, conversationFlow, campaignContext, dbIntents = null) {
   // Add context about current conversation state
   let flowContext = "";
   if (conversationFlow?.product) {
@@ -182,7 +248,11 @@ function buildClassificationPrompt(sourceContext, conversationFlow, campaignCont
   // Add campaign context
   const campaignSection = buildCampaignContext(campaignContext);
 
-  return `You are a classifier for a Mexican shade mesh (malla sombra) company chatbot.
+  // Build dynamic intent list from DB if available
+  const dynamicIntentList = buildIntentListForPrompt(dbIntents);
+
+  // Base prompt with product info
+  let prompt = `You are a classifier for a Mexican shade mesh (malla sombra) company chatbot.
 
 PRODUCTS WE SELL:
 - malla_sombra: Pre-made shade mesh in specific sizes (2x2m to 6x10m), beige color
@@ -191,7 +261,21 @@ PRODUCTS WE SELL:
 - groundcover: Anti-weed ground cover fabric (also called "antimaleza")
 - monofilamento: Monofilament shade mesh (agricultural use)
 ${flowContext}${sourceInfo}${campaignSection}
+`;
 
+  // Add dynamic intents if available, otherwise use hardcoded rules
+  if (dynamicIntentList) {
+    prompt += `
+${dynamicIntentList}
+
+CLASSIFICATION INSTRUCTIONS:
+- Match user messages to the most appropriate intent from the list above
+- Use keywords and descriptions to guide your classification
+- Return the intent key (e.g., "price_query", "greeting", etc.)
+- If no intent matches well, use "unclear"
+`;
+  } else {
+    prompt += `
 CLASSIFICATION RULES:
 1. If user just says "Precio", "Precio!", "Cuánto cuesta?" without specifying product → intent: "price_query", product: use context or "unknown"
 2. If user provides dimensions like "4x5", "3 por 4 metros" → intent: "size_specification"
@@ -207,7 +291,10 @@ CLASSIFICATION RULES:
 12. If user mentions "maleza" in context of WANTING ground cover → product: "groundcover"
 13. If user mentions "maleza" explaining WHY they need shade (para que no salga maleza) → keep original product context
 14. If campaign context specifies products, prefer those products in classification
+`;
+  }
 
+  prompt += `
 ENTITY EXTRACTION:
 - width: number in meters (e.g., 4.20, 2.10, 3)
 - height/length: number in meters
@@ -235,6 +322,8 @@ Respond with ONLY valid JSON, no explanation:
   "confidence": <0.0-1.0>,
   "suggested_action": "<optional: what the bot should do next>"
 }`;
+
+  return prompt;
 }
 
 /**
@@ -250,7 +339,10 @@ async function classifyMessage(message, sourceContext = null, conversationFlow =
   const startTime = Date.now();
 
   try {
-    const systemPrompt = buildClassificationPrompt(sourceContext, conversationFlow, campaignContext);
+    // Load intents from DB (with caching)
+    const dbIntents = await getIntentsFromDB();
+
+    const systemPrompt = buildClassificationPrompt(sourceContext, conversationFlow, campaignContext, dbIntents);
 
     const response = await openai.chat.completions.create({
       model: process.env.CLASSIFIER_MODEL || "gpt-4o-mini",
@@ -418,6 +510,8 @@ module.exports = {
   quickClassify,
   logClassification,
   buildCampaignContext,
+  clearIntentCache,
+  getIntentsFromDB,
   INTENTS,
   PRODUCTS
 };

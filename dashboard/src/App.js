@@ -61,6 +61,7 @@ import ProfilesView from "./components/ProfilesView";
 import ClickLogsView from "./components/ClickLogsView";
 import ConversionsView from "./pages/ConversionsView";
 import MLImporterView from "./pages/MLImporterView";
+import IntentsView from "./components/IntentsView";
 import ApiHealthAlerts from "./components/ApiHealthAlerts";
 
 const API_URL = process.env.REACT_APP_API_URL || "https://hanbot-production.up.railway.app";
@@ -268,6 +269,24 @@ const menuItems = [
         path: "/ml-importer",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
+        )
+      }
+    ]
+  },
+  {
+    id: "bot",
+    label: "Bot",
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
+    ),
+    isExpandable: true,
+    children: [
+      {
+        id: "intents",
+        label: "Intents",
+        path: "/intents",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
         )
       }
     ]
@@ -1238,8 +1257,8 @@ function App() {
     if (item.id === 'users') {
       return canManageUsers();
     }
-    // Roles and Profiles sections only visible to super_admin
-    if (item.id === 'roles' || item.id === 'profiles') {
+    // Roles, Profiles, and Bot sections only visible to super_admin
+    if (item.id === 'roles' || item.id === 'profiles' || item.id === 'bot') {
       return user?.role === 'super_admin';
     }
 
@@ -2247,6 +2266,9 @@ function App() {
           {/* Mercado Libre Routes */}
           <Route path="/ml-orders" element={<OrdersView />} />
           <Route path="/ml-importer" element={<MLImporterView />} />
+
+          {/* Bot Configuration Routes */}
+          <Route path="/intents" element={<IntentsView />} />
 
           <Route path="/settings" element={<Settings />} />
         </Routes>

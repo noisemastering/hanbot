@@ -83,6 +83,8 @@ const mercadoLibreAuthRoutes = require('./routes/mercadoLibreAuthRoutes');
 const mercadoLibreOrdersRoutes = require('./routes/mercadoLibreOrdersRoutes');
 const mercadoLibreNotificationsRoutes = require('./routes/mercadoLibreNotificationsRoutes');
 const healthRoutes = require('./routes/healthRoutes');
+const intentsRoutes = require('./routes/intentsRoutes');
+const intentCategoriesRoutes = require('./routes/intentCategoriesRoutes');
 
 // Auth routes (no prefix, will be /auth/login, /auth/me, etc.)
 app.use('/auth', authRoutes);
@@ -109,6 +111,8 @@ app.use('/usos', usosRoutes);
 app.use('/grupos', gruposRoutes);
 app.use('/product-families', productFamilyRoutes);
 app.use('/points-of-sale', pointsOfSaleRoutes);
+app.use('/intents', intentsRoutes);
+app.use('/intent-categories', intentCategoriesRoutes);
 
 // ============================================
 // Start the Express Server with Socket.IO
