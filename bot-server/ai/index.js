@@ -42,7 +42,106 @@ const { classify, logClassification } = require("./classifier");
 // Layer 2-3: Flow Router
 const { processMessage: processWithFlows } = require("./flows");
 
+// Intent model for DB-driven responses
+const Intent = require("../models/Intent");
 
+// Flow executor for DB-driven conversation flows
+const {
+  isInFlow,
+  processFlowStep,
+  startFlow,
+  getFlowByIntent
+} = require("./flowExecutor");
+
+/**
+ * Handle intent based on DB configuration (responseTemplate + handlerType)
+ * @param {string} intentKey - The classified intent key
+ * @param {object} classification - Full classification result
+ * @param {string} psid - User's PSID
+ * @param {object} convo - Conversation state
+ * @returns {object|null} Response if handled, null to continue to flows
+ */
+async function handleIntentFromDB(intentKey, classification, psid, convo) {
+  try {
+    // Lookup intent in DB
+    const intent = await Intent.findOne({ key: intentKey, active: true });
+
+    if (!intent) {
+      console.log(`📋 No DB intent found for "${intentKey}", continuing to flows`);
+      return null;
+    }
+
+    // Increment hit count and update lastTriggered
+    await Intent.updateOne(
+      { _id: intent._id },
+      { $inc: { hitCount: 1 }, $set: { lastTriggered: new Date() } }
+    );
+
+    console.log(`📋 DB Intent matched: ${intent.name} (${intent.handlerType})`);
+
+    // Handle based on handlerType
+    switch (intent.handlerType) {
+      case 'auto_response':
+        // Return the template directly - no AI involved
+        if (intent.responseTemplate) {
+          console.log(`✅ Auto-response from DB template`);
+          return {
+            type: "text",
+            text: intent.responseTemplate,
+            handledBy: "intent_auto_response"
+          };
+        }
+        // No template defined, fall through to flows
+        console.log(`⚠️ auto_response but no template defined, continuing to flows`);
+        return null;
+
+      case 'human_handoff':
+        // Trigger human handoff
+        console.log(`🤝 Intent triggers human handoff`);
+        const { updateConversation } = require("../conversationManager");
+        await updateConversation(psid, {
+          handoffRequested: true,
+          handoffReason: `Intent: ${intent.name}`,
+          handoffTimestamp: new Date(),
+          state: "needs_human"
+        });
+
+        return {
+          type: "text",
+          text: intent.responseTemplate || "Te comunico con un asesor. En un momento te atienden.",
+          handledBy: "intent_human_handoff"
+        };
+
+      case 'ai_generate':
+        // Store template as guidance for AI - flows will use it
+        if (intent.responseTemplate) {
+          classification.responseGuidance = intent.responseTemplate;
+          classification.intentName = intent.name;
+          console.log(`🤖 AI will use template as guidance: "${intent.responseTemplate.substring(0, 50)}..."`);
+        }
+        // Continue to flows which will use the guidance
+        return null;
+
+      case 'flow':
+        // Check if there's a linked flow for this intent
+        const linkedFlow = await getFlowByIntent(intentKey);
+        if (linkedFlow) {
+          console.log(`🔀 Intent has linked flow: ${linkedFlow.name}`);
+          return await startFlow(linkedFlow.key, psid, convo);
+        }
+        // No linked flow, continue to normal flow handling
+        console.log(`⚠️ handlerType=flow but no linked flow found`);
+        return null;
+
+      default:
+        // Continue to normal flow handling
+        return null;
+    }
+  } catch (error) {
+    console.error(`❌ Error handling intent from DB:`, error.message);
+    return null; // Continue to flows on error
+  }
+}
 
 const openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 const botNames = ["Paula", "Sofía", "Camila", "Valeria", "Daniela"];
@@ -463,6 +562,19 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
 async function generateReply(userMessage, psid, referral = null) {
   const convo = await getConversation(psid);
 
+  // ====== CHECK ACTIVE FLOW ======
+  // If user is in an active flow, process the flow step first
+  if (isInFlow(convo)) {
+    console.log(`🔄 User is in active flow: ${convo.activeFlow.flowKey}`);
+    const flowResponse = await processFlowStep(userMessage, psid, convo);
+    if (flowResponse) {
+      return await checkForRepetition(flowResponse, psid, convo);
+    }
+    // If flow returns null, continue with normal processing
+    console.log(`⚠️ Flow returned null, continuing with normal processing`);
+  }
+  // ====== END ACTIVE FLOW CHECK ======
+
   // ====== LAYER 0: SOURCE CONTEXT ======
   // Detect where this conversation came from (ad, comment, cold DM, returning user)
   const sourceContext = await buildSourceContext(
@@ -510,6 +622,15 @@ async function generateReply(userMessage, psid, referral = null) {
   const classification = await classify(userMessage, sourceContext, conversationFlow, campaignContext);
   logClassification(psid, userMessage, classification);
   // ====== END LAYER 1 ======
+
+  // ====== INTENT DB HANDLING ======
+  // Check if intent has a DB-configured response (auto_response, human_handoff, or guidance for ai_generate)
+  const intentResponse = await handleIntentFromDB(classification.intent, classification, psid, convo);
+  if (intentResponse) {
+    console.log(`✅ Intent handled by DB config (${intentResponse.handledBy})`);
+    return await checkForRepetition(intentResponse, psid, convo);
+  }
+  // ====== END INTENT DB HANDLING ======
 
   // ====== LAYER 2-3: FLOW ROUTING ======
   let response = null;

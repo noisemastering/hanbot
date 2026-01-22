@@ -34,9 +34,22 @@ const FLOWS = [
  * @returns {object|null} Response { text, type } or null if no flow handles it
  */
 async function routeToFlow(classification, sourceContext, convo, psid, campaign = null) {
-  const { intent, product, entities, confidence } = classification;
+  const { intent, product, entities, confidence, responseGuidance } = classification;
 
   console.log(`🔀 Flow router - Product: ${product}, Intent: ${intent}, Confidence: ${confidence}`);
+
+  // If classification has responseGuidance from DB (ai_generate handler), use it
+  // This allows dashboard-defined responses to take precedence over hardcoded flow logic
+  if (responseGuidance) {
+    const { updateConversation } = require("../../conversationManager");
+    console.log(`✅ Using DB responseGuidance in flow router for ${intent}`);
+    await updateConversation(psid, { lastIntent: intent });
+    return {
+      type: "text",
+      text: responseGuidance,
+      handledBy: "intent_ai_generate"
+    };
+  }
 
   if (campaign) {
     console.log(`📣 Campaign active: ${campaign.name} (goal: ${campaign.conversationGoal})`);
