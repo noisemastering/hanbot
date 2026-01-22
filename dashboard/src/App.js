@@ -377,6 +377,12 @@ function App() {
   // Click stats from ClickLog (for analytics)
   const [clickStats, setClickStats] = useState({ bestAd: null, allAds: [] });
 
+  // Ad metrics (impressions, clicks, CTR)
+  const [adMetrics, setAdMetrics] = useState({ totalImpressions: 0, totalClicks: 0, ctr: 0 });
+
+  // Top selling product through ads
+  const [topProduct, setTopProduct] = useState(null);
+
   const fetchMessages = async () => {
     try {
       const res = await fetch(`${API_URL}/conversations`, {
@@ -484,6 +490,30 @@ function App() {
       }
     } catch (error) {
       console.error("Error fetching click stats:", error);
+    }
+  };
+
+  const fetchAdMetrics = async () => {
+    try {
+      const res = await fetch(`${API_URL}/analytics/ad-metrics`);
+      const data = await res.json();
+      if (data.success) {
+        setAdMetrics(data.metrics);
+      }
+    } catch (error) {
+      console.error("Error fetching ad metrics:", error);
+    }
+  };
+
+  const fetchTopProducts = async () => {
+    try {
+      const res = await fetch(`${API_URL}/analytics/top-products`);
+      const data = await res.json();
+      if (data.success) {
+        setTopProduct(data.topProduct);
+      }
+    } catch (error) {
+      console.error("Error fetching top products:", error);
     }
   };
 
@@ -1137,6 +1167,8 @@ function App() {
     }
     if (location.pathname === "/analytics") {
       fetchClickStats(); // Fetch click stats from ClickLog for analytics
+      fetchAdMetrics(); // Fetch aggregated ad metrics (impressions, clicks, CTR)
+      fetchTopProducts(); // Fetch top selling products through ads
     }
   }, [location.pathname]);
 
@@ -1274,6 +1306,11 @@ function App() {
 
   // Best ad comes from clickStats (aggregated from ClickLog)
   const bestAd = clickStats.bestAd;
+
+  // Best conversion rate ad (minimum 3 clicks to be meaningful)
+  const bestRateAd = clickStats.allAds
+    .filter(ad => ad.clicks >= 3 && ad.conversions > 0)
+    .sort((a, b) => parseFloat(b.conversionRate) - parseFloat(a.conversionRate))[0] || null;
 
   let filteredMessages = messages;
 
@@ -1943,6 +1980,68 @@ function App() {
                       <div className="w-12 h-12 bg-rose-500/20 rounded-lg flex items-center justify-center">
                         <svg className="w-6 h-6 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                        </svg>
+                      </div>
+                    </div>
+                  </Link>
+
+                  {/* Click-Through Rate */}
+                  <Link to="/click-logs" className="bg-gradient-to-br from-teal-500/10 to-teal-600/5 backdrop-blur-lg border border-teal-500/20 rounded-xl p-6 hover:border-teal-500/40 transition-colors cursor-pointer">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-400 mb-1">Tasa de clics (CTR)</p>
+                        <h3 className="text-3xl font-bold text-white">{adMetrics.ctr}%</h3>
+                        <p className="text-sm text-teal-400">{adMetrics.totalClicks.toLocaleString()} / {adMetrics.totalImpressions.toLocaleString()}</p>
+                      </div>
+                      <div className="w-12 h-12 bg-teal-500/20 rounded-lg flex items-center justify-center">
+                        <svg className="w-6 h-6 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+                        </svg>
+                      </div>
+                    </div>
+                  </Link>
+
+                </div>
+              </div>
+            )}
+
+            {/* Divider */}
+            {canAccess('stats_campaigns') && (
+              <hr className="border-gray-700/50" />
+            )}
+
+            {/* Category: Ventas */}
+            {canAccess('stats_campaigns') && (
+              <div className="space-y-4">
+                <h2 className="text-xl font-semibold text-white">Ventas</h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                  {/* Best Conversion Rate Ad */}
+                  <Link to="/conversions" className="bg-gradient-to-br from-yellow-500/10 to-yellow-600/5 backdrop-blur-lg border border-yellow-500/20 rounded-xl p-6 hover:border-yellow-500/40 transition-colors cursor-pointer">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-400 mb-1">Mejor tasa de conversión</p>
+                        <h3 className="text-lg font-bold text-white truncate max-w-[150px]">{bestRateAd?.name || '-'}</h3>
+                        <p className="text-sm text-yellow-400">{bestRateAd?.conversionRate || 0}% ({bestRateAd?.conversions || 0} ventas)</p>
+                      </div>
+                      <div className="w-12 h-12 bg-yellow-500/20 rounded-lg flex items-center justify-center">
+                        <svg className="w-6 h-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                      </div>
+                    </div>
+                  </Link>
+
+                  {/* Best Selling Product */}
+                  <Link to="/click-logs" className="bg-gradient-to-br from-green-500/10 to-green-600/5 backdrop-blur-lg border border-green-500/20 rounded-xl p-6 hover:border-green-500/40 transition-colors cursor-pointer">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-400 mb-1">Producto más vendido</p>
+                        <h3 className="text-lg font-bold text-white truncate max-w-[150px]">{topProduct?._id || '-'}</h3>
+                        <p className="text-sm text-green-400">{topProduct?.conversions || 0} ventas</p>
+                      </div>
+                      <div className="w-12 h-12 bg-green-500/20 rounded-lg flex items-center justify-center">
+                        <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
                         </svg>
                       </div>
                     </div>

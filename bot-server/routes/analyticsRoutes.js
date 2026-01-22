@@ -542,6 +542,89 @@ router.get('/correlation-stats', async (req, res) => {
   }
 });
 
+// GET /analytics/top-products - Get top selling products through ads
+router.get('/top-products', async (req, res) => {
+  try {
+    const result = await ClickLog.aggregate([
+      {
+        $match: {
+          converted: true,
+          productName: { $exists: true, $ne: null, $ne: '' }
+        }
+      },
+      {
+        $group: {
+          _id: '$productName',
+          productId: { $first: '$productId' },
+          conversions: { $sum: 1 },
+          totalRevenue: { $sum: '$conversionData.totalAmount' }
+        }
+      },
+      { $sort: { conversions: -1 } },
+      { $limit: 10 }
+    ]);
+
+    const topProduct = result[0] || null;
+
+    res.json({
+      success: true,
+      topProduct,
+      allProducts: result
+    });
+  } catch (error) {
+    console.error('❌ Error fetching top products:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// GET /analytics/ad-metrics - Get aggregated ad metrics (impressions, clicks, CTR)
+router.get('/ad-metrics', async (req, res) => {
+  try {
+    const Ad = require('../models/Ad');
+
+    const result = await Ad.aggregate([
+      {
+        $group: {
+          _id: null,
+          totalImpressions: { $sum: '$metrics.impressions' },
+          totalClicks: { $sum: '$metrics.clicks' },
+          totalSpend: { $sum: '$metrics.spend' },
+          totalConversions: { $sum: '$metrics.conversions' }
+        }
+      }
+    ]);
+
+    const metrics = result[0] || {
+      totalImpressions: 0,
+      totalClicks: 0,
+      totalSpend: 0,
+      totalConversions: 0
+    };
+
+    // Calculate rates
+    metrics.ctr = metrics.totalImpressions > 0
+      ? ((metrics.totalClicks / metrics.totalImpressions) * 100).toFixed(2)
+      : 0;
+    metrics.conversionRate = metrics.totalClicks > 0
+      ? ((metrics.totalConversions / metrics.totalClicks) * 100).toFixed(2)
+      : 0;
+
+    res.json({
+      success: true,
+      metrics
+    });
+  } catch (error) {
+    console.error('❌ Error fetching ad metrics:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // GET /analytics/clicks-by-ad - Get click stats aggregated by ad
 router.get('/clicks-by-ad', async (req, res) => {
   try {
