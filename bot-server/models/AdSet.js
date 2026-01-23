@@ -85,6 +85,14 @@ const adSetSchema = new mongoose.Schema(
     // Specific flow to use (overrides default flow selection)
     flowRef: String,  // e.g., "rolloFlow", "mallaFlow", "bordeFlow"
 
+    // Catalog override (inherits from Campaign if not set)
+    catalog: {
+      url: { type: String },
+      publicId: { type: String },
+      name: { type: String },
+      uploadedAt: { type: Date }
+    },
+
     // Ad context override
     adContext: {
       angle: {

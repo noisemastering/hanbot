@@ -165,7 +165,13 @@ function mergeSettings(campaign, adSet, ad) {
     followupPrompts: campaign.followupPrompts || [],
 
     // Flow
-    flowRef: null
+    flowRef: null,
+
+    // Catalog
+    catalog: campaign.catalog?.url ? {
+      url: campaign.catalog.url,
+      name: campaign.catalog.name
+    } : null
   };
 
   // Merge AdSet-level overrides
@@ -199,6 +205,14 @@ function mergeSettings(campaign, adSet, ad) {
 
     // Override products if specified at adSet level
     if (adSet.productIds?.length) settings.productIds = adSet.productIds;
+
+    // Override catalog if specified at adSet level
+    if (adSet.catalog?.url) {
+      settings.catalog = {
+        url: adSet.catalog.url,
+        name: adSet.catalog.name
+      };
+    }
   }
 
   // Merge Ad-level overrides (highest priority)
@@ -242,6 +256,14 @@ function mergeSettings(campaign, adSet, ad) {
     // Override products if specified at ad level
     if (ad.productIds?.length) settings.productIds = ad.productIds;
     if (ad.mainProductId) settings.mainProductId = ad.mainProductId;
+
+    // Override catalog if specified at ad level
+    if (ad.catalog?.url) {
+      settings.catalog = {
+        url: ad.catalog.url,
+        name: ad.catalog.name
+      };
+    }
   }
 
   return settings;

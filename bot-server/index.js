@@ -86,6 +86,7 @@ const healthRoutes = require('./routes/healthRoutes');
 const intentsRoutes = require('./routes/intentsRoutes');
 const intentCategoriesRoutes = require('./routes/intentCategoriesRoutes');
 const flowsRoutes = require('./routes/flowsRoutes');
+const uploadsRoutes = require('./routes/uploadsRoutes');
 
 // Auth routes (no prefix, will be /auth/login, /auth/me, etc.)
 app.use('/auth', authRoutes);
@@ -115,6 +116,7 @@ app.use('/points-of-sale', pointsOfSaleRoutes);
 app.use('/intents', intentsRoutes);
 app.use('/intent-categories', intentCategoriesRoutes);
 app.use('/flows', flowsRoutes);
+app.use('/uploads', uploadsRoutes);
 
 // ============================================
 // Start the Express Server with Socket.IO

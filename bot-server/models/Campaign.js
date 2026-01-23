@@ -135,6 +135,14 @@ const campaignSchema = new mongoose.Schema(
     initialMessage: { type: String },
     followupPrompts: [String],
 
+    // ====== CATALOG / FILES ======
+    catalog: {
+      url: { type: String },           // Cloudinary URL to PDF
+      publicId: { type: String },      // Cloudinary public_id for deletion
+      name: { type: String },          // Original filename
+      uploadedAt: { type: Date }
+    },
+
     // ====== FACEBOOK/META INTEGRATION ======
     fbCampaignId: { type: String, unique: true, sparse: true },
     fbAdAccountId: { type: String },
