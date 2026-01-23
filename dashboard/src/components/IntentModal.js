@@ -9,7 +9,7 @@ const HANDLER_TYPES = [
   { value: 'human_handoff', label: 'Transferir a humano', description: 'Transfiere la conversación a un agente humano' }
 ];
 
-function IntentModal({ intent, categories = [], onClose, onSave }) {
+function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
   const [activeTab, setActiveTab] = useState('basic');
   const [formData, setFormData] = useState({
     key: '',
@@ -21,6 +21,7 @@ function IntentModal({ intent, categories = [], onClose, onSave }) {
     priority: 5,
     responseTemplate: '',
     handlerType: 'ai_generate',
+    linkedFlowId: '',
     active: true
   });
   const [keywordInput, setKeywordInput] = useState('');
@@ -28,6 +29,9 @@ function IntentModal({ intent, categories = [], onClose, onSave }) {
 
   useEffect(() => {
     if (intent) {
+      // Find flow that has this intent as trigger
+      const linkedFlow = flows.find(f => f.triggerIntent === intent.key);
+
       setFormData({
         key: intent.key || '',
         name: intent.name || '',
@@ -38,10 +42,11 @@ function IntentModal({ intent, categories = [], onClose, onSave }) {
         priority: intent.priority !== undefined ? intent.priority : 5,
         responseTemplate: intent.responseTemplate || '',
         handlerType: intent.handlerType || 'ai_generate',
+        linkedFlowId: linkedFlow?._id || '',
         active: intent.active !== undefined ? intent.active : true
       });
     }
-  }, [intent]);
+  }, [intent, flows]);
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -394,6 +399,37 @@ function IntentModal({ intent, categories = [], onClose, onSave }) {
                   </div>
                 </div>
 
+                {/* Flow Selector - only when handlerType is 'flow' */}
+                {formData.handlerType === 'flow' && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Flujo a ejecutar
+                    </label>
+                    <select
+                      value={formData.linkedFlowId}
+                      onChange={(e) => setFormData({ ...formData, linkedFlowId: e.target.value })}
+                      className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-primary-500 transition-colors"
+                    >
+                      <option value="">-- Selecciona un flujo --</option>
+                      {flows.filter(f => f.active).map(flow => (
+                        <option key={flow._id} value={flow._id}>
+                          {flow.name} ({flow.key})
+                        </option>
+                      ))}
+                    </select>
+                    {flows.length === 0 && (
+                      <p className="text-xs text-yellow-500 mt-2">
+                        No hay flujos creados. Ve a la sección Flows para crear uno.
+                      </p>
+                    )}
+                    {formData.linkedFlowId && (
+                      <p className="text-xs text-green-500 mt-2">
+                        Este intent iniciará el flujo seleccionado cuando sea detectado.
+                      </p>
+                    )}
+                  </div>
+                )}
+
                 {/* Response Template */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
@@ -409,7 +445,9 @@ function IntentModal({ intent, categories = [], onClose, onSave }) {
                   <p className="text-xs text-gray-500 mt-1">
                     {formData.handlerType === 'auto_response'
                       ? 'Esta respuesta se enviará automáticamente cuando se detecte el intent'
-                      : 'Opcional: puede usarse como contexto para la IA o flujos'}
+                      : formData.handlerType === 'flow'
+                      ? 'Opcional: mensaje de bienvenida antes de iniciar el flujo'
+                      : 'Opcional: puede usarse como contexto para la IA'}
                   </p>
                 </div>
               </>

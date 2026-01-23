@@ -17,6 +17,7 @@ const HANDLER_LABELS = {
 function IntentsView() {
   const [intents, setIntents] = useState([]);
   const [categories, setCategories] = useState([]);
+  const [flows, setFlows] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showIntentModal, setShowIntentModal] = useState(false);
   const [showCategoryModal, setShowCategoryModal] = useState(false);
@@ -30,6 +31,7 @@ function IntentsView() {
   useEffect(() => {
     fetchIntents();
     fetchCategories();
+    fetchFlows();
   }, []);
 
   const fetchIntents = async () => {
@@ -70,9 +72,28 @@ function IntentsView() {
     }
   };
 
+  const fetchFlows = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`${API_URL}/flows`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setFlows(data.data);
+      }
+    } catch (error) {
+      console.error('Error fetching flows:', error);
+    }
+  };
+
   const handleSaveIntent = async (intentData) => {
     try {
       const token = localStorage.getItem('token');
+      const { linkedFlowId, ...intentPayload } = intentData;
+
       const url = editingIntent
         ? `${API_URL}/intents/${editingIntent._id}`
         : `${API_URL}/intents`;
@@ -83,11 +104,55 @@ function IntentsView() {
           'Content-Type': 'application/json',
           'Authorization': `Bearer ${token}`
         },
-        body: JSON.stringify(intentData)
+        body: JSON.stringify(intentPayload)
       });
 
       const data = await res.json();
       if (data.success) {
+        // Handle flow linking if handlerType is 'flow'
+        if (intentData.handlerType === 'flow' && linkedFlowId) {
+          // First, clear any previously linked flow (if editing and changing flow)
+          const previouslyLinkedFlow = flows.find(f => f.triggerIntent === intentPayload.key);
+          if (previouslyLinkedFlow && previouslyLinkedFlow._id !== linkedFlowId) {
+            // Clear the old flow's trigger
+            await fetch(`${API_URL}/flows/${previouslyLinkedFlow._id}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({ triggerIntent: '' })
+            });
+          }
+
+          // Update the selected flow's triggerIntent
+          await fetch(`${API_URL}/flows/${linkedFlowId}`, {
+            method: 'PUT',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ triggerIntent: intentPayload.key })
+          });
+
+          // Refresh flows
+          await fetchFlows();
+        } else if (intentData.handlerType !== 'flow') {
+          // If handler type is no longer 'flow', clear any linked flow
+          const previouslyLinkedFlow = flows.find(f => f.triggerIntent === intentPayload.key);
+          if (previouslyLinkedFlow) {
+            await fetch(`${API_URL}/flows/${previouslyLinkedFlow._id}`, {
+              method: 'PUT',
+              headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+              },
+              body: JSON.stringify({ triggerIntent: '' })
+            });
+            await fetchFlows();
+          }
+        }
+
         await fetchIntents();
         setShowIntentModal(false);
         setEditingIntent(null);
@@ -580,6 +645,7 @@ function IntentsView() {
         <IntentModal
           intent={editingIntent}
           categories={categories}
+          flows={flows}
           onClose={() => {
             setShowIntentModal(false);
             setEditingIntent(null);

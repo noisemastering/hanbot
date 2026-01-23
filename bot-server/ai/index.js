@@ -53,6 +53,15 @@ const {
   getFlowByIntent
 } = require("./flowExecutor");
 
+// Wholesale handler
+const {
+  extractQuantity,
+  handleWholesaleRequest,
+  getWholesaleMention,
+  isWholesaleInquiry
+} = require("./utils/wholesaleHandler");
+const Product = require("../models/Product");
+
 /**
  * Handle intent based on DB configuration (responseTemplate + handlerType)
  * @param {string} intentKey - The classified intent key
@@ -61,7 +70,7 @@ const {
  * @param {object} convo - Conversation state
  * @returns {object|null} Response if handled, null to continue to flows
  */
-async function handleIntentFromDB(intentKey, classification, psid, convo) {
+async function handleIntentFromDB(intentKey, classification, psid, convo, userMessage = null) {
   try {
     // Lookup intent in DB
     const intent = await Intent.findOne({ key: intentKey, active: true });
@@ -127,7 +136,8 @@ async function handleIntentFromDB(intentKey, classification, psid, convo) {
         const linkedFlow = await getFlowByIntent(intentKey);
         if (linkedFlow) {
           console.log(`🔀 Intent has linked flow: ${linkedFlow.name}`);
-          return await startFlow(linkedFlow.key, psid, convo);
+          // Pass userMessage so flow can extract dimensions or other data
+          return await startFlow(linkedFlow.key, psid, convo, userMessage);
         }
         // No linked flow, continue to normal flow handling
         console.log(`⚠️ handlerType=flow but no linked flow found`);
@@ -625,12 +635,57 @@ async function generateReply(userMessage, psid, referral = null) {
 
   // ====== INTENT DB HANDLING ======
   // Check if intent has a DB-configured response (auto_response, human_handoff, or guidance for ai_generate)
-  const intentResponse = await handleIntentFromDB(classification.intent, classification, psid, convo);
+  const intentResponse = await handleIntentFromDB(classification.intent, classification, psid, convo, userMessage);
   if (intentResponse) {
     console.log(`✅ Intent handled by DB config (${intentResponse.handledBy})`);
     return await checkForRepetition(intentResponse, psid, convo);
   }
   // ====== END INTENT DB HANDLING ======
+
+  // ====== WHOLESALE CHECK ======
+  // Check if user is requesting a quantity that qualifies for wholesale
+  const requestedQty = extractQuantity(userMessage) || classification.entities?.quantity;
+
+  if (requestedQty && requestedQty > 1) {
+    // Try to find the product in context
+    let productForWholesale = null;
+
+    // Check if there's a product from classification entities
+    if (classification.entities?.productId) {
+      productForWholesale = await Product.findById(classification.entities.productId).lean();
+    }
+
+    // Or from conversation context
+    if (!productForWholesale && convo?.productSpecs?.productId) {
+      productForWholesale = await Product.findById(convo.productSpecs.productId).lean();
+    }
+
+    // Or try to find by product interest
+    if (!productForWholesale && convo?.productInterest) {
+      productForWholesale = await Product.findOne({
+        name: { $regex: convo.productInterest, $options: 'i' },
+        wholesaleEnabled: true
+      }).lean();
+    }
+
+    if (productForWholesale && productForWholesale.wholesaleEnabled) {
+      if (requestedQty >= productForWholesale.wholesaleMinQty) {
+        console.log(`📦 Wholesale quantity detected: ${requestedQty} x ${productForWholesale.name}`);
+        const wholesaleResponse = await handleWholesaleRequest(productForWholesale, requestedQty, psid, convo);
+        if (wholesaleResponse) {
+          return await checkForRepetition(wholesaleResponse, psid, convo);
+        }
+      }
+    }
+  }
+
+  // Also check for explicit wholesale inquiry
+  if (isWholesaleInquiry(userMessage)) {
+    console.log(`📦 Wholesale inquiry detected`);
+    // Could trigger a flow or hand off - for now, let it continue to normal handling
+    // The flows will add wholesale mention when showing products
+  }
+  // ====== END WHOLESALE CHECK ======
 
   // ====== LAYER 2-3: FLOW ROUTING ======
   let response = null;

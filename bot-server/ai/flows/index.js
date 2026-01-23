@@ -9,6 +9,7 @@ const groundcoverFlow = require("./groundcoverFlow");
 const monofilamentoFlow = require("./monofilamentoFlow");
 const generalFlow = require("./generalFlow");
 const { INTENTS, PRODUCTS } = require("../classifier");
+const { generateGuidedResponse } = require("../core/guidedResponse");
 
 /**
  * All available flows in priority order
@@ -30,25 +31,22 @@ const FLOWS = [
  * @param {object} sourceContext - From Layer 0 (channel, entry point, ad context)
  * @param {object} convo - Current conversation state
  * @param {string} psid - User's PSID
+ * @param {string} userMessage - The original user message
  * @param {object} campaign - Campaign document (optional)
  * @returns {object|null} Response { text, type } or null if no flow handles it
  */
-async function routeToFlow(classification, sourceContext, convo, psid, campaign = null) {
-  const { intent, product, entities, confidence, responseGuidance } = classification;
+async function routeToFlow(classification, sourceContext, convo, psid, userMessage, campaign = null) {
+  const { intent, product, entities, confidence, responseGuidance, intentName } = classification;
 
   console.log(`🔀 Flow router - Product: ${product}, Intent: ${intent}, Confidence: ${confidence}`);
 
-  // If classification has responseGuidance from DB (ai_generate handler), use it
-  // This allows dashboard-defined responses to take precedence over hardcoded flow logic
+  // If classification has responseGuidance from DB (ai_generate handler), generate AI-guided response
+  // The AI uses the template as guidance to generate a natural, contextual response
   if (responseGuidance) {
     const { updateConversation } = require("../../conversationManager");
-    console.log(`✅ Using DB responseGuidance in flow router for ${intent}`);
+    console.log(`🤖 Using AI-guided response for ${intent}`);
     await updateConversation(psid, { lastIntent: intent });
-    return {
-      type: "text",
-      text: responseGuidance,
-      handledBy: "intent_ai_generate"
-    };
+    return await generateGuidedResponse(userMessage, responseGuidance, intentName || intent, convo);
   }
 
   if (campaign) {
@@ -221,7 +219,7 @@ async function processMessage(classification, sourceContext, convo, psid, userMe
   }
 
   // Route to appropriate flow
-  const response = await routeToFlow(classification, sourceContext, convo, psid, campaign);
+  const response = await routeToFlow(classification, sourceContext, convo, psid, userMessage, campaign);
 
   if (response) {
     logRouting(psid, classification, sourceContext, response.handledBy, campaign);

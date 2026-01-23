@@ -21,20 +21,12 @@ const BUSINESS_INFO = {
  * Handle general queries
  */
 async function handle(classification, sourceContext, convo, psid) {
-  const { intent, entities, responseGuidance } = classification;
+  const { intent, entities } = classification;
 
   console.log(`📋 General flow - Intent: ${intent}`);
 
-  // If we have responseGuidance from DB intent (ai_generate), use it as the response
-  // This allows dashboard-defined responses to take precedence
-  if (responseGuidance) {
-    console.log(`✅ Using DB responseGuidance for ${intent}`);
-    await updateConversation(psid, { lastIntent: intent });
-    return {
-      type: "text",
-      text: responseGuidance
-    };
-  }
+  // Note: responseGuidance (ai_generate handler) is now handled at the router level
+  // using generateGuidedResponse() for AI-powered contextual responses
 
   switch (intent) {
     case INTENTS.GREETING:

@@ -4,12 +4,100 @@
 const Flow = require("../models/Flow");
 const { updateConversation } = require("../conversationManager");
 const { sendHandoffNotification } = require("../services/pushNotifications");
+const { parseDimensions } = require("./utils/sizeParser");
+
+// Dynamic action handlers
+const customSizeActions = require("./flows/customSizeActions");
 
 /**
  * Check if user is currently in a flow
  */
 function isInFlow(convo) {
   return convo?.activeFlow?.flowKey && convo?.activeFlow?.currentStep;
+}
+
+/**
+ * Check if a step should be skipped based on context
+ * Handles special skip conditions beyond the standard skipIf variable check
+ */
+function shouldSkipStepByContext(step, convo, collectedData, triggerMessage = null) {
+  // Standard skipIf check is handled by Flow.shouldSkipStep
+  // Here we handle special context-based conditions
+
+  if (step.stepId === 'ask_product_type') {
+    // Skip if we already know the product type from conversation context
+    if (customSizeActions.hasProductContext(convo)) {
+      console.log(`⏭️ Skipping ask_product_type - context already has product info`);
+      return true;
+    }
+  }
+
+  if (step.stepId === 'collect_dimensions') {
+    // Skip if we already have dimensions from the trigger message
+    if (triggerMessage) {
+      const dims = parseDimensions(triggerMessage);
+      if (dims && dims.hasFractional) {
+        console.log(`⏭️ Skipping collect_dimensions - found in trigger: ${dims.raw}`);
+        return true;
+      }
+    }
+  }
+
+  return false;
+}
+
+/**
+ * Pre-populate collected data from context
+ */
+function prepopulateFromContext(convo, triggerMessage = null) {
+  const data = {};
+
+  // Get product type from context
+  const productType = customSizeActions.determineProductType(convo, {}, null);
+  if (productType && productType !== 'unknown') {
+    data.productType = productType;
+    console.log(`📋 Pre-populated productType from context: ${productType}`);
+  }
+
+  // Get dimensions from trigger message
+  if (triggerMessage) {
+    const dims = parseDimensions(triggerMessage);
+    if (dims && dims.hasFractional) {
+      data.requestedSize = dims.raw;
+      data._parsedDimensions = dims;
+      console.log(`📋 Pre-populated requestedSize from trigger: ${dims.raw}`);
+    }
+  }
+
+  return data;
+}
+
+/**
+ * Handle dynamic message generation
+ * Messages starting with "DYNAMIC:" trigger special handlers
+ */
+async function handleDynamicMessage(step, collectedData, convo, psid) {
+  const message = step.message;
+
+  if (!message.startsWith('DYNAMIC:')) {
+    return null; // Not a dynamic message
+  }
+
+  const action = message.replace('DYNAMIC:', '').trim();
+  console.log(`🔄 Handling dynamic action: ${action}`);
+
+  switch (action) {
+    case 'find_similar_sizes':
+      return await customSizeActions.generateFindSimilarResponse(collectedData, convo);
+
+    case 'process_size_choice':
+      const userChoice = collectedData.userChoice;
+      return await customSizeActions.processUserChoice(userChoice, collectedData, convo);
+
+    default:
+      console.warn(`⚠️ Unknown dynamic action: ${action}`);
+      return null;
+  }
 }
 
 /**
@@ -21,8 +109,12 @@ function getFlowState(convo) {
 
 /**
  * Start a flow for a user
+ * @param {string} flowKey - The flow key to start
+ * @param {string} psid - User's PSID
+ * @param {object} convo - Conversation object
+ * @param {string} triggerMessage - The message that triggered this flow (optional)
  */
-async function startFlow(flowKey, psid, convo) {
+async function startFlow(flowKey, psid, convo, triggerMessage = null) {
   try {
     const flow = await Flow.findOne({ key: flowKey, active: true });
     if (!flow) {
@@ -30,19 +122,38 @@ async function startFlow(flowKey, psid, convo) {
       return null;
     }
 
-    const firstStep = flow.getFirstStep();
-    if (!firstStep) {
+    let currentStep = flow.getFirstStep();
+    if (!currentStep) {
       console.log(`❌ Flow has no steps: ${flowKey}`);
       return null;
+    }
+
+    // Pre-populate data from context (product type, dimensions from trigger)
+    const collectedData = prepopulateFromContext(convo, triggerMessage);
+
+    // Skip steps based on context
+    while (currentStep && shouldSkipStepByContext(currentStep, convo, collectedData, triggerMessage)) {
+      currentStep = flow.getNextStep(currentStep.stepId, collectedData);
+    }
+
+    // Also skip based on standard skipIf rules
+    while (currentStep && flow.shouldSkipStep(currentStep, collectedData)) {
+      currentStep = flow.getNextStep(currentStep.stepId, collectedData);
+    }
+
+    if (!currentStep) {
+      console.log(`⚠️ All steps skipped, completing flow immediately`);
+      return await completeFlow(flow, collectedData, psid, convo);
     }
 
     // Initialize flow state in conversation
     const flowState = {
       flowKey: flow.key,
       flowId: flow._id.toString(),
-      currentStep: firstStep.stepId,
-      collectedData: {},
-      startedAt: new Date()
+      currentStep: currentStep.stepId,
+      collectedData: collectedData,
+      startedAt: new Date(),
+      triggerMessage: triggerMessage
     };
 
     await updateConversation(psid, {
@@ -53,17 +164,56 @@ async function startFlow(flowKey, psid, convo) {
     // Increment start count
     await Flow.updateOne({ _id: flow._id }, { $inc: { startCount: 1 } });
 
-    console.log(`🚀 Started flow: ${flow.name} (step: ${firstStep.stepId})`);
+    console.log(`🚀 Started flow: ${flow.name} (step: ${currentStep.stepId})`);
 
-    // Return the first step's message
+    // Check if this is a dynamic message step
+    if (currentStep.message.startsWith('DYNAMIC:')) {
+      const dynamicResult = await handleDynamicMessage(currentStep, collectedData, convo, psid);
+      if (dynamicResult) {
+        // Handle special actions from dynamic result
+        if (dynamicResult.action === 'handoff') {
+          await updateConversation(psid, {
+            activeFlow: null,
+            handoffRequested: true,
+            handoffReason: dynamicResult.handoffReason || `Flow: ${flow.name}`,
+            handoffTimestamp: new Date(),
+            state: "needs_human"
+          });
+          await sendHandoffNotification(psid, convo, dynamicResult.handoffReason);
+          return {
+            type: "text",
+            text: dynamicResult.message,
+            handledBy: `flow_${flow.key}_handoff`
+          };
+        }
+
+        // Update options if dynamic response provides them
+        if (dynamicResult.options && dynamicResult.options.length > 0) {
+          currentStep.options = dynamicResult.options;
+        }
+
+        return {
+          type: "text",
+          text: dynamicResult.message,
+          handledBy: `flow_${flow.key}`,
+          flowState: {
+            ...flowState,
+            stepType: currentStep.inputType,
+            options: dynamicResult.options || currentStep.options
+          }
+        };
+      }
+    }
+
+    // Return the step's message
     return {
       type: "text",
-      text: firstStep.message,
+      text: currentStep.message,
       handledBy: `flow_${flow.key}`,
       flowState: {
         ...flowState,
-        stepType: firstStep.inputType,
-        options: firstStep.options
+        stepType: currentStep.inputType,
+        options: currentStep.options
       }
     };
   } catch (error) {
@@ -164,6 +314,75 @@ async function processFlowStep(userMessage, psid, convo) {
     });
 
     console.log(`➡️ Advanced to step: ${nextStep.stepId}`);
+
+    // Check if this is a dynamic message step
+    if (nextStep.message.startsWith('DYNAMIC:')) {
+      const dynamicResult = await handleDynamicMessage(nextStep, updatedData, convo, psid);
+      if (dynamicResult) {
+        // Handle special actions from dynamic result
+        if (dynamicResult.action === 'handoff') {
+          await updateConversation(psid, {
+            activeFlow: null,
+            handoffRequested: true,
+            handoffReason: dynamicResult.handoffReason || `Flow: ${flow.name}`,
+            handoffTimestamp: new Date(),
+            state: "needs_human",
+            flowCollectedData: updatedData
+          });
+          await sendHandoffNotification(psid, convo, dynamicResult.handoffReason);
+          return {
+            type: "text",
+            text: dynamicResult.message,
+            handledBy: `flow_${flow.key}_handoff`
+          };
+        }
+
+        if (dynamicResult.action === 'message') {
+          // Complete the flow with a message
+          await clearFlowState(psid);
+          return {
+            type: "text",
+            text: dynamicResult.message,
+            handledBy: `flow_${flow.key}_complete`
+          };
+        }
+
+        // If repeatStep is specified, go back to that step
+        if (dynamicResult.repeatStep) {
+          const repeatStep = flow.getStep(dynamicResult.repeatStep);
+          if (repeatStep) {
+            newFlowState.currentStep = repeatStep.stepId;
+            await updateConversation(psid, { activeFlow: newFlowState });
+            return {
+              type: "text",
+              text: dynamicResult.message,
+              handledBy: `flow_${flow.key}`,
+              flowState: {
+                ...newFlowState,
+                stepType: repeatStep.inputType,
+                options: repeatStep.options
+              }
+            };
+          }
+        }
+
+        // Update options if dynamic response provides them
+        if (dynamicResult.options && dynamicResult.options.length > 0) {
+          nextStep.options = dynamicResult.options;
+        }
+
+        return {
+          type: "text",
+          text: dynamicResult.message,
+          handledBy: `flow_${flow.key}`,
+          flowState: {
+            ...newFlowState,
+            stepType: nextStep.inputType,
+            options: dynamicResult.options || nextStep.options
+          }
+        };
+      }
+    }
 
     // Return the next step's message
     return {

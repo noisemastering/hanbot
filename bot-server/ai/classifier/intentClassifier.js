@@ -299,7 +299,7 @@ ENTITY EXTRACTION:
 - width: number in meters (e.g., 4.20, 2.10, 3)
 - height/length: number in meters
 - percentage: shade percentage (35-90)
-- quantity: number of units
+- quantity: number of units (only when explicitly ordering, e.g., "quiero 5", "necesito 10 rollos". NOT from "una/uno" in price queries like "cuánto sale una")
 - color: negro, verde, beige, blanco, azul
 - borde_length: 6, 9, 18, or 54 (only for borde_separador)
 - dimensions: full dimension string if detected (e.g., "4x5")
@@ -412,10 +412,36 @@ async function classifyMessage(message, sourceContext = null, conversationFlow =
  * Skips AI call for simple patterns to save latency/cost
  *
  * @param {string} message - User's message
+ * @param {Array} dbIntents - Intents from database (optional)
  * @returns {object|null} Classification or null if AI needed
  */
-function quickClassify(message) {
+function quickClassify(message, dbIntents = null) {
   const msg = message.toLowerCase().trim();
+
+  // First, check DB intent patterns (highest priority for custom patterns)
+  if (dbIntents && dbIntents.length > 0) {
+    for (const intent of dbIntents) {
+      if (!intent.patterns || intent.patterns.length === 0) continue;
+
+      for (const pattern of intent.patterns) {
+        try {
+          const regex = new RegExp(pattern, 'i');
+          if (regex.test(msg)) {
+            console.log(`✅ Pattern match for intent "${intent.key}": ${pattern}`);
+            return {
+              intent: intent.key,
+              product: PRODUCTS.UNKNOWN,
+              entities: {},
+              confidence: 0.92,
+              matchedPattern: pattern
+            };
+          }
+        } catch (e) {
+          console.warn(`⚠️ Invalid regex pattern for intent ${intent.key}: ${pattern}`);
+        }
+      }
+    }
+  }
 
   // Greetings
   if (/^(hola|buenas?|hey|hi|buenos?\s*d[ií]as?|buenas?\s*(tardes?|noches?))[\s!?.]*$/i.test(msg)) {
@@ -471,8 +497,11 @@ async function classify(message, sourceContext = null, conversationFlow = null, 
     });
   }
 
-  // Try quick classification first
-  const quickResult = quickClassify(message);
+  // Load DB intents for pattern matching and AI prompt
+  const dbIntents = await getIntentsFromDB();
+
+  // Try quick classification first (includes DB patterns)
+  const quickResult = quickClassify(message, dbIntents);
   if (quickResult) {
     console.log(`⚡ Quick classification (no AI):`, quickResult.intent);
     console.log(`🧠 ===== END LAYER 1 =====\n`);

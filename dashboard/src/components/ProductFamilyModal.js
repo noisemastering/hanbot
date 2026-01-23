@@ -18,7 +18,11 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
     onlineStoreLinks: [],
     enabledDimensions: [],
     dimensionUnits: {},  // Maps dimension name to selected unit
-    attributes: {}
+    attributes: {},
+    // Wholesale pricing
+    wholesaleEnabled: false,
+    wholesaleMinQty: '',
+    wholesalePrice: ''
   });
 
   // Available dimensions with their display labels, icon, and available unit options
@@ -268,7 +272,11 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
         onlineStoreLinks: product.onlineStoreLinks || [],
         enabledDimensions: product.enabledDimensions || [],
         dimensionUnits: dimensionUnitsObj,
-        attributes: attributesObj
+        attributes: attributesObj,
+        // Wholesale pricing
+        wholesaleEnabled: product.wholesaleEnabled || false,
+        wholesaleMinQty: product.wholesaleMinQty || '',
+        wholesalePrice: product.wholesalePrice || ''
       });
     } else if (presetParentId) {
       // When adding a child, preset the parent
@@ -865,6 +873,73 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
               <p className="text-xs text-gray-500 mt-1">
                 Los productos no vendibles pueden tener precio para aplicarlo a todos sus hijos
               </p>
+            </div>
+
+            {/* Wholesale Section */}
+            <div className="border border-gray-700/50 rounded-lg p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <label className="text-sm font-medium text-gray-300">
+                    Mayoreo habilitado
+                  </label>
+                  <p className="text-xs text-gray-500">
+                    Permite precio especial por cantidad
+                  </p>
+                </div>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="wholesaleEnabled"
+                    checked={formData.wholesaleEnabled}
+                    onChange={handleChange}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500"></div>
+                </label>
+              </div>
+
+              {formData.wholesaleEnabled && (
+                <div className="grid grid-cols-2 gap-4 pt-2 border-t border-gray-700/50">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Cantidad mínima
+                    </label>
+                    <input
+                      type="number"
+                      name="wholesaleMinQty"
+                      value={formData.wholesaleMinQty}
+                      onChange={handleChange}
+                      min="2"
+                      className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      placeholder="10"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Mínimo para precio de mayoreo
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Precio mayoreo
+                    </label>
+                    <div className="relative">
+                      <span className="absolute left-4 top-1/2 transform -translate-y-1/2 text-gray-400">$</span>
+                      <input
+                        type="number"
+                        name="wholesalePrice"
+                        value={formData.wholesalePrice}
+                        onChange={handleChange}
+                        min="0"
+                        step="0.01"
+                        className="w-full pl-8 pr-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                        placeholder="0.00"
+                      />
+                    </div>
+                    <p className="text-xs text-gray-500 mt-1">
+                      Precio por unidad en mayoreo
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Sellable-Only Fields */}

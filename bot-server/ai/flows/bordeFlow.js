@@ -1,10 +1,19 @@
 // ai/flows/bordeFlow.js
 // State machine for borde separador (garden edging) product flow
-// Borde comes in 6m, 9m, 18m, or 54m lengths
+// Uses existing product utilities for search and tree climbing
 
 const { updateConversation } = require("../../conversationManager");
 const { generateClickLink } = require("../../tracking");
+const ProductFamily = require("../../models/ProductFamily");
 const { INTENTS } = require("../classifier");
+
+// Import existing utilities - USE THESE
+const { getAncestors, getRootFamily } = require("../utils/productMatcher");
+const {
+  enrichProductWithContext,
+  getProductDisplayName,
+  getProductInterest
+} = require("../utils/productEnricher");
 
 /**
  * Flow stages for borde
@@ -16,30 +25,55 @@ const STAGES = {
 };
 
 /**
- * Valid lengths and their ML links
+ * Valid lengths for borde (in meters)
  */
-const BORDE_PRODUCTS = {
-  6: {
-    length: 6,
-    link: "https://articulo.mercadolibre.com.mx/MLM-923085679-borde-separador-grueso-para-jardin-rollo-de-6-metros-_JM",
-    description: "Rollo de 6 metros"
-  },
-  9: {
-    length: 9,
-    link: "https://articulo.mercadolibre.com.mx/MLM-923081079-borde-separador-grueso-para-jardin-rollo-de-9-metros-_JM",
-    description: "Rollo de 9 metros"
-  },
-  18: {
-    length: 18,
-    link: "https://articulo.mercadolibre.com.mx/MLM-801430874-borde-separador-grueso-para-jardin-rollo-de-18-metros-_JM",
-    description: "Rollo de 18 metros"
-  },
-  54: {
-    length: 54,
-    link: "https://articulo.mercadolibre.com.mx/MLM-1493170566-borde-separador-para-jardin-rollo-de-54-m-_JM",
-    description: "Rollo de 54 metros"
+const VALID_LENGTHS = [6, 9, 18, 54];
+
+/**
+ * Format money for Mexican pesos
+ */
+function formatMoney(n) {
+  if (typeof n !== "number") return String(n);
+  return n.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
+}
+
+/**
+ * Find matching sellable borde products
+ */
+async function findMatchingProducts(length = null) {
+  try {
+    // Build query for borde separador - search by name/aliases
+    const query = {
+      sellable: true,
+      active: true,
+      $or: [
+        { name: /borde.*separador/i },
+        { name: /separador.*jardin/i },
+        { aliases: { $in: [/borde/i, /separador/i, /garden.*edging/i] } }
+      ]
+    };
+
+    // Add length filter if specified
+    if (length) {
+      // Match patterns like "6 metros", "6m", "6 m", "rollo de 6"
+      const lengthRegex = new RegExp(`(^|\\s)${length}\\s*(m(?:etros?)?|metros?)?(\\s|$)`, 'i');
+      query.$and = [{ name: lengthRegex }];
+    }
+
+    console.log(`🌱 Searching for borde${length ? ` ${length}m` : ''}`);
+
+    const products = await ProductFamily.find(query)
+      .sort({ price: 1 })
+      .lean();
+
+    console.log(`🌱 Found ${products.length} matching borde products`);
+
+    return products;
+  } catch (error) {
+    console.error("❌ Error finding borde products:", error);
+    return [];
   }
-};
+}
 
 /**
  * Get current flow state from conversation
@@ -54,77 +88,84 @@ function getFlowState(convo) {
 }
 
 /**
+ * Determine what stage we should be in
+ */
+function determineStage(state) {
+  if (!state.length) return STAGES.AWAITING_LENGTH;
+  return STAGES.COMPLETE;
+}
+
+/**
  * Handle borde flow
- *
- * @param {object} classification - From Layer 1 classifier
- * @param {object} sourceContext - From Layer 0
- * @param {object} convo - Current conversation
- * @param {string} psid - User's PSID
- * @returns {object} Response { text, type }
  */
 async function handle(classification, sourceContext, convo, psid) {
   const { intent, entities } = classification;
 
-  // Get current state
   let state = getFlowState(convo);
 
   console.log(`🌱 Borde flow - Current state:`, state);
   console.log(`🌱 Borde flow - Intent: ${intent}, Entities:`, entities);
 
-  // Check for borde length in entities
-  let selectedLength = null;
-
-  if (entities.borde_length && BORDE_PRODUCTS[entities.borde_length]) {
-    selectedLength = entities.borde_length;
+  // Update state with any new entities
+  if (entities.borde_length && VALID_LENGTHS.includes(entities.borde_length)) {
+    state.length = entities.borde_length;
+  }
+  if (entities.quantity) {
+    state.quantity = entities.quantity;
   }
 
-  // If we have a length, show the product link
-  if (selectedLength) {
-    const product = BORDE_PRODUCTS[selectedLength];
-    const trackedLink = await generateClickLink(psid, product.link, {
-      productName: `Borde Separador ${selectedLength}m`,
-      city: convo?.city,
-      stateMx: convo?.stateMx
-    });
+  const stage = determineStage(state);
+  let response;
 
-    // Save state
-    await updateConversation(psid, {
-      lastIntent: "borde_complete",
-      productInterest: "borde_separador",
-      productSpecs: {
-        productType: "borde_separador",
-        borde_length: selectedLength,
-        quantity: entities.quantity || state.quantity,
-        updatedAt: new Date()
-      }
-    });
+  switch (stage) {
+    case STAGES.AWAITING_LENGTH:
+      response = handleAwaitingLength(intent, state, sourceContext);
+      break;
 
-    const quantityText = entities.quantity ? `Para ${entities.quantity} rollos, ` : "";
+    case STAGES.COMPLETE:
+      response = await handleComplete(intent, state, sourceContext, psid, convo);
+      break;
 
-    return {
-      type: "text",
-      text: `¡Claro! ${quantityText}Aquí está el borde separador de ${selectedLength} metros:\n\n` +
-            `${trackedLink}\n\n` +
-            `Ahí puedes ver el precio y realizar tu compra. El envío está incluido 📦\n\n` +
-            `¿Necesitas algo más?`
-    };
+    default:
+      response = handleStart(sourceContext);
   }
 
-  // No length specified - ask for it
+  // Save updated specs
   await updateConversation(psid, {
-    lastIntent: "borde_awaiting_length",
+    lastIntent: `borde_${stage}`,
     productInterest: "borde_separador",
     productSpecs: {
       productType: "borde_separador",
+      borde_length: state.length,
+      quantity: state.quantity,
       updatedAt: new Date()
     }
   });
 
-  // Check if this is a price query
+  return response;
+}
+
+/**
+ * Handle start - user just mentioned borde
+ */
+function handleStart(sourceContext) {
+  return {
+    type: "text",
+    text: "¡Hola! Sí manejamos borde separador para jardín.\n\n" +
+          "Sirve para delimitar áreas de pasto, crear caminos y separar zonas.\n\n" +
+          "Tenemos rollos de 6m, 9m, 18m y 54m.\n\n" +
+          "¿Qué largo te interesa?"
+  };
+}
+
+/**
+ * Handle awaiting length stage
+ */
+function handleAwaitingLength(intent, state, sourceContext) {
   if (intent === INTENTS.PRICE_QUERY) {
     return {
       type: "text",
-      text: "¡Claro! Manejamos borde separador para jardín en diferentes presentaciones:\n\n" +
+      text: "¡Claro! Manejamos borde separador en diferentes presentaciones:\n\n" +
             "• Rollo de 6 metros\n" +
             "• Rollo de 9 metros\n" +
             "• Rollo de 18 metros\n" +
@@ -133,13 +174,84 @@ async function handle(classification, sourceContext, convo, psid) {
     };
   }
 
-  // General inquiry
   return {
     type: "text",
-    text: "¡Hola! Sí manejamos borde separador para jardín 🌿\n\n" +
-          "Sirve para delimitar áreas de pasto, crear caminos y separar zonas de tu jardín.\n\n" +
-          "Tenemos rollos de 6m, 9m, 18m y 54m.\n\n" +
+    text: "Tenemos rollos de 6m, 9m, 18m y 54m.\n\n" +
           "¿Qué largo te interesa?"
+  };
+}
+
+/**
+ * Handle complete - we have the length
+ */
+async function handleComplete(intent, state, sourceContext, psid, convo) {
+  const { length, quantity } = state;
+
+  // Try to find matching product in inventory
+  const products = await findMatchingProducts(length);
+
+  if (products.length > 0) {
+    const product = products[0];
+
+    // ENRICH WITH TREE CONTEXT
+    const displayName = await getProductDisplayName(product, 'short');
+    const productInterest = await getProductInterest(product);
+
+    if (productInterest) {
+      await updateConversation(psid, { productInterest });
+    }
+
+    // Check for wholesale
+    if (quantity && product.wholesaleEnabled && product.wholesaleMinQty) {
+      if (quantity >= product.wholesaleMinQty) {
+        const { handleWholesaleRequest } = require("../utils/wholesaleHandler");
+        const wholesaleResponse = await handleWholesaleRequest(product, quantity, psid, convo);
+        if (wholesaleResponse) return wholesaleResponse;
+      }
+    }
+
+    // Get preferred link
+    const preferredLink = product.onlineStoreLinks?.find(link => link.isPreferred);
+    const productUrl = preferredLink?.url || product.onlineStoreLinks?.[0]?.url;
+
+    if (productUrl) {
+      const trackedLink = await generateClickLink(psid, productUrl, {
+        productName: product.name,
+        productId: product._id,
+        city: convo?.city,
+        stateMx: convo?.stateMx
+      });
+
+      const priceText = product.price ? ` por ${formatMoney(product.price)}` : "";
+      const quantityText = quantity ? `Para ${quantity} rollos, ` : "";
+
+      let wholesaleMention = "";
+      if (product.wholesaleEnabled && product.wholesaleMinQty && (!quantity || quantity < product.wholesaleMinQty)) {
+        wholesaleMention = `\n\nA partir de ${product.wholesaleMinQty} rollos manejamos precio de mayoreo.`;
+      }
+
+      return {
+        type: "text",
+        text: `¡Claro! ${quantityText}Tenemos el ${displayName}${priceText}:\n\n` +
+              `${trackedLink}\n\n` +
+              `Ahí puedes ver el precio y comprar. El envío está incluido.${wholesaleMention}\n\n` +
+              `¿Necesitas algo más?`
+      };
+    }
+  }
+
+  // No product found in inventory - hand off
+  await updateConversation(psid, {
+    handoffRequested: true,
+    handoffReason: `Borde quote: ${length}m${quantity ? ` x${quantity}` : ''}`,
+    handoffTimestamp: new Date()
+  });
+
+  return {
+    type: "text",
+    text: `El borde de ${length} metros está disponible.\n\n` +
+          `Un asesor te contactará con el precio.\n\n` +
+          `¿Necesitas algo más?`
   };
 }
 
@@ -149,15 +261,10 @@ async function handle(classification, sourceContext, convo, psid) {
 function shouldHandle(classification, sourceContext, convo) {
   const { product } = classification;
 
-  // Explicitly about borde
   if (product === "borde_separador") return true;
-
-  // Already in borde flow
   if (convo?.productSpecs?.productType === "borde_separador") return true;
   if (convo?.lastIntent?.startsWith("borde_")) return true;
   if (convo?.productInterest === "borde_separador") return true;
-
-  // Source indicates borde
   if (sourceContext?.ad?.product === "borde_separador") return true;
 
   return false;
@@ -167,5 +274,6 @@ module.exports = {
   handle,
   shouldHandle,
   STAGES,
-  BORDE_PRODUCTS
+  getFlowState,
+  determineStage
 };

@@ -28,8 +28,16 @@ const productFamilySchema = new mongoose.Schema({
   price: {
     type: Number
   },
+  wholesaleEnabled: {
+    type: Boolean,
+    default: false  // Whether wholesale pricing is available for this product
+  },
+  wholesaleMinQty: {
+    type: Number,
+    default: null  // Minimum quantity to qualify for wholesale pricing
+  },
   wholesalePrice: {
-    type: Number
+    type: Number  // Price per unit when buying wholesale
   },
   // ML price sync fields
   mlPrice: {

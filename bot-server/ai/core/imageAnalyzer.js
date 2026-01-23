@@ -77,12 +77,21 @@ Responde en español de forma concisa. Para categorías B y C, solo responde con
                                     /sombrilla|toldo|parasol|carpa|pérgola.*tela|forrar|reparar|cambiar.*tela/i.test(analysis);
     const isUnrelated = analysis.includes("UNRELATED_IMAGE");
 
+    // Detect when AI can't properly analyze the image
+    const cantAnalyze = /no (puedo|logro|es posible) (ver|analizar|identificar|determinar)/i.test(analysis) ||
+                        /imagen (borrosa|oscura|no clara|cortada|incompleta)/i.test(analysis) ||
+                        /no (se|está) (ve|clara|visible)/i.test(analysis) ||
+                        /necesito más (información|contexto|detalles)/i.test(analysis) ||
+                        /no tengo suficiente/i.test(analysis) ||
+                        analysis.length < 30; // Very short response = likely couldn't analyze
+
     return {
       success: true,
       analysis,
       imageUrl,
       isCustomServiceRequest,
-      isUnrelated
+      isUnrelated,
+      cantAnalyze
     };
 
   } catch (error) {
@@ -105,7 +114,17 @@ function generateImageResponse(analysisResult) {
       type: "text",
       text: "Gracias por la imagen. Te comunico con un asesor para ayudarte mejor.\n\nEn un momento te atienden.",
       needsHandoff: true,
-      handoffReason: "No se pudo analizar la imagen del cliente"
+      handoffReason: "Error al procesar la imagen del cliente"
+    };
+  }
+
+  // Handle cases where AI couldn't properly analyze the image
+  if (analysisResult.cantAnalyze) {
+    return {
+      type: "text",
+      text: "Gracias por la imagen. No logro verla bien, te comunico con un asesor que pueda ayudarte mejor.\n\nEn un momento te atienden.",
+      needsHandoff: true,
+      handoffReason: "No se pudo analizar la imagen correctamente"
     };
   }
 
@@ -121,13 +140,13 @@ function generateImageResponse(analysisResult) {
     };
   }
 
-  // Handle unrelated images
+  // Handle unrelated images - hand off since we can't help
   if (analysisResult.isUnrelated) {
     return {
       type: "text",
-      text: "Gracias por la imagen. No estoy seguro de cómo puedo ayudarte con esto.\n\n" +
-            "Nosotros vendemos mallas sombra para cubrir patios, jardines, terrazas y otros espacios exteriores.\n\n" +
-            "¿Tienes algún espacio que quieras proteger del sol? Si me envías una foto del área o me dices las medidas, te puedo asesorar."
+      text: "Gracias por la imagen. Te comunico con un asesor para ayudarte.\n\nEn un momento te atienden.",
+      needsHandoff: true,
+      handoffReason: "Cliente envió imagen no relacionada con mallas sombra"
     };
   }
 

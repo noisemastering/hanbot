@@ -1,11 +1,21 @@
 // ai/flows/mallaFlow.js
 // State machine for malla confeccionada (pre-made shade mesh) product flow
-// Malla confeccionada comes in specific pre-made sizes, various percentages
+// Uses existing product utilities for search and tree climbing
 
 const { updateConversation } = require("../../conversationManager");
 const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
 const { INTENTS } = require("../classifier");
+
+// Import existing utilities - USE THESE, don't reinvent
+const { getAncestors, getRootFamily } = require("../utils/productMatcher");
+const {
+  enrichProductWithContext,
+  getProductLineage,
+  formatProductForBot,
+  getProductDisplayName,
+  getProductInterest
+} = require("../utils/productEnricher");
 
 /**
  * Flow stages for malla confeccionada
@@ -23,35 +33,46 @@ const STAGES = {
 const VALID_PERCENTAGES = [35, 50, 70, 80, 90];
 
 /**
- * Parse dimension string like "4x3", "4 x 3", "4 por 3", "4 metros x 3"
+ * Parse dimension string - handles many formats:
+ * "4x3", "4 x 3", "4X3", "4×3"
+ * "4mx3m", "4m x 3m", "4 m x 3 m"
+ * "4mtsx3mts", "4 mts x 3 mts"
+ * "4 metros x 3 metros", "4metros x 3"
+ * "4 por 3", "4 metros por 3"
+ * "de 4 por 3", "una de 4x3"
+ *
+ * Dimensions are interchangeable: 5x3 = 3x5
  */
 function parseDimensions(str) {
   if (!str) return null;
 
-  // Pattern 1: "3x4" or "3 x 4"
-  let m = String(str).match(/(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)/i);
+  const s = String(str).toLowerCase();
 
-  // Pattern 2: "3 metros x 1.70"
-  if (!m) {
-    m = String(str).match(/(\d+(?:\.\d+)?)\s*metros?\s*x\s*(\d+(?:\.\d+)?)/i);
-  }
+  // Universal pattern that handles all formats:
+  // Optional unit after first number, separator (x/×/por), optional unit after second number
+  // Units: m, mts, metros, mt
+  const pattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*(?:x|×|por)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?/i;
 
-  // Pattern 3: "3 por 4" or "3 metros por 4"
-  if (!m) {
-    m = String(str).match(/(\d+(?:\.\d+)?)\s*(?:metros?\s+)?por\s+(\d+(?:\.\d+)?)/i);
-  }
+  const m = s.match(pattern);
 
   if (!m) return null;
-  const width = parseFloat(m[1]);
-  const height = parseFloat(m[2]);
-  if (Number.isNaN(width) || Number.isNaN(height)) return null;
+
+  const dim1 = parseFloat(m[1]);
+  const dim2 = parseFloat(m[2]);
+
+  if (Number.isNaN(dim1) || Number.isNaN(dim2)) return null;
+  if (dim1 <= 0 || dim2 <= 0) return null;
+
+  // Normalize: smaller dimension first for consistent DB matching
+  const width = Math.min(dim1, dim2);
+  const height = Math.max(dim1, dim2);
 
   return {
     width,
     height,
-    area: width * height,
-    // Normalize: smaller dimension first for consistent matching
-    normalized: `${Math.min(width, height)}x${Math.max(width, height)}`
+    original: { dim1, dim2 }, // Keep original order if needed
+    area: dim1 * dim2,
+    normalized: `${width}x${height}`
   };
 }
 
@@ -80,48 +101,43 @@ function determineStage(state) {
 }
 
 /**
- * Get available malla products from database matching dimensions
- * Dimensions are interchangeable (4x3 = 3x4)
+ * Find matching sellable products by size
+ * Searches ONLY sellable products and dimensions are interchangeable
  */
 async function findMatchingProducts(width, height, percentage = null, color = null) {
   try {
-    // Find malla sombra family
-    const mallaFamily = await ProductFamily.findOne({
-      $or: [
-        { name: /malla.*sombra/i },
-        { slug: /malla-sombra/i }
-      ],
-      active: true
-    }).lean();
+    // Normalize dimensions (smaller first for consistent matching)
+    const w = Math.min(Math.floor(width), Math.floor(height));
+    const h = Math.max(Math.floor(width), Math.floor(height));
 
-    if (!mallaFamily) return [];
+    // Build size regex - match various DB formats:
+    // "3x5", "5x3", "3x5m", "5 x 3 m", "5 m x 3 m", etc.
+    // Dimensions are interchangeable so we check both orders
+    const sizeRegex = new RegExp(
+      `^\\s*(${w}|${h})\\s*m?\\s*[xX×]\\s*(${w}|${h})\\s*m?\\s*$`,
+      'i'
+    );
 
-    // Build query for size matching
-    // The size field format is typically "4x3" or "4 x 3"
-    const sizePatterns = [
-      `${width}x${height}`,
-      `${height}x${width}`,
-      `${width} x ${height}`,
-      `${height} x ${width}`
-    ];
+    console.log(`🔍 Searching for malla ${w}x${h}m with regex: ${sizeRegex}`);
 
+    // Query ONLY sellable, active products with matching size
     const query = {
-      familyId: mallaFamily._id,
+      sellable: true,
       active: true,
-      $or: sizePatterns.map(s => ({ size: s }))
+      size: sizeRegex
     };
 
-    // Add percentage filter if specified
+    // Add percentage filter if specified (check in name or attributes)
     if (percentage) {
-      query.percentage = percentage;
+      query.name = new RegExp(`${percentage}\\s*%`, 'i');
     }
 
-    // Add color filter if specified
-    if (color) {
-      query.color = new RegExp(color, 'i');
-    }
+    const products = await ProductFamily.find(query)
+      .sort({ price: 1 }) // Cheapest first
+      .lean();
 
-    const products = await ProductFamily.find(query).lean();
+    console.log(`🔍 Found ${products.length} matching sellable products for ${w}x${h}m`);
+
     return products;
   } catch (error) {
     console.error("❌ Error finding malla products:", error);
@@ -215,7 +231,7 @@ async function handle(classification, sourceContext, convo, psid) {
 function handleStart(sourceContext) {
   return {
     type: "text",
-    text: "¡Hola! Tenemos malla sombra confeccionada lista para instalar 🌿\n\n" +
+    text: "¡Hola! Tenemos malla sombra confeccionada lista para instalar.\n\n" +
           "Los precios dependen de la medida.\n\n" +
           "¿Qué medida necesitas? (ej: 4x3 metros)"
   };
@@ -229,7 +245,7 @@ function handleAwaitingDimensions(intent, state, sourceContext) {
   if (intent === INTENTS.PRICE_QUERY) {
     return {
       type: "text",
-      text: "Los precios van desde $320 hasta $1,800 dependiendo de la medida 📐\n\n" +
+      text: "Los precios van desde $320 hasta $1,800 dependiendo de la medida.\n\n" +
             "¿Qué medida necesitas? (ej: 4x3 metros)"
     };
   }
@@ -237,7 +253,7 @@ function handleAwaitingDimensions(intent, state, sourceContext) {
   // General ask for dimensions
   return {
     type: "text",
-    text: "Para darte el precio necesito la medida 📐\n\n" +
+    text: "Para darte el precio necesito la medida.\n\n" +
           "¿Qué área buscas cubrir? (ej: 4x3 metros, 5x5 metros)"
   };
 }
@@ -258,7 +274,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
 
     return {
       type: "text",
-      text: `📏 Solo manejamos medidas en metros completos.\n\n` +
+      text: `Solo manejamos medidas en metros completos.\n\n` +
             `Para ${width}x${height}m, te recomiendo ${roundedWidth}x${roundedHeight}m.\n\n` +
             `¿Te interesa esa medida?`
     };
@@ -278,7 +294,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
 
     return {
       type: "text",
-      text: `La medida ${width}x${height}m es un pedido especial 📋\n\n` +
+      text: `La medida ${width}x${height}m es un pedido especial.\n\n` +
             `Un asesor te contactará para cotización personalizada.\n\n` +
             `¿Hay algo más que necesites?`
     };
@@ -288,9 +304,51 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
   const products = await findMatchingProducts(width, height, percentage, color);
 
   if (products.length > 0) {
-    // Found exact matches
-    const product = products[0]; // Take first match
-    const trackedLink = await generateClickLink(psid, product.permalink, {
+    // Found exact matches - use the first one
+    const product = products[0];
+
+    // ENRICH PRODUCT WITH TREE CONTEXT
+    const enrichedProduct = await enrichProductWithContext(product);
+    const displayName = await getProductDisplayName(product, 'short');
+    const productInterest = await getProductInterest(product);
+
+    // Update conversation with proper productInterest from tree
+    if (productInterest) {
+      await updateConversation(psid, { productInterest });
+    }
+
+    // Check for wholesale qualification
+    if (quantity && product.wholesaleEnabled && product.wholesaleMinQty) {
+      if (quantity >= product.wholesaleMinQty) {
+        // Wholesale handoff
+        const { handleWholesaleRequest } = require("../utils/wholesaleHandler");
+        const wholesaleResponse = await handleWholesaleRequest(product, quantity, psid, convo);
+        if (wholesaleResponse) {
+          return wholesaleResponse;
+        }
+      }
+    }
+
+    // Get the preferred link from onlineStoreLinks
+    const preferredLink = product.onlineStoreLinks?.find(link => link.isPreferred);
+    const productUrl = preferredLink?.url || product.onlineStoreLinks?.[0]?.url;
+
+    if (!productUrl) {
+      // No link available - hand off to human
+      console.log(`⚠️ Product ${product.name} has no online store link`);
+      await updateConversation(psid, {
+        handoffRequested: true,
+        handoffReason: `Malla ${width}x${height}m - no link available`,
+        handoffTimestamp: new Date()
+      });
+
+      return {
+        type: "text",
+        text: `¡Tenemos la ${displayName}! Un asesor te contactará con el precio y link de compra.\n\n¿Necesitas algo más?`
+      };
+    }
+
+    const trackedLink = await generateClickLink(psid, productUrl, {
       productName: product.name,
       productId: product._id,
       city: convo?.city,
@@ -300,17 +358,22 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
     const quantityText = quantity ? `Para ${quantity} piezas, ` : "";
     const priceText = product.price ? ` por ${formatMoney(product.price)}` : "";
 
+    // Add wholesale mention if product is eligible
+    let wholesaleMention = "";
+    if (product.wholesaleEnabled && product.wholesaleMinQty && !quantity) {
+      wholesaleMention = `\n\nA partir de ${product.wholesaleMinQty} piezas manejamos precio de mayoreo.`;
+    }
+
     return {
       type: "text",
-      text: `¡Perfecto! ${quantityText}Tenemos la malla de ${width}x${height}m${priceText}:\n\n` +
+      text: `¡Perfecto! ${quantityText}Tenemos la ${displayName}${priceText}:\n\n` +
             `${trackedLink}\n\n` +
-            `Ahí puedes ver el precio y comprar. El envío está incluido 📦\n\n` +
+            `Ahí puedes ver el precio y comprar. El envío está incluido.${wholesaleMention}\n\n` +
             `¿Necesitas algo más?`
     };
   }
 
-  // No exact match - suggest closest or custom
-  // For now, hand off to human for quote
+  // No exact match - hand off to human for quote
   await updateConversation(psid, {
     handoffRequested: true,
     handoffReason: `Malla quote request: ${width}x${height}m${percentage ? ' @ ' + percentage + '%' : ''}`,
@@ -318,20 +381,19 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
   });
 
   const area = width * height;
-  const summary = `✅ Te confirmo tu solicitud:\n\n` +
-                  `📐 Medida: ${width}m x ${height}m (${area} m²)\n`;
+  let summary = `Te confirmo tu solicitud:\n\n`;
+  summary += `Medida: ${width}m x ${height}m (${area} m²)\n`;
 
-  const extras = [];
-  if (percentage) extras.push(`📊 Sombra: ${percentage}%`);
-  if (color) extras.push(`🎨 Color: ${color}`);
-  if (quantity) extras.push(`📦 Cantidad: ${quantity}`);
+  if (percentage) summary += `Sombra: ${percentage}%\n`;
+  if (color) summary += `Color: ${color}\n`;
+  if (quantity) summary += `Cantidad: ${quantity}\n`;
+
+  summary += `\nUn asesor te contactará con el precio y disponibilidad.\n\n`;
+  summary += `¿Necesitas algo más?`;
 
   return {
     type: "text",
-    text: summary +
-          (extras.length > 0 ? extras.join('\n') + '\n\n' : '\n') +
-          `Un asesor te contactará con el precio y disponibilidad.\n\n` +
-          `¿Necesitas algo más?`
+    text: summary
   };
 }
 

@@ -10,7 +10,10 @@ function ProductModal({ product, onSave, onClose }) {
     imageUrl: '',
     description: '',
     familyId: '',
-    subfamilyId: ''
+    subfamilyId: '',
+    wholesaleEnabled: false,
+    wholesaleMinQty: '',
+    wholesalePrice: ''
   });
 
   useEffect(() => {
@@ -24,7 +27,10 @@ function ProductModal({ product, onSave, onClose }) {
         imageUrl: product.imageUrl || '',
         description: product.description || '',
         familyId: product.familyId || '',
-        subfamilyId: product.subfamilyId || ''
+        subfamilyId: product.subfamilyId || '',
+        wholesaleEnabled: product.wholesaleEnabled || false,
+        wholesaleMinQty: product.wholesaleMinQty || '',
+        wholesalePrice: product.wholesalePrice || ''
       });
     }
   }, [product]);
@@ -35,9 +41,10 @@ function ProductModal({ product, onSave, onClose }) {
   };
 
   const handleChange = (e) => {
+    const { name, value, type, checked } = e.target;
     setFormData({
       ...formData,
-      [e.target.name]: e.target.value
+      [name]: type === 'checkbox' ? checked : value
     });
   };
 
@@ -122,6 +129,58 @@ function ProductModal({ product, onSave, onClose }) {
                 className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                 placeholder="$650"
               />
+            </div>
+
+            {/* Wholesale Section */}
+            <div className="border border-gray-700/50 rounded-lg p-4 space-y-4">
+              <div className="flex items-center justify-between">
+                <label className="text-sm font-medium text-gray-300">
+                  Mayoreo habilitado
+                </label>
+                <label className="relative inline-flex items-center cursor-pointer">
+                  <input
+                    type="checkbox"
+                    name="wholesaleEnabled"
+                    checked={formData.wholesaleEnabled}
+                    onChange={handleChange}
+                    className="sr-only peer"
+                  />
+                  <div className="w-11 h-6 bg-gray-700 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-primary-500 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-500"></div>
+                </label>
+              </div>
+
+              {formData.wholesaleEnabled && (
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Cantidad mínima
+                    </label>
+                    <input
+                      type="number"
+                      name="wholesaleMinQty"
+                      value={formData.wholesaleMinQty}
+                      onChange={handleChange}
+                      min="2"
+                      className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      placeholder="10"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Precio mayoreo
+                    </label>
+                    <input
+                      type="number"
+                      name="wholesalePrice"
+                      value={formData.wholesalePrice}
+                      onChange={handleChange}
+                      min="0"
+                      className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      placeholder="550"
+                    />
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Mercado Libre Link */}

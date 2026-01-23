@@ -17,6 +17,11 @@ const productSchema = new mongoose.Schema({
   borderType: { type: String },                        // Ej: "Reforzado", "Simple", "Dobladillo"
   customizable: { type: Boolean, default: false },    // Can be custom-made to order
 
+  // Wholesale pricing
+  wholesaleEnabled: { type: Boolean, default: false }, // Is wholesale available for this product?
+  wholesaleMinQty: { type: Number, default: null },    // Minimum quantity to qualify for wholesale
+  wholesalePrice: { type: Number, default: null },     // Wholesale price per unit (optional)
+
   // Applications - Link to use case/context tree
   applicationIds: [{
     type: mongoose.Schema.Types.ObjectId,
