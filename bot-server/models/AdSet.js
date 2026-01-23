@@ -52,6 +52,50 @@ const adSetSchema = new mongoose.Schema(
       ref: "ProductFamily"
     }],
 
+    // ====== OVERRIDES (inherit from Campaign if not set) ======
+
+    // Audience override
+    audience: {
+      type: {
+        type: String,
+        enum: [null, "", "homeowner", "farmer", "greenhouse", "business", "contractor", "reseller"]
+      },
+      experienceLevel: {
+        type: String,
+        enum: [null, "", "beginner", "practical", "expert"]
+      }
+    },
+
+    // Conversation goal override
+    conversationGoal: {
+      type: String,
+      enum: [null, "", "cotizacion", "venta_directa", "lead_capture", "informacion"]
+    },
+
+    // Response guidelines override
+    responseGuidelines: {
+      tone: String,
+      mustNot: [String],
+      shouldDo: [String]
+    },
+
+    // Initial message override
+    initialMessage: String,
+
+    // Specific flow to use (overrides default flow selection)
+    flowRef: String,  // e.g., "rolloFlow", "mallaFlow", "bordeFlow"
+
+    // Ad context override
+    adContext: {
+      angle: {
+        type: String,
+        enum: [null, "", "problem_pain", "price_value", "quality", "urgency", "social_proof", "convenience"]
+      },
+      summary: String,
+      cta: String,
+      offerHook: String
+    },
+
     // Metrics
     metrics: {
       impressions: { type: Number, default: 0 },
