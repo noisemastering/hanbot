@@ -856,6 +856,7 @@ function InventarioView() {
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-20">Color</th>
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-20">Stock</th>
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-28">Precio</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-20">Min Qty</th>
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-28">Mayoreo</th>
                           <th className="px-3 py-2 text-center text-xs font-medium text-gray-400 uppercase w-20">Activo</th>
                         </tr>
@@ -984,6 +985,13 @@ function InventarioView() {
                                   </span>
                                 )}
                               </div>
+                            </td>
+                            <td className="px-3 py-2">
+                              <EditableCell
+                                value={product.wholesaleMinQty || ''}
+                                onSave={(v) => handleUpdateProduct(product._id, 'wholesaleMinQty', v ? parseInt(v) : null)}
+                                type="number"
+                              />
                             </td>
                             <td className="px-3 py-2">
                               <EditableCell
