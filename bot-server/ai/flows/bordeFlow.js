@@ -250,7 +250,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
   return {
     type: "text",
     text: `El borde de ${length} metros está disponible.\n\n` +
-          `Un asesor te contactará con el precio.\n\n` +
+          `Un especialista te contactará con el precio.\n\n` +
           `¿Necesitas algo más?`
   };
 }

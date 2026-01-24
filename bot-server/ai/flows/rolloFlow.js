@@ -248,7 +248,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
     const qtyText = quantity > 1 ? `los ${quantity} rollos` : "el rollo";
     return {
       type: "text",
-      text: `¡Perfecto! Un asesor te contactará para cotizarte ${qtyText}. ¿Necesitas algo más?`
+      text: `¡Perfecto! Un especialista te contactará para cotizarte ${qtyText}. ¿Necesitas algo más?`
     };
   }
 
@@ -316,7 +316,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
     return {
       type: "text",
       text: `Perfecto, ${quantity} rollo${quantity > 1 ? 's' : ''} de ${widthStr}m x 100m al ${state.percentage}%.\n\n` +
-            `Un asesor te contactará con el precio. ¿Necesitas algo más?`
+            `Un especialista te contactará con el precio. ¿Necesitas algo más?`
     };
   } else {
     return {

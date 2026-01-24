@@ -575,7 +575,7 @@ function generateSizeResponse(options) {
     }
 
     if (inBusinessHours) {
-      customOrderText += `\n\n✅ Estamos en horario de atención. Un asesor te contactará en breve para ayudarte con tu cotización.`;
+      customOrderText += `\n\n✅ Estamos en horario de atención. Un especialista te contactará en breve para ayudarte con tu cotización.`;
     }
 
     return {

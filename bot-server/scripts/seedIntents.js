@@ -274,7 +274,7 @@ async function seedIntents() {
         name: "Solicitud de humano",
         description: "Usuario pide hablar con una persona real",
         category: "support",
-        keywords: ["humano", "persona", "agente", "asesor", "hablar con alguien", "representante", "ejecutivo"],
+        keywords: ["humano", "persona", "agente", "asesor", "especialista", "hablar con alguien", "representante", "ejecutivo"],
         patterns: ["hablar\\s+con\\s+(alguien|una?\\s+persona|agente)", "quiero\\s+un\\s+humano"],
         priority: 10,
         handlerType: "human_handoff",
@@ -302,7 +302,7 @@ async function seedIntents() {
         patterns: ["quiero\\s+ser\\s+distribuidor", "venden\\s+al\\s+por\\s+mayor", "precio\\s+mayoreo"],
         priority: 8,
         handlerType: "human_handoff",
-        responseTemplate: "¡Gracias por tu interés en ser distribuidor! Para darte información detallada sobre nuestro programa de distribuidores, un asesor te contactará pronto.",
+        responseTemplate: "¡Gracias por tu interés en ser distribuidor! Para darte información detallada sobre nuestro programa de distribuidores, un especialista te contactará pronto.",
         active: true
       },
       {

@@ -84,7 +84,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     await sendHandoffNotification(psid, convo, "Cliente frustrado - necesita atención humana urgente");
     return {
       type: "text",
-      text: "Disculpa la confusión. Te comunico con un asesor para ayudarte mejor.\n\n" +
+      text: "Disculpa la confusión. Te comunico con un especialista para ayudarte mejor.\n\n" +
             "En un momento te atienden."
     };
   }
@@ -104,7 +104,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     await sendHandoffNotification(psid, convo, "Cliente confundido por precios - verificar cotización");
     return {
       type: "text",
-      text: "Disculpa la confusión con los precios. Te comunico con un asesor para verificar y darte el precio correcto.\n\n" +
+      text: "Disculpa la confusión con los precios. Te comunico con un especialista para verificar y darte el precio correcto.\n\n" +
             "En un momento te atienden."
     };
   }
@@ -476,8 +476,8 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
           return {
             type: "text",
-            text: `Para este producto, uno de nuestros asesores se pondrá en contacto contigo para explicarte el proceso de compra personalizado y resolver todas tus dudas.\n\n` +
-                  `Este tipo de producto requiere asesoría especializada para asegurarnos de ofrecerte la mejor solución. ¿Te conecto con un asesor?`
+            text: `Para este producto, uno de nuestros especialistas se pondrá en contacto contigo para explicarte el proceso de compra personalizado y resolver todas tus dudas.\n\n` +
+                  `Este tipo de producto requiere asesoría especializada para asegurarnos de ofrecerte la mejor solución. ¿Te conecto con un especialista?`
           };
         }
       } catch (error) {
@@ -575,7 +575,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       await sendHandoffNotification(psid, convo, "Cliente necesita atención - posible malentendido sobre impermeabilidad");
       return {
         type: "text",
-        text: "Parece que hay algo que no estoy entendiendo bien. Déjame contactar a un asesor para que te ayude mejor.\n\n" +
+        text: "Parece que hay algo que no estoy entendiendo bien. Déjame contactar a un especialista para que te ayude mejor.\n\n" +
               "En un momento te atienden."
       };
     }
@@ -673,7 +673,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       return {
         type: "text",
         text: "Perfecto, con gusto te ayudamos con el rollo que necesitas.\n\n" +
-              "Para cotizar rollos, comunícate directamente con uno de nuestros asesores:\n\n" +
+              "Para cotizar rollos, comunícate directamente con uno de nuestros especialistas:\n\n" +
               `💬 WhatsApp: ${whatsappLink}\n` +
               `📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n` +
               `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`
@@ -825,7 +825,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       // Give a shorter follow-up response
       return {
         type: "text",
-        text: "Como te comenté, para cotizaciones de volumen necesitas comunicarte con nuestros asesores:\n\n" +
+        text: "Como te comenté, para cotizaciones de volumen necesitas comunicarte con nuestros especialistas:\n\n" +
               `💬 WhatsApp: ${whatsappLink}\n` +
               `📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n\n` +
               "Ellos podrán darte el precio exacto para la cantidad que necesitas."
@@ -837,7 +837,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     return {
       type: "text",
       text: "Los descuentos por volumen aplican para pedidos desde $20,000 MXN en adelante.\n\n" +
-            "Para cotizar tu pedido y conocer los descuentos disponibles, te comunico con uno de nuestros asesores:\n\n" +
+            "Para cotizar tu pedido y conocer los descuentos disponibles, te comunico con uno de nuestros especialistas:\n\n" +
             `💬 WhatsApp: ${whatsappLink}\n` +
             `📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n` +
             `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`

@@ -487,14 +487,14 @@ Si no tienes información sobre algo, discúlpate de forma amable (sin usar emoj
         console.warn("⚠️ No se encontró información de negocio en la base de datos.");
         return {
           type: "text",
-          text: `Déjame conectarte con un asesor que pueda ayudarte mejor 😊\n\n💬 WhatsApp: ${whatsappLink}`
+          text: `Déjame conectarte con un especialista que pueda ayudarte mejor 😊\n\n💬 WhatsApp: ${whatsappLink}`
         };
       }
 
       return {
         type: "text",
         text:
-          `Déjame conectarte con un asesor que pueda ayudarte mejor 😊\n\n` +
+          `Déjame conectarte con un especialista que pueda ayudarte mejor 😊\n\n` +
           `💬 WhatsApp: ${whatsappLink}\n\n` +
           `📞 ${info.phones.join(" / ")}\n🕓 ${info.hours}`
       };

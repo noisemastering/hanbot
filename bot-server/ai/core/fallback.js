@@ -339,13 +339,13 @@ async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME
     const whatsappLink = "https://wa.me/524425957432";
 
     if (!info) {
-      return { type: "text", text: `Déjame conectarte con un asesor que pueda ayudarte mejor 😊\n\n💬 WhatsApp: ${whatsappLink}` };
+      return { type: "text", text: `Déjame conectarte con un especialista que pueda ayudarte mejor 😊\n\n💬 WhatsApp: ${whatsappLink}` };
     }
 
     return {
       type: "text",
       text:
-        `Déjame conectarte con un asesor que pueda ayudarte mejor 😊\n\n` +
+        `Déjame conectarte con un especialista que pueda ayudarte mejor 😊\n\n` +
         `💬 WhatsApp: ${whatsappLink}\n\n` +
         `📞 ${info.phones.join(" / ")}\n🕓 ${info.hours}`
     };

@@ -507,7 +507,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
     return {
       type: "text",
       text: `La medida ${width}x${height}m es un pedido especial.\n\n` +
-            `Un asesor te contactará para cotización personalizada.\n\n` +
+            `Un especialista te contactará para cotización personalizada.\n\n` +
             `¿Hay algo más que necesites?`
     };
   }
@@ -589,7 +589,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
 
       return {
         type: "text",
-        text: `¡Tenemos la ${displayName}! Un asesor te contactará con el precio y link de compra.\n\n¿Necesitas algo más?`
+        text: `¡Tenemos la ${displayName}! Un especialista te contactará con el precio y link de compra.\n\n¿Necesitas algo más?`
       };
     }
 
@@ -694,11 +694,11 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
   if (nearestCover) {
     // There's a single piece that could cover
     response += `La más cercana que cubre esa área es de ${nearestCover.product.size} por ${formatMoney(nearestCover.product.price)}.\n\n`;
-    response += `¿Te interesa esa medida, o prefieres que te pase con un asesor para cotización a medida?`;
+    response += `¿Te interesa esa medida, o prefieres que te pase con un especialista para cotización a medida?`;
   } else if (largest) {
     // Show largest available and offer custom
     response += `Nuestra medida más grande en confeccionada es de ${largest.product.size} por ${formatMoney(largest.product.price)}.\n\n`;
-    response += `Para ${width}x${height}m necesitarías una cotización a medida. ¿Te interesa la de ${largest.product.size} o te paso con un asesor?`;
+    response += `Para ${width}x${height}m necesitarías una cotización a medida. ¿Te interesa la de ${largest.product.size} o te paso con un especialista?`;
   } else {
     // No alternatives found - hand off
     await updateConversation(psid, {
@@ -707,7 +707,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
       handoffTimestamp: new Date()
     });
     response = `La medida ${width}x${height}m requiere cotización especial.\n\n`;
-    response += `Un asesor te contactará con el precio. ¿Necesitas algo más?`;
+    response += `Un especialista te contactará con el precio. ¿Necesitas algo más?`;
   }
 
   return {

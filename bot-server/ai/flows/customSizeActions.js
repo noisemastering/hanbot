@@ -257,7 +257,7 @@ async function processUserChoice(userChoice, collectedData, convo) {
     // User wants custom quote - handoff
     return {
       action: 'handoff',
-      message: `Entendido, te comunico con un asesor para cotizar tu medida especial de ${collectedData.requestedSize}. En breve te atienden.`,
+      message: `Entendido, te comunico con un especialista para cotizar tu medida especial de ${collectedData.requestedSize}. En breve te atienden.`,
       handoffReason: `Solicita medida especial: ${collectedData.requestedSize}`
     };
   }

@@ -93,7 +93,7 @@ async function handleProductCrossSell(userMessage, psid, convo, availableProduct
       return {
         type: "text",
         text: `Claro, también manejamos ${productInfo} 🌿\n\n` +
-              `Este producto requiere asesoría personalizada para asegurarnos de ofrecerte la mejor solución. ¿Te conecto con un asesor?`
+              `Este producto requiere asesoría personalizada para asegurarnos de ofrecerte la mejor solución. ¿Te conecto con un especialista?`
       };
     }
 

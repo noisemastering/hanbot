@@ -450,7 +450,7 @@ async function completeFlow(flow, collectedData, psid, convo) {
 
       return {
         type: "text",
-        text: onComplete.message || "Un asesor te contactará pronto.",
+        text: onComplete.message || "Un especialista te contactará pronto.",
         handledBy: `flow_${flow.key}_complete_handoff`
       };
 

@@ -258,7 +258,7 @@ async function handleRollQuery(userMessage, psid, convo) {
         response += `\n👤 Cliente: ${mergedSpecs.customerName}`;
       }
 
-      response += `\n\nUn asesor te contactará para confirmar precio y disponibilidad. `;
+      response += `\n\nUn especialista te contactará para confirmar precio y disponibilidad. `;
       response += `¿Necesitas algo más?`;
 
       // Mark for human handoff

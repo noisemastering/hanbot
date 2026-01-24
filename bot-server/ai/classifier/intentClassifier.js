@@ -471,7 +471,7 @@ function quickClassify(message, dbIntents = null) {
   }
 
   // Human request
-  if (/\b(humano|persona|agente|asesor|hablar\s*con\s*alguien)\b/i.test(msg)) {
+  if (/\b(humano|persona|agente|asesor|especialista|hablar\s*con\s*alguien)\b/i.test(msg)) {
     return { intent: INTENTS.HUMAN_REQUEST, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.95 };
   }
 

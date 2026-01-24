@@ -285,7 +285,7 @@ async function proceedAfterLocation(zipcode, zipInfo, psid, convo, neighborhood 
   if (options.length === 0) {
     return {
       type: "text",
-      text: "Lo siento, no encontré opciones disponibles para este producto. Un asesor te contactará pronto."
+      text: "Lo siento, no encontré opciones disponibles para este producto. Un especialista te contactará pronto."
     };
   }
 
@@ -388,7 +388,7 @@ async function handleProductSelectionResponse(msg, psid, convo) {
   if (options.length === 0) {
     return {
       type: "text",
-      text: "No hay opciones disponibles. Un asesor te contactará pronto."
+      text: "No hay opciones disponibles. Un especialista te contactará pronto."
     };
   }
 
@@ -651,7 +651,7 @@ async function handleMoreItemsResponse(msg, psid, convo) {
 
     return {
       type: "text",
-      text: `¡Perfecto! He registrado tu pedido. Un asesor te contactará pronto para confirmar disponibilidad y calcular el costo de envío a tu código postal.\n\n${orderSummary}\n\n¿Hay algo más en lo que pueda ayudarte?`
+      text: `¡Perfecto! He registrado tu pedido. Un especialista te contactará pronto para confirmar disponibilidad y calcular el costo de envío a tu código postal.\n\n${orderSummary}\n\n¿Hay algo más en lo que pueda ayudarte?`
     };
   }
 

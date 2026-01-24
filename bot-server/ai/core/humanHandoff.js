@@ -10,12 +10,12 @@ const { updateConversation } = require("../../conversationManager");
 function isHumanHandoffRequest(cleanMsg) {
   // Explicit human contact requests
   const explicitPatterns = [
-    /\b(quiero|necesito|puedo|me\s+pued[eo])\s+(hablar|comunicar|contactar|platicar)\s+(con|a)\s+(alguien|una?\s+persona|un\s+humano|ustedes|equipo|asesor)/i,
+    /\b(quiero|necesito|puedo|me\s+pued[eo])\s+(hablar|comunicar|contactar|platicar)\s+(con|a)\s+(alguien|una?\s+persona|un\s+humano|ustedes|equipo|asesor|especialista)/i,
     /\b(hablar|comunicar|contactar)\s+con\s+(alguien|una?\s+persona|un\s+asesor|ustedes)/i,
     /\bhab[eé]nenme\b/i,
     /\bll[aá]menme\b/i,
-    /\bpasarme\s+con\s+(alguien|un\s+asesor)/i,
-    /\b(necesito|requiero)\s+(un\s+)?asesor/i,
+    /\bpasarme\s+con\s+(alguien|un\s+asesor|especialista)/i,
+    /\b(necesito|requiero)\s+(un\s+)?(asesor|especialista)/i,
     /\b(me\s+atiend[ea]|que\s+me\s+atiend[ea])\s+(una?\s+persona|alguien|un\s+humano)/i,
     /\bpref(iero|erir[ií]a)\s+(hablar\s+)?con\s+(una?\s+persona|alguien)/i
   ];
@@ -53,18 +53,18 @@ async function handleHumanHandoff(userMessage, psid, convo, reason = "explicit")
   // Different responses based on reason
   const responses = {
     explicit: [
-      `Perfecto, te conectaré con uno de nuestros asesores.\n\nPuedes contactarnos directamente por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nUn asesor tomará tu conversación pronto 👍`,
-      `Claro, con gusto te paso con nuestro equipo.\n\nEscríbenos por WhatsApp para atención inmediata:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nO si prefieres, un asesor atenderá tu mensaje aquí en breve 😊`,
-      `Entendido, voy a transferir tu conversación con un asesor.\n\nSi es urgente, escríbenos por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\n¡Un asesor estará contigo pronto! 👍`
+      `Perfecto, te conectaré con uno de nuestros especialistas.\n\nPuedes contactarnos directamente por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nUn especialista tomará tu conversación pronto 👍`,
+      `Claro, con gusto te paso con nuestro equipo.\n\nEscríbenos por WhatsApp para atención inmediata:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nO si prefieres, un especialista atenderá tu mensaje aquí en breve 😊`,
+      `Entendido, voy a transferir tu conversación con un especialista.\n\nSi es urgente, escríbenos por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\n¡Un especialista estará contigo pronto! 👍`
     ],
     frustrated: [
-      `Entiendo tu frustración, déjame conectarte con uno de nuestros asesores para ayudarte mejor.\n\nEscríbenos directo por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nUn asesor atenderá tu caso personalmente 🙏`
+      `Entiendo tu frustración, déjame conectarte con uno de nuestros especialistas para ayudarte mejor.\n\nEscríbenos directo por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nUn especialista atenderá tu caso personalmente 🙏`
     ],
     complex: [
-      `Esta consulta requiere atención especializada. Te paso con un asesor que podrá ayudarte mejor.\n\nContáctanos por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nUn experto revisará tu caso pronto 🤓`
+      `Esta consulta requiere atención especializada. Te paso con un especialista que podrá ayudarte mejor.\n\nContáctanos por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nUn experto revisará tu caso pronto 🤓`
     ],
     auto_escalation: [
-      `Disculpa que no haya podido ayudarte como esperabas. Déjame conectarte con un asesor.\n\nEscríbenos por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nNuestro equipo te atenderá pronto 💚`
+      `Disculpa que no haya podido ayudarte como esperabas. Déjame conectarte con un especialista.\n\nEscríbenos por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nNuestro equipo te atenderá pronto 💚`
     ]
   };
 

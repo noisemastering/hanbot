@@ -119,7 +119,7 @@ async function handleIntentFromDB(intentKey, classification, psid, convo, userMe
 
         return {
           type: "text",
-          text: intent.responseTemplate || "Te comunico con un asesor. En un momento te atienden.",
+          text: intent.responseTemplate || "Te comunico con un especialista. En un momento te atienden.",
           handledBy: "intent_human_handoff"
         };
 
@@ -198,7 +198,7 @@ async function checkForRepetition(response, psid, convo) {
 
     return {
       type: "text",
-      text: "Déjame comunicarte con un asesor que pueda ayudarte mejor.\n\nEn un momento te atienden."
+      text: "Déjame comunicarte con un especialista que pueda ayudarte mejor.\n\nEn un momento te atienden."
     };
   }
 
@@ -864,7 +864,7 @@ async function generateReply(userMessage, psid, referral = null) {
 
       response = {
         type: "text",
-        text: "Déjame comunicarte con un asesor que pueda ayudarte mejor.\n\nEn un momento te atienden."
+        text: "Déjame comunicarte con un especialista que pueda ayudarte mejor.\n\nEn un momento te atienden."
       };
     } else {
       // Ask clarifying question - only root product classes

@@ -238,7 +238,7 @@ async function handleHumanRequest(convo, psid) {
 
   return {
     type: "text",
-    text: "¡Claro! Un asesor te contactará a la brevedad.\n\n" +
+    text: "¡Claro! Un especialista te contactará a la brevedad.\n\n" +
           "También puedes llamarnos al 📞 " + BUSINESS_INFO.phones[0] +
           "\n🕓 " + BUSINESS_INFO.hours
   };
@@ -327,7 +327,7 @@ function shouldHandle(classification, sourceContext, convo, userMessage = '') {
     }
 
     // Human request patterns
-    if (/hablar\s+con\s+(alguien|una?\s+persona|humano|asesor)|at[ie]ende\s+una?\s+persona/i.test(msg)) {
+    if (/hablar\s+con\s+(alguien|una?\s+persona|humano|asesor|especialista)|at[ie]ende\s+una?\s+persona/i.test(msg)) {
       classification.intent = INTENTS.HUMAN_REQUEST;
       return true;
     }

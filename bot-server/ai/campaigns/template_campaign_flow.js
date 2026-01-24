@@ -92,7 +92,7 @@ async function handleTemplateCampaignFlow(msg, psid, convo, campaign) {
   }
 
   // ☎️ 8. Contacto directo
-  if (/tel[eé]fono|hablar|asesor|contactar|whatsapp|número/.test(lowerMsg)) {
+  if (/tel[eé]fono|hablar|asesor|especialista|contactar|whatsapp|número/.test(lowerMsg)) {
     await updateConversation(psid, { lastIntent: "contact_request" });
     return {
       type: "text",

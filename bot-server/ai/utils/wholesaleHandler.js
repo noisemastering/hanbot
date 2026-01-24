@@ -113,7 +113,7 @@ async function handleWholesaleRequest(product, quantity, psid, convo) {
     }
   }
 
-  message += `\n\nTe comunico con un asesor para finalizar tu pedido. En un momento te atienden.`;
+  message += `\n\nTe comunico con un especialista para finalizar tu pedido. En un momento te atienden.`;
 
   // Update conversation for handoff
   await updateConversation(psid, {
