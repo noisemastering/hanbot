@@ -291,17 +291,37 @@ async function generateReply(userMessage, psid, referral = null) {
     const hasPriceIntent = /\b(precio|costo|cotiz|cu[aá]nto)\b/i.test(cleanMsg);
 
     if (incompleteDimensionMatch && hasPriceIntent) {
-      // User mentioned a single dimension like "3 metros" but we need both
-      const singleDim = incompleteDimensionMatch[1];
+      // User mentioned a single dimension like "3 metros" - assume square
+      const singleDim = parseFloat(incompleteDimensionMatch[1]);
+      const squareDimensions = { width: singleDim, height: singleDim, area: singleDim * singleDim };
+
+      const availableSizes = await getAvailableSizes(convo);
+      const closest = findClosestSizes(squareDimensions, availableSizes);
+
       await updateConversation(psid, {
-        lastIntent: "incomplete_dimension",
+        lastIntent: "specific_measure",
         productInterest: "malla_sombra",
+        requestedSize: `${singleDim}x${singleDim}`,
         unknownCount: 0
       });
-      return {
-        type: "text",
-        text: `Para darte el precio necesito la medida completa (ancho x largo).\n\n¿De cuántos metros necesitas? Por ejemplo: ${singleDim}x${singleDim}m, ${singleDim}x4m, ${singleDim}x5m...\n\nEl envío está incluido en el precio y llega a todo México 📦`
-      };
+
+      const businessInfo = await getBusinessInfo();
+      const sizeResponse = generateSizeResponse({
+        smaller: closest.smaller,
+        bigger: closest.bigger,
+        exact: closest.exact,
+        requestedDim: squareDimensions,
+        availableSizes,
+        businessInfo
+      });
+
+      // Add note about shipping being included
+      let response = sizeResponse.text;
+      if (!response.includes('envío')) {
+        response += '\n\nEl envío está incluido en el precio 📦';
+      }
+
+      return { type: "text", text: response };
     }
 
     // Generic measure/price inquiry (no specific dimensions mentioned)
