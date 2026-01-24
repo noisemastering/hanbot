@@ -56,7 +56,7 @@ async function routeToFlow(classification, sourceContext, convo, psid, userMessa
 
   // Check each flow in priority order
   for (const { name, flow } of FLOWS) {
-    if (flow.shouldHandle(classification, sourceContext, convo)) {
+    if (flow.shouldHandle(classification, sourceContext, convo, userMessage)) {
       console.log(`✅ Routing to ${name} flow`);
 
       // Pass campaign AND userMessage to flow handler
@@ -223,10 +223,13 @@ async function processMessage(classification, sourceContext, convo, psid, userMe
   if (isColdStart(classification, sourceContext, convo, campaign) &&
       classification.intent !== INTENTS.GREETING) {
     // But first check if this is a general query that we can handle
-    const generalResponse = await generalFlow.handle(classification, sourceContext, convo, psid, campaign);
-    if (generalResponse) {
-      logRouting(psid, classification, sourceContext, "general", campaign);
-      return generalResponse;
+    // Use shouldHandle to trigger pattern-based intent detection
+    if (generalFlow.shouldHandle(classification, sourceContext, convo, userMessage)) {
+      const generalResponse = await generalFlow.handle(classification, sourceContext, convo, psid, campaign, userMessage);
+      if (generalResponse) {
+        logRouting(psid, classification, sourceContext, "general", campaign);
+        return generalResponse;
+      }
     }
 
     // True cold start

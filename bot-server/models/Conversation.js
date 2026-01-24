@@ -20,6 +20,12 @@ const conversationSchema = new mongoose.Schema({
   requestedSize: { type: String, default: null },  // Track last size user asked about
   productInterest: { type: String, default: null }, // Product type user is interested in (malla_sombra, borde_separador, rollo)
 
+  // POI (Product of Interest) tree tracking - ensures variants stay in same tree
+  productFamilyId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductFamily', default: null }, // Current product node
+  poiLocked: { type: Boolean, default: false },        // Whether POI is locked to a tree
+  poiRootId: { type: String, default: null },          // Root of the locked tree
+  poiRootName: { type: String, default: null },        // Name of root product (e.g., "Malla Sombra Raschel")
+
   // Product specifications tracking (remembers what user already told us)
   productSpecs: {
     productType: { type: String, default: null },    // "rollo", "confeccionada", "ground_cover"

@@ -33,6 +33,7 @@ const { handleHumanSalesFlow } = require("./core/humanSalesHandler");
 const { correctTypos, logTypoCorrection } = require("./utils/typoCorrection");
 const { getProductDisplayName, determineVerbosity } = require("./utils/productEnricher");
 const { identifyAndSetProduct } = require("./utils/productIdentifier");
+const { lockPOI, checkVariantExists, getNotAvailableResponse } = require("./utils/productTree");
 
 // Layer 0: Source Context Detection
 const { buildSourceContext, logSourceContext, getProductFromSource } = require("./context");
@@ -604,28 +605,61 @@ async function generateReply(userMessage, psid, referral = null) {
         if (product) {
           const productInterest = await getProductInterest(product);
           if (productInterest) {
-            await updateConversation(psid, { productInterest });
-            convo.productInterest = productInterest; // Update local copy too
-            console.log(`✅ Self-healing: set productInterest to ${productInterest}`);
+            // Lock POI with full tree context
+            const poiContext = await lockPOI(psid, product._id);
+            if (poiContext) {
+              convo.productInterest = productInterest;
+              convo.poiLocked = true;
+              convo.poiRootId = poiContext.rootId?.toString();
+              convo.poiRootName = poiContext.rootName;
+              convo.productFamilyId = product._id.toString();
+              console.log(`✅ Self-healing: POI locked to ${poiContext.rootName} (${productInterest})`);
+            } else {
+              await updateConversation(psid, { productInterest });
+              convo.productInterest = productInterest;
+              console.log(`✅ Self-healing: set productInterest to ${productInterest}`);
+            }
           }
         }
       } else if (resolvedSettings?.campaignName) {
-        // Fallback: infer from campaign name
+        // Fallback: infer from campaign name and try to lock to root family
         const campaignName = (resolvedSettings.campaignName || '').toLowerCase();
         let productInterest = null;
+        let rootFamilyName = null;
 
         if (campaignName.includes('malla') || campaignName.includes('sombra') || campaignName.includes('confeccionada')) {
           productInterest = 'malla_sombra';
+          rootFamilyName = 'Malla Sombra';
         } else if (campaignName.includes('borde') || campaignName.includes('jardin')) {
           productInterest = 'borde_separador';
+          rootFamilyName = 'Borde Separador';
         } else if (campaignName.includes('ground') || campaignName.includes('cover')) {
           productInterest = 'ground_cover';
+          rootFamilyName = 'Ground Cover';
         }
 
         if (productInterest) {
-          await updateConversation(psid, { productInterest });
-          convo.productInterest = productInterest;
-          console.log(`✅ Self-healing: inferred productInterest ${productInterest} from campaign name`);
+          // Try to find and lock to the root family
+          const rootFamily = await ProductFamily.findOne({
+            name: { $regex: rootFamilyName, $options: 'i' },
+            parentId: null,
+            active: true
+          }).lean();
+
+          if (rootFamily) {
+            const poiContext = await lockPOI(psid, rootFamily._id);
+            if (poiContext) {
+              convo.productInterest = productInterest;
+              convo.poiLocked = true;
+              convo.poiRootId = poiContext.rootId?.toString();
+              convo.poiRootName = poiContext.rootName;
+              console.log(`✅ Self-healing: POI locked to ${poiContext.rootName} from campaign name`);
+            }
+          } else {
+            await updateConversation(psid, { productInterest });
+            convo.productInterest = productInterest;
+            console.log(`✅ Self-healing: inferred productInterest ${productInterest} from campaign name`);
+          }
         }
       }
     } catch (err) {
@@ -683,15 +717,50 @@ async function generateReply(userMessage, psid, referral = null) {
   }
   // ====== END CAMPAIGN CONTEXT ======
 
-  // ====== PRODUCT IDENTIFICATION ======
+  // ====== PRODUCT IDENTIFICATION & POI LOCK ======
   // Try to identify product from message content
   // This runs even if productInterest is already set (might be switching products)
   const identifiedProduct = await identifyAndSetProduct(userMessage, psid, convo);
   if (identifiedProduct) {
     convo.productInterest = identifiedProduct.key; // Update local copy
     console.log(`🎯 Product context: ${identifiedProduct.displayName} (${identifiedProduct.key})`);
+
+    // Lock POI with full tree context
+    if (identifiedProduct.familyId && !convo.poiLocked) {
+      const poiContext = await lockPOI(psid, identifiedProduct.familyId);
+      if (poiContext) {
+        convo.poiLocked = true;
+        convo.poiRootId = poiContext.rootId?.toString();
+        convo.poiRootName = poiContext.rootName;
+        console.log(`🔒 POI locked: ${poiContext.name} (root: ${poiContext.rootName})`);
+      }
+    }
   }
-  // ====== END PRODUCT IDENTIFICATION ======
+
+  // If POI is locked but user asks for something outside the tree, inform them
+  if (convo.poiLocked && convo.poiRootId) {
+    // Check if message mentions a different product category entirely
+    const ProductFamily = require("../models/ProductFamily");
+    const otherProduct = await identifyAndSetProduct(userMessage, psid, {});
+
+    if (otherProduct && otherProduct.familyId) {
+      // Check if this product is in our locked tree
+      const variantCheck = await checkVariantExists(convo.poiRootId, otherProduct.name);
+
+      if (!variantCheck.exists && variantCheck.reason === "not_in_tree") {
+        // User asked for a product outside their locked tree
+        // Allow switching - update POI to new tree
+        const newPOI = await lockPOI(psid, otherProduct.familyId);
+        if (newPOI) {
+          convo.productInterest = otherProduct.key;
+          convo.poiRootId = newPOI.rootId?.toString();
+          convo.poiRootName = newPOI.rootName;
+          console.log(`🔄 POI switched: ${newPOI.rootName}`);
+        }
+      }
+    }
+  }
+  // ====== END PRODUCT IDENTIFICATION & POI LOCK ======
 
   // ====== LAYER 1: INTENT CLASSIFICATION ======
   const conversationFlow = convo?.productSpecs ? {

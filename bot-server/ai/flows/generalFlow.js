@@ -256,7 +256,7 @@ async function handleRejection(convo, psid) {
 /**
  * Check if this flow should handle the message
  */
-function shouldHandle(classification, sourceContext, convo) {
+function shouldHandle(classification, sourceContext, convo, userMessage = '') {
   const { intent } = classification;
 
   // Handle social intents
@@ -277,6 +277,35 @@ function shouldHandle(classification, sourceContext, convo) {
     INTENTS.DELIVERY_TIME_QUERY
   ].includes(intent)) {
     return true;
+  }
+
+  // Pattern-based detection for common queries (fallback when intent is unclear)
+  if (userMessage) {
+    const msg = userMessage.toLowerCase();
+
+    // Location patterns
+    if (/d[oó]nde\s+(est[aá]n|se\s+ubican|quedan)|ubicaci[oó]n|direcci[oó]n/i.test(msg)) {
+      classification.intent = INTENTS.LOCATION_QUERY; // Override for handler
+      return true;
+    }
+
+    // Shipping patterns
+    if (/env[ií](an?|os?)\s+(a|hasta)|hacen\s+env[ií]os?|llega\s+a/i.test(msg)) {
+      classification.intent = INTENTS.SHIPPING_QUERY;
+      return true;
+    }
+
+    // Payment patterns
+    if (/c[oó]mo\s+(se\s+)?paga|formas?\s+de\s+pago|pago\s+contra\s+entrega|aceptan\s+tarjeta/i.test(msg)) {
+      classification.intent = INTENTS.PAYMENT_QUERY;
+      return true;
+    }
+
+    // Human request patterns
+    if (/hablar\s+con\s+(alguien|una?\s+persona|humano|asesor)|at[ie]ende\s+una?\s+persona/i.test(msg)) {
+      classification.intent = INTENTS.HUMAN_REQUEST;
+      return true;
+    }
   }
 
   // Handle confirmation/rejection only if not in a product flow

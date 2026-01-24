@@ -17,6 +17,15 @@ const {
   getProductInterest
 } = require("../utils/productEnricher");
 
+// POI tree management
+const {
+  checkVariantExists,
+  getNotAvailableResponse,
+  getSiblings,
+  getAvailableOptions,
+  findInTree
+} = require("../utils/productTree");
+
 /**
  * Flow stages for malla confeccionada
  */
@@ -130,8 +139,9 @@ function determineStage(state) {
 /**
  * Find matching sellable products by size
  * Searches ONLY sellable products and dimensions are interchangeable
+ * If poiRootId is provided, searches only within that tree
  */
-async function findMatchingProducts(width, height, percentage = null, color = null) {
+async function findMatchingProducts(width, height, percentage = null, color = null, poiRootId = null) {
   try {
     // Normalize dimensions (smaller first for consistent matching)
     const w = Math.min(Math.floor(width), Math.floor(height));
@@ -144,7 +154,7 @@ async function findMatchingProducts(width, height, percentage = null, color = nu
       'i'
     );
 
-    console.log(`🔍 Searching for malla ${w}x${h}m with regex: ${sizeRegex}`);
+    console.log(`🔍 Searching for malla ${w}x${h}m with regex: ${sizeRegex}${poiRootId ? ` in tree ${poiRootId}` : ''}`);
 
     // Query ONLY sellable, active products with matching size
     const query = {
@@ -158,9 +168,21 @@ async function findMatchingProducts(width, height, percentage = null, color = nu
       query.name = new RegExp(`${percentage}\\s*%`, 'i');
     }
 
-    const products = await ProductFamily.find(query)
+    let products = await ProductFamily.find(query)
       .sort({ price: 1 }) // Cheapest first
       .lean();
+
+    // If POI tree is locked, filter to only products in that tree
+    if (poiRootId && products.length > 0) {
+      const { getAllDescendants } = require("../utils/productTree");
+      const treeDescendants = await getAllDescendants(poiRootId);
+      const treeIds = new Set(treeDescendants.map(d => d._id.toString()));
+
+      // Filter products to only those in the tree
+      const filteredProducts = products.filter(p => treeIds.has(p._id.toString()));
+      console.log(`🔍 Filtered from ${products.length} to ${filteredProducts.length} products in POI tree`);
+      products = filteredProducts;
+    }
 
     console.log(`🔍 Found ${products.length} matching sellable products for ${w}x${h}m`);
 
@@ -180,6 +202,43 @@ function formatMoney(n) {
 }
 
 /**
+ * Handle multiple dimensions request (e.g., "6x5 o 5x5")
+ */
+async function handleMultipleDimensions(dimensions, psid, convo) {
+  const poiRootId = convo?.poiRootId;
+  const responseParts = [];
+
+  for (const dim of dimensions) {
+    const w = Math.min(dim.width, dim.height);
+    const h = Math.max(dim.width, dim.height);
+
+    // Find product for this size
+    const products = await findMatchingProducts(w, h, null, null, poiRootId);
+
+    if (products.length > 0) {
+      const product = products[0];
+      responseParts.push(`• ${dim.width}x${dim.height}m: ${formatMoney(product.price)}`);
+    } else {
+      responseParts.push(`• ${dim.width}x${dim.height}m: No disponible en esta medida`);
+    }
+  }
+
+  await updateConversation(psid, {
+    lastIntent: 'malla_multiple_sizes',
+    productInterest: 'malla_sombra',
+    productSpecs: {
+      productType: 'malla',
+      updatedAt: new Date()
+    }
+  });
+
+  return {
+    type: "text",
+    text: `Aquí te van los precios:\n\n${responseParts.join('\n')}\n\n¿Cuál te interesa?`
+  };
+}
+
+/**
  * Handle malla flow
  */
 async function handle(classification, sourceContext, convo, psid, campaign = null, userMessage = '') {
@@ -191,6 +250,16 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   console.log(`🌐 Malla flow - Current state:`, state);
   console.log(`🌐 Malla flow - Intent: ${intent}, Entities:`, entities);
   console.log(`🌐 Malla flow - User message: "${userMessage}"`);
+
+  // CHECK FOR MULTIPLE DIMENSIONS FIRST
+  // If user asks for multiple sizes like "6x5 o 5x5", handle them together
+  const { extractAllDimensions } = require("../core/multipleSizes");
+  const allDimensions = extractAllDimensions(userMessage);
+
+  if (allDimensions.length >= 2) {
+    console.log(`🌐 Malla flow - Multiple dimensions detected: ${allDimensions.map(d => d.width + 'x' + d.height).join(', ')}`);
+    return await handleMultipleDimensions(allDimensions, psid, convo);
+  }
 
   // FIRST: Try to parse dimensions directly from user message
   // This is more reliable than depending on classifier entities
@@ -235,6 +304,17 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   }
   if (entities.quantity) {
     state.quantity = entities.quantity;
+  }
+
+  // Check if user is asking about product condition (new vs used)
+  const conditionRequest = /\b(nuev[oa]s?|usad[oa]s?|segunda\s*mano|de\s*segunda|reciclad[oa]s?)\b/i;
+  const isAskingAboutCondition = userMessage && conditionRequest.test(userMessage);
+
+  if (isAskingAboutCondition) {
+    return {
+      type: "text",
+      text: "Sí, todas nuestras mallas son nuevas, somos fabricantes ¿Qué medida necesitas?"
+    };
   }
 
   // Check if user is asking for product INFO (not trying to buy yet)
@@ -333,24 +413,20 @@ function handleAwaitingDimensions(intent, state, sourceContext, userMessage = ''
   }
 
   // Check if they're asking what sizes/prices are available
-  // "que tamaños son", "qué medidas tienen", "cuáles medidas", "q salen", "cuanto cuestan"
+  // "que tamaños son", "qué medidas tienen", "cuáles medidas", "q salen", "medidas y precios"
   const sizesListRequest = /\b(qu[eé]|cu[aá]l(es)?)\s*(tamaños?|medidas?|dimensiones?)\s*(son|hay|tienen|manejan|disponibles?)?\b/i.test(userMessage) ||
                            /\b(tamaños?|medidas?)\s*(disponibles?|tienen|manejan|hay)\b/i.test(userMessage) ||
-                           /\b(q|que|qué)\s+salen\b/i.test(userMessage);
+                           /\b(q|que|qué)\s+salen\b/i.test(userMessage) ||
+                           /\b(medidas?|tamaños?)\s*(y|con)\s*(precios?|costos?)\b/i.test(userMessage) ||
+                           /\b(precios?|costos?)\s*(y|con)\s*(medidas?|tamaños?)\b/i.test(userMessage);
 
   if (sizesListRequest) {
+    // Show range instead of full list (rule: don't dump long lists)
     return {
       type: "text",
-      text: "Tenemos malla sombra confeccionada en estas medidas:\n\n" +
-            "📐 *Pequeñas* (desde $320):\n" +
-            "2x2m, 2x3m, 3x3m\n\n" +
-            "📐 *Medianas* (desde $450):\n" +
-            "3x4m, 4x4m, 3x5m, 4x5m\n\n" +
-            "📐 *Grandes* (desde $750):\n" +
-            "4x6m, 5x5m, 5x6m, 6x6m\n\n" +
-            "📐 *Extra grandes* (desde $1,200):\n" +
-            "4x8m, 5x8m, 6x8m, 6x10m\n\n" +
-            "¿Cuál te interesa?"
+      text: "Tenemos malla sombra confeccionada desde 2x2m hasta 6x10m.\n\n" +
+            "Los precios van desde $320 hasta $1,800 dependiendo del tamaño.\n\n" +
+            "¿Qué medida necesitas?"
     };
   }
 
@@ -361,6 +437,28 @@ function handleAwaitingDimensions(intent, state, sourceContext, userMessage = ''
       text: "Los precios van desde $320 hasta $1,800 dependiendo de la medida.\n\n" +
             "¿Qué medida necesitas? (ej: 4x3 metros)"
     };
+  }
+
+  // Check if user mentioned an object they want to cover (carro, cochera, patio, etc.)
+  const objectPatterns = [
+    { pattern: /\b(carro|coche|auto|veh[ií]culo|camioneta)\b/i, object: "carro" },
+    { pattern: /\b(cochera|garaje|garage)\b/i, object: "cochera" },
+    { pattern: /\b(patio|jard[ií]n)\b/i, object: "patio" },
+    { pattern: /\b(terraza|balc[oó]n)\b/i, object: "terraza" },
+    { pattern: /\b(ventana|ventanal)\b/i, object: "ventana" },
+    { pattern: /\b(puerta|entrada)\b/i, object: "puerta" },
+    { pattern: /\b(estacionamiento|parking)\b/i, object: "estacionamiento" },
+    { pattern: /\b(negocio|local|tienda)\b/i, object: "negocio" },
+    { pattern: /\b(alberca|piscina)\b/i, object: "alberca" }
+  ];
+
+  for (const { pattern, object } of objectPatterns) {
+    if (pattern.test(userMessage)) {
+      return {
+        type: "text",
+        text: `¿Qué dimensiones tiene tu ${object}?`
+      };
+    }
   }
 
   // General ask for dimensions
@@ -413,8 +511,41 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
     };
   }
 
-  // Try to find matching products
-  const products = await findMatchingProducts(width, height, percentage, color);
+  // ====== POI TREE CHECK ======
+  // If conversation has a locked POI, check that requested variant exists in tree
+  if (convo?.poiRootId) {
+    const sizeQuery = `${Math.min(width, height)}x${Math.max(width, height)}`;
+    const variantCheck = await checkVariantExists(convo.poiRootId, sizeQuery);
+
+    if (!variantCheck.exists) {
+      console.log(`❌ Variant ${sizeQuery} not found in POI tree (root: ${convo.poiRootName})`);
+
+      // Get available options to suggest
+      const availableInTree = await getAvailableOptions(convo.poiRootId);
+      const sellableChildren = availableInTree.children.filter(c => c.sellable && c.size);
+
+      if (sellableChildren.length > 0) {
+        // Show available sizes in this tree
+        const availableSizes = sellableChildren.slice(0, 5).map(p => p.size).join(', ');
+        return {
+          type: "text",
+          text: `No tenemos malla de ${width}x${height}m en esta línea.\n\n` +
+                `Las medidas disponibles incluyen: ${availableSizes}.\n\n` +
+                `¿Te interesa alguna de estas?`
+        };
+      }
+
+      // No sellable products found - generic not available
+      return {
+        type: "text",
+        text: getNotAvailableResponse(`${width}x${height}m`, convo.poiRootName || 'Malla Sombra')
+      };
+    }
+  }
+  // ====== END POI TREE CHECK ======
+
+  // Try to find matching products (within POI tree if locked)
+  const products = await findMatchingProducts(width, height, percentage, color, convo?.poiRootId);
 
   if (products.length > 0) {
     // Found exact matches - use the first one
@@ -523,13 +654,20 @@ function shouldHandle(classification, sourceContext, convo) {
   if (convo?.productSpecs?.productType === "malla") return true;
   if (convo?.lastIntent?.startsWith("malla_")) return true;
 
+  // POI is locked to Malla Sombra tree
+  const poiRootName = (convo?.poiRootName || '').toLowerCase();
+  if (poiRootName.includes('malla') && poiRootName.includes('sombra')) {
+    console.log(`🌐 Malla flow - POI locked to ${convo.poiRootName}, handling`);
+    return true;
+  }
+
   // Check productInterest - handle variations like malla_sombra_raschel, malla_sombra_raschel_agricola, etc.
-  const productInterest = convo?.productInterest || '';
+  const productInterest = String(convo?.productInterest || '');
   const isMallaInterest = productInterest.startsWith('malla_sombra') || productInterest === 'confeccionada';
   if (isMallaInterest && convo?.productSpecs?.productType !== "rollo") return true;
 
   // Source indicates malla (also check for variations)
-  const adProduct = sourceContext?.ad?.product || '';
+  const adProduct = String(sourceContext?.ad?.product || '');
   if (adProduct.startsWith('malla_sombra') || adProduct === 'confeccionada') return true;
 
   return false;
