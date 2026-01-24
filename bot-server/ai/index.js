@@ -32,6 +32,7 @@ const { handleRollQuery } = require("./core/rollQuery");
 const { handleHumanSalesFlow } = require("./core/humanSalesHandler");
 const { correctTypos, logTypoCorrection } = require("./utils/typoCorrection");
 const { getProductDisplayName, determineVerbosity } = require("./utils/productEnricher");
+const { identifyAndSetProduct } = require("./utils/productIdentifier");
 
 // Layer 0: Source Context Detection
 const { buildSourceContext, logSourceContext, getProductFromSource } = require("./context");
@@ -681,6 +682,16 @@ async function generateReply(userMessage, psid, referral = null) {
     }
   }
   // ====== END CAMPAIGN CONTEXT ======
+
+  // ====== PRODUCT IDENTIFICATION ======
+  // Try to identify product from message content
+  // This runs even if productInterest is already set (might be switching products)
+  const identifiedProduct = await identifyAndSetProduct(userMessage, psid, convo);
+  if (identifiedProduct) {
+    convo.productInterest = identifiedProduct.key; // Update local copy
+    console.log(`🎯 Product context: ${identifiedProduct.displayName} (${identifiedProduct.key})`);
+  }
+  // ====== END PRODUCT IDENTIFICATION ======
 
   // ====== LAYER 1: INTENT CLASSIFICATION ======
   const conversationFlow = convo?.productSpecs ? {

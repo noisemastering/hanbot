@@ -10,6 +10,7 @@ const monofilamentoFlow = require("./monofilamentoFlow");
 const generalFlow = require("./generalFlow");
 const { INTENTS, PRODUCTS } = require("../classifier");
 const { generateGuidedResponse } = require("../core/guidedResponse");
+const { getColdStartProductList } = require("../utils/productIdentifier");
 
 /**
  * All available flows in priority order
@@ -142,8 +143,8 @@ function isColdStart(classification, sourceContext, convo, campaign = null) {
  * Only used when we truly don't know what product the user wants
  */
 function getColdStartQuestion(intent = null) {
-  // Root product classes - the ONLY options we show on cold start
-  const productList = "• Malla Sombra\n• Malla Antiáfido\n• Malla Anti Granizo\n• Cinta Plástica";
+  // Get product list from productIdentifier (single source of truth)
+  const productList = getColdStartProductList();
 
   // Question variations
   const questions = [
