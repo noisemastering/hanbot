@@ -251,8 +251,9 @@ async function generateReply(userMessage, psid, referral = null) {
       };
     }
 
-    // Check for color query
-    if (isColorQuery(cleanMsg)) {
+    // Check for color query - but don't intercept if there's also a dimension request
+    const hasDimensionsInMsg = /\d+\s*(?:x|×|por)\s*\d+/i.test(cleanMsg);
+    if (isColorQuery(cleanMsg) && !hasDimensionsInMsg) {
       await updateConversation(psid, { lastIntent: "color_query", unknownCount: 0 });
       const colorResponses = [
         `Por ahora solo manejamos malla sombra beige en versión confeccionada 🌿. ¿Te gustaría ver las medidas disponibles?`,
