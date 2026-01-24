@@ -23,7 +23,8 @@ const {
   getNotAvailableResponse,
   getSiblings,
   getAvailableOptions,
-  findInTree
+  findInTree,
+  getAllDescendants
 } = require("../utils/productTree");
 
 /**
@@ -617,27 +618,101 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
     };
   }
 
-  // No exact match - hand off to human for quote
+  // No exact match - suggest alternatives before handing off
+  const requestedArea = width * height;
+  const minW = Math.min(width, height);
+  const maxH = Math.max(width, height);
+
+  // Get all available sellable products to find alternatives
+  let alternatives = [];
+  try {
+    // Get root ID for malla sombra confeccionada
+    let rootId = convo?.poiRootId;
+
+    // If no POI locked, find Malla Sombra Raschel root (we're in malla flow)
+    if (!rootId) {
+      const mallaRoot = await ProductFamily.findOne({
+        name: /Malla Sombra Raschel/i,
+        parentId: null,
+        active: { $ne: false }
+      }).lean();
+      if (mallaRoot) {
+        rootId = mallaRoot._id;
+      }
+    }
+
+    if (rootId) {
+      const descendants = await getAllDescendants(rootId);
+      alternatives = descendants.filter(p => p.sellable && p.size && p.price);
+    } else {
+      // Last resort fallback (shouldn't happen in malla flow)
+      alternatives = await ProductFamily.find({
+        sellable: true,
+        size: { $exists: true, $ne: null },
+        price: { $gt: 0 },
+        active: { $ne: false },
+        name: /malla.*sombra|raschel/i
+      }).lean();
+    }
+  } catch (err) {
+    console.error("Error getting alternatives:", err);
+  }
+
+  // Parse sizes and find nearest (exclude rolls - any dimension >= 50m)
+  const parsedAlternatives = alternatives.map(p => {
+    const match = p.size?.match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/);
+    if (!match) return null;
+    const d1 = parseFloat(match[1]);
+    const d2 = parseFloat(match[2]);
+    // Filter out rolls (dimension >= 50m indicates a roll, not confeccionada)
+    if (d1 >= 50 || d2 >= 50) return null;
+    return {
+      product: p,
+      w: Math.min(d1, d2),
+      h: Math.max(d1, d2),
+      area: d1 * d2
+    };
+  }).filter(Boolean);
+
+  // Find largest available size
+  const sortedByArea = parsedAlternatives.sort((a, b) => b.area - a.area);
+  const largest = sortedByArea[0];
+
+  // Find nearest size that could cover (single piece)
+  const couldCover = parsedAlternatives.filter(p => p.w >= minW && p.h >= maxH);
+  const nearestCover = couldCover.sort((a, b) => a.area - b.area)[0]; // Smallest that covers
+
+  // Save the custom request for potential follow-up
   await updateConversation(psid, {
-    handoffRequested: true,
-    handoffReason: `Malla quote request: ${width}x${height}m${percentage ? ' @ ' + percentage + '%' : ''}`,
-    handoffTimestamp: new Date()
+    lastUnavailableSize: `${width}x${height}`,
+    lastIntent: "malla_custom_size"
   });
 
-  const area = width * height;
-  let summary = `Te confirmo tu solicitud:\n\n`;
-  summary += `Medida: ${width}m x ${height}m (${area} m²)\n`;
+  // Build response with alternatives
+  let response = `La medida ${width}x${height}m no la manejamos en nuestro catálogo estándar.\n\n`;
 
-  if (percentage) summary += `Sombra: ${percentage}%\n`;
-  if (color) summary += `Color: ${color}\n`;
-  if (quantity) summary += `Cantidad: ${quantity}\n`;
-
-  summary += `\nUn asesor te contactará con el precio y disponibilidad.\n\n`;
-  summary += `¿Necesitas algo más?`;
+  if (nearestCover) {
+    // There's a single piece that could cover
+    response += `La más cercana que cubre esa área es de ${nearestCover.product.size} por ${formatMoney(nearestCover.product.price)}.\n\n`;
+    response += `¿Te interesa esa medida, o prefieres que te pase con un asesor para cotización a medida?`;
+  } else if (largest) {
+    // Show largest available and offer custom
+    response += `Nuestra medida más grande en confeccionada es de ${largest.product.size} por ${formatMoney(largest.product.price)}.\n\n`;
+    response += `Para ${width}x${height}m necesitarías una cotización a medida. ¿Te interesa la de ${largest.product.size} o te paso con un asesor?`;
+  } else {
+    // No alternatives found - hand off
+    await updateConversation(psid, {
+      handoffRequested: true,
+      handoffReason: `Malla quote request: ${width}x${height}m - no alternatives found`,
+      handoffTimestamp: new Date()
+    });
+    response = `La medida ${width}x${height}m requiere cotización especial.\n\n`;
+    response += `Un asesor te contactará con el precio. ¿Necesitas algo más?`;
+  }
 
   return {
     type: "text",
-    text: summary
+    text: response
   };
 }
 
