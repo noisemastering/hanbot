@@ -54,8 +54,23 @@ async function routeToFlow(classification, sourceContext, convo, psid, userMessa
     console.log(`📣 Campaign active: ${campaign.name} (goal: ${campaign.conversationGoal})`);
   }
 
-  // Check each flow in priority order
+  // PRIORITY: Check generalFlow FIRST for location/shipping/payment queries
+  // These should always be handled by generalFlow regardless of product context
+  if (generalFlow.shouldHandle(classification, sourceContext, convo, userMessage)) {
+    console.log(`✅ Routing to general flow (priority check)`);
+    const generalResponse = await generalFlow.handle(classification, sourceContext, convo, psid, campaign, userMessage);
+    if (generalResponse) {
+      return {
+        ...generalResponse,
+        handledBy: "general"
+      };
+    }
+  }
+
+  // Check each product flow in priority order
   for (const { name, flow } of FLOWS) {
+    // Skip generalFlow since we already checked it above
+    if (name === "general") continue;
     if (flow.shouldHandle(classification, sourceContext, convo, userMessage)) {
       console.log(`✅ Routing to ${name} flow`);
 

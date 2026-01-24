@@ -143,10 +143,12 @@ LO QUE NO OFRECEMOS:
 - ❌ NO hacemos instalaciones a domicilio
 - El cliente debe instalarla por su cuenta o contratar a alguien
 
-LO QUE SÍ OFRECEMOS:
-- ✅ Envíos a toda la República Mexicana (incluido en Querétaro zona urbana)
-- ✅ Tienda física en Querétaro (${businessInfo.address})
+UBICACIÓN Y ENVÍOS:
+- ✅ Tenemos UNA SOLA tienda física en Querétaro: ${businessInfo.address}
+- ✅ Enviamos a TODO MÉXICO (toda la República Mexicana)
+- ✅ También enviamos a ESTADOS UNIDOS
 - ✅ Venta en Tienda Oficial de Mercado Libre
+- ⚠️ NO tenemos sucursales en otras ciudades - solo Querétaro
 
 CONTACTO:
 - Teléfonos: ${businessInfo.phones.join(", ")}

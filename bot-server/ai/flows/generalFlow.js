@@ -145,7 +145,9 @@ async function handleLocation(convo, psid) {
 
   return {
     type: "text",
-    text: `Estamos en ${BUSINESS_INFO.city}, pero enviamos a todo el país por Mercado Libre 📦`
+    text: `Tenemos UNA sola tienda física en ${BUSINESS_INFO.city}:\n📍 ${BUSINESS_INFO.address}\n\n` +
+          `Pero enviamos a todo México y también a Estados Unidos 📦\n\n` +
+          `¿Te gustaría que te pase el link de compra?`
   };
 }
 
@@ -283,14 +285,14 @@ function shouldHandle(classification, sourceContext, convo, userMessage = '') {
   if (userMessage) {
     const msg = userMessage.toLowerCase();
 
-    // Location patterns
-    if (/d[oó]nde\s+(est[aá]n|se\s+ubican|quedan)|ubicaci[oó]n|direcci[oó]n/i.test(msg)) {
+    // Location patterns (sucursal, tienda, donde están, etc.)
+    if (/d[oó]nde\s+(est[aá]n|tienen|se\s+ubican|quedan)|ubicaci[oó]n|direcci[oó]n|sucursal|tienda\s+f[ií]sica/i.test(msg)) {
       classification.intent = INTENTS.LOCATION_QUERY; // Override for handler
       return true;
     }
 
-    // Shipping patterns
-    if (/env[ií](an?|os?)\s+(a|hasta)|hacen\s+env[ií]os?|llega\s+a/i.test(msg)) {
+    // Shipping patterns (envían, domicilio, etc.)
+    if (/env[ií](an?|os?)\s+(a|hasta)|hacen\s+env[ií]os?|llega\s+a|a\s+domicilio|entregan?\s+(a|en)/i.test(msg)) {
       classification.intent = INTENTS.SHIPPING_QUERY;
       return true;
     }
