@@ -146,8 +146,7 @@ async function handleLocation(convo, psid) {
   return {
     type: "text",
     text: `Tenemos UNA sola tienda física en ${BUSINESS_INFO.city}:\n📍 ${BUSINESS_INFO.address}\n\n` +
-          `Pero enviamos a todo México y también a Estados Unidos 📦\n\n` +
-          `¿Te gustaría que te pase el link de compra?`
+          `Pero enviamos a todo México y también a Estados Unidos 📦`
   };
 }
 
