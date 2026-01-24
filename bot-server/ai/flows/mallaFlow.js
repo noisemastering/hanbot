@@ -46,7 +46,10 @@ const VALID_PERCENTAGES = [35, 50, 70, 80, 90];
 function parseDimensions(str) {
   if (!str) return null;
 
-  const s = String(str).toLowerCase();
+  let s = String(str).toLowerCase();
+
+  // Convert "y medio" to .5 (e.g., "2 y medio" -> "2.5")
+  s = s.replace(/(\d+)\s*y\s*medio/gi, (_, num) => `${num}.5`);
 
   // Universal pattern that handles all formats:
   // Optional unit after first number, separator (x/×/por), optional unit after second number
@@ -74,6 +77,30 @@ function parseDimensions(str) {
     area: dim1 * dim2,
     normalized: `${width}x${height}`
   };
+}
+
+/**
+ * Parse single dimension from message (e.g., "2 y medio", "3 metros", "de 2.5")
+ */
+function parseSingleDimension(str) {
+  if (!str) return null;
+
+  let s = String(str).toLowerCase();
+
+  // Convert "y medio" to .5
+  s = s.replace(/(\d+)\s*y\s*medio/gi, (_, num) => `${num}.5`);
+
+  // Match single number with optional units
+  // "2 y medio", "3 metros", "de 2.5", "como 4", "ha de 2.5"
+  const pattern = /(?:de|como|ha\s*de|unos?)?\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?(?:\s|$)/i;
+
+  const m = s.match(pattern);
+  if (!m) return null;
+
+  const dim = parseFloat(m[1]);
+  if (Number.isNaN(dim) || dim <= 0 || dim > 20) return null; // Sanity check: 0-20 meters
+
+  return dim;
 }
 
 /**
@@ -172,6 +199,17 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     console.log(`🌐 Malla flow - Parsed dimensions from message: ${dimsFromMessage.width}x${dimsFromMessage.height}`);
     state.width = dimsFromMessage.width;
     state.height = dimsFromMessage.height;
+  }
+
+  // SECOND: Try single dimension - assume square (e.g., "2 y medio" -> 3x3)
+  if (!state.width || !state.height) {
+    const singleDim = parseSingleDimension(userMessage);
+    if (singleDim) {
+      const rounded = Math.round(singleDim);
+      console.log(`🌐 Malla flow - Single dimension ${singleDim}m, assuming square ${rounded}x${rounded}`);
+      state.width = rounded;
+      state.height = rounded;
+    }
   }
 
   // THEN: Check classifier entities as backup
