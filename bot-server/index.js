@@ -648,30 +648,56 @@ app.post("/webhook", async (req, res) => {
             .populate('productIds')
             .populate('mainProductId');
 
+          // Set greeting based on product interest
+          const greetings = {
+            'borde_separador': "🌱 ¡Hola! Te cuento sobre nuestros *bordes para jardín*. Tenemos rollos de 6m, 9m, 18m y 54m. ¿Qué largo necesitas?",
+            'cinta_rompevientos': "🌬️ ¡Hola! Veo que te interesa nuestra *cinta rompevientos*. ¿Te gustaría conocer medidas y precios?",
+            'cinta_rigida': "🌿 ¡Hola! Te cuento sobre nuestra *cinta rígida para jardín*. ¿Qué medida necesitas?",
+            'malla_sombra': "👋 ¡Hola! Soy Paula de Hanlob. Veo que te interesa la *malla sombra* 🌿 ¿Deseas ver precios o medidas?",
+            'malla_sombra_raschel': "👋 ¡Hola! Soy Paula de Hanlob. Veo que te interesa la *malla sombra* 🌿 ¿Deseas ver precios o medidas?",
+            'malla_sombra_raschel_agricola': "🌾 ¡Hola! Veo que te interesa nuestra *malla sombra agrícola*. ¿Qué porcentaje de sombra necesitas?",
+            'ground_cover': "🌱 ¡Hola! Veo que te interesa nuestro *ground cover antimaleza*. ¿Te gustaría conocer medidas disponibles?",
+            'monofilamento': "🎣 ¡Hola! Veo que te interesa nuestra *malla monofilamento*. ¿Te gustaría conocer precios y medidas?",
+            'antigranizo': "🌨️ ¡Hola! Veo que te interesa nuestra *malla antigranizo*. ¿Qué medidas necesitas?",
+            'antiafido': "🐛 ¡Hola! Veo que te interesa nuestra *malla antiáfido*. ¿Te gustaría conocer especificaciones?",
+            'herrajes': "🔧 ¡Hola! Veo que te interesan nuestros *herrajes y kits de instalación*. ¿Qué necesitas?",
+            'sujetadores': "📎 ¡Hola! Veo que te interesan nuestros *sujetadores plásticos*. ¿Cuántos necesitas?"
+          };
+
           if (ad && (ad.mainProductId || (ad.productIds && ad.productIds.length > 0))) {
             // Use mainProductId if set, otherwise fall back to first product in array
             const productForInterest = ad.mainProductId || ad.productIds[0];
             adProductInterest = await getProductInterest(productForInterest);
             console.log(`📦 Ad ${referral.ad_id} - Main product: ${ad.mainProductId ? ad.mainProductId.name : 'not set'}`);
             console.log(`📦 Ad ${referral.ad_id} - Using: ${productForInterest.name} → productInterest: ${adProductInterest}`);
-
-            // Set greeting based on product interest
-            const greetings = {
-              'borde_separador': "🌱 ¡Hola! Te cuento sobre nuestros *bordes para jardín*. Tenemos rollos de 6m, 9m, 18m y 54m. ¿Qué largo necesitas?",
-              'cinta_rompevientos': "🌬️ ¡Hola! Veo que te interesa nuestra *cinta rompevientos*. ¿Te gustaría conocer medidas y precios?",
-              'cinta_rigida': "🌿 ¡Hola! Te cuento sobre nuestra *cinta rígida para jardín*. ¿Qué medida necesitas?",
-              'malla_sombra_raschel': "👋 ¡Hola! Soy Paula de Hanlob. Veo que te interesa la *malla sombra* 🌿 ¿Deseas ver precios o medidas?",
-              'malla_sombra_raschel_agricola': "🌾 ¡Hola! Veo que te interesa nuestra *malla sombra agrícola*. ¿Qué porcentaje de sombra necesitas?",
-              'ground_cover': "🌱 ¡Hola! Veo que te interesa nuestro *ground cover antimaleza*. ¿Te gustaría conocer medidas disponibles?",
-              'monofilamento': "🎣 ¡Hola! Veo que te interesa nuestra *malla monofilamento*. ¿Te gustaría conocer precios y medidas?",
-              'antigranizo': "🌨️ ¡Hola! Veo que te interesa nuestra *malla antigranizo*. ¿Qué medidas necesitas?",
-              'antiafido': "🐛 ¡Hola! Veo que te interesa nuestra *malla antiáfido*. ¿Te gustaría conocer especificaciones?",
-              'herrajes': "🔧 ¡Hola! Veo que te interesan nuestros *herrajes y kits de instalación*. ¿Qué necesitas?",
-              'sujetadores': "📎 ¡Hola! Veo que te interesan nuestros *sujetadores plásticos*. ¿Cuántos necesitas?"
-            };
             adGreeting = greetings[adProductInterest] || "👋 ¡Hola! Gracias por contactarnos. ¿En qué producto te puedo ayudar?";
+          } else if (ad) {
+            // Ad exists but no products linked - infer from ad name/intent
+            const adNameLower = (ad.name || '').toLowerCase();
+            const primaryUse = (ad.adIntent?.primaryUse || '').toLowerCase();
+
+            console.log(`🔍 Ad ${referral.ad_id} has no linked products, inferring from name: "${ad.name}"`);
+
+            if (adNameLower.includes('malla') || adNameLower.includes('sombra') || adNameLower.includes('confeccionada') || adNameLower.includes('raschel')) {
+              adProductInterest = 'malla_sombra';
+              adGreeting = greetings['malla_sombra'];
+              console.log(`📦 Inferred productInterest: malla_sombra from ad name`);
+            } else if (adNameLower.includes('borde') || adNameLower.includes('jardin') || adNameLower.includes('jardín')) {
+              adProductInterest = 'borde_separador';
+              adGreeting = greetings['borde_separador'];
+              console.log(`📦 Inferred productInterest: borde_separador from ad name`);
+            } else if (adNameLower.includes('ground') || adNameLower.includes('cover') || adNameLower.includes('maleza')) {
+              adProductInterest = 'ground_cover';
+              adGreeting = greetings['ground_cover'];
+              console.log(`📦 Inferred productInterest: ground_cover from ad name`);
+            } else if (adNameLower.includes('rollo') || primaryUse.includes('mayoreo') || primaryUse.includes('distribu')) {
+              // Distributor/wholesale ads usually want malla sombra too
+              adProductInterest = 'malla_sombra';
+              adGreeting = greetings['malla_sombra'];
+              console.log(`📦 Inferred productInterest: malla_sombra from distributor/wholesale context`);
+            }
           } else {
-            console.log(`⚠️ Ad ${referral.ad_id} not found in database or has no linked products`);
+            console.log(`⚠️ Ad ${referral.ad_id} not found in database`);
           }
         }
 
