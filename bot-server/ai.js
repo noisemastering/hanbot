@@ -286,6 +286,24 @@ async function generateReply(userMessage, psid, referral = null) {
     // Parse specific dimensions from message
     const dimensions = parseDimensions(cleanMsg);
 
+    // Check for incomplete dimension (single number + metros, but not complete WxH)
+    const incompleteDimensionMatch = !dimensions && /(\d+(?:\.\d+)?)\s*(?:m(?:etros?|ts?)?\.?)(?!\s*[xX×*])/i.exec(cleanMsg);
+    const hasPriceIntent = /\b(precio|costo|cotiz|cu[aá]nto)\b/i.test(cleanMsg);
+
+    if (incompleteDimensionMatch && hasPriceIntent) {
+      // User mentioned a single dimension like "3 metros" but we need both
+      const singleDim = incompleteDimensionMatch[1];
+      await updateConversation(psid, {
+        lastIntent: "incomplete_dimension",
+        productInterest: "malla_sombra",
+        unknownCount: 0
+      });
+      return {
+        type: "text",
+        text: `Para darte el precio necesito la medida completa (ancho x largo).\n\n¿De cuántos metros necesitas? Por ejemplo: ${singleDim}x${singleDim}m, ${singleDim}x4m, ${singleDim}x5m...\n\nEl envío está incluido en el precio y llega a todo México 📦`
+      };
+    }
+
     // Generic measure/price inquiry (no specific dimensions mentioned)
     const isGenericMeasureQuery = /\b(medidas|tamaños?|dimensiones|cu[aá]nto|precio|cuestan)\b.*\b(medidas|disponibles|tienen|hay|manejan)\b/i.test(cleanMsg) && !dimensions;
 
