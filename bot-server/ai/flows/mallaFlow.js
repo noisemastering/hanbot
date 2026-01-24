@@ -294,6 +294,28 @@ function handleAwaitingDimensions(intent, state, sourceContext, userMessage = ''
     return handleProductInfo(userMessage);
   }
 
+  // Check if they're asking what sizes/prices are available
+  // "que tamaños son", "qué medidas tienen", "cuáles medidas", "q salen", "cuanto cuestan"
+  const sizesListRequest = /\b(qu[eé]|cu[aá]l(es)?)\s*(tamaños?|medidas?|dimensiones?)\s*(son|hay|tienen|manejan|disponibles?)?\b/i.test(userMessage) ||
+                           /\b(tamaños?|medidas?)\s*(disponibles?|tienen|manejan|hay)\b/i.test(userMessage) ||
+                           /\b(q|que|qué)\s+salen\b/i.test(userMessage);
+
+  if (sizesListRequest) {
+    return {
+      type: "text",
+      text: "Tenemos malla sombra confeccionada en estas medidas:\n\n" +
+            "📐 *Pequeñas* (desde $320):\n" +
+            "2x2m, 2x3m, 3x3m\n\n" +
+            "📐 *Medianas* (desde $450):\n" +
+            "3x4m, 4x4m, 3x5m, 4x5m\n\n" +
+            "📐 *Grandes* (desde $750):\n" +
+            "4x6m, 5x5m, 5x6m, 6x6m\n\n" +
+            "📐 *Extra grandes* (desde $1,200):\n" +
+            "4x8m, 5x8m, 6x8m, 6x10m\n\n" +
+            "¿Cuál te interesa?"
+    };
+  }
+
   // If they're asking about prices without dimensions
   if (intent === INTENTS.PRICE_QUERY) {
     return {
