@@ -21,7 +21,13 @@ const BUSINESS_INFO = {
  * Handle general queries
  */
 async function handle(classification, sourceContext, convo, psid, campaign = null, userMessage = '') {
-  const { intent, entities } = classification;
+  let { intent, entities } = classification;
+  const msg = (userMessage || '').toLowerCase();
+
+  // Check for opt-out patterns FIRST (overrides other intents)
+  if (/ya\s+(hice|realic[eé]|tengo)\s+(pedido|orden|contacto)|no\s+necesito|de\s+momento\s+no|por\s+ahora\s+no|ya\s+compr[eé]|ya\s+lo\s+ped[ií]/i.test(msg)) {
+    intent = "opt_out";
+  }
 
   console.log(`📋 General flow - Intent: ${intent}`);
 
@@ -58,6 +64,9 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
     case INTENTS.REJECTION:
       return handleRejection(convo, psid);
+
+    case "opt_out":
+      return handleOptOut(convo, psid);
 
     default:
       return null; // Let other flows handle it
@@ -109,6 +118,21 @@ async function handleGoodbye(convo, psid) {
   return {
     type: "text",
     text: "¡Gracias por contactarnos! Que tengas excelente día 🌿"
+  };
+}
+
+/**
+ * Handle opt-out (already ordered, not interested, etc.)
+ */
+async function handleOptOut(convo, psid) {
+  await updateConversation(psid, {
+    lastIntent: "opt_out",
+    state: "closed"
+  });
+
+  return {
+    type: "text",
+    text: "¡Perfecto! Gracias por tu preferencia. Cualquier cosa aquí estamos 🌿"
   };
 }
 
@@ -305,6 +329,12 @@ function shouldHandle(classification, sourceContext, convo, userMessage = '') {
     // Human request patterns
     if (/hablar\s+con\s+(alguien|una?\s+persona|humano|asesor)|at[ie]ende\s+una?\s+persona/i.test(msg)) {
       classification.intent = INTENTS.HUMAN_REQUEST;
+      return true;
+    }
+
+    // Opt-out patterns (already ordered, not interested, have contact elsewhere)
+    if (/ya\s+(hice|realic[eé]|tengo)\s+(pedido|orden|contacto)|no\s+necesito|de\s+momento\s+no|por\s+ahora\s+no|ya\s+compr[eé]|ya\s+lo\s+ped[ií]/i.test(msg)) {
+      classification.intent = "opt_out";
       return true;
     }
   }
