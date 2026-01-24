@@ -110,17 +110,24 @@ function convertSpanishNumbersToDigits(text) {
  * @returns {object|null} - {width, height, area} or null if not found
  */
 function parseDimensions(message) {
-  // FIRST: Check if user mentioned a reference object (e.g., "tamaño de un carro")
-  const reference = extractReference(message);
-  if (reference) {
-    // Return estimated dimensions with reference marker
-    return {
-      width: reference.width,
-      height: reference.height,
-      area: reference.width * reference.height,
-      isEstimated: true,
-      referenceObject: reference.description
-    };
+  // First, check if there are EXPLICIT dimensions in the message (e.g., "8x10", "8.00 x 10.00")
+  // These should take priority over reference object estimates
+  const hasExplicitDimensions = /\d+(?:\.\d+)?\s*[xX×*]\s*\d+(?:\.\d+)?/.test(message) ||
+                                 /\d+(?:\.\d+)?\s+(?:por|x)\s+\d+(?:\.\d+)?/i.test(message);
+
+  // Only use reference object estimation if NO explicit dimensions are provided
+  if (!hasExplicitDimensions) {
+    const reference = extractReference(message);
+    if (reference) {
+      // Return estimated dimensions with reference marker
+      return {
+        width: reference.width,
+        height: reference.height,
+        area: reference.width * reference.height,
+        isEstimated: true,
+        referenceObject: reference.description
+      };
+    }
   }
 
   // Convert Spanish number words to digits first
