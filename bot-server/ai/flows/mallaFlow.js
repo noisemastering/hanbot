@@ -110,11 +110,10 @@ async function findMatchingProducts(width, height, percentage = null, color = nu
     const w = Math.min(Math.floor(width), Math.floor(height));
     const h = Math.max(Math.floor(width), Math.floor(height));
 
-    // Build size regex - match various DB formats:
-    // "3x5", "5x3", "3x5m", "5 x 3 m", "5 m x 3 m", etc.
-    // Dimensions are interchangeable so we check both orders
+    // Build size regex - match exactly WxH or HxW (not any combo like WxW or HxH)
+    // Formats: "3x5", "5x3", "3x5m", "5 x 3 m", "5 m x 3 m", etc.
     const sizeRegex = new RegExp(
-      `^\\s*(${w}|${h})\\s*m?\\s*[xX×]\\s*(${w}|${h})\\s*m?\\s*$`,
+      `^\\s*(${w}\\s*m?\\s*[xX×]\\s*${h}|${h}\\s*m?\\s*[xX×]\\s*${w})\\s*m?\\s*$`,
       'i'
     );
 
@@ -463,11 +462,15 @@ function shouldHandle(classification, sourceContext, convo) {
   // Already in malla flow
   if (convo?.productSpecs?.productType === "malla") return true;
   if (convo?.lastIntent?.startsWith("malla_")) return true;
-  if (convo?.productInterest === "malla_sombra" && convo?.productSpecs?.productType !== "rollo") return true;
 
-  // Source indicates malla
-  if (sourceContext?.ad?.product === "malla_sombra") return true;
-  if (sourceContext?.ad?.product === "confeccionada") return true;
+  // Check productInterest - handle variations like malla_sombra_raschel, malla_sombra_raschel_agricola, etc.
+  const productInterest = convo?.productInterest || '';
+  const isMallaInterest = productInterest.startsWith('malla_sombra') || productInterest === 'confeccionada';
+  if (isMallaInterest && convo?.productSpecs?.productType !== "rollo") return true;
+
+  // Source indicates malla (also check for variations)
+  const adProduct = sourceContext?.ad?.product || '';
+  if (adProduct.startsWith('malla_sombra') || adProduct === 'confeccionada') return true;
 
   return false;
 }
