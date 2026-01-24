@@ -573,7 +573,65 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
  * Main entry point - wraps generateReplyInternal with repetition detection
  */
 async function generateReply(userMessage, psid, referral = null) {
-  const convo = await getConversation(psid);
+  let convo = await getConversation(psid);
+
+  // ====== STRUCTURAL FIX: ENSURE PRODUCT INTEREST IS RESOLVED ======
+  // If conversation has adId or campaignRef but NO productInterest, resolve it now
+  // This is a self-healing mechanism - even if initial referral handling failed,
+  // we always have a second chance to resolve the context
+  if (!convo?.productInterest && (convo?.adId || convo?.campaignRef)) {
+    try {
+      const { resolveByAdId, resolveByCampaignRef } = require("../utils/campaignResolver");
+      const { getProductInterest } = require("./utils/productEnricher");
+      const ProductFamily = require("../models/ProductFamily");
+
+      let resolvedSettings = null;
+
+      // Try to resolve by adId first, then by campaignRef
+      if (convo.adId) {
+        resolvedSettings = await resolveByAdId(convo.adId);
+        console.log(`🔄 Self-healing: resolving productInterest from adId ${convo.adId}`);
+      } else if (convo.campaignRef) {
+        resolvedSettings = await resolveByCampaignRef(convo.campaignRef);
+        console.log(`🔄 Self-healing: resolving productInterest from campaignRef ${convo.campaignRef}`);
+      }
+
+      if (resolvedSettings?.productIds?.length > 0) {
+        const productId = resolvedSettings.mainProductId || resolvedSettings.productIds[0];
+        const product = await ProductFamily.findById(productId).lean();
+
+        if (product) {
+          const productInterest = await getProductInterest(product);
+          if (productInterest) {
+            await updateConversation(psid, { productInterest });
+            convo.productInterest = productInterest; // Update local copy too
+            console.log(`✅ Self-healing: set productInterest to ${productInterest}`);
+          }
+        }
+      } else if (resolvedSettings?.campaignName) {
+        // Fallback: infer from campaign name
+        const campaignName = (resolvedSettings.campaignName || '').toLowerCase();
+        let productInterest = null;
+
+        if (campaignName.includes('malla') || campaignName.includes('sombra') || campaignName.includes('confeccionada')) {
+          productInterest = 'malla_sombra';
+        } else if (campaignName.includes('borde') || campaignName.includes('jardin')) {
+          productInterest = 'borde_separador';
+        } else if (campaignName.includes('ground') || campaignName.includes('cover')) {
+          productInterest = 'ground_cover';
+        }
+
+        if (productInterest) {
+          await updateConversation(psid, { productInterest });
+          convo.productInterest = productInterest;
+          console.log(`✅ Self-healing: inferred productInterest ${productInterest} from campaign name`);
+        }
+      }
+    } catch (err) {
+      console.error(`⚠️ Self-healing productInterest resolution failed:`, err.message);
+    }
+  }
+  // ====== END STRUCTURAL FIX ======
 
   // ====== CHECK ACTIVE FLOW ======
   // If user is in an active flow, process the flow step first
