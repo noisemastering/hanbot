@@ -637,16 +637,17 @@ app.post("/webhook", async (req, res) => {
           campaignId: referral.campaign_id || null,
         });
 
-        // 🔍 Look up ad in database to get linked products
+        // 🔍 Look up ad with inheritance (Campaign → AdSet → Ad)
         let adProductInterest = null;
         let adGreeting = null;
 
         if (referral.ad_id) {
-          const Ad = require("./models/Ad");
+          const { resolveByAdId } = require("./utils/campaignResolver");
           const { getProductInterest } = require("./ai/utils/productEnricher");
-          const ad = await Ad.findOne({ fbAdId: referral.ad_id })
-            .populate('productIds')
-            .populate('mainProductId');
+          const ProductFamily = require("./models/ProductFamily");
+
+          // Use campaign resolver for proper inheritance
+          const resolvedSettings = await resolveByAdId(referral.ad_id);
 
           // Set greeting based on product interest
           const greetings = {
@@ -664,37 +665,34 @@ app.post("/webhook", async (req, res) => {
             'sujetadores': "📎 ¡Hola! Veo que te interesan nuestros *sujetadores plásticos*. ¿Cuántos necesitas?"
           };
 
-          if (ad && (ad.mainProductId || (ad.productIds && ad.productIds.length > 0))) {
-            // Use mainProductId if set, otherwise fall back to first product in array
-            const productForInterest = ad.mainProductId || ad.productIds[0];
-            adProductInterest = await getProductInterest(productForInterest);
-            console.log(`📦 Ad ${referral.ad_id} - Main product: ${ad.mainProductId ? ad.mainProductId.name : 'not set'}`);
-            console.log(`📦 Ad ${referral.ad_id} - Using: ${productForInterest.name} → productInterest: ${adProductInterest}`);
-            adGreeting = greetings[adProductInterest] || "👋 ¡Hola! Gracias por contactarnos. ¿En qué producto te puedo ayudar?";
-          } else if (ad) {
-            // Ad exists but no products linked - infer from ad name/intent
-            const adNameLower = (ad.name || '').toLowerCase();
-            const primaryUse = (ad.adIntent?.primaryUse || '').toLowerCase();
+          if (resolvedSettings && resolvedSettings.productIds && resolvedSettings.productIds.length > 0) {
+            // Get product from inherited productIds (Campaign → AdSet → Ad)
+            const productId = resolvedSettings.mainProductId || resolvedSettings.productIds[0];
+            const product = await ProductFamily.findById(productId).lean();
 
-            console.log(`🔍 Ad ${referral.ad_id} has no linked products, inferring from name: "${ad.name}"`);
+            if (product) {
+              adProductInterest = await getProductInterest(product);
+              console.log(`📦 Ad ${referral.ad_id} - Resolved products from ${resolvedSettings.campaignName}`);
+              console.log(`📦 Using: ${product.name} → productInterest: ${adProductInterest}`);
+              adGreeting = greetings[adProductInterest] || "👋 ¡Hola! Gracias por contactarnos. ¿En qué producto te puedo ayudar?";
+            }
+          } else if (resolvedSettings) {
+            // No products but we have settings - infer from campaign name
+            const campaignName = (resolvedSettings.campaignName || '').toLowerCase();
+            console.log(`🔍 Ad ${referral.ad_id} has no linked products, inferring from campaign: "${resolvedSettings.campaignName}"`);
 
-            if (adNameLower.includes('malla') || adNameLower.includes('sombra') || adNameLower.includes('confeccionada') || adNameLower.includes('raschel')) {
+            if (campaignName.includes('malla') || campaignName.includes('sombra') || campaignName.includes('confeccionada') || campaignName.includes('raschel')) {
               adProductInterest = 'malla_sombra';
               adGreeting = greetings['malla_sombra'];
-              console.log(`📦 Inferred productInterest: malla_sombra from ad name`);
-            } else if (adNameLower.includes('borde') || adNameLower.includes('jardin') || adNameLower.includes('jardín')) {
+              console.log(`📦 Inferred productInterest: malla_sombra from campaign name`);
+            } else if (campaignName.includes('borde') || campaignName.includes('jardin') || campaignName.includes('jardín')) {
               adProductInterest = 'borde_separador';
               adGreeting = greetings['borde_separador'];
-              console.log(`📦 Inferred productInterest: borde_separador from ad name`);
-            } else if (adNameLower.includes('ground') || adNameLower.includes('cover') || adNameLower.includes('maleza')) {
+              console.log(`📦 Inferred productInterest: borde_separador from campaign name`);
+            } else if (campaignName.includes('ground') || campaignName.includes('cover') || campaignName.includes('maleza')) {
               adProductInterest = 'ground_cover';
               adGreeting = greetings['ground_cover'];
-              console.log(`📦 Inferred productInterest: ground_cover from ad name`);
-            } else if (adNameLower.includes('rollo') || primaryUse.includes('mayoreo') || primaryUse.includes('distribu')) {
-              // Distributor/wholesale ads usually want malla sombra too
-              adProductInterest = 'malla_sombra';
-              adGreeting = greetings['malla_sombra'];
-              console.log(`📦 Inferred productInterest: malla_sombra from distributor/wholesale context`);
+              console.log(`📦 Inferred productInterest: ground_cover from campaign name`);
             }
           } else {
             console.log(`⚠️ Ad ${referral.ad_id} not found in database`);
