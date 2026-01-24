@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ProductTreeSelector from './ProductTreeSelector';
+import CatalogUpload from './CatalogUpload';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -63,6 +64,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
 
   const [productFamilies, setProductFamilies] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
+  const [currentCatalog, setCurrentCatalog] = useState(null);
 
   // Fetch product families tree on mount
   useEffect(() => {
@@ -101,6 +103,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
         audienceType: ad.adIntent?.audienceType || '',
         offerHook: ad.adIntent?.offerHook || ''
       });
+      setCurrentCatalog(ad.catalog || null);
     }
   }, [ad]);
 
@@ -394,14 +397,28 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
             {/* Products Selection */}
             <div className="border-t border-gray-700 pt-4 mt-4">
               <h3 className="text-sm font-semibold text-gray-300 mb-3">Productos Asociados</h3>
-              <ProductTreeSelector
-                selectedProducts={formData.productIds}
-                onToggle={handleProductToggle}
-                products={productFamilies}
-                loading={productsLoading}
-              />
+              {(() => {
+                const selectedAdSet = adSets.find(a => a._id === formData.adSetId);
+                // Get inherited products: from AdSet if it has them, otherwise from Campaign
+                const adSetProducts = selectedAdSet?.productIds?.map(p => p._id || p) || [];
+                const campaignProducts = selectedAdSet?.campaignId?.productIds?.map(p => p._id || p) || [];
+                const inheritedProductIds = adSetProducts.length > 0 ? adSetProducts : campaignProducts;
+                const inheritedFrom = adSetProducts.length > 0
+                  ? `AdSet: ${selectedAdSet?.name}`
+                  : (campaignProducts.length > 0 ? `Campaña: ${selectedAdSet?.campaignId?.name}` : null);
+                return (
+                  <ProductTreeSelector
+                    selectedProducts={formData.productIds}
+                    inheritedProducts={inheritedProductIds}
+                    inheritedFrom={inheritedFrom}
+                    onToggle={handleProductToggle}
+                    products={productFamilies}
+                    loading={productsLoading}
+                  />
+                );
+              })()}
               <p className="text-xs text-gray-400 mt-2">
-                Nota: Solo se guardarán los productos vendibles seleccionados.
+                Nota: Deja vacío para usar los productos del AdSet o Campaña. Solo se guardarán los productos vendibles seleccionados.
               </p>
 
               {/* Main Product Selection */}
@@ -428,6 +445,29 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                   </select>
                   <p className="text-xs text-gray-400 mt-1">
                     Este producto determina cómo el bot identifica el tipo de producto del anuncio.
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Catalog Upload */}
+            <div className="border-t border-gray-700 pt-4 mt-4">
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">Catálogo PDF</h3>
+              {ad?._id ? (
+                <CatalogUpload
+                  entityType="ad"
+                  entityId={ad._id}
+                  currentCatalog={currentCatalog}
+                  onUploadSuccess={(catalog) => setCurrentCatalog(catalog)}
+                  onDeleteSuccess={() => setCurrentCatalog(null)}
+                  inheritedFrom={!currentCatalog && (ad.adSetId?.catalog?.url || ad.adSetId?.campaignId?.catalog?.url) ?
+                    (ad.adSetId?.catalog?.url ? `AdSet: ${ad.adSetId?.name}` : `Campaña: ${ad.adSetId?.campaignId?.name}`) : null
+                  }
+                />
+              ) : (
+                <div className="p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
+                  <p className="text-amber-400 text-sm">
+                    Primero guarda el Anuncio para poder subir un catálogo.
                   </p>
                 </div>
               )}

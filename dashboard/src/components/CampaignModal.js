@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ProductTreeSelector from './ProductTreeSelector';
+import CatalogUpload from './CatalogUpload';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -205,6 +206,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
   const [productFamilies, setProductFamilies] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('basic');
+  const [currentCatalog, setCurrentCatalog] = useState(null);
 
   // New rule inputs
   const [newMustNot, setNewMustNot] = useState('');
@@ -274,6 +276,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
 
         productIds: campaign.productIds?.map(p => p._id || p) || []
       });
+      setCurrentCatalog(campaign.catalog || null);
     }
   }, [campaign]);
 
@@ -398,6 +401,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
     { id: 'audience', label: 'Audiencia' },
     { id: 'products', label: 'Productos' },
     { id: 'guidelines', label: 'Guías IA' },
+    { id: 'catalog', label: 'Catálogo' },
     { id: 'facebook', label: 'Facebook' }
   ];
 
@@ -766,6 +770,34 @@ function CampaignModal({ campaign, onSave, onClose }) {
                     Agregar
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Catalog Tab */}
+          {activeTab === 'catalog' && (
+            <div className="space-y-4">
+              {campaign?._id ? (
+                <CatalogUpload
+                  entityType="campaign"
+                  entityId={campaign._id}
+                  currentCatalog={currentCatalog}
+                  onUploadSuccess={(catalog) => setCurrentCatalog(catalog)}
+                  onDeleteSuccess={() => setCurrentCatalog(null)}
+                />
+              ) : (
+                <div className="p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
+                  <p className="text-amber-400 text-sm">
+                    Primero guarda la campaña para poder subir un catálogo.
+                  </p>
+                </div>
+              )}
+              <div className="p-4 bg-gray-900/30 rounded-lg">
+                <h4 className="text-sm font-medium text-gray-300 mb-2">Nota sobre catálogos</h4>
+                <p className="text-xs text-gray-500">
+                  El catálogo subido aquí estará disponible para todos los AdSets y Ads de esta campaña,
+                  a menos que se suba un catálogo específico a nivel de AdSet o Ad.
+                </p>
               </div>
             </div>
           )}

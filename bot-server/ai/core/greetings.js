@@ -11,10 +11,11 @@ async function handleGreeting(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
 
   if (/^(hola|buenas|buenos días|buenas tardes|buenas noches|qué tal|hey|hi|hello)\b/.test(cleanMsg)) {
     // Check if the message contains an actual question/request after the greeting
-    const hasProductQuestion = /\b(precio|medida|rollo|cuanto|cuánto|cuesta|vale|metro|malla|tien[ea]s?|vend[ea]s?|disponible|cotiz|ofrece|comprar)\b/i.test(cleanMsg);
+    const hasProductQuestion = /\b(precio|costo|medida|rollo|cuanto|cuánto|cuesta|vale|metro|malla|tien[ea]s?|vend[ea]s?|disponible|cotiz|ofrece|comprar)\b/i.test(cleanMsg);
+    const hasDimensions = /\d+\s*[xX×]\s*\d+/.test(cleanMsg);
 
     // If the user is asking a product question, don't intercept - let other handlers process it
-    if (hasProductQuestion) {
+    if (hasProductQuestion || hasDimensions) {
       console.log("📝 Greeting with product question detected, passing to other handlers");
       // Still mark as greeted but don't respond - let the question be processed
       await updateConversation(psid, {

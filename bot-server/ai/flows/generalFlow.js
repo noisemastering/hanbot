@@ -20,7 +20,7 @@ const BUSINESS_INFO = {
 /**
  * Handle general queries
  */
-async function handle(classification, sourceContext, convo, psid) {
+async function handle(classification, sourceContext, convo, psid, campaign = null, userMessage = '') {
   const { intent, entities } = classification;
 
   console.log(`📋 General flow - Intent: ${intent}`);

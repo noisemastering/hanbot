@@ -32,7 +32,7 @@ console.log(`🤖 Asistente asignada para esta sesión: ${BOT_PERSONA_NAME}`);
 const confirmRegex = /\b(s[ií]|claro|ok|dale|va|sale|de acuerdo|sí por favor|mu[eé]strame|ens[eé]ñame|ver|sí,.*|por favor)\b/i;
 const productKeywordRegex = /\b(malla|sombra|borde|rollo|beige|monofilamento|invernadero|negra|verde|blanca|azul|90%|70%)\b/i;
 
-async function generateReply(userMessage, psid) {
+async function generateReply(userMessage, psid, referral = null) {
   try {
     const cleanMsg = userMessage.toLowerCase().trim();
     const convo = await getConversation(psid);
@@ -89,35 +89,57 @@ async function generateReply(userMessage, psid) {
 
     // 1) SALUDO (solo una vez / anti doble-saludo)
     if (/^(hola|buenas|buenos días|buenas tardes|buenas noches|qué tal|hey|hi|hello)\b/.test(cleanMsg)) {
-      const now = Date.now();
-      const lastGreetTime = convo.lastGreetTime || 0;
-      const oneHour = 60 * 60 * 1000;
-      const greetedRecently = convo.greeted && (now - lastGreetTime) < oneHour;
+      // Check if the message also contains a product question - if so, skip greeting and process the question
+      const hasProductQuestion = /\b(precio|costo|medida|rollo|cuanto|cuánto|cuesta|vale|metro|malla|tien[ea]s?|vend[ea]s?|disponible|cotiz|ofrece|comprar)\b/i.test(cleanMsg);
+      const hasDimensions = /\d+\s*[xX×]\s*\d+/.test(cleanMsg);
 
-      if (greetedRecently) {
-        return { type: "text", text: `¡Hola de nuevo! 🌷 Soy ${BOT_PERSONA_NAME}. ¿Qué estás buscando esta vez?` };
+      if (hasProductQuestion || hasDimensions) {
+        console.log("📝 Greeting with product question detected, processing question instead");
+        await updateConversation(psid, {
+          greeted: true,
+          state: "active",
+          lastGreetTime: Date.now(),
+          unknownCount: 0
+        });
+        // Don't return here - continue to process the product question below
+      } else {
+        const now = Date.now();
+        const lastGreetTime = convo.lastGreetTime || 0;
+        const oneHour = 60 * 60 * 1000;
+        const greetedRecently = convo.greeted && (now - lastGreetTime) < oneHour;
+
+        if (greetedRecently) {
+          return { type: "text", text: `¡Hola de nuevo! 🌷 Soy ${BOT_PERSONA_NAME}. ¿Qué estás buscando esta vez?` };
+        }
+
+        await updateConversation(psid, {
+          greeted: true,
+          state: "active",
+          lastIntent: "greeting",
+          lastGreetTime: now,
+          unknownCount: 0
+        });
+
+        const greetings = [
+          `¡Hola! 👋 Soy ${BOT_PERSONA_NAME}, tu asesora virtual en Hanlob. ¿Qué tipo de producto te interesa ver?`,
+          `¡Qué gusto saludarte! 🌿 Soy ${BOT_PERSONA_NAME} del equipo de Hanlob.`,
+          `¡Hola! 🙌 Soy ${BOT_PERSONA_NAME}, asesora de Hanlob. Cuéntame, ¿qué producto te interesa?`,
+        ];
+        return { type: "text", text: greetings[Math.floor(Math.random() * greetings.length)] };
       }
-
-      await updateConversation(psid, {
-        greeted: true,
-        state: "active",
-        lastIntent: "greeting",
-        lastGreetTime: now,
-        unknownCount: 0
-      });
-
-      const greetings = [
-        `¡Hola! 👋 Soy ${BOT_PERSONA_NAME}, tu asesora virtual en Hanlob. ¿Qué tipo de producto te interesa ver?`,
-        `¡Qué gusto saludarte! 🌿 Soy ${BOT_PERSONA_NAME} del equipo de Hanlob.`,
-        `¡Hola! 🙌 Soy ${BOT_PERSONA_NAME}, asesora de Hanlob. Cuéntame, ¿qué producto te interesa?`,
-      ];
-      return { type: "text", text: greetings[Math.floor(Math.random() * greetings.length)] };
     }
 
-    // 2) Cierre / agradecimiento
+    // 2) Cierre / agradecimiento (only if no product question in the same message)
     if (/\b(gracias|perfecto|excelente|muy amable|adiós|bye|nos vemos)\b/i.test(cleanMsg)) {
-      await updateConversation(psid, { state: "closed", unknownCount: 0, lastIntent: "closed" });
-      return { type: "text", text: `¡Gracias a ti! 🌷 Soy ${BOT_PERSONA_NAME} y fue un gusto ayudarte. ¡Que tengas un excelente día! ☀️` };
+      // Check if message also contains a product question - if so, skip closing and process the question
+      const hasProductQuestion = /\b(precio|costo|medida|rollo|cuanto|cuánto|cuesta|vale|metro|malla|tien[ea]s?|vend[ea]s?|disponible|cotiz|ofrece|comprar)\b/i.test(cleanMsg);
+      const hasDimensions = /\d+\s*[xX×]\s*\d+/.test(cleanMsg);
+
+      if (!hasProductQuestion && !hasDimensions) {
+        await updateConversation(psid, { state: "closed", unknownCount: 0, lastIntent: "closed" });
+        return { type: "text", text: `¡Gracias a ti! 🌷 Soy ${BOT_PERSONA_NAME} y fue un gusto ayudarte. ¡Que tengas un excelente día! ☀️` };
+      }
+      // If there's a product question, continue processing instead of closing
     }
 
     // 3) Consulta general de productos (antes de familia o producto)
@@ -336,7 +358,31 @@ async function generateReply(userMessage, psid) {
     }
 
     // 6) Búsqueda de productos (solo si hay palabras clave reales)
-    if (productKeywordRegex.test(cleanMsg)) {
+    // Skip product search for info/characteristics requests - these should get detailed responses
+    const isInfoRequest = /\b(caracter[ií]sticas?|informaci[oó]n|info|detalles?|especificaciones?|material|qu[eé]\s+es|c[oó]mo\s+es)\b/i.test(cleanMsg);
+
+    // Handle info requests for malla sombra
+    if (isInfoRequest && /malla\s*sombra/i.test(cleanMsg)) {
+      await updateConversation(psid, {
+        lastIntent: "malla_info",
+        productInterest: "malla_sombra",
+        productSpecs: { productType: "malla", updatedAt: new Date() }
+      });
+      return {
+        type: "text",
+        text: "La malla sombra confeccionada viene lista para instalar:\n\n" +
+              "• Material: Polietileno de alta densidad (HDPE)\n" +
+              "• Color: Beige\n" +
+              "• Porcentajes de sombra: 35%, 50%, 70%, 80% y 90%\n" +
+              "• Incluye ojillos en todo el perímetro para fácil instalación\n" +
+              "• Resistente a rayos UV\n" +
+              "• Durable (5+ años de vida útil)\n\n" +
+              "Las medidas van desde 2x2m hasta 6x10m.\n\n" +
+              "¿Qué medida necesitas?"
+      };
+    }
+
+    if (!isInfoRequest && productKeywordRegex.test(cleanMsg)) {
       const product = await getProduct(cleanMsg);
       if (product) {
         await updateConversation(psid, { lastIntent: "product_search", state: "active", unknownCount: 0 });

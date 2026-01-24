@@ -255,7 +255,7 @@ function buildClassificationPrompt(sourceContext, conversationFlow, campaignCont
   let prompt = `You are a classifier for a Mexican shade mesh (malla sombra) company chatbot.
 
 PRODUCTS WE SELL:
-- malla_sombra: Pre-made shade mesh in specific sizes (2x2m to 6x10m), beige color
+- malla_sombra: Pre-made shade mesh (confeccionada) in custom sizes. Standard sizes 2x2m to 6x10m available. Larger sizes require quote. User asking for "malla sombra" with dimensions = malla_sombra
 - rollo: Shade mesh rolls, 100m long, widths of 2.10m or 4.20m, various shade percentages (35%-90%)
 - borde_separador: Plastic garden edging, comes in 6m, 9m, 18m, or 54m lengths
 - groundcover: Anti-weed ground cover fabric (also called "antimaleza")
@@ -278,7 +278,7 @@ CLASSIFICATION INSTRUCTIONS:
     prompt += `
 CLASSIFICATION RULES:
 1. If user just says "Precio", "Precio!", "Cuánto cuesta?" without specifying product → intent: "price_query", product: use context or "unknown"
-2. If user provides dimensions like "4x5", "3 por 4 metros" → intent: "size_specification"
+2. If user provides dimensions like "4x5", "3 por 4 metros", "10 x 10" → intent: "size_specification"
 3. If user provides percentage like "90%", "al 80" → intent: "percentage_specification"
 4. If user provides quantity like "15 rollos", "quiero 10" → intent: "quantity_specification"
 5. If user mentions borde lengths (6, 9, 18, 54 meters) → product: "borde_separador"
@@ -291,6 +291,8 @@ CLASSIFICATION RULES:
 12. If user mentions "maleza" in context of WANTING ground cover → product: "groundcover"
 13. If user mentions "maleza" explaining WHY they need shade (para que no salga maleza) → keep original product context
 14. If campaign context specifies products, prefer those products in classification
+15. CRITICAL: If user says "malla sombra" + ANY dimensions (e.g., "malla sombra de 10x10", "malla sombra 5x4") → product: "malla_sombra", intent: "product_inquiry", extract dimensions
+16. CRITICAL: "malla sombra" WITHOUT mentioning "rollo" or "100 metros" = product: "malla_sombra" (confeccionada/pre-made)
 `;
   }
 
@@ -471,6 +473,88 @@ function quickClassify(message, dbIntents = null) {
   // Human request
   if (/\b(humano|persona|agente|asesor|hablar\s*con\s*alguien)\b/i.test(msg)) {
     return { intent: INTENTS.HUMAN_REQUEST, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.95 };
+  }
+
+  // ===== PRODUCT KEYWORD DETECTION =====
+  // These bypass AI for obvious product mentions
+
+  // Dimension pattern: NxN, N x N, N por N (with optional decimals and units)
+  const dimPattern = /(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*(?:x|×|por)\s*(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?/i;
+  const dimMatch = msg.match(dimPattern);
+  let dimensions = null;
+  if (dimMatch) {
+    const d1 = parseFloat(dimMatch[1].replace(',', '.'));
+    const d2 = parseFloat(dimMatch[2].replace(',', '.'));
+    if (!isNaN(d1) && !isNaN(d2)) {
+      dimensions = { width: Math.min(d1, d2), height: Math.max(d1, d2), raw: `${d1}x${d2}` };
+    }
+  }
+
+  // "malla sombra" + dimensions = definitely malla_sombra product
+  if (/malla\s*sombra/i.test(msg) && dimensions) {
+    console.log(`⚡ Quick classify: malla sombra with dimensions ${dimensions.raw}`);
+    return {
+      intent: INTENTS.PRODUCT_INQUIRY,
+      product: PRODUCTS.MALLA_SOMBRA,
+      entities: { dimensions: dimensions.raw, width: dimensions.width, height: dimensions.height },
+      confidence: 0.95
+    };
+  }
+
+  // "malla sombra" without "rollo" = malla_sombra (confeccionada)
+  if (/malla\s*sombra/i.test(msg) && !/rollo/i.test(msg)) {
+    console.log(`⚡ Quick classify: malla sombra (no rollo mentioned)`);
+    return {
+      intent: INTENTS.PRODUCT_INQUIRY,
+      product: PRODUCTS.MALLA_SOMBRA,
+      entities: dimensions ? { dimensions: dimensions.raw, width: dimensions.width, height: dimensions.height } : {},
+      confidence: 0.90
+    };
+  }
+
+  // Just dimensions (when in context) - still extract them
+  if (dimensions && msg.replace(dimPattern, '').trim().length < 10) {
+    // Message is mostly just dimensions
+    console.log(`⚡ Quick classify: dimensions only ${dimensions.raw}`);
+    return {
+      intent: INTENTS.SIZE_SPECIFICATION,
+      product: PRODUCTS.UNKNOWN, // Let conversation context determine product
+      entities: { dimensions: dimensions.raw, width: dimensions.width, height: dimensions.height },
+      confidence: 0.85
+    };
+  }
+
+  // "rollo" or "100 metros" = rollo product
+  if (/\brollo\b/i.test(msg) || /100\s*m(etros)?/i.test(msg)) {
+    console.log(`⚡ Quick classify: rollo product`);
+    return {
+      intent: INTENTS.PRODUCT_INQUIRY,
+      product: PRODUCTS.ROLLO,
+      entities: {},
+      confidence: 0.90
+    };
+  }
+
+  // "borde" = borde_separador
+  if (/\bborde\b/i.test(msg)) {
+    console.log(`⚡ Quick classify: borde product`);
+    return {
+      intent: INTENTS.PRODUCT_INQUIRY,
+      product: PRODUCTS.BORDE_SEPARADOR,
+      entities: {},
+      confidence: 0.90
+    };
+  }
+
+  // "antimaleza" or "groundcover" or "malla para maleza"
+  if (/\b(antimaleza|ground\s*cover|malla\s*(para\s*)?maleza)\b/i.test(msg)) {
+    console.log(`⚡ Quick classify: groundcover product`);
+    return {
+      intent: INTENTS.PRODUCT_INQUIRY,
+      product: PRODUCTS.GROUNDCOVER,
+      entities: {},
+      confidence: 0.90
+    };
   }
 
   // Need AI for anything else

@@ -13,18 +13,22 @@ function collectAllDescendantIds(product) {
   return ids;
 }
 
-function ProductTreeNode({ product, selectedProducts, onToggle, level = 0 }) {
+function ProductTreeNode({ product, selectedProducts, inheritedProducts = [], onToggle, level = 0, readOnly = false }) {
   const [isExpanded, setIsExpanded] = useState(false); // Start collapsed
   const hasChildren = product.children && product.children.length > 0;
   const isSelected = selectedProducts.includes(product._id);
+  const isInherited = inheritedProducts.includes(product._id);
 
   // Check if all children are selected (for indeterminate state)
   const allChildIds = hasChildren ? collectAllDescendantIds(product).slice(1) : []; // Exclude parent
   const selectedChildCount = allChildIds.filter(id => selectedProducts.includes(id)).length;
+  const inheritedChildCount = allChildIds.filter(id => inheritedProducts.includes(id)).length;
   const isIndeterminate = hasChildren && selectedChildCount > 0 && selectedChildCount < allChildIds.length;
+  const isInheritedIndeterminate = hasChildren && inheritedChildCount > 0 && inheritedChildCount < allChildIds.length;
 
   const handleToggle = (e) => {
     e.stopPropagation();
+    if (readOnly) return;
 
     // Collect this product and all its descendants
     const allIds = collectAllDescendantIds(product);
@@ -37,12 +41,18 @@ function ProductTreeNode({ product, selectedProducts, onToggle, level = 0 }) {
     setIsExpanded(!isExpanded);
   };
 
+  // Determine visual state
+  const showAsSelected = isSelected || (isInherited && selectedProducts.length === 0);
+  const showAsInherited = isInherited && selectedProducts.length === 0;
+
   return (
     <div className="select-none">
       {/* Node Row */}
       <div
-        className={`flex items-center py-2 px-3 rounded-lg hover:bg-gray-700/30 transition-colors cursor-pointer ${
-          isSelected ? 'bg-primary-500/10' : ''
+        className={`flex items-center py-2 px-3 rounded-lg transition-colors ${
+          readOnly ? 'cursor-default' : 'cursor-pointer hover:bg-gray-700/30'
+        } ${
+          isSelected ? 'bg-primary-500/10' : showAsInherited ? 'bg-amber-500/5' : ''
         }`}
         style={{ paddingLeft: `${level * 1.5 + 0.75}rem` }}
         onClick={handleToggle}
@@ -72,23 +82,34 @@ function ProductTreeNode({ product, selectedProducts, onToggle, level = 0 }) {
         {/* Checkbox */}
         <input
           type="checkbox"
-          checked={isSelected}
+          checked={showAsSelected}
+          disabled={readOnly}
           ref={(input) => {
             if (input) {
-              input.indeterminate = isIndeterminate;
+              input.indeterminate = isIndeterminate || (showAsInherited && isInheritedIndeterminate);
             }
           }}
           onChange={handleToggle}
           onClick={(e) => e.stopPropagation()}
-          className="w-4 h-4 text-primary-500 bg-gray-900/50 border-gray-700 rounded focus:ring-primary-500 mr-3"
+          className={`w-4 h-4 bg-gray-900/50 border-gray-700 rounded focus:ring-primary-500 mr-3 ${
+            showAsInherited ? 'text-amber-500' : 'text-primary-500'
+          } ${readOnly ? 'opacity-60 cursor-not-allowed' : ''}`}
         />
 
         {/* Product Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center space-x-2">
-            <span className={`text-sm ${isSelected ? 'text-primary-300 font-medium' : 'text-white'}`}>
+            <span className={`text-sm ${
+              isSelected ? 'text-primary-300 font-medium' :
+              showAsInherited ? 'text-amber-300/80' : 'text-white'
+            }`}>
               {product.name}
             </span>
+            {showAsInherited && (
+              <span className="px-1.5 py-0.5 bg-amber-500/20 text-amber-300 rounded text-xs">
+                Heredado
+              </span>
+            )}
             {product.sellable && (
               <span className="px-1.5 py-0.5 bg-green-500/20 text-green-300 rounded text-xs">
                 Vendible
@@ -121,8 +142,10 @@ function ProductTreeNode({ product, selectedProducts, onToggle, level = 0 }) {
               key={child._id}
               product={child}
               selectedProducts={selectedProducts}
+              inheritedProducts={inheritedProducts}
               onToggle={onToggle}
               level={level + 1}
+              readOnly={readOnly}
             />
           ))}
         </div>
@@ -131,7 +154,7 @@ function ProductTreeNode({ product, selectedProducts, onToggle, level = 0 }) {
   );
 }
 
-function ProductTreeSelector({ selectedProducts, onToggle, products, loading }) {
+function ProductTreeSelector({ selectedProducts, inheritedProducts = [], inheritedFrom = null, onToggle, products, loading }) {
   const [searchTerm, setSearchTerm] = useState('');
   const [expandAll, setExpandAll] = useState(false);
 
@@ -210,6 +233,7 @@ function ProductTreeSelector({ selectedProducts, onToggle, products, loading }) 
                 key={product._id}
                 product={product}
                 selectedProducts={selectedProducts}
+                inheritedProducts={inheritedProducts}
                 onToggle={onToggle}
                 level={0}
               />
@@ -219,11 +243,27 @@ function ProductTreeSelector({ selectedProducts, onToggle, products, loading }) 
       </div>
 
       {/* Selection Summary */}
-      {selectedProducts.length > 0 && (
-        <div className="text-sm text-gray-400">
-          {selectedProducts.length} producto{selectedProducts.length !== 1 ? 's' : ''} seleccionado{selectedProducts.length !== 1 ? 's' : ''}
-        </div>
-      )}
+      <div className="text-sm space-y-1">
+        {selectedProducts.length > 0 ? (
+          <div className="text-primary-400">
+            {selectedProducts.length} producto{selectedProducts.length !== 1 ? 's' : ''} seleccionado{selectedProducts.length !== 1 ? 's' : ''} (específico{selectedProducts.length !== 1 ? 's' : ''})
+          </div>
+        ) : inheritedProducts.length > 0 ? (
+          <div className="text-amber-400">
+            {inheritedProducts.length} producto{inheritedProducts.length !== 1 ? 's' : ''} heredado{inheritedProducts.length !== 1 ? 's' : ''}
+            {inheritedFrom && <span className="text-gray-500"> de {inheritedFrom}</span>}
+          </div>
+        ) : (
+          <div className="text-gray-500">
+            Sin productos seleccionados
+          </div>
+        )}
+        {selectedProducts.length > 0 && inheritedProducts.length > 0 && (
+          <div className="text-xs text-gray-500">
+            (Sobrescribiendo {inheritedProducts.length} producto{inheritedProducts.length !== 1 ? 's' : ''} heredado{inheritedProducts.length !== 1 ? 's' : ''} de {inheritedFrom})
+          </div>
+        )}
+      </div>
     </div>
   );
 }

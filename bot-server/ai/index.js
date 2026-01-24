@@ -505,7 +505,10 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
     const isGenericQuoteRequest = /\b(cotizar|cotiza|cotizaci[oó]n)\b/i.test(cleanMsg) &&
                                    !/\d+\s*x\s*\d+/.test(cleanMsg);
 
-    if (!isMultiQuestion && !isMultiSize && !isGenericQuoteRequest && productKeywordRegex.test(cleanMsg)) {
+    // Skip product search for info/characteristics requests - let flows handle these
+    const isInfoRequest = /\b(caracter[ií]sticas?|informaci[oó]n|info|detalles?|especificaciones?|material|qu[eé]\s+es|c[oó]mo\s+es)\b/i.test(cleanMsg);
+
+    if (!isMultiQuestion && !isMultiSize && !isGenericQuoteRequest && !isInfoRequest && productKeywordRegex.test(cleanMsg)) {
       const product = await getProduct(cleanMsg);
       if (product) {
         await updateConversation(psid, { lastIntent: "product_search", state: "active", unknownCount: 0 });

@@ -98,7 +98,7 @@ function determineStage(state) {
 /**
  * Handle borde flow
  */
-async function handle(classification, sourceContext, convo, psid) {
+async function handle(classification, sourceContext, convo, psid, campaign = null, userMessage = '') {
   const { intent, entities } = classification;
 
   let state = getFlowState(convo);

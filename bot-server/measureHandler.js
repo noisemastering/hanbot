@@ -577,13 +577,22 @@ function generateSizeResponse(options) {
   }
 
   if (exact) {
-    // Generic responses WITHOUT ML link (link shown only on buying intent or when user asks for details)
     suggestedSizes.push(exact.sizeStr);
-    responses.push(
-      `¡Claro! 😊 De ${exact.sizeStr} la tenemos en $${exact.price}`,
-      `¡Perfecto! La ${exact.sizeStr} está disponible por $${exact.price} 🌿`,
-      `Con gusto 😊 La malla de ${exact.sizeStr} la manejamos en $${exact.price}`
-    );
+    const link = exact.mLink || exact.permalink;
+    if (link) {
+      // Include purchase link when product is found
+      responses.push(
+        `¡Claro! 😊 De ${exact.sizeStr} la tenemos en $${exact.price}\n\nAquí puedes verla y comprarla:\n${link}`,
+        `¡Perfecto! La ${exact.sizeStr} está disponible por $${exact.price} 🌿\n\nLink de compra:\n${link}`,
+        `Con gusto 😊 La malla de ${exact.sizeStr} la manejamos en $${exact.price}\n\n${link}`
+      );
+    } else {
+      responses.push(
+        `¡Claro! 😊 De ${exact.sizeStr} la tenemos en $${exact.price}`,
+        `¡Perfecto! La ${exact.sizeStr} está disponible por $${exact.price} 🌿`,
+        `Con gusto 😊 La malla de ${exact.sizeStr} la manejamos en $${exact.price}`
+      );
+    }
   } else {
     const parts = [];
 

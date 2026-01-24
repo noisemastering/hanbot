@@ -58,8 +58,8 @@ async function routeToFlow(classification, sourceContext, convo, psid, userMessa
     if (flow.shouldHandle(classification, sourceContext, convo)) {
       console.log(`✅ Routing to ${name} flow`);
 
-      // Pass campaign to flow handler
-      const response = await flow.handle(classification, sourceContext, convo, psid, campaign);
+      // Pass campaign AND userMessage to flow handler
+      const response = await flow.handle(classification, sourceContext, convo, psid, campaign, userMessage);
 
       if (response) {
         return {

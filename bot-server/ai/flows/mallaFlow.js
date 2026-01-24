@@ -156,7 +156,7 @@ function formatMoney(n) {
 /**
  * Handle malla flow
  */
-async function handle(classification, sourceContext, convo, psid) {
+async function handle(classification, sourceContext, convo, psid, campaign = null, userMessage = '') {
   const { intent, entities } = classification;
 
   // Get current state
@@ -164,19 +164,31 @@ async function handle(classification, sourceContext, convo, psid) {
 
   console.log(`🌐 Malla flow - Current state:`, state);
   console.log(`🌐 Malla flow - Intent: ${intent}, Entities:`, entities);
+  console.log(`🌐 Malla flow - User message: "${userMessage}"`);
 
-  // Update state with any new entities
-  if (entities.dimensions) {
-    const dims = parseDimensions(entities.dimensions);
-    if (dims) {
-      state.width = dims.width;
-      state.height = dims.height;
-    }
+  // FIRST: Try to parse dimensions directly from user message
+  // This is more reliable than depending on classifier entities
+  const dimsFromMessage = parseDimensions(userMessage);
+  if (dimsFromMessage) {
+    console.log(`🌐 Malla flow - Parsed dimensions from message: ${dimsFromMessage.width}x${dimsFromMessage.height}`);
+    state.width = dimsFromMessage.width;
+    state.height = dimsFromMessage.height;
   }
-  // Also check for width/height separately
-  if (entities.width && entities.height) {
-    state.width = entities.width;
-    state.height = entities.height;
+
+  // THEN: Check classifier entities as backup
+  if (!state.width || !state.height) {
+    if (entities.dimensions) {
+      const dims = parseDimensions(entities.dimensions);
+      if (dims) {
+        state.width = dims.width;
+        state.height = dims.height;
+      }
+    }
+    // Also check for width/height separately
+    if (entities.width && entities.height) {
+      state.width = entities.width;
+      state.height = entities.height;
+    }
   }
   if (entities.percentage) {
     state.percentage = entities.percentage;
@@ -188,6 +200,24 @@ async function handle(classification, sourceContext, convo, psid) {
     state.quantity = entities.quantity;
   }
 
+  // Check if user is asking for product INFO (not trying to buy yet)
+  const infoRequest = /\b(caracter[ií]sticas?|informaci[oó]n|info|c[oó]mo\s*(es|son)|de\s*qu[eé]\s*(es|est[aá]|material)|qu[eé]\s*(es|son)|especificaciones?|detalles?|descripci[oó]n)\b/i;
+  const isAskingForInfo = userMessage && infoRequest.test(userMessage);
+
+  if (isAskingForInfo && !state.width) {
+    // User wants to know about the product, not buy yet
+    // IMPORTANT: Save context so next message stays in malla flow
+    await updateConversation(psid, {
+      lastIntent: 'malla_info',
+      productInterest: 'malla_sombra',
+      productSpecs: {
+        productType: 'malla',
+        updatedAt: new Date()
+      }
+    });
+    return handleProductInfo(userMessage);
+  }
+
   // Determine current stage
   const stage = determineStage(state);
 
@@ -196,7 +226,7 @@ async function handle(classification, sourceContext, convo, psid) {
 
   switch (stage) {
     case STAGES.AWAITING_DIMENSIONS:
-      response = handleAwaitingDimensions(intent, state, sourceContext);
+      response = handleAwaitingDimensions(intent, state, sourceContext, userMessage);
       break;
 
     case STAGES.COMPLETE:
@@ -226,6 +256,24 @@ async function handle(classification, sourceContext, convo, psid) {
 }
 
 /**
+ * Handle product info request - user asking about characteristics
+ */
+function handleProductInfo(userMessage) {
+  return {
+    type: "text",
+    text: "La malla sombra confeccionada viene lista para instalar:\n\n" +
+          "• Material: Polietileno de alta densidad (HDPE)\n" +
+          "• Color: Beige\n" +
+          "• Porcentajes de sombra: 35%, 50%, 70%, 80% y 90%\n" +
+          "• Incluye ojillos en todo el perímetro para fácil instalación\n" +
+          "• Resistente a rayos UV\n" +
+          "• Durable (5+ años de vida útil)\n\n" +
+          "Las medidas van desde 2x2m hasta 6x10m. Para medidas más grandes hacemos pedidos especiales.\n\n" +
+          "¿Qué medida necesitas?"
+  };
+}
+
+/**
  * Handle start - user just mentioned malla
  */
 function handleStart(sourceContext) {
@@ -240,7 +288,13 @@ function handleStart(sourceContext) {
 /**
  * Handle awaiting dimensions stage
  */
-function handleAwaitingDimensions(intent, state, sourceContext) {
+function handleAwaitingDimensions(intent, state, sourceContext, userMessage = '') {
+  // Check if they're asking for info even at this stage
+  const infoRequest = /\b(caracter[ií]sticas?|informaci[oó]n|info|c[oó]mo\s*(es|son)|de\s*qu[eé]|especificaciones?)\b/i;
+  if (userMessage && infoRequest.test(userMessage)) {
+    return handleProductInfo(userMessage);
+  }
+
   // If they're asking about prices without dimensions
   if (intent === INTENTS.PRICE_QUERY) {
     return {

@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import ProductTreeSelector from './ProductTreeSelector';
+import CatalogUpload from './CatalogUpload';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -40,6 +41,7 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
 
   const [productFamilies, setProductFamilies] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
+  const [currentCatalog, setCurrentCatalog] = useState(null);
 
   // Fetch product families tree on mount
   useEffect(() => {
@@ -76,6 +78,7 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
         placements: adSet.placements?.join(',') || 'facebook_feed,instagram_feed',
         productIds: adSet.productIds?.map(p => p._id || p) || []
       });
+      setCurrentCatalog(adSet.catalog || null);
     }
   }, [adSet]);
 
@@ -338,15 +341,44 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
             {/* Products Selection */}
             <div className="border-t border-gray-700 pt-4 mt-4">
               <h3 className="text-sm font-semibold text-gray-300 mb-3">Productos Asociados</h3>
-              <ProductTreeSelector
-                selectedProducts={formData.productIds}
-                onToggle={handleProductToggle}
-                products={productFamilies}
-                loading={productsLoading}
-              />
+              {(() => {
+                const selectedCampaign = campaigns.find(c => c._id === formData.campaignId);
+                const inheritedProductIds = selectedCampaign?.productIds?.map(p => p._id || p) || [];
+                return (
+                  <ProductTreeSelector
+                    selectedProducts={formData.productIds}
+                    inheritedProducts={inheritedProductIds}
+                    inheritedFrom={selectedCampaign ? `Campaña: ${selectedCampaign.name}` : null}
+                    onToggle={handleProductToggle}
+                    products={productFamilies}
+                    loading={productsLoading}
+                  />
+                );
+              })()}
               <p className="text-xs text-gray-400 mt-2">
-                Nota: Solo se guardarán los productos vendibles seleccionados.
+                Nota: Deja vacío para usar los productos de la campaña. Solo se guardarán los productos vendibles seleccionados.
               </p>
+            </div>
+
+            {/* Catalog Upload */}
+            <div className="border-t border-gray-700 pt-4 mt-4">
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">Catálogo PDF</h3>
+              {adSet?._id ? (
+                <CatalogUpload
+                  entityType="adset"
+                  entityId={adSet._id}
+                  currentCatalog={currentCatalog}
+                  onUploadSuccess={(catalog) => setCurrentCatalog(catalog)}
+                  onDeleteSuccess={() => setCurrentCatalog(null)}
+                  inheritedFrom={!currentCatalog && adSet.campaignId?.catalog?.url ? `Campaña: ${adSet.campaignId?.name || 'Padre'}` : null}
+                />
+              ) : (
+                <div className="p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
+                  <p className="text-amber-400 text-sm">
+                    Primero guarda el Ad Set para poder subir un catálogo.
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </form>
