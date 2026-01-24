@@ -237,47 +237,50 @@ async function generateReply(userMessage, psid, referral = null) {
     }
 
     // 🧩 MEASURES INTENT - Handle size/dimension inquiries
-    // Check for installation query first
-    if (isInstallationQuery(cleanMsg)) {
-      await updateConversation(psid, { lastIntent: "installation_query", unknownCount: 0 });
-      const installationResponses = [
-        `Por el momento no ofrecemos servicio de instalación 😊. Sin embargo, puedo ayudarte con las medidas y especificaciones para que puedas instalarla tú o contratar a alguien de confianza.`,
-        `No contamos con servicio de instalación, pero te puedo asesorar con las medidas exactas que necesitas 🌿.`,
-        `Nosotros no ofrecemos instalación, pero si me dices el área a cubrir, te ayudo a elegir la medida perfecta 😊.`
-      ];
-      return {
-        type: "text",
-        text: installationResponses[Math.floor(Math.random() * installationResponses.length)]
-      };
-    }
-
-    // Check for color query - but don't intercept if there's also a dimension request
+    // Check if message has dimensions - if so, ALWAYS prioritize processing the dimensions
     const hasDimensionsInMsg = /\d+\s*(?:x|×|por)\s*\d+/i.test(cleanMsg);
-    if (isColorQuery(cleanMsg) && !hasDimensionsInMsg) {
-      await updateConversation(psid, { lastIntent: "color_query", unknownCount: 0 });
-      const colorResponses = [
-        `Por ahora solo manejamos malla sombra beige en versión confeccionada 🌿. ¿Te gustaría ver las medidas disponibles?`,
-        `Actualmente tenemos disponible solo el color beige en malla confeccionada. ¿Quieres que te muestre los tamaños?`,
-        `De momento contamos únicamente con beige, que es nuestro color más popular 😊. ¿Te interesa ver precios y medidas?`
-      ];
-      return {
-        type: "text",
-        text: colorResponses[Math.floor(Math.random() * colorResponses.length)]
-      };
-    }
+    const hasProductKeywords = /\b(precio|costo|medida|malla|cotiz)/i.test(cleanMsg);
 
-    // Check for approximate measurement / need to measure properly
-    if (isApproximateMeasure(cleanMsg)) {
-      await updateConversation(psid, { lastIntent: "measurement_guidance", unknownCount: 0 });
-      const guidanceResponses = [
-        `¡Perfecto! 📏 Te recomiendo medir el área total y luego elegir una malla aproximadamente 1 metro cuadrado más pequeña que el espacio. Esto deja espacio para los tensores y asegura una instalación adecuada.\n\nCuando tengas la medida exacta, con gusto te ayudo a elegir el tamaño ideal 🌿`,
-        `Muy bien pensado medir con precisión 👍. Un consejo: la malla debe ser cerca de 1m² más pequeña que el área total para dejar espacio a los tensores.\n\n¿Ya tienes una idea aproximada de las dimensiones?`,
-        `Excelente idea medir bien 📐. Recuerda que la malla debe ser un poco más pequeña que el área (aproximadamente 1m² menos) para los tensores.\n\nCuando tengas las medidas, cuéntame y te sugiero la opción perfecta 🌿`
-      ];
-      return {
-        type: "text",
-        text: guidanceResponses[Math.floor(Math.random() * guidanceResponses.length)]
-      };
+    // Only handle installation/color/measurement queries if there's NO dimension request
+    if (!hasDimensionsInMsg && !hasProductKeywords) {
+      if (isInstallationQuery(cleanMsg)) {
+        await updateConversation(psid, { lastIntent: "installation_query", unknownCount: 0 });
+        const installationResponses = [
+          `Por el momento no ofrecemos servicio de instalación 😊. Sin embargo, puedo ayudarte con las medidas y especificaciones para que puedas instalarla tú o contratar a alguien de confianza.`,
+          `No contamos con servicio de instalación, pero te puedo asesorar con las medidas exactas que necesitas 🌿.`,
+          `Nosotros no ofrecemos instalación, pero si me dices el área a cubrir, te ayudo a elegir la medida perfecta 😊.`
+        ];
+        return {
+          type: "text",
+          text: installationResponses[Math.floor(Math.random() * installationResponses.length)]
+        };
+      }
+
+      if (isColorQuery(cleanMsg)) {
+        await updateConversation(psid, { lastIntent: "color_query", unknownCount: 0 });
+        const colorResponses = [
+          `Por ahora solo manejamos malla sombra beige en versión confeccionada 🌿. ¿Te gustaría ver las medidas disponibles?`,
+          `Actualmente tenemos disponible solo el color beige en malla confeccionada. ¿Quieres que te muestre los tamaños?`,
+          `De momento contamos únicamente con beige, que es nuestro color más popular 😊. ¿Te interesa ver precios y medidas?`
+        ];
+        return {
+          type: "text",
+          text: colorResponses[Math.floor(Math.random() * colorResponses.length)]
+        };
+      }
+
+      if (isApproximateMeasure(cleanMsg)) {
+        await updateConversation(psid, { lastIntent: "measurement_guidance", unknownCount: 0 });
+        const guidanceResponses = [
+          `¡Perfecto! 📏 Te recomiendo medir el área total y luego elegir una malla aproximadamente 1 metro cuadrado más pequeña que el espacio. Esto deja espacio para los tensores y asegura una instalación adecuada.\n\nCuando tengas la medida exacta, con gusto te ayudo a elegir el tamaño ideal 🌿`,
+          `Muy bien pensado medir con precisión 👍. Un consejo: la malla debe ser cerca de 1m² más pequeña que el área total para dejar espacio a los tensores.\n\n¿Ya tienes una idea aproximada de las dimensiones?`,
+          `Excelente idea medir bien 📐. Recuerda que la malla debe ser un poco más pequeña que el área (aproximadamente 1m² menos) para los tensores.\n\nCuando tengas las medidas, cuéntame y te sugiero la opción perfecta 🌿`
+        ];
+        return {
+          type: "text",
+          text: guidanceResponses[Math.floor(Math.random() * guidanceResponses.length)]
+        };
+      }
     }
 
     // Parse specific dimensions from message
