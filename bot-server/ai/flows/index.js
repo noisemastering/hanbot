@@ -138,6 +138,35 @@ function isColdStart(classification, sourceContext, convo, campaign = null) {
 }
 
 /**
+ * Generate cold start question with variation
+ * Only used when we truly don't know what product the user wants
+ */
+function getColdStartQuestion(intent = null) {
+  // Root product classes - the ONLY options we show on cold start
+  const productList = "• Malla Sombra\n• Malla Antiáfido\n• Malla Anti Granizo\n• Cinta Plástica";
+
+  // Question variations
+  const questions = [
+    "¿Qué tipo de producto te interesa?",
+    "¿Qué tipo de producto buscas?",
+    "¿Qué tipo de producto necesitas?",
+    "¿En qué tipo de producto te puedo ayudar?"
+  ];
+
+  // Price-specific variations
+  const priceQuestions = [
+    "¿De qué tipo de producto quieres saber el precio?",
+    "¿De qué producto te gustaría conocer precios?",
+    "¿Qué tipo de producto te interesa cotizar?"
+  ];
+
+  const questionList = intent === INTENTS.PRICE_QUERY ? priceQuestions : questions;
+  const question = questionList[Math.floor(Math.random() * questionList.length)];
+
+  return `${question}\n\n${productList}`;
+}
+
+/**
  * Handle cold start scenario
  * When we don't know what product the user wants
  */
@@ -146,22 +175,9 @@ async function handleColdStart(classification, sourceContext, convo, psid) {
 
   console.log(`❄️ Cold start detected - Intent: ${intent}`);
 
-  // If they're asking about price without context
-  if (intent === INTENTS.PRICE_QUERY) {
-    return {
-      type: "text",
-      text: "¿De qué producto quieres saber el precio?\n\n" +
-            "• Malla sombra confeccionada\n" +
-            "• Rollos de malla sombra\n" +
-            "• Borde separador para jardín",
-      handledBy: "cold_start"
-    };
-  }
-
-  // Generic cold start
   return {
     type: "text",
-    text: "Hola, ¿qué producto te interesa?",
+    text: getColdStartQuestion(intent),
     handledBy: "cold_start"
   };
 }

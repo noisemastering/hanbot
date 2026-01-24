@@ -787,10 +787,10 @@ async function generateReply(userMessage, psid, referral = null) {
         text: "Déjame comunicarte con un asesor que pueda ayudarte mejor.\n\nEn un momento te atienden."
       };
     } else {
-      // Ask clarifying question
+      // Ask clarifying question - only root product classes
       response = {
         type: "text",
-        text: "¿Qué producto te interesa?\n\n• Malla sombra\n• Rollos de malla\n• Borde separador para jardín"
+        text: "¿Qué tipo de producto te interesa?\n\n• Malla Sombra\n• Malla Antiáfido\n• Malla Anti Granizo\n• Cinta Plástica"
       };
     }
   }

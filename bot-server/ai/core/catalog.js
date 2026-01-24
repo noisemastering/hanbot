@@ -36,7 +36,7 @@ async function handleCatalogOverview(cleanMsg, psid) {
       await updateConversation(psid, { lastIntent: "catalog_overview" });
       return {
         type: "text",
-        text: `Manejamos ${familyNames}. ¿Qué producto te interesa?`
+        text: `Manejamos ${familyNames}. ¿Qué tipo de producto te interesa?`
       };
     }
     return null;

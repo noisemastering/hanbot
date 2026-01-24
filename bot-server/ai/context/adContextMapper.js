@@ -125,7 +125,7 @@ function inferProductFromRef(ref) {
  */
 function getAdGreeting(source) {
   if (!source.ad?.product) {
-    return "👋 ¡Hola! Gracias por contactarnos. ¿Qué producto te interesa?";
+    return "👋 ¡Hola! Gracias por contactarnos. ¿Qué tipo de producto te interesa?";
   }
 
   const greetings = {
@@ -136,7 +136,7 @@ function getAdGreeting(source) {
     [PRODUCT_TYPES.MONOFILAMENTO]: "👋 ¡Hola! Veo que te interesa la *malla monofilamento*. ¿Qué porcentaje de sombra necesitas?"
   };
 
-  return greetings[source.ad.product] || "👋 ¡Hola! Gracias por contactarnos. ¿Qué producto te interesa?";
+  return greetings[source.ad.product] || "👋 ¡Hola! Gracias por contactarnos. ¿Qué tipo de producto te interesa?";
 }
 
 /**

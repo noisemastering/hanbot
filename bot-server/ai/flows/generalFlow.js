@@ -125,7 +125,7 @@ async function handleShipping(entities, convo, psid) {
       type: "text",
       text: `¡Sí! Enviamos a ${entities.location} y a todo el país a través de Mercado Libre 📦\n\n` +
             `El envío está incluido en la mayoría de los productos.\n\n` +
-            `¿Qué producto te interesa?`
+            `¿Qué tipo de producto te interesa?`
     };
   }
 
@@ -133,7 +133,7 @@ async function handleShipping(entities, convo, psid) {
     type: "text",
     text: "¡Sí! Enviamos a todo el país por Mercado Libre 📦\n\n" +
           "El envío está incluido en la mayoría de los productos.\n\n" +
-          "¿Qué producto te interesa?"
+          "¿Qué tipo de producto te interesa?"
   };
 }
 
@@ -237,7 +237,7 @@ async function handleConfirmation(convo, psid) {
 
   return {
     type: "text",
-    text: "¿Qué producto te interesa?"
+    text: "¿Qué tipo de producto te interesa?"
   };
 }
 

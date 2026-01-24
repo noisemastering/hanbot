@@ -83,7 +83,7 @@ function getGreetingForSource(source) {
   }
 
   // Truly cold
-  return "Hola, ¿qué producto te interesa?";
+  return "Hola, ¿qué tipo de producto te interesa?";
 }
 
 /**
