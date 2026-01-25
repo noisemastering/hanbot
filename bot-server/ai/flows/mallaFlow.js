@@ -262,6 +262,32 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     return await handleMultipleDimensions(allDimensions, psid, convo);
   }
 
+  // CHECK FOR CONFIRMATION of recommended size
+  // When user says "Claro", "Sí", "Ok" etc. after we recommended a size
+  if (intent === INTENTS.CONFIRMATION && convo?.lastIntent === "malla_awaiting_confirmation" && convo?.recommendedSize) {
+    console.log(`🌐 Malla flow - User confirmed recommended size: ${convo.recommendedSize}`);
+
+    // Parse the recommended size and process it
+    const sizeMatch = convo.recommendedSize.match(/(\d+)\s*[xX×]\s*(\d+)/);
+    if (sizeMatch) {
+      const recWidth = parseInt(sizeMatch[1]);
+      const recHeight = parseInt(sizeMatch[2]);
+
+      // Update state with confirmed dimensions
+      state.width = Math.min(recWidth, recHeight);
+      state.height = Math.max(recWidth, recHeight);
+
+      // Clear the awaiting confirmation state
+      await updateConversation(psid, {
+        lastIntent: "malla_confirmed_size",
+        recommendedSize: null
+      });
+
+      // Process as complete with confirmed dimensions
+      return await handleComplete(intent, state, sourceContext, psid, convo);
+    }
+  }
+
   // FIRST: Try to parse dimensions directly from user message
   // This is more reliable than depending on classifier entities
   const dimsFromMessage = parseDimensions(userMessage);
@@ -355,20 +381,23 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       response = handleStart(sourceContext);
   }
 
-  // Save updated specs
-  await updateConversation(psid, {
-    lastIntent: `malla_${stage}`,
-    productInterest: "malla_sombra",
-    productSpecs: {
-      productType: "malla",
-      width: state.width,
-      height: state.height,
-      percentage: state.percentage,
-      color: state.color,
-      quantity: state.quantity,
-      updatedAt: new Date()
-    }
-  });
+  // Save updated specs (but don't overwrite if we're awaiting confirmation)
+  const convoNow = await require("../../conversationManager").getConversation(psid);
+  if (convoNow?.lastIntent !== "malla_awaiting_confirmation") {
+    await updateConversation(psid, {
+      lastIntent: `malla_${stage}`,
+      productInterest: "malla_sombra",
+      productSpecs: {
+        productType: "malla",
+        width: state.width,
+        height: state.height,
+        percentage: state.percentage,
+        color: state.color,
+        quantity: state.quantity,
+        updatedAt: new Date()
+      }
+    });
+  }
 
   return response;
 }
@@ -483,6 +512,13 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
     // Round up to suggest closest sizes
     const roundedWidth = Math.ceil(width);
     const roundedHeight = Math.ceil(height);
+
+    // Save recommended size for when user confirms
+    await updateConversation(psid, {
+      lastIntent: "malla_awaiting_confirmation",
+      recommendedSize: `${roundedWidth}x${roundedHeight}`,
+      lastUnavailableSize: `${width}x${height}`
+    });
 
     return {
       type: "text",
@@ -682,24 +718,30 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
   const couldCover = parsedAlternatives.filter(p => p.w >= minW && p.h >= maxH);
   const nearestCover = couldCover.sort((a, b) => a.area - b.area)[0]; // Smallest that covers
 
-  // Save the custom request for potential follow-up
-  await updateConversation(psid, {
-    lastUnavailableSize: `${width}x${height}`,
-    lastIntent: "malla_custom_size"
-  });
-
   // Build response with alternatives
   let response = `La medida ${width}x${height}m no la manejamos en nuestro catálogo estándar.\n\n`;
+  let recommendedSize = null;
 
   if (nearestCover) {
     // There's a single piece that could cover
-    response += `La más cercana que cubre esa área es de ${nearestCover.product.size} por ${formatMoney(nearestCover.product.price)}.\n\n`;
+    recommendedSize = nearestCover.product.size;
+    response += `La más cercana que cubre esa área es de ${recommendedSize} por ${formatMoney(nearestCover.product.price)}.\n\n`;
     response += `¿Te interesa esa medida, o prefieres que te pase con un especialista para cotización a medida?`;
   } else if (largest) {
     // Show largest available and offer custom
+    recommendedSize = largest.product.size;
     response += `Nuestra medida más grande en confeccionada es de ${largest.product.size} por ${formatMoney(largest.product.price)}.\n\n`;
     response += `Para ${width}x${height}m necesitarías una cotización a medida. ¿Te interesa la de ${largest.product.size} o te paso con un especialista?`;
-  } else {
+  }
+
+  // Save the custom request and recommended size for follow-up
+  await updateConversation(psid, {
+    lastUnavailableSize: `${width}x${height}`,
+    lastIntent: "malla_awaiting_confirmation",
+    recommendedSize: recommendedSize
+  });
+
+  if (!nearestCover && !largest) {
     // No alternatives found - hand off
     await updateConversation(psid, {
       handoffRequested: true,

@@ -455,9 +455,14 @@ function quickClassify(message, dbIntents = null) {
     return { intent: INTENTS.THANKS, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.95 };
   }
 
-  // Simple confirmations
-  if (/^(s[ií]|ok|okey|vale|claro|perfecto|exacto|correcto|eso|esa|ese)[\s!?.]*$/i.test(msg)) {
+  // Simple confirmations (allow emojis like 👍 👌 ✅)
+  if (/^(s[ií]|ok|okey|va|vale|claro|perfecto|exacto|correcto|eso|esa|ese|dale|listo|órale|simon|simón)[\s!?.👍👌✅🙌💪]*$/i.test(msg)) {
     return { intent: INTENTS.CONFIRMATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
+  }
+
+  // Emoji-only confirmations
+  if (/^[👍👌✅🙌💪]+$/i.test(msg)) {
+    return { intent: INTENTS.CONFIRMATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.85 };
   }
 
   // Simple rejections

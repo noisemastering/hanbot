@@ -45,6 +45,7 @@ const conversationSchema = new mongoose.Schema({
   stateMx: { type: String, default: null },        // Mexican state (e.g., "Sonora")
   familyShown: { type: String, default: null },     // Track last family shown
   lastUnavailableSize: { type: String, default: null },  // Track unavailable size to detect insistence
+  recommendedSize: { type: String, default: null },      // Size recommended by bot (for confirmation flow)
   oversizedRepeatCount: { type: Number, default: 0 },  // Track how many times user asked for same oversized dimension
   offeredToShowAllSizes: { type: Boolean, default: false },  // Track if bot offered to show all sizes
 
