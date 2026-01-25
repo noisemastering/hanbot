@@ -67,6 +67,34 @@ async function routeToFlow(classification, sourceContext, convo, psid, userMessa
     }
   }
 
+  // GLOBAL: Handle confirmation of recommended sizes (works for ALL products)
+  // When user says "Claro", "Ok", "Sí" after we recommended a size
+  if (classification.intent === INTENTS.CONFIRMATION &&
+      convo?.lastIntent?.endsWith("_awaiting_confirmation") &&
+      convo?.recommendedSize) {
+    console.log(`✅ User confirmed recommended size: ${convo.recommendedSize}`);
+
+    // Parse the recommended size
+    const sizeMatch = convo.recommendedSize.match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/);
+    if (sizeMatch) {
+      const w = parseFloat(sizeMatch[1]);
+      const h = parseFloat(sizeMatch[2]);
+
+      // Inject confirmed dimensions into classification entities
+      classification.entities = classification.entities || {};
+      classification.entities.width = Math.min(w, h);
+      classification.entities.height = Math.max(w, h);
+      classification.entities.dimensions = convo.recommendedSize;
+
+      // Clear the awaiting confirmation state
+      const { updateConversation } = require("../../conversationManager");
+      await updateConversation(psid, {
+        lastIntent: convo.lastIntent.replace("_awaiting_confirmation", "_confirmed"),
+        recommendedSize: null
+      });
+    }
+  }
+
   // Check each product flow in priority order
   for (const { name, flow } of FLOWS) {
     // Skip generalFlow since we already checked it above
