@@ -27,6 +27,13 @@ const {
   getAllDescendants
 } = require("../utils/productTree");
 
+// Centralized dimension parsing
+const {
+  parseConfeccionadaDimensions: parseDimensions,
+  parseSingleDimension,
+  extractAllDimensions
+} = require("../utils/dimensionParsers");
+
 /**
  * Flow stages for malla confeccionada
  */
@@ -42,76 +49,8 @@ const STAGES = {
  */
 const VALID_PERCENTAGES = [35, 50, 70, 80, 90];
 
-/**
- * Parse dimension string - handles many formats:
- * "4x3", "4 x 3", "4X3", "4×3"
- * "4mx3m", "4m x 3m", "4 m x 3 m"
- * "4mtsx3mts", "4 mts x 3 mts"
- * "4 metros x 3 metros", "4metros x 3"
- * "4 por 3", "4 metros por 3"
- * "de 4 por 3", "una de 4x3"
- *
- * Dimensions are interchangeable: 5x3 = 3x5
- */
-function parseDimensions(str) {
-  if (!str) return null;
-
-  let s = String(str).toLowerCase();
-
-  // Convert "y medio" to .5 (e.g., "2 y medio" -> "2.5")
-  s = s.replace(/(\d+)\s*y\s*medio/gi, (_, num) => `${num}.5`);
-
-  // Universal pattern that handles all formats:
-  // Optional unit after first number, separator (x/×/*/por), optional unit after second number
-  // Units: m, mts, metros, mt
-  const pattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*(?:x|×|\*|por)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?/i;
-
-  const m = s.match(pattern);
-
-  if (!m) return null;
-
-  const dim1 = parseFloat(m[1]);
-  const dim2 = parseFloat(m[2]);
-
-  if (Number.isNaN(dim1) || Number.isNaN(dim2)) return null;
-  if (dim1 <= 0 || dim2 <= 0) return null;
-
-  // Normalize: smaller dimension first for consistent DB matching
-  const width = Math.min(dim1, dim2);
-  const height = Math.max(dim1, dim2);
-
-  return {
-    width,
-    height,
-    original: { dim1, dim2 }, // Keep original order if needed
-    area: dim1 * dim2,
-    normalized: `${width}x${height}`
-  };
-}
-
-/**
- * Parse single dimension from message (e.g., "2 y medio", "3 metros", "de 2.5")
- */
-function parseSingleDimension(str) {
-  if (!str) return null;
-
-  let s = String(str).toLowerCase();
-
-  // Convert "y medio" to .5
-  s = s.replace(/(\d+)\s*y\s*medio/gi, (_, num) => `${num}.5`);
-
-  // Match single number with optional units
-  // "2 y medio", "3 metros", "de 2.5", "como 4", "ha de 2.5"
-  const pattern = /(?:de|como|ha\s*de|unos?)?\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?(?:\s|$)/i;
-
-  const m = s.match(pattern);
-  if (!m) return null;
-
-  const dim = parseFloat(m[1]);
-  if (Number.isNaN(dim) || dim <= 0 || dim > 20) return null; // Sanity check: 0-20 meters
-
-  return dim;
-}
+// NOTE: parseDimensions, parseSingleDimension, and extractAllDimensions
+// are now imported from ../utils/dimensionParsers.js for consistency across all flows
 
 /**
  * Get current flow state from conversation
@@ -254,8 +193,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   // CHECK FOR MULTIPLE DIMENSIONS FIRST
   // If user asks for multiple sizes like "6x5 o 5x5", handle them together
-  const { extractAllDimensions } = require("../core/multipleSizes");
-  const allDimensions = extractAllDimensions(userMessage);
+  const allDimensions = extractAllDimensions(userMessage, 'confeccionada');
 
   if (allDimensions.length >= 2) {
     console.log(`🌐 Malla flow - Multiple dimensions detected: ${allDimensions.map(d => d.width + 'x' + d.height).join(', ')}`);

@@ -15,6 +15,9 @@ const {
   getProductInterest
 } = require("../utils/productEnricher");
 
+// Centralized dimension parsing for rolls
+const { parseRollDimensions: parseDimensions } = require("../utils/dimensionParsers");
+
 /**
  * Flow stages for monofilamento
  */
@@ -32,29 +35,7 @@ function formatMoney(n) {
   return n.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
 }
 
-/**
- * Parse dimension string for monofilamento (width x length)
- */
-function parseDimensions(str) {
-  if (!str) return null;
-
-  const s = String(str).toLowerCase();
-
-  // Pattern: 4.20x100, 4.20 x 100, 4.20m x 100m, 4.20*100, etc.
-  const pattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*(?:x|×|\*|por)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?/i;
-
-  const m = s.match(pattern);
-
-  if (!m) return null;
-
-  const width = parseFloat(m[1]);
-  const length = parseFloat(m[2]);
-
-  if (Number.isNaN(width) || Number.isNaN(length)) return null;
-  if (width <= 0 || length <= 0) return null;
-
-  return { width, length };
-}
+// NOTE: parseDimensions is now imported from ../utils/dimensionParsers.js (roll parser)
 
 /**
  * Find matching sellable monofilamento products
