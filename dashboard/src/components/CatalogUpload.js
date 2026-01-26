@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
+const API_URL = process.env.REACT_APP_API_URL || 'https://hanbot-production.up.railway.app';
 
 /**
  * CatalogUpload component for uploading PDF catalogs
