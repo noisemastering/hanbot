@@ -163,14 +163,16 @@ async function handleShipping(entities, convo, psid) {
 
 /**
  * Handle location query
+ * IMPORTANT: Lead with shipping info - users often think they can't buy if they're far away
  */
 async function handleLocation(convo, psid) {
   await updateConversation(psid, { lastIntent: "location_query" });
 
   return {
     type: "text",
-    text: `Tenemos UNA sola tienda física en ${BUSINESS_INFO.city}:\n📍 ${BUSINESS_INFO.address}\n\n` +
-          `Pero enviamos a todo México y también a Estados Unidos 📦`
+    text: `¡Enviamos a todo México y también a Estados Unidos! 📦\n\n` +
+          `Nuestra tienda física está en ${BUSINESS_INFO.city}:\n📍 ${BUSINESS_INFO.address}\n\n` +
+          `Pero no necesitas visitarnos, te lo enviamos a domicilio.`
   };
 }
 
