@@ -468,9 +468,20 @@ function quickClassify(message, dbIntents = null) {
     return { intent: INTENTS.CONFIRMATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
   }
 
+  // Confirmation at END of message (e.g., "Disculpa no tenía la medida Ok")
+  // This catches messages where user explains something then confirms
+  if (/\b(s[ií]|ok|okey|va|vale|claro|perfecto|exacto|correcto|eso|esa|ese|dale|listo|órale|simon|simón)[\s!?.👍👌✅🙌💪]*$/i.test(msg)) {
+    return { intent: INTENTS.CONFIRMATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.80 };
+  }
+
   // Emoji-only confirmations
   if (/^[👍👌✅🙌💪]+$/i.test(msg)) {
     return { intent: INTENTS.CONFIRMATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.85 };
+  }
+
+  // Message ending with confirmation emoji
+  if (/[👍👌✅🙌💪]+[\s]*$/i.test(msg)) {
+    return { intent: INTENTS.CONFIRMATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.75 };
   }
 
   // Simple rejections
