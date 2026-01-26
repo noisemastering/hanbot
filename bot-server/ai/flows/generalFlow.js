@@ -65,6 +65,9 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     case INTENTS.REJECTION:
       return handleRejection(convo, psid);
 
+    case INTENTS.MULTI_QUESTION:
+      return handleMultiQuestion(entities, convo, psid);
+
     case "opt_out":
       return handleOptOut(convo, psid);
 
@@ -173,6 +176,43 @@ async function handleLocation(convo, psid) {
     text: `¡Enviamos a todo México y también a Estados Unidos! 📦\n\n` +
           `Nuestra tienda física está en ${BUSINESS_INFO.city}:\n📍 ${BUSINESS_INFO.address}\n\n` +
           `Pero no necesitas visitarnos, te lo enviamos a domicilio.`
+  };
+}
+
+/**
+ * Handle multi-question (e.g., "precio y ubicación")
+ * Combines responses for multiple intents in one message
+ */
+async function handleMultiQuestion(entities, convo, psid) {
+  await updateConversation(psid, { lastIntent: "multi_question" });
+
+  const subIntents = entities.subIntents || [];
+  const responses = [];
+
+  // Response snippets for each intent type
+  const intentResponses = {
+    'price_query': `💰 **Precios:** Los precios dependen de la medida que necesites. ¿Qué medida te interesa?`,
+    'location_query': `📍 **Ubicación:** ¡Enviamos a todo México y USA! Nuestra tienda está en ${BUSINESS_INFO.city}, pero te lo enviamos a domicilio.`,
+    'shipping_query': `📦 **Envío:** Sí, enviamos a todo México y también a Estados Unidos. El envío está incluido en la mayoría de nuestros productos.`,
+    'payment_query': `💳 **Pago:** Aceptamos tarjeta, efectivo en OXXO, o meses sin intereses a través de Mercado Libre.`,
+    'availability_query': `✅ **Disponibilidad:** La mayoría de medidas estándar las tenemos en stock. ¿Qué medida necesitas?`,
+    'delivery_time_query': `🚚 **Tiempo de entrega:** Normalmente de 3 a 5 días hábiles dependiendo de tu ubicación.`
+  };
+
+  // Build combined response
+  for (const intent of subIntents) {
+    if (intentResponses[intent]) {
+      responses.push(intentResponses[intent]);
+    }
+  }
+
+  if (responses.length === 0) {
+    return null; // Let other flows handle it
+  }
+
+  return {
+    type: "text",
+    text: responses.join('\n\n')
   };
 }
 
@@ -301,7 +341,8 @@ function shouldHandle(classification, sourceContext, convo, userMessage = '') {
     INTENTS.SHIPPING_QUERY,
     INTENTS.LOCATION_QUERY,
     INTENTS.PAYMENT_QUERY,
-    INTENTS.DELIVERY_TIME_QUERY
+    INTENTS.DELIVERY_TIME_QUERY,
+    INTENTS.MULTI_QUESTION
   ].includes(intent)) {
     return true;
   }

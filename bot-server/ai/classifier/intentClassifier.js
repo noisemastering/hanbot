@@ -77,6 +77,7 @@ const INTENTS = {
   REJECTION: "rejection",                  // "No", "Otra", "No me interesa"
   CLARIFICATION: "clarification",          // User clarifying something
   FOLLOW_UP: "follow_up",                  // Following up on previous topic
+  MULTI_QUESTION: "multi_question",        // "Precio y ubicación", multiple questions in one
 
   // Human Handoff
   HUMAN_REQUEST: "human_request",          // "Quiero hablar con alguien", "Agente"
@@ -461,6 +462,35 @@ function quickClassify(message, dbIntents = null) {
   // Thanks
   if (/^(gracias|muchas\s*gracias|thanks|thx)[\s!?.]*$/i.test(msg)) {
     return { intent: INTENTS.THANKS, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.95 };
+  }
+
+  // ===== MULTI-QUESTION DETECTION =====
+  // Detect common combinations like "precio y ubicación", "costo y envío"
+  const multiQuestionPatterns = [
+    // Price + Location
+    { pattern: /\b(precio|costo)s?\b.*\b(ubicaci[oó]n|d[oó]nde)\b/i, intents: ['price_query', 'location_query'] },
+    { pattern: /\b(ubicaci[oó]n|d[oó]nde)\b.*\b(precio|costo)s?\b/i, intents: ['location_query', 'price_query'] },
+    // Price + Shipping
+    { pattern: /\b(precio|costo)s?\b.*\b(env[ií]o|entrega)\b/i, intents: ['price_query', 'shipping_query'] },
+    { pattern: /\b(env[ií]o|entrega)\b.*\b(precio|costo)s?\b/i, intents: ['shipping_query', 'price_query'] },
+    // Location + Shipping (common confusion)
+    { pattern: /\b(ubicaci[oó]n|d[oó]nde)\b.*\b(env[ií]o|entrega)\b/i, intents: ['location_query', 'shipping_query'] },
+    // Price + Availability
+    { pattern: /\b(precio|costo)s?\b.*\b(disponib|stock|tienen)\b/i, intents: ['price_query', 'availability_query'] },
+    { pattern: /\b(disponib|stock|tienen)\b.*\b(precio|costo)s?\b/i, intents: ['availability_query', 'price_query'] },
+    // Price + Payment
+    { pattern: /\b(precio|costo)s?\b.*\b(pago|pagar|tarjeta)\b/i, intents: ['price_query', 'payment_query'] },
+  ];
+
+  for (const { pattern, intents } of multiQuestionPatterns) {
+    if (pattern.test(msg)) {
+      return {
+        intent: INTENTS.MULTI_QUESTION,
+        product: PRODUCTS.UNKNOWN,
+        entities: { subIntents: intents },
+        confidence: 0.85
+      };
+    }
   }
 
   // Simple confirmations (allow emojis like 👍 👌 ✅)
