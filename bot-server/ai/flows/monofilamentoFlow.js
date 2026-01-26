@@ -40,8 +40,8 @@ function parseDimensions(str) {
 
   const s = String(str).toLowerCase();
 
-  // Pattern: 4.20x100, 4.20 x 100, 4.20m x 100m, etc.
-  const pattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*(?:x|×|por)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?/i;
+  // Pattern: 4.20x100, 4.20 x 100, 4.20m x 100m, 4.20*100, etc.
+  const pattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*(?:x|×|\*|por)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?/i;
 
   const m = s.match(pattern);
 

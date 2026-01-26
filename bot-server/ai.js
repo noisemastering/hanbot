@@ -238,7 +238,7 @@ async function generateReply(userMessage, psid, referral = null) {
 
     // 🧩 MEASURES INTENT - Handle size/dimension inquiries
     // Check if message has dimensions - if so, ALWAYS prioritize processing the dimensions
-    const hasDimensionsInMsg = /\d+\s*(?:x|×|por)\s*\d+/i.test(cleanMsg);
+    const hasDimensionsInMsg = /\d+\s*(?:x|×|\*|por)\s*\d+/i.test(cleanMsg);
     const hasProductKeywords = /\b(precio|costo|medida|malla|cotiz)/i.test(cleanMsg);
 
     // Only handle installation/color/measurement queries if there's NO dimension request

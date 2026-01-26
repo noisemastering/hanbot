@@ -445,9 +445,17 @@ function quickClassify(message, dbIntents = null) {
     }
   }
 
-  // Greetings
-  if (/^(hola|buenas?|hey|hi|buenos?\s*d[ií]as?|buenas?\s*(tardes?|noches?))[\s!?.]*$/i.test(msg)) {
-    return { intent: INTENTS.GREETING, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.95 };
+  // Greetings - standalone or with self-introduction
+  // Matches: "Hola", "Buenas tardes", "Hola soy María", "Buenas tardes aquí el señor X", etc.
+  const greetingBase = /^(hola|buenas?|hey|hi|buenos?\s*d[ií]as?|buenas?\s*(tardes?|noches?))/i;
+  if (greetingBase.test(msg)) {
+    // Check if it's just a greeting or greeting + self-introduction
+    const selfIntro = /^(hola|buenas?|hey|hi|buenos?\s*d[ií]as?|buenas?\s*(tardes?|noches?))[,.\s]*(soy|aquí|habla|le\s*habla|mi\s*nombre\s*es|el\s*señor|la\s*señora|sr\.?|sra\.?)/i;
+    const simpleGreeting = /^(hola|buenas?|hey|hi|buenos?\s*d[ií]as?|buenas?\s*(tardes?|noches?))[\s!?,.:]*$/i;
+
+    if (simpleGreeting.test(msg) || selfIntro.test(msg)) {
+      return { intent: INTENTS.GREETING, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.95 };
+    }
   }
 
   // Thanks
@@ -483,8 +491,8 @@ function quickClassify(message, dbIntents = null) {
   // ===== PRODUCT KEYWORD DETECTION =====
   // These bypass AI for obvious product mentions
 
-  // Dimension pattern: NxN, N x N, N por N (with optional decimals and units)
-  const dimPattern = /(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*(?:x|×|por)\s*(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?/i;
+  // Dimension pattern: NxN, N x N, N*N, N por N (with optional decimals and units)
+  const dimPattern = /(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*(?:x|×|\*|por)\s*(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?/i;
   const dimMatch = msg.match(dimPattern);
   let dimensions = null;
   if (dimMatch) {

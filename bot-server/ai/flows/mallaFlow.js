@@ -62,9 +62,9 @@ function parseDimensions(str) {
   s = s.replace(/(\d+)\s*y\s*medio/gi, (_, num) => `${num}.5`);
 
   // Universal pattern that handles all formats:
-  // Optional unit after first number, separator (x/×/por), optional unit after second number
+  // Optional unit after first number, separator (x/×/*/por), optional unit after second number
   // Units: m, mts, metros, mt
-  const pattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*(?:x|×|por)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?/i;
+  const pattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*(?:x|×|\*|por)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?/i;
 
   const m = s.match(pattern);
 
