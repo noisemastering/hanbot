@@ -49,12 +49,28 @@ export default function CatalogUpload({
       const formData = new FormData();
       formData.append('catalog', file);
 
-      const response = await fetch(`${API_URL}/uploads/catalog/${entityType}/${entityId}`, {
+      const uploadUrl = `${API_URL}/uploads/catalog/${entityType}/${entityId}`;
+      console.log('Uploading to:', uploadUrl);
+
+      const response = await fetch(uploadUrl, {
         method: 'POST',
         body: formData
       });
 
-      const data = await response.json();
+      console.log('Response status:', response.status, response.statusText);
+
+      // Get response text first to handle both JSON and HTML errors
+      const responseText = await response.text();
+      console.log('Response preview:', responseText.substring(0, 200));
+
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        // Response is not JSON (likely HTML error page)
+        console.error('Failed to parse response as JSON:', responseText.substring(0, 500));
+        throw new Error(`Server returned non-JSON response (status ${response.status}). Check console for details.`);
+      }
 
       if (!response.ok) {
         throw new Error(data.error || 'Error al subir el archivo');
@@ -78,11 +94,23 @@ export default function CatalogUpload({
     setError(null);
 
     try {
-      const response = await fetch(`${API_URL}/uploads/catalog/${entityType}/${entityId}`, {
+      const deleteUrl = `${API_URL}/uploads/catalog/${entityType}/${entityId}`;
+      console.log('Deleting from:', deleteUrl);
+
+      const response = await fetch(deleteUrl, {
         method: 'DELETE'
       });
 
-      const data = await response.json();
+      console.log('Response status:', response.status, response.statusText);
+
+      const responseText = await response.text();
+      let data;
+      try {
+        data = JSON.parse(responseText);
+      } catch (parseError) {
+        console.error('Failed to parse response as JSON:', responseText.substring(0, 500));
+        throw new Error(`Server returned non-JSON response (status ${response.status}).`);
+      }
 
       if (!response.ok) {
         throw new Error(data.error || 'Error al eliminar el archivo');
