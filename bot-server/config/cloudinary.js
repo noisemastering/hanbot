@@ -10,13 +10,13 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Storage for catalogs (PDFs)
+// Storage for catalogs (PDFs and AI files saved as PDF)
 const catalogStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: {
     folder: 'hanlob/catalogs',
     resource_type: 'raw', // Required for PDFs
-    allowed_formats: ['pdf'],
+    allowed_formats: ['pdf', 'ai'],  // AI files created in Illustrator but saved as PDF
     public_id: (req, file) => {
       const timestamp = Date.now();
       const name = file.originalname.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9]/g, '_');
