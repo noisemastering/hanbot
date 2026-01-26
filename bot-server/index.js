@@ -119,6 +119,31 @@ app.use('/flows', flowsRoutes);
 app.use('/uploads', uploadsRoutes);
 
 // ============================================
+// Global Error Handler (returns JSON, not HTML)
+// ============================================
+const multer = require('multer');
+
+app.use((err, req, res, next) => {
+  console.error('❌ Global error handler:', err.message);
+
+  // Handle multer errors (file upload issues)
+  if (err instanceof multer.MulterError) {
+    if (err.code === 'LIMIT_FILE_SIZE') {
+      return res.status(400).json({ success: false, error: 'File too large. Maximum size is 10MB.' });
+    }
+    return res.status(400).json({ success: false, error: `Upload error: ${err.message}` });
+  }
+
+  // Handle CORS errors
+  if (err.message === 'Not allowed by CORS') {
+    return res.status(403).json({ success: false, error: 'CORS not allowed for this origin' });
+  }
+
+  // Generic error
+  res.status(500).json({ success: false, error: err.message || 'Internal server error' });
+});
+
+// ============================================
 // Start the Express Server with Socket.IO
 // ============================================
 const http = require("http");
