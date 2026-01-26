@@ -8,6 +8,7 @@ const mallaFlow = require("./mallaFlow");
 const groundcoverFlow = require("./groundcoverFlow");
 const monofilamentoFlow = require("./monofilamentoFlow");
 const generalFlow = require("./generalFlow");
+const leadCaptureFlow = require("./leadCaptureFlow");
 const { INTENTS, PRODUCTS } = require("../classifier");
 const { generateGuidedResponse } = require("../core/guidedResponse");
 const { getColdStartProductList } = require("../utils/productIdentifier");
@@ -52,6 +53,18 @@ async function routeToFlow(classification, sourceContext, convo, psid, userMessa
 
   if (campaign) {
     console.log(`📣 Campaign active: ${campaign.name} (goal: ${campaign.conversationGoal})`);
+  }
+
+  // LEAD CAPTURE: Check if this is a lead capture campaign (distribuidores, mayoreo)
+  if (leadCaptureFlow.shouldHandle(classification, sourceContext, convo, userMessage, campaign)) {
+    console.log(`✅ Routing to lead capture flow`);
+    const leadResponse = await leadCaptureFlow.handle(classification, sourceContext, convo, psid, campaign, userMessage);
+    if (leadResponse) {
+      return {
+        ...leadResponse,
+        handledBy: "lead_capture"
+      };
+    }
   }
 
   // PRIORITY: Check generalFlow FIRST for location/shipping/payment queries

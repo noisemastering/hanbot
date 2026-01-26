@@ -73,7 +73,19 @@ const conversationSchema = new mongoose.Schema({
   humanSalesZipcode: { type: String, default: null },
   humanSalesNeighborhood: { type: String, default: null },
   humanSalesPendingNeighborhoods: [{ name: String, type: String }],
-  humanSalesCurrentProduct: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductFamily', default: null }
+  humanSalesCurrentProduct: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductFamily', default: null },
+
+  // Lead capture data (for distributor/wholesale campaigns)
+  leadData: {
+    name: { type: String, default: null },
+    zipcode: { type: String, default: null },
+    location: { type: String, default: null },
+    products: { type: String, default: null },    // Raw text of requested products/dimensions
+    quantity: { type: mongoose.Schema.Types.Mixed, default: null },
+    contact: { type: String, default: null },     // WhatsApp or email
+    contactType: { type: String, enum: ['whatsapp', 'email', null], default: null },
+    capturedAt: { type: Date, default: null }
+  }
 });
 
 module.exports = mongoose.model("Conversation", conversationSchema);
