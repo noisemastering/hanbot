@@ -57,7 +57,10 @@ const campaignSchema = new mongoose.Schema(
           "quality",         // "La mejor malla del mercado"
           "urgency",         // "Últimas piezas"
           "social_proof",    // "Miles de clientes satisfechos"
-          "convenience"      // "Envío gratis a todo México"
+          "convenience",     // "Envío gratis a todo México"
+          "bulk_b2b",        // "Precios de mayoreo"
+          "diy_ease",        // "Fácil de instalar"
+          "comparison"       // "Mejor que la competencia"
         ]
       },
       summary: { type: String }, // Brief description of ad message

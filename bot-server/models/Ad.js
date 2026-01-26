@@ -63,18 +63,20 @@ const adSchema = new mongoose.Schema(
       offerHook: String          // e.g., "envío gratis por tiempo limitado"
     },
 
-    // Ad angle - messaging strategy
+    // Ad angle - messaging strategy (same as Campaign for consistency)
     adAngle: {
       type: String,
       enum: [
         null, "",
-        "price_sensitive",       // Focus on value/affordable pricing
-        "quality_premium",       // Focus on quality/durability
-        "urgency_offer",         // Limited time offers
-        "problem_pain",          // Solving a specific problem (sun damage, heat)
-        "bulk_b2b",              // Business/wholesale focus
-        "diy_ease",              // Easy to install/use yourself
-        "comparison_switching"   // Better than alternatives
+        "problem_pain",    // Solving a specific problem (sun damage, heat)
+        "price_value",     // Focus on value/affordable pricing
+        "quality",         // Focus on quality/durability
+        "urgency",         // Limited time offers
+        "social_proof",    // Testimonials and social proof
+        "convenience",     // Easy shipping/purchase
+        "bulk_b2b",        // Business/wholesale focus
+        "diy_ease",        // Easy to install/use yourself
+        "comparison"       // Better than alternatives
       ]
     },
 
@@ -123,7 +125,7 @@ const adSchema = new mongoose.Schema(
     adContext: {
       angle: {
         type: String,
-        enum: [null, "", "problem_pain", "price_value", "quality", "urgency", "social_proof", "convenience"]
+        enum: [null, "", "problem_pain", "price_value", "quality", "urgency", "social_proof", "convenience", "bulk_b2b", "diy_ease", "comparison"]
       },
       summary: String,
       cta: String,

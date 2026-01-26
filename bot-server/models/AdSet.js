@@ -97,7 +97,7 @@ const adSetSchema = new mongoose.Schema(
     adContext: {
       angle: {
         type: String,
-        enum: [null, "", "problem_pain", "price_value", "quality", "urgency", "social_proof", "convenience"]
+        enum: [null, "", "problem_pain", "price_value", "quality", "urgency", "social_proof", "convenience", "bulk_b2b", "diy_ease", "comparison"]
       },
       summary: String,
       cta: String,

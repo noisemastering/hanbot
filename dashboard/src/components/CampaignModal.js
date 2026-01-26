@@ -15,12 +15,15 @@ const TRAFFIC_SOURCES = [
 ];
 
 const AD_ANGLES = [
-  { value: 'problem_pain', label: 'Problema/Dolor', desc: 'Resuelve un problema del cliente' },
-  { value: 'price_value', label: 'Precio/Valor', desc: 'Enfocado en precio accesible' },
-  { value: 'quality', label: 'Calidad', desc: 'Enfocado en calidad del producto' },
-  { value: 'urgency', label: 'Urgencia', desc: 'Disponibilidad limitada' },
-  { value: 'social_proof', label: 'Prueba Social', desc: 'Testimonios y casos de éxito' },
-  { value: 'convenience', label: 'Conveniencia', desc: 'Facilidad de compra o envío' }
+  { value: 'problem_pain', label: '☀️ Problema/Dolor', desc: 'Resuelve un problema del cliente' },
+  { value: 'price_value', label: '💰 Precio/Valor', desc: 'Enfocado en precio accesible' },
+  { value: 'quality', label: '⭐ Calidad', desc: 'Enfocado en calidad/durabilidad' },
+  { value: 'urgency', label: '⏰ Urgencia', desc: 'Oferta por tiempo limitado' },
+  { value: 'social_proof', label: '👥 Prueba Social', desc: 'Testimonios y casos de éxito' },
+  { value: 'convenience', label: '🚚 Conveniencia', desc: 'Facilidad de compra o envío' },
+  { value: 'bulk_b2b', label: '🏢 Mayoreo/B2B', desc: 'Enfoque en negocios y distribuidores' },
+  { value: 'diy_ease', label: '🔧 Fácil Instalación', desc: 'Hazlo tú mismo, fácil de usar' },
+  { value: 'comparison', label: '🔄 Comparación', desc: 'Mejor que las alternativas' }
 ];
 
 const CTA_OPTIONS = [

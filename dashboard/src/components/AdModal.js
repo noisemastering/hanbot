@@ -4,6 +4,19 @@ import CatalogUpload from './CatalogUpload';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
+// Ad angles - same as CampaignModal for consistency
+const AD_ANGLES = [
+  { value: 'problem_pain', label: '☀️ Problema/Dolor', desc: 'Resuelve un problema del cliente' },
+  { value: 'price_value', label: '💰 Precio/Valor', desc: 'Enfocado en precio accesible' },
+  { value: 'quality', label: '⭐ Calidad', desc: 'Enfocado en calidad/durabilidad' },
+  { value: 'urgency', label: '⏰ Urgencia', desc: 'Oferta por tiempo limitado' },
+  { value: 'social_proof', label: '👥 Prueba Social', desc: 'Testimonios y casos de éxito' },
+  { value: 'convenience', label: '🚚 Conveniencia', desc: 'Facilidad de compra o envío' },
+  { value: 'bulk_b2b', label: '🏢 Mayoreo/B2B', desc: 'Enfoque en negocios y distribuidores' },
+  { value: 'diy_ease', label: '🔧 Fácil Instalación', desc: 'Hazlo tú mismo, fácil de usar' },
+  { value: 'comparison', label: '🔄 Comparación', desc: 'Mejor que las alternativas' }
+];
+
 // Helper function to collect only sellable product IDs from tree
 function collectSellableProductIds(productTree) {
   let sellableIds = [];
@@ -332,13 +345,9 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                     className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
                     <option value="">Sin ángulo específico</option>
-                    <option value="price_sensitive">💰 Precio - Enfoque en valor/precio accesible</option>
-                    <option value="quality_premium">⭐ Calidad Premium - Enfoque en durabilidad</option>
-                    <option value="urgency_offer">⏰ Urgencia - Oferta por tiempo limitado</option>
-                    <option value="problem_pain">☀️ Problema/Dolor - Solución al sol/calor</option>
-                    <option value="bulk_b2b">🏢 Mayoreo/B2B - Enfoque en negocios</option>
-                    <option value="diy_ease">🔧 Fácil Instalación - Hazlo tú mismo</option>
-                    <option value="comparison_switching">🔄 Comparación - Mejor que alternativas</option>
+                    {AD_ANGLES.map(a => (
+                      <option key={a.value} value={a.value}>{a.label} - {a.desc}</option>
+                    ))}
                   </select>
                 </div>
 
