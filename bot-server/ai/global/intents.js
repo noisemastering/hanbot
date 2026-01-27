@@ -70,6 +70,13 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   console.log("🌍 INTENTOS GLOBALES CHECANDO →", msg);
 
+  // Generate tracked store link once for reuse throughout this function
+  const STORE_URL = "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob";
+  const trackedStoreLink = await generateClickLink(psid, STORE_URL, {
+    productName: "Tienda Hanlob",
+    campaignId: convo.campaignId
+  });
+
   // 😤 FRUSTRATION DETECTION - Escalate to human when user is frustrated
   // Patterns: "estoy diciendo", "no leen", "no entienden", "ya les dije", etc.
   const frustrationPatterns = /\b(estoy\s+diciendo|no\s+leen|no\s+entienden|ya\s+(te|les?)\s+dije|les?\s+repito|no\s+me\s+escuchan?|no\s+ponen\s+atenci[oó]n|acabo\s+de\s+decir|como\s+te\s+dije|como\s+ya\s+dije|ya\s+lo\s+dije|no\s+est[aá]n?\s+entendiendo|no\s+entendieron|no\s+entendi[oó]|pero\s+ya\s+dije|pero\s+estoy\s+diciendo|dios\s+me\s+los\s+bendiga)\b/i;
@@ -549,7 +556,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       }
 
       response += "Puedes ver todas las medidas disponibles en nuestra Tienda Oficial de Mercado Libre:\n\n";
-      response += "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n";
+      response += trackedStoreLink + "\n\n";
       response += "¿Qué medida necesitas para tu proyecto?";
 
       return {
@@ -805,7 +812,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     return {
       type: "text",
       text: "Puedes ver todas nuestras medidas y precios en la Tienda Oficial:\n" +
-            "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n" +
+            trackedStoreLink + "\n\n" +
             "¿Qué medida necesitas?"
     };
   }
@@ -894,7 +901,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       }
 
       response += "\n\nPuedes ver todas en nuestra Tienda Oficial:\n";
-      response += "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n";
+      response += trackedStoreLink + "\n\n";
       response += "¿Qué medida te interesa?";
 
       return {
@@ -1019,7 +1026,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     return {
       type: "text",
       text: "Puedes comprar en nuestra tienda digital en Mercado Libre 🛒\n\n" +
-            "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n" +
+            trackedStoreLink + "\n\n" +
             "¿Qué medida necesitas? 📐"
     };
   }
@@ -2131,7 +2138,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
       // Add shipping info if location was mentioned
       if (hasLocationInGeneric) {
-        responseText += `\n\nEnviamos a todo México. El envío está incluido en la mayoría de los casos o se calcula automáticamente:\n\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob`;
+        responseText += `\n\nEnviamos a todo México. El envío está incluido en la mayoría de los casos o se calcula automáticamente:\n\n${trackedStoreLink}`;
       }
 
       return {
