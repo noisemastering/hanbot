@@ -27,16 +27,44 @@ function parseConfeccionadaDimensions(str) {
   // Convert "y medio" to .5 (e.g., "2 y medio" -> "2.5")
   s = s.replace(/(\d+)\s*y\s*medio/gi, (_, num) => `${num}.5`);
 
-  // Universal pattern for rectangular dimensions:
+  // Pattern 1: "N de largo x M de ancho" or "N de ancho x M de largo"
+  // Examples: "8 mts. de largo x 5 de ancho", "5 de ancho por 8 de largo"
+  const largoAnchoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*de\s*largo\s*(?:x|×|por)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*(?:de\s*ancho)?/i;
+  const anchoLargoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*de\s*ancho\s*(?:x|×|por)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*(?:de\s*largo)?/i;
+
+  let m = s.match(largoAnchoPattern);
+  if (m) {
+    // "largo x ancho" format - first number is height (largo), second is width (ancho)
+    const height = parseFloat(m[1]);
+    const width = parseFloat(m[2]);
+    return buildResult(width, height);
+  }
+
+  m = s.match(anchoLargoPattern);
+  if (m) {
+    // "ancho x largo" format - first number is width (ancho), second is height (largo)
+    const width = parseFloat(m[1]);
+    const height = parseFloat(m[2]);
+    return buildResult(width, height);
+  }
+
+  // Pattern 2: Universal pattern for rectangular dimensions:
   // Number + optional unit + separator (x/×/*/por/de) + number + optional unit
   const pattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*(?:x|×|\*|por|de)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?/i;
 
-  const m = s.match(pattern);
+  m = s.match(pattern);
   if (!m) return null;
 
   const dim1 = parseFloat(m[1]);
   const dim2 = parseFloat(m[2]);
 
+  return buildResult(dim1, dim2);
+}
+
+/**
+ * Helper to build dimension result object
+ */
+function buildResult(dim1, dim2) {
   if (Number.isNaN(dim1) || Number.isNaN(dim2)) return null;
   if (dim1 <= 0 || dim2 <= 0) return null;
 
