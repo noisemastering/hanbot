@@ -348,7 +348,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   switch (stage) {
     case STAGES.AWAITING_DIMENSIONS:
-      response = handleAwaitingDimensions(intent, state, sourceContext, userMessage);
+      response = handleAwaitingDimensions(intent, state, sourceContext, userMessage, convo);
       break;
 
     case STAGES.COMPLETE:
@@ -413,7 +413,26 @@ function handleStart(sourceContext) {
 /**
  * Handle awaiting dimensions stage
  */
-function handleAwaitingDimensions(intent, state, sourceContext, userMessage = '') {
+function handleAwaitingDimensions(intent, state, sourceContext, userMessage = '', convo = null) {
+  // Check if user is frustrated about repeating info ("ya te dije", "ya te di las medidas")
+  const alreadyToldPattern = /\b(ya\s+te\s+di(je)?|ya\s+lo\s+di(je)?|ya\s+mencion[eé]|te\s+dije|las?\s+medidas?\s+ya)\b/i;
+  if (userMessage && alreadyToldPattern.test(userMessage)) {
+    // Check if we have dimensions in conversation
+    if (convo?.productSpecs?.width && convo?.productSpecs?.height) {
+      const w = convo.productSpecs.width;
+      const h = convo.productSpecs.height;
+      return {
+        type: "text",
+        text: `Tienes razón, disculpa. Tenías ${w}x${h}m.\n\n¿Te paso el link para esa medida?`
+      };
+    }
+    // No dimensions found - apologize and ask nicely
+    return {
+      type: "text",
+      text: `Disculpa, ¿me puedes confirmar la medida? (ej: 4x3 metros)`
+    };
+  }
+
   // Check if they're asking for info even at this stage
   const infoRequest = /\b(caracter[ií]sticas?|informaci[oó]n|info|c[oó]mo\s*(es|son)|de\s*qu[eé]|especificaciones?)\b/i;
   if (userMessage && infoRequest.test(userMessage)) {
@@ -490,9 +509,20 @@ function handleAwaitingDimensions(intent, state, sourceContext, userMessage = ''
       ? responses.slice(0, -1).join(', ') + ' y ' + responses[responses.length - 1]
       : responses[0];
 
+    // Check if we already have dimensions - don't ask again
+    const alreadyHasDimensions = state.width && state.height;
+    const alreadyShownProduct = convo?.lastIntent === 'malla_complete' && convo?.productSpecs?.width;
+
+    let followUp = "";
+    if (!alreadyHasDimensions && !alreadyShownProduct) {
+      followUp = "\n\n¿Qué medida necesitas?";
+    } else {
+      followUp = "\n\n¿Necesitas algo más?";
+    }
+
     return {
       type: "text",
-      text: `Sí, ${combined}.\n\n¿Qué medida necesitas?`
+      text: `Sí, ${combined}.${followUp}`
     };
   }
 
