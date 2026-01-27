@@ -349,7 +349,7 @@ function handleProductInfo(userMessage) {
     text: "La malla sombra confeccionada viene lista para instalar:\n\n" +
           "• Material: Polietileno de alta densidad (HDPE)\n" +
           "• Color: Beige\n" +
-          "• Porcentajes de sombra: 35%, 50%, 70%, 80% y 90%\n" +
+          "• 90% de sombra\n" +
           "• Incluye ojillos en todo el perímetro para fácil instalación\n" +
           "• Resistente a rayos UV\n" +
           "• Durable (5+ años de vida útil)\n\n" +
@@ -419,24 +419,12 @@ function handleAwaitingDimensions(intent, state, sourceContext, userMessage = ''
       response: "sí manejamos 90% de sombra"
     },
     {
-      pattern: /\b(80|ochenta)\s*%?(?!\s*(m|metro|x|\d))/i,
-      response: "sí manejamos 80% de sombra"
-    },
-    {
-      pattern: /\b(70|setenta)\s*%?(?!\s*(m|metro|x|\d))/i,
-      response: "sí manejamos 70% de sombra"
-    },
-    {
-      pattern: /\b(50|cincuenta)\s*%?(?!\s*(m|metro|x|\d))/i,
-      response: "sí manejamos 50% de sombra"
-    },
-    {
-      pattern: /\b(35|treinta\s*y\s*cinco)\s*%?(?!\s*(m|metro|x|\d))/i,
-      response: "sí manejamos 35% de sombra"
+      pattern: /\b(80|ochenta|70|setenta|50|cincuenta|35|treinta\s*y\s*cinco)\s*%?(?!\s*(m|metro|x|\d))/i,
+      response: "la malla confeccionada es 90% de sombra. Para otros porcentajes tenemos malla raschel para uso agrícola"
     },
     {
       pattern: /\b(porcentaje|nivel\s*de\s*sombra)\b/i,
-      response: "manejamos 35%, 50%, 70%, 80% y 90% de sombra"
+      response: "la malla confeccionada es 90% de sombra"
     },
     {
       pattern: /\b(beige|caf[eé])\b/i,

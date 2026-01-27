@@ -415,7 +415,7 @@ async function generateReply(userMessage, psid, referral = null) {
         text: "La malla sombra confeccionada viene lista para instalar:\n\n" +
               "• Material: Polietileno de alta densidad (HDPE)\n" +
               "• Color: Beige\n" +
-              "• Porcentajes de sombra: 35%, 50%, 70%, 80% y 90%\n" +
+              "• 90% de sombra\n" +
               "• Incluye ojillos en todo el perímetro para fácil instalación\n" +
               "• Resistente a rayos UV\n" +
               "• Durable (5+ años de vida útil)\n\n" +
