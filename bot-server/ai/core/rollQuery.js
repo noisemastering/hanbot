@@ -305,6 +305,16 @@ async function handleRollQuery(userMessage, psid, convo) {
       }
 
       // Generic roll query - ask for size
+      // IMPORTANT: Set conversation state so rolloFlow can continue the conversation
+      await updateConversation(psid, {
+        lastIntent: "roll_awaiting_width",
+        productInterest: "rollo",
+        productSpecs: {
+          productType: "rollo",
+          updatedAt: new Date()
+        }
+      });
+
       return {
         type: "text",
         text: `¡Claro! Manejamos rollos de malla sombra en:\n\n` +

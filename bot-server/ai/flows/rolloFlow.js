@@ -162,8 +162,31 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   console.log(`📦 Rollo flow - Current state:`, state);
   console.log(`📦 Rollo flow - Intent: ${intent}, Entities:`, entities);
 
-  // Update state with any new entities
-  if (entities.width) {
+  // FIRST: Try to parse width directly from user message
+  // Patterns: "de 4 mts", "4 metros", "4.20", "el de 4", "2.10m", "2 metros"
+  if (!state.width && userMessage) {
+    const widthPatterns = [
+      /\b(?:de\s+)?(\d+(?:[.,]\d+)?)\s*(?:m(?:ts?|etros?)?)\b/i,  // "de 4 mts", "4 metros", "4.20m"
+      /\b(?:el\s+)?(?:de\s+)?(\d+(?:[.,]\d+)?)\s*(?:ancho)?\b/i,   // "el de 4", "4 ancho"
+      /\b(\d+(?:[.,]\d+)?)\s*[xX×]\s*100\b/i                       // "4x100", "4.20x100"
+    ];
+
+    for (const pattern of widthPatterns) {
+      const match = userMessage.match(pattern);
+      if (match) {
+        const parsedWidth = parseFloat(match[1].replace(',', '.'));
+        const normalized = normalizeWidth(parsedWidth);
+        if (normalized) {
+          console.log(`📦 Rollo flow - Parsed width from message: ${parsedWidth} → ${normalized}m`);
+          state.width = normalized;
+          break;
+        }
+      }
+    }
+  }
+
+  // Update state with any new entities from classifier
+  if (!state.width && entities.width) {
     const normalized = normalizeWidth(entities.width);
     if (normalized) state.width = normalized;
   }
