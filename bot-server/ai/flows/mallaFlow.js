@@ -237,9 +237,16 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   }
 
   // CHECK FOR CONFIRMATION of recommended size
-  // When user says "Claro", "Sí", "Ok" etc. after we recommended a size
-  if (intent === INTENTS.CONFIRMATION && convo?.lastIntent === "malla_awaiting_confirmation" && convo?.recommendedSize) {
-    console.log(`🌐 Malla flow - User confirmed recommended size: ${convo.recommendedSize}`);
+  // When user says "Claro", "Sí", "Ok" etc. OR asks about price/that size after we recommended
+  // Patterns: "ese tamaño", "esa medida", "la que me dices", "cuánto cuesta", "qué precio"
+  const isReferringToRecommendation = convo?.recommendedSize && (
+    intent === INTENTS.CONFIRMATION ||
+    intent === INTENTS.PRICE_QUERY ||
+    /\b(es[ea]\s*(tamaño|medida)|la\s*que\s*(me\s*)?(dices|recomiendas)|cu[aá]nto\s*(cuesta|sale|es)|qu[eé]\s*precio)\b/i.test(userMessage)
+  );
+
+  if (isReferringToRecommendation && convo?.lastIntent === "malla_awaiting_confirmation") {
+    console.log(`🌐 Malla flow - User accepted recommended size: ${convo.recommendedSize}`);
 
     // Parse the recommended size and process it
     const sizeMatch = convo.recommendedSize.match(/(\d+)\s*[xX×]\s*(\d+)/);

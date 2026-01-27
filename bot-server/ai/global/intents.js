@@ -70,6 +70,18 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   console.log("🌍 INTENTOS GLOBALES CHECANDO →", msg);
 
+  // ====== SKIP IF PENDING RECOMMENDATION ======
+  // If we recommended a size and user is asking about it, let the flow system handle it
+  // Patterns: "ese tamaño", "esa medida", "la que me dices", "cuánto cuesta", "qué precio"
+  if (convo?.recommendedSize && convo?.lastIntent?.includes("awaiting_confirmation")) {
+    const isReferringToRecommendation = /\b(es[ea]\s*(tamaño|medida)|la\s*que\s*(me\s*)?(dices|recomiendas)|cu[aá]nto\s*(cuesta|sale|es|vale)|qu[eé]\s*precio|ese|esa|la\s+de)\b/i.test(msg);
+    if (isReferringToRecommendation) {
+      console.log(`🔄 User referring to recommended size (${convo.recommendedSize}), deferring to flow system`);
+      return null;
+    }
+  }
+  // ====== END SKIP ======
+
   // Generate tracked store link once for reuse throughout this function
   const STORE_URL = "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob";
   const trackedStoreLink = await generateClickLink(psid, STORE_URL, {
