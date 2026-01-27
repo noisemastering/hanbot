@@ -5,6 +5,7 @@
 const { updateConversation } = require("../../conversationManager");
 const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
+const ZipCode = require("../../models/ZipCode");
 const { INTENTS } = require("../classifier");
 
 // Import existing utilities - USE THESE
@@ -22,6 +23,7 @@ const STAGES = {
   START: "start",
   AWAITING_WIDTH: "awaiting_width",
   AWAITING_PERCENTAGE: "awaiting_percentage",
+  AWAITING_ZIP: "awaiting_zip",
   COMPLETE: "complete"
 };
 
@@ -51,6 +53,38 @@ function normalizeWidth(width) {
 function formatMoney(n) {
   if (typeof n !== "number") return String(n);
   return n.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
+}
+
+/**
+ * Parse zip code from message and look up location
+ */
+async function parseAndLookupZipCode(msg) {
+  if (!msg) return null;
+
+  const patterns = [
+    /\b(?:c\.?p\.?|codigo\s*postal|cp)\s*[:\.]?\s*(\d{5})\b/i,
+    /\bal\s+(\d{5})\b/i,
+    /\b(\d{5})\b(?=\s*(?:$|,|\.|\s+(?:para|en|a)\b))/i,
+    /\b(\d{5})\b/  // Fallback: any 5-digit number
+  ];
+
+  for (const pattern of patterns) {
+    const match = msg.match(pattern);
+    if (match) {
+      const code = match[1];
+      try {
+        const location = await ZipCode.lookup(code);
+        if (location) {
+          console.log(`📍 Zip code ${code} → ${location.city}, ${location.state}`);
+          return location;
+        }
+      } catch (err) {
+        console.error(`❌ Zip code lookup failed:`, err.message);
+      }
+    }
+  }
+
+  return null;
 }
 
 /**
@@ -102,7 +136,8 @@ function getFlowState(convo) {
     width: specs.width || null,
     percentage: specs.percentage || null,
     quantity: specs.quantity || null,
-    color: specs.color || null
+    color: specs.color || null,
+    zipCode: convo?.zipCode || null
   };
 }
 
@@ -112,6 +147,7 @@ function getFlowState(convo) {
 function determineStage(state) {
   if (!state.width) return STAGES.AWAITING_WIDTH;
   if (!state.percentage) return STAGES.AWAITING_PERCENTAGE;
+  if (!state.zipCode) return STAGES.AWAITING_ZIP;
   return STAGES.COMPLETE;
 }
 
@@ -140,6 +176,21 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   if (entities.color) {
     state.color = entities.color;
   }
+  if (entities.zipCode) {
+    state.zipCode = entities.zipCode;
+  }
+  // Also check if zip was already in convo
+  if (!state.zipCode && convo?.zipCode) {
+    state.zipCode = convo.zipCode;
+  }
+  // Try to parse zip from user message if we're expecting it
+  if (!state.zipCode && userMessage) {
+    const zipInfo = await parseAndLookupZipCode(userMessage);
+    if (zipInfo) {
+      state.zipCode = zipInfo.code;
+      state.zipInfo = zipInfo; // Store full info for response
+    }
+  }
 
   const stage = determineStage(state);
   let response;
@@ -153,6 +204,10 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       response = handleAwaitingPercentage(intent, state, sourceContext);
       break;
 
+    case STAGES.AWAITING_ZIP:
+      response = handleAwaitingZip(intent, state, sourceContext);
+      break;
+
     case STAGES.COMPLETE:
       response = await handleComplete(intent, state, sourceContext, psid, convo);
       break;
@@ -162,7 +217,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   }
 
   // Save updated specs
-  await updateConversation(psid, {
+  const updateData = {
     lastIntent: `roll_${stage}`,
     productInterest: "rollo",
     productSpecs: {
@@ -174,7 +229,18 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       color: state.color,
       updatedAt: new Date()
     }
-  });
+  };
+
+  // Save zip code at conversation level (not just in specs)
+  if (state.zipCode) {
+    updateData.zipCode = state.zipCode;
+  }
+  if (state.zipInfo) {
+    updateData.city = state.zipInfo.city;
+    updateData.stateMx = state.zipInfo.state;
+  }
+
+  await updateConversation(psid, updateData);
 
   return response;
 }
@@ -227,6 +293,21 @@ function handleAwaitingPercentage(intent, state, sourceContext) {
 }
 
 /**
+ * Handle awaiting zip code stage
+ */
+function handleAwaitingZip(intent, state, sourceContext) {
+  const widthStr = state.width === 4.20 ? "4.20" : "2.10";
+
+  return {
+    type: "text",
+    text: `✅ Perfecto, te confirmo:\n\n` +
+          `📦 Rollo de ${widthStr}m x 100m al ${state.percentage}%\n` +
+          `📊 Cantidad: ${state.quantity || 1} rollo${(state.quantity || 1) > 1 ? 's' : ''}\n\n` +
+          `Para calcular el envío, ¿me compartes tu código postal?`
+  };
+}
+
+/**
  * Handle complete - we have width and percentage
  */
 async function handleComplete(intent, state, sourceContext, psid, convo) {
@@ -239,16 +320,26 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
 
   // If user is confirming quantity, give short response
   if (alreadyAskedQuantity && userProvidedQuantity) {
+    const locationText = state.zipInfo
+      ? ` a ${state.zipInfo.city}, ${state.zipInfo.state}`
+      : '';
+
     await updateConversation(psid, {
       handoffRequested: true,
-      handoffReason: `Roll quote: ${quantity}x ${widthStr}m x 100m @ ${state.percentage}%`,
+      handoffReason: `Roll quote: ${quantity}x ${widthStr}m x 100m @ ${state.percentage}%${locationText}`,
       handoffTimestamp: new Date()
     });
 
     const qtyText = quantity > 1 ? `los ${quantity} rollos` : "el rollo";
+    let responseText = `¡Perfecto! Un especialista te contactará para cotizarte ${qtyText}.`;
+    if (state.zipInfo) {
+      responseText += `\n\n📍 Envío a ${state.zipInfo.city}, ${state.zipInfo.state}`;
+    }
+    responseText += `\n\n¿Necesitas algo más?`;
+
     return {
       type: "text",
-      text: `¡Perfecto! Un especialista te contactará para cotizarte ${qtyText}. ¿Necesitas algo más?`
+      text: responseText
     };
   }
 
@@ -284,8 +375,8 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
       const trackedLink = await generateClickLink(psid, productUrl, {
         productName: product.name,
         productId: product._id,
-        city: convo?.city,
-        stateMx: convo?.stateMx
+        city: state.zipInfo?.city || convo?.city,
+        stateMx: state.zipInfo?.state || convo?.stateMx
       });
 
       const priceText = product.price ? ` por ${formatMoney(product.price)}` : "";
@@ -295,11 +386,16 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
         wholesaleMention = `\n\nA partir de ${product.wholesaleMinQty} rollos manejamos precio de mayoreo.`;
       }
 
+      let locationMention = "";
+      if (state.zipInfo) {
+        locationMention = `\n\n📍 Envío a ${state.zipInfo.city}, ${state.zipInfo.state}`;
+      }
+
       return {
         type: "text",
         text: `¡Perfecto! Tenemos el ${displayName}${priceText}:\n\n` +
               `${trackedLink}\n\n` +
-              `Ahí puedes ver el precio y comprar.${wholesaleMention}\n\n` +
+              `Ahí puedes ver el precio y comprar.${wholesaleMention}${locationMention}\n\n` +
               `¿Necesitas algo más?`
       };
     }
@@ -307,16 +403,25 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
 
   // No product found or no quantity yet - hand off or ask quantity
   if (userProvidedQuantity) {
+    const locationText = state.zipInfo
+      ? ` a ${state.zipInfo.city}, ${state.zipInfo.state}`
+      : '';
+
     await updateConversation(psid, {
       handoffRequested: true,
-      handoffReason: `Roll quote: ${quantity}x ${widthStr}m x 100m @ ${state.percentage}%`,
+      handoffReason: `Roll quote: ${quantity}x ${widthStr}m x 100m @ ${state.percentage}%${locationText}`,
       handoffTimestamp: new Date()
     });
 
+    let responseText = `Perfecto, ${quantity} rollo${quantity > 1 ? 's' : ''} de ${widthStr}m x 100m al ${state.percentage}%.`;
+    if (state.zipInfo) {
+      responseText += `\n\n📍 Envío a ${state.zipInfo.city}, ${state.zipInfo.state}`;
+    }
+    responseText += `\n\nUn especialista te contactará con el precio. ¿Necesitas algo más?`;
+
     return {
       type: "text",
-      text: `Perfecto, ${quantity} rollo${quantity > 1 ? 's' : ''} de ${widthStr}m x 100m al ${state.percentage}%.\n\n` +
-            `Un especialista te contactará con el precio. ¿Necesitas algo más?`
+      text: responseText
     };
   } else {
     return {
