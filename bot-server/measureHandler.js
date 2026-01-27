@@ -393,6 +393,7 @@ async function getAvailableSizes(conversation = null) {
             price: product.price || 0,
             source: preferredLink ? 'mercadolibre' : 'product',
             productName: product.name,
+            productId: product._id,
             mLink: preferredLink,
             permalink: preferredLink,
             imageUrl: product.imageUrl || product.thumbnail
@@ -437,6 +438,7 @@ async function getAvailableSizes(conversation = null) {
           price: product.price,
           source: preferredLink ? 'mercadolibre' : 'product',
           productName: product.name,
+          productId: product._id,
           mLink: preferredLink,
           permalink: preferredLink,
           imageUrl: product.imageUrl || product.thumbnail

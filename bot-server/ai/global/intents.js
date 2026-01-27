@@ -34,7 +34,7 @@ const { selectRelevantAsset, trackAssetMention, insertAssetIntoResponse } = requ
 const { handleRollQuery } = require("../core/rollQuery");
 const { getOfferHook, shouldMentionOffer, applyAdContext, getAngleMessaging } = require("../utils/adContextHelper");
 const { isContextualMention, isExplicitProductRequest } = require("../utils/productMatcher");
-const { getProductDisplayName, determineVerbosity } = require("../utils/productEnricher");
+const { getProductDisplayName, determineVerbosity, formatProductResponse } = require("../utils/productEnricher");
 
 // Helper to add offer hook to responses when appropriate
 function addOfferHookIfRelevant(responseText, convo) {
@@ -1927,26 +1927,15 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
           // 🎨 Check if user mentioned a color
           const hasColorMention = isColorQuery(msg);
 
-          // Build warm response text
-          const warmOpeners = [
-            `¡Claro! 😊 De ${closest.exact.sizeStr} la tenemos en $${closest.exact.price}`,
-            `¡Perfecto! La ${closest.exact.sizeStr} está disponible por $${closest.exact.price} 🌿`,
-            `Con gusto 😊 La malla de ${closest.exact.sizeStr} la manejamos en $${closest.exact.price}`
-          ];
-
-          let responseText = warmOpeners[Math.floor(Math.random() * warmOpeners.length)];
+          // Build sales-style response with product details
+          let responseText = await formatProductResponse(product, { price: product.price });
 
           // Add color info if color was mentioned
           if (hasColorMention) {
             responseText += `\n\nActualmente solo manejamos color beige en malla confeccionada.`;
           }
 
-          // Add shipping info if location mentioned or buying intent
-          if (hasLocationMention || hasBuyingIntent) {
-            responseText += `\n\nEnviamos a todo el país a través de Mercado Libre.`;
-          }
-
-          responseText += `\n\nTe paso el link para que la veas:\n\n${trackedLink}`;
+          responseText += `\n\n${trackedLink}`;
 
           // Append location if also asked
           if (isAlsoAskingLocation(msg)) {

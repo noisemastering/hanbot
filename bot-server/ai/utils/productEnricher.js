@@ -530,6 +530,153 @@ function determineVerbosity(userMessage, convo, options = {}) {
   return 'full';
 }
 
+/**
+ * Build a sales-style product pitch with key selling points
+ * Used for product responses to make them more compelling
+ * @param {object|string} product - Product document or ID
+ * @returns {object} - { description, sellingPoints, shippingInfo }
+ */
+async function buildProductSalesPitch(product) {
+  try {
+    let productDoc = product;
+
+    // If product is an ID, fetch it
+    if (typeof product === 'string') {
+      productDoc = await ProductFamily.findById(product).lean();
+    } else if (product.toObject) {
+      productDoc = product.toObject();
+    }
+
+    if (!productDoc) return null;
+
+    // Get full lineage
+    const lineage = [];
+    let current = productDoc;
+
+    while (current) {
+      lineage.unshift({
+        name: current.name,
+        generation: current.generation
+      });
+
+      if (current.parentId) {
+        const parentId = typeof current.parentId === 'object' ? current.parentId._id || current.parentId : current.parentId;
+        current = await ProductFamily.findById(parentId).lean();
+      } else {
+        break;
+      }
+    }
+
+    // Extract key info from lineage
+    const gen1 = lineage.find(l => l.generation === 1);
+    const gen2 = lineage.find(l => l.generation === 2);
+    const gen3 = lineage.find(l => l.generation === 3);
+    const gen4 = lineage.find(l => l.generation === 4);
+
+    // Determine product type and attributes
+    const isMallaSombra = gen1?.name?.toLowerCase().includes('malla sombra');
+    const percentage = gen2?.name?.match(/(\d+)\s*%/)?.[1];
+    const isReforzada = gen3?.name?.toLowerCase().includes('refuerzo') || gen3?.name?.toLowerCase().includes('reforzada');
+    const isTriangular = gen4?.name?.toLowerCase().includes('triangular');
+    const isRectangular = gen4?.name?.toLowerCase().includes('rectangular');
+
+    // Format size naturally
+    let sizeText = productDoc.size || '';
+
+    // For triangular products, try to get the 3-dimension size from the product name
+    // e.g., "5 m x 5 m x 5 m" -> "5x5x5"
+    if (isTriangular && productDoc.name) {
+      const triMatch = productDoc.name.match(/(\d+(?:\.\d+)?)\s*m?\s*[xX×]\s*(\d+(?:\.\d+)?)\s*m?\s*[xX×]\s*(\d+(?:\.\d+)?)/);
+      if (triMatch) {
+        sizeText = `${triMatch[1]}x${triMatch[2]}x${triMatch[3]}m`;
+      }
+    }
+
+    // Convert "5x5m" to "5 x 5 metros", "5x5x5m" to "5 x 5 x 5 metros"
+    sizeText = sizeText
+      .replace(/m$/, '')  // Remove trailing m first
+      .replace(/x/g, ' x ')  // Add spaces around all x
+      .replace(/\s+/g, ' ')  // Normalize spaces
+      .trim() + ' metros';
+
+    // Build description parts
+    const parts = [];
+
+    if (isMallaSombra) {
+      // "malla sombra triangular de 90% reforzada de 5x5 metros"
+      let desc = 'malla sombra';
+      if (isTriangular) desc += ' triangular';
+      if (percentage) desc += ` al ${percentage}%`;
+      if (isReforzada) desc += ' reforzada';
+      desc += ` de ${sizeText}`;
+      parts.push(desc);
+    } else {
+      // For other products, use display name
+      parts.push(await getProductDisplayName(productDoc, 'short'));
+    }
+
+    // Selling points based on product family
+    const sellingPoints = [];
+    if (isMallaSombra) {
+      sellingPoints.push('5 años de vida útil');
+      if (gen3?.name?.toLowerCase().includes('confeccionada')) {
+        sellingPoints.push('con ojillos para fácil instalación');
+      }
+    }
+
+    return {
+      productType: isMallaSombra ? (isTriangular ? 'triangular' : 'rectangular') : 'other',
+      description: parts[0],
+      sellingPoints,
+      shippingInfo: 'envío gratis a toda la república',
+      percentage,
+      isReforzada,
+      sizeText
+    };
+  } catch (error) {
+    console.error("Error building product sales pitch:", error);
+    return null;
+  }
+}
+
+/**
+ * Format a complete product response with sales pitch
+ * @param {object} product - Product document
+ * @param {object} options - { price, link, quantity }
+ * @returns {string} - Formatted response text
+ */
+async function formatProductResponse(product, options = {}) {
+  const { price, link, quantity } = options;
+
+  const pitch = await buildProductSalesPitch(product);
+  if (!pitch) {
+    // Fallback to simple format
+    const displayName = await getProductDisplayName(product, 'short');
+    return `Tenemos la ${displayName}${price ? ` por $${price}` : ''}.`;
+  }
+
+  // Build response
+  let response = `Claro, ${pitch.description}`;
+
+  // Add selling points
+  if (pitch.sellingPoints.length > 0) {
+    response += `, ${pitch.sellingPoints[0]}`;
+  }
+
+  // Add price
+  if (price) {
+    const formattedPrice = typeof price === 'number'
+      ? price.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 })
+      : `$${price}`;
+    response += `, la tenemos en ${formattedPrice}`;
+  }
+
+  // Add shipping
+  response += `, ${pitch.shippingInfo}.`;
+
+  return response;
+}
+
 module.exports = {
   enrichProductWithContext,
   buildContextDescription,
@@ -540,5 +687,7 @@ module.exports = {
   getProductInterest,
   getProductDisplayName,
   determineVerbosity,
+  buildProductSalesPitch,
+  formatProductResponse,
   NAMING_TEMPLATES
 };

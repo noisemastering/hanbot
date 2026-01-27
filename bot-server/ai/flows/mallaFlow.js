@@ -15,7 +15,8 @@ const {
   getProductLineage,
   formatProductForBot,
   getProductDisplayName,
-  getProductInterest
+  getProductInterest,
+  formatProductResponse
 } = require("../utils/productEnricher");
 
 // POI tree management
@@ -714,8 +715,8 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       stateMx: convo?.stateMx
     });
 
-    const quantityText = quantity ? `Para ${quantity} piezas, ` : "";
-    const priceText = product.price ? ` por ${formatMoney(product.price)}` : "";
+    // Build sales-style response
+    const salesPitch = await formatProductResponse(product, { price: product.price });
 
     // Add wholesale mention if product is eligible
     let wholesaleMention = "";
@@ -723,11 +724,13 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       wholesaleMention = `\n\nA partir de ${product.wholesaleMinQty} piezas manejamos precio de mayoreo.`;
     }
 
+    // Build quantity prefix if needed
+    const quantityText = quantity ? `Para ${quantity} piezas: ` : "";
+
     return {
       type: "text",
-      text: `¡Perfecto! ${quantityText}Tenemos la ${displayName}${priceText}:\n\n` +
-            `${trackedLink}\n\n` +
-            `Ahí puedes ver el precio y comprar. El envío está incluido.${wholesaleMention}\n\n` +
+      text: `${quantityText}${salesPitch}\n\n` +
+            `${trackedLink}${wholesaleMention}\n\n` +
             `¿Necesitas algo más?`
     };
   }
