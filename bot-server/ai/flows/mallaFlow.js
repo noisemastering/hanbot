@@ -5,6 +5,7 @@
 const { updateConversation } = require("../../conversationManager");
 const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
+const ZipCode = require("../../models/ZipCode");
 const { INTENTS } = require("../classifier");
 
 // Import existing utilities - USE THESE, don't reinvent
@@ -33,6 +34,40 @@ const {
   parseSingleDimension,
   extractAllDimensions
 } = require("../utils/dimensionParsers");
+
+/**
+ * Parse zip code from message and look up location
+ * Patterns: CP 12345, C.P. 12345, cp12345, al 12345, codigo postal 12345
+ * @param {string} msg - User message
+ * @returns {Promise<object|null>} { code, city, state, municipality, shipping } or null
+ */
+async function parseAndLookupZipCode(msg) {
+  if (!msg) return null;
+
+  const patterns = [
+    /\b(?:c\.?p\.?|codigo\s*postal|cp)\s*[:\.]?\s*(\d{5})\b/i,
+    /\bal\s+(\d{5})\b/i,
+    /\b(\d{5})\b(?=\s*(?:$|,|\.|\s+(?:para|en|a)\b))/i
+  ];
+
+  for (const pattern of patterns) {
+    const match = msg.match(pattern);
+    if (match) {
+      const code = match[1];
+      try {
+        const location = await ZipCode.lookup(code);
+        if (location) {
+          console.log(`📍 Zip code ${code} → ${location.city}, ${location.state}`);
+          return location;
+        }
+      } catch (err) {
+        console.error(`❌ Zip code lookup failed:`, err.message);
+      }
+    }
+  }
+
+  return null;
+}
 
 /**
  * Flow stages for malla confeccionada
@@ -222,7 +257,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       });
 
       // Process as complete with confirmed dimensions
-      return await handleComplete(intent, state, sourceContext, psid, convo);
+      return await handleComplete(intent, state, sourceContext, psid, convo, userMessage);
     }
   }
 
@@ -317,7 +352,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       break;
 
     case STAGES.COMPLETE:
-      response = await handleComplete(intent, state, sourceContext, psid, convo);
+      response = await handleComplete(intent, state, sourceContext, psid, convo, userMessage);
       break;
 
     default:
@@ -494,8 +529,20 @@ function handleAwaitingDimensions(intent, state, sourceContext, userMessage = ''
 /**
  * Handle complete - we have dimensions
  */
-async function handleComplete(intent, state, sourceContext, psid, convo) {
+async function handleComplete(intent, state, sourceContext, psid, convo, userMessage = '') {
   const { width, height, percentage, color, quantity } = state;
+
+  // Parse zip code from message if provided
+  const zipInfo = await parseAndLookupZipCode(userMessage);
+  if (zipInfo) {
+    // Save location info to conversation
+    await updateConversation(psid, {
+      zipCode: zipInfo.code,
+      city: zipInfo.city,
+      state: zipInfo.state,
+      shippingZone: zipInfo.shipping?.text || '3-5 días hábiles'
+    });
+  }
 
   // Check if dimensions are fractional (we only do whole meters)
   const hasFractions = (width % 1 !== 0) || (height % 1 !== 0);
@@ -512,11 +559,20 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
       lastUnavailableSize: `${width}x${height}`
     });
 
+    // Build response with city confirmation if zip was provided
+    let responseText = `Solo manejamos medidas en metros completos.\n\n` +
+                       `Para ${width}x${height}m, te recomiendo ${roundedWidth}x${roundedHeight}m.`;
+
+    if (zipInfo) {
+      responseText += `\n\n📍 Envío a ${zipInfo.city}, ${zipInfo.state} (${zipInfo.shipping?.text || '3-5 días hábiles'})`;
+      responseText += `\n\n¿Te confirmo la de ${roundedWidth}x${roundedHeight}m a ${zipInfo.city}?`;
+    } else {
+      responseText += `\n\n¿Te interesa esa medida?`;
+    }
+
     return {
       type: "text",
-      text: `Solo manejamos medidas en metros completos.\n\n` +
-            `Para ${width}x${height}m, te recomiendo ${roundedWidth}x${roundedHeight}m.\n\n` +
-            `¿Te interesa esa medida?`
+      text: responseText
     };
   }
 
@@ -753,8 +809,18 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
 /**
  * Check if this flow should handle the message
  */
-function shouldHandle(classification, sourceContext, convo) {
+function shouldHandle(classification, sourceContext, convo, userMessage = '') {
   const { product } = classification;
+  const msg = (userMessage || '').toLowerCase();
+
+  // FIRST: Check if user is asking for non-90% shade (35%, 50%, 70%, 80%)
+  // These are ROLLO products, not confeccionada (which is only 90%)
+  // Patterns: "al 50%", "50%", "al 50", "malla 50", "50/100" (50% shade, 100m roll)
+  const nonConfeccionadaShade = /\b(al\s*)?(35|50|70|80)\s*(%|porciento|por\s*ciento)?\b|\b(35|50|70|80)\s*[\/]\s*100\b/i;
+  if (nonConfeccionadaShade.test(msg)) {
+    console.log(`🌐 Malla flow - Non-90% shade detected, deferring to rollo flow`);
+    return false;
+  }
 
   // Explicitly about malla sombra (not rolls)
   if (product === "malla_sombra") return true;
