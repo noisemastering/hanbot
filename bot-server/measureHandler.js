@@ -280,12 +280,28 @@ function parseDimensions(message) {
 
   // Pattern 9: Single dimension implies square - "de 4 metros", "una de 4", "4 metros q sale"
   // Only match if it's clearly asking for a size (with "de" prefix or "metros" unit)
+  // IMPORTANT: Only use this if the message truly has ONE dimension number.
+  // If there are TWO DIFFERENT numbers, the customer gave both dimensions - don't assume square!
   const patternSquare = /\b(?:de|una?\s+de)\s+(\d+(?:\.\d+)?)\s*(?:metros?|m)?\b/i;
   const matchSquare = normalized.match(patternSquare);
   if (matchSquare) {
     const size = parseFloat(matchSquare[1]);
     // Only treat as square if size is reasonable (2-10 meters)
     if (size >= 2 && size <= 10) {
+      // SAFETY CHECK: Look for other dimension numbers in the message
+      // If we find a DIFFERENT number that could be a dimension, don't assume square
+      const allNumbers = normalized.match(/\b(\d+(?:\.\d+)?)\b/g) || [];
+      const dimensionNumbers = allNumbers
+        .map(n => parseFloat(n))
+        .filter(n => n >= 1 && n <= 50); // Reasonable dimension range (1-50 meters)
+      const uniqueDimensions = [...new Set(dimensionNumbers)];
+
+      // If there are 2+ different dimension-like numbers, customer specified both - don't assume square
+      if (uniqueDimensions.length >= 2) {
+        console.log(`⚠️ Found multiple dimensions (${uniqueDimensions.join(', ')}), not assuming square`);
+        return null;
+      }
+
       console.log(`📐 Single dimension detected (${size}m), treating as ${size}x${size} square`);
       return {
         width: size,
