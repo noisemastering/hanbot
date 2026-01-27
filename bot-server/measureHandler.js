@@ -177,8 +177,11 @@ function parseDimensions(message) {
   // Without this fix, "3 metros x 1.70" wouldn't match (requires trailing "metros")
   const pattern4 = /(\d+(?:\.\d+)?)\s+metros?\s+(?:de\s+)?(?:ancho\s+)?(?:por|x)\s+(\d+(?:\.\d+)?)(?:\s*metros?)?/i;
 
-  // Pattern 5: "3 ancho x 5 largo" - dimensions with ancho/largo labels
+  // Pattern 5: "3 ancho x 5 largo" - dimensions with ancho/largo labels (ancho first)
   const pattern5 = /(\d+(?:\.\d+)?)\s+(?:de\s+)?ancho\s+(?:por|x)\s+(\d+(?:\.\d+)?)\s+(?:de\s+)?largo/i;
+
+  // Pattern 5b: "4 de largo por 3 de ancho" - dimensions with largo first (opposite of pattern 5)
+  const pattern5b = /(\d+(?:\.\d+)?)\s+(?:de\s+)?largo\s+(?:por|x)\s+(\d+(?:\.\d+)?)\s+(?:de\s+)?ancho/i;
 
   // Pattern 6: "8 metros de largo x 5 de ancho" or "8 metros de ancho x 5 de largo"
   const pattern6 = /(\d+(?:\.\d+)?)\s*metros?\s+de\s+(largo|ancho)\s*[xX×*]\s*(\d+(?:\.\d+)?)\s*(?:metros?)?\s*(?:de\s+)?(largo|ancho)?/i;
@@ -231,6 +234,19 @@ function parseDimensions(message) {
     const width = firstLabel === 'ancho' ? firstNum : secondNum;
     const height = firstLabel === 'largo' ? firstNum : secondNum;
 
+    return {
+      width,
+      height,
+      area: width * height
+    };
+  }
+
+  // Handle pattern 5b: "N de largo por M de ancho" (largo first, opposite of pattern 5)
+  const match5b = normalized.match(pattern5b);
+  if (match5b) {
+    // match5b[1] = largo value (height), match5b[2] = ancho value (width)
+    const height = parseFloat(match5b[1]);
+    const width = parseFloat(match5b[2]);
     return {
       width,
       height,
