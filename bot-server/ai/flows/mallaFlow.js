@@ -407,6 +407,67 @@ function handleAwaitingDimensions(intent, state, sourceContext, userMessage = ''
     };
   }
 
+  // Check if user is asking about product features (material, percentage, color, UV)
+  // Collect all matching features to give a combined response
+  const featureChecks = [
+    {
+      pattern: /\b(es\s+)?raschel\b/i,
+      response: "es malla raschel de alta densidad (HDPE)"
+    },
+    {
+      pattern: /\b(90|noventa)\s*%?(?!\s*(m|metro|x|\d))/i,
+      response: "sí manejamos 90% de sombra"
+    },
+    {
+      pattern: /\b(80|ochenta)\s*%?(?!\s*(m|metro|x|\d))/i,
+      response: "sí manejamos 80% de sombra"
+    },
+    {
+      pattern: /\b(70|setenta)\s*%?(?!\s*(m|metro|x|\d))/i,
+      response: "sí manejamos 70% de sombra"
+    },
+    {
+      pattern: /\b(50|cincuenta)\s*%?(?!\s*(m|metro|x|\d))/i,
+      response: "sí manejamos 50% de sombra"
+    },
+    {
+      pattern: /\b(35|treinta\s*y\s*cinco)\s*%?(?!\s*(m|metro|x|\d))/i,
+      response: "sí manejamos 35% de sombra"
+    },
+    {
+      pattern: /\b(porcentaje|nivel\s*de\s*sombra)\b/i,
+      response: "manejamos 35%, 50%, 70%, 80% y 90% de sombra"
+    },
+    {
+      pattern: /\b(beige|caf[eé])\b/i,
+      response: "el color es beige"
+    },
+    {
+      pattern: /\b(uv|rayos|sol)\b/i,
+      response: "tiene protección UV"
+    },
+    {
+      pattern: /\b(ojillos?|ojales?|arillos?)\b/i,
+      response: "viene con ojillos en todo el perímetro"
+    }
+  ];
+
+  const matchedFeatures = featureChecks.filter(f => f.pattern.test(userMessage));
+
+  if (matchedFeatures.length > 0) {
+    // Capitalize first response, join with ", "
+    const responses = matchedFeatures.map(f => f.response);
+    responses[0] = responses[0].charAt(0).toUpperCase() + responses[0].slice(1);
+    const combined = responses.length > 1
+      ? responses.slice(0, -1).join(', ') + ' y ' + responses[responses.length - 1]
+      : responses[0];
+
+    return {
+      type: "text",
+      text: `Sí, ${combined}.\n\n¿Qué medida necesitas?`
+    };
+  }
+
   // Check if user mentioned an object they want to cover (carro, cochera, patio, etc.)
   const objectPatterns = [
     { pattern: /\b(carro|coche|auto|veh[ií]culo|camioneta)\b/i, object: "carro" },

@@ -17,7 +17,26 @@ const User = require("./models/User");
 
 
 mongoose.connect(process.env.MONGODB_URI)
-  .then(() => console.log('✅ Connected to MongoDB Atlas'))
+  .then(async () => {
+    console.log('✅ Connected to MongoDB Atlas');
+
+    // Fix User index to be sparse (allows WhatsApp users without psid)
+    try {
+      const db = mongoose.connection.db;
+      const indexes = await db.collection('users').indexes();
+      const psidIndex = indexes.find(i => i.name === 'psid_1');
+
+      if (psidIndex && !psidIndex.sparse) {
+        console.log('🔧 Fixing non-sparse psid index...');
+        await db.collection('users').dropIndex('psid_1');
+        await db.collection('users').createIndex({ psid: 1 }, { unique: true, sparse: true });
+        console.log('✅ Fixed psid index (now sparse)');
+      }
+    } catch (err) {
+      // Index might not exist or already fixed
+      console.log('ℹ️ Index check:', err.message);
+    }
+  })
   .catch(err => console.error('❌ MongoDB connection error:', err));
 
 // --- CORS CONFIG (MUST BE BEFORE ROUTES) ---
@@ -609,10 +628,70 @@ app.get("/webhook", (req, res) => {
 
 app.post("/webhook", async (req, res) => {
   const body = req.body;
+
+  // 🔍 DEBUG: Log raw webhook payload to diagnose missing referrals
+  console.log("📥 WEBHOOK RAW:", JSON.stringify(body, null, 2).slice(0, 1500));
+
   if (body.object === "page") {
     for (const entry of body.entry) {
+      // Handle feed/changes (posts, comments) - separate from messaging
+      if (entry.changes) {
+        console.log("📰 PAGE FEED EVENT:", JSON.stringify(entry.changes, null, 2).slice(0, 1000));
+
+        for (const change of entry.changes) {
+          // Track comments on posts for context when user messages
+          if (change.field === 'feed' && change.value?.item === 'comment') {
+            const { from, post_id, message, comment_id } = change.value;
+
+            if (from?.id && post_id) {
+              console.log(`💬 COMMENT DETECTED:`);
+              console.log(`   User: ${from.name} (${from.id})`);
+              console.log(`   Post: ${post_id}`);
+              console.log(`   Comment: ${message?.slice(0, 100) || 'N/A'}`);
+
+              // Store in cache for later correlation with messaging
+              // Key: Facebook user ID, Value: post context
+              const CommentContext = require('./models/CommentContext');
+              try {
+                await CommentContext.findOneAndUpdate(
+                  { fbUserId: from.id },
+                  {
+                    fbUserId: from.id,
+                    fbUserName: from.name,
+                    postId: post_id,
+                    commentId: comment_id,
+                    commentText: message,
+                    createdAt: new Date()
+                  },
+                  { upsert: true, new: true }
+                );
+                console.log(`   ✅ Stored comment context for user ${from.id}`);
+              } catch (err) {
+                console.error(`   ❌ Failed to store comment context:`, err.message);
+              }
+            }
+          }
+        }
+
+        // Feed events don't have messaging - skip to next entry
+        continue;
+      }
+
+      if (!entry.messaging || !entry.messaging[0]) {
+        console.log("⚠️ No messaging array in entry:", JSON.stringify(entry, null, 2).slice(0, 500));
+        continue;
+      }
+
       const webhookEvent = entry.messaging[0];
       const senderPsid = webhookEvent.sender.id;
+
+      // 🔍 DEBUG: Log referral detection
+      if (webhookEvent.referral) {
+        console.log("🎯 REFERRAL FOUND (direct):", JSON.stringify(webhookEvent.referral));
+      }
+      if (webhookEvent.postback?.referral) {
+        console.log("🎯 REFERRAL FOUND (postback):", JSON.stringify(webhookEvent.postback.referral));
+      }
 
 
       // 🤝 HANDOVER PROTOCOL: Handle thread control events
@@ -832,6 +911,67 @@ app.post("/webhook", async (req, res) => {
 
         // 🎯 Check if the ad associated with this conversation is active
         const conversation = await getConversation(senderPsid);
+
+        // 💬 COMMENT CONTEXT: If no referral, check if user recently commented on a post
+        if (conversation && !conversation.adId && !conversation.campaignRef && messageText) {
+          try {
+            const CommentContext = require('./models/CommentContext');
+
+            // Try to match by comment text (first message often IS the comment)
+            const commentContext = await CommentContext.findOne({
+              commentText: { $regex: messageText.slice(0, 50).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' }
+            }).sort({ createdAt: -1 }).lean();
+
+            if (commentContext) {
+              console.log(`💬 COMMENT MATCH FOUND!`);
+              console.log(`   Post ID: ${commentContext.postId}`);
+              console.log(`   Original comment: ${commentContext.commentText?.slice(0, 50)}`);
+
+              // Infer product from post mapping or comment text
+              const postId = commentContext.postId || '';
+              let inferredProduct = null;
+
+              // First, check if we have a post mapping
+              const PostMapping = require('./models/PostMapping');
+              const postMapping = await PostMapping.findOne({ postId }).lean();
+
+              if (postMapping?.productInterest) {
+                inferredProduct = postMapping.productInterest;
+                console.log(`   📍 Found post mapping: ${inferredProduct}`);
+              } else {
+                // Fallback: infer from comment text keywords
+                const commentLower = (commentContext.commentText || '').toLowerCase();
+                if (/malla.*sombra|rollo|raschel|sombra|metro/i.test(commentLower)) {
+                  inferredProduct = 'malla_sombra';
+                } else if (/borde|jard[ií]n|separador/i.test(commentLower)) {
+                  inferredProduct = 'borde_separador';
+                } else if (/ground.*cover|antimaleza/i.test(commentLower)) {
+                  inferredProduct = 'ground_cover';
+                }
+              }
+
+              // Update conversation with inferred context
+              await updateConversation(senderPsid, {
+                productInterest: inferredProduct,
+                source: {
+                  type: 'comment',
+                  postId: commentContext.postId,
+                  commentId: commentContext.commentId
+                }
+              });
+
+              // Link the PSID back to comment context for future reference
+              await CommentContext.updateOne(
+                { _id: commentContext._id },
+                { linkedPsid: senderPsid }
+              );
+
+              console.log(`   ✅ Linked to PSID ${senderPsid}, inferred product: ${inferredProduct || 'unknown'}`);
+            }
+          } catch (err) {
+            console.error(`❌ Comment context lookup failed:`, err.message);
+          }
+        }
 
         // 📊 Log campaign source for this message
         if (conversation) {

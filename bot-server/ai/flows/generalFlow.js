@@ -189,14 +189,14 @@ async function handleMultiQuestion(entities, convo, psid) {
   const subIntents = entities.subIntents || [];
   const responses = [];
 
-  // Response snippets for each intent type
+  // Response snippets for each intent type (emoji as bullet, no markdown)
   const intentResponses = {
-    'price_query': `💰 **Precios:** Los precios dependen de la medida que necesites. ¿Qué medida te interesa?`,
-    'location_query': `📍 **Ubicación:** ¡Enviamos a todo México y USA! Nuestra tienda está en ${BUSINESS_INFO.city}, pero te lo enviamos a domicilio.`,
-    'shipping_query': `📦 **Envío:** Sí, enviamos a todo México y también a Estados Unidos. El envío está incluido en la mayoría de nuestros productos.`,
-    'payment_query': `💳 **Pago:** Aceptamos tarjeta, efectivo en OXXO, o meses sin intereses a través de Mercado Libre.`,
-    'availability_query': `✅ **Disponibilidad:** La mayoría de medidas estándar las tenemos en stock. ¿Qué medida necesitas?`,
-    'delivery_time_query': `🚚 **Tiempo de entrega:** Normalmente de 3 a 5 días hábiles dependiendo de tu ubicación.`
+    'price_query': `💰 Los precios dependen de la medida que necesites. ¿Qué medida te interesa?`,
+    'location_query': `📍 ¡Enviamos a todo México y USA! Nuestra tienda está en ${BUSINESS_INFO.city}, pero te lo enviamos a domicilio.`,
+    'shipping_query': `📦 Enviamos a todo México y también a Estados Unidos. El envío está incluido en la mayoría de nuestros productos.`,
+    'payment_query': `💳 Aceptamos tarjeta, efectivo en OXXO, o meses sin intereses a través de Mercado Libre.`,
+    'availability_query': `✅ La mayoría de medidas estándar las tenemos en stock. ¿Qué medida necesitas?`,
+    'delivery_time_query': `🚚 Normalmente de 3 a 5 días hábiles dependiendo de tu ubicación.`
   };
 
   // Build combined response
