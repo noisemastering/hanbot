@@ -482,7 +482,126 @@ router.get('/attribution/:psid', async (req, res) => {
   }
 });
 
-// POST /analytics/correlate - Run correlation on existing orders
+// POST /analytics/correlate-conversions - Run correlation (dashboard format)
+router.post('/correlate-conversions', async (req, res) => {
+  try {
+    const { sellerId = '482595248', timeWindowHours = 48, orderLimit = 100, dryRun = false } = req.body;
+
+    console.log(`🔄 Running correlation: seller=${sellerId}, window=${timeWindowHours}h, limit=${orderLimit}, dryRun=${dryRun}`);
+
+    // Fetch recent orders from ML API
+    const ordersResult = await getOrders(sellerId, {
+      limit: parseInt(orderLimit),
+      sort: 'date_desc'
+    });
+
+    if (!ordersResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch orders from ML API',
+        details: ordersResult.error
+      });
+    }
+
+    // Filter to paid orders only
+    const paidOrders = ordersResult.orders.filter(o => o.status === 'paid');
+    console.log(`📦 Found ${paidOrders.length} paid orders out of ${ordersResult.orders.length} total`);
+
+    // For each order, try to find a matching click
+    const correlations = [];
+    let ordersWithClicks = 0;
+
+    for (const order of paidOrders) {
+      // Look for clicks that match this order
+      const orderDate = new Date(order.date_created);
+      const windowStart = new Date(orderDate.getTime() - (timeWindowHours * 60 * 60 * 1000));
+
+      // Find click logs that could match this order
+      const matchingClicks = await ClickLog.find({
+        clicked: true,
+        clickedAt: { $gte: windowStart, $lte: orderDate },
+        $or: [
+          { converted: { $ne: true } }, // Not yet converted
+          { 'conversionData.orderId': order.id } // Or already matched to this order
+        ]
+      }).sort({ clickedAt: -1 }).limit(5).lean();
+
+      if (matchingClicks.length > 0) {
+        ordersWithClicks++;
+
+        // Find the best match (by product if possible, or most recent)
+        let bestMatch = matchingClicks[0];
+        const orderItemTitle = order.order_items?.[0]?.item?.title?.toLowerCase() || '';
+
+        for (const click of matchingClicks) {
+          const clickProduct = (click.productName || '').toLowerCase();
+          if (orderItemTitle.includes(clickProduct) || clickProduct.includes(orderItemTitle.split(' ')[0])) {
+            bestMatch = click;
+            break;
+          }
+        }
+
+        // Determine confidence
+        const timeDiff = orderDate - new Date(bestMatch.clickedAt);
+        const hoursApart = timeDiff / (1000 * 60 * 60);
+        let confidence = 'low';
+        if (hoursApart < 2) confidence = 'high';
+        else if (hoursApart < 12) confidence = 'medium';
+
+        correlations.push({
+          clickId: bestMatch._id,
+          psid: bestMatch.psid,
+          productName: bestMatch.productName,
+          orderId: order.id,
+          totalAmount: order.total_amount,
+          buyerNickname: order.buyer?.nickname,
+          confidence,
+          timeDiff: `${hoursApart.toFixed(1)}h`
+        });
+
+        // If not dry run, update the click log
+        if (!dryRun) {
+          await ClickLog.updateOne(
+            { _id: bestMatch._id },
+            {
+              $set: {
+                converted: true,
+                convertedAt: orderDate,
+                correlationConfidence: confidence,
+                conversionData: {
+                  orderId: order.id,
+                  orderStatus: order.status,
+                  totalAmount: order.total_amount,
+                  paidAmount: order.paid_amount,
+                  buyerNickname: order.buyer?.nickname,
+                  orderDate: order.date_created
+                }
+              }
+            }
+          );
+        }
+      }
+    }
+
+    res.json({
+      success: true,
+      dryRun,
+      ordersProcessed: paidOrders.length,
+      ordersWithClicks,
+      clicksCorrelated: correlations.length,
+      correlations: dryRun ? correlations : undefined
+    });
+  } catch (error) {
+    console.error('❌ Error running correlation:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to run correlation',
+      details: error.message
+    });
+  }
+});
+
+// POST /analytics/correlate - Run correlation on existing orders (legacy)
 // This will match ML orders with ClickLog entries based on city + timestamp
 router.post('/correlate', async (req, res) => {
   try {
