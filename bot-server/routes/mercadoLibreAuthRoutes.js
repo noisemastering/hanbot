@@ -397,8 +397,49 @@ router.get("/items", authenticate, async (req, res) => {
     });
     const userId = me.data.id;
 
-    // If search query is provided, use search API (much faster)
+    // If search query is provided, check if it's a URL/ML item ID first
     if (search && search.length >= 3) {
+      // Check if search contains an ML item ID (URL or direct ID)
+      const { extractMLItemId } = require("../utils/mlPriceSync");
+      const mlItemId = extractMLItemId(search) ||
+        (search.match(/^MLM[-]?(\d{8,})$/i) ? `MLM${search.match(/\d+/)[0]}` : null);
+
+      if (mlItemId) {
+        console.log(`🔍 Detected ML item ID in search: ${mlItemId}`);
+        try {
+          const itemResponse = await axios.get(
+            `https://api.mercadolibre.com/items/${mlItemId}`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+                'Cache-Control': 'no-cache'
+              }
+            }
+          );
+
+          const item = itemResponse.data;
+          return res.json({
+            success: true,
+            items: [{
+              id: item.id,
+              title: item.title,
+              price: item.price,
+              original_price: item.original_price,
+              currency: item.currency_id,
+              permalink: item.permalink,
+              thumbnail: item.thumbnail,
+              status: item.status,
+              available_quantity: item.available_quantity
+            }],
+            total: 1
+          });
+        } catch (itemErr) {
+          console.error(`❌ Error fetching ML item ${mlItemId}:`, itemErr.message);
+          // Fall through to text search if item not found
+        }
+      }
+
+      // Text search - use ML search API
       const searchResponse = await axios.get(
         `https://api.mercadolibre.com/users/${userId}/items/search`,
         {
