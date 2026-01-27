@@ -78,7 +78,21 @@ router.get('/', async (req, res) => {
 // Returns FB attributed conversions and ML order totals for a date range
 router.get('/conversions', async (req, res) => {
   try {
-    const { dateFrom, dateTo } = req.query;
+    const { dateFrom, dateTo, sellerId = '482595248' } = req.query;
+
+    // Auto-sync: correlate recent orders before returning stats
+    try {
+      const ordersResult = await getOrders(sellerId, { limit: 50, sort: 'date_desc' });
+      if (ordersResult.success) {
+        const paidOrders = ordersResult.orders.filter(o => o.status === 'paid');
+        if (paidOrders.length > 0) {
+          const correlationResult = await correlateOrders(paidOrders, sellerId);
+          console.log(`🔄 Auto-sync: ${correlationResult.correlated} new correlations`);
+        }
+      }
+    } catch (syncError) {
+      console.error('⚠️ Auto-sync failed (continuing with cached data):', syncError.message);
+    }
 
     // Build date filter for clicks
     const dateFilter = {};
