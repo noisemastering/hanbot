@@ -80,7 +80,7 @@ router.get('/conversions', async (req, res) => {
   try {
     const { dateFrom, dateTo } = req.query;
 
-    // Build date filter
+    // Build date filter for clicks
     const dateFilter = {};
     if (dateFrom) {
       dateFilter.$gte = new Date(dateFrom);
@@ -89,60 +89,118 @@ router.get('/conversions', async (req, res) => {
       dateFilter.$lte = new Date(dateTo);
     }
 
-    // Query ClickLog for FB attributed conversions in date range
-    const clickQuery = { converted: true };
+    // Build query for all links in date range
+    const allLinksQuery = {};
     if (Object.keys(dateFilter).length > 0) {
-      // Use conversionData.orderDate or convertedAt for date filtering
-      clickQuery.$or = [
+      allLinksQuery.createdAt = dateFilter;
+    }
+
+    // Get all click stats
+    const totalLinks = await ClickLog.countDocuments(allLinksQuery);
+    const clickedLinks = await ClickLog.countDocuments({ ...allLinksQuery, clicked: true });
+
+    // Query for conversions
+    const conversionQuery = { converted: true };
+    if (Object.keys(dateFilter).length > 0) {
+      conversionQuery.$or = [
         { 'conversionData.orderDate': dateFilter },
-        { convertedAt: dateFilter }
+        { convertedAt: dateFilter },
+        { createdAt: dateFilter }
       ];
     }
 
     // Get attributed conversions
-    const attributedClicks = await ClickLog.find(clickQuery).lean();
+    const attributedClicks = await ClickLog.find(conversionQuery).lean();
+    const conversions = attributedClicks.length;
 
-    // Calculate attributed revenue from conversions
-    const attributedOrders = attributedClicks.length;
-    const attributedRevenue = attributedClicks.reduce((sum, click) => {
+    // Calculate attributed revenue
+    const totalRevenue = attributedClicks.reduce((sum, click) => {
       return sum + (click.conversionData?.totalAmount || click.conversionData?.paidAmount || 0);
     }, 0);
 
-    // Note: totalMLOrders and totalMLRevenue require ML API calls
-    // The frontend gets totalMLOrders from paging.total in the orders endpoint
-    // totalMLRevenue would require fetching ALL pages (expensive)
-    // We return null to indicate it's not available from this endpoint
+    // Confidence breakdown
+    const confidenceBreakdown = { high: 0, medium: 0, low: 0 };
+    attributedClicks.forEach(click => {
+      const conf = click.correlationConfidence || 'low';
+      if (confidenceBreakdown[conf] !== undefined) {
+        confidenceBreakdown[conf]++;
+      }
+    });
+
+    // Top converters (by PSID)
+    const topConverters = await ClickLog.aggregate([
+      { $match: conversionQuery },
+      {
+        $group: {
+          _id: '$psid',
+          conversions: { $sum: 1 },
+          totalSpent: { $sum: { $ifNull: ['$conversionData.totalAmount', 0] } }
+        }
+      },
+      { $sort: { conversions: -1 } },
+      { $limit: 5 }
+    ]);
+
+    // Calculate rates
+    const clickRate = totalLinks > 0 ? ((clickedLinks / totalLinks) * 100).toFixed(1) : '0';
+    const conversionRate = clickedLinks > 0 ? ((conversions / clickedLinks) * 100).toFixed(1) : '0';
 
     res.json({
       success: true,
       stats: {
-        // FB Attribution stats
-        attributedOrders,
-        attributedRevenue,
-        conversions: attributedOrders,
-        totalRevenue: attributedRevenue,
-
-        // ML totals - these come from the ML orders endpoint, not here
-        // totalMLOrders comes from paging.total in /ml/orders/:sellerId
-        // totalMLRevenue is not available without fetching all pages
-        totalMLOrders: null,
-        totalMLRevenue: null,
-
-        // Rates
-        conversionRate: null, // Can't calculate without total ML orders
-        attributionRate: null
+        totalLinks,
+        clickedLinks,
+        clickRate,
+        conversions,
+        conversionRate,
+        totalRevenue,
+        confidenceBreakdown,
+        topConverters
       },
       dateRange: {
         from: dateFrom || 'not specified',
         to: dateTo || 'not specified'
-      },
-      note: 'totalMLOrders comes from ML API paging.total. totalMLRevenue requires fetching all order pages.'
+      }
     });
   } catch (error) {
     console.error('❌ Error fetching conversion stats:', error);
     res.status(500).json({
       success: false,
       error: 'Failed to fetch conversion stats',
+      details: error.message
+    });
+  }
+});
+
+// GET /analytics/conversions/recent - Get recent conversions for display
+router.get('/conversions/recent', async (req, res) => {
+  try {
+    const limit = parseInt(req.query.limit) || 20;
+
+    // Get recent converted clicks
+    const recentConversions = await ClickLog.find({ converted: true })
+      .sort({ convertedAt: -1, clickedAt: -1 })
+      .limit(limit)
+      .lean();
+
+    res.json({
+      success: true,
+      conversions: recentConversions.map(click => ({
+        clickId: click._id,
+        psid: click.psid,
+        productName: click.productName,
+        productId: click.productId,
+        clickedAt: click.clickedAt,
+        convertedAt: click.convertedAt,
+        correlationConfidence: click.correlationConfidence,
+        conversionData: click.conversionData
+      }))
+    });
+  } catch (error) {
+    console.error('❌ Error fetching recent conversions:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to fetch recent conversions',
       details: error.message
     });
   }
