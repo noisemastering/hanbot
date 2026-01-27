@@ -195,8 +195,10 @@ async function handleMultiQuestion(entities, convo, psid) {
     'location_query': `📍 ¡Enviamos a todo México y USA! Nuestra tienda está en ${BUSINESS_INFO.city}, pero te lo enviamos a domicilio.`,
     'shipping_query': `📦 Enviamos a todo México y también a Estados Unidos. El envío está incluido en la mayoría de nuestros productos.`,
     'payment_query': `💳 Aceptamos tarjeta, efectivo en OXXO, o meses sin intereses a través de Mercado Libre.`,
-    'availability_query': `✅ La mayoría de medidas estándar las tenemos en stock. ¿Qué medida necesitas?`,
-    'delivery_time_query': `🚚 Normalmente de 3 a 5 días hábiles dependiendo de tu ubicación.`
+    'availability_query': `✅ La malla se vende por pieza confeccionada (lista para instalar). Manejamos desde 2x2m hasta 6x10m.`,
+    'delivery_time_query': `🚚 Normalmente de 3 a 5 días hábiles dependiendo de tu ubicación.`,
+    'installation_query': `🔧 No ofrecemos servicio de instalación, pero la malla viene lista para instalar con ojillos en todo el perímetro.`,
+    'product_inquiry': `ℹ️ Tenemos malla sombra confeccionada lista para instalar en diferentes medidas y porcentajes de sombra.`
   };
 
   // Build combined response

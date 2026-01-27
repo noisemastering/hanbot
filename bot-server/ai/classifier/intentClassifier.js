@@ -480,6 +480,19 @@ function quickClassify(message, dbIntents = null) {
     { pattern: /\b(disponib|stock|tienen)\b.*\b(precio|costo)s?\b/i, intents: ['availability_query', 'price_query'] },
     // Price + Payment
     { pattern: /\b(precio|costo)s?\b.*\b(pago|pagar|tarjeta)\b/i, intents: ['price_query', 'payment_query'] },
+    // Price + Installation (with typos: installan, instalan)
+    { pattern: /\b(precio|costo)s?\b.*\b(instal[ae]n?|ponen|colocan)\b/i, intents: ['price_query', 'installation_query'] },
+    { pattern: /\b(instal[ae]n?|ponen|colocan)\b.*\b(precio|costo)s?\b/i, intents: ['installation_query', 'price_query'] },
+    // Price + How it's sold (metros, rollos, piezas)
+    { pattern: /\b(precio|costo)s?\b.*\b(por\s*metros?|metros?)\b/i, intents: ['price_query', 'availability_query'] },
+    { pattern: /\b(metros?|rollo|pieza).*\b(precio|costo)s?\b/i, intents: ['availability_query', 'price_query'] },
+    // Info + Price (common: "informes y precio", "info precio")
+    { pattern: /\b(informes?|info)\b.*\b(precio|costo)s?\b/i, intents: ['product_inquiry', 'price_query'] },
+    { pattern: /\b(precio|costo)s?\b.*\b(informes?|info)\b/i, intents: ['price_query', 'product_inquiry'] },
+    // Installation + Delivery/Shipping
+    { pattern: /\b(instal[ae]n?|ponen|colocan)\b.*\b(env[ií]o|entrega|llega)\b/i, intents: ['installation_query', 'shipping_query'] },
+    // Metros + Installation
+    { pattern: /\b(metros?|por\s*metro)\b.*\b(instal[ae]n?|ponen|colocan)\b/i, intents: ['price_query', 'installation_query'] },
   ];
 
   for (const { pattern, intents } of multiQuestionPatterns) {
