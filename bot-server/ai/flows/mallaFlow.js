@@ -236,13 +236,18 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   }
 
   // SECOND: Try single dimension - assume square (e.g., "2 y medio" -> 3x3)
+  // BUT only for reasonable confeccionada sizes (2-10m), not roll sizes like 100m
   if (!state.width || !state.height) {
     const singleDim = parseSingleDimension(userMessage);
-    if (singleDim) {
+    // Sanity check: confeccionada single dimensions should be 2-10m
+    // Numbers like 100 are roll lengths, not confeccionada sizes
+    if (singleDim && singleDim >= 2 && singleDim <= 10) {
       const rounded = Math.round(singleDim);
       console.log(`🌐 Malla flow - Single dimension ${singleDim}m, assuming square ${rounded}x${rounded}`);
       state.width = rounded;
       state.height = rounded;
+    } else if (singleDim && singleDim > 10) {
+      console.log(`⚠️ Single dimension ${singleDim}m is too large for confeccionada, ignoring`);
     }
   }
 
