@@ -681,6 +681,41 @@ async function generateReply(userMessage, psid, referral = null) {
   }
   // ====== END ACTIVE FLOW CHECK ======
 
+  // ====== EARLY HANDLERS (from old system) ======
+  // These handle common patterns before the main flow system
+  const cleanMsg = userMessage.toLowerCase().trim();
+
+  // 👍 ACKNOWLEDGMENT: Handle simple acknowledgments and emojis
+  const acknowledgmentResponse = await handleAcknowledgment(cleanMsg, psid, convo);
+  if (acknowledgmentResponse) {
+    return await checkForRepetition(acknowledgmentResponse, psid, convo);
+  }
+
+  // 📅 PURCHASE DEFERRAL: Handle when user wants to think about it
+  const deferralResponse = await handlePurchaseDeferral(cleanMsg, psid, convo, BOT_PERSONA_NAME);
+  if (deferralResponse) {
+    return await checkForRepetition(deferralResponse, psid, convo);
+  }
+
+  // 👋 GREETING: Handle simple greetings
+  const greetingResponse = await handleGreeting(cleanMsg, psid, convo, BOT_PERSONA_NAME);
+  if (greetingResponse) {
+    return await checkForRepetition(greetingResponse, psid, convo);
+  }
+
+  // 💬 THANKS/GOODBYE: Handle thank you messages
+  const thanksResponse = await handleThanks(cleanMsg, psid, convo, BOT_PERSONA_NAME);
+  if (thanksResponse) {
+    return await checkForRepetition(thanksResponse, psid, convo);
+  }
+
+  // 🌍 GLOBAL INTENTS: Handle common questions (rain, shipping, location, etc.)
+  const globalResponse = await handleGlobalIntents(cleanMsg, psid, convo);
+  if (globalResponse) {
+    return await checkForRepetition(globalResponse, psid, convo);
+  }
+  // ====== END EARLY HANDLERS ======
+
   // ====== LAYER 0: SOURCE CONTEXT ======
   // Detect where this conversation came from (ad, comment, cold DM, returning user)
   const sourceContext = await buildSourceContext(
