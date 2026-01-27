@@ -190,7 +190,36 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     const normalized = normalizeWidth(entities.width);
     if (normalized) state.width = normalized;
   }
-  if (entities.percentage) {
+
+  // Parse percentage from user message - both numeric and natural language
+  if (!state.percentage && userMessage) {
+    // Try numeric percentage: "35%", "al 50%", "50 porciento"
+    // IMPORTANT: Require % or porciento suffix to avoid matching dimensions like "4.20"
+    const numericMatch = userMessage.match(/\b(\d{2,3})\s*(%|porciento|por\s*ciento)/i);
+    if (numericMatch) {
+      const pct = parseInt(numericMatch[1]);
+      if (VALID_PERCENTAGES.includes(pct)) {
+        console.log(`📦 Rollo flow - Parsed percentage from message: ${pct}%`);
+        state.percentage = pct;
+      }
+    }
+
+    // Try natural language descriptions
+    if (!state.percentage) {
+      // "menos sombra", "mas delgado", "menor", "poca sombra" → 35%
+      if (/\b(menos\s*sombra|menor\s*sombra|poca\s*sombra|m[aá]s\s*delgad[oa]|delgad[oa]|m[aá]s\s*fin[oa]|fin[oa])\b/i.test(userMessage)) {
+        console.log(`📦 Rollo flow - Natural language "menos sombra/delgado" → 35%`);
+        state.percentage = 35;
+      }
+      // "mas sombra", "mas grueso", "mayor", "mucha sombra" → 90%
+      else if (/\b(m[aá]s\s*sombra|mayor\s*sombra|mucha\s*sombra|m[aá]s\s*grues[oa]|grues[oa]|m[aá]s\s*denso|denso)\b/i.test(userMessage)) {
+        console.log(`📦 Rollo flow - Natural language "mas sombra/grueso" → 90%`);
+        state.percentage = 90;
+      }
+    }
+  }
+
+  if (!state.percentage && entities.percentage) {
     state.percentage = entities.percentage;
   }
   if (entities.quantity) {

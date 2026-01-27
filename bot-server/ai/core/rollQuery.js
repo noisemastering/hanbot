@@ -29,6 +29,18 @@ function extractSpecsFromMessage(msg) {
     specs.percentage = parseInt(percentMatch[1]);
   }
 
+  // Natural language percentage descriptions
+  if (!specs.percentage) {
+    // "menos sombra", "mas delgado", "menor", "poca sombra" → 35%
+    if (/\b(menos\s*sombra|menor\s*sombra|poca\s*sombra|m[aá]s\s*delgad[oa]|delgad[oa]|m[aá]s\s*fin[oa]|fin[oa])\b/i.test(cleanMsg)) {
+      specs.percentage = 35;
+    }
+    // "mas sombra", "mas grueso", "mayor", "mucha sombra" → 90%
+    else if (/\b(m[aá]s\s*sombra|mayor\s*sombra|mucha\s*sombra|m[aá]s\s*grues[oa]|grues[oa]|m[aá]s\s*denso|denso)\b/i.test(cleanMsg)) {
+      specs.percentage = 90;
+    }
+  }
+
   // Extract quantity (e.g., "15 rollos", "quiero 10", "necesito 5")
   const qtyMatch = cleanMsg.match(/(\d+)\s*(?:rol+[oy]s?|unidades?|piezas?)/i) ||
                    cleanMsg.match(/(?:quiero|necesito|ocupo|son)\s+(\d+)/i) ||
