@@ -624,6 +624,20 @@ function quickClassify(message, dbIntents = null) {
     };
   }
 
+  // Just "malla" (without "sombra", "maleza", "anti") = malla_sombra (confeccionada)
+  // This is the default product when someone just says "malla"
+  if (/\bmalla\b/i.test(msg) && !/rollo|maleza|anti|granizo|[aá]fido/i.test(msg)) {
+    // Check if it's a price query
+    const isPrice = /precio|costo|cu[aá]nto|vale|cuesta/i.test(msg);
+    console.log(`⚡ Quick classify: just "malla" → malla_sombra (${isPrice ? 'price_query' : 'product_inquiry'})`);
+    return {
+      intent: isPrice ? INTENTS.PRICE_QUERY : INTENTS.PRODUCT_INQUIRY,
+      product: PRODUCTS.MALLA_SOMBRA,
+      entities: dimensions ? { dimensions: dimensions.raw, width: dimensions.width, height: dimensions.height } : {},
+      confidence: 0.85
+    };
+  }
+
   // Need AI for anything else
   return null;
 }
