@@ -130,10 +130,9 @@ async function syncMLPrices({ productIds = null } = {}) {
 
   const token = await getValidMLToken();
 
-  // Find products with ML links
+  // Find products with ML links (sync all products, not just sellable)
   const query = {
-    "onlineStoreLinks.url": { $regex: "mercadolibre" },
-    sellable: true
+    "onlineStoreLinks.url": { $regex: "mercadolibre" }
   };
 
   if (productIds && productIds.length > 0) {
