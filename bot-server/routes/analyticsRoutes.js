@@ -510,36 +510,50 @@ router.post('/correlate-conversions', async (req, res) => {
     // For each order, try to find a matching click
     const correlations = [];
     let ordersWithClicks = 0;
+    const matchedClickIds = new Set(); // Track clicks already matched in this run
 
     for (const order of paidOrders) {
+      // Skip if order already has a correlation in ClickLog
+      const existingCorrelation = await ClickLog.findOne({
+        'conversionData.orderId': order.id
+      }).lean();
+
+      if (existingCorrelation) {
+        console.log(`⏭️ Order ${order.id} already correlated to click ${existingCorrelation._id}`);
+        continue;
+      }
+
       // Look for clicks that match this order
       const orderDate = new Date(order.date_created);
       const windowStart = new Date(orderDate.getTime() - (timeWindowHours * 60 * 60 * 1000));
 
-      // Find click logs that could match this order
+      // Find click logs that could match this order (not yet converted)
       const matchingClicks = await ClickLog.find({
         clicked: true,
-        clickedAt: { $gte: windowStart, $lte: orderDate },
-        $or: [
-          { converted: { $ne: true } }, // Not yet converted
-          { 'conversionData.orderId': order.id } // Or already matched to this order
-        ]
-      }).sort({ clickedAt: -1 }).limit(5).lean();
+        converted: { $ne: true },
+        clickedAt: { $gte: windowStart, $lte: orderDate }
+      }).sort({ clickedAt: -1 }).limit(10).lean();
 
-      if (matchingClicks.length > 0) {
+      // Filter out clicks already matched in this run
+      const availableClicks = matchingClicks.filter(c => !matchedClickIds.has(c._id.toString()));
+
+      if (availableClicks.length > 0) {
         ordersWithClicks++;
 
         // Find the best match (by product if possible, or most recent)
-        let bestMatch = matchingClicks[0];
+        let bestMatch = availableClicks[0];
         const orderItemTitle = order.order_items?.[0]?.item?.title?.toLowerCase() || '';
 
-        for (const click of matchingClicks) {
+        for (const click of availableClicks) {
           const clickProduct = (click.productName || '').toLowerCase();
           if (orderItemTitle.includes(clickProduct) || clickProduct.includes(orderItemTitle.split(' ')[0])) {
             bestMatch = click;
             break;
           }
         }
+
+        // Mark this click as matched for this run
+        matchedClickIds.add(bestMatch._id.toString());
 
         // Determine confidence
         const timeDiff = orderDate - new Date(bestMatch.clickedAt);
@@ -579,6 +593,7 @@ router.post('/correlate-conversions', async (req, res) => {
               }
             }
           );
+          console.log(`✅ Correlated order ${order.id} → click ${bestMatch._id}`);
         }
       }
     }
