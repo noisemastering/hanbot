@@ -5,7 +5,25 @@
  * Map of common typos to their correct forms
  */
 const TYPO_MAP = {
+  // Common texting shortcuts (SMS/chat slang)
+  'k': 'que',           // "en k tiempo" → "en que tiempo"
+  'q': 'que',           // "q precio" → "que precio"
+  'c': 'se',            // "como c pide" → "como se pide"
+  'x': 'por',           // "x favor" → "por favor"
+  'd': 'de',            // "malla d sombra" → "malla de sombra"
+  'xq': 'porque',       // "xq" → "porque"
+  'xk': 'porque',       // "xk" → "porque"
+  'tb': 'también',      // "tb quiero" → "también quiero"
+  'tmb': 'también',
+
+  // Llegar (arrive) typos
+  'yega': 'llega',      // "en k tiempo yega" → "en que tiempo llega"
+  'yegan': 'llegan',
+  'yegue': 'llegue',
+  'yego': 'llegó',
+
   // Precio (price) typos
+  'presio': 'precio',   // Very common
   'presión': 'precio',
   'presion': 'precio',
   'precion': 'precio',
