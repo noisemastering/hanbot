@@ -683,6 +683,20 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 📐 PRICE PER SQUARE METER - "precio por metro cuadrado", "cuánto el m2"
+  // We don't sell by m², prices depend on specific dimensions
+  if (/\b(precio|cu[aá]nto|costo|vale)\s+(por|el|del?)\s*(metro\s*cuadrado|m2|m²)\b/i.test(msg) ||
+      /\b(metro\s*cuadrado|m2|m²)\s+(cu[aá]nto|precio|cuesta|vale)\b/i.test(msg)) {
+
+    console.log("📐 Price per m² question detected");
+    await updateConversation(psid, { lastIntent: "price_per_sqm" });
+
+    return {
+      type: "text",
+      text: "Nuestros precios dependen de las dimensiones de la malla, no manejamos un precio fijo por metro cuadrado.\n\n¿Qué medida te interesa?"
+    };
+  }
+
   // 📏 PRICING BY METER/ROLL - Handle "cuánto vale el metro" questions
   // NOTE: Removed general "rollo" pattern - that's handled by handleRollQuery in ai/index.js
   if (/\b(cu[aá]nto|precio|vale|cuesta)\s+(?:el\s+)?metro\b/i.test(msg) ||
