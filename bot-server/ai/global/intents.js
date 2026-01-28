@@ -190,10 +190,20 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   const bordeSeparadorPattern = /\b(borde|separador|bordes?|delineador|delimitar|orilla)\s*(de\s+)?(jard[ií]n|pasto|c[eé]sped)?/i;
 
   // Detect borde-specific lengths in rollo context (6, 9, 18, 54 meters are ONLY for borde separador)
+  // BUT EXCLUDE when it's part of a dimension pattern like "4x6", "4 mts x 6", "ancho x largo"
+  const hasDimensionPattern = /\d+\s*(?:m(?:ts|etros?)?\.?)?\s*(?:d[e']?\s*)?(?:ancho|largo)?\s*[xX×*]\s*\d+/i.test(msg) ||
+                              /\b(?:ancho|largo)\s*[xX×*por]\s*(?:ancho|largo)\b/i.test(msg);
   const bordeLengthPattern = /\b(rol+[oy]s?|metros?|mts?)\b.*\b(6|9|18|54)\s*(m|metros?|mts?)?\b|\b(6|9|18|54)\s*(m|metros?|mts?)\b.*\b(rol+[oy]s?)\b/i;
-  const isBordeByLength = bordeLengthPattern.test(msg) && !/\b(100|4x100|5x100|6x100)\b/i.test(msg);
+  const isBordeByLength = !hasDimensionPattern && bordeLengthPattern.test(msg) && !/\b(100|4x100|5x100|6x100)\b/i.test(msg);
 
-  if (bordeSeparadorPattern.test(msg) || convo.productInterest === 'borde_separador' || isBordeByLength) {
+  // CRITICAL: If user already has a different productInterest, don't switch to borde
+  // Only switch if: explicitly mentions borde OR already interested in borde
+  // Length-based detection (isBordeByLength) should NOT override existing product interest
+  const hasExistingNonBordeInterest = convo.productInterest &&
+    convo.productInterest !== 'borde_separador' &&
+    !bordeSeparadorPattern.test(msg);  // Unless they explicitly say "borde"
+
+  if (!hasExistingNonBordeInterest && (bordeSeparadorPattern.test(msg) || convo.productInterest === 'borde_separador' || isBordeByLength)) {
     console.log("🌿 Borde separador query detected:", msg);
     await updateConversation(psid, { lastIntent: "borde_separador", productInterest: "borde_separador" });
 

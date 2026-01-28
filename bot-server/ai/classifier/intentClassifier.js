@@ -465,55 +465,53 @@ function quickClassify(message, dbIntents = null) {
   }
 
   // ===== MULTI-QUESTION DETECTION =====
-  // Detect common combinations like "precio y ubicación", "costo y envío"
-  const multiQuestionPatterns = [
-    // Price + Location
-    { pattern: /\b(precio|costo)s?\b.*\b(ubicaci[oó]n|d[oó]nde)\b/i, intents: ['price_query', 'location_query'] },
-    { pattern: /\b(ubicaci[oó]n|d[oó]nde)\b.*\b(precio|costo)s?\b/i, intents: ['location_query', 'price_query'] },
-    // Price + Shipping
-    { pattern: /\b(precio|costo)s?\b.*\b(env[ií]o|entrega)\b/i, intents: ['price_query', 'shipping_query'] },
-    { pattern: /\b(env[ií]o|entrega)\b.*\b(precio|costo)s?\b/i, intents: ['shipping_query', 'price_query'] },
-    // Location + Shipping (common confusion)
-    { pattern: /\b(ubicaci[oó]n|d[oó]nde)\b.*\b(env[ií]o|entrega)\b/i, intents: ['location_query', 'shipping_query'] },
-    // Price + Availability
-    { pattern: /\b(precio|costo)s?\b.*\b(disponib|stock|tienen)\b/i, intents: ['price_query', 'availability_query'] },
-    { pattern: /\b(disponib|stock|tienen)\b.*\b(precio|costo)s?\b/i, intents: ['availability_query', 'price_query'] },
-    // Price + Payment
-    { pattern: /\b(precio|costo)s?\b.*\b(pago|pagar|tarjeta)\b/i, intents: ['price_query', 'payment_query'] },
-    // Price + Installation (with typos: installan, instalan)
-    { pattern: /\b(precio|costo)s?\b.*\b(instal[ae]n?|ponen|colocan)\b/i, intents: ['price_query', 'installation_query'] },
-    { pattern: /\b(instal[ae]n?|ponen|colocan)\b.*\b(precio|costo)s?\b/i, intents: ['installation_query', 'price_query'] },
-    // Price + How it's sold (metros, rollos, piezas)
-    { pattern: /\b(precio|costo)s?\b.*\b(por\s*metros?|metros?)\b/i, intents: ['price_query', 'availability_query'] },
-    { pattern: /\b(metros?|rollo|pieza).*\b(precio|costo)s?\b/i, intents: ['availability_query', 'price_query'] },
-    // Info + Price (common: "informes y precio", "info precio")
-    { pattern: /\b(informes?|info)\b.*\b(precio|costo)s?\b/i, intents: ['product_inquiry', 'price_query'] },
-    { pattern: /\b(precio|costo)s?\b.*\b(informes?|info)\b/i, intents: ['price_query', 'product_inquiry'] },
-    // Installation + Delivery/Shipping
-    { pattern: /\b(instal[ae]n?|ponen|colocan)\b.*\b(env[ií]o|entrega|llega)\b/i, intents: ['installation_query', 'shipping_query'] },
-    // Metros + Installation
-    { pattern: /\b(metros?|por\s*metro)\b.*\b(instal[ae]n?|ponen|colocan)\b/i, intents: ['price_query', 'installation_query'] },
+  // Dynamically detect ALL question types in a message (supports 2, 3, or more questions)
+  const questionIndicators = [
+    { intent: 'price_query', pattern: /\b(precio|costo|cu[aá]nto\s*(cuesta|vale|es)|qu[eé]\s*precio)\b/i },
+    { intent: 'availability_query', pattern: /\b(medidas?|tamaños?|disponib|stock|tienen|manejan|qu[eé]\s*medidas?)\b/i },
+    { intent: 'payment_query', pattern: /\b(pago|pagar|tarjeta|efectivo|transferencia|forma\s*de\s*pago|meses)\b/i },
+    { intent: 'location_query', pattern: /\b(ubicaci[oó]n|direcci[oó]n|d[oó]nde\s*(est[aá]n|quedan|se\s*encuentran))\b/i },
+    { intent: 'shipping_query', pattern: /\b(env[ií]o|envi[aá]n|entrega|llega|mandan|cu[aá]nto\s*tarda)\b/i },
+    { intent: 'installation_query', pattern: /\b(instal[ae]n?|ponen|colocan|c[oó]mo\s*se\s*(instala|pone|coloca))\b/i },
+    { intent: 'product_inquiry', pattern: /\b(informes?|info|caracter[ií]sticas?|especificaciones?|de\s*qu[eé]\s*(es|est[aá]|material))\b/i },
+    { intent: 'delivery_time_query', pattern: /\b(cu[aá]nto\s*tarda|cu[aá]ntos?\s*d[ií]as?|tiempo\s*de\s*entrega|cuando\s*llega)\b/i }
   ];
 
-  for (const { pattern, intents } of multiQuestionPatterns) {
+  // Detect pay-on-delivery specifically
+  const isPayOnDelivery = /\b(pago|pagar)\b.*\b(entreg|llega|recib)/i.test(msg) ||
+                          /\b(al\s*entregar|contra\s*entrega|cuando\s*llegue)\b/i.test(msg);
+
+  // Find all matching question types
+  const detectedIntents = [];
+  for (const { intent, pattern } of questionIndicators) {
     if (pattern.test(msg)) {
-      return {
-        intent: INTENTS.MULTI_QUESTION,
-        product: PRODUCTS.UNKNOWN,
-        entities: { subIntents: intents },
-        confidence: 0.85
-      };
+      detectedIntents.push(intent);
     }
   }
 
+  // If 2+ questions detected, return as MULTI_QUESTION
+  if (detectedIntents.length >= 2) {
+    const entities = { subIntents: detectedIntents };
+    if (isPayOnDelivery) {
+      entities.payOnDelivery = true;
+    }
+    return {
+      intent: INTENTS.MULTI_QUESTION,
+      product: PRODUCTS.UNKNOWN,
+      entities,
+      confidence: 0.85
+    };
+  }
+
   // Simple confirmations (allow emojis like 👍 👌 ✅)
-  if (/^(s[ií]|ok|okey|va|vale|claro|perfecto|exacto|correcto|eso|esa|ese|dale|listo|órale|simon|simón)[\s!?.👍👌✅🙌💪]*$/i.test(msg)) {
+  // Include "aok" as common typo/variant of "a ok" / "ok"
+  if (/^(s[ií]|a?ok|okey|va|vale|claro|perfecto|exacto|correcto|eso|esa|ese|dale|listo|órale|simon|simón)[\s!?.👍👌✅🙌💪]*$/i.test(msg)) {
     return { intent: INTENTS.CONFIRMATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
   }
 
   // Confirmation at END of message (e.g., "Disculpa no tenía la medida Ok")
   // This catches messages where user explains something then confirms
-  if (/\b(s[ií]|ok|okey|va|vale|claro|perfecto|exacto|correcto|eso|esa|ese|dale|listo|órale|simon|simón)[\s!?.👍👌✅🙌💪]*$/i.test(msg)) {
+  if (/\b(s[ií]|a?ok|okey|va|vale|claro|perfecto|exacto|correcto|eso|esa|ese|dale|listo|órale|simon|simón)[\s!?.👍👌✅🙌💪]*$/i.test(msg)) {
     return { intent: INTENTS.CONFIRMATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.80 };
   }
 

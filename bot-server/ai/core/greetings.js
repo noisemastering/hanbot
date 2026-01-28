@@ -11,7 +11,8 @@ async function handleGreeting(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
 
   if (/^(hola|buenas|buenos días|buenas tardes|buenas noches|qué tal|hey|hi|hello)\b/.test(cleanMsg)) {
     // Check if the message contains an actual question/request after the greeting
-    const hasProductQuestion = /\b(precio|costo|medida|rollo|cuanto|cuánto|cuesta|vale|metro|malla|tien[ea]s?|vend[ea]s?|disponible|cotiz|ofrece|comprar)\b/i.test(cleanMsg);
+    // Use optional 's' for plurals: costos, mallas, precios, medidas, etc.
+    const hasProductQuestion = /\b(precios?|costos?|medidas?|rollos?|cuanto|cuánto|cuesta|vale|metros?|mallas?|tien[ea]s?|vend[ea]s?|disponibles?|cotiz|ofrece|comprar|env[ií]os?)\b/i.test(cleanMsg);
     const hasDimensions = /\d+\s*[xX×]\s*\d+/.test(cleanMsg);
 
     // If the user is asking a product question, don't intercept - let other handlers process it
@@ -89,18 +90,23 @@ async function handleThanks(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
   }
 
   // Check for continuation phrases - if user is continuing, don't close
-  const hasContinuation = /\b(pero|aun|todavía|todavia|aún|tengo\s+(una\s+)?(duda|pregunta)|quiero\s+saber|me\s+gustaría|quisiera)\b/i.test(cleanMsg);
+  // "otra pregunta", "una duda", "tengo pregunta", etc.
+  const hasContinuation = /\b(pero|aun|todavía|todavia|aún|otra\s+(duda|pregunta|cosa)|tengo\s+(una\s+)?(duda|pregunta)|quiero\s+saber|me\s+gustaría|quisiera)\b/i.test(cleanMsg);
 
   // Check if message contains actual product/size requests
   // Exclude "gracias por la cotización" - that's a thank you, not a quote request
   const isThankingForQuote = /\b(gracias\s+por\s+(la\s+)?cotizaci[oó]n|gracias\s+por\s+cotizar)\b/i.test(cleanMsg);
   const hasProductRequest = !isThankingForQuote && /\b(\d+\s*x\s*\d+|precio|medida|rollo|metro|malla|sombra|tien[ea]s?|cuanto|cuánto|cotiz|ofrece|disponible)\b/i.test(cleanMsg);
 
+  // Check if message contains ANY question (location, hours, contact, payment, etc.)
+  // "ubicación, gracias" or "forma de pago, gracias" is a question, not a goodbye
+  const hasQuestion = /\b(ubicaci[oó]n|direcci[oó]n|d[oó]nde|horarios?|tel[eé]fono|n[uú]mero|contacto|env[ií]o|entrega|forma\s+de\s+pago|c[oó]mo\s+(llego|pago|compro)|pago|pagar|tarjeta|efectivo|transferencia|cu[aá]nto\s+(cuesta|vale|tarda)|qu[eé]\s+(precio|medida|tamaño)|tienen|manejan|hacen|instalan)\b/i.test(cleanMsg);
+
   // Expanded goodbye patterns to include common Mexican closing phrases and deferment messages
   const isGoodbye = /\b(gracias|perfecto|excelente|muy amable|adiós|adios|bye|nos vemos|hasta luego|nos hablamos|te hablo|luego hablo|después|despu[ée]s\s+(te\s+)?(contacto|hablo|comunico|escribo)|ma[ñn]ana\s+(me\s+|te\s+)?(comunico|hablo|contacto|escribo)|analizar|lo\s+(voy\s+a\s+)?analizo|escribo\s+(más\s+|mas\s+)?tarde|te\s+escribo|lo\s+pienso|más\s+tarde|mas\s+tarde|estamos\s+en\s+contacto|estaremos\s+en\s+contacto|seguimos\s+en\s+contacto)\b/i.test(cleanMsg);
 
-  // Only treat as goodbye if: no continuation, has goodbye words, AND no product request
-  if (!hasContinuation && !hasProductRequest && isGoodbye) {
+  // Only treat as goodbye if: no continuation, has goodbye words, AND no product request OR question
+  if (!hasContinuation && !hasProductRequest && !hasQuestion && isGoodbye) {
     await updateConversation(psid, { state: "closed", unknownCount: 0, lastIntent: "closed" });
     const userName = convo.userName;
     if (userName) {
@@ -180,7 +186,8 @@ async function handleAcknowledgment(cleanMsg, psid, convo) {
 
   // Check for acknowledgment emojis or simple confirmations (with or without text)
   // Also includes common Mexican chat abbreviations: ntp (no te preocupes), np (no problem), sta bien (está bien)
-  const isAcknowledgment = /^(👍|👌|✅|❤️|😊|🙂|👏|💯|ok|vale|perfecto|excelente|entendido|si|sí|dale|claro|listo|ntp|np|sta\s*bien|esta\s*bien|está\s*bien)[\s!]*$/i.test(cleanMsg) ||
+  // "aok" is common typo/variant of "ok" / "a ok"
+  const isAcknowledgment = /^(👍|👌|✅|❤️|😊|🙂|👏|💯|a?ok|vale|perfecto|excelente|entendido|si|sí|dale|claro|listo|ntp|np|sta\s*bien|esta\s*bien|está\s*bien)[\s!]*$/i.test(cleanMsg) ||
                             /^(ntp|np)\s+(está|esta|sta)\s+bien[\s!]*$/i.test(cleanMsg);
 
   if (isAcknowledgment) {
@@ -202,4 +209,54 @@ async function handleAcknowledgment(cleanMsg, psid, convo) {
   return null;
 }
 
-module.exports = { handleGreeting, handleThanks, handleOptOut, handleAcknowledgment, handlePurchaseDeferral };
+// 🏪 Handle store visit intention: when user says they'll visit the physical store
+async function handleStoreVisit(cleanMsg, psid, convo) {
+  // Don't respond if human is active
+  if (await isHumanActive(psid)) {
+    return null;
+  }
+
+  // Detect store visit intentions
+  // "la visito en su tienda", "los visito", "paso a su tienda", "voy a ir a la tienda"
+  // "la siguiente semana", "próxima semana", "mañana", "en estos días"
+  const isStoreVisitIntent = /\b(l[oa]s?\s+visit[oa]|visit[oa]\s+(en\s+)?(su\s+)?tienda|pas[oa]\s+(a\s+)?(su\s+)?tienda|voy\s+a\s+(ir\s+)?(a\s+)?(la\s+|su\s+)?tienda|ir\s+a\s+(la\s+|su\s+)?tienda)\b/i.test(cleanMsg);
+
+  if (!isStoreVisitIntent) {
+    return null;
+  }
+
+  console.log("🏪 Store visit intention detected:", cleanMsg);
+
+  // Check if they also mentioned a product interest
+  const mentionsMalla = /\b(malla|sombra)\b/i.test(cleanMsg);
+  const mentionsProduct = /\b(malla|sombra|rollo|borde|ground\s*cover|monofilamento)\b/i.test(cleanMsg);
+
+  await updateConversation(psid, {
+    lastIntent: "store_visit_planned",
+    state: "active",
+    unknownCount: 0
+  });
+
+  // If they mentioned a product, ask about specifics
+  if (mentionsMalla) {
+    return {
+      type: "text",
+      text: "¡Perfecto! Te esperamos. ¿Qué medida de malla sombra ocupas?"
+    };
+  }
+
+  if (mentionsProduct) {
+    return {
+      type: "text",
+      text: "¡Perfecto! Te esperamos. ¿Qué producto te interesa?"
+    };
+  }
+
+  // General store visit
+  return {
+    type: "text",
+    text: "¡Perfecto! Te esperamos. Estamos en Querétaro: Calle Loma de San Gremal 108, bodega 73, Navex Park.\n\n¿Hay algo que pueda adelantarte?"
+  };
+}
+
+module.exports = { handleGreeting, handleThanks, handleOptOut, handleAcknowledgment, handlePurchaseDeferral, handleStoreVisit };

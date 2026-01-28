@@ -19,7 +19,7 @@ const { routeByIntent } = require("./intentRouter");
 const { identifyCustomerType, getCustomerTypeDetails, hasCustomerTypeIndicators } = require("./customerClassifier");
 
 const { handleGlobalIntents } = require("./global/intents");
-const { handleGreeting, handleThanks, handleOptOut, handleAcknowledgment, handlePurchaseDeferral } = require("./core/greetings");
+const { handleGreeting, handleThanks, handleOptOut, handleAcknowledgment, handlePurchaseDeferral, handleStoreVisit } = require("./core/greetings");
 const { handleCatalogOverview } = require("./core/catalog");
 const { handleFamilyFlow } = require("./core/family");
 const { autoResponder } = require("./core/autoResponder");
@@ -330,6 +330,10 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
     // 👍 ACKNOWLEDGMENT: Handle simple acknowledgments and emojis (before AI calls)
     const acknowledgmentResponse = await handleAcknowledgment(cleanMsg, psid, convo);
     if (acknowledgmentResponse) return acknowledgmentResponse;
+
+    // 🏪 STORE VISIT: Handle when user says they'll visit the physical store
+    const storeVisitResponse = await handleStoreVisit(cleanMsg, psid, convo);
+    if (storeVisitResponse) return storeVisitResponse;
 
     // 📅 PURCHASE DEFERRAL: Handle when user wants to think about it, take measurements, etc.
     const deferralResponse = await handlePurchaseDeferral(cleanMsg, psid, convo, BOT_PERSONA_NAME);
@@ -689,6 +693,12 @@ async function generateReply(userMessage, psid, referral = null) {
   const acknowledgmentResponse = await handleAcknowledgment(cleanMsg, psid, convo);
   if (acknowledgmentResponse) {
     return await checkForRepetition(acknowledgmentResponse, psid, convo);
+  }
+
+  // 🏪 STORE VISIT: Handle when user says they'll visit the physical store
+  const storeVisitResponse = await handleStoreVisit(cleanMsg, psid, convo);
+  if (storeVisitResponse) {
+    return await checkForRepetition(storeVisitResponse, psid, convo);
   }
 
   // 📅 PURCHASE DEFERRAL: Handle when user wants to think about it

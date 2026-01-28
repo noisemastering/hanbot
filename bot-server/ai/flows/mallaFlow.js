@@ -535,6 +535,9 @@ function handleAwaitingDimensions(intent, state, sourceContext, userMessage = ''
   }
 
   // Check if user mentioned an object they want to cover (carro, cochera, patio, etc.)
+  // Skip if user is referring to Hanlob's store (su tienda, la tienda, visito en la tienda)
+  const isReferringToHanlobStore = /\b(su\s+tienda|la\s+tienda|visito?\s+(en\s+)?(su\s+|la\s+)?tienda|tienda\s+de\s+ustedes)\b/i.test(userMessage);
+
   const objectPatterns = [
     { pattern: /\b(carro|coche|auto|veh[ií]culo|camioneta)\b/i, object: "carro" },
     { pattern: /\b(cochera|garaje|garage)\b/i, object: "cochera" },
@@ -543,12 +546,16 @@ function handleAwaitingDimensions(intent, state, sourceContext, userMessage = ''
     { pattern: /\b(ventana|ventanal)\b/i, object: "ventana" },
     { pattern: /\b(puerta|entrada)\b/i, object: "puerta" },
     { pattern: /\b(estacionamiento|parking)\b/i, object: "estacionamiento" },
-    { pattern: /\b(negocio|local|tienda)\b/i, object: "negocio" },
+    { pattern: /\b(negocio|local|tienda)\b/i, object: "negocio", skipIfHanlobStore: true },
     { pattern: /\b(alberca|piscina)\b/i, object: "alberca" }
   ];
 
-  for (const { pattern, object } of objectPatterns) {
+  for (const { pattern, object, skipIfHanlobStore } of objectPatterns) {
     if (pattern.test(userMessage)) {
+      // Skip "tienda/negocio/local" if user is referring to Hanlob's store
+      if (skipIfHanlobStore && isReferringToHanlobStore) {
+        continue;
+      }
       return {
         type: "text",
         text: `¿Qué dimensiones tiene tu ${object}?`

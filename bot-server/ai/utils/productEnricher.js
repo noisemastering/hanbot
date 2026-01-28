@@ -620,7 +620,7 @@ async function buildProductSalesPitch(product) {
     if (isMallaSombra) {
       sellingPoints.push('5 años de vida útil');
       if (gen3?.name?.toLowerCase().includes('confeccionada')) {
-        sellingPoints.push('con ojillos para fácil instalación');
+        sellingPoints.push('cuenta con argollas en todos sus lados, lista para instalar');
       }
     }
 
@@ -658,9 +658,9 @@ async function formatProductResponse(product, options = {}) {
   // Build response
   let response = `Claro, ${pitch.description}`;
 
-  // Add selling points
-  if (pitch.sellingPoints.length > 0) {
-    response += `, ${pitch.sellingPoints[0]}`;
+  // Add all selling points
+  for (const point of pitch.sellingPoints) {
+    response += `, ${point}`;
   }
 
   // Add price
