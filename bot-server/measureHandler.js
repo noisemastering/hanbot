@@ -447,8 +447,20 @@ async function getAvailableSizes(conversation = null) {
     }
   }
 
+  // Deduplicate by size (keep first occurrence, which has the link)
+  const seen = new Set();
+  const uniqueSizes = sizes.filter(s => {
+    const key = s.sizeStr;
+    if (seen.has(key)) {
+      console.log(`⚠️ Duplicate size ${key} filtered out`);
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+
   // Sort by area
-  return sizes.sort((a, b) => a.area - b.area);
+  return uniqueSizes.sort((a, b) => a.area - b.area);
 }
 
 /**

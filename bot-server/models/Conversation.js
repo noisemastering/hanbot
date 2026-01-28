@@ -49,6 +49,14 @@ const conversationSchema = new mongoose.Schema({
   oversizedRepeatCount: { type: Number, default: 0 },  // Track how many times user asked for same oversized dimension
   offeredToShowAllSizes: { type: Boolean, default: false },  // Track if bot offered to show all sizes
 
+  // Track sizes we've already offered (to avoid repetitive suggestions)
+  offeredSizes: [{
+    size: String,           // e.g., "3x2m"
+    forRequest: String,     // What user asked for, e.g., "3x1.8m"
+    price: Number,
+    offeredAt: { type: Date, default: Date.now }
+  }],
+
   // Human handoff tracking
   handoffRequested: { type: Boolean, default: false },  // User explicitly requested human
   handoffReason: { type: String, default: null },      // Why handoff was triggered
