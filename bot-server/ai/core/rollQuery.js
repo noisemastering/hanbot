@@ -9,9 +9,10 @@ const { enrichProductWithContext, formatProductForBot, getProductDisplayName } =
 /**
  * Extract product specs from a user message
  * @param {string} msg - User's message
+ * @param {object} context - Optional context (e.g., lastIntent for understanding selections)
  * @returns {object} - Extracted specs { size, width, length, percentage, quantity, color, customerName }
  */
-function extractSpecsFromMessage(msg) {
+function extractSpecsFromMessage(msg, context = {}) {
   const specs = {};
   const cleanMsg = msg.toLowerCase().trim();
 
@@ -21,6 +22,31 @@ function extractSpecsFromMessage(msg) {
     specs.width = parseFloat(rollDimMatch[1] || rollDimMatch[4]);
     specs.length = 100;
     specs.size = `${specs.width}x100`;
+  }
+
+  // If awaiting width selection, understand simple width responses
+  // e.g., "4.20 mts", "de 4.20", "la de 4.20", "4.20", "la primera", "la segunda"
+  if (!specs.width && context.lastIntent === 'roll_awaiting_width') {
+    // Pattern for "la primera" / "la segunda" / "el primero" / "el de 4.20"
+    if (/\b(primer[oa]|la\s+de\s+4|4\.?20?|de\s+4\.?20?)\b/i.test(cleanMsg)) {
+      specs.width = 4.20;
+      specs.length = 100;
+      specs.size = '4.2x100';
+    } else if (/\b(segund[oa]|la\s+de\s+2|2\.?10?|de\s+2\.?10?)\b/i.test(cleanMsg)) {
+      specs.width = 2.10;
+      specs.length = 100;
+      specs.size = '2.1x100';
+    }
+    // Also match plain numbers like "4.20 mts", "4.20m", "4.20"
+    else {
+      const widthMatch = cleanMsg.match(/\b(4\.?20?|2\.?10?)\s*(?:m|mts?|metros?)?\b/i);
+      if (widthMatch) {
+        const num = widthMatch[1].replace(/[^\d.]/g, '');
+        specs.width = parseFloat(num.includes('.') ? num : (num.startsWith('4') ? '4.20' : '2.10'));
+        specs.length = 100;
+        specs.size = `${specs.width}x100`;
+      }
+    }
   }
 
   // Extract percentage (e.g., "90%", "al 80%", "80 por ciento")
@@ -220,9 +246,9 @@ async function handleRollQuery(userMessage, psid, convo) {
     console.log("🎯 Roll query detected, checking conversation state...");
 
     // ============================================================
-    // STEP 1: Extract specs from current message
+    // STEP 1: Extract specs from current message (with context for better understanding)
     // ============================================================
-    const newSpecs = extractSpecsFromMessage(userMessage);
+    const newSpecs = extractSpecsFromMessage(userMessage, { lastIntent: convo.lastIntent });
     console.log("📝 Extracted specs from message:", newSpecs);
 
     // ============================================================
@@ -317,11 +343,12 @@ async function handleRollQuery(userMessage, psid, convo) {
       }
 
       // Generic roll query - ask for size
-      // IMPORTANT: Set conversation state so rolloFlow can continue the conversation
+      // IMPORTANT: Preserve existing specs (like percentage) while asking for width
       await updateConversation(psid, {
         lastIntent: "roll_awaiting_width",
         productInterest: "rollo",
         productSpecs: {
+          ...mergedSpecs,  // Keep existing specs (percentage, color, etc.)
           productType: "rollo",
           updatedAt: new Date()
         }
