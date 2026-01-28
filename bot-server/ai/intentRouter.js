@@ -90,6 +90,7 @@ async function routeByIntent(intent, message, psid, convo, botName) {
     case "installation":
     case "shipping":
     case "location":
+    case "location_query":  // "Dónde están?", "Ubicación?"
     case "colors":
     case "payment_methods":  // Payment inquiries - clarify upfront payment
     case "stock_availability":
