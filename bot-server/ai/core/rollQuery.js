@@ -17,32 +17,38 @@ function extractSpecsFromMessage(msg, context = {}) {
   const cleanMsg = msg.toLowerCase().trim();
 
   // Extract roll dimension (e.g., "2x100", "4.2x100")
+  // Normalize: 4.10/4.20/4.2 → 4, 2.10/2.20/2.1 → 2
   const rollDimMatch = cleanMsg.match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(100)\b|(100)\s*[xX×*]\s*(\d+(?:\.\d+)?)/i);
   if (rollDimMatch) {
-    specs.width = parseFloat(rollDimMatch[1] || rollDimMatch[4]);
+    let rawWidth = parseFloat(rollDimMatch[1] || rollDimMatch[4]);
+    // Normalize: 4.x → 4, 2.x → 2
+    if (rawWidth >= 4 && rawWidth < 5) rawWidth = 4;
+    else if (rawWidth >= 2 && rawWidth < 3) rawWidth = 2;
+    specs.width = rawWidth;
     specs.length = 100;
     specs.size = `${specs.width}x100`;
   }
 
   // If awaiting width selection, understand simple width responses
-  // e.g., "4.20 mts", "de 4.20", "la de 4.20", "4.20", "la primera", "la segunda"
+  // Roll widths are 4m and 2m (4.10/4.20 = 4, 2.10/2.20 = 2)
   if (!specs.width && context.lastIntent === 'roll_awaiting_width') {
-    // Pattern for "la primera" / "la segunda" / "el primero" / "el de 4.20"
-    if (/\b(primer[oa]|la\s+de\s+4|4\.?20?|de\s+4\.?20?)\b/i.test(cleanMsg)) {
-      specs.width = 4.20;
+    // Pattern for 4m width: "la primera", "4.20", "4.10", "4 metros", "de 4"
+    if (/\b(primer[oa]|la\s+de\s+4|4\.?[12]0?|de\s+4)\b/i.test(cleanMsg)) {
+      specs.width = 4;
       specs.length = 100;
-      specs.size = '4.2x100';
-    } else if (/\b(segund[oa]|la\s+de\s+2|2\.?10?|de\s+2\.?10?)\b/i.test(cleanMsg)) {
-      specs.width = 2.10;
-      specs.length = 100;
-      specs.size = '2.1x100';
+      specs.size = '4x100';
     }
-    // Also match plain numbers like "4.20 mts", "4.20m", "4.20"
+    // Pattern for 2m width: "la segunda", "2.20", "2.10", "2 metros", "de 2"
+    else if (/\b(segund[oa]|la\s+de\s+2|2\.?[12]0?|de\s+2)\b/i.test(cleanMsg)) {
+      specs.width = 2;
+      specs.length = 100;
+      specs.size = '2x100';
+    }
+    // Also match plain "4" or "2" with optional units
     else {
-      const widthMatch = cleanMsg.match(/\b(4\.?20?|2\.?10?)\s*(?:m|mts?|metros?)?\b/i);
+      const widthMatch = cleanMsg.match(/\b([42])(?:\.?[12]0?)?\s*(?:m|mts?|metros?)?\b/i);
       if (widthMatch) {
-        const num = widthMatch[1].replace(/[^\d.]/g, '');
-        specs.width = parseFloat(num.includes('.') ? num : (num.startsWith('4') ? '4.20' : '2.10'));
+        specs.width = parseInt(widthMatch[1]);
         specs.length = 100;
         specs.size = `${specs.width}x100`;
       }
@@ -328,8 +334,9 @@ async function handleRollQuery(userMessage, psid, convo) {
       const rollDimMatch = cleanMsg.match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(100)\b|(100)\s*[xX×*]\s*(\d+(?:\.\d+)?)/i);
       if (rollDimMatch) {
         const width = parseFloat(rollDimMatch[1] || rollDimMatch[4]);
-        const standardWidths = [4.20, 2.10, 4.2, 2.1, 4, 2];
-        const isStandardWidth = standardWidths.some(w => Math.abs(w - width) < 0.1);
+        const standardWidths = [4, 2];  // Normalized widths only
+        // Tolerance of 0.3 to accept 4.20, 4.10, 2.10, 2.20 as standard
+        const isStandardWidth = standardWidths.some(w => Math.abs(w - width) < 0.3);
 
         if (!isStandardWidth) {
           return {
