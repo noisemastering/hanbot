@@ -3,6 +3,103 @@
 // and merges them with existing conversation specs (never overwrites)
 
 /**
+ * Detect if message contains multiple items (multi-item order)
+ * e.g., "rollo de 80 y de 70% el primero de 4x100 y el segundo de 2.10x100"
+ * @param {string} message - User's message
+ * @returns {boolean}
+ */
+function isMultiItemOrder(message) {
+  const cleanMsg = message.toLowerCase();
+
+  // Patterns that indicate multiple items:
+  // - "el primero... el segundo..."
+  // - "uno de X y otro de Y"
+  // - Multiple percentages: "80 y 70%", "80% y 70%"
+  // - Multiple dimensions with "y": "4x100 y 2x100"
+  const multiItemPatterns = [
+    /\b(el\s+)?primer[oa].*\b(el\s+)?segund[oa]\b/i,
+    /\buno\s+de\b.*\botro\s+de\b/i,
+    /\buna\s+de\b.*\botra\s+de\b/i,
+    /(\d{2,3})\s*%?\s*(y|,)\s*(\d{2,3})\s*%/i,  // "80 y 70%", "80% y 70%"
+    /(\d+(?:\.\d+)?)\s*[xX×]\s*100\s*(y|,)\s*(\d+(?:\.\d+)?)\s*[xX×]\s*100/i,  // Multiple rolls
+    /\b(dos|2)\s+(rol+[oy]s?|mallas?)\b.*\b(diferente|distint)/i,  // "dos rollos diferentes"
+  ];
+
+  return multiItemPatterns.some(pattern => pattern.test(cleanMsg));
+}
+
+/**
+ * Extract multiple items from a multi-item order message
+ * @param {string} message - User's message
+ * @returns {Array<object>} - Array of item specs [{percentage, width, ...}, ...]
+ */
+function extractMultipleItems(message) {
+  const cleanMsg = message.toLowerCase();
+  const items = [];
+
+  // Strategy 1: "el primero de Xx100... el segundo de Yx100"
+  // with percentages mentioned before or inline
+  const firstSecondMatch = cleanMsg.match(
+    /(\d{2,3})\s*%?\s*(?:y|,)\s*(?:de\s+)?(\d{2,3})\s*%/
+  );
+
+  // Extract all roll dimensions (Nx100)
+  const rollDimensions = [];
+  const dimRegex = /(\d+(?:\.\d+)?)\s*[xX×*]\s*(100)/gi;
+  let match;
+  while ((match = dimRegex.exec(cleanMsg)) !== null) {
+    let width = parseFloat(match[1]);
+    // Normalize: 4.x → 4, 2.x → 2
+    if (width >= 4 && width < 5) width = 4;
+    else if (width >= 2 && width < 3) width = 2;
+    rollDimensions.push(width);
+  }
+
+  // Extract all percentages
+  const percentages = [];
+  const pctRegex = /(\d{2,3})\s*(?:%|por\s*ciento)/gi;
+  while ((match = pctRegex.exec(cleanMsg)) !== null) {
+    percentages.push(parseInt(match[1]));
+  }
+
+  // Also check for "80 y de 70%" pattern (first number without %)
+  const pctPairMatch = cleanMsg.match(/(\d{2,3})\s*(?:%\s*)?(?:y|,)\s*(?:de\s+)?(\d{2,3})\s*%/);
+  if (pctPairMatch && percentages.length < 2) {
+    const p1 = parseInt(pctPairMatch[1]);
+    const p2 = parseInt(pctPairMatch[2]);
+    if (!percentages.includes(p1)) percentages.unshift(p1);
+    if (!percentages.includes(p2) && percentages.length < 2) percentages.push(p2);
+  }
+
+  // Build items by matching dimensions with percentages
+  const numItems = Math.max(rollDimensions.length, percentages.length);
+
+  for (let i = 0; i < numItems; i++) {
+    const item = { productType: 'rollo' };
+
+    if (rollDimensions[i]) {
+      item.width = rollDimensions[i];
+      item.length = 100;
+      item.size = `${item.width}x100`;
+    }
+
+    if (percentages[i]) {
+      item.percentage = percentages[i];
+    }
+
+    // Extract quantity if mentioned (e.g., "5 rollos de 80%")
+    const qtyMatch = cleanMsg.match(new RegExp(`(\\d+)\\s*rol+[oy]s?.*${percentages[i] || ''}`, 'i'));
+    if (qtyMatch) {
+      item.quantity = parseInt(qtyMatch[1]);
+    }
+
+    items.push(item);
+  }
+
+  return items.length > 0 ? items : null;
+}
+
+/**
  * Extract all product specs from a user message
  * This is the SINGLE SOURCE OF TRUTH for spec extraction
  * @param {string} message - User's message
@@ -212,9 +309,33 @@ function getMissingSpecs(specs, productType = null) {
   return missing;
 }
 
+/**
+ * Format multiple items for display/confirmation
+ * @param {Array<object>} items - Array of item specs
+ * @returns {string} - Formatted text
+ */
+function formatMultipleItems(items) {
+  if (!items || items.length === 0) return null;
+
+  const lines = items.map((item, i) => {
+    const parts = [];
+    if (item.quantity && item.quantity > 1) parts.push(`${item.quantity}x`);
+    parts.push(`Rollo`);
+    if (item.width) parts.push(`${item.width}m x 100m`);
+    if (item.percentage) parts.push(`al ${item.percentage}%`);
+    if (item.color) parts.push(item.color);
+    return `${i + 1}. ${parts.join(' ')}`;
+  });
+
+  return lines.join('\n');
+}
+
 module.exports = {
   extractAllSpecs,
   mergeSpecs,
   getSpecsSummary,
-  getMissingSpecs
+  getMissingSpecs,
+  isMultiItemOrder,
+  extractMultipleItems,
+  formatMultipleItems
 };

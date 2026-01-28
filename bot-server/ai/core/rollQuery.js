@@ -5,7 +5,7 @@
 const { updateConversation } = require("../../conversationManager");
 const ProductFamily = require("../../models/ProductFamily");
 const { enrichProductWithContext, formatProductForBot, getProductDisplayName } = require("../utils/productEnricher");
-const { getMissingSpecs: getMissingSpecsFromExtractor } = require("../utils/specExtractor");
+const { getMissingSpecs: getMissingSpecsFromExtractor, isMultiItemOrder, extractMultipleItems, formatMultipleItems } = require("../utils/specExtractor");
 
 /**
  * Extract product specs from a user message
@@ -253,7 +253,54 @@ async function handleRollQuery(userMessage, psid, convo) {
     console.log("🎯 Roll query detected, checking conversation state...");
 
     // ============================================================
-    // STEP 1: Use specs from conversation basket (already merged by generateReply)
+    // CHECK FOR MULTI-ITEM ORDER FIRST
+    // e.g., "rollo de 80 y de 70% el primero de 4x100 y el segundo de 2x100"
+    // ============================================================
+    if (isMultiItemOrder(userMessage)) {
+      console.log("📦 MULTI-ITEM ORDER detected!");
+      const items = extractMultipleItems(userMessage);
+
+      if (items && items.length > 1) {
+        console.log("📦 Extracted items:", items);
+
+        // Check if any items are missing specs
+        const itemsNeedingSpecs = items.filter(item => !item.width || !item.percentage);
+
+        if (itemsNeedingSpecs.length > 0) {
+          // Some items incomplete - ask for clarification
+          const formatted = formatMultipleItems(items);
+          await updateConversation(psid, {
+            lastIntent: "multi_roll_incomplete",
+            productInterest: "rollo",
+            multiItemOrder: items
+          });
+
+          return {
+            type: "text",
+            text: `Entendido, quieres varios rollos:\n\n${formatted}\n\n¿Me confirmas los datos que faltan?`
+          };
+        }
+
+        // All items complete - confirm and hand off
+        const formatted = formatMultipleItems(items);
+        await updateConversation(psid, {
+          lastIntent: "multi_roll_quote_ready",
+          productInterest: "rollo",
+          multiItemOrder: items,
+          handoffRequested: true,
+          handoffReason: `Multi-roll order: ${items.length} items`,
+          state: "needs_human"
+        });
+
+        return {
+          type: "text",
+          text: `✅ Perfecto, tu pedido:\n\n${formatted}\n\nUn especialista te contactará para confirmar precio, disponibilidad y coordinar el envío.`
+        };
+      }
+    }
+
+    // ============================================================
+    // SINGLE ITEM: Use specs from conversation basket
     // ============================================================
     const mergedSpecs = { ...(convo.productSpecs || {}), productType: 'rollo' };
     console.log("📋 Current specs from basket:", mergedSpecs);
