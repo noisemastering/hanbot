@@ -21,11 +21,61 @@ const {
  */
 const STAGES = {
   START: "start",
+  AWAITING_TYPE: "awaiting_type",  // Ask what type of rollo (malla sombra, groundcover, monofilamento)
   AWAITING_WIDTH: "awaiting_width",
   AWAITING_PERCENTAGE: "awaiting_percentage",
   AWAITING_ZIP: "awaiting_zip",
   COMPLETE: "complete"
 };
+
+/**
+ * Rollo types
+ */
+const ROLLO_TYPES = {
+  MALLA_SOMBRA: "malla_sombra",
+  GROUNDCOVER: "groundcover",
+  MONOFILAMENTO: "monofilamento"
+};
+
+/**
+ * Detect rollo type from user message
+ * Returns the type if detected, null if ambiguous
+ */
+function detectRolloType(msg, convo = null) {
+  if (!msg) return null;
+  const m = msg.toLowerCase();
+
+  // Check conversation context first
+  if (convo?.productInterest === 'groundcover' || convo?.lastIntent?.includes('groundcover')) {
+    return ROLLO_TYPES.GROUNDCOVER;
+  }
+  if (convo?.productInterest === 'monofilamento' || convo?.lastIntent?.includes('monofilamento')) {
+    return ROLLO_TYPES.MONOFILAMENTO;
+  }
+
+  // Groundcover indicators
+  if (/\b(groundcover|ground\s*cover|antimaleza|anti\s*maleza|para\s+el\s+suelo|suelo|piso|maleza|hierba|yerbas?)\b/i.test(m)) {
+    return ROLLO_TYPES.GROUNDCOVER;
+  }
+
+  // Monofilamento indicators
+  if (/\b(monofilamento|mono\s*filamento)\b/i.test(m)) {
+    return ROLLO_TYPES.MONOFILAMENTO;
+  }
+
+  // Malla sombra indicators
+  if (/\b(malla\s*sombra|raschel|sombra|sombreado|porcentaje)\b/i.test(m) ||
+      /\b(35|50|70|80|90)\s*(%|porciento|por\s*ciento)/i.test(m)) {
+    return ROLLO_TYPES.MALLA_SOMBRA;
+  }
+
+  // Check if they explicitly mention the roll type context
+  if (convo?.productSpecs?.rolloType) {
+    return convo.productSpecs.rolloType;
+  }
+
+  return null; // Ambiguous - need to ask
+}
 
 /**
  * Valid widths for rolls (in meters)
@@ -133,6 +183,7 @@ function getFlowState(convo) {
   const specs = convo?.productSpecs || {};
   return {
     stage: specs.productType === 'rollo' ? STAGES.COMPLETE : STAGES.START,
+    rolloType: specs.rolloType || null,  // malla_sombra, groundcover, monofilamento
     width: specs.width || null,
     percentage: specs.percentage || null,
     quantity: specs.quantity || null,
@@ -145,6 +196,8 @@ function getFlowState(convo) {
  * Determine what's missing and what stage we should be in
  */
 function determineStage(state) {
+  // Must know rollo type first (only for malla sombra do we continue in this flow)
+  if (!state.rolloType) return STAGES.AWAITING_TYPE;
   if (!state.width) return STAGES.AWAITING_WIDTH;
   if (!state.percentage) return STAGES.AWAITING_PERCENTAGE;
   if (!state.zipCode) return STAGES.AWAITING_ZIP;
@@ -162,7 +215,48 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   console.log(`📦 Rollo flow - Current state:`, state);
   console.log(`📦 Rollo flow - Intent: ${intent}, Entities:`, entities);
 
-  // FIRST: Try to parse width directly from user message
+  // FIRST: Detect or confirm rollo type
+  if (!state.rolloType) {
+    const detectedType = detectRolloType(userMessage, convo);
+    if (detectedType) {
+      console.log(`📦 Rollo flow - Detected type: ${detectedType}`);
+      state.rolloType = detectedType;
+
+      // If it's groundcover or monofilamento, redirect to those flows
+      if (detectedType === ROLLO_TYPES.GROUNDCOVER) {
+        console.log(`📦 Rollo flow - Redirecting to groundcover flow`);
+        await updateConversation(psid, {
+          productInterest: "groundcover",
+          lastIntent: "groundcover_inquiry",
+          productSpecs: { productType: "groundcover", updatedAt: new Date() }
+        });
+        return {
+          type: "text",
+          text: "¡Perfecto! El Groundcover (malla antimaleza) es ideal para cubrir el suelo.\n\n" +
+                "Lo manejamos en rollos de:\n• 2m x 100m\n• 4m x 100m\n\n" +
+                "¿Qué ancho necesitas?",
+          redirect: "groundcover"  // Signal to flow router
+        };
+      }
+
+      if (detectedType === ROLLO_TYPES.MONOFILAMENTO) {
+        console.log(`📦 Rollo flow - Redirecting to monofilamento flow`);
+        await updateConversation(psid, {
+          productInterest: "monofilamento",
+          lastIntent: "monofilamento_inquiry",
+          productSpecs: { productType: "monofilamento", updatedAt: new Date() }
+        });
+        return {
+          type: "text",
+          text: "¡Claro! El monofilamento es una malla más resistente.\n\n" +
+                "¿Qué porcentaje de sombra necesitas? Manejamos 35%, 50%, 70% y 80%.",
+          redirect: "monofilamento"
+        };
+      }
+    }
+  }
+
+  // SECOND: Try to parse width directly from user message
   // Patterns: "de 4 mts", "4 metros", "4.20", "el de 4", "2.10m", "2 metros"
   if (!state.width && userMessage) {
     const widthPatterns = [
@@ -248,6 +342,10 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   let response;
 
   switch (stage) {
+    case STAGES.AWAITING_TYPE:
+      response = handleAwaitingType(intent, state, sourceContext);
+      break;
+
     case STAGES.AWAITING_WIDTH:
       response = handleAwaitingWidth(intent, state, sourceContext);
       break;
@@ -274,6 +372,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     productInterest: "rollo",
     productSpecs: {
       productType: "rollo",
+      rolloType: state.rolloType,  // malla_sombra, groundcover, monofilamento
       width: state.width,
       length: 100,
       percentage: state.percentage,
@@ -298,7 +397,19 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 }
 
 /**
- * Handle start - user just mentioned rolls
+ * Handle awaiting type - ask what kind of rollo they need
+ */
+function handleAwaitingType(intent, state, sourceContext) {
+  return {
+    type: "text",
+    text: "¿Para qué lo necesitas?\n\n" +
+          "• Para dar **sombra** (malla sombra raschel)\n" +
+          "• Para cubrir el **suelo** (groundcover/antimaleza)"
+  };
+}
+
+/**
+ * Handle start - user just mentioned rolls (type already known)
  */
 function handleStart(sourceContext) {
   return {
