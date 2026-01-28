@@ -186,7 +186,35 @@ async function checkForRepetition(response, psid, convo) {
 
   // Check if this is a repetition (same response as last time)
   if (lastNormalized && currentNormalized === lastNormalized) {
-    console.log("🔄 REPETITION DETECTED - escalating to human instead of repeating");
+    console.log("🔄 REPETITION DETECTED - checking if it's same size request");
+
+    // Check if this is a price/product quote (contains price and dimensions)
+    const isPriceQuote = /\$[\d,]+/.test(response.text) &&
+                         /\d+\s*[xX×]\s*\d+/.test(response.text);
+
+    if (isPriceQuote) {
+      // User is asking about the same size they were just quoted
+      // Extract size and price from the response
+      const sizeMatch = response.text.match(/(\d+)\s*[xX×]\s*(\d+)/);
+      const priceMatch = response.text.match(/\$([\d,]+)/);
+
+      if (sizeMatch && priceMatch) {
+        const size = `${sizeMatch[1]}x${sizeMatch[2]}`;
+        const price = priceMatch[1];
+
+        console.log(`📏 User asking for same size ${size} - giving short acknowledgment`);
+
+        await updateConversation(psid, { lastIntent: "same_size_confirmation" });
+
+        return {
+          type: "text",
+          text: `Sí, es la misma medida que te acabo de cotizar: ${size}m a $${price} con envío gratis.\n\n¿Te paso el link para que puedas comprarlo?`
+        };
+      }
+    }
+
+    // Not a price quote repetition - escalate to human
+    console.log("🔄 Non-price repetition - escalating to human");
 
     await updateConversation(psid, {
       lastIntent: "human_handoff",
