@@ -9,7 +9,7 @@ async function handleGreeting(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
     return null;
   }
 
-  if (/^(hola|buenas|buenos días|buenas tardes|buenas noches|qué tal|hey|hi|hello)\b/.test(cleanMsg)) {
+  if (/^(hola|ola|buenas|buenos días|buenas tardes|buenas noches|qué tal|hey|hi|hello)\b/.test(cleanMsg)) {
     // Check if the message contains an actual question/request after the greeting
     // Use optional 's' for plurals: costos, mallas, precios, medidas, etc.
     const hasProductQuestion = /\b(precios?|costos?|medidas?|rollos?|cuanto|cuánto|cuesta|vale|metros?|mallas?|tien[ea]s?|vend[ea]s?|disponibles?|cotiz|ofrece|comprar|env[ií]os?)\b/i.test(cleanMsg);

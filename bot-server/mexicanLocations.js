@@ -149,7 +149,7 @@ function isLikelyLocationName(message) {
   const cleaned = message.toLowerCase().trim();
 
   // Exclude common non-location words
-  const excludedWords = /\b(precio|cuanto|cuesta|medida|tamaño|dimension|tiene|hay|vende|fabrica|color|hola|buenos|buenas|que tal|gracias|si|no|ok|bien|mal|cuando|donde|como|quien|para|por|con|sin|muy|poco|mucho)\b/i;
+  const excludedWords = /\b(precio|cuanto|cuesta|medida|tamaño|dimension|tiene|hay|vende|fabrica|color|hola|ola|buenos|buenas|que tal|gracias|si|no|ok|bien|mal|cuando|donde|como|quien|para|por|con|sin|muy|poco|mucho)\b/i;
 
   if (excludedWords.test(cleaned)) {
     return false;
