@@ -798,10 +798,13 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   // 📋 CATALOG REQUEST - Handle requests for general pricing, sizes, and colors listing
   // Instead of dumping a huge list, ask for specific dimensions
   // NOTE: "precios y medidas" is handled by EXPLICIT LIST REQUEST below to show the full list
-  if (/\b(pongan?|den|muestren?|env[ií]en?|pasame?|pasen?|listado?)\s+(de\s+)?(precios?|medidas?|opciones?|tama[ñn]os?|colores?)\b/i.test(msg) ||
+  // IMPORTANT: Skip if user already provided dimensions (e.g., "cotización de 4x16")
+  const hasDimensionsInMessage = parseDimensions(msg);
+  if (!hasDimensionsInMessage && (
+      /\b(pongan?|den|muestren?|env[ií]en?|pasame?|pasen?|listado?)\s+(de\s+)?(precios?|medidas?|opciones?|tama[ñn]os?|colores?)\b/i.test(msg) ||
       /\b(hacer\s+presupuesto|cotizaci[oó]n|cotizar)\b/i.test(msg) ||
       /\b(opciones?\s+disponibles?)\b/i.test(msg) ||
-      /\b(medidas?\s+est[aá]ndares?)\b/i.test(msg)) {
+      /\b(medidas?\s+est[aá]ndares?)\b/i.test(msg))) {
 
     await updateConversation(psid, { lastIntent: "catalog_request" });
 
