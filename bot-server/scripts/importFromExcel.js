@@ -13,13 +13,22 @@ const EXCEL_PATH = "/Users/serch/Downloads/base de datos mallas confeccionadas r
 /**
  * Extract size from product name
  * e.g., "MALLA SOMBRAL BEIGE 90% 3 X 4 M REFORZADAS" → "3x4"
+ * e.g., "MALLA SOMBRA 90% 3x3x3 M TRIANGULO" → "3x3x3"
  */
 function extractSize(productName) {
-  // Pattern: "NUM X NUM" or "NUM x NUM"
-  const match = productName.match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/);
+  // IMPORTANT: Check 3D pattern FIRST, before 2D patterns
+  // Otherwise "3x3x3" would match the 2D pattern and return "3x3"
 
-  if (match) {
-    return `${match[1]}x${match[2]}`;
+  // Pattern 1: Triangle/3D - "3x3x3", "3 X 3 X 3"
+  const match3D = productName.match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/);
+  if (match3D) {
+    return `${match3D[1]}x${match3D[2]}x${match3D[3]}`;
+  }
+
+  // Pattern 2: Rectangular/2D - "NUM X NUM" or "NUM x NUM"
+  const match2D = productName.match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/);
+  if (match2D) {
+    return `${match2D[1]}x${match2D[2]}`;
   }
 
   return null;

@@ -145,25 +145,28 @@ productFamilySchema.virtual('children', {
 function extractSizeFromText(text) {
   if (!text) return null;
 
-  // Pattern 1: "6x4m", "6 x 4m", "6x4", "6 x 4"
-  const pattern1 = /(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*m?(?:etros?)?/;
-  const match1 = text.match(pattern1);
-  if (match1) {
-    return `${match1[1]}x${match1[2]}m`;
+  // IMPORTANT: Check 3D pattern FIRST, before 2D patterns
+  // Otherwise "3 m x 3 m x 3 m" would match the 2D pattern and return "3x3m"
+
+  // Pattern 1: Triangle/3D - "3x4x5m", "3 x 4 x 5", "3 m x 4 m x 5 m"
+  const pattern3D = /(\d+(?:\.\d+)?)\s*m?\s*[xX×]\s*(\d+(?:\.\d+)?)\s*m?\s*[xX×]\s*(\d+(?:\.\d+)?)\s*m?/;
+  const match3D = text.match(pattern3D);
+  if (match3D) {
+    return `${match3D[1]}x${match3D[2]}x${match3D[3]}m`;
   }
 
-  // Pattern 2: "6 metros x 4 metros", "6m x 4m"
-  const pattern2 = /(\d+(?:\.\d+)?)\s*m(?:etros?)?\s*[xX×]\s*(\d+(?:\.\d+)?)\s*m(?:etros?)?/;
-  const match2 = text.match(pattern2);
-  if (match2) {
-    return `${match2[1]}x${match2[2]}m`;
+  // Pattern 2: Rectangular - "6x4m", "6 x 4m", "6x4", "6 x 4"
+  const pattern2D = /(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*m?(?:etros?)?/;
+  const match2D = text.match(pattern2D);
+  if (match2D) {
+    return `${match2D[1]}x${match2D[2]}m`;
   }
 
-  // Pattern 3: Triangle - "3x4x5m", "3 x 4 x 5"
-  const pattern3 = /(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)\s*m?/;
-  const match3 = text.match(pattern3);
-  if (match3) {
-    return `${match3[1]}x${match3[2]}x${match3[3]}m`;
+  // Pattern 3: "6 metros x 4 metros", "6m x 4m"
+  const patternMetros = /(\d+(?:\.\d+)?)\s*m(?:etros?)?\s*[xX×]\s*(\d+(?:\.\d+)?)\s*m(?:etros?)?/;
+  const matchMetros = text.match(patternMetros);
+  if (matchMetros) {
+    return `${matchMetros[1]}x${matchMetros[2]}m`;
   }
 
   return null;
