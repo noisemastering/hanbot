@@ -1962,9 +1962,9 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
         const productLink = getProductLink(product);
         if (productLink) {
-          // Update conversation state with exact match
+          // Update conversation state with exact match - use "price_given" to prevent duplicate response
           await updateConversation(psid, {
-            lastIntent: "specific_measure",
+            lastIntent: "specific_measure_price_given",
             unknownCount: 0,
             requestedSize: closest.exact.sizeStr,
             lastUnavailableSize: null
@@ -2121,7 +2121,10 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       }
 
       // SECOND: Check if user mentioned specific size before
-      if (convo.requestedSize && (convo.lastIntent === "specific_measure" || convo.lastIntent === "generic_measures")) {
+      // BUT don't respond if we just gave the price (to avoid duplicate responses)
+      if (convo.requestedSize &&
+          (convo.lastIntent === "specific_measure" || convo.lastIntent === "generic_measures") &&
+          convo.lastIntent !== "specific_measure_price_given") {
         // User asked for a size before, now asking for price - provide that size's info
         const requestedSizeStr = convo.requestedSize;
         const sizeVariants = [requestedSizeStr, requestedSizeStr + 'm'];
