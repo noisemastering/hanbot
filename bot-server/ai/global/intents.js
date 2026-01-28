@@ -1625,6 +1625,13 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   // This allows us to handle multi-intent messages like "quiero una 6x4 azul"
   const dimensions = parseDimensions(msg);
 
+  // 📏 Handle feet-to-meter conversion - inform user and continue with converted dimensions
+  let feetConversionNote = '';
+  if (dimensions && dimensions.convertedFromFeet) {
+    feetConversionNote = `📏 Convertí tu medida de ${dimensions.originalFeetStr} a aproximadamente ${dimensions.width}x${dimensions.height} metros.\n\n`;
+    console.log(`📏 Feet conversion detected: ${dimensions.originalFeetStr} → ${dimensions.width}x${dimensions.height}m`);
+  }
+
   // 🎯 Detect roll dimensions (e.g., 4x100, 2.10x100) - skip confeccionada handler
   // Roll dimensions have one side = 100 (standard roll length)
   const isRollDimension = dimensions && (dimensions.width === 100 || dimensions.height === 100);
@@ -2067,7 +2074,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
       return {
         type: "text",
-        text: sizeResponse.text
+        text: feetConversionNote + sizeResponse.text
       };
     } else {
       // Generic inquiry - check context from previous conversation

@@ -6,6 +6,9 @@
 // 2. parseCintaDimensions - for linear products (borde separador, cinta plástica)
 // 3. parseRollDimensions - for roll products (rollo malla, groundcover, monofilamento)
 
+// Conversion constant
+const FEET_TO_METERS = 0.3048;
+
 /**
  * Parse dimensions for CONFECCIONADA products (malla sombra confeccionada, etc.)
  * These are rectangular products with dimensions in whole meters.
@@ -15,14 +18,18 @@
  * - "4x3m", "4x3 metros", "4 mts x 3 mts"
  * - "4 por 3", "4 de 3"
  * - "4 y medio x 3" (converts to 4.5x3)
+ * - "16x10 pies", "16 por 10 ft" (converts feet to meters)
  *
  * @param {string} str - User message
- * @returns {object|null} { width, height, area, normalized, hasFractional } or null
+ * @returns {object|null} { width, height, area, normalized, hasFractional, convertedFromFeet, originalFeet } or null
  */
 function parseConfeccionadaDimensions(str) {
   if (!str) return null;
 
   let s = String(str).toLowerCase();
+
+  // Check if dimensions are in feet
+  const isFeet = /\b(pies?|ft|feet|foot)\b/i.test(s);
 
   // Convert "y medio" to .5 (e.g., "2 y medio" -> "2.5")
   s = s.replace(/(\d+)\s*y\s*medio/gi, (_, num) => `${num}.5`);
@@ -37,7 +44,7 @@ function parseConfeccionadaDimensions(str) {
     // "largo x ancho" format - first number is height (largo), second is width (ancho)
     const height = parseFloat(m[1]);
     const width = parseFloat(m[2]);
-    return buildResult(width, height);
+    return buildResult(width, height, isFeet);
   }
 
   m = s.match(anchoLargoPattern);
@@ -45,12 +52,13 @@ function parseConfeccionadaDimensions(str) {
     // "ancho x largo" format - first number is width (ancho), second is height (largo)
     const width = parseFloat(m[1]);
     const height = parseFloat(m[2]);
-    return buildResult(width, height);
+    return buildResult(width, height, isFeet);
   }
 
   // Pattern 2: Universal pattern for rectangular dimensions:
   // Number + optional unit + separator (x/×/*/por/de) + number + optional unit
-  const pattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*(?:x|×|\*|por|de)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?/i;
+  // Also handles feet: "16x10 pies", "16 por 10 ft"
+  const pattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?|(?:pies?|ft|feet))?\s*(?:x|×|\*|por|de)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?|(?:pies?|ft|feet))?/i;
 
   m = s.match(pattern);
   if (!m) return null;
@@ -58,15 +66,31 @@ function parseConfeccionadaDimensions(str) {
   const dim1 = parseFloat(m[1]);
   const dim2 = parseFloat(m[2]);
 
-  return buildResult(dim1, dim2);
+  return buildResult(dim1, dim2, isFeet);
 }
 
 /**
  * Helper to build dimension result object
+ * @param {number} dim1 - First dimension
+ * @param {number} dim2 - Second dimension
+ * @param {boolean} isFeet - Whether dimensions are in feet (need conversion)
  */
-function buildResult(dim1, dim2) {
+function buildResult(dim1, dim2, isFeet = false) {
   if (Number.isNaN(dim1) || Number.isNaN(dim2)) return null;
   if (dim1 <= 0 || dim2 <= 0) return null;
+
+  // Store original values before any conversion
+  const originalDim1 = dim1;
+  const originalDim2 = dim2;
+
+  // Convert feet to meters if needed
+  if (isFeet) {
+    dim1 = dim1 * FEET_TO_METERS;
+    dim2 = dim2 * FEET_TO_METERS;
+    // Round to 1 decimal place for practical use
+    dim1 = Math.round(dim1 * 10) / 10;
+    dim2 = Math.round(dim2 * 10) / 10;
+  }
 
   // Normalize: smaller dimension first for consistent DB matching
   const width = Math.min(dim1, dim2);
@@ -75,14 +99,23 @@ function buildResult(dim1, dim2) {
   // Check if any dimension has fractional part
   const hasFractional = (dim1 % 1 !== 0) || (dim2 % 1 !== 0);
 
-  return {
+  const result = {
     width,
     height,
-    original: { dim1, dim2 },
+    original: { dim1: originalDim1, dim2: originalDim2 },
     area: dim1 * dim2,
     normalized: `${width}x${height}`,
     hasFractional
   };
+
+  // Add conversion info if feet were converted
+  if (isFeet) {
+    result.convertedFromFeet = true;
+    result.originalFeet = { dim1: originalDim1, dim2: originalDim2 };
+    result.originalFeetStr = `${originalDim1}x${originalDim2} pies`;
+  }
+
+  return result;
 }
 
 /**

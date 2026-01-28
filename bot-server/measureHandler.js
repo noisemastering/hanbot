@@ -102,14 +102,45 @@ function convertSpanishNumbersToDigits(text) {
   return converted;
 }
 
+// Conversion constant for feet to meters
+const FEET_TO_METERS = 0.3048;
+
+/**
+ * Helper to convert feet to meters and add conversion info to result
+ */
+function applyFeetConversion(result, isFeet) {
+  if (!result || !isFeet) return result;
+
+  const originalWidth = result.width;
+  const originalHeight = result.height;
+
+  // Convert feet to meters (rounded to 1 decimal)
+  result.width = Math.round(result.width * FEET_TO_METERS * 10) / 10;
+  result.height = Math.round(result.height * FEET_TO_METERS * 10) / 10;
+  result.area = result.width * result.height;
+
+  // Add conversion info
+  result.convertedFromFeet = true;
+  result.originalFeet = { width: originalWidth, height: originalHeight };
+  result.originalFeetStr = `${originalWidth}x${originalHeight} pies`;
+
+  console.log(`📏 Converted ${originalWidth}x${originalHeight} pies → ${result.width}x${result.height}m`);
+
+  return result;
+}
+
 /**
  * Parses dimension patterns from user message
  * Supports: "15 x 25", "8x8", "De. 8 8", "2.80 x 3.80"
  * Also supports: "nueve metros y medio por uno treinta" (9.5 x 1.30)
+ * Also supports feet: "16 por 10 pies" (converts to meters)
  * @param {string} message - User's message
- * @returns {object|null} - {width, height, area} or null if not found
+ * @returns {object|null} - {width, height, area, convertedFromFeet?, originalFeet?} or null if not found
  */
 function parseDimensions(message) {
+  // Check if dimensions are in feet
+  const isFeet = /\b(pies?|ft|feet|foot)\b/i.test(message);
+
   // First, check if there are EXPLICIT dimensions in the message (e.g., "8x10", "8.00 x 10.00")
   // These should take priority over reference object estimates
   const hasExplicitDimensions = /\d+(?:\.\d+)?\s*[xX×*]\s*\d+(?:\.\d+)?/.test(message) ||
@@ -214,11 +245,11 @@ function parseDimensions(message) {
     const width = firstLabel === 'ancho' ? firstNum : secondNum;
     const height = firstLabel === 'largo' ? firstNum : secondNum;
 
-    return {
+    return applyFeetConversion({
       width,
       height,
       area: width * height
-    };
+    }, isFeet);
   }
 
   // Handle pattern 7 next
@@ -234,11 +265,11 @@ function parseDimensions(message) {
     const width = firstLabel === 'ancho' ? firstNum : secondNum;
     const height = firstLabel === 'largo' ? firstNum : secondNum;
 
-    return {
+    return applyFeetConversion({
       width,
       height,
       area: width * height
-    };
+    }, isFeet);
   }
 
   // Handle pattern 5b: "N de largo por M de ancho" (largo first, opposite of pattern 5)
@@ -247,11 +278,11 @@ function parseDimensions(message) {
     // match5b[1] = largo value (height), match5b[2] = ancho value (width)
     const height = parseFloat(match5b[1]);
     const width = parseFloat(match5b[2]);
-    return {
+    return applyFeetConversion({
       width,
       height,
       area: width * height
-    };
+    }, isFeet);
   }
 
   // Handle pattern 6 separately due to different capture groups
@@ -261,21 +292,21 @@ function parseDimensions(message) {
     // match6[3] = second number, match6[4] = "largo" or "ancho"
     const width = parseFloat(match6[1]);
     const height = parseFloat(match6[3]);
-    return {
+    return applyFeetConversion({
       width,
       height,
       area: width * height
-    };
+    }, isFeet);
   }
 
   if (match) {
     const width = parseFloat(match[1]);
     const height = parseFloat(match[2]);
-    return {
+    return applyFeetConversion({
       width,
       height,
       area: width * height
-    };
+    }, isFeet);
   }
 
   // Pattern 9: Single dimension implies square - "de 4 metros", "una de 4", "4 metros q sale"
@@ -303,12 +334,12 @@ function parseDimensions(message) {
       }
 
       console.log(`📐 Single dimension detected (${size}m), treating as ${size}x${size} square`);
-      return {
+      return applyFeetConversion({
         width: size,
         height: size,
         area: size * size,
         isSquare: true
-      };
+      }, isFeet);
     }
   }
 
