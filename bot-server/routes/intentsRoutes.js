@@ -184,4 +184,77 @@ router.post("/:id/hit", async (req, res) => {
   }
 });
 
+// ============================================================
+// INTENT GAPS - Messages that fell through to fallback
+// ============================================================
+
+const { getUnreviewedGaps, markGapReviewed, getGapStats, IntentGap } = require("../ai/utils/intentGapLogger");
+
+// Get intent gap statistics
+router.get("/gaps/stats", async (req, res) => {
+  try {
+    const stats = await getGapStats();
+    res.json({ success: true, data: stats });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get unreviewed intent gaps
+router.get("/gaps/unreviewed", async (req, res) => {
+  try {
+    const { limit = 50, reason } = req.query;
+    const gaps = await getUnreviewedGaps(parseInt(limit), reason || null);
+    res.json({ success: true, data: gaps });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Mark a gap as reviewed
+router.post("/gaps/:id/review", async (req, res) => {
+  try {
+    const { addedToIntents = false } = req.body;
+    const gap = await markGapReviewed(req.params.id, addedToIntents);
+    if (!gap) {
+      return res.status(404).json({ success: false, error: "Gap no encontrado" });
+    }
+    res.json({ success: true, data: gap });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Get all gaps (with pagination)
+router.get("/gaps", async (req, res) => {
+  try {
+    const { page = 1, limit = 50, reason, reviewed } = req.query;
+    const filter = {};
+
+    if (reason) filter.reason = reason;
+    if (reviewed !== undefined) filter.reviewed = reviewed === 'true';
+
+    const gaps = await IntentGap.find(filter)
+      .sort({ timestamp: -1 })
+      .skip((parseInt(page) - 1) * parseInt(limit))
+      .limit(parseInt(limit))
+      .lean();
+
+    const total = await IntentGap.countDocuments(filter);
+
+    res.json({
+      success: true,
+      data: gaps,
+      pagination: {
+        page: parseInt(page),
+        limit: parseInt(limit),
+        total,
+        pages: Math.ceil(total / parseInt(limit))
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;

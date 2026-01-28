@@ -237,6 +237,16 @@ async function getPreviousUserMessage(psid) {
 async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME) {
   const businessInfo = await getBusinessInfo();
 
+  // 📝 LOG INTENT GAP: Message reached fallback, meaning no handler matched
+  const { logIntentGap } = require("../utils/intentGapLogger");
+  logIntentGap({
+    message: userMessage,
+    psid,
+    reason: 'fallback_reached',
+    lastIntent: convo.lastIntent,
+    productSpecs: convo.productSpecs
+  }).catch(err => console.error("Error logging intent gap:", err.message));
+
   // 🏭 Detect frustration about size limitations / custom manufacturing requests
   const customManufacturingFrustration = /\b(fabricante|manufacturer|manufactur|hacer.*medid|medid.*especial|medid.*solicit|no\s+cubre|no\s+cubr|área\s+que\s+necesito|no.*ayud.*nada|pueden\s+hacer|puede\s+hacer)\b/i.test(userMessage);
 
