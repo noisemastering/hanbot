@@ -1005,12 +1005,29 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
             requestedDim: dimensions,
             availableSizes,
             isRepeated: false,
-            businessInfo
+            businessInfo,
+            offeredSizes: convo.offeredSizes  // Pass conversation history
           });
+
+          // Track offered sizes to avoid repetitive suggestions
+          const suggestedSize = closest.exact?.sizeStr || closest.bigger?.sizeStr;
+          const updates = {};
+
+          if (suggestedSize && !sizeResponse.alreadyOffered) {
+            // Add to offeredSizes array using $push
+            const newOffer = {
+              size: suggestedSize,
+              forRequest: `${dimensions.width}x${dimensions.height}m`,
+              price: closest.exact?.price || closest.bigger?.price,
+              offeredAt: new Date()
+            };
+            updates.$push = { offeredSizes: newOffer };
+          }
 
           // Update conversation with the flag if we offered to show all sizes
           if (sizeResponse.offeredToShowAllSizes) {
-            await updateConversation(psid, { offeredToShowAllSizes: true });
+            // Use $set for regular fields when also using $push
+            updates.$set = { offeredToShowAllSizes: true };
           }
 
           // Handle custom order handoff (both sides >= 8m)
@@ -1030,6 +1047,9 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
             sendHandoffNotification(psid, `Pedido especial: ${dimensions.width}x${dimensions.height}m - requiere cotización personalizada`).catch(err => {
               console.error("❌ Failed to send push notification:", err);
             });
+          } else if (updates.$push || updates.$set) {
+            // Save offered size tracking
+            await updateConversation(psid, updates);
           }
 
           return {

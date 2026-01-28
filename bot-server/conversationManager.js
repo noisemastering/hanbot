@@ -51,13 +51,39 @@ async function getConversation(psid) {
 }
 
 // 💾 Actualizar conversación
+// Supports both $set and $push operations
+// Pass { $push: { arrayField: value } } for array pushes
 async function updateConversation(psid, updates = {}) {
   try {
-    await Conversation.updateOne(
-      { psid },
-      { $set: { ...updates, lastMessageAt: new Date() } },
-      { upsert: true }
-    );
+    // Check if updates contains $push or other MongoDB operators
+    const hasPush = updates.$push;
+    const hasSet = updates.$set;
+
+    if (hasPush || hasSet) {
+      // Caller is using MongoDB operators directly
+      const updateOps = {};
+
+      // Handle $set - merge with lastMessageAt
+      if (hasSet) {
+        updateOps.$set = { ...updates.$set, lastMessageAt: new Date() };
+      } else {
+        updateOps.$set = { lastMessageAt: new Date() };
+      }
+
+      // Handle $push
+      if (hasPush) {
+        updateOps.$push = updates.$push;
+      }
+
+      await Conversation.updateOne({ psid }, updateOps, { upsert: true });
+    } else {
+      // Legacy behavior - treat all fields as $set
+      await Conversation.updateOne(
+        { psid },
+        { $set: { ...updates, lastMessageAt: new Date() } },
+        { upsert: true }
+      );
+    }
   } catch (err) {
     console.error("❌ Error en updateConversation:", err);
   }

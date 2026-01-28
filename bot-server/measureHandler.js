@@ -595,15 +595,50 @@ function isApproximateMeasure(message) {
 }
 
 /**
+ * Check if a size was already offered in this conversation
+ * @param {string} sizeStr - Size to check, e.g., "3x2m"
+ * @param {Array} offeredSizes - Array from conversation.offeredSizes
+ * @returns {object|null} - The offer if found, null otherwise
+ */
+function wasAlreadyOffered(sizeStr, offeredSizes) {
+  if (!offeredSizes || offeredSizes.length === 0) return null;
+  return offeredSizes.find(o => o.size === sizeStr);
+}
+
+/**
  * Generates natural response for size inquiry
  * @param {object} options - Response configuration
  * @returns {object} - {text, suggestedSizes, isCustomOrder, requiresHandoff} where suggestedSizes is array of size strings for context
  */
 function generateSizeResponse(options) {
-  const { smaller, bigger, exact, requestedDim, availableSizes, isRepeated, businessInfo } = options;
+  const { smaller, bigger, exact, requestedDim, availableSizes, isRepeated, businessInfo, offeredSizes } = options;
 
   const responses = [];
   const suggestedSizes = []; // Track suggested sizes for context
+
+  // Check if we're about to suggest a size we already offered
+  const suggestedSize = exact?.sizeStr || bigger?.sizeStr;
+  const previousOffer = suggestedSize ? wasAlreadyOffered(suggestedSize, offeredSizes) : null;
+
+  if (previousOffer && requestedDim) {
+    // We already offered this size before - give a shorter, contextual response
+    const link = exact?.mLink || exact?.permalink || bigger?.mLink || bigger?.permalink;
+    const price = exact?.price || bigger?.price;
+    suggestedSizes.push(suggestedSize);
+
+    let text = `Como te mencioné, la medida estándar más cercana a ${requestedDim.width}x${requestedDim.height}m es ${suggestedSize} por $${price}.`;
+    if (link) {
+      text += `\n\nAquí está el link:\n${link}`;
+    }
+    text += `\n\n¿Te la quedas o prefieres cotizar fabricación a tu medida exacta?`;
+
+    return {
+      text,
+      suggestedSizes,
+      offeredToShowAllSizes: false,
+      alreadyOffered: true
+    };
+  }
 
   // FIRST: Check if this is a custom order (both sides >= 8m)
   // These ALWAYS need human attention, even if product exists in inventory
