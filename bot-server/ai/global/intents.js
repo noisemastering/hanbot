@@ -467,6 +467,31 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       /\b(link|enlace)\s+(de\s+)?(la\s+)?(tienda|catalogo)\b/i.test(msg) ||
       /\b(tienes?|tienen?|venden?|est[aá]n?)\s+(en\s+|por\s+)?mercado\s*libre\b/i.test(msg)) {
 
+    // If conversation is about ROLLOS, they need human contact (rollos aren't on ML directly)
+    const isRolloContext = convo.productInterest === 'rollo' ||
+                           convo.lastIntent?.includes('roll') ||
+                           convo.productSpecs?.productType === 'rollo';
+
+    if (isRolloContext) {
+      console.log("📦 ML question in rollo context - collecting data for human handoff");
+      await updateConversation(psid, {
+        lastIntent: "rollo_ml_inquiry",
+        handoffRequested: true,
+        handoffReason: "Rollo inquiry asking about ML - needs quote",
+        handoffTimestamp: new Date()
+      });
+
+      return {
+        type: "text",
+        text: "Los rollos de malla sombra se cotizan directamente con nuestro equipo de ventas.\n\n" +
+              "Para darte precio y disponibilidad, necesito:\n" +
+              "• Tu código postal (para calcular envío)\n" +
+              "• Cantidad de rollos que necesitas\n\n" +
+              "Un asesor te contactará en breve para ayudarte con tu cotización."
+      };
+    }
+
+    // For other products, confirm ML and ask what product they want
     await updateConversation(psid, { lastIntent: "store_link_requested" });
 
     const storeUrl = "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob";
@@ -480,9 +505,22 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       stateMx: convo.stateMx
     });
 
-    const baseResponse = "Ver tienda en línea\nIngresa al siguiente link:\n\n" +
+    // If no product context yet, confirm ML and ask what they need
+    if (!convo.productInterest) {
+      return {
+        type: "text",
+        text: "¡Sí! Vendemos por Mercado Libre 🛒\n\n" +
+              "¿Qué producto te interesa?\n\n" +
+              "• Malla Sombra (confeccionada o en rollo)\n" +
+              "• Borde Separador para jardín\n" +
+              "• Groundcover (malla antimaleza)"
+      };
+    }
+
+    // Has product context - give store link
+    const baseResponse = "¡Sí! Puedes comprar en nuestra Tienda Oficial de Mercado Libre:\n\n" +
           trackedLink + "\n\n" +
-          "Estamos disponibles para ayudarte con cualquier duda sobre nuestros productos.";
+          "¿Te ayudo a encontrar la medida que necesitas?";
 
     return {
       type: "text",
