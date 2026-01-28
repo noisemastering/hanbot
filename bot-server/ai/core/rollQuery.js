@@ -5,6 +5,7 @@
 const { updateConversation } = require("../../conversationManager");
 const ProductFamily = require("../../models/ProductFamily");
 const { enrichProductWithContext, formatProductForBot, getProductDisplayName } = require("../utils/productEnricher");
+const { getMissingSpecs: getMissingSpecsFromExtractor } = require("../utils/specExtractor");
 
 /**
  * Extract product specs from a user message
@@ -252,24 +253,15 @@ async function handleRollQuery(userMessage, psid, convo) {
     console.log("🎯 Roll query detected, checking conversation state...");
 
     // ============================================================
-    // STEP 1: Extract specs from current message (with context for better understanding)
+    // STEP 1: Use specs from conversation basket (already merged by generateReply)
     // ============================================================
-    const newSpecs = extractSpecsFromMessage(userMessage, { lastIntent: convo.lastIntent });
-    console.log("📝 Extracted specs from message:", newSpecs);
+    const mergedSpecs = { ...(convo.productSpecs || {}), productType: 'rollo' };
+    console.log("📋 Current specs from basket:", mergedSpecs);
 
     // ============================================================
-    // STEP 2: Merge with existing specs from conversation
+    // STEP 2: Check what's still missing for a roll quote
     // ============================================================
-    const existingSpecs = convo.productSpecs || {};
-    const mergedSpecs = mergeSpecs(existingSpecs, newSpecs);
-    mergedSpecs.productType = 'rollo';
-
-    console.log("📋 Merged specs:", mergedSpecs);
-
-    // ============================================================
-    // STEP 3: Check what's still missing
-    // ============================================================
-    const missing = getMissingSpecs(mergedSpecs);
+    const missing = getMissingSpecsFromExtractor(mergedSpecs, 'rollo');
     console.log("❓ Missing specs:", missing);
 
     // ============================================================

@@ -581,6 +581,25 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
 async function generateReply(userMessage, psid, referral = null) {
   let convo = await getConversation(psid);
 
+  // ====== CONVERSATION BASKET: Extract and merge specs from EVERY message ======
+  // This ensures we never lose information the customer gave us
+  const { extractAllSpecs, mergeSpecs } = require("./utils/specExtractor");
+  const extractedSpecs = extractAllSpecs(userMessage, { lastIntent: convo.lastIntent });
+
+  if (Object.keys(extractedSpecs).length > 0) {
+    const mergedSpecs = mergeSpecs(convo.productSpecs || {}, extractedSpecs);
+    console.log(`🛒 Basket updated:`, JSON.stringify(mergedSpecs));
+
+    // Save merged specs to conversation (non-blocking)
+    updateConversation(psid, { productSpecs: mergedSpecs }).catch(err =>
+      console.error("Error updating productSpecs:", err.message)
+    );
+
+    // Update local convo object so handlers have the latest specs
+    convo.productSpecs = mergedSpecs;
+  }
+  // ====== END CONVERSATION BASKET ======
+
   // ====== STRUCTURAL FIX: ENSURE PRODUCT INTEREST IS RESOLVED ======
   // If conversation has adId or campaignRef but NO productInterest, resolve it now
   // This is a self-healing mechanism - even if initial referral handling failed,
