@@ -175,14 +175,28 @@ async function processMessage(normalizedMessage, io = null) {
   // 5. Get/create conversation
   const conversation = await getOrCreateConversation(unifiedId, channel);
 
-  // 6. Handle campaign referrals (Facebook only)
-  if (referral && channel === 'facebook') {
-    await updateConversation(unifiedId, {
-      lastIntent: 'ad_entry',
-      campaignRef: referral.ref || null,
-      adId: referral.ad_id || null,
-      campaignId: referral.campaign_id || null
-    });
+  // 6. Handle campaign referrals (Facebook and WhatsApp)
+  if (referral) {
+    if (channel === 'facebook') {
+      await updateConversation(unifiedId, {
+        lastIntent: 'ad_entry',
+        campaignRef: referral.ref || null,
+        adId: referral.ad_id || null,
+        campaignId: referral.campaign_id || null
+      });
+    } else if (channel === 'whatsapp') {
+      // WhatsApp CTWA (Click-to-WhatsApp) ad referral
+      // Fields: source_id (ad ID), source_type, source_url, headline, body
+      console.log(`📣 WhatsApp ad referral: ad=${referral.source_id}, type=${referral.source_type}`);
+      await updateConversation(unifiedId, {
+        lastIntent: 'ad_entry',
+        adId: referral.source_id || null,
+        adHeadline: referral.headline || null,
+        adBody: referral.body || null,
+        adSourceUrl: referral.source_url || null,
+        adSourceType: referral.source_type || null
+      });
+    }
   }
 
   // 7. Check if conversation is in human_active state

@@ -15,8 +15,13 @@ const conversationSchema = new mongoose.Schema({
 
   // Campaign & context tracking
   campaignRef: { type: String, default: null },
-  adId: { type: String, default: null },           // Facebook Ad ID (referral.ad_id)
+  adId: { type: String, default: null },           // Facebook Ad ID (referral.ad_id) or WhatsApp CTWA source_id
   campaignId: { type: String, default: null },     // Facebook Campaign ID (referral.campaign_id)
+  // WhatsApp CTWA (Click-to-WhatsApp) ad tracking
+  adHeadline: { type: String, default: null },     // WhatsApp ad headline
+  adBody: { type: String, default: null },         // WhatsApp ad body text
+  adSourceUrl: { type: String, default: null },    // WhatsApp ad source URL
+  adSourceType: { type: String, default: null },   // WhatsApp ad source type (usually "ad")
   requestedSize: { type: String, default: null },  // Track last size user asked about
   productInterest: { type: String, default: null }, // Product type user is interested in (malla_sombra, borde_separador, rollo)
 

@@ -40,6 +40,22 @@ function normalizeWhatsAppMessage(message, metadata) {
            message.interactive.list_reply?.title;
   }
 
+  // Extract referral from Click-to-WhatsApp ads
+  // When user clicks a CTWA ad, first message includes referral with:
+  // - source_type: "ad"
+  // - source_id: the ad ID
+  // - source_url: the ad URL
+  // - headline: ad headline
+  // - body: ad body text
+  const referral = message.referral || null;
+  if (referral) {
+    console.log(`📣 WhatsApp CTWA referral detected:`, {
+      source_type: referral.source_type,
+      source_id: referral.source_id,
+      headline: referral.headline
+    });
+  }
+
   return {
     channel: 'whatsapp',
     unifiedId: `wa:${senderPhone}`,
@@ -47,7 +63,7 @@ function normalizeWhatsAppMessage(message, metadata) {
     messageId: message.id,
     text: text,
     timestamp: message.timestamp * 1000, // Convert to milliseconds
-    referral: null, // WhatsApp doesn't have referral tracking like FB
+    referral: referral,
     isFromPage: false, // WhatsApp messages are always from users (business can't initiate)
     recipientId: metadata.phone_number_id,
     raw: message
