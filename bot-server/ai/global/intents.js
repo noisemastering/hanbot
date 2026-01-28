@@ -283,8 +283,11 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   }
 
   // 🌿 BORDE SEPARADOR FOLLOW-UP - Handle questions when in borde context
-  if (convo.lastIntent === "borde_separador" || convo.productInterest === "borde_separador" ||
-      convo.lastIntent === "borde_link_sent") {
+  // EXCEPT: Skip if user is asking about location/address (let location handler deal with it)
+  const isLocationQuestion = /d[oó]nde\s+(est[aá]n|se\s+ubican|quedan)|h?ubicaci[oó]n|direcci[oó]n|qued[ao]n?|encuentran|ir\s+a\s+ver|f[ií]sicamente/i.test(msg);
+
+  if (!isLocationQuestion && (convo.lastIntent === "borde_separador" || convo.productInterest === "borde_separador" ||
+      convo.lastIntent === "borde_link_sent")) {
 
     // Installation question - "con qué se sujeta", "cómo se instala", etc.
     if (/\b(sujet|ancl|clav|instala|pone|fij|asegur|enterr)/i.test(msg) ||
@@ -1061,11 +1064,26 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     }
   }
 
-  // 📍 Ubicación - respond with simple location info
+  // 📍 Ubicación - respond with location info
   // Note: "ciudad" removed - too broad, matches "Ciudad de México" when user answers where they're from
-  if (/d[oó]nde\s+(est[aá]n|se\s+ubican|quedan)|h?ubicaci[oó]n|direcci[oó]n|qued[ao]n?|encuentran/i.test(msg)) {
+  if (/d[oó]nde\s+(est[aá]n|se\s+ubican|quedan)|h?ubicaci[oó]n|direcci[oó]n|qued[ao]n?|encuentran/i.test(msg) ||
+      /ir\s+a\s+ver|ver(lo)?\s+f[ií]sicamente|verlos?\s+en\s+persona/i.test(msg)) {
     console.log("📍 Location question detected");
     await updateConversation(psid, { lastIntent: "location_info" });
+
+    // Check if user specifically wants to visit physically
+    const wantsPhysicalVisit = /f[ií]sicamente|en\s+persona|ir\s+a\s+ver|verlo|visitarlos/i.test(msg);
+
+    if (wantsPhysicalVisit) {
+      return {
+        type: "text",
+        text: "Nos ubicamos en Querétaro. Somos principalmente tienda en línea, pero si gustas visitarnos puedes contactarnos para coordinar:\n\n" +
+              "📞 442 123 4567\n" +
+              "💬 WhatsApp: https://wa.me/524425957432\n\n" +
+              "También puedes ver todos nuestros productos en nuestra Tienda Oficial de Mercado Libre con envío a todo el país 📦"
+      };
+    }
+
     return {
       type: "text",
       text: "Estamos en Querétaro, pero enviamos a todo el país por Mercado Libre 📦"
