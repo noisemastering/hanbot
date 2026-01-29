@@ -101,7 +101,8 @@ function Messages() {
   const fetchFullConversation = async (psid) => {
     try {
       const res = await API.get(`/conversations/${psid}`);
-      setFullConversation(res.data);
+      // Reverse to show oldest first (chronological order, like a chat)
+      setFullConversation([...res.data].reverse());
     } catch (err) {
       console.error("Error fetching full conversation:", err);
     }
