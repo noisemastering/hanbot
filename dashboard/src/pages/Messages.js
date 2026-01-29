@@ -37,7 +37,7 @@ function Messages() {
       case 'high':
         return { emoji: '🟢', color: '#4caf50', label: 'Alta' };
       case 'medium':
-        return { emoji: '🟡', color: '#ff9800', label: 'Media' };
+        return { emoji: '🔵', color: '#2196F3', label: 'Media' };
       case 'low':
         return { emoji: '🔴', color: '#f44336', label: 'Baja' };
       default:
