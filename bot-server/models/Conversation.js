@@ -111,7 +111,33 @@ const conversationSchema = new mongoose.Schema({
     detectedAt: { type: Date, default: null },
     followedUp: { type: Boolean, default: false },      // Has been followed up
     followedUpAt: { type: Date, default: null }
-  }
+  },
+
+  // Purchase intent scoring - how ready is customer to buy
+  purchaseIntent: {
+    type: String,
+    enum: ['high', 'medium', 'low', null],
+    default: null
+  },
+  intentSignals: {
+    // Positive signals
+    hasSpecificDimensions: { type: Boolean, default: false },
+    hasSpecificLocation: { type: Boolean, default: false },
+    askedAboutPayment: { type: Boolean, default: false },
+    askedAboutDelivery: { type: Boolean, default: false },
+    confirmedSize: { type: Boolean, default: false },
+    mentionedUrgency: { type: Boolean, default: false },
+    // Negative signals (tracked by count)
+    materialQuestions: { type: Number, default: 0 },
+    techSpecQuestions: { type: Number, default: 0 },
+    catalogRequests: { type: Number, default: 0 },
+    messagesWithoutProgress: { type: Number, default: 0 },
+    erraticTypingCount: { type: Number, default: 0 },
+    // Tracking
+    totalMessages: { type: Number, default: 0 },
+    lastScoreUpdate: { type: Date, default: null }
+  },
+  isWholesaleInquiry: { type: Boolean, default: false }
 });
 
 module.exports = mongoose.model("Conversation", conversationSchema);

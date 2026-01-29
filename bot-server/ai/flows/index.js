@@ -13,6 +13,12 @@ const { INTENTS, PRODUCTS } = require("../classifier");
 const { generateGuidedResponse } = require("../core/guidedResponse");
 const { getColdStartProductList } = require("../utils/productIdentifier");
 
+// Multi-question parser for handling multiple intents in one message
+const { parseQuestions, wrapResponse, shouldUseProductFlow } = require("../utils/multiQuestionParser");
+
+// Purchase intent scoring - detects how ready a customer is to buy
+const { scorePurchaseIntent, isWholesaleInquiry } = require("../utils/purchaseIntentScorer");
+
 /**
  * All available flows in priority order
  * More specific flows first, general flow last
@@ -41,6 +47,18 @@ async function routeToFlow(classification, sourceContext, convo, psid, userMessa
   const { intent, product, entities, confidence, responseGuidance, intentName } = classification;
 
   console.log(`🔀 Flow router - Product: ${product}, Intent: ${intent}, Confidence: ${confidence}`);
+
+  // ====== MULTI-QUESTION PARSING ======
+  // Parse all questions in the message to handle multiple intents
+  const parsedQuestions = parseQuestions(userMessage);
+  if (parsedQuestions.questionCount > 1) {
+    console.log(`📋 Multi-question detected (${parsedQuestions.questionCount}):`,
+      parsedQuestions.all.map(q => `${q.type}[P${q.priority}]`).join(', '));
+  }
+  if (parsedQuestions.data.dimensions) {
+    console.log(`📐 Dimensions extracted: ${parsedQuestions.data.dimensions.raw}`);
+  }
+  // ====== END MULTI-QUESTION PARSING ======
 
   // If classification has responseGuidance from DB (ai_generate handler), generate AI-guided response
   // The AI uses the template as guidance to generate a natural, contextual response
@@ -119,6 +137,17 @@ async function routeToFlow(classification, sourceContext, convo, psid, userMessa
       const response = await flow.handle(classification, sourceContext, convo, psid, campaign, userMessage);
 
       if (response) {
+        // ====== WRAP WITH MULTI-QUESTION CONTEXT ======
+        // Add prefix (greeting) and suffix (secondary questions) to response
+        if (parsedQuestions.questionCount > 1 && response.text) {
+          const wrappedText = wrapResponse(response.text, parsedQuestions);
+          if (wrappedText !== response.text) {
+            console.log(`📝 Wrapped response with ${parsedQuestions.secondary.length} secondary answers`);
+            response.text = wrappedText;
+          }
+        }
+        // ====== END WRAP ======
+
         return {
           ...response,
           handledBy: name
@@ -275,6 +304,28 @@ function shouldHandoffForQuote(campaign) {
  * Called from ai/index.js after classification
  */
 async function processMessage(classification, sourceContext, convo, psid, userMessage, campaign = null) {
+  // === PURCHASE INTENT SCORING ===
+  // Runs on every message to track buying readiness (retail only for now)
+  const isWholesale = isWholesaleInquiry(userMessage, convo);
+
+  if (!isWholesale) {
+    const intentScore = scorePurchaseIntent(userMessage, convo);
+
+    // Update conversation with purchase intent (non-blocking)
+    const { updateConversation } = require("../../conversationManager");
+    updateConversation(psid, {
+      purchaseIntent: intentScore.intent,
+      intentSignals: intentScore.signals,
+      isWholesaleInquiry: false
+    }).catch(err => console.error("Error updating purchase intent:", err));
+  } else {
+    // Mark as wholesale - different rules apply (to be implemented)
+    const { updateConversation } = require("../../conversationManager");
+    updateConversation(psid, { isWholesaleInquiry: true }).catch(err => console.error("Error marking wholesale:", err));
+    console.log("🏭 Wholesale inquiry detected - different scoring rules apply");
+  }
+  // === END PURCHASE INTENT SCORING ===
+
   // Check for cold start (but campaign context means not cold)
   if (isColdStart(classification, sourceContext, convo, campaign) &&
       classification.intent !== INTENTS.GREETING) {

@@ -36,6 +36,9 @@ const {
   extractAllDimensions
 } = require("../utils/dimensionParsers");
 
+// Location detection
+const { detectMexicanLocation, detectZipCode } = require("../../mexicanLocations");
+
 /**
  * Parse zip code from message and look up location
  * Patterns: CP 12345, C.P. 12345, cp12345, al 12345, codigo postal 12345
@@ -178,6 +181,59 @@ function formatMoney(n) {
 }
 
 /**
+ * Handle accessory questions (arnés, cuerda, lazo, kit de instalación)
+ * Offers lazo and kit de instalación as additional products
+ */
+async function handleAccessoryQuestion(psid, convo, userMessage) {
+  // Find the lazo and kit products
+  const kitProduct = await ProductFamily.findOne({
+    name: /Kit de Instalación para Malla Sombra/i,
+    sellable: true
+  }).lean();
+
+  const lazoProduct = await ProductFamily.findOne({
+    name: /Rollo de 47 m/i,
+    parentId: { $exists: true },
+    sellable: true,
+    price: { $gt: 0 }
+  }).lean();
+
+  // Build response
+  let response = `La malla sombra confeccionada viene lista para instalar con argollas en todo el perímetro, pero no incluye cuerda ni arnés.\n\n`;
+  response += `Te ofrecemos estos accesorios:\n\n`;
+
+  if (lazoProduct) {
+    const lazoLink = lazoProduct.mlLink || null;
+    const lazoTracked = lazoLink ? await generateClickLink(psid, lazoLink, {
+      productName: 'Lazo con protección UV',
+      productId: lazoProduct._id
+    }) : null;
+    response += `• **Lazo con protección UV** (rollo de 47m): ${formatMoney(lazoProduct.price)}${lazoTracked ? `\n  ${lazoTracked}` : ''}\n\n`;
+  }
+
+  if (kitProduct) {
+    const kitLink = kitProduct.mlLink || null;
+    const kitTracked = kitLink ? await generateClickLink(psid, kitLink, {
+      productName: 'Kit de Instalación',
+      productId: kitProduct._id
+    }) : null;
+    response += `• **Kit de Instalación para Malla Sombra**: ${formatMoney(kitProduct.price)}${kitTracked ? `\n  ${kitTracked}` : ''}\n\n`;
+  }
+
+  response += `¿Te interesa agregar alguno de estos accesorios?`;
+
+  await updateConversation(psid, {
+    lastIntent: 'malla_accessory_offered',
+    unknownCount: 0
+  });
+
+  return {
+    type: "text",
+    text: response
+  };
+}
+
+/**
  * Handle multiple dimensions request (e.g., "6x5 o 5x5")
  */
 async function handleMultipleDimensions(dimensions, psid, convo) {
@@ -226,6 +282,13 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   console.log(`🌐 Malla flow - Current state:`, state);
   console.log(`🌐 Malla flow - Intent: ${intent}, Entities:`, entities);
   console.log(`🌐 Malla flow - User message: "${userMessage}"`);
+
+  // CHECK FOR ACCESSORY QUESTIONS (arnés, cuerda, lazo, kit de instalación)
+  const isAccessoryQuestion = /\b(arn[eé]s|cuerda|lazo|amarre|kit.*instalaci|incluye.*para\s*(colgar|instalar)|viene\s*con|dan\s*con|trae)\b/i.test(userMessage);
+  if (isAccessoryQuestion) {
+    console.log(`🔧 Accessory question detected: "${userMessage}"`);
+    return await handleAccessoryQuestion(psid, convo, userMessage);
+  }
 
   // CHECK FOR MULTIPLE DIMENSIONS FIRST
   // If user asks for multiple sizes like "6x5 o 5x5", handle them together
@@ -438,6 +501,39 @@ function handleAwaitingDimensions(intent, state, sourceContext, userMessage = ''
     return {
       type: "text",
       text: `Disculpa, ¿me puedes confirmar la medida? (ej: 4x3 metros)`
+    };
+  }
+
+  // CHECK FOR LOCATION - if user is providing city/alcaldía/zipcode
+  // and we already have dimensions, respond with shipping info
+  const locationInfo = detectMexicanLocation(userMessage);
+  const zipcodeInfo = detectZipCode(userMessage);
+
+  if (locationInfo || zipcodeInfo) {
+    // User is giving location info
+    const hasDimensions = (convo?.productSpecs?.width && convo?.productSpecs?.height) ||
+                          convo?.requestedSize;
+
+    if (hasDimensions) {
+      // We already have dimensions - acknowledge location and provide shipping info
+      const locationName = locationInfo?.normalized || zipcodeInfo;
+      const cityForDisplay = locationInfo?.type === 'alcaldia'
+        ? `${locationInfo.location.charAt(0).toUpperCase() + locationInfo.location.slice(1)}, CDMX`
+        : locationInfo?.normalized || locationName;
+
+      return {
+        type: "text",
+        text: `¡Sí! Enviamos a ${cityForDisplay} a través de Mercado Libre.\n\n` +
+              `El envío tarda entre 3-5 días hábiles. El costo lo calcula ML según tu código postal exacto.\n\n` +
+              `¿Te paso el link de compra?`
+      };
+    }
+    // If no dimensions yet but they gave location, still ask for dimensions
+    // but acknowledge the location
+    const cityName = locationInfo?.normalized || 'tu zona';
+    return {
+      type: "text",
+      text: `Perfecto, sí enviamos a ${cityName}.\n\n¿Qué medida necesitas?`
     };
   }
 
@@ -739,13 +835,12 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     }
 
     // Build quantity prefix if needed
-    const quantityText = quantity ? `Para ${quantity} piezas: ` : "";
+    const quantityText = quantity ? `Para ${quantity} piezas:\n\n` : "";
 
     return {
       type: "text",
-      text: `${quantityText}${salesPitch}\n\n` +
-            `${trackedLink}${wholesaleMention}\n\n` +
-            `¿Necesitas algo más?`
+      text: `${quantityText}${salesPitch}\n` +
+            `${trackedLink}${wholesaleMention}`
     };
   }
 

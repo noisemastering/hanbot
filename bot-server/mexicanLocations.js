@@ -13,7 +13,19 @@ const MEXICAN_STATES = [
   'cdmx', 'ciudad de méxico'
 ];
 
+// CDMX Alcaldías (formerly Delegaciones)
+const CDMX_ALCALDIAS = [
+  'álvaro obregón', 'alvaro obregon', 'azcapotzalco', 'benito juárez', 'benito juarez',
+  'coyoacán', 'coyoacan', 'cuajimalpa', 'cuauhtémoc', 'cuauhtemoc',
+  'gustavo a. madero', 'gustavo a madero', 'gustavo madero', 'gam',
+  'iztacalco', 'iztapalapa', 'magdalena contreras', 'la magdalena contreras',
+  'miguel hidalgo', 'milpa alta', 'tláhuac', 'tlahuac', 'tlalpan',
+  'venustiano carranza', 'xochimilco'
+];
+
 const MAJOR_CITIES = [
+  // CDMX Alcaldías
+  ...CDMX_ALCALDIAS,
   // Major cities (100k+ population)
   'guadalajara', 'monterrey', 'puebla', 'tijuana', 'león', 'juárez',
   // Towns with "agua" in name (to avoid false positives with water questions)
@@ -97,6 +109,33 @@ function removeAccents(str) {
 function detectMexicanLocation(message) {
   const cleaned = message.toLowerCase().trim();
   const cleanedNoAccents = removeAccents(cleaned);
+
+  // Check for "Alcaldía X" or "Delegación X" patterns (CDMX)
+  const alcaldiaMatch = cleaned.match(/\b(?:alcald[ií]a|delegaci[oó]n)\s+(.+)/i);
+  if (alcaldiaMatch) {
+    const alcaldiaName = alcaldiaMatch[1].trim();
+    const alcaldiaNoAccents = removeAccents(alcaldiaName);
+    // Check if it's a known alcaldía
+    for (const alcaldia of CDMX_ALCALDIAS) {
+      if (removeAccents(alcaldia).includes(alcaldiaNoAccents) || alcaldiaNoAccents.includes(removeAccents(alcaldia))) {
+        return {
+          location: alcaldiaName,
+          type: 'alcaldia',
+          state: 'Ciudad de México',
+          normalized: `${alcaldiaName.charAt(0).toUpperCase() + alcaldiaName.slice(1)}, CDMX`,
+          original: message.trim()
+        };
+      }
+    }
+    // Even if not in our list, "Alcaldía X" is clearly a CDMX location
+    return {
+      location: alcaldiaName,
+      type: 'alcaldia',
+      state: 'Ciudad de México',
+      normalized: `${alcaldiaName.charAt(0).toUpperCase() + alcaldiaName.slice(1)}, CDMX`,
+      original: message.trim()
+    };
+  }
 
   // Check for abbreviations first
   for (const [abbr, fullName] of Object.entries(LOCATION_VARIATIONS)) {

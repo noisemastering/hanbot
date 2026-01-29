@@ -1598,6 +1598,15 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
         // Build response - confirm coverage
         const capitalizedCity = cityName.charAt(0).toUpperCase() + cityName.slice(1);
+
+        // If we already gave a price/size, don't ask for measure again
+        if (convo.requestedSize && (convo.lastIntent === "specific_measure" || convo.lastIntent === "specific_measure_price_given")) {
+          return {
+            type: "text",
+            text: `¡Sí! Enviamos a ${capitalizedCity} a través de Mercado Libre, el envío es gratis 📦🚚`
+          };
+        }
+
         const response = `¡Perfecto! Sí tenemos cobertura en ${capitalizedCity} 📦\n\n¿Qué medida te interesa?`;
 
         return {

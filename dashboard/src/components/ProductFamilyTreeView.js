@@ -65,6 +65,11 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, 
             >
               <h3 className="text-sm font-semibold text-white hover:text-indigo-400 transition-colors">{product.name}</h3>
 
+              {/* Item ID */}
+              <span className="text-[10px] text-gray-500 font-mono" title={`ID: ${product._id}`}>
+                {product._id?.slice(-6)}
+              </span>
+
               {/* Generation Badge */}
               <span className="px-2 py-0.5 bg-blue-500/20 text-blue-300 rounded text-xs font-medium">
                 Gen {product.generation || 1}

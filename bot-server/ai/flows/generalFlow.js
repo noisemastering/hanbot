@@ -348,10 +348,20 @@ function shouldHandle(classification, sourceContext, convo, userMessage = '') {
     INTENTS.SHIPPING_QUERY,
     INTENTS.LOCATION_QUERY,
     INTENTS.PAYMENT_QUERY,
-    INTENTS.DELIVERY_TIME_QUERY,
-    INTENTS.MULTI_QUESTION
+    INTENTS.DELIVERY_TIME_QUERY
   ].includes(intent)) {
     return true;
+  }
+
+  // Handle MULTI_QUESTION only if NO dimensions are present
+  // If dimensions are present, let product flows handle it (they can give specific prices)
+  if (intent === INTENTS.MULTI_QUESTION) {
+    const hasDimensions = /\d+\s*[xX×]\s*\d+/.test(userMessage);
+    if (!hasDimensions) {
+      return true;
+    }
+    // Has dimensions - let product flow handle it
+    console.log(`📏 MULTI_QUESTION has dimensions, deferring to product flow`);
   }
 
   // Pattern-based detection for common queries (fallback when intent is unclear)

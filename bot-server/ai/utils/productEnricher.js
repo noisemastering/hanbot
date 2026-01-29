@@ -655,15 +655,49 @@ async function formatProductResponse(product, options = {}) {
     return `Tenemos la ${displayName}${price ? ` por $${price}` : ''}.`;
   }
 
-  // Build response
+  // Build formatted response with bullet points
+  const isMallaSombra = pitch.productType === 'rectangular' || pitch.productType === 'triangular';
+
+  if (isMallaSombra) {
+    // New bullet-point format for malla sombra
+    const percentageText = pitch.percentage ? `al ${pitch.percentage}% de cobertura` : '';
+    const sizeInParens = pitch.sizeText ? `(${pitch.sizeText.replace(' metros', ' m')})` : '';
+
+    let response = `Le ofrecemos una malla sombra ${percentageText} ${sizeInParens}, diseñada para mayor durabilidad con las siguientes características:\n\n`;
+
+    // Bullet points for features
+    const features = [];
+    if (pitch.isReforzada) {
+      features.push('Reforzada en las esquinas');
+    }
+    features.push('Sujetadores y argollas en todos los lados, lista para instalar fácilmente');
+    features.push('Incluye envío a domicilio');
+
+    for (const feature of features) {
+      response += `• ${feature}.\n`;
+    }
+
+    // Add price
+    if (price) {
+      const formattedPrice = typeof price === 'number'
+        ? price.toLocaleString('es-MX', { maximumFractionDigits: 0 })
+        : price;
+      response += `\nPrecio: $${formattedPrice} MXN.\n`;
+    }
+
+    // Shopping prompt
+    response += `\n🛒 Adquiérala de forma rápida y segura desde nuestra tienda oficial en Mercado Libre:`;
+
+    return response;
+  }
+
+  // Original format for other products
   let response = `Claro, ${pitch.description}`;
 
-  // Add all selling points
   for (const point of pitch.sellingPoints) {
     response += `, ${point}`;
   }
 
-  // Add price
   if (price) {
     const formattedPrice = typeof price === 'number'
       ? price.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 })
@@ -671,7 +705,6 @@ async function formatProductResponse(product, options = {}) {
     response += `, la tenemos en ${formattedPrice}`;
   }
 
-  // Add shipping
   response += `, ${pitch.shippingInfo}.`;
 
   return response;

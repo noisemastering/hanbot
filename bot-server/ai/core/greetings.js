@@ -83,15 +83,9 @@ async function handleThanks(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
     return null;
   }
 
-  // Don't respond if conversation is already closed (user is just acknowledging our goodbye)
-  if (convo.state === "closed" || convo.lastIntent === "closed") {
-    console.log("🚫 Conversation already closed, not responding to farewell acknowledgment");
-    return { type: "no_response" };
-  }
-
   // Check for continuation phrases - if user is continuing, don't close
   // "otra pregunta", "una duda", "tengo pregunta", etc.
-  const hasContinuation = /\b(pero|aun|todavía|todavia|aún|otra\s+(duda|pregunta|cosa)|tengo\s+(una\s+)?(duda|pregunta)|quiero\s+saber|me\s+gustaría|quisiera)\b/i.test(cleanMsg);
+  const hasContinuation = /\b(pero|aun|todavía|todavia|aún|otra\s+(duda|pregunta|cosa)|tengo\s+(una\s+)?(duda|pregunta)|quiero\s+saber|me\s+gustaría|quisiera|también|tambien)\b/i.test(cleanMsg);
 
   // Check if message contains actual product/size requests
   // Exclude "gracias por la cotización" - that's a thank you, not a quote request
@@ -100,7 +94,36 @@ async function handleThanks(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
 
   // Check if message contains ANY question (location, hours, contact, payment, etc.)
   // "ubicación, gracias" or "forma de pago, gracias" is a question, not a goodbye
-  const hasQuestion = /\b(ubicaci[oó]n|direcci[oó]n|d[oó]nde|horarios?|tel[eé]fono|n[uú]mero|contacto|env[ií]o|entrega|forma\s+de\s+pago|c[oó]mo\s+(llego|pago|compro)|pago|pagar|tarjeta|efectivo|transferencia|cu[aá]nto\s+(cuesta|vale|tarda)|qu[eé]\s+(precio|medida|tamaño)|tienen|manejan|hacen|instalan)\b/i.test(cleanMsg);
+  const hasQuestion = /\b(ubicaci[oó]n|direcci[oó]n|d[oó]nde|ubicados?|horarios?|tel[eé]fono|n[uú]mero|contacto|env[ií]o|entrega|forma\s+de\s+pago|c[oó]mo\s+(llego|pago|compro)|pago|pagar|tarjeta|efectivo|transferencia|cu[aá]nto\s+(cuesta|vale|tarda)|qu[eé]\s+(precio|medida|tamaño)|tienen|manejan|hacen|instalan)\b/i.test(cleanMsg);
+
+  // If conversation was closed but user has a real question, re-open and let other handlers process
+  if ((convo.state === "closed" || convo.lastIntent === "closed") && (hasContinuation || hasProductRequest || hasQuestion)) {
+    console.log("🔄 Conversation was closed but user has a new question - re-opening");
+    await updateConversation(psid, { state: "active", lastIntent: "reopened" });
+    return null; // Let other handlers process the question
+  }
+
+  // If conversation is closed and this is just a simple acknowledgment, don't respond
+  if ((convo.state === "closed" || convo.lastIntent === "closed") && !hasContinuation && !hasProductRequest && !hasQuestion) {
+    console.log("🚫 Conversation already closed, not responding to farewell acknowledgment");
+    return { type: "no_response" };
+  }
+
+  // Check for online purchase objection - offer physical store
+  const prefersInPerson = /\b(no\s+compro\s+(en\s+)?l[ií]nea|no\s+compro\s+(por\s+)?internet|no\s+compro\s+en\s+mercado|prefiero\s+(en\s+)?persona|prefiero\s+ir|prefiero\s+tienda|no\s+me\s+gusta\s+(comprar\s+)?(en\s+)?l[ií]nea|mejor\s+en\s+persona|paso\s+a\s+(la\s+)?tienda|tienen\s+tienda\s+f[ií]sica|puedo\s+ir\s+a\s+comprar)\b/i.test(cleanMsg);
+
+  if (prefersInPerson) {
+    console.log("🏪 Online purchase objection detected - offering physical store");
+    await updateConversation(psid, { lastIntent: "prefers_in_person", unknownCount: 0 });
+
+    return {
+      type: "text",
+      text: `¡Claro! También puedes visitarnos en nuestra tienda física:\n\n` +
+            `📍 Calle Loma de San Gremal 108, bodega 73, Navex Park, Querétaro.\n\n` +
+            `🕐 Horario: Lunes a Viernes de 9:00 a 18:00 hrs, Sábados de 9:00 a 14:00 hrs.\n\n` +
+            `¡Te esperamos!`
+    };
+  }
 
   // Expanded goodbye patterns to include common Mexican closing phrases and deferment messages
   const isGoodbye = /\b(gracias|perfecto|excelente|muy amable|adiós|adios|bye|nos vemos|hasta luego|nos hablamos|te hablo|luego hablo|después|despu[ée]s\s+(te\s+)?(contacto|hablo|comunico|escribo)|ma[ñn]ana\s+(me\s+|te\s+)?(comunico|hablo|contacto|escribo)|analizar|lo\s+(voy\s+a\s+)?analizo|escribo\s+(más\s+|mas\s+)?tarde|te\s+escribo|lo\s+pienso|más\s+tarde|mas\s+tarde|estamos\s+en\s+contacto|estaremos\s+en\s+contacto|seguimos\s+en\s+contacto)\b/i.test(cleanMsg);
@@ -109,15 +132,26 @@ async function handleThanks(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
   if (!hasContinuation && !hasProductRequest && !hasQuestion && isGoodbye) {
     await updateConversation(psid, { state: "closed", unknownCount: 0, lastIntent: "closed" });
     const userName = convo.userName;
+
+    // Check if conversation was about malla sombra to include video link
+    const wasMallaSombra = convo.productInterest === 'malla_sombra' ||
+      convo.productSpecs?.productType === 'malla_sombra' ||
+      convo.lastIntent?.includes('malla') ||
+      convo.poiRootId; // POI lock indicates product conversation
+
+    const videoMessage = wasMallaSombra
+      ? `\n\n📽️ Conoce más sobre nuestra malla sombra en este video: https://youtube.com/shorts/XLGydjdE7mY`
+      : '';
+
     if (userName) {
       return {
         type: "text",
-        text: `¡Gracias a ti, ${userName}! Soy ${BOT_PERSONA_NAME} y fue un gusto ayudarte. ¡Que tengas un excelente día!`
+        text: `¡Gracias a ti, ${userName}! Soy ${BOT_PERSONA_NAME} y fue un gusto ayudarte. ¡Que tengas un excelente día!${videoMessage}`
       };
     }
     return {
       type: "text",
-      text: `¡Gracias a ti! Soy ${BOT_PERSONA_NAME} y fue un gusto ayudarte. ¡Que tengas un excelente día!`
+      text: `¡Gracias a ti! Soy ${BOT_PERSONA_NAME} y fue un gusto ayudarte. ¡Que tengas un excelente día!${videoMessage}`
     };
   }
   return null;
