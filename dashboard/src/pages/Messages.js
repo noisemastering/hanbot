@@ -26,9 +26,9 @@ function Messages() {
   // Helper function to get channel icon and label
   const getChannelDisplay = (channel) => {
     if (channel === 'whatsapp') {
-      return { icon: '💬', label: 'WhatsApp', color: '#25D366' };
+      return { icon: 'WA', label: 'WhatsApp', color: '#25D366', isText: true };
     }
-    return { icon: '👥', label: 'Facebook', color: '#1877F2' };
+    return { icon: 'FB', label: 'Facebook', color: '#1877F2', isText: true };
   };
 
   // Helper function to determine handoff type and colors
@@ -369,7 +369,17 @@ function Messages() {
                   }}
                 >
                   <td style={{ padding: "10px", textAlign: "center" }}>
-                    <span style={{ fontSize: "1.2rem" }} title={channelDisplay.label}>
+                    <span
+                      style={{
+                        backgroundColor: channelDisplay.color,
+                        color: 'white',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '0.75rem',
+                        fontWeight: 'bold'
+                      }}
+                      title={channelDisplay.label}
+                    >
                       {channelDisplay.icon}
                     </span>
                   </td>
@@ -574,7 +584,17 @@ function Messages() {
                 }}
               >
                 <td style={{ padding: "8px", textAlign: "center" }}>
-                  <span style={{ fontSize: "1.2rem" }} title={channelDisplay.label}>
+                  <span
+                    style={{
+                      backgroundColor: channelDisplay.color,
+                      color: 'white',
+                      padding: '4px 8px',
+                      borderRadius: '4px',
+                      fontSize: '0.75rem',
+                      fontWeight: 'bold'
+                    }}
+                    title={channelDisplay.label}
+                  >
                     {channelDisplay.icon}
                   </span>
                 </td>
@@ -707,7 +727,17 @@ function Messages() {
             {/* Header */}
             <div style={{ padding: "1rem", borderBottom: "1px solid #2a2a2a", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                <span style={{ fontSize: "1.5rem" }} title={getChannelDisplay(selectedChannel).label}>
+                <span
+                  style={{
+                    backgroundColor: getChannelDisplay(selectedChannel).color,
+                    color: 'white',
+                    padding: '6px 12px',
+                    borderRadius: '4px',
+                    fontSize: '0.9rem',
+                    fontWeight: 'bold'
+                  }}
+                  title={getChannelDisplay(selectedChannel).label}
+                >
                   {getChannelDisplay(selectedChannel).icon}
                 </span>
                 <h3 style={{ margin: 0, color: "white" }}>
