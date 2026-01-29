@@ -173,6 +173,19 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 🔙 WILL GET BACK - "mañana te aviso", "voy a medir", "al rato te confirmo"
+  // Customer says they'll return with info - just acknowledge politely
+  const willGetBackPatterns = /\b(mañana|ahorita|al\s+rato|en\s+un\s+momento|despu[eé]s|luego|m[aá]s\s+tarde)\s+(te\s+)?(aviso|confirmo|digo|escribo|mando|contacto|marco|llamo|hablo)\b|\b(voy\s+a\s+medir|tengo\s+que\s+medir|necesito\s+medir|deja\s+mido|déjame\s+medir)\b|\b(te\s+)?(aviso|confirmo|digo)\s+(mañana|al\s+rato|luego|despu[eé]s)\b/i;
+
+  if (willGetBackPatterns.test(msg)) {
+    console.log("🔙 Will get back detected:", msg);
+    await updateConversation(psid, { lastIntent: "will_get_back", unknownCount: 0 });
+    return {
+      type: "text",
+      text: "Perfecto, quedamos a tus órdenes."
+    };
+  }
+
   // 🔄 PRODUCT COMPARISON - "diferencia entre X y Y", "cual es mejor"
   // Handle questions comparing products (raschel vs monofilamento, etc.)
   const comparisonPatterns = /\b(diferencia|diferencias|distinto|distinta|comparar|comparaci[oó]n|vs|versus)\b.*\b(malla|raschel|monofilamento|beige|negro)/i;
