@@ -32,6 +32,20 @@ function Messages() {
     return { icon: 'FB', label: 'Facebook', color: '#1877F2', isText: true };
   };
 
+  // Helper function to get purchase intent display
+  const getIntentDisplay = (intent) => {
+    switch (intent) {
+      case 'high':
+        return { emoji: '🟢', color: '#4caf50', label: 'Alta' };
+      case 'medium':
+        return { emoji: '🟡', color: '#ff9800', label: 'Media' };
+      case 'low':
+        return { emoji: '🔴', color: '#f44336', label: 'Baja' };
+      default:
+        return { emoji: '⚪', color: '#666', label: '-' };
+    }
+  };
+
   // Helper function to determine handoff type and colors
   const getHandoffStyle = (handoffReason) => {
     // Sales opportunity handoffs (green/teal)
@@ -348,6 +362,7 @@ function Messages() {
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Canal</th>
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Fecha</th>
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Último mensaje</th>
+              <th style={{ padding: "10px", textAlign: "center", borderBottom: "2px solid #555" }}>Intención</th>
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Vocero</th>
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Acción</th>
             </tr>
@@ -401,6 +416,11 @@ function Messages() {
                   <td style={{ padding: "10px", paddingRight: "30px", maxWidth: "350px", overflow: "hidden", textOverflow: "ellipsis", color: "white", position: "relative", whiteSpace: "nowrap" }}>
                     {getMessageExcerpt(msg.text)}
                     <span style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)" }}>{msg.senderType === "bot" ? "🤖" : "👤"}</span>
+                  </td>
+                  <td style={{ padding: "10px", textAlign: "center" }}>
+                    <span title={getIntentDisplay(status?.purchaseIntent).label} style={{ fontSize: "1.2rem" }}>
+                      {getIntentDisplay(status?.purchaseIntent).emoji}
+                    </span>
                   </td>
                   <td style={{ padding: "10px" }}>
                     {needsHelp && handoffStyle ? (
@@ -562,6 +582,7 @@ function Messages() {
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Canal</th>
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Fecha</th>
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Último mensaje</th>
+            <th style={{ padding: "8px", textAlign: "center", borderBottom: "2px solid #555" }}>Intención</th>
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Tipo</th>
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Vocero</th>
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Acción</th>
@@ -609,6 +630,11 @@ function Messages() {
                 <td style={{ padding: "8px", paddingRight: "30px", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", color: "white", position: "relative", whiteSpace: "nowrap" }}>
                   {getMessageExcerpt(msg.text)}
                   <span style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)" }}>{msg.senderType === "bot" ? "🤖" : "👤"}</span>
+                </td>
+                <td style={{ padding: "8px", textAlign: "center" }}>
+                  <span title={getIntentDisplay(status?.purchaseIntent).label} style={{ fontSize: "1.2rem" }}>
+                    {getIntentDisplay(status?.purchaseIntent).emoji}
+                  </span>
                 </td>
                 <td style={{ padding: "8px", color: msg.senderType === "bot" ? "lightblue" : "white" }}>
                   {msg.senderType}

@@ -816,22 +816,8 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
-  // 💬 DIRECT QUOTE REQUEST - "cotízame", "me la puedes cotizar", etc.
-  // These require human attention, direct to WhatsApp
-  if (/\b(cot[ií]za(me|la|lo)?|me\s+(la\s+)?puedes?\s+cotizar|puedes?\s+cotizar(me|la|lo)?|dame\s+cotizaci[oó]n|hazme\s+cotizaci[oó]n|necesito\s+cotizaci[oó]n)\b/i.test(msg)) {
-    const info = await getBusinessInfo();
-    const whatsappLink = "https://wa.me/524425957432";
-
-    await updateConversation(psid, { lastIntent: "direct_quote_request", state: "needs_human" });
-
-    return {
-      type: "text",
-      text: "Con gusto te cotizamos. Para atención personalizada, contáctanos:\n\n" +
-            `💬 WhatsApp: ${whatsappLink}\n` +
-            `📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n` +
-            `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`
-    };
-  }
+  // NOTE: "cotízame" / quote requests are handled by product flows directly
+  // WhatsApp contact is ONLY for wholesale/resellers, not retail quotes
 
   // 💰 SIMPLE PRICE QUERY - "Precio!", "Precio?", "Precio", "Costo"
   // This is a standalone intent - user is asking for pricing without specifying product

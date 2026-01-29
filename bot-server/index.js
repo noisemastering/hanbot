@@ -567,6 +567,7 @@ app.get("/api/conversation/:psid/status", async (req, res) => {
       handoffRequested: convo?.handoffRequested || false,
       handoffReason: convo?.handoffReason || null,
       handoffTimestamp: convo?.handoffTimestamp || null,
+      purchaseIntent: convo?.purchaseIntent || null,
       timestamp: new Date()
     });
   } catch (error) {
