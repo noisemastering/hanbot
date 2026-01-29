@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import API from "../api";
 import TrackedLinkGenerator from "../components/TrackedLinkGenerator";
+import PurchaseIntentStats from "../components/PurchaseIntentStats";
 
 function Messages() {
   const [messages, setMessages] = useState([]);
@@ -329,6 +330,11 @@ function Messages() {
         >
           {refreshing ? "🔄 Actualizando..." : "🔄 Actualizar"}
         </button>
+      </div>
+
+      {/* Purchase Intent Stats */}
+      <div style={{ marginBottom: "2rem" }}>
+        <PurchaseIntentStats />
       </div>
 
       {/* SECTION 1: Recent Activity Table */}
