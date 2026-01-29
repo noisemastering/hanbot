@@ -12,10 +12,20 @@ function parseDimensions(text) {
   if (!text) return null;
 
   // Normalize: replace commas with dots, convert to lowercase
-  const normalized = text.toLowerCase()
+  let normalized = text.toLowerCase()
     .replace(/,/g, '.')
-    .replace(/metros?/g, 'm')
     .replace(/\s+/g, ' ');
+
+  // Handle fractions BEFORE removing units: "7mts y 1/2" or "7 y medio" → "7.5"
+  normalized = normalized
+    .replace(/(\d+)\s*(?:m|mts?|metros?)?\s*y\s*1\/2/g, (_, num) => `${parseFloat(num) + 0.5}`)
+    .replace(/(\d+)\s*(?:m|mts?|metros?)?\s*y\s*medi[oa]/g, (_, num) => `${parseFloat(num) + 0.5}`)
+    .replace(/(\d+)\s*1\/2/g, (_, num) => `${parseFloat(num) + 0.5}`);
+
+  // Now normalize units
+  normalized = normalized
+    .replace(/mts?\.?/g, 'm')
+    .replace(/metros?/g, 'm');
 
   // Patterns to match dimensions (most specific first)
   const patterns = [
