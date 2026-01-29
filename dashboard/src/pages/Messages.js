@@ -32,16 +32,16 @@ function Messages() {
   };
 
   // Helper function to get purchase intent display
+  // Default to medium (blue) if no score yet
   const getIntentDisplay = (intent) => {
     switch (intent) {
       case 'high':
         return { emoji: '🟢', color: '#4caf50', label: 'Alta' };
-      case 'medium':
-        return { emoji: '🔵', color: '#2196F3', label: 'Media' };
       case 'low':
         return { emoji: '🔴', color: '#f44336', label: 'Baja' };
+      case 'medium':
       default:
-        return { emoji: '⚪', color: '#666', label: '-' };
+        return { emoji: '🔵', color: '#2196F3', label: 'Media' };
     }
   };
 
