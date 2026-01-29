@@ -328,8 +328,7 @@ async function generateReply(userMessage, psid, referral = null) {
     const isGenericMeasureQuery = /\b(medidas|tamaños?|dimensiones|cu[aá]nto|precio|cuestan)\b.*\b(medidas|disponibles|tienen|hay|manejan)\b/i.test(cleanMsg) && !dimensions;
 
     if (dimensions || isGenericMeasureQuery) {
-      const campaignRef = convo.campaignRef || null;
-      const availableSizes = await getAvailableSizes(campaignRef);
+      const availableSizes = await getAvailableSizes(convo);
 
       if (dimensions) {
         // User specified exact dimensions
