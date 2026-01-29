@@ -13,6 +13,8 @@ function Messages() {
   const [, setUsers] = useState({}); // eslint-disable-line no-unused-vars
   const [refreshing, setRefreshing] = useState(false);
   const [showLinkGenerator, setShowLinkGenerator] = useState(false);
+  const [replyText, setReplyText] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
 
   // Helper function to show message excerpt
   const getMessageExcerpt = (text, maxLength = 60) => {
@@ -198,6 +200,42 @@ function Messages() {
       alert(`❌ Error: ${err.response?.data?.error || err.message}`);
     } finally {
       setLoading(prev => ({ ...prev, [psid]: false }));
+    }
+  };
+
+  // Send reply to user (works for both Messenger and WhatsApp)
+  const handleSendReply = async () => {
+    if (!replyText.trim() || !selectedPsid) return;
+
+    setSendingReply(true);
+    try {
+      const response = await API.post('/conversations/reply', {
+        psid: selectedPsid,
+        text: replyText.trim()
+      });
+
+      if (response.data.success) {
+        // Add the sent message to the conversation
+        setFullConversation(prev => [...prev, {
+          text: replyText.trim(),
+          senderType: 'human',
+          timestamp: new Date().toISOString()
+        }]);
+
+        // Clear the input
+        setReplyText('');
+
+        // Update status to show human is active
+        setConversationStatuses(prev => ({
+          ...prev,
+          [selectedPsid]: { ...prev[selectedPsid], humanActive: true }
+        }));
+      }
+    } catch (err) {
+      console.error("Error sending reply:", err);
+      alert(`❌ Error enviando mensaje: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setSendingReply(false);
     }
   };
 
@@ -702,16 +740,55 @@ function Messages() {
                     marginBottom: "1rem",
                     padding: "0.75rem",
                     borderRadius: "8px",
-                    backgroundColor: msg.senderType === "bot" ? "#1e3a5f" : "#2a2a2a"
+                    backgroundColor: msg.senderType === "bot" ? "#1e3a5f" : msg.senderType === "human" ? "#3a5f1e" : "#2a2a2a"
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem", fontSize: "0.85rem", color: "#888" }}>
-                    <span>{msg.senderType === "bot" ? "🤖 Bot" : "👤 Usuario"}</span>
+                    <span>{msg.senderType === "bot" ? "🤖 Bot" : msg.senderType === "human" ? "👨‍💼 Agente" : "👤 Usuario"}</span>
                     <span>{new Date(msg.timestamp).toLocaleString()}</span>
                   </div>
                   <p style={{ margin: 0, whiteSpace: "pre-wrap", color: "white" }}>{msg.text}</p>
                 </div>
               ))}
+            </div>
+
+            {/* Reply Input */}
+            <div style={{ padding: "1rem", borderTop: "1px solid #2a2a2a" }}>
+              <div style={{ display: "flex", gap: "0.5rem" }}>
+                <input
+                  type="text"
+                  value={replyText}
+                  onChange={(e) => setReplyText(e.target.value)}
+                  onKeyPress={(e) => e.key === 'Enter' && !sendingReply && handleSendReply()}
+                  placeholder={`Responder por ${getChannelDisplay(selectedChannel).label}...`}
+                  style={{
+                    flex: 1,
+                    padding: "12px",
+                    borderRadius: "8px",
+                    border: `2px solid ${getChannelDisplay(selectedChannel).color}40`,
+                    backgroundColor: "#2a2a2a",
+                    color: "white",
+                    fontSize: "1rem"
+                  }}
+                  disabled={sendingReply}
+                />
+                <button
+                  onClick={handleSendReply}
+                  disabled={sendingReply || !replyText.trim()}
+                  style={{
+                    padding: "12px 24px",
+                    backgroundColor: getChannelDisplay(selectedChannel).color,
+                    color: "white",
+                    border: "none",
+                    borderRadius: "8px",
+                    cursor: sendingReply || !replyText.trim() ? "not-allowed" : "pointer",
+                    opacity: sendingReply || !replyText.trim() ? 0.6 : 1,
+                    fontWeight: "bold"
+                  }}
+                >
+                  {sendingReply ? "..." : `Enviar ${getChannelDisplay(selectedChannel).icon}`}
+                </button>
+              </div>
             </div>
 
             {/* Footer with handover controls */}
