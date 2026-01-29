@@ -35,6 +35,7 @@ const { handleRollQuery } = require("../core/rollQuery");
 const { getOfferHook, shouldMentionOffer, applyAdContext, getAngleMessaging } = require("../utils/adContextHelper");
 const { isContextualMention, isExplicitProductRequest } = require("../utils/productMatcher");
 const { getProductDisplayName, determineVerbosity, formatProductResponse } = require("../utils/productEnricher");
+const { detectFutureInterest } = require("../utils/futureInterest");
 
 // Helper to add offer hook to responses when appropriate
 function addOfferHookIfRelevant(responseText, convo) {
@@ -144,6 +145,31 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       type: "text",
       text: "Gracias por avisarnos. Déjame verificar la disponibilidad con nuestro equipo.\n\n" +
             "En un momento te atienden para confirmar el stock."
+    };
+  }
+
+  // 📅 FUTURE PURCHASE INTENT - "en un par de meses", "más adelante", "sí me interesa pero..."
+  // Detect when customer is interested but will buy later, save for follow-up
+  const futureInterest = detectFutureInterest(msg, convo);
+  if (futureInterest) {
+    console.log("📅 Future purchase intent detected:", {
+      timeframe: futureInterest.timeframeRaw,
+      days: futureInterest.timeframeDays,
+      followUp: futureInterest.followUpDate
+    });
+
+    await updateConversation(psid, {
+      lastIntent: "future_interest",
+      futureInterest: futureInterest
+    });
+
+    // Friendly acknowledgment without being pushy
+    const followUpMonth = futureInterest.followUpDate.toLocaleDateString('es-MX', { month: 'long' });
+    return {
+      type: "text",
+      text: `¡Perfecto! Sin problema, aquí estaremos cuando lo necesites. 😊\n\n` +
+            `Te tengo anotado para darte seguimiento ${futureInterest.timeframeRaw}.\n\n` +
+            `Cualquier duda antes, con gusto te ayudamos. ¡Que tengas excelente día!`
     };
   }
 

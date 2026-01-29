@@ -98,6 +98,19 @@ const conversationSchema = new mongoose.Schema({
     contact: { type: String, default: null },     // WhatsApp or email
     contactType: { type: String, enum: ['whatsapp', 'email', null], default: null },
     capturedAt: { type: Date, default: null }
+  },
+
+  // Future purchase intent tracking
+  futureInterest: {
+    interested: { type: Boolean, default: false },
+    timeframeRaw: { type: String, default: null },      // Original text: "en un par de meses"
+    timeframeDays: { type: Number, default: null },     // Estimated days: 60
+    followUpDate: { type: Date, default: null },        // Calculated follow-up date
+    productInterest: { type: String, default: null },   // What they were interested in
+    originalMessage: { type: String, default: null },   // The message that triggered this
+    detectedAt: { type: Date, default: null },
+    followedUp: { type: Boolean, default: false },      // Has been followed up
+    followedUpAt: { type: Date, default: null }
   }
 });
 

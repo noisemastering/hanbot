@@ -53,6 +53,59 @@ router.get('/', async (req, res) => {
   }
 });
 
+// GET /conversations/follow-ups - Get leads with future purchase intent
+// IMPORTANT: This route must be before /:psid to avoid matching "follow-ups" as a psid
+router.get('/follow-ups', async (req, res) => {
+  try {
+    const { status } = req.query; // 'pending', 'due', 'all'
+
+    const query = {
+      'futureInterest.interested': true
+    };
+
+    // Filter by status
+    if (status === 'pending') {
+      query['futureInterest.followedUp'] = { $ne: true };
+      query['futureInterest.followUpDate'] = { $gt: new Date() };
+    } else if (status === 'due') {
+      query['futureInterest.followedUp'] = { $ne: true };
+      query['futureInterest.followUpDate'] = { $lte: new Date() };
+    }
+
+    const followUps = await Conversation.find(query)
+      .sort({ 'futureInterest.followUpDate': 1 })
+      .lean();
+
+    // Get last message for each conversation
+    const enrichedFollowUps = await Promise.all(followUps.map(async (conv) => {
+      const lastMessage = await Message.findOne({ psid: conv.psid })
+        .sort({ timestamp: -1 })
+        .lean();
+
+      return {
+        psid: conv.psid,
+        channel: conv.channel || 'facebook',
+        futureInterest: conv.futureInterest,
+        productInterest: conv.productInterest || conv.futureInterest?.productInterest,
+        requestedSize: conv.requestedSize,
+        city: conv.city,
+        lastMessage: lastMessage?.text,
+        lastMessageAt: lastMessage?.timestamp
+      };
+    }));
+
+    res.json({
+      success: true,
+      total: enrichedFollowUps.length,
+      data: enrichedFollowUps
+    });
+
+  } catch (error) {
+    console.error('Error fetching follow-ups:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch follow-ups' });
+  }
+});
+
 // GET /conversations/:psid - Get messages for specific user with channel information
 router.get('/:psid', async (req, res) => {
   try {
@@ -138,6 +191,32 @@ router.post('/reply', async (req, res) => {
       success: false,
       error: error.message || 'Failed to send reply'
     });
+  }
+});
+
+// POST /conversations/:psid/mark-followed-up - Mark a lead as followed up
+router.post('/:psid/mark-followed-up', async (req, res) => {
+  try {
+    const { psid } = req.params;
+
+    const result = await Conversation.findOneAndUpdate(
+      { psid },
+      {
+        'futureInterest.followedUp': true,
+        'futureInterest.followedUpAt': new Date()
+      },
+      { new: true }
+    );
+
+    if (!result) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+
+    res.json({ success: true, data: result.futureInterest });
+
+  } catch (error) {
+    console.error('Error marking follow-up:', error);
+    res.status(500).json({ success: false, error: 'Failed to mark follow-up' });
   }
 });
 
