@@ -1779,34 +1779,37 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
-  // Check for color query ONLY if no dimensions are present
-  // If dimensions are present, let the dimension handler deal with it
-  if (isColorQuery(msg) && !dimensions) {
-    // Detect if this is a color CONFIRMATION (user confirming they want beige)
-    // vs a color INQUIRY (user asking what colors are available)
+  // Check for color request/query ONLY if no dimensions are present
+  // Handles: "la quiero en verde", "de color verde", "qué colores tienen", etc.
+  const wantsUnavailableColor = /\b(quiero|quier[oa]|en\s+)?(verde|azul|blanca?|roja?|gris|rosa|morad[oa])\b/i.test(msg);
+  const isGeneralColorQuery = isColorQuery(msg) && !wantsUnavailableColor;
+
+  if ((wantsUnavailableColor || isGeneralColorQuery) && !dimensions) {
+    // Detect if this is a color CONFIRMATION (user confirming they want beige/negro)
     const isConfirmation = /\b(esta\s+bien|está\s+bien|ok|perfecto|si|sí|dale|claro|ese|esa|me\s+gusta)\b/i.test(msg);
+    const wantsAvailableColor = /\b(beige|bex|negr[oa])\b/i.test(msg);
 
-    if (isConfirmation) {
-      // User is confirming they want beige - show products directly
-      await updateConversation(psid, { lastIntent: "color_confirmed", unknownCount: 0 });
-
-      // Don't dump entire product list - ask for dimensions instead
+    if (wantsUnavailableColor) {
+      // User wants a color we don't have - tell them directly
+      await updateConversation(psid, { lastIntent: "color_unavailable", unknownCount: 0 });
       return {
         type: "text",
-        text: "¡Perfecto! Tenemos varias medidas disponibles en beige, desde 2x2m hasta rollos de 100m.\n\n" +
-              "¿Qué medida necesitas para tu proyecto?"
+        text: "Ese color no lo manejamos. Solo tenemos disponible en beige y negro.\n\n¿Te interesa en alguno de esos colores?"
+      };
+    } else if (isConfirmation || wantsAvailableColor) {
+      // User is confirming they want beige/negro
+      await updateConversation(psid, { lastIntent: "color_confirmed", unknownCount: 0 });
+      return {
+        type: "text",
+        text: "¡Perfecto! Tenemos varias medidas disponibles, desde 2x2m hasta 6x12m.\n\n" +
+              "¿Qué medida necesitas?"
       };
     } else {
-      // User is asking about colors - just inform we only have beige (don't ask about prices if we already gave them)
+      // General color query - what colors do we have?
       await updateConversation(psid, { lastIntent: "color_query", unknownCount: 0 });
-      const colorResponses = [
-        `Por ahora solo manejamos malla sombra beige en versión confeccionada 🌿`,
-        `Actualmente solo tenemos disponible el color beige en malla confeccionada.`,
-        `De momento contamos únicamente con beige, que es nuestro color más popular 😊`
-      ];
       return {
         type: "text",
-        text: colorResponses[Math.floor(Math.random() * colorResponses.length)]
+        text: "Manejamos malla sombra confeccionada en beige y negro. ¿Cuál prefieres?"
       };
     }
   }
