@@ -118,16 +118,56 @@ router.get("/stats", async (req, res) => {
       if (endDate) filter.createdAt.$lte = new Date(endDate + 'T23:59:59.999');
     }
 
+    const Conversation = require("../models/Conversation");
+
     const [
       totalLinks,
       totalClicks,
       totalConversions,
-      uniqueUsers
+      uniqueUsers,
+      topProduct,
+      busiestDay,
+      topAd,
+      handovers
     ] = await Promise.all([
       ClickLog.countDocuments(filter),
       ClickLog.countDocuments({ ...filter, clicked: true }),
       ClickLog.countDocuments({ ...filter, converted: true }),
-      ClickLog.distinct('psid', filter).then(arr => arr.length)
+      ClickLog.distinct('psid', filter).then(arr => arr.length),
+      // Most popular product (by clicks)
+      ClickLog.aggregate([
+        { $match: { ...filter, clicked: true, productName: { $exists: true, $ne: null } } },
+        { $group: { _id: "$productName", clicks: { $sum: 1 } } },
+        { $sort: { clicks: -1 } },
+        { $limit: 1 }
+      ]).then(res => res[0] || null),
+      // Busiest day
+      ClickLog.aggregate([
+        { $match: { ...filter, clicked: true } },
+        { $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$clickedAt" } },
+          clicks: { $sum: 1 }
+        }},
+        { $sort: { clicks: -1 } },
+        { $limit: 1 }
+      ]).then(res => res[0] || null),
+      // Top ad (by clicks)
+      ClickLog.aggregate([
+        { $match: { ...filter, clicked: true, adId: { $exists: true, $ne: null } } },
+        { $group: { _id: "$adId", clicks: { $sum: 1 } } },
+        { $sort: { clicks: -1 } },
+        { $limit: 1 }
+      ]).then(res => res[0] || null),
+      // Handovers count
+      Conversation.countDocuments({
+        handoffRequested: true,
+        ...(startDate || endDate ? {
+          handoffTimestamp: {
+            ...(startDate ? { $gte: new Date(startDate + 'T00:00:00') } : {}),
+            ...(endDate ? { $lte: new Date(endDate + 'T23:59:59.999') } : {})
+          }
+        } : {})
+      })
     ]);
 
     res.json({
@@ -138,7 +178,15 @@ router.get("/stats", async (req, res) => {
         totalConversions,
         uniqueUsers,
         clickRate: totalLinks > 0 ? ((totalClicks / totalLinks) * 100).toFixed(2) : 0,
-        conversionRate: totalClicks > 0 ? ((totalConversions / totalClicks) * 100).toFixed(2) : 0
+        conversionRate: totalClicks > 0 ? ((totalConversions / totalClicks) * 100).toFixed(2) : 0,
+        topProduct: topProduct ? { name: topProduct._id, clicks: topProduct.clicks } : null,
+        busiestDay: busiestDay ? {
+          date: busiestDay._id,
+          dateLabel: new Date(busiestDay._id + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'short', month: 'short', day: 'numeric' }),
+          clicks: busiestDay.clicks
+        } : null,
+        topAd: topAd ? { adId: topAd._id, clicks: topAd.clicks } : null,
+        handovers
       }
     });
   } catch (error) {

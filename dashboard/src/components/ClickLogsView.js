@@ -264,6 +264,61 @@ function ClickLogsView() {
         </div>
       </div>
 
+      {/* Additional Stats */}
+      {stats && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          {/* Top Product */}
+          <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
+            <div className="text-gray-400 text-sm mb-1">Producto más popular</div>
+            {stats.topProduct ? (
+              <>
+                <div className="text-lg font-bold text-white truncate" title={stats.topProduct.name}>
+                  {stats.topProduct.name}
+                </div>
+                <div className="text-xs text-green-400 mt-1">{stats.topProduct.clicks} clicks</div>
+              </>
+            ) : (
+              <div className="text-gray-500">Sin datos</div>
+            )}
+          </div>
+
+          {/* Busiest Day */}
+          <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
+            <div className="text-gray-400 text-sm mb-1">Día más activo</div>
+            {stats.busiestDay ? (
+              <>
+                <div className="text-lg font-bold text-white">{stats.busiestDay.dateLabel}</div>
+                <div className="text-xs text-blue-400 mt-1">{stats.busiestDay.clicks} clicks</div>
+              </>
+            ) : (
+              <div className="text-gray-500">Sin datos</div>
+            )}
+          </div>
+
+          {/* Handovers */}
+          <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
+            <div className="text-gray-400 text-sm mb-1">Handovers</div>
+            <div className="text-2xl font-bold text-white">{stats.handovers || 0}</div>
+            <div className="text-xs text-yellow-400 mt-1">Conversaciones transferidas</div>
+          </div>
+
+          {/* Top Ad */}
+          <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
+            <div className="text-gray-400 text-sm mb-1">Anuncio top</div>
+            {stats.topAd ? (
+              <>
+                <div className="text-lg font-bold text-white font-mono truncate" title={stats.topAd.adId}>
+                  {stats.topAd.adId.slice(-8)}
+                </div>
+                <div className="text-xs text-purple-400 mt-1">{stats.topAd.clicks} clicks</div>
+              </>
+            ) : (
+              <div className="text-gray-500">Sin datos de anuncios</div>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Click Logs Table */}
       {loading ? (
         <div className="text-center py-12">
