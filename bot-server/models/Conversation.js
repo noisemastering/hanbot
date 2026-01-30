@@ -62,6 +62,11 @@ const conversationSchema = new mongoose.Schema({
     offeredAt: { type: Date, default: Date.now }
   }],
 
+  // Custom order flow (oversized orders needing human quote)
+  customOrderSize: { type: String, default: null },     // Requested size e.g. "10x12m"
+  customOrderPurpose: { type: String, default: null },  // What they want to protect
+  customOrderZipcode: { type: String, default: null },  // Their zip code
+
   // Human handoff tracking
   handoffRequested: { type: Boolean, default: false },  // User explicitly requested human
   handoffReason: { type: String, default: null },      // Why handoff was triggered

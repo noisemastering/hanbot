@@ -3,6 +3,7 @@ const { updateConversation } = require("../../conversationManager");
 const { getCampaignProductFromConversation } = require("../../utils/productCompatibility");
 const { generateClickLink } = require("../../tracking");
 const { getAvailableSizes } = require("../../measureHandler");
+const { sendHandoffNotification } = require("../../services/pushNotifications");
 
 // --- Helpers ---
 function parseSize(str) {
@@ -159,21 +160,43 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
   // This must come BEFORE generic price check so "precio de 3x4" handles the dimension
   const requested = parseSize(clean);
   if (requested) {
-    // Check for fractional meters
+    // Check for fractional meters - hand off to human for custom quote
     const hasFractions = (requested.w % 1 !== 0) || (requested.h % 1 !== 0);
 
     if (hasFractions) {
-      // Explain we only have whole meters and show closest options
-      await updateConversation(psid, { lastIntent: "size_fractional" });
+      console.log(`📏 Fractional meters detected in campaign (${requested.w}x${requested.h}m), triggering handoff`);
 
-      const { lower, upper } = findClosestUpDown(variants, requested);
-      let response = `📏 Solo manejamos medidas en metros completos.\n\n`;
-      response += `Para ${requested.w}x${requested.h}m, las opciones más cercanas son:\n`;
-      if (lower) response += `${await variantLine(lower, true, psid, convo)}\n`;
-      if (upper) response += `${await variantLine(upper, true, psid, convo)}\n`;
-      response += `\n¿Te interesa alguna de estas medidas?`;
+      await updateConversation(psid, {
+        lastIntent: "fractional_meters_handoff",
+        handoffRequested: true,
+        handoffReason: `Medida con decimales: ${requested.w}x${requested.h}m`,
+        handoffTimestamp: new Date(),
+        state: "needs_human",
+        unknownCount: 0
+      });
 
-      return { type: "text", text: response };
+      // Send push notification
+      sendHandoffNotification(psid, `Medida con decimales: ${requested.w}x${requested.h}m - requiere atención`).catch(err => {
+        console.error("❌ Failed to send push notification:", err);
+      });
+
+      // Find closest standard size to offer while they wait
+      let linkText = "";
+      try {
+        const { lower, upper } = findClosestUpDown(variants, requested);
+        const closestOption = upper || lower;
+        if (closestOption) {
+          const line = await variantLine(closestOption, true, psid, convo);
+          linkText = `\n\nMientras tanto, la medida estándar más cercana por si te resulta útil:\n${line}`;
+        }
+      } catch (err) {
+        console.error("Error getting closest size link:", err);
+      }
+
+      return {
+        type: "text",
+        text: `Permíteme comunicarte con un especialista para cotizar la medida exacta (${requested.w}m x ${requested.h}m).` + linkText
+      };
     }
 
     // 2a) ¿Existe exacta?

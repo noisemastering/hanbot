@@ -90,6 +90,61 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     campaignId: convo.campaignId
   });
 
+  // 🏭 CUSTOM ORDER FLOW - Handle multi-step collection for oversized orders
+  const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
+
+  // Step 2: Waiting for purpose (what they want to protect)
+  if (convo.lastIntent === "custom_order_awaiting_purpose") {
+    console.log("🏭 Custom order flow: received purpose response");
+
+    // Save purpose and ask for zip code
+    await updateConversation(psid, {
+      lastIntent: "custom_order_awaiting_zipcode",
+      customOrderPurpose: msg.substring(0, 200) // Save their answer (truncated)
+    });
+
+    return {
+      type: "text",
+      text: "¡Perfecto! ¿Me compartes tu código postal para verificar la disponibilidad de envío?"
+    };
+  }
+
+  // Step 3: Waiting for zip code - then handoff with video
+  if (convo.lastIntent === "custom_order_awaiting_zipcode") {
+    console.log("🏭 Custom order flow: received zipcode, triggering handoff");
+
+    // Extract zip code if present
+    const zipMatch = msg.match(/\b(\d{5})\b/);
+    const zipCode = zipMatch ? zipMatch[1] : msg.substring(0, 50);
+
+    // Get fresh conversation data (convo passed in may be stale)
+    const { getConversation } = require("../../conversationManager");
+    const freshConvo = await getConversation(psid);
+    const orderSize = freshConvo.customOrderSize || convo.customOrderSize || 'grande';
+    const orderPurpose = freshConvo.customOrderPurpose || convo.customOrderPurpose || 'no especificado';
+
+    await updateConversation(psid, {
+      lastIntent: "custom_order_handoff",
+      handoffRequested: true,
+      handoffReason: `Pedido especial ${orderSize} - Uso: ${orderPurpose} - CP: ${zipCode}`,
+      handoffTimestamp: new Date(),
+      state: "needs_human",
+      customOrderZipcode: zipCode,
+      unknownCount: 0
+    });
+
+    // Send push notification with collected info
+    sendHandoffNotification(psid, `Pedido especial: ${orderSize}\nUso: ${orderPurpose}\nCP: ${zipCode}`).catch(err => {
+      console.error("❌ Failed to send push notification:", err);
+    });
+
+    return {
+      type: "text",
+      text: `¡Gracias! Permíteme consultar con producción para la confección.\n\n` +
+            `📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
+    };
+  }
+
   // 😤 FRUSTRATION DETECTION - Escalate to human when user is frustrated
   // Patterns: "estoy diciendo", "no leen", "no entienden", "ya les dije", etc.
   const frustrationPatterns = /\b(estoy\s+diciendo|no\s+leen|no\s+entienden|ya\s+(te|les?)\s+dije|les?\s+repito|no\s+me\s+escuchan?|no\s+ponen\s+atenci[oó]n|acabo\s+de\s+decir|como\s+te\s+dije|como\s+ya\s+dije|ya\s+lo\s+dije|no\s+est[aá]n?\s+entendiendo|no\s+entendieron|no\s+entendi[oó]|pero\s+ya\s+dije|pero\s+estoy\s+diciendo|dios\s+me\s+los\s+bendiga)\b/i;
@@ -1099,23 +1154,20 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
             updates.$set = { offeredToShowAllSizes: true };
           }
 
-          // Handle custom order handoff (both sides >= 8m)
+          // Handle custom order (both sides >= 8m) - start collection flow
           if (sizeResponse.isCustomOrder && sizeResponse.requiresHandoff) {
-            console.log(`🏭 Custom order detected (${dimensions.width}x${dimensions.height}m), triggering handoff`);
+            console.log(`🏭 Custom order detected (${dimensions.width}x${dimensions.height}m), starting collection flow`);
 
             await updateConversation(psid, {
-              lastIntent: "custom_order_request",
-              handoffRequested: true,
-              handoffReason: `Custom order request: ${dimensions.width}x${dimensions.height}m - both sides >= 8m`,
-              handoffTimestamp: new Date(),
-              state: "needs_human",
+              lastIntent: "custom_order_awaiting_purpose",
+              customOrderSize: `${dimensions.width}x${dimensions.height}m`,
               unknownCount: 0
             });
 
-            // Send push notification
-            sendHandoffNotification(psid, `Pedido especial: ${dimensions.width}x${dimensions.height}m - requiere cotización personalizada`).catch(err => {
-              console.error("❌ Failed to send push notification:", err);
-            });
+            return {
+              type: "text",
+              text: `¡Claro! ¿Qué te gustaría proteger del sol?`
+            };
           } else if (updates.$push || updates.$set) {
             // Save offered size tracking
             await updateConversation(psid, updates);
@@ -1272,6 +1324,75 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   // 🔘 EYELETS/HOLES QUESTION - "ojitos", "argollas", "orificios"
   // Confeccionada comes with reinforced eyelets every 50cm
   if (/\b(ojito|ojitos|ojillo|ojillos|argolla|argollas|orificio|orificios|agujero|agujeros|hoyito|hoyitos|para\s+colgar|para\s+amarrar|donde\s+amarro|c[oó]mo\s+se\s+instala)\b/i.test(msg)) {
+    // Check if there are also dimensions in the message
+    const dimensions = parseDimensions(msg);
+    const hasFractions = dimensions && hasFractionalMeters(dimensions);
+
+    if (hasFractions) {
+      // Answer argollas AND hand off for fractional dimensions
+      console.log(`🔘📏 Argollas question with fractional dimensions (${dimensions.width}x${dimensions.height}m), answering both and triggering handoff`);
+
+      await updateConversation(psid, {
+        lastIntent: "fractional_meters_handoff",
+        handoffRequested: true,
+        handoffReason: `Medida con decimales: ${dimensions.width}x${dimensions.height}m (preguntó por argollas)`,
+        handoffTimestamp: new Date(),
+        state: "needs_human",
+        unknownCount: 0,
+        requestedSize: `${dimensions.width}x${dimensions.height}`
+      });
+
+      sendHandoffNotification(psid, `Medida con decimales: ${dimensions.width}x${dimensions.height}m con argollas - requiere atención`).catch(err => {
+        console.error("❌ Failed to send push notification:", err);
+      });
+
+      // Find closest standard size to offer while they wait
+      let linkText = "";
+      try {
+        const availableSizes = await getAvailableSizes(convo);
+        const closest = findClosestSizes(dimensions, availableSizes);
+        const closestOption = closest.bigger || closest.smaller || closest.exact;
+
+        if (closestOption) {
+          const sizeVariants = [closestOption.sizeStr, closestOption.sizeStr + 'm'];
+          const sizeMatch = closestOption.sizeStr.match(/(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)/);
+          if (sizeMatch) {
+            const swapped = `${sizeMatch[2]}x${sizeMatch[1]}`;
+            sizeVariants.push(swapped, swapped + 'm');
+          }
+
+          const product = await ProductFamily.findOne({
+            size: { $in: sizeVariants },
+            sellable: true,
+            active: true
+          });
+
+          const productLink = getProductLink(product);
+          if (productLink) {
+            const trackedLink = await generateClickLink(psid, productLink, {
+              productName: product?.name,
+              productId: product?._id,
+              campaignId: convo.campaignId,
+              adSetId: convo.adSetId,
+              adId: convo.adId,
+              city: convo.city,
+              stateMx: convo.stateMx
+            });
+            linkText = `\n\nMientras tanto, la medida estándar más cercana es ${closestOption.sizeStr} por si te resulta útil $${closestOption.price}:\n${trackedLink}`;
+          }
+        }
+      } catch (err) {
+        console.error("Error getting closest size link:", err);
+      }
+
+      return {
+        type: "text",
+        text: `Sí, nuestra malla confeccionada viene con ojillos reforzados cada 50cm en todo el perímetro, lista para instalar.\n\n` +
+              `Permíteme comunicarte con un especialista para cotizar la medida exacta (${dimensions.width}m x ${dimensions.height}m).` +
+              linkText
+      };
+    }
+
     await updateConversation(psid, { lastIntent: "eyelets_question", unknownCount: 0 });
 
     return {
@@ -1878,23 +1999,20 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         businessInfo
       });
 
-      // Handle custom order handoff (both sides >= 8m)
+      // Handle custom order (both sides >= 8m) - start collection flow
       if (sizeResponse.isCustomOrder && sizeResponse.requiresHandoff) {
-        console.log(`🏭 Custom order detected (${dimensions.width}x${dimensions.height}m), triggering handoff`);
+        console.log(`🏭 Custom order detected (${dimensions.width}x${dimensions.height}m), starting collection flow`);
 
         await updateConversation(psid, {
-          lastIntent: "custom_order_request",
-          handoffRequested: true,
-          handoffReason: `Custom order request: ${dimensions.width}x${dimensions.height}m - both sides >= 8m`,
-          handoffTimestamp: new Date(),
-          state: "needs_human",
+          lastIntent: "custom_order_awaiting_purpose",
+          customOrderSize: `${dimensions.width}x${dimensions.height}m`,
           unknownCount: 0
         });
 
-        // Send push notification
-        sendHandoffNotification(psid, `Pedido especial: ${dimensions.width}x${dimensions.height}m - requiere cotización personalizada`).catch(err => {
-          console.error("❌ Failed to send push notification:", err);
-        });
+        return {
+          type: "text",
+          text: `¡Claro! ¿Qué te gustaría proteger del sol?`
+        };
       } else {
         await updateConversation(psid, {
           lastIntent: "size_reference_alternatives",
@@ -1969,80 +2087,62 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       // 📏 Check if dimensions contain fractional meters
       const hasFractions = hasFractionalMeters(dimensions);
 
-      // 📏 Handle fractional meters FIRST - even if there's an "exact" match within tolerance
-      // This ensures we warn users that only whole meters are available
+      // 📏 Handle fractional meters - hand off to human for custom quote
       if (hasFractions) {
-        // Calculate rounded dimensions to nearest full meter
-        const roundedWidth = Math.round(dimensions.width);
-        const roundedHeight = Math.round(dimensions.height);
+        console.log(`📏 Fractional meters detected (${dimensions.width}x${dimensions.height}m), triggering handoff`);
 
-        // Build fractional meter warning response
-        let responseText = `📏 Nota: Solo vendemos medidas en metros completos (sin decimales).\n\n`;
-        responseText += `Para la medida que solicitaste (${dimensions.width}m x ${dimensions.height}m), las opciones más cercanas son:\n\n`;
-
-        // Show closest smaller and bigger options
-        const optionsToShow = [];
-        if (closest.smaller) optionsToShow.push(closest.smaller);
-        if (closest.bigger) optionsToShow.push(closest.bigger);
-        if (closest.exact) optionsToShow.push(closest.exact);
-
-        // If we have options, show them with ML links
-        if (optionsToShow.length > 0) {
-          for (const option of optionsToShow) {
-            // Fetch the product to get ML link
-            const sizeVariants = [option.sizeStr, option.sizeStr + 'm'];
-            const match = option.sizeStr.match(/(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)/);
-            if (match) {
-              const swapped = `${match[2]}x${match[1]}`;
-              sizeVariants.push(swapped, swapped + 'm');
-            }
-
-            const product = await ProductFamily.findOne({
-              size: { $in: sizeVariants },
-              sellable: true,
-              active: true
-            });
-
-            const productLink = getProductLink(product);
-            if (productLink) {
-              const trackedLink = await generateClickLink(psid, productLink, {
-                productName: product.name,
-                productId: product._id,
-                campaignId: convo.campaignId,
-                adSetId: convo.adSetId,
-                adId: convo.adId,
-                city: convo.city,
-                stateMx: convo.stateMx
-              });
-              responseText += `• ${option.sizeStr} por $${option.price}:\n${trackedLink}\n\n`;
-            } else {
-              responseText += `• ${option.sizeStr} por $${option.price}\n\n`;
-            }
-          }
-        } else {
-          // No standard sizes available - suggest custom fabrication
-          responseText += `No tenemos medidas estándar que se ajusten exactamente.\n\n`;
-        }
-
-        // Always offer custom fabrication option
-        const info = await getBusinessInfo();
-        responseText += `\n📐 También fabricamos a la medida exacta (${dimensions.width}m x ${dimensions.height}m).\n`;
-        responseText += `Para cotizar, contáctanos:\n📞 ${info?.phones?.[0] || '442-790-2000'}\n`;
-
-        responseText += `\n💡 ¿Te sirve la medida estándar o prefieres cotizar fabricación a medida?`;
-
-        // Update conversation state
         await updateConversation(psid, {
-          lastIntent: "fractional_meters",
+          lastIntent: "fractional_meters_handoff",
+          handoffRequested: true,
+          handoffReason: `Medida con decimales: ${dimensions.width}x${dimensions.height}m`,
+          handoffTimestamp: new Date(),
+          state: "needs_human",
           unknownCount: 0,
-          requestedSize: requestedSizeStr,
-          lastUnavailableSize: requestedSizeStr,
-          suggestedSizes: optionsToShow.map(o => o.sizeStr)
+          requestedSize: requestedSizeStr
         });
+
+        // Send push notification
+        sendHandoffNotification(psid, `Medida con decimales: ${dimensions.width}x${dimensions.height}m - requiere atención`).catch(err => {
+          console.error("❌ Failed to send push notification:", err);
+        });
+
+        // Find closest standard size to offer while they wait
+        const closestOption = closest.bigger || closest.smaller || closest.exact;
+        let responseText = `Permíteme comunicarte con un especialista para cotizar la medida exacta (${dimensions.width}m x ${dimensions.height}m).`;
+
+        if (closestOption) {
+          // Get product link for the closest standard size
+          const sizeVariants = [closestOption.sizeStr, closestOption.sizeStr + 'm'];
+          const sizeMatch = closestOption.sizeStr.match(/(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)/);
+          if (sizeMatch) {
+            const swapped = `${sizeMatch[2]}x${sizeMatch[1]}`;
+            sizeVariants.push(swapped, swapped + 'm');
+          }
+
+          const product = await ProductFamily.findOne({
+            size: { $in: sizeVariants },
+            sellable: true,
+            active: true
+          });
+
+          const productLink = getProductLink(product);
+          if (productLink) {
+            const trackedLink = await generateClickLink(psid, productLink, {
+              productName: product?.name,
+              productId: product?._id,
+              campaignId: convo.campaignId,
+              adSetId: convo.adSetId,
+              adId: convo.adId,
+              city: convo.city,
+              stateMx: convo.stateMx
+            });
+            responseText += `\n\nMientras tanto, la medida estándar más cercana es ${closestOption.sizeStr} por $${closestOption.price}:\n${trackedLink}`;
+          }
+        }
 
         return {
           type: "text",
-          text: addOfferHookIfRelevant(responseText, convo)
+          text: responseText
         };
       }
 
@@ -2140,21 +2240,18 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
       // Handle custom order handoff (both sides >= 8m)
       if (sizeResponse.isCustomOrder && sizeResponse.requiresHandoff) {
-        console.log(`🏭 Custom order detected (${dimensions.width}x${dimensions.height}m), triggering handoff`);
+        console.log(`🏭 Custom order detected (${dimensions.width}x${dimensions.height}m), starting collection flow`);
 
         await updateConversation(psid, {
-          lastIntent: "custom_order_request",
-          handoffRequested: true,
-          handoffReason: `Custom order request: ${dimensions.width}x${dimensions.height}m - both sides >= 8m`,
-          handoffTimestamp: new Date(),
-          state: "needs_human",
+          lastIntent: "custom_order_awaiting_purpose",
+          customOrderSize: `${dimensions.width}x${dimensions.height}m`,
           unknownCount: 0
         });
 
-        // Send push notification
-        sendHandoffNotification(psid, `Pedido especial: ${dimensions.width}x${dimensions.height}m - requiere cotización personalizada`).catch(err => {
-          console.error("❌ Failed to send push notification:", err);
-        });
+        return {
+          type: "text",
+          text: `¡Claro! ¿Qué te gustaría proteger del sol?`
+        };
       } else {
         // Update conversation state with suggested sizes for context
         await updateConversation(psid, {

@@ -164,9 +164,16 @@ function parseDimensions(message) {
   // Convert Spanish number words to digits first
   const converted = convertSpanishNumbersToDigits(message);
 
+  // PREPROCESSING: Handle numeric fractions BEFORE removing units
+  // "7mts y 1/2" → "7.5", "7 y medio" → "7.5", "7 y media" → "7.5"
+  let withFractions = converted
+    .replace(/(\d+)\s*(?:m|mts?|metros?)?\s*y\s*1\/2/gi, (_, num) => `${parseFloat(num) + 0.5}`)
+    .replace(/(\d+)\s*(?:m|mts?|metros?)?\s*y\s*medi[oa]/gi, (_, num) => `${parseFloat(num) + 0.5}`)
+    .replace(/(\d+)\s*1\/2/gi, (_, num) => `${parseFloat(num) + 0.5}`);
+
   // PREPROCESSING: Fix spacing around decimal points (e.g., "7 .70" → "7.70")
   // This handles cases where users add spaces before decimal points
-  let normalized = converted.replace(/(\d)\s+(\.\d+)/g, '$1$2');
+  let normalized = withFractions.replace(/(\d)\s+(\.\d+)/g, '$1$2');
 
   // PREPROCESSING: Handle "2 00" → "2.00" (space as decimal separator)
   // Also handles "2:00" → "2.00" (colon as decimal separator, common typo)

@@ -39,6 +39,9 @@ const {
 // Location detection
 const { detectMexicanLocation, detectZipCode } = require("../../mexicanLocations");
 
+// Push notifications for handoffs
+const { sendHandoffNotification } = require("../../services/pushNotifications");
+
 /**
  * Parse zip code from message and look up location
  * Patterns: CP 12345, C.P. 12345, cp12345, al 12345, codigo postal 12345
@@ -685,35 +688,61 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     });
   }
 
-  // Check if dimensions are fractional (we only do whole meters)
+  // Check if dimensions are fractional - hand off to human for custom quote
   const hasFractions = (width % 1 !== 0) || (height % 1 !== 0);
 
   if (hasFractions) {
-    // Round up to suggest closest sizes
-    const roundedWidth = Math.ceil(width);
-    const roundedHeight = Math.ceil(height);
+    console.log(`📏 Fractional meters detected in mallaFlow (${width}x${height}m), triggering handoff`);
 
-    // Save recommended size for when user confirms
     await updateConversation(psid, {
-      lastIntent: "malla_awaiting_confirmation",
-      recommendedSize: `${roundedWidth}x${roundedHeight}`,
-      lastUnavailableSize: `${width}x${height}`
+      lastIntent: "fractional_meters_handoff",
+      handoffRequested: true,
+      handoffReason: `Medida con decimales: ${width}x${height}m`,
+      handoffTimestamp: new Date(),
+      state: "needs_human",
+      unknownCount: 0
     });
 
-    // Build response with city confirmation if zip was provided
-    let responseText = `Solo manejamos medidas en metros completos.\n\n` +
-                       `Para ${width}x${height}m, te recomiendo ${roundedWidth}x${roundedHeight}m.`;
+    // Send push notification
+    sendHandoffNotification(psid, `Medida con decimales: ${width}x${height}m - requiere atención`).catch(err => {
+      console.error("❌ Failed to send push notification:", err);
+    });
 
-    if (zipInfo) {
-      responseText += `\n\n📍 Envío a ${zipInfo.city}, ${zipInfo.state} (${zipInfo.shipping?.text || '3-5 días hábiles'})`;
-      responseText += `\n\n¿Te confirmo la de ${roundedWidth}x${roundedHeight}m a ${zipInfo.city}?`;
-    } else {
-      responseText += `\n\n¿Te interesa esa medida?`;
+    // Find closest standard size to offer while they wait
+    let linkText = "";
+    try {
+      const roundedW = Math.round(width);
+      const roundedH = Math.round(height);
+      const sizeVariants = [
+        `${roundedW}x${roundedH}`, `${roundedW}x${roundedH}m`,
+        `${roundedH}x${roundedW}`, `${roundedH}x${roundedW}m`
+      ];
+
+      const product = await ProductFamily.findOne({
+        size: { $in: sizeVariants },
+        sellable: true,
+        active: true
+      });
+
+      if (product) {
+        const productLink = product.onlineStoreLinks?.mercadoLibre || product.mLink;
+        if (productLink) {
+          const trackedLink = await generateClickLink(psid, productLink, {
+            productName: product.name,
+            productId: product._id,
+            campaignId: convo?.campaignId,
+            adId: convo?.adId
+          });
+          linkText = `\n\nMientras tanto, la medida estándar más cercana es ${roundedW}x${roundedH}m por si te resulta útil $${product.price}:\n${trackedLink}`;
+        }
+      }
+    } catch (err) {
+      console.error("Error getting closest size link:", err);
     }
 
     return {
       type: "text",
-      text: responseText
+      text: `Permíteme comunicarte con un especialista para cotizar la medida exacta (${width}m x ${height}m).` + linkText
     };
   }
 
@@ -722,18 +751,18 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
   const maxSide = Math.max(width, height);
 
   if (minSide >= 8 && maxSide >= 8) {
-    // Custom order - needs human handoff
+    // Custom order - start collection flow instead of immediate handoff
+    console.log(`🏭 Custom order detected in mallaFlow (${width}x${height}m), starting collection flow`);
+
     await updateConversation(psid, {
-      handoffRequested: true,
-      handoffReason: `Custom malla order: ${width}x${height}m${percentage ? ' @ ' + percentage + '%' : ''}`,
-      handoffTimestamp: new Date()
+      lastIntent: "custom_order_awaiting_purpose",
+      customOrderSize: `${width}x${height}m`,
+      unknownCount: 0
     });
 
     return {
       type: "text",
-      text: `La medida ${width}x${height}m es un pedido especial.\n\n` +
-            `Un especialista te contactará para cotización personalizada.\n\n` +
-            `¿Hay algo más que necesites?`
+      text: `¡Claro! ¿Qué te gustaría proteger del sol?`
     };
   }
 
