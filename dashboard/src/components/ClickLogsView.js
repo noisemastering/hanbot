@@ -1,6 +1,17 @@
 // components/ClickLogsView.js
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import {
+  ComposedChart,
+  Bar,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend
+} from 'recharts';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -18,6 +29,7 @@ const getCurrentDate = () => {
 function ClickLogsView() {
   const [clickLogs, setClickLogs] = useState([]);
   const [stats, setStats] = useState(null);
+  const [chartData, setChartData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState({
     clicked: '',
@@ -29,6 +41,7 @@ function ClickLogsView() {
   useEffect(() => {
     fetchStats();
     fetchClickLogs();
+    fetchChartData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [filter]);
 
@@ -81,6 +94,27 @@ function ClickLogsView() {
     }
   };
 
+  const fetchChartData = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      const params = new URLSearchParams();
+      if (filter.startDate) params.append('startDate', filter.startDate);
+      if (filter.endDate) params.append('endDate', filter.endDate);
+
+      const res = await fetch(`${API_URL}/click-logs/daily?${params.toString()}`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      const data = await res.json();
+      if (data.success) {
+        setChartData(data.chartData);
+      }
+    } catch (error) {
+      console.error('Error fetching chart data:', error);
+    }
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleString('es-MX');
@@ -113,6 +147,57 @@ function ClickLogsView() {
           <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
             <div className="text-gray-400 text-sm">Usuarios Únicos</div>
             <div className="text-2xl font-bold text-white mt-1">{stats.uniqueUsers}</div>
+          </div>
+        </div>
+      )}
+
+      {/* Daily Chart */}
+      {chartData.length > 0 && (
+        <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4 mb-6">
+          <h3 className="text-sm font-semibold text-gray-300 mb-4">Enlaces y Clicks por Día</h3>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis
+                  dataKey="dateLabel"
+                  tick={{ fill: '#9CA3AF', fontSize: 11 }}
+                  axisLine={{ stroke: '#374151' }}
+                />
+                <YAxis
+                  tick={{ fill: '#9CA3AF', fontSize: 11 }}
+                  axisLine={{ stroke: '#374151' }}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1F2937',
+                    border: '1px solid #374151',
+                    borderRadius: '8px',
+                    color: '#F3F4F6'
+                  }}
+                  labelStyle={{ color: '#9CA3AF' }}
+                />
+                <Legend
+                  wrapperStyle={{ color: '#9CA3AF' }}
+                />
+                <Bar
+                  dataKey="clicks"
+                  name="Clicks"
+                  fill="#10B981"
+                  fillOpacity={0.7}
+                  radius={[4, 4, 0, 0]}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="links"
+                  name="Enlaces"
+                  stroke="#3B82F6"
+                  strokeWidth={2}
+                  dot={{ fill: '#3B82F6', strokeWidth: 2, r: 4 }}
+                  activeDot={{ r: 6 }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
           </div>
         </div>
       )}

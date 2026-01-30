@@ -150,6 +150,52 @@ router.get("/stats", async (req, res) => {
   }
 });
 
+// GET /click-logs/daily - Get daily aggregated data for charts
+router.get("/daily", async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    // Build date filter
+    const dateFilter = {};
+    if (startDate) dateFilter.$gte = new Date(startDate + 'T00:00:00');
+    if (endDate) dateFilter.$lte = new Date(endDate + 'T23:59:59.999');
+
+    // Aggregate links created per day
+    const linksPerDay = await ClickLog.aggregate([
+      { $match: dateFilter.$gte ? { createdAt: dateFilter } : {} },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          links: { $sum: 1 },
+          clicks: { $sum: { $cond: ["$clicked", 1, 0] } },
+          conversions: { $sum: { $cond: ["$converted", 1, 0] } }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // Format for chart
+    const chartData = linksPerDay.map(day => ({
+      date: day._id,
+      dateLabel: new Date(day._id + 'T12:00:00').toLocaleDateString('es-MX', { month: 'short', day: 'numeric' }),
+      links: day.links,
+      clicks: day.clicks,
+      conversions: day.conversions
+    }));
+
+    res.json({
+      success: true,
+      chartData
+    });
+  } catch (error) {
+    console.error("Error fetching daily stats:", error);
+    res.status(500).json({
+      success: false,
+      error: "Error fetching daily statistics"
+    });
+  }
+});
+
 // Background correlation function - runs without blocking the response
 async function runBackgroundCorrelation() {
   try {
