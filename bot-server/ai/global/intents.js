@@ -83,12 +83,18 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   }
   // ====== END SKIP ======
 
-  // Generate tracked store link once for reuse throughout this function
+  // Lazy-generate tracked store link only when needed
   const STORE_URL = "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob";
-  const trackedStoreLink = await generateClickLink(psid, STORE_URL, {
-    productName: "Tienda Hanlob",
-    campaignId: convo.campaignId
-  });
+  let _trackedStoreLink = null;
+  const getTrackedStoreLink = async () => {
+    if (!_trackedStoreLink) {
+      _trackedStoreLink = await generateClickLink(psid, STORE_URL, {
+        productName: "Tienda Hanlob",
+        campaignId: convo.campaignId
+      });
+    }
+    return _trackedStoreLink;
+  };
 
   // 🏭 CUSTOM ORDER FLOW - Handle multi-step collection for oversized orders
   const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
@@ -713,7 +719,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       }
 
       response += "Puedes ver todas las medidas disponibles en nuestra Tienda Oficial de Mercado Libre:\n\n";
-      response += trackedStoreLink + "\n\n";
+      response += await getTrackedStoreLink() + "\n\n";
       response += "¿Qué medida necesitas para tu proyecto?";
 
       return {
@@ -969,10 +975,11 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     }
 
     // Fallback if no sizes loaded
+    const storeLink = await getTrackedStoreLink();
     return {
       type: "text",
       text: "Puedes ver todas nuestras medidas y precios en la Tienda Oficial:\n" +
-            trackedStoreLink + "\n\n" +
+            storeLink + "\n\n" +
             "¿Qué medida necesitas?"
     };
   }
@@ -1061,7 +1068,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       }
 
       response += "\n\nPuedes ver todas en nuestra Tienda Oficial:\n";
-      response += trackedStoreLink + "\n\n";
+      response += await getTrackedStoreLink() + "\n\n";
       response += "¿Qué medida te interesa?";
 
       return {
@@ -1215,10 +1222,11 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     console.log("🛒 Where to buy + measurements question detected");
     await updateConversation(psid, { lastIntent: "where_to_buy_with_measures" });
 
+    const storeLink = await getTrackedStoreLink();
     return {
       type: "text",
       text: "Puedes comprar en nuestra tienda digital en Mercado Libre 🛒\n\n" +
-            trackedStoreLink + "\n\n" +
+            storeLink + "\n\n" +
             "¿Qué medida necesitas? 📐"
     };
   }
@@ -2386,7 +2394,8 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
       // Add shipping info if location was mentioned
       if (hasLocationInGeneric) {
-        responseText += `\n\nEnviamos a todo México. El envío está incluido en la mayoría de los casos o se calcula automáticamente:\n\n${trackedStoreLink}`;
+        const storeLink = await getTrackedStoreLink();
+        responseText += `\n\nEnviamos a todo México. El envío está incluido en la mayoría de los casos o se calcula automáticamente:\n\n${storeLink}`;
       }
 
       return {
