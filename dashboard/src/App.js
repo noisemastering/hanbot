@@ -1452,9 +1452,7 @@ function App() {
           {/* Sidebar Header */}
           <div className="p-6 border-b border-gray-700/50">
             <div className="flex items-center space-x-3">
-              <div className="w-10 h-10 bg-gradient-to-br from-primary-500 to-primary-700 rounded-lg flex items-center justify-center">
-                <span className="text-white text-xl font-bold">H</span>
-              </div>
+              <img src="/logo192.png" alt="Hanlob" className="w-10 h-10 rounded-lg" />
               <div>
                 <h2 className="text-lg font-bold text-white">Hanlob Bot</h2>
                 <p className="text-xs text-gray-400">Dashboard</p>
