@@ -585,13 +585,26 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
     const autoResponse = await autoResponder(cleanMsg);
     if (autoResponse) return autoResponse;
 
-    // 📍 Location questions - respond with simple location info
-    if (/d[oó]nde\s+(est[aá]n|se\s+ubican|quedan)|h?ubicaci[oó]n|direcci[oó]n|qued[ao]n?|encuentran/i.test(cleanMsg)) {
-      console.log("📍 Location question detected at fallback stage");
+    // 📍 "Donde las consigo" - Ask for location to personalize shipping response
+    if (/d[oó]nde\s+(l[ao]s?\s+)?(cons?igo|consiguen|compro|encuentro|venden|adquiero)|c[oó]mo\s+(l[ao]s?\s+)?(compro|consigo|adquiero)/i.test(cleanMsg)) {
+      console.log("📍 'Donde las consigo' detected - asking for location");
+      await updateConversation(psid, {
+        lastIntent: "asking_where_to_buy",
+        pendingShippingLocation: true
+      });
+      return {
+        type: "text",
+        text: "¿Cuál es tu código postal o ciudad?"
+      };
+    }
+
+    // 📍 Physical location questions - where are you located
+    if (/d[oó]nde\s+(est[aá]n|se\s+ubican|quedan)|h?ubicaci[oó]n|direcci[oó]n/i.test(cleanMsg)) {
+      console.log("📍 Physical location question detected");
       await updateConversation(psid, { lastIntent: "location_info" });
       return {
         type: "text",
-        text: "Estamos en Querétaro, pero enviamos a todo el país por Mercado Libre 📦"
+        text: "Estamos en Querétaro en el parque industrial Navex, Tlacote. Pero enviamos a todo el país por Mercado Libre 📦\n\n¿De qué ciudad nos escribes?"
       };
     }
 
@@ -744,6 +757,60 @@ async function generateReply(userMessage, psid, referral = null) {
       return await checkForRepetition(locationResponse, psid, convo);
     }
     // Not a location response, continue normal flow
+  }
+
+  // 📍 SHIPPING LOCATION: Check if user is answering "¿Cuál es tu código postal o ciudad?"
+  if (convo.pendingShippingLocation) {
+    const { parseLocationResponse, syncLocationToUser } = require("./utils/locationStats");
+    const { detectLocationEnhanced } = require("../mexicanLocations");
+
+    // Try to parse as location
+    let location = parseLocationResponse(userMessage);
+
+    // If parseLocationResponse didn't work, try detectLocationEnhanced
+    if (!location) {
+      const detected = await detectLocationEnhanced(userMessage);
+      if (detected) {
+        location = {
+          city: detected.location || detected.normalized,
+          state: detected.state,
+          zipcode: detected.code || null
+        };
+      }
+    }
+
+    // Clear pending flag
+    await updateConversation(psid, { pendingShippingLocation: false });
+
+    if (location) {
+      console.log("📍 Shipping location received:", location);
+
+      // Save location to conversation and User model
+      const convoUpdate = { unknownCount: 0 };
+      if (location.city) convoUpdate.city = location.city;
+      if (location.state) convoUpdate.stateMx = location.state;
+      if (location.zipcode) convoUpdate.zipcode = location.zipcode;
+      await updateConversation(psid, convoUpdate);
+      await syncLocationToUser(psid, location, 'shipping_question');
+
+      // Build location string for response
+      const locationStr = location.city || location.state || `CP ${location.zipcode}`;
+
+      // Check if they're in Querétaro
+      const isQueretaro = (location.state && /quer[eé]taro/i.test(location.state)) ||
+                          (location.city && /quer[eé]taro/i.test(location.city));
+
+      let response = `Perfecto, enviamos a ${locationStr} sin costo a través de Mercado Libre 📦`;
+
+      if (isQueretaro) {
+        response += `\n\nTambién puedes visitar nuestra tienda en el parque industrial Navex, Tlacote.`;
+      }
+
+      response += `\n\n¿Qué medida de malla sombra necesitas?`;
+
+      return await checkForRepetition({ type: "text", text: response }, psid, convo);
+    }
+    // Not a valid location, continue normal flow
   }
 
   // 👍 ACKNOWLEDGMENT: Handle simple acknowledgments and emojis

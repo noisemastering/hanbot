@@ -147,6 +147,7 @@ const conversationSchema = new mongoose.Schema({
   // Location stats question tracking (for correlation)
   askedLocationStats: { type: Boolean, default: false },      // Already asked "de qué ciudad nos escribes?"
   pendingLocationResponse: { type: Boolean, default: false }, // Expecting city/state answer
+  pendingShippingLocation: { type: Boolean, default: false }, // Expecting location for "donde las consigo"
   lastLinkSentAt: { type: Date, default: null }               // When we last sent an ML link
 });
 
