@@ -339,6 +339,23 @@ async function correlateOrder(order, sellerId) {
     }
 
     if (!bestMatch || bestScore < 30) {
+      // If re-evaluating an existing correlation, keep it but determine proper method
+      if (existingCorrelation) {
+        // Check if existing click has ML Item ID that matches order
+        let method = 'time_based';
+        if (existingCorrelation.mlItemId && orderedMLItemIds.includes(existingCorrelation.mlItemId)) {
+          method = 'ml_item_match';
+          console.log(`   🎯 Existing correlation has ML Item ID match: ${existingCorrelation.mlItemId}`);
+        }
+
+        // Update existing correlation with proper method
+        await ClickLog.findByIdAndUpdate(existingCorrelation._id, {
+          correlationMethod: method,
+          correlatedOrderId: String(orderId)
+        });
+        console.log(`   ✅ Updated existing correlation for order ${orderId} (${method})`);
+        return { alreadyCorrelated: true, clickLog: existingCorrelation, method };
+      }
       console.log(`   ❌ No suitable match found for order ${orderId} (best score: ${bestScore})`);
       return null;
     }
