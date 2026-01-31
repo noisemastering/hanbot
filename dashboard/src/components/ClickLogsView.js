@@ -307,8 +307,11 @@ function ClickLogsView() {
             <div className="text-gray-400 text-sm mb-1">Anuncio top</div>
             {stats.topAd ? (
               <>
-                <div className="text-lg font-bold text-white truncate" title={stats.topAd.name}>
-                  {stats.topAd.name}
+                <div className="text-lg font-bold text-white truncate" title={stats.topAd.name || stats.topAd.adId}>
+                  {stats.topAd.name || '(sin nombre)'}
+                </div>
+                <div className="text-xs text-gray-500 font-mono truncate" title={stats.topAd.adId}>
+                  ID: {stats.topAd.adId}
                 </div>
                 <div className="text-xs text-purple-400 mt-1">{stats.topAd.clicks} clicks</div>
               </>
