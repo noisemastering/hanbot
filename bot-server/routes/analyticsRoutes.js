@@ -76,21 +76,10 @@ router.get('/', async (req, res) => {
 
 // GET /analytics/conversions - Get conversion/attribution stats for orders view
 // Returns FB attributed conversions and ML order totals for a date range
+// NOTE: No auto-sync here - just reads from DB. Use POST /correlate-conversions to sync.
 router.get('/conversions', async (req, res) => {
   try {
-    const { dateFrom, dateTo, sellerId = '482595248' } = req.query;
-
-    // Auto-sync: use enhanced correlation system
-    try {
-      const ordersResult = await getOrders(sellerId, { limit: 50, sort: 'date_desc' });
-      if (ordersResult.success) {
-        const paidOrders = ordersResult.orders.filter(o => o.status === 'paid');
-        const result = await correlateOrders(paidOrders, sellerId);
-        console.log(`🔄 Auto-sync: ${result.correlated} new correlations (enhanced)`);
-      }
-    } catch (syncError) {
-      console.error('⚠️ Auto-sync failed (continuing with cached data):', syncError.message);
-    }
+    const { dateFrom, dateTo } = req.query;
 
     // Build date filter for clicks
     const dateFilter = {};
@@ -707,6 +696,66 @@ router.get('/correlation-stats', async (req, res) => {
     });
   } catch (error) {
     console.error('❌ Error fetching correlation stats:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
+// POST /analytics/migrate-correlations - Re-process all correlations to add match details
+// This is a one-time migration endpoint
+router.post('/migrate-correlations', async (req, res) => {
+  try {
+    const { sellerId = '482595248', limit = 200 } = req.body;
+
+    console.log('🔄 Starting correlation migration...');
+
+    // Get all converted clicks that need migration (no matchDetails)
+    const clicksToMigrate = await ClickLog.find({
+      converted: true,
+      matchDetails: { $exists: false }
+    }).limit(limit).lean();
+
+    console.log(`📦 Found ${clicksToMigrate.length} correlations to migrate`);
+
+    if (clicksToMigrate.length === 0) {
+      return res.json({
+        success: true,
+        message: 'No correlations need migration',
+        migrated: 0
+      });
+    }
+
+    // Get unique order IDs
+    const orderIds = [...new Set(clicksToMigrate.map(c => c.correlatedOrderId || c.conversionData?.orderId).filter(Boolean))];
+    console.log(`📦 Fetching ${orderIds.length} orders from ML API...`);
+
+    // Fetch orders from ML
+    const ordersResult = await getOrders(sellerId, { limit: 200, sort: 'date_desc' });
+    if (!ordersResult.success) {
+      return res.status(500).json({
+        success: false,
+        error: 'Failed to fetch orders from ML API'
+      });
+    }
+
+    const paidOrders = ordersResult.orders.filter(o => o.status === 'paid');
+    console.log(`📦 Got ${paidOrders.length} paid orders`);
+
+    // Re-run correlation with force update
+    const result = await correlateOrders(paidOrders, sellerId, { forceUpdate: true });
+
+    res.json({
+      success: true,
+      message: 'Migration complete',
+      ordersProcessed: paidOrders.length,
+      correlated: result.correlated,
+      alreadyCorrelated: result.alreadyCorrelated,
+      updated: result.updated || 0
+    });
+  } catch (error) {
+    console.error('❌ Migration error:', error);
     res.status(500).json({
       success: false,
       error: error.message

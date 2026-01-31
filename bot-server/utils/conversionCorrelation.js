@@ -103,14 +103,18 @@ async function correlateOrder(order, sellerId) {
       ]
     });
     if (existingCorrelation) {
-      // If already correlated with enhanced method, skip
       const method = existingCorrelation.correlationMethod;
-      if (method && method !== 'time_based') {
+      const hasMatchDetails = existingCorrelation.matchDetails && Object.keys(existingCorrelation.matchDetails).length > 0;
+
+      // Re-evaluate if: time_based method OR missing matchDetails (needs migration)
+      if (method && method !== 'time_based' && hasMatchDetails) {
         console.log(`   ⏭️ Order ${orderId} already correlated (${method})`);
         return { alreadyCorrelated: true, clickLog: existingCorrelation };
       }
-      // Old time_based correlation - re-evaluate with enhanced scoring
-      console.log(`   🔄 Re-evaluating old time_based correlation for order ${orderId}...`);
+
+      // Old correlation or missing match details - re-evaluate with enhanced scoring
+      const reason = !hasMatchDetails ? 'missing matchDetails' : 'time_based method';
+      console.log(`   🔄 Re-evaluating correlation for order ${orderId} (${reason})...`);
     }
 
     // Get shipping address and receiver name from ML Shipments API
@@ -496,6 +500,18 @@ async function saveCorrelation(click, order, confidence, method, details) {
     correlatedOrderId: String(orderId),
     correlationConfidence: confidence,
     correlationMethod: method,
+    // Store match details for debugging/auditing
+    matchDetails: {
+      mlItemMatch: details.mlItemMatch || false,
+      nameMatch: details.nameMatch || false,
+      nicknameMatch: details.nicknameMatch || false,
+      cityMatch: details.cityMatch || false,
+      stateMatch: details.stateMatch || false,
+      zipMatch: details.zipMatch || false,
+      poiMatch: details.poiMatch || false,
+      timeScore: details.timeScore || 0,
+      hoursAgo: details.hoursAgo || null
+    },
     conversionData: {
       orderId: String(orderId),
       orderStatus: order.status,
