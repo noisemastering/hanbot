@@ -81,8 +81,14 @@ async function correlateOrder(order, sellerId) {
 
     console.log(`🔍 Correlating order ${orderId}...`);
 
-    // Check if order is already correlated
-    const existingCorrelation = await ClickLog.findOne({ correlatedOrderId: String(orderId) });
+    // Check if order is already correlated (check both old and new field locations)
+    const existingCorrelation = await ClickLog.findOne({
+      $or: [
+        { correlatedOrderId: String(orderId) },
+        { 'conversionData.orderId': String(orderId) },
+        { 'conversionData.orderId': orderId }
+      ]
+    });
     if (existingCorrelation) {
       // If already correlated with enhanced method, skip
       const method = existingCorrelation.correlationMethod;
