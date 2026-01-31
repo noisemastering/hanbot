@@ -105,7 +105,7 @@ const STATS_QUESTION = "\n\nPor cierto, para fines estadísticos, ¿de qué ciud
  */
 function containsMLLink(responseText) {
   if (!responseText) return false;
-  return /mercadolibre\.com\.mx|articulo\.mercadolibre|hanbot.*\/r\//.test(responseText);
+  return /mercadolibre\.com\.mx|articulo\.mercadolibre|hanlob.*\/r\/|agente\.hanlob/.test(responseText);
 }
 
 /**
