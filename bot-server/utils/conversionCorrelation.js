@@ -341,11 +341,36 @@ async function correlateOrder(order, sellerId) {
     if (!bestMatch || bestScore < 30) {
       // If re-evaluating an existing correlation, keep it but determine proper method
       if (existingCorrelation) {
-        // Check if existing click has ML Item ID that matches order
         let method = 'time_based';
+
+        // Check if existing click has ML Item ID that matches order
         if (existingCorrelation.mlItemId && orderedMLItemIds.includes(existingCorrelation.mlItemId)) {
           method = 'ml_item_match';
           console.log(`   🎯 Existing correlation has ML Item ID match: ${existingCorrelation.mlItemId}`);
+        } else {
+          // Check if click's user matches buyer by name/location
+          const clickUser = await User.findOne({ psid: existingCorrelation.psid }).lean();
+          if (clickUser) {
+            const userFirstName = normalizeName(clickUser.firstName || clickUser.first_name);
+            const userCity = normalizeCity(clickUser.location?.city);
+            const userState = normalizeCity(clickUser.location?.state);
+
+            const nameMatches = userFirstName && buyerFirstName && userFirstName === buyerFirstName;
+            const cityMatches = userCity && normalizedShippingCity && userCity === normalizedShippingCity;
+            const stateMatches = userState && normalizedShippingState && userState === normalizedShippingState;
+
+            // If name + location match, it's enhanced (not just time)
+            if (nameMatches && (cityMatches || stateMatches)) {
+              method = 'enhanced';
+              console.log(`   ✨ User match: ${clickUser.firstName} from ${clickUser.location?.city}`);
+            } else if (cityMatches || stateMatches) {
+              method = 'enhanced';
+              console.log(`   ✨ Location match: ${clickUser.location?.city}, ${clickUser.location?.state}`);
+            } else if (nameMatches) {
+              method = 'enhanced';
+              console.log(`   ✨ Name match: ${clickUser.firstName}`);
+            }
+          }
         }
 
         // Update existing correlation with proper method
