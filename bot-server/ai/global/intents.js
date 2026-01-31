@@ -36,6 +36,7 @@ const { getOfferHook, shouldMentionOffer, applyAdContext, getAngleMessaging } = 
 const { isContextualMention, isExplicitProductRequest } = require("../utils/productMatcher");
 const { getProductDisplayName, determineVerbosity, formatProductResponse } = require("../utils/productEnricher");
 const { detectFutureInterest } = require("../utils/futureInterest");
+const { syncLocationToUser } = require("../utils/locationStats");
 
 // Helper to add offer hook to responses when appropriate
 function addOfferHookIfRelevant(responseText, convo) {
@@ -1552,6 +1553,13 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         if (shippingLocation.code) cityUpdate.zipcode = shippingLocation.code;
         await updateConversation(psid, cityUpdate);
         console.log(`📍 Location detected (${shippingLocation.type}): ${JSON.stringify(cityUpdate)}`);
+
+        // Sync location to User model for correlation
+        syncLocationToUser(psid, {
+          city: cityUpdate.city || null,
+          state: cityUpdate.stateMx || null,
+          zipcode: cityUpdate.zipcode || null
+        }, 'shipping_flow').catch(err => console.error("Location sync error:", err.message));
       }
 
       // Select relevant asset to mention (shipping is already the main topic)
@@ -1710,6 +1718,13 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
         console.log(`📍 Location detected and stored: ${location.normalized}${location.code ? ` (CP: ${location.code})` : ''}`);
         await updateConversation(psid, updateData);
+
+        // Sync location to User model for correlation
+        syncLocationToUser(psid, {
+          city: updateData.city || null,
+          state: updateData.stateMx || null,
+          zipcode: updateData.zipcode || null
+        }, 'conversation').catch(err => console.error("Location sync error:", err.message));
 
         // Build response - confirm coverage
         const capitalizedCity = cityName.charAt(0).toUpperCase() + cityName.slice(1);

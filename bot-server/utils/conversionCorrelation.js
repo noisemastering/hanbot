@@ -1,11 +1,25 @@
 // utils/conversionCorrelation.js
 const ClickLog = require("../models/ClickLog");
+const User = require("../models/User");
 const { getShipmentById } = require("./mercadoLibreOrders");
 
 // Correlation time windows (in hours)
 const HIGH_CONFIDENCE_HOURS = 24;
 const MEDIUM_CONFIDENCE_HOURS = 72;
 const MAX_CORRELATION_HOURS = 168; // 7 days
+
+/**
+ * Normalize name for comparison
+ * Removes accents, lowercase, trims
+ */
+function normalizeName(name) {
+  if (!name) return null;
+  return name
+    .toLowerCase()
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .trim();
+}
 
 /**
  * Normalize city name for comparison
@@ -30,7 +44,29 @@ function hoursBetween(date1, date2) {
 }
 
 /**
- * Correlate an ML order with ClickLog entries
+ * Check if POI matches ordered product
+ * @param {string} poiRootName - User's POI root (e.g., "Malla Sombra")
+ * @param {string} itemTitle - ML order item title
+ * @returns {boolean}
+ */
+function poiMatchesProduct(poiRootName, itemTitle) {
+  if (!poiRootName || !itemTitle) return false;
+  const normalizedPoi = normalizeName(poiRootName);
+  const normalizedTitle = normalizeName(itemTitle);
+
+  // Check if POI root name appears in item title
+  return normalizedTitle.includes(normalizedPoi);
+}
+
+/**
+ * Correlate an ML order with ClickLog entries and User data
+ *
+ * Correlation priority:
+ * 1. ML Item ID exact match (from clicked link)
+ * 2. Name + Location + POI match (highest confidence)
+ * 3. Location + POI match
+ * 4. Name + POI match
+ * 5. Click within time window (fallback)
  *
  * @param {object} order - ML order object
  * @param {string} sellerId - Seller ID for API calls
@@ -40,6 +76,8 @@ async function correlateOrder(order, sellerId) {
   try {
     const orderId = order.id || order.orderId;
     const orderDate = new Date(order.date_created || order.orderDate);
+    const buyerInfo = order.buyer || {};
+    const firstItem = (order.order_items || [])[0];
 
     console.log(`🔍 Correlating order ${orderId}...`);
 
@@ -53,214 +91,385 @@ async function correlateOrder(order, sellerId) {
     // Get shipping address from ML Shipments API
     let shippingCity = null;
     let shippingState = null;
+    let shippingZipCode = null;
 
     if (order.shipping?.id) {
       const shipmentResult = await getShipmentById(sellerId, order.shipping.id);
       if (shipmentResult.success) {
         shippingCity = shipmentResult.shipment.receiverAddress?.city;
         shippingState = shipmentResult.shipment.receiverAddress?.state;
-        console.log(`   📍 Shipping address: ${shippingCity}, ${shippingState}`);
+        shippingZipCode = shipmentResult.shipment.receiverAddress?.zipCode;
+        console.log(`   📍 Shipping: ${shippingCity}, ${shippingState} (${shippingZipCode})`);
       }
     }
 
-    const normalizedShippingCity = normalizeCity(shippingCity);
-
-    // Get ordered product IDs
-    const orderedProductIds = (order.order_items || [])
+    // Get ordered ML Item IDs for exact matching
+    const orderedMLItemIds = (order.order_items || [])
       .map(item => item.item?.id)
       .filter(Boolean);
 
-    // Calculate time window for correlation
+    console.log(`   📦 Ordered items: ${orderedMLItemIds.join(', ')}`);
+
+    // Buyer name for matching
+    const buyerFirstName = normalizeName(buyerInfo.first_name);
+    const buyerLastName = normalizeName(buyerInfo.last_name);
+    console.log(`   👤 Buyer: ${buyerInfo.first_name} ${buyerInfo.last_name}`);
+
+    // Calculate time window for click-based correlation
     const maxTimeAgo = new Date(orderDate.getTime() - (MAX_CORRELATION_HOURS * 60 * 60 * 1000));
 
-    // Find potential matching clicks
-    // Must be: clicked, not converted, within time window
-    const query = {
+    // ============ PHASE 1: USER DATA LOOKUP ============
+    // Find users that match buyer name and/or location
+    const normalizedShippingCity = normalizeCity(shippingCity);
+    const normalizedShippingState = normalizeCity(shippingState);
+
+    let matchingUsers = [];
+
+    // Build user query conditions
+    const userConditions = [];
+
+    // Name match condition
+    if (buyerFirstName) {
+      userConditions.push({
+        $expr: {
+          $eq: [
+            { $toLower: "$first_name" },
+            buyerFirstName
+          ]
+        }
+      });
+    }
+
+    // Location match conditions
+    if (normalizedShippingCity) {
+      userConditions.push({ 'location.city': { $regex: new RegExp(normalizedShippingCity, 'i') } });
+    }
+    if (normalizedShippingState) {
+      userConditions.push({ 'location.state': { $regex: new RegExp(normalizedShippingState, 'i') } });
+    }
+    if (shippingZipCode) {
+      userConditions.push({ 'location.zipcode': shippingZipCode });
+    }
+
+    if (userConditions.length > 0) {
+      matchingUsers = await User.find({ $or: userConditions }).lean();
+      console.log(`   👥 Found ${matchingUsers.length} potentially matching users`);
+    }
+
+    // ============ PHASE 3: SCORE CLICK CANDIDATES ============
+    // Find all clicks within time window
+    const clickQuery = {
       clicked: true,
       converted: { $ne: true },
       clickedAt: { $gte: maxTimeAgo, $lte: orderDate }
     };
 
-    // If we have a shipping city/state, prioritize location matches
-    let candidates = [];
-    const normalizedShippingState = normalizeCity(shippingState);
+    const allClicks = await ClickLog.find(clickQuery).sort({ clickedAt: -1 }).limit(50);
+    console.log(`   🖱️ Found ${allClicks.length} clicks in time window`);
 
-    if (normalizedShippingCity || normalizedShippingState) {
-      // Build location match query
-      // Match by: city, state, OR if user stored state as city (common case)
-      const locationConditions = [];
-
-      if (normalizedShippingCity) {
-        locationConditions.push(
-          { city: { $regex: new RegExp(normalizedShippingCity, 'i') } },
-          { city: shippingCity }
-        );
-      }
-
-      if (normalizedShippingState) {
-        // Also match if the ClickLog.city is actually the state name
-        // e.g., user said "Jalisco" and we stored it as city
-        locationConditions.push(
-          { city: { $regex: new RegExp(normalizedShippingState, 'i') } },
-          { stateMx: { $regex: new RegExp(normalizedShippingState, 'i') } }
-        );
-      }
-
-      const cityMatches = await ClickLog.find({
-        ...query,
-        $or: locationConditions
-      }).sort({ clickedAt: -1 }).limit(10);
-
-      candidates = cityMatches;
-      console.log(`   🏙️ Found ${cityMatches.length} clicks matching ${shippingCity || ''}, ${shippingState || ''}`);
-    }
-
-    // If no city matches, fall back to product-only matching (lower confidence)
-    if (candidates.length === 0 && orderedProductIds.length > 0) {
-      const productMatches = await ClickLog.find({
-        ...query,
-        productId: { $in: orderedProductIds.map(String) }
-      }).sort({ clickedAt: -1 }).limit(5);
-
-      candidates = productMatches;
-      console.log(`   📦 Found ${productMatches.length} clicks for ordered products (no city match)`);
-    }
-
-    if (candidates.length === 0) {
-      console.log(`   ❌ No matching clicks found for order ${orderId}`);
-      return null;
-    }
-
-    // Score candidates and pick the best match
     let bestMatch = null;
     let bestScore = 0;
 
-    for (const click of candidates) {
+    for (const click of allClicks) {
       let score = 0;
+      const matchDetails = {
+        mlItemMatch: false,
+        nameMatch: false,
+        cityMatch: false,
+        stateMatch: false,
+        zipMatch: false,
+        poiMatch: false,
+        timeScore: 0
+      };
+
       const hoursAgo = hoursBetween(click.clickedAt, orderDate);
 
-      // City match scoring
-      const normalizedClickCity = normalizeCity(click.city);
-      const normalizedClickState = normalizeCity(click.stateMx);
-
-      const cityMatches = normalizedClickCity && normalizedShippingCity &&
-                          normalizedClickCity === normalizedShippingCity;
-
-      // State match - either direct state match OR click.city is actually the state name
-      const stateMatches = normalizedShippingState && (
-        (normalizedClickState && normalizedClickState === normalizedShippingState) ||
-        (normalizedClickCity && normalizedClickCity === normalizedShippingState)
+      // Find the user associated with this click
+      const clickUser = matchingUsers.find(u =>
+        u.psid === click.psid ||
+        u.unifiedId === click.psid ||
+        u.unifiedId === `fb:${click.psid}`
       );
 
-      if (cityMatches) {
-        score += 50; // Strong signal - exact city match
-      } else if (stateMatches) {
-        score += 35; // Good signal - same state
+      // ML Item ID exact match - strongest signal
+      if (click.mlItemId && orderedMLItemIds.includes(click.mlItemId)) {
+        score += 100;
+        matchDetails.mlItemMatch = true;
+        console.log(`      ✓ ML Item ID match: ${click.mlItemId}`);
       }
 
-      // Product match scoring
-      const clickProductId = click.productId ? String(click.productId) : null;
-      const productMatches = clickProductId && orderedProductIds.map(String).includes(clickProductId);
-
-      if (productMatches) {
-        score += 30; // Good signal
+      // Name match - check User model
+      if (clickUser && buyerFirstName) {
+        const userFirstName = normalizeName(clickUser.first_name);
+        if (userFirstName === buyerFirstName) {
+          score += 40;
+          matchDetails.nameMatch = true;
+          console.log(`      ✓ Name match: ${clickUser.first_name}`);
+        }
       }
 
-      // Time proximity scoring (closer = better)
+      // Location matches - check both ClickLog and User model
+      const clickCity = normalizeCity(click.city || clickUser?.location?.city);
+      const clickState = normalizeCity(click.stateMx || clickUser?.location?.state);
+      const clickZip = click.zipcode || clickUser?.location?.zipcode;
+
+      if (clickCity && normalizedShippingCity && clickCity === normalizedShippingCity) {
+        score += 35;
+        matchDetails.cityMatch = true;
+      }
+
+      if (clickState && normalizedShippingState && clickState === normalizedShippingState) {
+        score += 25;
+        matchDetails.stateMatch = true;
+      }
+
+      if (clickZip && shippingZipCode && clickZip === shippingZipCode) {
+        score += 45; // Zip is very specific
+        matchDetails.zipMatch = true;
+      }
+
+      // POI match - check if user's POI matches ordered product
+      if (clickUser?.poi?.rootName && firstItem?.item?.title) {
+        if (poiMatchesProduct(clickUser.poi.rootName, firstItem.item.title)) {
+          score += 30;
+          matchDetails.poiMatch = true;
+          console.log(`      ✓ POI match: ${clickUser.poi.rootName}`);
+        }
+      }
+
+      // Time proximity scoring
       if (hoursAgo <= HIGH_CONFIDENCE_HOURS) {
         score += 20;
+        matchDetails.timeScore = 20;
       } else if (hoursAgo <= MEDIUM_CONFIDENCE_HOURS) {
         score += 10;
+        matchDetails.timeScore = 10;
       } else {
         score += 5;
+        matchDetails.timeScore = 5;
       }
 
       if (score > bestScore) {
         bestScore = score;
-        bestMatch = {
-          click,
-          score,
-          cityMatches,
-          stateMatches,
-          productMatches,
-          hoursAgo
-        };
+        bestMatch = { click, score, hoursAgo, matchDetails, user: clickUser };
       }
     }
 
-    if (!bestMatch) {
-      console.log(`   ❌ No suitable match found for order ${orderId}`);
+    // ============ PHASE 4: ORPHAN CORRELATION ============
+    // If no click matched well, check if we have a user match without a click
+    // This handles: user chatted, got product info, but bought directly on ML without clicking link
+    if ((!bestMatch || bestScore < 50) && matchingUsers.length > 0) {
+      for (const user of matchingUsers) {
+        let orphanScore = 0;
+        const matchDetails = {
+          orphan: true,
+          nameMatch: false,
+          cityMatch: false,
+          stateMatch: false,
+          zipMatch: false,
+          poiMatch: false
+        };
+
+        // Name match
+        if (buyerFirstName && normalizeName(user.first_name) === buyerFirstName) {
+          orphanScore += 40;
+          matchDetails.nameMatch = true;
+        }
+
+        // Location match
+        const userCity = normalizeCity(user.location?.city);
+        const userState = normalizeCity(user.location?.state);
+        const userZip = user.location?.zipcode;
+
+        if (userCity && normalizedShippingCity && userCity === normalizedShippingCity) {
+          orphanScore += 35;
+          matchDetails.cityMatch = true;
+        }
+
+        if (userState && normalizedShippingState && userState === normalizedShippingState) {
+          orphanScore += 25;
+          matchDetails.stateMatch = true;
+        }
+
+        if (userZip && shippingZipCode && userZip === shippingZipCode) {
+          orphanScore += 45;
+          matchDetails.zipMatch = true;
+        }
+
+        // POI match
+        if (user.poi?.rootName && firstItem?.item?.title) {
+          if (poiMatchesProduct(user.poi.rootName, firstItem.item.title)) {
+            orphanScore += 30;
+            matchDetails.poiMatch = true;
+          }
+        }
+
+        // Only consider orphan if score is meaningful (name + location OR name + POI)
+        if (orphanScore >= 70 && orphanScore > bestScore) {
+          console.log(`   🔮 ORPHAN CORRELATION: User ${user.first_name} (score: ${orphanScore})`);
+          bestScore = orphanScore;
+          bestMatch = {
+            click: null,
+            score: orphanScore,
+            hoursAgo: null,
+            matchDetails,
+            user,
+            isOrphan: true
+          };
+        }
+      }
+    }
+
+    if (!bestMatch || bestScore < 30) {
+      console.log(`   ❌ No suitable match found for order ${orderId} (best score: ${bestScore})`);
       return null;
     }
 
-    // Determine confidence level
+    // Determine confidence level based on score
+    // Additive scoring means higher scores = more matching signals
     let confidence = 'low';
-    if (bestMatch.cityMatches && bestMatch.hoursAgo <= HIGH_CONFIDENCE_HOURS) {
-      confidence = 'high';
-    } else if (bestMatch.cityMatches || (bestMatch.stateMatches && bestMatch.hoursAgo <= MEDIUM_CONFIDENCE_HOURS)) {
-      confidence = 'medium'; // State match within 72h
-    } else if (bestMatch.productMatches && bestMatch.hoursAgo <= MEDIUM_CONFIDENCE_HOURS) {
-      confidence = 'medium';
+    if (bestScore >= 150) {
+      confidence = 'high'; // ML ID + name/location, or multiple strong signals
+    } else if (bestScore >= 100) {
+      confidence = 'medium'; // ML ID alone, or name + location + POI
+    } else if (bestScore >= 70) {
+      confidence = 'medium'; // Good combination without ML ID
+    }
+    // Below 70 stays 'low'
+
+    // Log match details
+    const md = bestMatch.matchDetails;
+    console.log(`   📊 Best match score: ${bestScore}`);
+    console.log(`      ML Item: ${md.mlItemMatch ? 'YES' : 'no'}, Name: ${md.nameMatch ? 'YES' : 'no'}, POI: ${md.poiMatch ? 'YES' : 'no'}`);
+    console.log(`      City: ${md.cityMatch ? 'YES' : 'no'}, State: ${md.stateMatch ? 'YES' : 'no'}, Zip: ${md.zipMatch ? 'YES' : 'no'}`);
+
+    // Handle orphan correlation (no click, just user match)
+    if (bestMatch.isOrphan) {
+      return await saveOrphanCorrelation(bestMatch.user, order, confidence, bestMatch.matchDetails, {
+        shippingCity, shippingState, shippingZipCode
+      });
     }
 
-    // Update the ClickLog with conversion data
-    const click = bestMatch.click;
-    const buyerInfo = order.buyer || {};
-    const firstItem = (order.order_items || [])[0];
-
-    const updateData = {
-      converted: true,
-      convertedAt: new Date(),
-      correlatedOrderId: String(orderId),
-      correlationConfidence: confidence,
-      correlationMethod: 'time_based',
-      conversionData: {
-        orderId: String(orderId),
-        orderStatus: order.status,
-        buyerId: buyerInfo.id ? String(buyerInfo.id) : null,
-        buyerNickname: buyerInfo.nickname,
-        buyerFirstName: buyerInfo.first_name,
-        buyerLastName: buyerInfo.last_name,
-        totalAmount: order.total_amount,
-        paidAmount: order.paid_amount,
-        currency: order.currency_id,
-        orderDate: orderDate,
-        itemTitle: firstItem?.item?.title,
-        itemQuantity: firstItem?.quantity,
-        shippingCity: shippingCity,
-        shippingState: shippingState
-      }
-    };
-
-    const updatedClick = await ClickLog.findByIdAndUpdate(
-      click._id,
-      updateData,
-      { new: true }
-    );
-
-    console.log(`   ✅ Correlated order ${orderId} with click ${click.clickId}`);
-    console.log(`      Confidence: ${confidence}, Score: ${bestScore}`);
-    console.log(`      City: ${click.city || 'none'} → ${shippingCity || 'none'} (${bestMatch.cityMatches ? 'MATCH' : 'no match'})`);
-    console.log(`      State: ${click.stateMx || click.city || 'none'} → ${shippingState || 'none'} (${bestMatch.stateMatches ? 'MATCH' : 'no match'})`);
-    console.log(`      Time: ${bestMatch.hoursAgo.toFixed(1)}h before order`);
-
-    return {
-      success: true,
-      clickLog: updatedClick,
-      confidence,
-      score: bestScore,
-      details: {
-        cityMatches: bestMatch.cityMatches,
-        stateMatches: bestMatch.stateMatches,
-        productMatches: bestMatch.productMatches,
-        hoursAgo: bestMatch.hoursAgo
-      }
-    };
+    // Normal click-based correlation
+    const method = md.mlItemMatch ? 'ml_item_match' : 'enhanced';
+    return await saveCorrelation(bestMatch.click, order, confidence, method, {
+      ...bestMatch.matchDetails,
+      shippingCity, shippingState, shippingZipCode,
+      hoursAgo: bestMatch.hoursAgo
+    });
 
   } catch (error) {
     console.error(`❌ Error correlating order:`, error.message);
     return { error: error.message };
   }
+}
+
+/**
+ * Save correlation to ClickLog
+ */
+async function saveCorrelation(click, order, confidence, method, details) {
+  const orderId = order.id || order.orderId;
+  const orderDate = new Date(order.date_created || order.orderDate);
+  const buyerInfo = order.buyer || {};
+  const firstItem = (order.order_items || [])[0];
+
+  const updateData = {
+    converted: true,
+    convertedAt: new Date(),
+    correlatedOrderId: String(orderId),
+    correlationConfidence: confidence,
+    correlationMethod: method,
+    conversionData: {
+      orderId: String(orderId),
+      orderStatus: order.status,
+      buyerId: buyerInfo.id ? String(buyerInfo.id) : null,
+      buyerNickname: buyerInfo.nickname,
+      buyerFirstName: buyerInfo.first_name,
+      buyerLastName: buyerInfo.last_name,
+      totalAmount: order.total_amount,
+      paidAmount: order.paid_amount,
+      currency: order.currency_id,
+      orderDate: orderDate,
+      itemTitle: firstItem?.item?.title,
+      itemQuantity: firstItem?.quantity,
+      shippingCity: details.shippingCity,
+      shippingState: details.shippingState,
+      shippingZipCode: details.shippingZipCode
+    }
+  };
+
+  const updatedClick = await ClickLog.findByIdAndUpdate(
+    click._id,
+    updateData,
+    { new: true }
+  );
+
+  console.log(`   ✅ Correlated order ${orderId} with click ${click.clickId} (${confidence})`);
+
+  return {
+    success: true,
+    clickLog: updatedClick,
+    confidence,
+    method,
+    details
+  };
+}
+
+/**
+ * Save orphan correlation (user match without click)
+ * Creates a new ClickLog entry to track the correlation
+ */
+async function saveOrphanCorrelation(user, order, confidence, matchDetails, shippingInfo) {
+  const orderId = order.id || order.orderId;
+  const orderDate = new Date(order.date_created || order.orderDate);
+  const buyerInfo = order.buyer || {};
+  const firstItem = (order.order_items || [])[0];
+
+  // Create an orphan ClickLog entry
+  const orphanClick = new ClickLog({
+    clickId: `orphan-${orderId}`,
+    psid: user.psid || user.unifiedId,
+    originalUrl: 'orphan_correlation',
+    productName: firstItem?.item?.title || 'Unknown',
+    clicked: false, // Not a real click
+    converted: true,
+    convertedAt: new Date(),
+    correlatedOrderId: String(orderId),
+    correlationConfidence: confidence,
+    correlationMethod: 'orphan',
+    city: user.location?.city,
+    stateMx: user.location?.state,
+    conversionData: {
+      orderId: String(orderId),
+      orderStatus: order.status,
+      buyerId: buyerInfo.id ? String(buyerInfo.id) : null,
+      buyerNickname: buyerInfo.nickname,
+      buyerFirstName: buyerInfo.first_name,
+      buyerLastName: buyerInfo.last_name,
+      totalAmount: order.total_amount,
+      paidAmount: order.paid_amount,
+      currency: order.currency_id,
+      orderDate: orderDate,
+      itemTitle: firstItem?.item?.title,
+      itemQuantity: firstItem?.quantity,
+      shippingCity: shippingInfo.shippingCity,
+      shippingState: shippingInfo.shippingState,
+      shippingZipCode: shippingInfo.shippingZipCode
+    }
+  });
+
+  await orphanClick.save();
+
+  console.log(`   ✅ ORPHAN correlation: order ${orderId} → user ${user.first_name} (${confidence})`);
+
+  return {
+    success: true,
+    clickLog: orphanClick,
+    confidence,
+    method: 'orphan',
+    details: matchDetails,
+    isOrphan: true
+  };
 }
 
 /**
@@ -317,6 +526,8 @@ module.exports = {
   correlateOrder,
   correlateOrders,
   normalizeCity,
+  normalizeName,
+  poiMatchesProduct,
   HIGH_CONFIDENCE_HOURS,
   MEDIUM_CONFIDENCE_HOURS,
   MAX_CORRELATION_HOURS

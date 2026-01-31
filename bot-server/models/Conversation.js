@@ -142,7 +142,12 @@ const conversationSchema = new mongoose.Schema({
     totalMessages: { type: Number, default: 0 },
     lastScoreUpdate: { type: Date, default: null }
   },
-  isWholesaleInquiry: { type: Boolean, default: false }
+  isWholesaleInquiry: { type: Boolean, default: false },
+
+  // Location stats question tracking (for correlation)
+  askedLocationStats: { type: Boolean, default: false },      // Already asked "de qué ciudad nos escribes?"
+  pendingLocationResponse: { type: Boolean, default: false }, // Expecting city/state answer
+  lastLinkSentAt: { type: Date, default: null }               // When we last sent an ML link
 });
 
 module.exports = mongoose.model("Conversation", conversationSchema);

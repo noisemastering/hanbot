@@ -2,6 +2,27 @@ const { randomUUID } = require('crypto');
 const ClickLog = require('./models/ClickLog');
 
 /**
+ * Extract ML Item ID from a Mercado Libre URL
+ * Handles formats like:
+ * - https://articulo.mercadolibre.com.mx/MLM-1234567890-titulo
+ * - https://www.mercadolibre.com.mx/some-product/p/MLM12345678
+ * - MLM1234567890 (already an ID)
+ * @param {string} url - ML URL or item ID
+ * @returns {string|null} - ML Item ID (e.g., "MLM1234567890") or null
+ */
+function extractMLItemId(url) {
+  if (!url) return null;
+
+  // Pattern 1: MLM-1234567890 or MLM1234567890 (with or without dash)
+  const match = url.match(/MLM-?(\d+)/i);
+  if (match) {
+    return `MLM${match[1]}`;
+  }
+
+  return null;
+}
+
+/**
  * Generate a trackable click link
  * @param {string} psid - User's PSID
  * @param {string} originalUrl - The actual destination URL
@@ -11,10 +32,14 @@ const ClickLog = require('./models/ClickLog');
 async function generateClickLink(psid, originalUrl, options = {}) {
   const clickId = randomUUID().slice(0, 8);
 
+  // Extract ML Item ID from URL for exact matching
+  const mlItemId = extractMLItemId(originalUrl);
+
   const clickLog = new ClickLog({
     clickId,
     psid,
     originalUrl,
+    mlItemId,  // Store extracted ML Item ID
     productName: options.productName,
     productId: options.productId,
     campaignId: options.campaignId,

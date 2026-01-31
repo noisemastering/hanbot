@@ -394,7 +394,7 @@ app.post("/sync-users", async (req, res) => {
           `https://graph.facebook.com/v18.0/${psid}`,
           {
             params: {
-              fields: "first_name,last_name,profile_pic",
+              fields: "first_name,last_name,profile_pic,locale,timezone",
               access_token: FB_PAGE_TOKEN
             }
           }
@@ -405,6 +405,8 @@ app.post("/sync-users", async (req, res) => {
           first_name: response.data.first_name || '',
           last_name: response.data.last_name || '',
           profile_pic: response.data.profile_pic || '',
+          locale: response.data.locale || null,
+          timezone: response.data.timezone || null,
           last_interaction: new Date()
         };
 

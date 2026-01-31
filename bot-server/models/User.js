@@ -18,7 +18,26 @@ const userSchema = new mongoose.Schema({
   locale: String,
   timezone: Number,
   gender: String,
-  last_interaction: { type: Date, default: Date.now }
+  last_interaction: { type: Date, default: Date.now },
+
+  // Location data (for sales correlation)
+  location: {
+    zipcode: { type: String, default: null },
+    city: { type: String, default: null },
+    state: { type: String, default: null },
+    source: { type: String, enum: ['conversation', 'stats_question', 'shipping_flow', null], default: null },
+    updatedAt: { type: Date, default: null }
+  },
+
+  // Product of Interest (for sales correlation)
+  poi: {
+    productInterest: { type: String, default: null },     // "malla_sombra", "borde_separador", "rollo", etc.
+    familyId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductFamily', default: null },
+    familyName: { type: String, default: null },          // "Malla Sombra Raschel 90%"
+    rootId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductFamily', default: null },
+    rootName: { type: String, default: null },            // "Malla Sombra"
+    updatedAt: { type: Date, default: null }
+  }
 });
 
 // Ensure at least one identifier is present

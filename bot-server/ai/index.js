@@ -34,6 +34,7 @@ const { correctTypos, logTypoCorrection } = require("./utils/typoCorrection");
 const { getProductDisplayName, determineVerbosity } = require("./utils/productEnricher");
 const { identifyAndSetProduct } = require("./utils/productIdentifier");
 const { lockPOI, checkVariantExists, getNotAvailableResponse } = require("./utils/productTree");
+const { handleLocationStatsResponse, appendStatsQuestionIfNeeded, syncConversationLocationToUser } = require("./utils/locationStats");
 
 // Layer 0: Source Context Detection
 const { buildSourceContext, logSourceContext, getProductFromSource } = require("./context");
@@ -736,6 +737,15 @@ async function generateReply(userMessage, psid, referral = null) {
   // These handle common patterns before the main flow system
   const cleanMsg = userMessage.toLowerCase().trim();
 
+  // 📊 LOCATION STATS: Check if user is answering our "de qué ciudad?" question
+  if (convo.pendingLocationResponse) {
+    const locationResponse = await handleLocationStatsResponse(userMessage, psid, convo);
+    if (locationResponse) {
+      return await checkForRepetition(locationResponse, psid, convo);
+    }
+    // Not a location response, continue normal flow
+  }
+
   // 👍 ACKNOWLEDGMENT: Handle simple acknowledgments and emojis
   const acknowledgmentResponse = await handleAcknowledgment(cleanMsg, psid, convo);
   if (acknowledgmentResponse) {
@@ -966,6 +976,17 @@ async function generateReply(userMessage, psid, referral = null) {
       };
     }
   }
+
+  // ====== LOCATION STATS QUESTION ======
+  // Append "de qué ciudad nos escribes?" if we're sending an ML link
+  // and haven't asked yet
+  if (response && response.text) {
+    const statsResult = await appendStatsQuestionIfNeeded(response.text, convo, psid);
+    if (statsResult.askedStats) {
+      response.text = statsResult.text;
+    }
+  }
+  // ====== END LOCATION STATS QUESTION ======
 
   // Check for repetition and escalate if needed
   return await checkForRepetition(response, psid, convo);

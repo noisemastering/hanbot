@@ -24,6 +24,12 @@ const clickLogSchema = new mongoose.Schema(
       required: true
     },
 
+    // ML Item ID (extracted from URL for exact matching)
+    mlItemId: {
+      type: String,
+      index: true  // e.g., "MLM1234567890"
+    },
+
     // Context information
     productName: String,
     productId: String,

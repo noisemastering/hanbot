@@ -4,6 +4,38 @@
 
 const ProductFamily = require("../../models/ProductFamily");
 const { updateConversation } = require("../../conversationManager");
+const User = require("../../models/User");
+
+/**
+ * Sync POI to User model for sales correlation
+ * @param {string} psid - User's PSID
+ * @param {object} poiData - POI data to sync
+ */
+async function syncPOIToUser(psid, poiData) {
+  try {
+    const user = await User.findOne({
+      $or: [
+        { psid: psid },
+        { unifiedId: psid },
+        { unifiedId: `fb:${psid}` }
+      ]
+    });
+
+    if (!user) return;
+
+    const poiUpdate = { 'poi.updatedAt': new Date() };
+    if (poiData.productInterest) poiUpdate['poi.productInterest'] = poiData.productInterest;
+    if (poiData.familyId) poiUpdate['poi.familyId'] = poiData.familyId;
+    if (poiData.familyName) poiUpdate['poi.familyName'] = poiData.familyName;
+    if (poiData.rootId) poiUpdate['poi.rootId'] = poiData.rootId;
+    if (poiData.rootName) poiUpdate['poi.rootName'] = poiData.rootName;
+
+    await User.updateOne({ _id: user._id }, { $set: poiUpdate });
+    console.log(`📊 Synced POI to User: ${poiData.rootName || poiData.productInterest}`);
+  } catch (error) {
+    console.error("Error syncing POI to User:", error.message);
+  }
+}
 
 /**
  * Get a product node with its full ancestry chain
@@ -297,6 +329,15 @@ async function lockPOI(psid, productId) {
     });
 
     console.log(`🔒 POI locked for ${psid}: ${product.name} (root: ${product.rootName})`);
+
+    // Sync POI to User model for sales correlation (non-blocking)
+    syncPOIToUser(psid, {
+      productInterest: product.rootName?.toLowerCase().replace(/\s+/g, '_'),
+      familyId: product._id,
+      familyName: product.name,
+      rootId: product.rootId,
+      rootName: product.rootName
+    }).catch(err => console.error("POI sync error:", err.message));
 
     return {
       id: product._id,
