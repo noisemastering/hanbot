@@ -119,6 +119,7 @@ router.get("/stats", async (req, res) => {
     }
 
     const Conversation = require("../models/Conversation");
+    const Ad = require("../models/Ad");
 
     const [
       totalLinks,
@@ -170,6 +171,17 @@ router.get("/stats", async (req, res) => {
       })
     ]);
 
+    // Look up ad name if we have a top ad
+    let topAdData = null;
+    if (topAd) {
+      const ad = await Ad.findOne({ fbAdId: topAd._id }).select('name');
+      topAdData = {
+        adId: topAd._id,
+        name: ad?.name || topAd._id,
+        clicks: topAd.clicks
+      };
+    }
+
     res.json({
       success: true,
       stats: {
@@ -185,7 +197,7 @@ router.get("/stats", async (req, res) => {
           dateLabel: new Date(busiestDay._id + 'T12:00:00').toLocaleDateString('es-MX', { weekday: 'short', month: 'short', day: 'numeric' }),
           clicks: busiestDay.clicks
         } : null,
-        topAd: topAd ? { adId: topAd._id, clicks: topAd.clicks } : null,
+        topAd: topAdData,
         handovers
       }
     });
