@@ -358,8 +358,8 @@ async function handleRollQuery(userMessage, psid, convo) {
     // STEP 6: Ask for missing info (respecting what we already know)
     // ============================================================
 
-    // If we have size but missing percentage
-    if (!missing.includes('size') && missing.includes('percentage')) {
+    // If we have width but missing percentage
+    if (!missing.includes('width') && missing.includes('percentage')) {
       const width = mergedSpecs.width;
       return {
         type: "text",
