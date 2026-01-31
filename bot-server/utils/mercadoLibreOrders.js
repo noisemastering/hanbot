@@ -364,7 +364,7 @@ async function getShipmentById(sellerId, shipmentId) {
           streetNumber: receiverAddress.street_number || null,
           country: receiverAddress.country?.name || null
         },
-        receiverName: shipment.receiver_name || null
+        receiverName: receiverAddress.receiver_name || null
       }
     };
   } catch (error) {
