@@ -220,6 +220,34 @@ function ConversionsView() {
         </div>
       )}
 
+      {/* Method Breakdown */}
+      {stats?.methodBreakdown && (
+        <div className="mb-6 bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
+          <p className="text-sm text-gray-400 mb-2">Método de Correlación</p>
+          <div className="flex flex-wrap gap-2">
+            {stats.methodBreakdown.ml_item_match > 0 && (
+              <span className="px-2 py-1 rounded text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30">
+                🎯 ML ID: {stats.methodBreakdown.ml_item_match}
+              </span>
+            )}
+            {stats.methodBreakdown.enhanced > 0 && (
+              <span className="px-2 py-1 rounded text-xs font-medium bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
+                ✨ Multi-señal: {stats.methodBreakdown.enhanced}
+              </span>
+            )}
+            {stats.methodBreakdown.orphan > 0 && (
+              <span className="px-2 py-1 rounded text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
+                🔮 Orphan: {stats.methodBreakdown.orphan}
+              </span>
+            )}
+            {stats.methodBreakdown.time_based > 0 && (
+              <span className="px-2 py-1 rounded text-xs font-medium bg-gray-500/20 text-gray-300 border border-gray-500/30">
+                ⏱️ Tiempo: {stats.methodBreakdown.time_based}
+              </span>
+            )}
+          </div>
+        </div>
+
       {/* Date Filters */}
       <div className="mb-6 flex flex-wrap items-end gap-4 bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
         <div>
@@ -401,28 +429,65 @@ function ConversionsView() {
             ) : (
               <div className="space-y-3 max-h-96 overflow-y-auto">
                 {recentConversions.map((conversion) => (
-                  <div key={conversion.clickId} className="p-3 bg-gray-700/30 rounded border-l-4 border-green-500">
+                  <div key={conversion.clickId} className={`p-3 bg-gray-700/30 rounded border-l-4 ${
+                    conversion.correlationMethod === 'orphan' ? 'border-purple-500' : 'border-green-500'
+                  }`}>
                     <div className="flex justify-between items-start mb-2">
                       <div>
                         <p className="text-sm font-medium text-white truncate max-w-xs" title={conversion.productName}>
                           {conversion.productName || 'Producto'}
                         </p>
                         <p className="text-xs text-gray-500">
-                          PSID: {conversion.psid?.substring(0, 12)}...
+                          {conversion.conversionData?.buyerFirstName} {conversion.conversionData?.buyerLastName || ''}
+                          {' · '}
+                          {conversion.conversionData?.shippingCity || conversion.city || 'Sin ciudad'}
                         </p>
                       </div>
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium ${getConfidenceBadge(conversion.correlationConfidence)}`}>
-                        {conversion.correlationConfidence || 'N/A'}
-                      </span>
+                      <div className="flex flex-col items-end gap-1">
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${getConfidenceBadge(conversion.correlationConfidence)}`}>
+                          {conversion.correlationConfidence || 'N/A'}
+                        </span>
+                        <span className="text-xs text-gray-500">
+                          {conversion.correlationMethod === 'orphan' ? '🔮 sin click' :
+                           conversion.correlationMethod === 'ml_item_match' ? '🎯 ML ID' :
+                           conversion.correlationMethod === 'enhanced' ? '✨ multi' :
+                           '⏱️ tiempo'}
+                        </span>
+                      </div>
                     </div>
+
+                    {/* Match indicators */}
+                    <div className="flex flex-wrap gap-1 mb-2">
+                      {conversion.mlItemId && (
+                        <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-xs" title={conversion.mlItemId}>
+                          📦 {conversion.mlItemId?.substring(0, 12)}
+                        </span>
+                      )}
+                      {conversion.matches?.city && (
+                        <span className="px-1.5 py-0.5 bg-green-500/20 text-green-300 rounded text-xs">
+                          📍 ciudad
+                        </span>
+                      )}
+                      {conversion.matches?.name && (
+                        <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-300 rounded text-xs">
+                          👤 nombre
+                        </span>
+                      )}
+                      {conversion.matches?.isOrphan && (
+                        <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded text-xs">
+                          🔮 orphan
+                        </span>
+                      )}
+                    </div>
+
                     <div className="flex justify-between items-center text-xs text-gray-400">
-                      <span>Click: {formatDate(conversion.clickedAt)}</span>
+                      <span>{conversion.clickedAt ? `Click: ${formatDate(conversion.clickedAt)}` : 'Sin click'}</span>
                       <span className="font-bold text-green-400">
                         {formatCurrency(conversion.conversionData?.totalAmount)}
                       </span>
                     </div>
                     <div className="text-xs text-gray-500 mt-1">
-                      Comprador: {conversion.conversionData?.buyerNickname || 'N/A'}
+                      Pedido: {conversion.conversionData?.orderId || 'N/A'} · {conversion.conversionData?.buyerNickname || ''}
                     </div>
                   </div>
                 ))}

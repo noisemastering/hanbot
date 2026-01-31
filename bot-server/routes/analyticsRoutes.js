@@ -182,6 +182,17 @@ router.get('/conversions', async (req, res) => {
       }
     });
 
+    // Method breakdown
+    const methodBreakdown = { ml_item_match: 0, enhanced: 0, orphan: 0, time_based: 0, other: 0 };
+    attributedClicks.forEach(click => {
+      const method = click.correlationMethod || 'time_based';
+      if (methodBreakdown[method] !== undefined) {
+        methodBreakdown[method]++;
+      } else {
+        methodBreakdown.other++;
+      }
+    });
+
     // Top converters (by PSID)
     const topConverters = await ClickLog.aggregate([
       { $match: conversionQuery },
@@ -210,6 +221,7 @@ router.get('/conversions', async (req, res) => {
         conversionRate,
         totalRevenue,
         confidenceBreakdown,
+        methodBreakdown,
         topConverters
       },
       dateRange: {
@@ -245,10 +257,24 @@ router.get('/conversions/recent', async (req, res) => {
         psid: click.psid,
         productName: click.productName,
         productId: click.productId,
+        mlItemId: click.mlItemId,
         clickedAt: click.clickedAt,
         convertedAt: click.convertedAt,
         correlationConfidence: click.correlationConfidence,
-        conversionData: click.conversionData
+        correlationMethod: click.correlationMethod,
+        // Location data from click
+        city: click.city,
+        stateMx: click.stateMx,
+        // Full conversion data
+        conversionData: click.conversionData,
+        // Computed match indicators
+        matches: {
+          mlItem: click.mlItemId && click.conversionData?.itemTitle?.includes(click.mlItemId?.replace('MLM', '')),
+          city: click.city && click.conversionData?.shippingCity &&
+                click.city.toLowerCase() === click.conversionData.shippingCity.toLowerCase(),
+          name: click.conversionData?.buyerFirstName ? true : false,
+          isOrphan: click.correlationMethod === 'orphan'
+        }
       }))
     });
   } catch (error) {
