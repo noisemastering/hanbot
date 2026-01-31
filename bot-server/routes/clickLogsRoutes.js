@@ -174,10 +174,12 @@ router.get("/stats", async (req, res) => {
     // Look up ad name if we have a top ad
     let topAdData = null;
     if (topAd) {
-      const ad = await Ad.findOne({ fbAdId: topAd._id }).select('name');
+      console.log('🔍 Looking up ad with fbAdId:', topAd._id);
+      const ad = await Ad.findOne({ fbAdId: topAd._id }).select('name fbAdId');
+      console.log('📋 Found ad:', ad);
       topAdData = {
         adId: topAd._id,
-        name: ad?.name || topAd._id,
+        name: ad?.name || null,
         clicks: topAd.clicks
       };
     }
