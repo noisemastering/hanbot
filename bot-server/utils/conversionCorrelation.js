@@ -84,8 +84,14 @@ async function correlateOrder(order, sellerId) {
     // Check if order is already correlated
     const existingCorrelation = await ClickLog.findOne({ correlatedOrderId: String(orderId) });
     if (existingCorrelation) {
-      console.log(`   ⏭️ Order ${orderId} already correlated to click ${existingCorrelation.clickId}`);
-      return { alreadyCorrelated: true, clickLog: existingCorrelation };
+      // If already correlated with enhanced method, skip
+      const method = existingCorrelation.correlationMethod;
+      if (method && method !== 'time_based') {
+        console.log(`   ⏭️ Order ${orderId} already correlated (${method})`);
+        return { alreadyCorrelated: true, clickLog: existingCorrelation };
+      }
+      // Old time_based correlation - re-evaluate with enhanced scoring
+      console.log(`   🔄 Re-evaluating old time_based correlation for order ${orderId}...`);
     }
 
     // Get shipping address from ML Shipments API
@@ -164,7 +170,13 @@ async function correlateOrder(order, sellerId) {
       clickedAt: { $gte: maxTimeAgo, $lte: orderDate }
     };
 
-    const allClicks = await ClickLog.find(clickQuery).sort({ clickedAt: -1 }).limit(50);
+    let allClicks = await ClickLog.find(clickQuery).sort({ clickedAt: -1 }).limit(50);
+
+    // If re-evaluating an old correlation, include the existing click in candidates
+    if (existingCorrelation && !allClicks.find(c => c._id.equals(existingCorrelation._id))) {
+      allClicks = [existingCorrelation, ...allClicks];
+    }
+
     console.log(`   🖱️ Found ${allClicks.length} clicks in time window`);
 
     let bestMatch = null;
