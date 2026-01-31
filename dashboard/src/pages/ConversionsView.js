@@ -220,94 +220,61 @@ function ConversionsView() {
         </div>
       )}
 
-      {/* Method Breakdown */}
-      {stats?.methodBreakdown && (
-        <div className="mb-6 bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
-          <p className="text-sm text-gray-400 mb-2">Método de Correlación</p>
-          <div className="flex flex-wrap gap-2">
-            {stats.methodBreakdown.ml_item_match > 0 && (
-              <span className="px-2 py-1 rounded text-xs font-medium bg-blue-500/20 text-blue-300 border border-blue-500/30">
-                🎯 ML ID: {stats.methodBreakdown.ml_item_match}
-              </span>
-            )}
-            {stats.methodBreakdown.enhanced > 0 && (
-              <span className="px-2 py-1 rounded text-xs font-medium bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">
-                ✨ Multi-señal: {stats.methodBreakdown.enhanced}
-              </span>
-            )}
-            {stats.methodBreakdown.orphan > 0 && (
-              <span className="px-2 py-1 rounded text-xs font-medium bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                🔮 Orphan: {stats.methodBreakdown.orphan}
-              </span>
-            )}
-            {stats.methodBreakdown.time_based > 0 && (
-              <span className="px-2 py-1 rounded text-xs font-medium bg-gray-500/20 text-gray-300 border border-gray-500/30">
-                ⏱️ Tiempo: {stats.methodBreakdown.time_based}
-              </span>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Date Filters */}
-      <div className="mb-6 flex flex-wrap items-end gap-4 bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Desde</label>
-          <input
-            type="date"
-            value={dateFrom}
-            onChange={(e) => setDateFrom(e.target.value)}
-            className="px-3 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-1">Hasta</label>
-          <input
-            type="date"
-            value={dateTo}
-            onChange={(e) => setDateTo(e.target.value)}
-            className="px-3 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-          />
-        </div>
-        <button
-          onClick={fetchData}
-          disabled={loading}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg disabled:opacity-50 transition-colors"
-        >
-          {loading ? 'Cargando...' : 'Actualizar'}
-        </button>
-      </div>
-
       {/* Correlation Controls */}
       <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4 mb-6">
-        <h2 className="text-lg font-semibold text-white mb-4">Ejecutar Correlación</h2>
-        <p className="text-sm text-gray-400 mb-4">
-          Correlaciona clicks de Messenger con pedidos de Mercado Libre por producto y tiempo.
-        </p>
+        <h2 className="text-lg font-semibold text-white mb-4">Correlación</h2>
 
-        <div className="flex flex-wrap gap-4 items-end">
+        <div className="flex flex-wrap gap-4 items-end mb-4">
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Ventana de tiempo (horas)</label>
+            <label className="block text-sm text-gray-400 mb-1">Desde</label>
+            <input
+              type="date"
+              value={dateFrom}
+              onChange={(e) => setDateFrom(e.target.value)}
+              className="px-3 py-2 bg-gray-900/50 border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Hasta</label>
+            <input
+              type="date"
+              value={dateTo}
+              onChange={(e) => setDateTo(e.target.value)}
+              className="px-3 py-2 bg-gray-900/50 border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+          </div>
+          <div>
+            <label className="block text-sm text-gray-400 mb-1">Ventana (hrs)</label>
             <input
               type="number"
               value={timeWindowHours}
               onChange={(e) => setTimeWindowHours(parseInt(e.target.value) || 48)}
-              className="bg-gray-700/50 border border-gray-600 rounded px-3 py-2 w-24 text-white"
+              className="bg-gray-700/50 border border-gray-600 rounded px-3 py-2 w-20 text-white"
               min="1"
               max="168"
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Límite de pedidos</label>
+            <label className="block text-sm text-gray-400 mb-1">Límite</label>
             <input
               type="number"
               value={orderLimit}
               onChange={(e) => setOrderLimit(parseInt(e.target.value) || 100)}
-              className="bg-gray-700/50 border border-gray-600 rounded px-3 py-2 w-24 text-white"
+              className="bg-gray-700/50 border border-gray-600 rounded px-3 py-2 w-20 text-white"
               min="10"
               max="500"
             />
           </div>
+        </div>
+
+        <div className="flex flex-wrap gap-2">
+          <button
+            onClick={fetchData}
+            disabled={loading}
+            className="px-4 py-2 bg-gray-700/50 text-gray-300 rounded hover:bg-gray-600 border border-gray-600"
+          >
+            {loading ? 'Cargando...' : 'Actualizar Stats'}
+          </button>
           <button
             onClick={() => runCorrelation(true)}
             disabled={correlating}
@@ -321,13 +288,6 @@ function ConversionsView() {
             className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
           >
             {correlating ? 'Procesando...' : 'Sincronizar Ahora'}
-          </button>
-          <button
-            onClick={fetchData}
-            disabled={loading}
-            className="bg-gray-700/50 text-gray-300 px-4 py-2 rounded hover:bg-gray-600 border border-gray-600"
-          >
-            Actualizar
           </button>
         </div>
 
