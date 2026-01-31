@@ -31,6 +31,10 @@ function ConversionsView() {
   const [timeWindowHours, setTimeWindowHours] = useState(48);
   const [orderLimit, setOrderLimit] = useState(100);
 
+  // Pagination for conversions table
+  const [pageSize, setPageSize] = useState(30);
+  const [currentPage, setCurrentPage] = useState(1);
+
   const fetchData = async () => {
     setLoading(true);
     setError(null);
@@ -45,7 +49,7 @@ function ConversionsView() {
 
       const [statsRes, conversionsRes] = await Promise.all([
         axios.get(`${API_URL}/analytics/conversions?${params.toString()}`),
-        axios.get(`${API_URL}/analytics/conversions/recent?limit=20`)
+        axios.get(`${API_URL}/analytics/conversions/recent?limit=500`) // Fetch more for pagination
       ]);
 
       setStats(statsRes.data.stats);
@@ -379,83 +383,135 @@ function ConversionsView() {
         </div>
       )}
 
-      {/* Recent Conversions - Full Width */}
+      {/* Recent Conversions - Table */}
       <div className="bg-gray-800/30 rounded-lg border border-gray-700/50">
-          <div className="px-4 py-3 border-b border-gray-700/50">
-            <h2 className="text-lg font-semibold text-white">Conversiones Recientes</h2>
+        <div className="px-4 py-3 border-b border-gray-700/50 flex justify-between items-center">
+          <h2 className="text-lg font-semibold text-white">Conversiones Recientes</h2>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-gray-400">Mostrar:</span>
+            {[30, 50, 100].map((size) => (
+              <button
+                key={size}
+                onClick={() => { setPageSize(size); setCurrentPage(1); }}
+                className={`px-2 py-1 text-sm rounded ${
+                  pageSize === size
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700/50 text-gray-400 hover:bg-gray-600'
+                }`}
+              >
+                {size}
+              </button>
+            ))}
           </div>
-          <div className="p-4">
-            {recentConversions.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">No hay conversiones registradas</p>
-            ) : (
-              <div className="space-y-3 max-h-96 overflow-y-auto">
-                {recentConversions.map((conversion) => (
-                  <div key={conversion.clickId} className={`p-3 bg-gray-700/30 rounded border-l-4 ${
-                    conversion.correlationMethod === 'orphan' ? 'border-purple-500' : 'border-green-500'
-                  }`}>
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <p className="text-sm font-medium text-white truncate max-w-xs" title={conversion.productName}>
-                          {conversion.productName || 'Producto'}
+        </div>
+        <div className="overflow-x-auto">
+          {recentConversions.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">No hay conversiones registradas</p>
+          ) : (
+            <>
+              <table className="w-full">
+                <thead className="bg-gray-900/50">
+                  <tr className="text-left text-xs text-gray-400 uppercase">
+                    <th className="px-4 py-3">Producto</th>
+                    <th className="px-4 py-3">Comprador</th>
+                    <th className="px-4 py-3">Ciudad</th>
+                    <th className="px-4 py-3">Click</th>
+                    <th className="px-4 py-3">Pedido</th>
+                    <th className="px-4 py-3">Método</th>
+                    <th className="px-4 py-3 text-right">Monto</th>
+                    <th className="px-4 py-3 text-center">Confianza</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700/50">
+                  {recentConversions
+                    .slice((currentPage - 1) * pageSize, currentPage * pageSize)
+                    .map((conversion) => (
+                    <tr key={conversion.clickId || conversion.conversionData?.orderId} className="hover:bg-gray-700/20">
+                      <td className="px-4 py-3">
+                        <div className="max-w-[200px]">
+                          <p className="text-sm text-white truncate" title={conversion.productName}>
+                            {conversion.productName || 'Producto'}
+                          </p>
+                          {conversion.mlItemId && (
+                            <span className="text-xs text-blue-400 font-mono">
+                              {conversion.mlItemId}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-sm text-gray-300">
+                          {conversion.conversionData?.buyerFirstName || ''} {conversion.conversionData?.buyerLastName || ''}
                         </p>
-                        <p className="text-xs text-gray-500">
-                          {conversion.conversionData?.buyerFirstName} {conversion.conversionData?.buyerLastName || ''}
-                          {' · '}
-                          {conversion.conversionData?.shippingCity || conversion.city || 'Sin ciudad'}
+                        <p className="text-xs text-gray-500 font-mono">
+                          {conversion.conversionData?.buyerNickname || '-'}
                         </p>
-                      </div>
-                      <div className="flex flex-col items-end gap-1">
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${getConfidenceBadge(conversion.correlationConfidence)}`}>
-                          {conversion.correlationConfidence || 'N/A'}
-                        </span>
-                        <span className="text-xs text-gray-500">
-                          {conversion.correlationMethod === 'orphan' ? '🔮 sin click' :
+                      </td>
+                      <td className="px-4 py-3 text-sm text-gray-300">
+                        {conversion.conversionData?.shippingCity || conversion.city || '-'}
+                      </td>
+                      <td className="px-4 py-3 text-xs text-gray-400">
+                        {conversion.clickedAt ? formatDate(conversion.clickedAt) : '-'}
+                      </td>
+                      <td className="px-4 py-3">
+                        <p className="text-xs text-gray-400 font-mono">
+                          {conversion.conversionData?.orderId || '-'}
+                        </p>
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className="text-xs text-gray-400">
+                          {conversion.correlationMethod === 'orphan' ? '🔮 orphan' :
                            conversion.correlationMethod === 'ml_item_match' ? '🎯 ML ID' :
                            conversion.correlationMethod === 'enhanced' ? '✨ multi' :
                            '⏱️ tiempo'}
                         </span>
-                      </div>
-                    </div>
+                      </td>
+                      <td className="px-4 py-3 text-right">
+                        <span className="text-sm font-semibold text-green-400">
+                          {formatCurrency(conversion.conversionData?.totalAmount)}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 text-center">
+                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${getConfidenceBadge(conversion.correlationConfidence)}`}>
+                          {conversion.correlationConfidence || 'N/A'}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
 
-                    {/* Match indicators */}
-                    <div className="flex flex-wrap gap-1 mb-2">
-                      {conversion.mlItemId && (
-                        <span className="px-1.5 py-0.5 bg-blue-500/20 text-blue-300 rounded text-xs" title={conversion.mlItemId}>
-                          📦 {conversion.mlItemId?.substring(0, 12)}
-                        </span>
-                      )}
-                      {conversion.matches?.city && (
-                        <span className="px-1.5 py-0.5 bg-green-500/20 text-green-300 rounded text-xs">
-                          📍 ciudad
-                        </span>
-                      )}
-                      {conversion.matches?.name && (
-                        <span className="px-1.5 py-0.5 bg-yellow-500/20 text-yellow-300 rounded text-xs">
-                          👤 nombre
-                        </span>
-                      )}
-                      {conversion.matches?.isOrphan && (
-                        <span className="px-1.5 py-0.5 bg-purple-500/20 text-purple-300 rounded text-xs">
-                          🔮 orphan
-                        </span>
-                      )}
-                    </div>
-
-                    <div className="flex justify-between items-center text-xs text-gray-400">
-                      <span>{conversion.clickedAt ? `Click: ${formatDate(conversion.clickedAt)}` : 'Sin click'}</span>
-                      <span className="font-bold text-green-400">
-                        {formatCurrency(conversion.conversionData?.totalAmount)}
-                      </span>
-                    </div>
-                    <div className="text-xs text-gray-500 mt-1">
-                      Pedido: {conversion.conversionData?.orderId || 'N/A'} · {conversion.conversionData?.buyerNickname || ''}
-                    </div>
+              {/* Pagination */}
+              {recentConversions.length > pageSize && (
+                <div className="px-4 py-3 border-t border-gray-700/50 flex items-center justify-between">
+                  <p className="text-sm text-gray-400">
+                    Mostrando {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, recentConversions.length)} de {recentConversions.length}
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      className="px-3 py-1 text-sm bg-gray-700/50 text-gray-300 rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Anterior
+                    </button>
+                    <span className="px-3 py-1 text-sm text-gray-400">
+                      Página {currentPage} de {Math.ceil(recentConversions.length / pageSize)}
+                    </span>
+                    <button
+                      onClick={() => setCurrentPage(p => Math.min(Math.ceil(recentConversions.length / pageSize), p + 1))}
+                      disabled={currentPage >= Math.ceil(recentConversions.length / pageSize)}
+                      className="px-3 py-1 text-sm bg-gray-700/50 text-gray-300 rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Siguiente
+                    </button>
                   </div>
-                ))}
-              </div>
-            )}
-          </div>
+                </div>
+              )}
+            </>
+          )}
         </div>
+      </div>
 
       {/* Attribution Funnel */}
       {stats && (

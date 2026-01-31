@@ -94,6 +94,26 @@ function extractSpecsFromMessage(msg, context = {}) {
     specs.customerName = nameMatch[1];
   }
 
+  // Extract "metros lineales" pattern: "20 metros lineales de uno veinte de ancho"
+  // Also handles: "20m de 1.20 de ancho", "20 metros de 1.2m de ancho"
+  const linearMetersMatch = cleanMsg.match(/(\d+)\s*(?:m|mts?|metros?)?\s*(?:lineales?|de\s+largo)?[^\d]*(?:de|por|x)?\s*(?:uno\s+veinte|1[.,]?20?|2[.,]?10?|4[.,]?20?|(\d+(?:[.,]\d+)?))\s*(?:m|mts?|metros?)?\s*(?:de\s+)?ancho/i);
+  if (linearMetersMatch && !specs.width) {
+    specs.linearMeters = parseInt(linearMetersMatch[1]);
+    // Parse the width - handle "uno veinte" = 1.20
+    let widthStr = linearMetersMatch[2] || cleanMsg.match(/uno\s+veinte/i) ? '1.20' : null;
+    if (!widthStr) {
+      // Try to find width in the original match
+      const widthPart = cleanMsg.match(/(?:de|por|x)\s*(?:uno\s+veinte|(\d+(?:[.,]\d+)?))\s*(?:m|mts?|metros?)?\s*(?:de\s+)?ancho/i);
+      if (widthPart) {
+        widthStr = /uno\s+veinte/i.test(widthPart[0]) ? '1.20' : widthPart[1];
+      }
+    }
+    if (widthStr) {
+      specs.requestedWidth = parseFloat(widthStr.replace(',', '.'));
+    }
+    specs.isLinearMetersRequest = true;
+  }
+
   return specs;
 }
 
@@ -190,7 +210,9 @@ function isRollQuery(msg) {
     /\b(precio\s+rol+[oy]|rol+[oy]\s+precio)\b/i,
     /\b(rol+[oy]\s+completo|rol+[oy]\s+entero)\b/i,
     /\b(\d+(?:\.\d+)?\s*[xX×*]\s*100|100\s*[xX×*]\s*\d+(?:\.\d+)?)\b/i, // Any roll dimension (Nx100 or 100xN)
-    /\b(comprar\s+rol+[oy]|vender\s+rol+[oy])\b/i
+    /\b(comprar\s+rol+[oy]|vender\s+rol+[oy])\b/i,
+    /\b(metros?\s+lineales?|lineales?\s+metros?)\b/i,  // "metros lineales", "20 metros lineales"
+    /\b(\d+)\s*(?:m|mts?|metros?)?\s*(?:lineales?|de\s+largo)\s+(?:de|por|x)?\s*(\d+(?:[.,]\d+)?)\s*(?:m|mts?|metros?)?\s*(?:de\s+)?ancho/i // "20m de largo de 1.20 de ancho"
   ];
 
   return rollPatterns.some(pattern => pattern.test(msg));
@@ -250,6 +272,35 @@ async function handleRollQuery(userMessage, psid, convo) {
       return null;
     }
 
+    // ============================================================
+    // CHECK FOR CONFECCIONADA CONTEXT WITH LINEAR METERS
+    // If user is asking for "metros lineales" but in confeccionada context, hand off to human
+    // (confeccionada = pre-made pieces, not sold by linear meter)
+    // ============================================================
+    const isConfeccionadaContext = convo.productInterest === 'malla_sombra' &&
+      (convo.productSpecs?.productType === 'confeccionada' ||
+       convo.poiRootName?.toLowerCase().includes('confeccionada') ||
+       /confeccionada/i.test(cleanMsg));
+
+    const isLinearMetersRequest = /\b(metros?\s+lineales?|lineales?\s+metros?)\b/i.test(cleanMsg) ||
+      /\b\d+\s*(?:m|mts?|metros?)\s+(?:de\s+)?(?:largo|ancho)/i.test(cleanMsg);
+
+    if (isConfeccionadaContext && isLinearMetersRequest) {
+      console.log("📏 Linear meters request in confeccionada context - handing off to human");
+      await updateConversation(psid, {
+        lastIntent: "confeccionada_custom_size",
+        handoffRequested: true,
+        handoffReason: "Linear meters request for confeccionada",
+        handoffTimestamp: new Date(),
+        state: "needs_human"
+      });
+
+      return {
+        type: "text",
+        text: "Las mallas confeccionadas las manejamos en medidas estándar. Para medidas especiales o por metro lineal, un especialista te puede cotizar.\n\nEn un momento te atienden."
+      };
+    }
+
     console.log("🎯 Roll query detected, checking conversation state...");
 
     // ============================================================
@@ -295,6 +346,36 @@ async function handleRollQuery(userMessage, psid, convo) {
         return {
           type: "text",
           text: `✅ Perfecto, tu pedido:\n\n${formatted}\n\nUn especialista te contactará para confirmar precio, disponibilidad y coordinar el envío.`
+        };
+      }
+    }
+
+    // ============================================================
+    // CHECK FOR LINEAR METERS REQUEST WITH NON-STANDARD WIDTH
+    // e.g., "20 metros lineales de uno veinte de ancho" (1.20m is not standard)
+    // ============================================================
+    const tempSpecs = extractSpecsFromMessage(userMessage, { lastIntent: convo.lastIntent });
+    if (tempSpecs.isLinearMetersRequest && tempSpecs.requestedWidth) {
+      const requestedWidth = tempSpecs.requestedWidth;
+      const linearMeters = tempSpecs.linearMeters;
+
+      // Check if requested width is valid (only 2.10m or 4.20m available)
+      const isValidWidth = (requestedWidth >= 2 && requestedWidth <= 2.2) || (requestedWidth >= 4 && requestedWidth <= 4.3);
+
+      if (!isValidWidth) {
+        console.log(`📏 Non-standard width requested: ${requestedWidth}m`);
+        await updateConversation(psid, {
+          lastIntent: "roll_invalid_width",
+          productInterest: "rollo"
+        });
+
+        return {
+          type: "text",
+          text: `Los rollos de malla sombra los manejamos en anchos estándar de:\n\n` +
+                `• 2.10m de ancho x 100m de largo\n` +
+                `• 4.20m de ancho x 100m de largo\n\n` +
+                `El ancho de ${requestedWidth}m no está disponible. ` +
+                `¿Te funciona alguno de estos anchos? Si necesitas ${linearMeters}m lineales, puedo cotizarte un corte del rollo.`
         };
       }
     }

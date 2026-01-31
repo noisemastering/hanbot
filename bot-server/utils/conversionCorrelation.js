@@ -411,29 +411,46 @@ async function correlateOrder(order, sellerId) {
           }
         }
 
-        // Update existing correlation with proper method
+        // Determine confidence based on method
+        let confidence = 'low';
+        if (method === 'ml_item_match') {
+          confidence = 'medium'; // ML ID alone is medium
+        } else if (method === 'enhanced') {
+          confidence = 'medium'; // Name/location match is medium
+        }
+        // time_based stays 'low'
+
+        // Update existing correlation with proper method AND confidence
         await ClickLog.findByIdAndUpdate(existingCorrelation._id, {
           correlationMethod: method,
+          correlationConfidence: confidence,
           correlatedOrderId: String(orderId)
         });
-        console.log(`   ✅ Updated existing correlation for order ${orderId} (${method})`);
-        return { alreadyCorrelated: true, clickLog: existingCorrelation, method };
+        console.log(`   ✅ Updated existing correlation for order ${orderId} (${method}, ${confidence})`);
+        return { alreadyCorrelated: true, clickLog: existingCorrelation, method, confidence };
       }
       console.log(`   ❌ No suitable match found for order ${orderId} (best score: ${bestScore})`);
       return null;
     }
 
-    // Determine confidence level based on score
-    // Additive scoring means higher scores = more matching signals
+    // Determine confidence level based on score AND method
+    // ML ID match should always be at least medium
+    const hasMLItemMatch = bestMatch.matchDetails?.mlItemMatch;
     let confidence = 'low';
-    if (bestScore >= 150) {
-      confidence = 'high'; // ML ID + name/location, or multiple strong signals
+
+    if (hasMLItemMatch) {
+      // ML Item ID is a strong signal
+      if (bestScore >= 130) {
+        confidence = 'high'; // ML ID + additional signals (name/location)
+      } else {
+        confidence = 'medium'; // ML ID alone
+      }
     } else if (bestScore >= 100) {
-      confidence = 'medium'; // ML ID alone, or name + location + POI
+      confidence = 'high'; // Multiple strong signals without ML ID
     } else if (bestScore >= 70) {
-      confidence = 'medium'; // Good combination without ML ID
+      confidence = 'medium'; // Good combination (name + location or similar)
     }
-    // Below 70 stays 'low'
+    // Below 70 without ML ID stays 'low' (time-only matches)
 
     // Log match details
     const md = bestMatch.matchDetails;

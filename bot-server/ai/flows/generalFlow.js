@@ -4,6 +4,7 @@
 
 const { updateConversation } = require("../../conversationManager");
 const { INTENTS } = require("../classifier");
+const { getAvailableSizes } = require("../../measureHandler");
 
 /**
  * Business information constants
@@ -306,6 +307,38 @@ async function handleConfirmation(convo, psid) {
     return null;
   }
 
+  // User confirmed after "¿Deseas ver la lista?" - show the actual size list!
+  if (lastIntent === "generic_measures") {
+    console.log("✅ User confirmed to see size list after generic_measures");
+    await updateConversation(psid, { lastIntent: "sizes_shown", unknownCount: 0 });
+
+    // Fetch all available sizes
+    const availableSizes = await getAvailableSizes(convo);
+
+    if (availableSizes.length > 0) {
+      let response = "📐 Aquí están nuestras medidas con precio:\n\n";
+
+      // Show sizes (up to 15)
+      const sizesFormatted = availableSizes.slice(0, 15).map(s => `• ${s.sizeStr} - $${s.price}`);
+      response += sizesFormatted.join('\n');
+
+      if (availableSizes.length > 15) {
+        response += `\n\n... y ${availableSizes.length - 15} medidas más.`;
+      }
+
+      response += "\n\nTambién manejamos rollos de 4.20x100m y 2.10x100m.\n\n";
+      response += "¿Cuál te interesa?";
+
+      return { type: "text", text: response };
+    }
+
+    // Fallback if no sizes available
+    return {
+      type: "text",
+      text: "Manejamos medidas desde 2x2m hasta 6x10m. ¿Qué medida necesitas?"
+    };
+  }
+
   // Generic confirmation
   await updateConversation(psid, { lastIntent: "confirmed" });
 
@@ -367,6 +400,14 @@ function shouldHandle(classification, sourceContext, convo, userMessage = '') {
   // Pattern-based detection for common queries (fallback when intent is unclear)
   if (userMessage) {
     const msg = userMessage.toLowerCase();
+
+    // IMPORTANT: If message contains product dimensions (e.g., "8x4"), defer to product flows
+    // They will handle the main query and append secondary answers (location, shipping, etc.)
+    const hasDimensions = /\d+\s*[xX×]\s*\d+/.test(msg);
+    if (hasDimensions) {
+      console.log(`📏 Message has dimensions, deferring to product flow for multi-question handling`);
+      return false;
+    }
 
     // Location patterns (sucursal, tienda, donde están, etc.)
     if (/d[oó]nde\s+(est[aá]n|tienen|se\s+ubican|quedan)|ubicaci[oó]n|direcci[oó]n|sucursal|tienda\s+f[ií]sica/i.test(msg)) {

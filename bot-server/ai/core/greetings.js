@@ -137,7 +137,9 @@ async function handleThanks(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
     const wasMallaSombra = convo.productInterest === 'malla_sombra' ||
       convo.productSpecs?.productType === 'malla_sombra' ||
       convo.lastIntent?.includes('malla') ||
-      convo.poiRootId; // POI lock indicates product conversation
+      convo.poiRootId || // POI lock indicates product conversation
+      /malla\s*sombra/i.test(convo.lastBotResponse || '') || // Bot just quoted malla sombra
+      convo.lastIntent === 'specific_measure'; // Just gave a product quote (usually malla sombra)
 
     const videoMessage = wasMallaSombra
       ? `\n\n📽️ Conoce más sobre nuestra malla sombra en este video: https://youtube.com/shorts/XLGydjdE7mY`

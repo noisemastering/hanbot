@@ -171,6 +171,19 @@ const { sendHandoffNotification } = require("../services/pushNotifications");
 async function checkForRepetition(response, psid, convo) {
   if (!response || !response.text) return response;
 
+  // Check time since last message - if more than 6 hours, treat as fresh conversation
+  const lastMessageTime = convo.lastMessageAt ? new Date(convo.lastMessageAt) : null;
+  const hoursSinceLastMessage = lastMessageTime
+    ? (Date.now() - lastMessageTime.getTime()) / (1000 * 60 * 60)
+    : 999;
+
+  if (hoursSinceLastMessage > 6) {
+    console.log(`⏰ Conversation resumed after ${hoursSinceLastMessage.toFixed(1)} hours - treating as fresh`);
+    // Clear lastBotResponse to prevent false repetition detection
+    await updateConversation(psid, { lastBotResponse: response.text });
+    return response;
+  }
+
   // Normalize for comparison (remove emojis, extra spaces, lowercase)
   const normalizeText = (text) => {
     if (!text) return '';
@@ -195,26 +208,45 @@ async function checkForRepetition(response, psid, convo) {
 
     if (isPriceQuote) {
       // User is asking about the same size they were just quoted
-      // Extract size and price from the response
+      // Extract size, price, and link from the response
       const sizeMatch = response.text.match(/(\d+)\s*[xX×]\s*(\d+)/);
       const priceMatch = response.text.match(/\$([\d,]+)/);
+      const linkMatch = response.text.match(/(https:\/\/agente\.hanlob\.com\.mx\/r\/\w+)/);
 
       if (sizeMatch && priceMatch) {
         const size = `${sizeMatch[1]}x${sizeMatch[2]}`;
         const price = priceMatch[1];
 
-        console.log(`📏 User asking for same size ${size} - giving short acknowledgment`);
+        console.log(`📏 User asking for same size ${size} - sending link again`);
 
         await updateConversation(psid, { lastIntent: "same_size_confirmation" });
 
-        return {
-          type: "text",
-          text: `Sí, es la misma medida que te acabo de cotizar: ${size}m a $${price} con envío gratis.\n\n¿Te paso el link para que puedas comprarlo?`
-        };
+        // If we have the link, send it directly. Otherwise ask.
+        if (linkMatch) {
+          return {
+            type: "text",
+            text: `¡Claro! Te paso nuevamente el link de la ${size}m a $${price} con envío gratis:\n\n${linkMatch[1]}`
+          };
+        } else {
+          return {
+            type: "text",
+            text: `Sí, es la misma medida: ${size}m a $${price} con envío gratis.\n\n¿Te paso el link para que puedas comprarlo?`
+          };
+        }
       }
     }
 
-    // Not a price quote repetition - escalate to human
+    // Check if this is a simple logistics response that user is re-asking
+    // (location, shipping, payment) - these are valid re-asks, not bot loops
+    const isLogisticsResponse = /quer[eé]taro|enviamos|env[ií]o|pago|tarjeta|mercado libre/i.test(response.text);
+    if (isLogisticsResponse) {
+      console.log(`📍 Logistics re-ask detected - allowing repeat response`);
+      // Just allow the response through, save it for next comparison
+      await updateConversation(psid, { lastBotResponse: response.text });
+      return response;
+    }
+
+    // Not a price quote or logistics repetition - escalate to human
     console.log("🔄 Non-price repetition - escalating to human");
 
     await updateConversation(psid, {
@@ -817,6 +849,23 @@ async function generateReply(userMessage, psid, referral = null) {
   const acknowledgmentResponse = await handleAcknowledgment(cleanMsg, psid, convo);
   if (acknowledgmentResponse) {
     return await checkForRepetition(acknowledgmentResponse, psid, convo);
+  }
+
+  // 📞 PHONE NUMBER: Handle when user asks for phone/contact number
+  if (/\b(tel[eé]fono|n[uú]mero|cel(ular)?|contacto|llam(ar|o|e)|whatsapp|wsp)\b/i.test(cleanMsg) &&
+      !/precio|cuanto|cuesta|medida|cotiza/i.test(cleanMsg)) {
+    console.log("📞 Phone number request detected");
+    const { getBusinessInfo } = require("./core/businessInfo");
+    const info = await getBusinessInfo();
+    await updateConversation(psid, { lastIntent: "phone_request" });
+    return await checkForRepetition({
+      type: "text",
+      text: `¡Claro! Aquí tienes nuestros datos de contacto:\n\n` +
+            `📞 ${info.phones.join(" / ")}\n` +
+            `💬 WhatsApp: wa.me/524421809696\n` +
+            `🕓 ${info.hours}\n\n` +
+            `¿Hay algo más en lo que pueda ayudarte?`
+    }, psid, convo);
   }
 
   // 🏪 STORE VISIT: Handle when user says they'll visit the physical store

@@ -606,12 +606,11 @@ router.post('/correlate-conversions', async (req, res) => {
         // Mark this click as matched for this run
         matchedClickIds.add(bestMatch._id.toString());
 
-        // Determine confidence
+        // Determine confidence - time-only correlation is always low confidence
+        // Higher confidence requires matching signals (ML ID, name, location)
         const timeDiff = orderDate - new Date(bestMatch.clickedAt);
         const hoursApart = timeDiff / (1000 * 60 * 60);
-        let confidence = 'low';
-        if (hoursApart < 2) confidence = 'high';
-        else if (hoursApart < 12) confidence = 'medium';
+        let confidence = 'low'; // Time-only match = low confidence
 
         correlations.push({
           clickId: bestMatch._id,
