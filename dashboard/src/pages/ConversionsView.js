@@ -370,6 +370,7 @@ function ConversionsView() {
                       ? `${converter.firstName || ''} ${converter.lastName || ''}`.trim()
                       : 'Usuario'}
                   </p>
+                  <p className="text-xs text-gray-500 font-mono">{converter.psid?.substring(0, 12)}...</p>
                   <p className="text-xs text-gray-500">{converter.conversions} compra{converter.conversions !== 1 ? 's' : ''} · {formatCurrency(converter.totalSpent)}</p>
                 </div>
               </div>
