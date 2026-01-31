@@ -59,6 +59,19 @@ function poiMatchesProduct(poiRootName, itemTitle) {
 }
 
 /**
+ * Check if a name appears in a nickname
+ * E.g., "juan" in "JUANPEREZ123" or "laura" in "LAURAM_MX"
+ * @param {string} firstName - Normalized first name from Facebook
+ * @param {string} nickname - ML buyer nickname
+ * @returns {boolean}
+ */
+function nameInNickname(firstName, nickname) {
+  if (!firstName || !nickname || firstName.length < 3) return false;
+  const normalizedNickname = normalizeName(nickname);
+  return normalizedNickname.includes(firstName);
+}
+
+/**
  * Correlate an ML order with ClickLog entries and User data
  *
  * Correlation priority:
@@ -202,6 +215,7 @@ async function correlateOrder(order, sellerId) {
       const matchDetails = {
         mlItemMatch: false,
         nameMatch: false,
+        nicknameMatch: false,
         cityMatch: false,
         stateMatch: false,
         zipMatch: false,
@@ -225,13 +239,22 @@ async function correlateOrder(order, sellerId) {
         console.log(`      ✓ ML Item ID match: ${click.mlItemId}`);
       }
 
-      // Name match - check User model
-      if (clickUser && buyerFirstName) {
-        const userFirstName = normalizeName(clickUser.first_name);
-        if (userFirstName === buyerFirstName) {
+      // Name match - check User model against receiver name or nickname
+      if (clickUser) {
+        const userFirstName = normalizeName(clickUser.firstName || clickUser.first_name);
+
+        // Primary: match against receiver name from shipment
+        if (userFirstName && buyerFirstName && userFirstName === buyerFirstName) {
           score += 40;
           matchDetails.nameMatch = true;
-          console.log(`      ✓ Name match: ${clickUser.first_name}`);
+          console.log(`      ✓ Name match (receiver): ${clickUser.firstName || clickUser.first_name}`);
+        }
+        // Fallback: check if user's name appears in buyer nickname
+        else if (userFirstName && buyerInfo.nickname && nameInNickname(userFirstName, buyerInfo.nickname)) {
+          score += 35; // Slightly lower confidence than exact match
+          matchDetails.nameMatch = true;
+          matchDetails.nicknameMatch = true;
+          console.log(`      ✓ Name in nickname: ${userFirstName} found in ${buyerInfo.nickname}`);
         }
       }
 
@@ -291,16 +314,22 @@ async function correlateOrder(order, sellerId) {
         const matchDetails = {
           orphan: true,
           nameMatch: false,
+          nicknameMatch: false,
           cityMatch: false,
           stateMatch: false,
           zipMatch: false,
           poiMatch: false
         };
 
-        // Name match
-        if (buyerFirstName && normalizeName(user.first_name) === buyerFirstName) {
+        // Name match - receiver name or nickname
+        const userFirstName = normalizeName(user.firstName || user.first_name);
+        if (userFirstName && buyerFirstName && userFirstName === buyerFirstName) {
           orphanScore += 40;
           matchDetails.nameMatch = true;
+        } else if (userFirstName && buyerInfo.nickname && nameInNickname(userFirstName, buyerInfo.nickname)) {
+          orphanScore += 35;
+          matchDetails.nameMatch = true;
+          matchDetails.nicknameMatch = true;
         }
 
         // Location match
