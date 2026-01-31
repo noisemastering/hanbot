@@ -194,7 +194,7 @@ router.get('/conversions', async (req, res) => {
     });
 
     // Top converters (by PSID)
-    const topConverters = await ClickLog.aggregate([
+    const topConvertersRaw = await ClickLog.aggregate([
       { $match: conversionQuery },
       {
         $group: {
@@ -206,6 +206,19 @@ router.get('/conversions', async (req, res) => {
       { $sort: { conversions: -1 } },
       { $limit: 5 }
     ]);
+
+    // Look up user names for top converters
+    const User = require('../models/User');
+    const topConverters = await Promise.all(topConvertersRaw.map(async (converter) => {
+      const user = await User.findOne({ psid: converter._id }).select('firstName lastName').lean();
+      return {
+        psid: converter._id,
+        conversions: converter.conversions,
+        totalSpent: converter.totalSpent,
+        firstName: user?.firstName || null,
+        lastName: user?.lastName || null
+      };
+    }));
 
     // Calculate rates
     const clickRate = totalLinks > 0 ? ((clickedLinks / totalLinks) * 100).toFixed(1) : '0';

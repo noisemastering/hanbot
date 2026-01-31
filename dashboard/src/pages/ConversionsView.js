@@ -344,43 +344,42 @@ function ConversionsView() {
         )}
       </div>
 
-      {/* Two Column Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Top Converters */}
-        {stats?.topConverters?.length > 0 && (
-          <div className="bg-gray-800/30 rounded-lg border border-gray-700/50">
-            <div className="px-4 py-3 border-b border-gray-700/50">
-              <h2 className="text-lg font-semibold text-white">Top Compradores (PSID)</h2>
-            </div>
-            <div className="p-4">
-              <div className="space-y-3">
-                {stats.topConverters.map((converter, i) => (
-                  <div key={converter._id} className="flex items-center justify-between p-3 bg-gray-700/30 rounded">
-                    <div className="flex items-center gap-3">
-                      <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold ${
-                        i === 0 ? 'bg-yellow-500/30 text-yellow-300' :
-                        i === 1 ? 'bg-gray-500/30 text-gray-300' :
-                        i === 2 ? 'bg-orange-500/30 text-orange-300' :
-                        'bg-gray-600/30 text-gray-400'
-                      }`}>
-                        {i + 1}
-                      </span>
-                      <div>
-                        <p className="text-sm font-medium text-white">
-                          {converter._id?.substring(0, 16)}...
-                        </p>
-                        <p className="text-xs text-gray-500">{converter.conversions} compra(s)</p>
-                      </div>
-                    </div>
-                  </div>
-                ))}
+      {/* Top Converters - Horizontal Cards */}
+      {stats?.topConverters?.length > 0 && (
+        <div className="mb-6">
+          <h2 className="text-lg font-semibold text-white mb-3">Top Compradores</h2>
+          <div className="flex flex-wrap gap-3">
+            {stats.topConverters.map((converter, i) => (
+              <div key={converter.psid} className={`flex items-center gap-3 px-4 py-3 bg-gray-800/30 rounded-lg border ${
+                i === 0 ? 'border-yellow-500/50' :
+                i === 1 ? 'border-gray-500/50' :
+                i === 2 ? 'border-orange-500/50' :
+                'border-gray-700/50'
+              }`}>
+                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${
+                  i === 0 ? 'bg-yellow-500/30 text-yellow-300' :
+                  i === 1 ? 'bg-gray-500/30 text-gray-300' :
+                  i === 2 ? 'bg-orange-500/30 text-orange-300' :
+                  'bg-gray-600/30 text-gray-400'
+                }`}>
+                  {i + 1}
+                </span>
+                <div>
+                  <p className="text-sm font-medium text-white">
+                    {converter.firstName || converter.lastName
+                      ? `${converter.firstName || ''} ${converter.lastName || ''}`.trim()
+                      : 'Usuario'}
+                  </p>
+                  <p className="text-xs text-gray-500">{converter.conversions} compra{converter.conversions !== 1 ? 's' : ''} · {formatCurrency(converter.totalSpent)}</p>
+                </div>
               </div>
-            </div>
+            ))}
           </div>
-        )}
+        </div>
+      )}
 
-        {/* Recent Conversions */}
-        <div className="bg-gray-800/30 rounded-lg border border-gray-700/50">
+      {/* Recent Conversions - Full Width */}
+      <div className="bg-gray-800/30 rounded-lg border border-gray-700/50">
           <div className="px-4 py-3 border-b border-gray-700/50">
             <h2 className="text-lg font-semibold text-white">Conversiones Recientes</h2>
           </div>
@@ -456,7 +455,6 @@ function ConversionsView() {
             )}
           </div>
         </div>
-      </div>
 
       {/* Attribution Funnel */}
       {stats && (
