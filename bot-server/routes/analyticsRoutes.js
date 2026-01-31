@@ -80,56 +80,13 @@ router.get('/conversions', async (req, res) => {
   try {
     const { dateFrom, dateTo, sellerId = '482595248' } = req.query;
 
-    // Auto-sync: correlate recent orders with simple time-window matching
+    // Auto-sync: use enhanced correlation system
     try {
       const ordersResult = await getOrders(sellerId, { limit: 50, sort: 'date_desc' });
       if (ordersResult.success) {
         const paidOrders = ordersResult.orders.filter(o => o.status === 'paid');
-        let newCorrelations = 0;
-        const matchedClickIds = new Set();
-
-        for (const order of paidOrders) {
-          // Skip if already correlated
-          const existing = await ClickLog.findOne({ 'conversionData.orderId': order.id }).lean();
-          if (existing) continue;
-
-          const orderDate = new Date(order.date_created);
-          const windowStart = new Date(orderDate.getTime() - (48 * 60 * 60 * 1000));
-
-          // Find clicks in time window
-          const candidates = await ClickLog.find({
-            clicked: true,
-            converted: { $ne: true },
-            clickedAt: { $gte: windowStart, $lte: orderDate }
-          }).sort({ clickedAt: -1 }).limit(10).lean();
-
-          const available = candidates.filter(c => !matchedClickIds.has(c._id.toString()));
-          if (available.length === 0) continue;
-
-          const bestMatch = available[0]; // Most recent click
-          matchedClickIds.add(bestMatch._id.toString());
-
-          const timeDiff = (orderDate - new Date(bestMatch.clickedAt)) / (1000 * 60 * 60);
-          const confidence = timeDiff < 2 ? 'high' : timeDiff < 12 ? 'medium' : 'low';
-
-          await ClickLog.updateOne({ _id: bestMatch._id }, {
-            $set: {
-              converted: true,
-              convertedAt: orderDate,
-              correlationConfidence: confidence,
-              conversionData: {
-                orderId: order.id,
-                orderStatus: order.status,
-                totalAmount: order.total_amount,
-                paidAmount: order.paid_amount,
-                buyerNickname: order.buyer?.nickname,
-                orderDate: order.date_created
-              }
-            }
-          });
-          newCorrelations++;
-        }
-        console.log(`🔄 Auto-sync: ${newCorrelations} new correlations`);
+        const result = await correlateOrders(paidOrders, sellerId);
+        console.log(`🔄 Auto-sync: ${result.correlated} new correlations (enhanced)`);
       }
     } catch (syncError) {
       console.error('⚠️ Auto-sync failed (continuing with cached data):', syncError.message);
