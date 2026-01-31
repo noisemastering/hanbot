@@ -100,10 +100,11 @@ async function correlateOrder(order, sellerId) {
       console.log(`   🔄 Re-evaluating old time_based correlation for order ${orderId}...`);
     }
 
-    // Get shipping address from ML Shipments API
+    // Get shipping address and receiver name from ML Shipments API
     let shippingCity = null;
     let shippingState = null;
     let shippingZipCode = null;
+    let receiverName = null;
 
     if (order.shipping?.id) {
       const shipmentResult = await getShipmentById(sellerId, order.shipping.id);
@@ -111,7 +112,9 @@ async function correlateOrder(order, sellerId) {
         shippingCity = shipmentResult.shipment.receiverAddress?.city;
         shippingState = shipmentResult.shipment.receiverAddress?.state;
         shippingZipCode = shipmentResult.shipment.receiverAddress?.zipCode;
+        receiverName = shipmentResult.shipment.receiverName;
         console.log(`   📍 Shipping: ${shippingCity}, ${shippingState} (${shippingZipCode})`);
+        console.log(`   👤 Receiver: ${receiverName}`);
       }
     }
 
@@ -122,10 +125,16 @@ async function correlateOrder(order, sellerId) {
 
     console.log(`   📦 Ordered items: ${orderedMLItemIds.join(', ')}`);
 
-    // Buyer name for matching
-    const buyerFirstName = normalizeName(buyerInfo.first_name);
-    const buyerLastName = normalizeName(buyerInfo.last_name);
-    console.log(`   👤 Buyer: ${buyerInfo.first_name} ${buyerInfo.last_name}`);
+    // Receiver name for matching (from shipment, this is the real name)
+    // Parse "Juan Pérez García" into first/last name
+    let buyerFirstName = null;
+    let buyerLastName = null;
+    if (receiverName) {
+      const nameParts = receiverName.trim().split(/\s+/);
+      buyerFirstName = normalizeName(nameParts[0]);
+      buyerLastName = nameParts.length > 1 ? normalizeName(nameParts.slice(1).join(' ')) : null;
+    }
+    console.log(`   👤 Receiver name parsed: ${buyerFirstName} ${buyerLastName || ''}`);
 
     // Calculate time window for click-based correlation
     const maxTimeAgo = new Date(orderDate.getTime() - (MAX_CORRELATION_HOURS * 60 * 60 * 1000));
@@ -406,7 +415,8 @@ async function correlateOrder(order, sellerId) {
     // Handle orphan correlation (no click, just user match)
     if (bestMatch.isOrphan) {
       return await saveOrphanCorrelation(bestMatch.user, order, confidence, bestMatch.matchDetails, {
-        shippingCity, shippingState, shippingZipCode
+        shippingCity, shippingState, shippingZipCode,
+        buyerFirstName, buyerLastName, receiverName
       });
     }
 
@@ -415,6 +425,7 @@ async function correlateOrder(order, sellerId) {
     return await saveCorrelation(bestMatch.click, order, confidence, method, {
       ...bestMatch.matchDetails,
       shippingCity, shippingState, shippingZipCode,
+      buyerFirstName, buyerLastName, receiverName,
       hoursAgo: bestMatch.hoursAgo
     });
 
@@ -444,8 +455,9 @@ async function saveCorrelation(click, order, confidence, method, details) {
       orderStatus: order.status,
       buyerId: buyerInfo.id ? String(buyerInfo.id) : null,
       buyerNickname: buyerInfo.nickname,
-      buyerFirstName: buyerInfo.first_name,
-      buyerLastName: buyerInfo.last_name,
+      buyerFirstName: details.buyerFirstName || null,
+      buyerLastName: details.buyerLastName || null,
+      receiverName: details.receiverName || null,
       totalAmount: order.total_amount,
       paidAmount: order.paid_amount,
       currency: order.currency_id,
@@ -504,8 +516,9 @@ async function saveOrphanCorrelation(user, order, confidence, matchDetails, ship
       orderStatus: order.status,
       buyerId: buyerInfo.id ? String(buyerInfo.id) : null,
       buyerNickname: buyerInfo.nickname,
-      buyerFirstName: buyerInfo.first_name,
-      buyerLastName: buyerInfo.last_name,
+      buyerFirstName: shippingInfo.buyerFirstName || null,
+      buyerLastName: shippingInfo.buyerLastName || null,
+      receiverName: shippingInfo.receiverName || null,
       totalAmount: order.total_amount,
       paidAmount: order.paid_amount,
       currency: order.currency_id,
@@ -520,7 +533,7 @@ async function saveOrphanCorrelation(user, order, confidence, matchDetails, ship
 
   await orphanClick.save();
 
-  console.log(`   ✅ ORPHAN correlation: order ${orderId} → user ${user.first_name} (${confidence})`);
+  console.log(`   ✅ ORPHAN correlation: order ${orderId} → user ${user.firstName || user.first_name} (${confidence})`);
 
   return {
     success: true,
