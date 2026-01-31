@@ -247,6 +247,7 @@ function ConversionsView() {
             )}
           </div>
         </div>
+      )}
 
       {/* Date Filters */}
       <div className="mb-6 flex flex-wrap items-end gap-4 bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
