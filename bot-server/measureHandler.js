@@ -216,16 +216,18 @@ function parseDimensions(message) {
   const pattern4 = /(\d+(?:\.\d+)?)\s+metros?\s+(?:de\s+)?(?:ancho\s+)?(?:por|x)\s+(\d+(?:\.\d+)?)(?:\s*metros?)?/i;
 
   // Pattern 5: "3 ancho x 5 largo" - dimensions with ancho/largo labels (ancho first)
-  const pattern5 = /(\d+(?:\.\d+)?)\s+(?:de\s+)?ancho\s+(?:por|x)\s+(\d+(?:\.\d+)?)\s+(?:de\s+)?largo/i;
+  // Also handles "y" as separator (e.g., "3 de ancho y 5 de largo")
+  const pattern5 = /(\d+(?:\.\d+)?)\s+(?:de\s+)?ancho\s+(?:por|x|y)\s+(\d+(?:\.\d+)?)\s+(?:de\s+)?largo/i;
 
   // Pattern 5b: "4 de largo por 3 de ancho" - dimensions with largo first (opposite of pattern 5)
-  const pattern5b = /(\d+(?:\.\d+)?)\s+(?:de\s+)?largo\s+(?:por|x)\s+(\d+(?:\.\d+)?)\s+(?:de\s+)?ancho/i;
+  const pattern5b = /(\d+(?:\.\d+)?)\s+(?:de\s+)?largo\s+(?:por|x|y)\s+(\d+(?:\.\d+)?)\s+(?:de\s+)?ancho/i;
 
   // Pattern 6: "8 metros de largo x 5 de ancho" or "8 metros de ancho x 5 de largo"
-  const pattern6 = /(\d+(?:\.\d+)?)\s*metros?\s+de\s+(largo|ancho)\s*[xX×*]\s*(\d+(?:\.\d+)?)\s*(?:metros?)?\s*(?:de\s+)?(largo|ancho)?/i;
+  // Also handles "y" as separator
+  const pattern6 = /(\d+(?:\.\d+)?)\s*metros?\s+de\s+(largo|ancho)\s*(?:[xX×*]|y)\s*(\d+(?:\.\d+)?)\s*(?:metros?)?\s*(?:de\s+)?(largo|ancho)?/i;
 
-  // Pattern 7: "10 metros de ancho por 27 de largo" - using "por" instead of "x"
-  const pattern7 = /(\d+(?:\.\d+)?)\s*metros?\s+de\s+(ancho|largo)\s+por\s+(\d+(?:\.\d+)?)\s*(?:metros?)?\s*(?:de\s+)?(largo|ancho)/i;
+  // Pattern 7: "10 metros de ancho por 27 de largo" - using "por" or "y" instead of "x"
+  const pattern7 = /(\d+(?:\.\d+)?)\s*metros?\s+de\s+(ancho|largo)\s+(?:por|y)\s+(\d+(?:\.\d+)?)\s*(?:metros?)?\s*(?:de\s+)?(largo|ancho)/i;
 
   // Pattern 8: "Largo 6.00 Ancho 5.00" or "Ancho 5.00 Largo 6.00" (formal specification without connector)
   const pattern8 = /(largo|ancho)\s+(\d+(?:\.\d+)?)\s+(ancho|largo)\s+(\d+(?:\.\d+)?)/i;
