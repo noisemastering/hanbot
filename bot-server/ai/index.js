@@ -1001,6 +1001,37 @@ async function generateReply(userMessage, psid, referral = null) {
   }
   // ====== END INTENT DB HANDLING ======
 
+  // ====== PHONE NUMBER DETECTION (HOT LEAD!) ======
+  if (classification.intent === 'phone_shared' && classification.entities?.phone) {
+    const phone = classification.entities.phone;
+    console.log(`📱 HOT LEAD! Phone number captured: ${phone}`);
+
+    // Store phone in leadData and trigger human handoff
+    await updateConversation(psid, {
+      'leadData.contact': phone,
+      'leadData.contactType': 'phone',
+      'leadData.capturedAt': new Date(),
+      handoffRequested: true,
+      handoffReason: `Cliente compartió su teléfono: ${phone}`,
+      handoffTimestamp: new Date(),
+      state: "needs_human"
+    });
+
+    // Also try to extract name from recent messages if available
+    if (convo.productSpecs?.customerName) {
+      await updateConversation(psid, {
+        'leadData.name': convo.productSpecs.customerName
+      });
+    }
+
+    return {
+      type: "text",
+      text: "¡Perfecto! Anotado tu número. En un momento te contacta uno de nuestros asesores para atenderte personalmente.",
+      handledBy: "phone_captured"
+    };
+  }
+  // ====== END PHONE NUMBER DETECTION ======
+
   // ====== WHOLESALE CHECK ======
   // Check if user is requesting a quantity that qualifies for wholesale
   const requestedQty = extractQuantity(userMessage) || classification.entities?.quantity;

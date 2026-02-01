@@ -83,6 +83,9 @@ const INTENTS = {
   HUMAN_REQUEST: "human_request",          // "Quiero hablar con alguien", "Agente"
   COMPLAINT: "complaint",                  // User expressing frustration
 
+  // Contact Info (hot leads!)
+  PHONE_SHARED: "phone_shared",            // User shared their phone number
+
   // Other
   OFF_TOPIC: "off_topic",                  // Unrelated to products
   UNCLEAR: "unclear"                       // Can't determine intent
@@ -464,6 +467,32 @@ function quickClassify(message, dbIntents = null) {
     return { intent: INTENTS.THANKS, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.95 };
   }
 
+  // ===== PHONE NUMBER DETECTION (HOT LEAD!) =====
+  // Mexican phone numbers: 10 digits, optionally with +52 country code
+  // Can have spaces, dashes, dots, or parentheses
+  const phonePattern = /(?:\+?52\s*)?(?:\(?[1-9]\d{1,2}\)?[\s.-]*)?\d{3,4}[\s.-]?\d{4}/g;
+  const phoneMatches = msg.match(phonePattern);
+  if (phoneMatches) {
+    // Clean and validate - must have 10 digits total
+    for (const match of phoneMatches) {
+      const digitsOnly = match.replace(/\D/g, '');
+      // Remove country code if present
+      const phone = digitsOnly.length === 12 && digitsOnly.startsWith('52')
+        ? digitsOnly.slice(2)
+        : digitsOnly;
+
+      if (phone.length === 10) {
+        console.log(`📱 Phone number detected: ${phone}`);
+        return {
+          intent: INTENTS.PHONE_SHARED,
+          product: PRODUCTS.UNKNOWN,
+          entities: { phone },
+          confidence: 0.95
+        };
+      }
+    }
+  }
+
   // ===== MULTI-QUESTION DETECTION =====
   // Dynamically detect ALL question types in a message (supports 2, 3, or more questions)
   const questionIndicators = [
@@ -551,15 +580,42 @@ function quickClassify(message, dbIntents = null) {
   // ===== PRODUCT KEYWORD DETECTION =====
   // These bypass AI for obvious product mentions
 
-  // Dimension pattern: NxN, N x N, N*N, N por N (with optional decimals and units)
-  const dimPattern = /(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*(?:x|×|\*|por)\s*(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?/i;
-  const dimMatch = msg.match(dimPattern);
+  // First, check for "N de ancho y M de largo" or "N de largo y M de ancho" patterns
+  const anchoLargoPattern = /(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*de\s*ancho\s*(?:y|x|por)\s*(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*(?:de\s*largo)?/i;
+  const largoAnchoPattern = /(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*de\s*largo\s*(?:y|x|por)\s*(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*(?:de\s*ancho)?/i;
+
   let dimensions = null;
-  if (dimMatch) {
-    const d1 = parseFloat(dimMatch[1].replace(',', '.'));
-    const d2 = parseFloat(dimMatch[2].replace(',', '.'));
-    if (!isNaN(d1) && !isNaN(d2)) {
-      dimensions = { width: Math.min(d1, d2), height: Math.max(d1, d2), raw: `${d1}x${d2}` };
+  let anchoLargoMatch = msg.match(anchoLargoPattern);
+  let largoAnchoMatch = msg.match(largoAnchoPattern);
+
+  if (anchoLargoMatch) {
+    // "N de ancho y M de largo" - first is width, second is height
+    const width = parseFloat(anchoLargoMatch[1].replace(',', '.'));
+    const height = parseFloat(anchoLargoMatch[2].replace(',', '.'));
+    if (!isNaN(width) && !isNaN(height)) {
+      dimensions = { width: Math.min(width, height), height: Math.max(width, height), raw: `${width}x${height}` };
+      console.log(`⚡ Detected "ancho y largo" format: ${width}x${height}`);
+    }
+  } else if (largoAnchoMatch) {
+    // "N de largo y M de ancho" - first is height, second is width
+    const height = parseFloat(largoAnchoMatch[1].replace(',', '.'));
+    const width = parseFloat(largoAnchoMatch[2].replace(',', '.'));
+    if (!isNaN(width) && !isNaN(height)) {
+      dimensions = { width: Math.min(width, height), height: Math.max(width, height), raw: `${width}x${height}` };
+      console.log(`⚡ Detected "largo y ancho" format: ${width}x${height}`);
+    }
+  }
+
+  // Fallback: Standard dimension pattern: NxN, N x N, N*N, N por N
+  if (!dimensions) {
+    const dimPattern = /(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*(?:x|×|\*|por)\s*(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?/i;
+    const dimMatch = msg.match(dimPattern);
+    if (dimMatch) {
+      const d1 = parseFloat(dimMatch[1].replace(',', '.'));
+      const d2 = parseFloat(dimMatch[2].replace(',', '.'));
+      if (!isNaN(d1) && !isNaN(d2)) {
+        dimensions = { width: Math.min(d1, d2), height: Math.max(d1, d2), raw: `${d1}x${d2}` };
+      }
     }
   }
 
@@ -586,15 +642,24 @@ function quickClassify(message, dbIntents = null) {
   }
 
   // Just dimensions (when in context) - still extract them
-  if (dimensions && msg.replace(dimPattern, '').trim().length < 10) {
-    // Message is mostly just dimensions
-    console.log(`⚡ Quick classify: dimensions only ${dimensions.raw}`);
-    return {
-      intent: INTENTS.SIZE_SPECIFICATION,
-      product: PRODUCTS.UNKNOWN, // Let conversation context determine product
-      entities: { dimensions: dimensions.raw, width: dimensions.width, height: dimensions.height },
-      confidence: 0.85
-    };
+  // Check if message is mostly just dimensions by removing the dimension part and seeing what's left
+  if (dimensions) {
+    // Remove dimension-related text and see if message is mostly about dimensions
+    const withoutDims = msg
+      .replace(/\d+(?:[.,]\d+)?\s*(?:m(?:ts|etros?)?\.?)?\s*(?:de\s*)?(?:ancho|largo)?\s*(?:y|x|×|\*|por)\s*\d+(?:[.,]\d+)?\s*(?:m(?:ts|etros?)?\.?)?\s*(?:de\s*)?(?:ancho|largo)?/gi, '')
+      .replace(/\d+(?:[.,]\d+)?\s*(?:m(?:ts|etros?)?\.?)?/g, '')
+      .trim();
+
+    if (withoutDims.length < 15) {
+      // Message is mostly just dimensions
+      console.log(`⚡ Quick classify: dimensions only ${dimensions.raw}`);
+      return {
+        intent: INTENTS.SIZE_SPECIFICATION,
+        product: PRODUCTS.UNKNOWN, // Let conversation context determine product
+        entities: { dimensions: dimensions.raw, width: dimensions.width, height: dimensions.height },
+        confidence: 0.85
+      };
+    }
   }
 
   // "rollo" or "100 metros" = rollo product

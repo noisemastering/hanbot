@@ -35,9 +35,9 @@ function parseConfeccionadaDimensions(str) {
   s = s.replace(/(\d+)\s*y\s*medio/gi, (_, num) => `${num}.5`);
 
   // Pattern 1: "N de largo x M de ancho" or "N de ancho x M de largo"
-  // Examples: "8 mts. de largo x 5 de ancho", "5 de ancho por 8 de largo"
-  const largoAnchoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*de\s*largo\s*(?:x|×|por)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*(?:de\s*ancho)?/i;
-  const anchoLargoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*de\s*ancho\s*(?:x|×|por)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*(?:de\s*largo)?/i;
+  // Examples: "8 mts. de largo x 5 de ancho", "5 de ancho por 8 de largo", "4 metros de ancho y 10 de largo"
+  const largoAnchoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*de\s*largo\s*(?:x|×|por|y)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*(?:de\s*ancho)?/i;
+  const anchoLargoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*de\s*ancho\s*(?:x|×|por|y)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*(?:de\s*largo)?/i;
 
   let m = s.match(largoAnchoPattern);
   if (m) {
