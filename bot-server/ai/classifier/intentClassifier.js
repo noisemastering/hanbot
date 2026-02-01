@@ -509,6 +509,14 @@ function quickClassify(message, dbIntents = null) {
     return { intent: INTENTS.CONFIRMATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
   }
 
+  // Polite request confirmations (e.g., "por favor si me la comparte", "si me la pasa")
+  // These are affirmative responses meaning "yes, please do it"
+  if (/\b(por\s*favor|s[ií])\s*(s[ií]\s*)?(me\s+)?(la|lo|las|los)?\s*(comparte|pasa|manda|env[ií]a|muestra|ense[ñn]a)/i.test(msg) ||
+      /\b(comp[aá]rt[ae]me|p[aá]s[ae]me|m[aá]nd[ae]me|env[ií][ae]me|mu[eé]str[ae]me)\b/i.test(msg) ||
+      /\b(s[ií]\s+por\s*favor|por\s*favor\s+s[ií])\b/i.test(msg)) {
+    return { intent: INTENTS.CONFIRMATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.85 };
+  }
+
   // Confirmation at END of message (e.g., "Disculpa no tenía la medida Ok")
   // This catches messages where user explains something then confirms
   if (/\b(s[ií]|a?ok|okey|va|vale|claro|perfecto|exacto|correcto|eso|esa|ese|dale|listo|órale|simon|simón)[\s!?.👍👌✅🙌💪]*$/i.test(msg)) {
