@@ -83,7 +83,7 @@ function ConversionsView() {
     setCorrelationResult(null);
 
     try {
-      const response = await axios.post(`${API_URL}/analytics/correlate-conversions`, {
+      const response = await API.post('/analytics/correlate-conversions', {
         sellerId: '482595248',
         timeWindowHours,
         orderLimit,
