@@ -354,6 +354,7 @@ function Messages() {
           <thead>
             <tr style={{ backgroundColor: "#2a1a5e", color: "#bb86fc" }}>
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Canal</th>
+              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Usuario</th>
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Fecha</th>
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Último mensaje</th>
               <th style={{ padding: "10px", textAlign: "center", borderBottom: "2px solid #555" }}>Intención</th>
@@ -398,6 +399,23 @@ function Messages() {
                     >
                       {channelDisplay.icon}
                     </span>
+                  </td>
+                  <td style={{ padding: "10px", color: "#e0e0e0", fontSize: "0.85rem" }}>
+                    {msg.channel === 'whatsapp' && msg.psid?.startsWith('wa:') ? (
+                      <span
+                        style={{ cursor: 'pointer' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(msg.psid.substring(3));
+                          alert('Número copiado: ' + msg.psid.substring(3));
+                        }}
+                        title="Click para copiar"
+                      >
+                        📱 {msg.psid.substring(3)}
+                      </span>
+                    ) : (
+                      <span style={{ color: '#888' }}>{msg.psid?.substring(0, 10)}...</span>
+                    )}
                   </td>
                   <td style={{ padding: "10px", color: "#e0e0e0", fontSize: "0.9rem" }}>
                     {new Date(msg.timestamp).toLocaleString('es-MX', {
@@ -574,6 +592,7 @@ function Messages() {
         <thead>
           <tr style={{ backgroundColor: "#1b3a1b", color: "lightgreen" }}>
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Canal</th>
+            <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Usuario</th>
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Fecha</th>
             <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Último mensaje</th>
             <th style={{ padding: "8px", textAlign: "center", borderBottom: "2px solid #555" }}>Intención</th>
@@ -619,6 +638,23 @@ function Messages() {
                   >
                     {channelDisplay.icon}
                   </span>
+                </td>
+                <td style={{ padding: "8px", color: "#e0e0e0", fontSize: "0.85rem" }}>
+                  {msg.channel === 'whatsapp' && msg.psid?.startsWith('wa:') ? (
+                    <span
+                      style={{ cursor: 'pointer' }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        navigator.clipboard.writeText(msg.psid.substring(3));
+                        alert('Número copiado: ' + msg.psid.substring(3));
+                      }}
+                      title="Click para copiar"
+                    >
+                      📱 {msg.psid.substring(3)}
+                    </span>
+                  ) : (
+                    <span style={{ color: '#888' }}>{msg.psid?.substring(0, 10)}...</span>
+                  )}
                 </td>
                 <td style={{ padding: "8px", color: "#e0e0e0" }}>{new Date(msg.timestamp).toLocaleString()}</td>
                 <td style={{ padding: "8px", paddingRight: "30px", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", color: "white", position: "relative", whiteSpace: "nowrap" }}>
@@ -767,9 +803,60 @@ function Messages() {
                 >
                   {getChannelDisplay(selectedChannel).icon}
                 </span>
-                <h3 style={{ margin: 0, color: "white" }}>
-                  Conversacion Completa - PSID: {selectedPsid.substring(0, 12)}...
-                </h3>
+                <div>
+                  <h3 style={{ margin: 0, color: "white" }}>
+                    {selectedChannel === 'whatsapp' && selectedPsid.startsWith('wa:') ? (
+                      <>
+                        📱 {selectedPsid.substring(3)}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard.writeText(selectedPsid.substring(3));
+                            alert('Número copiado: ' + selectedPsid.substring(3));
+                          }}
+                          style={{
+                            marginLeft: '8px',
+                            padding: '4px 8px',
+                            fontSize: '0.75rem',
+                            backgroundColor: '#25D366',
+                            color: 'white',
+                            border: 'none',
+                            borderRadius: '4px',
+                            cursor: 'pointer'
+                          }}
+                          title="Copiar número"
+                        >
+                          📋 Copiar
+                        </button>
+                        <a
+                          href={`https://wa.me/${selectedPsid.substring(3)}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          onClick={(e) => e.stopPropagation()}
+                          style={{
+                            marginLeft: '8px',
+                            padding: '4px 8px',
+                            fontSize: '0.75rem',
+                            backgroundColor: '#25D366',
+                            color: 'white',
+                            borderRadius: '4px',
+                            textDecoration: 'none'
+                          }}
+                          title="Abrir en WhatsApp"
+                        >
+                          💬 WhatsApp
+                        </a>
+                      </>
+                    ) : (
+                      <>Conversación - {selectedPsid.substring(0, 15)}...</>
+                    )}
+                  </h3>
+                  {selectedChannel === 'whatsapp' && (
+                    <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#888' }}>
+                      WhatsApp • Puedes llamar o enviar mensaje directo
+                    </p>
+                  )}
+                </div>
               </div>
               <button
                 onClick={() => {
