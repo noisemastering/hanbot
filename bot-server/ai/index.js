@@ -1002,6 +1002,15 @@ async function generateReply(userMessage, psid, referral = null) {
   }
   // ====== END PHONE NUMBER DETECTION ======
 
+  // ====== INTENT DB HANDLING ======
+  // Check if intent has a DB-configured response (auto_response, human_handoff, or ai_generate guidance)
+  const intentResponse = await handleIntentFromDB(classification.intent, classification, psid, convo, userMessage);
+  if (intentResponse) {
+    console.log(`✅ Intent handled by DB config (${intentResponse.handledBy})`);
+    return await checkForRepetition(intentResponse, psid, convo);
+  }
+  // ====== END INTENT DB HANDLING ======
+
   // ====== FLOW MANAGER - CENTRAL ROUTING ======
   // ALL messages go through the flow manager
   // - Scoring ALWAYS runs (detects tire-kickers, competitors)
