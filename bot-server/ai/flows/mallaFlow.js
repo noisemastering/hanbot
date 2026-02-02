@@ -286,6 +286,79 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   console.log(`🌐 Malla flow - Intent: ${intent}, Entities:`, entities);
   console.log(`🌐 Malla flow - User message: "${userMessage}"`);
 
+  // CHECK FOR PHOTO/IMAGE REQUEST WITH COLOR
+  // E.g., "foto del negro", "imagen en color negro", "ver el verde"
+  const photoColorPattern = /\b(foto|imagen|ver|mostrar|ense[ñn]ar?)\b.*\b(color\s*)?(negro|verde|beige|blanco|azul|caf[eé])\b/i;
+  const colorOnlyPattern = /\b(el|la|del?|en)\s*(negro|verde|beige|blanco|azul|caf[eé])\b/i;
+
+  const photoMatch = userMessage.match(photoColorPattern);
+  const colorMatch = userMessage.match(colorOnlyPattern);
+
+  if (photoMatch || (colorMatch && /\b(foto|imagen|ver|mostrar)\b/i.test(userMessage))) {
+    const requestedColor = (photoMatch?.[3] || colorMatch?.[2] || '').toLowerCase();
+    console.log(`🎨 Photo/color request detected: "${userMessage}" → color: ${requestedColor}`);
+
+    // Check if we have dimensions in context
+    const hasSize = (state.width && state.height) ||
+                    (convo?.productSpecs?.width && convo?.productSpecs?.height);
+
+    if (hasSize) {
+      // We have size - find product and provide link
+      const w = state.width || convo?.productSpecs?.width;
+      const h = state.height || convo?.productSpecs?.height;
+
+      // Update state with color preference
+      state.color = requestedColor;
+
+      // Find product with this size (color filtering will happen in search)
+      const products = await findMatchingProducts(w, h, null, requestedColor, convo?.poiRootId);
+
+      if (products.length > 0) {
+        const product = products[0];
+        const productUrl = product.onlineStoreLinks?.find(link => link.isPreferred)?.url ||
+                          product.onlineStoreLinks?.[0]?.url;
+
+        if (productUrl) {
+          const trackedLink = await generateClickLink(psid, productUrl, {
+            productName: product.name,
+            productId: product._id
+          });
+
+          await updateConversation(psid, {
+            lastIntent: 'malla_photo_provided',
+            productSpecs: { ...convo?.productSpecs, color: requestedColor, updatedAt: new Date() }
+          });
+
+          return {
+            type: "text",
+            text: `Aquí puedes ver las fotos del producto en ${w}x${h}m:\n\n${trackedLink}\n\nEn la publicación encontrarás varias imágenes del producto.`
+          };
+        }
+      }
+
+      // No product found with that color/size combo
+      return {
+        type: "text",
+        text: `No tenemos malla en color ${requestedColor} para ${w}x${h}m. La malla confeccionada es color beige.\n\n¿Te interesa ver el producto en beige?`
+      };
+    } else {
+      // No size yet - save color preference and ask for size
+      await updateConversation(psid, {
+        lastIntent: 'malla_awaiting_dimensions',
+        productSpecs: {
+          productType: 'malla',
+          color: requestedColor,
+          updatedAt: new Date()
+        }
+      });
+
+      return {
+        type: "text",
+        text: `¿Qué medida te interesa para mostrarte la imagen?`
+      };
+    }
+  }
+
   // CHECK FOR ACCESSORY QUESTIONS (arnés, cuerda, lazo, kit de instalación)
   const isAccessoryQuestion = /\b(arn[eé]s|cuerda|lazo|amarre|kit.*instalaci|incluye.*para\s*(colgar|instalar)|viene\s*con|dan\s*con|trae)\b/i.test(userMessage);
   if (isAccessoryQuestion) {
