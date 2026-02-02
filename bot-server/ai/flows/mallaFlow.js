@@ -761,31 +761,17 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     });
   }
 
-  // Check if dimensions are fractional - hand off to human for custom quote
+  // Check if dimensions are fractional - offer standard size first before handoff
   const hasFractions = (width % 1 !== 0) || (height % 1 !== 0);
 
   if (hasFractions) {
-    console.log(`📏 Fractional meters detected in mallaFlow (${width}x${height}m), triggering handoff`);
+    console.log(`📏 Fractional meters detected in mallaFlow (${width}x${height}m), offering standard size first`);
 
-    await updateConversation(psid, {
-      lastIntent: "fractional_meters_handoff",
-      handoffRequested: true,
-      handoffReason: `Medida con decimales: ${width}x${height}m`,
-      handoffTimestamp: new Date(),
-      state: "needs_human",
-      unknownCount: 0
-    });
+    const roundedW = Math.round(width);
+    const roundedH = Math.round(height);
 
-    // Send push notification
-    sendHandoffNotification(psid, `Medida con decimales: ${width}x${height}m - requiere atención`).catch(err => {
-      console.error("❌ Failed to send push notification:", err);
-    });
-
-    // Find closest standard size to offer while they wait
-    let linkText = "";
+    // Find closest standard size to offer
     try {
-      const roundedW = Math.round(width);
-      const roundedH = Math.round(height);
       const sizeVariants = [
         `${roundedW}x${roundedH}`, `${roundedW}x${roundedH}m`,
         `${roundedH}x${roundedW}`, `${roundedH}x${roundedW}m`
@@ -800,22 +786,43 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       if (product) {
         const productLink = product.onlineStoreLinks?.mercadoLibre || product.mLink;
         if (productLink) {
-          const trackedLink = await generateClickLink(psid, productLink, {
-            productName: product.name,
-            productId: product._id,
-            campaignId: convo?.campaignId,
-            adId: convo?.adId
+          // Save state to await their choice
+          await updateConversation(psid, {
+            lastIntent: "fractional_awaiting_choice",
+            fractionalOriginalSize: `${width}x${height}`,
+            fractionalStandardSize: `${roundedW}x${roundedH}`,
+            fractionalProductId: product._id.toString(),
+            unknownCount: 0
           });
-          linkText = `\n\nMientras tanto, la medida estándar más cercana es ${roundedW}x${roundedH}m por si te resulta útil $${product.price}:\n${trackedLink}`;
+
+          return {
+            type: "text",
+            text: `Tenemos la medida estándar ${roundedW}x${roundedH}m por $${product.price}. ¿Te funciona o prefieres cotización exacta para ${width}x${height}m?`
+          };
         }
       }
     } catch (err) {
-      console.error("Error getting closest size link:", err);
+      console.error("Error getting closest size:", err);
     }
 
+    // No standard size found - hand off directly with video
+    await updateConversation(psid, {
+      lastIntent: "fractional_meters_handoff",
+      handoffRequested: true,
+      handoffReason: `Medida con decimales: ${width}x${height}m`,
+      handoffTimestamp: new Date(),
+      state: "needs_human",
+      unknownCount: 0
+    });
+
+    sendHandoffNotification(psid, `Medida con decimales: ${width}x${height}m - requiere atención`).catch(err => {
+      console.error("❌ Failed to send push notification:", err);
+    });
+
+    const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
     return {
       type: "text",
-      text: `Permíteme comunicarte con un especialista para cotizar la medida exacta (${width}m x ${height}m).` + linkText
+      text: `Permíteme comunicarte con un especialista para cotizar ${width}x${height}m.\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
     };
   }
 
@@ -906,7 +913,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     const productUrl = preferredLink?.url || product.onlineStoreLinks?.[0]?.url;
 
     if (!productUrl) {
-      // No link available - hand off to human
+      // No link available - hand off to human with video
       console.log(`⚠️ Product ${product.name} has no online store link`);
       await updateConversation(psid, {
         handoffRequested: true,
@@ -914,9 +921,14 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
         handoffTimestamp: new Date()
       });
 
+      sendHandoffNotification(psid, `Malla ${width}x${height}m - producto sin link`).catch(err => {
+        console.error("❌ Failed to send push notification:", err);
+      });
+
+      const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
       return {
         type: "text",
-        text: `¡Tenemos la ${displayName}! Un especialista te contactará con el precio y link de compra.\n\n¿Necesitas algo más?`
+        text: `¡Tenemos la ${displayName}! Un especialista te contactará con el precio y link de compra.\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
       };
     }
 
@@ -1034,14 +1046,20 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
   });
 
   if (!nearestCover && !largest) {
-    // No alternatives found - hand off
+    // No alternatives found - hand off with video
     await updateConversation(psid, {
       handoffRequested: true,
       handoffReason: `Malla quote request: ${width}x${height}m - no alternatives found`,
       handoffTimestamp: new Date()
     });
+
+    sendHandoffNotification(psid, `Malla ${width}x${height}m - sin alternativas disponibles`).catch(err => {
+      console.error("❌ Failed to send push notification:", err);
+    });
+
+    const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
     response = `La medida ${width}x${height}m requiere cotización especial.\n\n`;
-    response += `Un especialista te contactará con el precio. ¿Necesitas algo más?`;
+    response += `Un especialista te contactará con el precio.\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`;
   }
 
   return {

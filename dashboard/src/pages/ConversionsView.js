@@ -1,5 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
+import API from '../api';
+import {
+  ComposedChart,
+  Bar,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend
+} from 'recharts';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -18,6 +30,7 @@ function getTodayStr() {
 function ConversionsView() {
   const [stats, setStats] = useState(null);
   const [recentConversions, setRecentConversions] = useState([]);
+  const [dailyClicks, setDailyClicks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [correlating, setCorrelating] = useState(false);
   const [error, setError] = useState(null);
@@ -47,13 +60,16 @@ function ConversionsView() {
       if (dateFromISO) params.append('dateFrom', dateFromISO);
       if (dateToISO) params.append('dateTo', dateToISO);
 
-      const [statsRes, conversionsRes] = await Promise.all([
+      const [statsRes, conversionsRes, clicksRes] = await Promise.all([
         axios.get(`${API_URL}/analytics/conversions?${params.toString()}`),
-        axios.get(`${API_URL}/analytics/conversions/recent?limit=500`) // Fetch more for pagination
+        axios.get(`${API_URL}/analytics/conversions/recent?limit=500`), // Fetch more for pagination
+        API.get(`/click-logs/daily?startDate=${dateFrom}&endDate=${dateTo}`)
       ]);
 
       setStats(statsRes.data.stats);
       setRecentConversions(conversionsRes.data.conversions || []);
+      // API returns chartData with: { date, dateLabel, links, clicks, conversions }
+      setDailyClicks(clicksRes.data?.chartData || []);
     } catch (err) {
       console.error('Error fetching conversion data:', err);
       setError(err.message);
@@ -94,7 +110,7 @@ function ConversionsView() {
   useEffect(() => {
     fetchData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateFrom, dateTo]);
+  }, []); // Only fetch on mount, use button to refresh with new dates
 
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return 'N/A';
@@ -122,6 +138,16 @@ function ConversionsView() {
     };
     return styles[confidence] || 'bg-gray-500/20 text-gray-300 border border-gray-500/30';
   };
+
+  // Chart data comes directly from the daily API (already has clicks + conversions)
+  const chartData = useMemo(() => {
+    return dailyClicks.map(day => ({
+      date: day.date,
+      dateLabel: day.dateLabel,
+      clicks: day.clicks || 0,
+      conversions: day.conversions || 0
+    }));
+  }, [dailyClicks]);
 
   if (loading) {
     return (
@@ -220,6 +246,55 @@ function ConversionsView() {
                 </span>
               </div>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Daily Chart */}
+      {chartData.length > 0 && (
+        <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4 mb-6">
+          <h2 className="text-lg font-semibold text-white mb-4">Clicks vs Conversiones por Día</h2>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis
+                  dataKey="dateLabel"
+                  tick={{ fill: '#9CA3AF', fontSize: 11 }}
+                  axisLine={{ stroke: '#374151' }}
+                />
+                <YAxis
+                  tick={{ fill: '#9CA3AF', fontSize: 11 }}
+                  axisLine={{ stroke: '#374151' }}
+                  allowDecimals={false}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1F2937',
+                    border: '1px solid #374151',
+                    borderRadius: '8px',
+                    color: '#F3F4F6'
+                  }}
+                  labelStyle={{ color: '#9CA3AF' }}
+                />
+                <Legend wrapperStyle={{ color: '#9CA3AF' }} />
+                <Bar
+                  dataKey="conversions"
+                  name="Conversiones"
+                  fill="#10B981"
+                  fillOpacity={0.7}
+                  radius={[4, 4, 0, 0]}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="clicks"
+                  name="Clicks"
+                  stroke="#3B82F6"
+                  strokeWidth={2}
+                  dot={{ fill: '#3B82F6', strokeWidth: 2, r: 3 }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
           </div>
         </div>
       )}

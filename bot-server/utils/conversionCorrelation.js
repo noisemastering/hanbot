@@ -437,30 +437,41 @@ async function correlateOrder(order, sellerId) {
       return null;
     }
 
-    // Determine confidence level based on score AND method
-    // ML ID match should always be at least medium
-    const hasMLItemMatch = bestMatch.matchDetails?.mlItemMatch;
-    let confidence = 'low';
-
-    if (hasMLItemMatch) {
-      // ML Item ID is a strong signal
-      if (bestScore >= 130) {
-        confidence = 'high'; // ML ID + additional signals (name/location)
-      } else {
-        confidence = 'medium'; // ML ID alone
-      }
-    } else if (bestScore >= 100) {
-      confidence = 'high'; // Multiple strong signals without ML ID
-    } else if (bestScore >= 70) {
-      confidence = 'medium'; // Good combination (name + location or similar)
-    }
-    // Below 70 without ML ID stays 'low' (time-only matches)
-
     // Log match details
-    const md = bestMatch.matchDetails;
+    const md = bestMatch.matchDetails || {};
     console.log(`   📊 Best match score: ${bestScore}`);
     console.log(`      ML Item: ${md.mlItemMatch ? 'YES' : 'no'}, Name: ${md.nameMatch ? 'YES' : 'no'}, POI: ${md.poiMatch ? 'YES' : 'no'}`);
     console.log(`      City: ${md.cityMatch ? 'YES' : 'no'}, State: ${md.stateMatch ? 'YES' : 'no'}, Zip: ${md.zipMatch ? 'YES' : 'no'}`);
+
+    // Determine method based on what actually matched
+    const hasMLItemMatch = md.mlItemMatch || false;
+    const hasNonTimeSignals = md.nameMatch || md.cityMatch || md.stateMatch || md.zipMatch || md.poiMatch;
+
+    let method;
+    if (hasMLItemMatch) {
+      method = 'ml_item_match';
+    } else if (hasNonTimeSignals) {
+      method = 'enhanced';
+    } else {
+      method = 'time_based';
+    }
+
+    // Determine confidence level based on method and score
+    let confidence;
+    if (hasMLItemMatch) {
+      // ML Item ID is a strong signal
+      confidence = bestScore >= 130 ? 'high' : 'medium';
+    } else if (method === 'enhanced') {
+      // Enhanced correlations (multiple signals) should be at least medium
+      if (bestScore >= 100) {
+        confidence = 'high';
+      } else {
+        confidence = 'medium'; // Enhanced is always at least medium
+      }
+    } else {
+      // Time-based only
+      confidence = 'low';
+    }
 
     // Handle orphan correlation (no click, just user match)
     if (bestMatch.isOrphan) {
@@ -471,7 +482,6 @@ async function correlateOrder(order, sellerId) {
     }
 
     // Normal click-based correlation
-    const method = md.mlItemMatch ? 'ml_item_match' : 'enhanced';
     return await saveCorrelation(bestMatch.click, order, confidence, method, {
       ...bestMatch.matchDetails,
       shippingCity, shippingState, shippingZipCode,

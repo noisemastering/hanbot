@@ -100,6 +100,73 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   // 🏭 CUSTOM ORDER FLOW - Handle multi-step collection for oversized orders
   const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
 
+  // 📏 FRACTIONAL SIZE CHOICE - User chose between standard size or custom quote
+  if (convo.lastIntent === "fractional_awaiting_choice") {
+    const originalSize = convo.fractionalOriginalSize;
+    const standardSize = convo.fractionalStandardSize;
+    const productId = convo.fractionalProductId;
+
+    // Check if they want the standard size
+    const wantsStandard = /\b(s[ií]|funciona|esa|est[aá]\s*bien|ok|perfecto|va|dale|sale|me\s*sirve|esa\s*medida|la\s*estandar|la\s*est[aá]ndar|me\s*quedo|quiero\s*esa)\b/i.test(msg);
+    const wantsCustom = /\b(exacta|cotiza|custom|especial|prefiero|la\s*otra|no\s*me\s*sirve|no\s*funciona|quiero\s*la\s*de|necesito)\b/i.test(msg);
+
+    if (wantsStandard || (!wantsCustom && !wantsStandard)) {
+      // Default to standard if unclear, or they explicitly accepted
+      console.log(`📏 User accepted standard size ${standardSize}`);
+
+      try {
+        const ProductFamily = require("../../models/ProductFamily");
+        const { generateClickLink } = require("../../services/clickTracking");
+
+        const product = await ProductFamily.findById(productId);
+        if (product) {
+          const productLink = product.onlineStoreLinks?.mercadoLibre || product.mLink;
+          if (productLink) {
+            const trackedLink = await generateClickLink(psid, productLink, {
+              productName: product.name,
+              productId: product._id,
+              campaignId: convo?.campaignId,
+              adId: convo?.adId
+            });
+
+            await updateConversation(psid, {
+              lastIntent: "size_confirmed",
+              unknownCount: 0
+            });
+
+            return {
+              type: "text",
+              text: `¡Excelente! Aquí tienes la malla ${standardSize}m:\n${trackedLink}\n\n¿Necesitas algo más?`
+            };
+          }
+        }
+      } catch (err) {
+        console.error("Error getting standard size product:", err);
+      }
+    }
+
+    // They want custom quote - hand off with video
+    console.log(`📏 User wants custom quote for ${originalSize}, triggering handoff`);
+
+    await updateConversation(psid, {
+      lastIntent: "fractional_meters_handoff",
+      handoffRequested: true,
+      handoffReason: `Medida con decimales: ${originalSize}m (rechazó ${standardSize}m estándar)`,
+      handoffTimestamp: new Date(),
+      state: "needs_human",
+      unknownCount: 0
+    });
+
+    sendHandoffNotification(psid, `Medida especial: ${originalSize}m - cliente prefiere cotización exacta`).catch(err => {
+      console.error("❌ Failed to send push notification:", err);
+    });
+
+    return {
+      type: "text",
+      text: `Perfecto, te comunico con un especialista para cotizar ${originalSize}m.\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
+    };
+  }
+
   // Step 2: Waiting for purpose (what they want to protect)
   if (convo.lastIntent === "custom_order_awaiting_purpose") {
     console.log("🏭 Custom order flow: received purpose response");

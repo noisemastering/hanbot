@@ -137,7 +137,8 @@ async function handleShipping(entities, convo, psid) {
 async function handleLocation(convo, psid) {
   return {
     type: "text",
-    text: "Estamos ubicados en Querétaro:\n\n" +
+    text: "Estamos ubicados en Querétaro pero enviamos a todo el país 📦🚚\n\n" +
+          "Puedes visitarnos en:\n" +
           "📍 Calle Loma de San Gremal 108, bodega 73\n" +
           "Parque Industrial Navex, C.P. 76137\n" +
           "Santiago de Querétaro\n\n" +

@@ -12,17 +12,15 @@ const SimulationModeSelector = () => {
   const [loading, setLoading] = useState(false);
   const dropdownRef = useRef(null);
 
-  // Only show for super_admin
-  if (!user || user.role !== 'super_admin') {
-    return null;
-  }
+  const isSuperAdmin = user?.role === 'super_admin';
 
   // Load roles and profiles when dropdown opens
   useEffect(() => {
-    if (isOpen && roles.length === 0) {
+    if (isSuperAdmin && isOpen && roles.length === 0) {
       loadRolesAndProfiles();
     }
-  }, [isOpen]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, isSuperAdmin]);
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -87,6 +85,11 @@ const SimulationModeSelector = () => {
   const getProfilesForRole = (roleName) => {
     return profiles.filter(p => p.role === roleName && p.active);
   };
+
+  // Only show for super_admin
+  if (!isSuperAdmin) {
+    return null;
+  }
 
   return (
     <div className="relative" ref={dropdownRef}>

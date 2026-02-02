@@ -498,7 +498,9 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
     if (state.zipInfo) {
       responseText += `\n\n📍 Envío a ${state.zipInfo.city}, ${state.zipInfo.state}`;
     }
-    responseText += `\n\n¿Necesitas algo más?`;
+
+    const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
+    responseText += `\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`;
 
     return {
       type: "text",
@@ -580,7 +582,9 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
     if (state.zipInfo) {
       responseText += `\n\n📍 Envío a ${state.zipInfo.city}, ${state.zipInfo.state}`;
     }
-    responseText += `\n\nUn especialista te contactará con el precio. ¿Necesitas algo más?`;
+
+    const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
+    responseText += `\n\nUn especialista te contactará con el precio.\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`;
 
     return {
       type: "text",

@@ -286,11 +286,23 @@ async function handleHumanRequest(convo, psid) {
     handoffTimestamp: new Date()
   });
 
+  // Include video if they were talking about malla sombra
+  const isMallaContext = convo?.currentFlow === 'malla_sombra' ||
+                         convo?.currentFlow === 'rollo' ||
+                         convo?.productInterest?.toLowerCase()?.includes('malla');
+
+  let response = "¡Claro! Un especialista te contactará a la brevedad.\n\n" +
+                 "También puedes llamarnos al 📞 " + BUSINESS_INFO.phones[0] +
+                 "\n🕓 " + BUSINESS_INFO.hours;
+
+  if (isMallaContext) {
+    const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
+    response += `\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`;
+  }
+
   return {
     type: "text",
-    text: "¡Claro! Un especialista te contactará a la brevedad.\n\n" +
-          "También puedes llamarnos al 📞 " + BUSINESS_INFO.phones[0] +
-          "\n🕓 " + BUSINESS_INFO.hours
+    text: response
   };
 }
 
