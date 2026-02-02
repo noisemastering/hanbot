@@ -414,9 +414,18 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
     if (earlyThanksResponse) return earlyThanksResponse;
 
     // 🧠 Si hay campaña activa, intentar intención global primero
+    // BUT: If message has dimensions, skip globalIntents and let flow manager handle
+    // This prevents location detection from ignoring dimensions in the same message
     if (campaign) {
-      const globalResponse = await handleGlobalIntents(cleanMsg, psid, convo);
-      if (globalResponse) return globalResponse;
+      const { extractAllDimensions } = require("./utils/dimensionParsers");
+      const hasDimensions = extractAllDimensions(cleanMsg, 'confeccionada').length > 0;
+
+      if (!hasDimensions) {
+        const globalResponse = await handleGlobalIntents(cleanMsg, psid, convo);
+        if (globalResponse) return globalResponse;
+      } else {
+        console.log(`📏 Message has dimensions, skipping globalIntents to let flow manager handle`);
+      }
 
       // luego flujo dinámico de campaña
       try {
@@ -522,8 +531,13 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
     if (humanSalesResponse) return humanSalesResponse;
 
     // 🌍 Global intents (measures, shipping, location, etc.) - for ALL users
-    const globalResponse = await handleGlobalIntents(cleanMsg, psid, convo);
-    if (globalResponse) return globalResponse;
+    // Skip if message has dimensions - let flow manager handle those properly
+    const { extractAllDimensions: extractDims } = require("./utils/dimensionParsers");
+    const msgHasDimensions = extractDims(cleanMsg, 'confeccionada').length > 0;
+    if (!msgHasDimensions) {
+      const globalResponse = await handleGlobalIntents(cleanMsg, psid, convo);
+      if (globalResponse) return globalResponse;
+    }
 
     // 📦 Catálogo general
     const catalogResponse = await handleCatalogOverview(cleanMsg, psid);
