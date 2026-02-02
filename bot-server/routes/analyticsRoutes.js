@@ -525,13 +525,16 @@ router.get('/attribution/:psid', async (req, res) => {
 // POST /analytics/correlate-conversions - Run correlation (dashboard format)
 router.post('/correlate-conversions', async (req, res) => {
   try {
-    const { sellerId = '482595248', timeWindowHours = 48, orderLimit = 100, dryRun = false } = req.body;
+    const { sellerId = '482595248', timeWindowHours = 48, orderLimit = 50, dryRun = false } = req.body;
 
-    console.log(`🔄 Running enhanced correlation: seller=${sellerId}, limit=${orderLimit}, dryRun=${dryRun}`);
+    // ML API max limit is 51, cap it to 50 to be safe
+    const safeLimit = Math.min(parseInt(orderLimit) || 50, 50);
+
+    console.log(`🔄 Running enhanced correlation: seller=${sellerId}, limit=${safeLimit}, dryRun=${dryRun}`);
 
     // Fetch recent orders from ML API
     const ordersResult = await getOrders(sellerId, {
-      limit: parseInt(orderLimit),
+      limit: safeLimit,
       sort: 'date_desc'
     });
 

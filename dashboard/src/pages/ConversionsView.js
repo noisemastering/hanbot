@@ -42,7 +42,7 @@ function ConversionsView() {
 
   // Correlation options
   const [timeWindowHours, setTimeWindowHours] = useState(48);
-  const [orderLimit, setOrderLimit] = useState(100);
+  const [orderLimit, setOrderLimit] = useState(50);
 
   // Pagination for conversions table
   const [pageSize, setPageSize] = useState(30);
@@ -341,7 +341,7 @@ function ConversionsView() {
               onChange={(e) => setOrderLimit(parseInt(e.target.value) || 100)}
               className="bg-gray-700/50 border border-gray-600 rounded px-3 py-2 w-20 text-white"
               min="10"
-              max="500"
+              max="50"
             />
           </div>
         </div>
