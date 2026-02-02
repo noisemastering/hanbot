@@ -42,8 +42,11 @@ const { buildSourceContext, logSourceContext, getProductFromSource } = require("
 // Layer 1: Intent Classification
 const { classify, logClassification } = require("./classifier");
 
-// Layer 2-3: Flow Router
+// Layer 2-3: Flow Router (legacy - being replaced by flowManager)
 const { processMessage: processWithFlows } = require("./flows");
+
+// NEW: Central Flow Manager - ALL messages go through here
+const { processMessage: processWithFlowManager } = require("./flowManager");
 
 // Intent model for DB-driven responses
 const Intent = require("../models/Intent");
@@ -880,23 +883,6 @@ async function generateReply(userMessage, psid, referral = null) {
     return await checkForRepetition(deferralResponse, psid, convo);
   }
 
-  // 👋 GREETING: Handle simple greetings
-  const greetingResponse = await handleGreeting(cleanMsg, psid, convo, BOT_PERSONA_NAME);
-  if (greetingResponse) {
-    return await checkForRepetition(greetingResponse, psid, convo);
-  }
-
-  // 💬 THANKS/GOODBYE: Handle thank you messages
-  const thanksResponse = await handleThanks(cleanMsg, psid, convo, BOT_PERSONA_NAME);
-  if (thanksResponse) {
-    return await checkForRepetition(thanksResponse, psid, convo);
-  }
-
-  // 🌍 GLOBAL INTENTS: Handle common questions (rain, shipping, location, etc.)
-  const globalResponse = await handleGlobalIntents(cleanMsg, psid, convo);
-  if (globalResponse) {
-    return await checkForRepetition(globalResponse, psid, convo);
-  }
   // ====== END EARLY HANDLERS ======
 
   // ====== LAYER 0: SOURCE CONTEXT ======
@@ -992,21 +978,12 @@ async function generateReply(userMessage, psid, referral = null) {
   logClassification(psid, userMessage, classification);
   // ====== END LAYER 1 ======
 
-  // ====== INTENT DB HANDLING ======
-  // Check if intent has a DB-configured response (auto_response, human_handoff, or guidance for ai_generate)
-  const intentResponse = await handleIntentFromDB(classification.intent, classification, psid, convo, userMessage);
-  if (intentResponse) {
-    console.log(`✅ Intent handled by DB config (${intentResponse.handledBy})`);
-    return await checkForRepetition(intentResponse, psid, convo);
-  }
-  // ====== END INTENT DB HANDLING ======
-
   // ====== PHONE NUMBER DETECTION (HOT LEAD!) ======
+  // This runs before flow manager because it's a special case that triggers immediate handoff
   if (classification.intent === 'phone_shared' && classification.entities?.phone) {
     const phone = classification.entities.phone;
     console.log(`📱 HOT LEAD! Phone number captured: ${phone}`);
 
-    // Store phone in leadData and trigger human handoff
     await updateConversation(psid, {
       'leadData.contact': phone,
       'leadData.contactType': 'phone',
@@ -1017,13 +994,6 @@ async function generateReply(userMessage, psid, referral = null) {
       state: "needs_human"
     });
 
-    // Also try to extract name from recent messages if available
-    if (convo.productSpecs?.customerName) {
-      await updateConversation(psid, {
-        'leadData.name': convo.productSpecs.customerName
-      });
-    }
-
     return {
       type: "text",
       text: "¡Perfecto! Anotado tu número. En un momento te contacta uno de nuestros asesores para atenderte personalmente.",
@@ -1032,70 +1002,36 @@ async function generateReply(userMessage, psid, referral = null) {
   }
   // ====== END PHONE NUMBER DETECTION ======
 
-  // ====== WHOLESALE CHECK ======
-  // Check if user is requesting a quantity that qualifies for wholesale
-  const requestedQty = extractQuantity(userMessage) || classification.entities?.quantity;
-
-  if (requestedQty && requestedQty > 1) {
-    // Try to find the product in context
-    let productForWholesale = null;
-
-    // Check if there's a product from classification entities
-    if (classification.entities?.productId) {
-      productForWholesale = await Product.findById(classification.entities.productId).lean();
-    }
-
-    // Or from conversation context
-    if (!productForWholesale && convo?.productSpecs?.productId) {
-      productForWholesale = await Product.findById(convo.productSpecs.productId).lean();
-    }
-
-    // Or try to find by product interest
-    if (!productForWholesale && convo?.productInterest) {
-      productForWholesale = await Product.findOne({
-        name: { $regex: convo.productInterest, $options: 'i' },
-        wholesaleEnabled: true
-      }).lean();
-    }
-
-    if (productForWholesale && productForWholesale.wholesaleEnabled) {
-      if (requestedQty >= productForWholesale.wholesaleMinQty) {
-        console.log(`📦 Wholesale quantity detected: ${requestedQty} x ${productForWholesale.name}`);
-        const wholesaleResponse = await handleWholesaleRequest(productForWholesale, requestedQty, psid, convo);
-        if (wholesaleResponse) {
-          return await checkForRepetition(wholesaleResponse, psid, convo);
-        }
-      }
-    }
-  }
-
-  // Also check for explicit wholesale inquiry
-  if (isWholesaleInquiry(userMessage)) {
-    console.log(`📦 Wholesale inquiry detected`);
-    // Could trigger a flow or hand off - for now, let it continue to normal handling
-    // The flows will add wholesale mention when showing products
-  }
-  // ====== END WHOLESALE CHECK ======
-
-  // ====== LAYER 2-3: FLOW ROUTING ======
+  // ====== FLOW MANAGER - CENTRAL ROUTING ======
+  // ALL messages go through the flow manager
+  // - Scoring ALWAYS runs (detects tire-kickers, competitors)
+  // - Routes to appropriate flow (default, malla, rollo, etc.)
+  // - Handles flow transfers when product is detected
   let response = null;
 
   try {
-    // Pass campaign to flows for goal/constraint handling
-    response = await processWithFlows(classification, sourceContext, convo, psid, userMessage, campaign);
+    response = await processWithFlowManager(userMessage, psid, convo, classification, sourceContext, campaign);
 
     if (response) {
-      console.log(`✅ New flow system handled message (${response.handledBy})`);
-    } else {
-      console.log(`⚠️ New flow system returned null`);
+      console.log(`✅ Flow manager handled message (${response.handledBy})`);
     }
   } catch (flowError) {
-    console.error(`❌ Error in new flow system:`, flowError.message);
+    console.error(`❌ Error in flow manager:`, flowError.message);
   }
-  // ====== END LAYER 2-3 ======
 
-  // ====== FALLBACK: Simple response when flows don't handle ======
-  // OLD SYSTEM DEACTIVATED - keeping files for reference only
+  // ====== FALLBACK: Legacy flows if flow manager didn't handle ======
+  if (!response) {
+    try {
+      response = await processWithFlows(classification, sourceContext, convo, psid, userMessage, campaign);
+      if (response) {
+        console.log(`✅ Legacy flow system handled message (${response.handledBy})`);
+      }
+    } catch (legacyError) {
+      console.error(`❌ Error in legacy flows:`, legacyError.message);
+    }
+  }
+
+  // ====== FINAL FALLBACK ======
   if (!response) {
     const unhandledCount = (convo.unhandledCount || 0) + 1;
     await updateConversation(psid, { unhandledCount });
@@ -1103,7 +1039,6 @@ async function generateReply(userMessage, psid, referral = null) {
     console.log(`🔴 Unhandled message (count: ${unhandledCount}): "${userMessage}"`);
 
     if (unhandledCount >= 3) {
-      // After 3 unhandled messages, hand off to human
       await updateConversation(psid, {
         handoffRequested: true,
         handoffReason: "Multiple unhandled messages",
@@ -1116,10 +1051,9 @@ async function generateReply(userMessage, psid, referral = null) {
         text: "Déjame comunicarte con un especialista que pueda ayudarte mejor.\n\nEn un momento te atienden."
       };
     } else {
-      // Ask clarifying question - only root product classes
       response = {
         type: "text",
-        text: "¿Qué tipo de producto te interesa?\n\n• Malla Sombra\n• Malla Antiáfido\n• Malla Anti Granizo\n• Cinta Plástica"
+        text: "¿Qué producto te interesa?\n\n• Malla sombra confeccionada\n• Rollos de malla sombra\n• Borde separador para jardín"
       };
     }
   }

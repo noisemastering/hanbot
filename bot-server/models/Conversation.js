@@ -7,6 +7,11 @@ const conversationSchema = new mongoose.Schema({
   state: { type: String, default: "new" },  // new | active | closed | needs_human | human_handling
   greeted: { type: Boolean, default: false },
   lastIntent: { type: String, default: null },
+
+  // Flow tracking - every conversation is always in a flow
+  currentFlow: { type: String, default: "default" },  // default | malla_sombra | rollo | borde_separador | groundcover | monofilamento
+  flowTransferredFrom: { type: String, default: null }, // Previous flow (for context)
+  flowTransferredAt: { type: Date, default: null },
   lastGreetTime: { type: Number, default: 0 },
   unknownCount: { type: Number, default: 0 },
   clarificationCount: { type: Number, default: 0 },  // Track unintelligible message attempts
