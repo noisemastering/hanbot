@@ -9,6 +9,9 @@ export const AuthProvider = ({ children }) => {
   const [loading, setLoading] = useState(true);
   const [token, setToken] = useState(localStorage.getItem('token'));
 
+  // Simulation mode state (super_admin only)
+  const [simulationMode, setSimulationMode] = useState(null); // { role, profile, permissions, label }
+
   // Check if user is logged in on mount
   useEffect(() => {
     if (token) {
@@ -78,22 +81,55 @@ export const AuthProvider = ({ children }) => {
     localStorage.removeItem('token');
     setToken(null);
     setUser(null);
+    setSimulationMode(null); // Clear simulation on logout
   };
+
+  // Start simulating a role/profile (super_admin only)
+  const startSimulation = (roleData) => {
+    if (!user || user.role !== 'super_admin') {
+      console.warn('Only super_admin can use simulation mode');
+      return false;
+    }
+
+    setSimulationMode({
+      role: roleData.role,
+      profile: roleData.profile || null,
+      permissions: roleData.permissions || [],
+      label: roleData.label || roleData.role
+    });
+
+    console.log('🎭 Simulation mode started:', roleData);
+    return true;
+  };
+
+  // Stop simulation and return to real permissions
+  const stopSimulation = () => {
+    setSimulationMode(null);
+    console.log('🎭 Simulation mode ended');
+  };
+
+  // Check if currently in simulation mode
+  const isSimulating = () => !!simulationMode;
 
   // Check if user has access to a section
   const canAccess = (section) => {
     if (!user) return false;
 
+    // SIMULATION MODE: If active, use simulated permissions instead
+    if (simulationMode) {
+      const simPerms = simulationMode.permissions || [];
+
+      // Check if simulated role has wildcard permission
+      if (simPerms.includes('*')) {
+        return true;
+      }
+
+      // Check if simulated role has specific section permission
+      return simPerms.includes(section);
+    }
+
     // NEW: Use backend permissions array if available
     if (user.permissions && Array.isArray(user.permissions)) {
-      console.log(`🔍 Checking access for section "${section}"`, {
-        username: user.username,
-        role: user.role,
-        profile: user.profile,
-        permissions: user.permissions,
-        hasAccess: user.permissions.includes('*') || user.permissions.includes(section)
-      });
-
       // Check if user has wildcard permission (access to everything)
       if (user.permissions.includes('*')) {
         return true;
@@ -143,7 +179,14 @@ export const AuthProvider = ({ children }) => {
 
   // Check if user can manage users (only super_admin and admin)
   const canManageUsers = () => {
-    return user && (user.role === 'super_admin' || user.role === 'admin');
+    if (!user) return false;
+
+    // In simulation mode, check simulated role
+    if (simulationMode) {
+      return simulationMode.role === 'super_admin' || simulationMode.role === 'admin';
+    }
+
+    return user.role === 'super_admin' || user.role === 'admin';
   };
 
   const value = {
@@ -154,7 +197,12 @@ export const AuthProvider = ({ children }) => {
     logout,
     canAccess,
     canManageUsers,
-    isAuthenticated: !!user
+    isAuthenticated: !!user,
+    // Simulation mode (super_admin only)
+    simulationMode,
+    startSimulation,
+    stopSimulation,
+    isSimulating
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

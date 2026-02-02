@@ -64,6 +64,7 @@ import MLImporterView from "./pages/MLImporterView";
 import IntentsView from "./components/IntentsView";
 import FlowsView from "./components/FlowsView";
 import ApiHealthAlerts from "./components/ApiHealthAlerts";
+import SimulationModeSelector from "./components/SimulationModeSelector";
 
 const API_URL = process.env.REACT_APP_API_URL || "https://hanbot-production.up.railway.app";
 const socket = io(API_URL, {
@@ -313,7 +314,7 @@ const menuItems = [
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, loading: authLoading, canAccess, canManageUsers, logout } = useAuth();
+  const { user, loading: authLoading, canAccess, canManageUsers, logout, simulationMode, stopSimulation } = useAuth();
 
   // All useState hooks must be called BEFORE any early returns
   const [messages, setMessages] = useState([]);
@@ -1261,6 +1262,9 @@ function App() {
   }
 
   // Filter menu items based on user permissions
+  // In simulation mode, use simulated role for visibility checks
+  const effectiveRole = simulationMode?.role || user?.role;
+
   const filteredMenuItems = menuItems.filter(item => {
     // Users section only visible to super_admin and admin
     if (item.id === 'users') {
@@ -1268,7 +1272,7 @@ function App() {
     }
     // Roles, Profiles, and Bot sections only visible to super_admin
     if (item.id === 'roles' || item.id === 'profiles' || item.id === 'bot') {
-      return user?.role === 'super_admin';
+      return effectiveRole === 'super_admin';
     }
 
     // For items with children, check if user has access to ANY child
@@ -1602,6 +1606,9 @@ function App() {
 
               {/* Right: Top Menu */}
               <div className="flex items-center space-x-2">
+                {/* Simulation Mode Selector (super_admin only) */}
+                <SimulationModeSelector />
+
                 {/* Notifications */}
                 <button className="p-2 rounded-lg text-gray-400 hover:bg-gray-800/50 hover:text-white transition-colors relative">
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1628,6 +1635,37 @@ function App() {
             </div>
           </div>
         </header>
+
+      {/* Simulation Mode Banner */}
+      {simulationMode && (
+        <div className="bg-amber-500/10 border-b border-amber-500/30">
+          <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-2">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                </svg>
+                <span className="text-sm text-amber-200">
+                  <strong>Modo Simulación:</strong> Viendo como <span className="font-semibold text-amber-100">{simulationMode.label}</span>
+                </span>
+                <span className="text-xs text-amber-400/70">
+                  ({simulationMode.permissions?.includes('*') ? 'Todos los permisos' : `${simulationMode.permissions?.length || 0} permisos`})
+                </span>
+              </div>
+              <button
+                onClick={stopSimulation}
+                className="text-sm text-amber-400 hover:text-amber-300 flex items-center space-x-1 transition-colors"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                </svg>
+                <span>Salir</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* API Health Alerts */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
