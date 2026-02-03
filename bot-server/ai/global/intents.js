@@ -755,6 +755,31 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 📞 PHONE NUMBER REQUEST - "tienes teléfono?", "número para llamar", "me pueden llamar"
+  // Simple contact info request - just give them the phone!
+  if (/\b(tel[eé]fono|n[uú]mero|llamar|contacto|whatsapp|celular)\b/i.test(msg) &&
+      (/\b(tienen|tendr[aá]n?|hay|cu[aá]l|dame|p[aá]same|me\s+(dan|das|pasan?|compartes?))\b/i.test(msg) ||
+       /\b(para\s+(llamar|contactar|hablar|comunicar))\b/i.test(msg) ||
+       /\b(me\s+pueden\s+llamar|pueden\s+llamar|ll[aá]m[ae]me)\b/i.test(msg) ||
+       /\bno\s+tendr[aá]/i.test(msg))) {  // "No tendrá un número de teléfono"
+
+    console.log("📞 User asking for phone/contact number");
+
+    const { getBusinessInfo } = require("../../businessInfoManager");
+    const info = await getBusinessInfo();
+
+    await updateConversation(psid, { lastIntent: "phone_request", unknownCount: 0 });
+
+    return {
+      type: "text",
+      text: `¡Claro! Nuestro teléfono es:\n\n` +
+            `📞 ${info?.phones?.[0] || "442 352 1646"}\n` +
+            `💬 WhatsApp: https://wa.me/524423521646\n\n` +
+            `🕓 Horario: ${info?.hours || "Lun-Vie 9am-6pm"}\n\n` +
+            `También puedes comprar directamente en nuestra tienda de Mercado Libre si prefieres.`
+    };
+  }
+
   // 🌿 WEED CONTROL / MALLA ANTIMALEZA - Handle questions about weed control
   // BUT only if it's an explicit request, not a contextual mention
   // e.g., "quiero malla antimaleza" = product request
