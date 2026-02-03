@@ -2,6 +2,7 @@
 // Handlers for conversation flow intents: future interest, will get back
 
 const { updateConversation } = require("../../conversationManager");
+const { generateBotResponse } = require("../responseGenerator");
 
 /**
  * Handle future interest - "En un par de meses", "Más adelante"
@@ -14,12 +15,11 @@ async function handleFutureInterest({ psid, convo, userMessage }) {
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: "¡Perfecto! Sin problema.\n\n" +
-          "Cuando estés listo, solo escríbenos y con gusto te ayudamos.\n\n" +
-          "Recuerda que enviamos a todo el país y tenemos inventario listo para envío inmediato."
-  };
+  const response = await generateBotResponse("future_interest", {
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
@@ -36,20 +36,12 @@ async function handleWillGetBack({ psid, convo, userMessage }) {
     unknownCount: 0
   });
 
-  if (isMeasuring) {
-    return {
-      type: "text",
-      text: "¡Perfecto! Mide con calma.\n\n" +
-            "Cuando tengas las medidas exactas me escribes y te paso el precio con link de compra.\n\n" +
-            "Recuerda medir ancho x largo en metros."
-    };
-  }
+  const response = await generateBotResponse("will_get_back", {
+    isMeasuring,
+    convo
+  });
 
-  return {
-    type: "text",
-    text: "¡Claro! Quedo pendiente.\n\n" +
-          "Cuando estés listo, escríbeme y te ayudo con tu pedido."
-  };
+  return { type: "text", text: response };
 }
 
 // Note: CONFIRMATION and REJECTION intents are context-dependent

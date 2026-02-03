@@ -2,6 +2,7 @@
 // Handlers for social intents: greeting, thanks, goodbye
 
 const { updateConversation } = require("../../conversationManager");
+const { generateBotResponse } = require("../responseGenerator");
 
 /**
  * Handle greeting intent
@@ -9,15 +10,11 @@ const { updateConversation } = require("../../conversationManager");
  */
 async function handleGreeting({ psid, convo }) {
   // Check if returning user
-  if (convo?.greeted && convo?.lastMessageAt) {
-    const hoursSince = (Date.now() - new Date(convo.lastMessageAt).getTime()) / (1000 * 60 * 60);
+  const isReturningUser = convo?.greeted && convo?.lastMessageAt;
+  let hoursSinceLastMessage = null;
 
-    if (hoursSince < 1) {
-      return {
-        type: "text",
-        text: "¡Hola de nuevo! ¿En qué más te puedo ayudar?"
-      };
-    }
+  if (isReturningUser) {
+    hoursSinceLastMessage = (Date.now() - new Date(convo.lastMessageAt).getTime()) / (1000 * 60 * 60);
   }
 
   await updateConversation(psid, {
@@ -26,45 +23,47 @@ async function handleGreeting({ psid, convo }) {
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: "¡Hola! ¿Qué producto te interesa?\n\n" +
-          "Manejamos:\n" +
-          "• Malla sombra (confeccionada lista para instalar)\n" +
-          "• Rollos de malla sombra (100m)\n" +
-          "• Borde separador para jardín"
-  };
+  const response = await generateBotResponse("greeting", {
+    isReturningUser,
+    hoursSinceLastMessage,
+    productInterest: convo?.productInterest,
+    userName: convo?.userName,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
  * Handle thanks intent
  */
-async function handleThanks({ psid }) {
+async function handleThanks({ psid, convo }) {
   await updateConversation(psid, {
     lastIntent: "thanks",
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: "¡Con gusto! ¿Hay algo más en lo que pueda ayudarte?"
-  };
+  const response = await generateBotResponse("thanks", { convo });
+
+  return { type: "text", text: response };
 }
 
 /**
  * Handle goodbye intent
  */
-async function handleGoodbye({ psid }) {
+async function handleGoodbye({ psid, convo }) {
   await updateConversation(psid, {
     lastIntent: "goodbye",
     state: "closed",
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: "¡Gracias por contactarnos! Que tengas excelente día."
-  };
+  const response = await generateBotResponse("goodbye", {
+    userName: convo?.userName,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 module.exports = {

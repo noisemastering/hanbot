@@ -6,11 +6,7 @@
 const { updateConversation } = require("../../conversationManager");
 const { INTENTS } = require("../classifier");
 const { getAvailableSizes, generateGenericSizeResponse } = require("../../measureHandler");
-
-// NOTE: Global intents are now handled by the Intent Dispatcher (ai/intentDispatcher.js)
-// which runs BEFORE flows. This delegation is no longer needed.
-// Keeping import for backwards compatibility during migration.
-// const { handleGlobalIntents } = require("../global/intents");
+const { generateBotResponse } = require("../responseGenerator");
 
 /**
  * Check if this flow should handle the message
@@ -78,39 +74,32 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 async function handleGreeting(convo, psid, flowContext = {}) {
   // Check purchase intent from scoring
   const intentLevel = flowContext.intentScore?.intent || 'medium';
+  const isReturningUser = convo?.greeted && convo?.lastMessageAt;
+  let hoursSinceLastMessage = null;
 
-  if (convo?.greeted && convo?.lastMessageAt) {
-    // Returning user
-    const hoursSince = (Date.now() - new Date(convo.lastMessageAt).getTime()) / (1000 * 60 * 60);
-
-    if (hoursSince < 1) {
-      return {
-        type: "text",
-        text: "¡Hola de nuevo! ¿En qué más te puedo ayudar?"
-      };
-    }
+  if (isReturningUser) {
+    hoursSinceLastMessage = (Date.now() - new Date(convo.lastMessageAt).getTime()) / (1000 * 60 * 60);
   }
 
   await updateConversation(psid, { greeted: true });
 
-  return {
-    type: "text",
-    text: "¡Hola! ¿Qué producto te interesa?\n\n" +
-          "Manejamos:\n" +
-          "• Malla sombra (confeccionada lista para instalar)\n" +
-          "• Rollos de malla sombra (100m)\n" +
-          "• Borde separador para jardín"
-  };
+  const response = await generateBotResponse("greeting", {
+    isReturningUser,
+    hoursSinceLastMessage,
+    productInterest: convo?.productInterest,
+    intentLevel,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
  * Thanks handler
  */
 async function handleThanks(convo, psid) {
-  return {
-    type: "text",
-    text: "¡Con gusto! ¿Hay algo más en lo que pueda ayudarte?"
-  };
+  const response = await generateBotResponse("thanks", { convo });
+  return { type: "text", text: response };
 }
 
 /**
@@ -119,53 +108,55 @@ async function handleThanks(convo, psid) {
 async function handleGoodbye(convo, psid) {
   await updateConversation(psid, { state: "closed" });
 
-  return {
-    type: "text",
-    text: "¡Gracias por contactarnos! Que tengas excelente día. 🌿"
-  };
+  const response = await generateBotResponse("goodbye", {
+    userName: convo?.userName,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
  * Shipping query - general (no product context yet)
  */
 async function handleShipping(entities, convo, psid) {
-  return {
-    type: "text",
-    text: "¡Claro! Enviamos a todo México con envío gratis en la mayoría de los productos a través de Mercado Libre.\n\n" +
-          "¿Qué producto te interesa para darte más detalles?"
-  };
+  const response = await generateBotResponse("shipping_query", {
+    shipsNationwide: true,
+    freeShipping: true,
+    carrier: "Mercado Libre",
+    noProductContext: true,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
  * Location query
  */
 async function handleLocation(convo, psid) {
-  return {
-    type: "text",
-    text: "Estamos ubicados en Querétaro pero enviamos a todo el país 📦🚚\n\n" +
-          "Puedes visitarnos en:\n" +
-          "📍 Calle Loma de San Gremal 108, bodega 73\n" +
-          "Parque Industrial Navex, C.P. 76137\n" +
-          "Santiago de Querétaro\n\n" +
-          "🕓 Lunes a Viernes 9am - 6pm\n" +
-          "📞 442 352 1646\n\n" +
-          "¿Te gustaría ver nuestros productos?"
-  };
+  const response = await generateBotResponse("location_query", {
+    address: 'Calle Loma de San Gremal 108, bodega 73, Parque Industrial Navex',
+    phone: '442 352 1646',
+    hours: 'Lunes a Viernes 9am - 6pm',
+    whatsapp: "https://wa.me/524425957432",
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
  * Payment query
  */
 async function handlePayment(convo, psid) {
-  return {
-    type: "text",
-    text: "Puedes pagar de forma segura a través de Mercado Libre:\n\n" +
-          "💳 Tarjeta de crédito/débito\n" +
-          "🏦 Transferencia bancaria\n" +
-          "💵 Efectivo en OXXO/7-Eleven\n" +
-          "📅 Hasta 12 meses sin intereses\n\n" +
-          "¿Qué producto te interesa?"
-  };
+  const response = await generateBotResponse("payment_query", {
+    paymentMethods: ['Tarjeta de crédito/débito', 'Transferencia bancaria', 'Efectivo en OXXO/7-Eleven'],
+    monthsWithoutInterest: 12,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
@@ -179,69 +170,50 @@ async function handleHumanRequest(convo, psid) {
     state: "needs_human"
   });
 
-  return {
-    type: "text",
-    text: "¡Claro! Te comunico con un asesor. En un momento te atienden."
-  };
+  const response = await generateBotResponse("human_request", { convo });
+  return { type: "text", text: response };
 }
 
 /**
  * Product inquiry without specific product - ask what they need
  */
 async function handleProductInquiry(convo, psid, userMessage) {
-  return {
-    type: "text",
-    text: "¿Qué producto te interesa?\n\n" +
-          "• **Malla sombra confeccionada** - Lista para instalar, desde 2x2m hasta 6x10m\n" +
-          "• **Rollos de malla sombra** - 100m de largo, para proyectos grandes\n" +
-          "• **Borde separador** - Para delimitar jardines"
-  };
+  const response = await generateBotResponse("product_inquiry", {
+    noProductContext: true,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
  * Confirmation without context
  */
 async function handleConfirmation(convo, psid) {
-  // User said "yes" but we don't have context
-  return {
-    type: "text",
-    text: "¡Perfecto! ¿Qué producto o medida te interesa?"
-  };
+  const response = await generateBotResponse("confirmation_no_context", { convo });
+  return { type: "text", text: response };
 }
 
 /**
  * Rejection without context
  */
 async function handleRejection(convo, psid) {
-  return {
-    type: "text",
-    text: "Entendido. ¿Hay algo más en lo que pueda ayudarte?"
-  };
+  const response = await generateBotResponse("rejection", { convo });
+  return { type: "text", text: response };
 }
 
 /**
  * Unclear intent - guide the conversation
- *
- * NOTE: Cross-cutting intents (color_query, shipping, location, payment, etc.)
- * are now handled by the Intent Dispatcher BEFORE flows are reached.
- * This function only handles truly unclear messages that weren't classified.
  */
 async function handleUnclear(convo, psid, userMessage, flowContext = {}) {
   const intentLevel = flowContext.intentScore?.intent || 'medium';
 
-  // If low intent (possible troll/competitor), keep response minimal
-  if (intentLevel === 'low') {
-    return {
-      type: "text",
-      text: "¿En qué puedo ayudarte?"
-    };
-  }
+  const response = await generateBotResponse("unclear_intent", {
+    intentLevel,
+    convo
+  });
 
-  // Medium/high intent - be more helpful
-  return {
-    type: "text",
-    text: "¿Qué producto te interesa? Manejamos malla sombra, rollos y borde separador para jardín."
-  };
+  return { type: "text", text: response };
 }
 
 module.exports = {

@@ -37,6 +37,9 @@ const {
   extractAllDimensions
 } = require("../utils/dimensionParsers");
 
+// AI-powered response generation
+const { generateBotResponse } = require("../responseGenerator");
+
 // Location detection
 const { detectMexicanLocation, detectZipCode } = require("../../mexicanLocations");
 
@@ -527,10 +530,12 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   const isAskingAboutCondition = userMessage && conditionRequest.test(userMessage);
 
   if (isAskingAboutCondition) {
-    return {
-      type: "text",
-      text: "Sí, todas nuestras mallas son nuevas, somos fabricantes ¿Qué medida necesitas?"
-    };
+    const response = await generateBotResponse("product_condition", {
+      isNew: true,
+      isManufacturer: true,
+      convo
+    });
+    return { type: "text", text: response };
   }
 
   // Check if user is asking for product INFO (not trying to buy yet)
@@ -548,7 +553,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
         updatedAt: new Date()
       }
     });
-    return handleProductInfo(userMessage);
+    return await handleProductInfo(userMessage, convo);
   }
 
   // Determine current stage
@@ -567,7 +572,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       break;
 
     default:
-      response = handleStart(sourceContext);
+      response = await handleStart(sourceContext, convo);
   }
 
   // Save updated specs (but don't overwrite if we're awaiting confirmation)
@@ -594,31 +599,32 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 /**
  * Handle product info request - user asking about characteristics
  */
-function handleProductInfo(userMessage) {
-  return {
-    type: "text",
-    text: "La malla sombra confeccionada viene lista para instalar:\n\n" +
-          "• Material: Polietileno de alta densidad (HDPE)\n" +
-          "• Color: Beige\n" +
-          "• 90% de sombra\n" +
-          "• Incluye ojillos en todo el perímetro para fácil instalación\n" +
-          "• Resistente a rayos UV\n" +
-          "• Durable (5+ años de vida útil)\n\n" +
-          "Las medidas van desde 2x2m hasta 6x10m. Para medidas más grandes hacemos pedidos especiales.\n\n" +
-          "¿Qué medida necesitas?"
-  };
+async function handleProductInfo(userMessage, convo) {
+  const response = await generateBotResponse("product_info", {
+    productType: "malla_sombra_confeccionada",
+    material: "Polietileno de alta densidad (HDPE)",
+    color: "Beige",
+    shadePercentage: "90%",
+    hasEyelets: true,
+    hasUVProtection: true,
+    lifespan: "5+ años",
+    sizeRange: "2x2m hasta 6x10m",
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
  * Handle start - user just mentioned malla
  */
-function handleStart(sourceContext) {
-  return {
-    type: "text",
-    text: "¡Hola! Tenemos malla sombra confeccionada lista para instalar.\n\n" +
-          "Los precios dependen de la medida.\n\n" +
-          "¿Qué medida necesitas? (ej: 4x3 metros)"
-  };
+async function handleStart(sourceContext, convo) {
+  const response = await generateBotResponse("malla_start", {
+    productType: "malla_sombra_confeccionada",
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
@@ -632,16 +638,19 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
     if (convo?.productSpecs?.width && convo?.productSpecs?.height) {
       const w = convo.productSpecs.width;
       const h = convo.productSpecs.height;
-      return {
-        type: "text",
-        text: `Tienes razón, disculpa. Tenías ${w}x${h}m.\n\n¿Te paso el link para esa medida?`
-      };
+      const response = await generateBotResponse("frustration_recovery", {
+        hasSizeContext: true,
+        previousSize: `${w}x${h}m`,
+        convo
+      });
+      return { type: "text", text: response };
     }
     // No dimensions found - apologize and ask nicely
-    return {
-      type: "text",
-      text: `Disculpa, ¿me puedes confirmar la medida? (ej: 4x3 metros)`
-    };
+    const response = await generateBotResponse("frustration_recovery", {
+      hasProductContext: true,
+      convo
+    });
+    return { type: "text", text: response };
   }
 
   // CHECK FOR LOCATION - if user is providing city/alcaldía/zipcode
@@ -680,7 +689,7 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
   // Check if they're asking for info even at this stage
   const infoRequest = /\b(caracter[ií]sticas?|informaci[oó]n|info|c[oó]mo\s*(es|son)|de\s*qu[eé]|especificaciones?)\b/i;
   if (userMessage && infoRequest.test(userMessage)) {
-    return handleProductInfo(userMessage);
+    return await handleProductInfo(userMessage, convo);
   }
 
   // Check if they're asking what sizes/prices are available
@@ -693,21 +702,21 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
 
   if (sizesListRequest) {
     // Show range instead of full list (rule: don't dump long lists)
-    return {
-      type: "text",
-      text: "Tenemos malla sombra confeccionada desde 2x2m hasta 6x10m.\n\n" +
-            "Los precios van desde $320 hasta $1,800 dependiendo del tamaño.\n\n" +
-            "¿Qué medida necesitas?"
-    };
+    const response = await generateBotResponse("catalog_request", {
+      sizeRange: "2x2m hasta 6x10m",
+      priceRange: "$320 hasta $1,800",
+      convo
+    });
+    return { type: "text", text: response };
   }
 
   // If they're asking about prices without dimensions
   if (intent === INTENTS.PRICE_QUERY) {
-    return {
-      type: "text",
-      text: "Los precios van desde $320 hasta $1,800 dependiendo de la medida.\n\n" +
-            "¿Qué medida necesitas? (ej: 4x3 metros)"
-    };
+    const response = await generateBotResponse("price_query_no_size", {
+      priceRange: "$320 hasta $1,800",
+      convo
+    });
+    return { type: "text", text: response };
   }
 
   // Check if user is asking about product features (material, percentage, color, UV)
@@ -810,11 +819,11 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
   }
 
   // General ask for dimensions
-  return {
-    type: "text",
-    text: "Para darte el precio necesito la medida.\n\n" +
-          "¿Qué área buscas cubrir? (ej: 4x3 metros, 5x5 metros)"
-  };
+  const response = await generateBotResponse("awaiting_dimensions", {
+    productType: "malla_sombra_confeccionada",
+    convo
+  });
+  return { type: "text", text: response };
 }
 
 /**

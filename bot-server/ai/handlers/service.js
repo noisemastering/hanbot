@@ -4,57 +4,59 @@
 const { updateConversation } = require("../../conversationManager");
 const { getBusinessInfo } = require("../../businessInfoManager");
 const { sendHandoffNotification } = require("../../services/pushNotifications");
+const { generateBotResponse } = require("../responseGenerator");
 
 /**
  * Handle installation query - "Ustedes instalan?", "Pasan a medir?"
  */
-async function handleInstallation({ psid }) {
+async function handleInstallation({ psid, convo }) {
   await updateConversation(psid, {
     lastIntent: "installation_query",
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: "No, mil disculpas, en Hanlob no proveemos servicios de instalación.\n\n" +
-          "Solo vendemos la malla sombra y la enviamos a tu domicilio.\n\n" +
-          "¿Ya tienes la medida que necesitas?"
-  };
+  const response = await generateBotResponse("installation_query", {
+    offersInstallation: false,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
  * Handle structure query - "Hacen la estructura?", "Incluye postes?"
  */
-async function handleStructure({ psid }) {
+async function handleStructure({ psid, convo }) {
   await updateConversation(psid, {
     lastIntent: "structure_query",
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: "No, mil disculpas, nosotros solo realizamos la fabricación de la malla.\n\n" +
-          "No vendemos ni instalamos estructuras.\n\n" +
-          "¿Te puedo ayudar con alguna medida de malla?"
-  };
+  const response = await generateBotResponse("structure_query", {
+    offersStructure: false,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
  * Handle warranty query - "Tiene garantía?", "Cuánto de garantía?"
  */
-async function handleWarranty({ psid }) {
+async function handleWarranty({ psid, convo }) {
   await updateConversation(psid, {
     lastIntent: "warranty_query",
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: "Nuestras mallas tienen garantía de 1 año por defectos de fabricación.\n\n" +
-          "Además, la compra por Mercado Libre te da protección adicional del comprador.\n\n" +
-          "La vida útil del producto es de 8-10 años con el cuidado adecuado.\n\n" +
-          "¿Qué medida te interesa?"
-  };
+  const response = await generateBotResponse("warranty_query", {
+    warrantyYears: 1,
+    lifespan: '8-10 años',
+    hasMercadoLibreProtection: true,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
@@ -68,34 +70,31 @@ async function handleCustomSize({ psid, convo }) {
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: "Sí, podemos fabricar malla a medida exacta para proyectos especiales.\n\n" +
-          "Para cotizar una medida personalizada, necesitamos:\n" +
-          "• Las dimensiones exactas (ancho x largo)\n" +
-          "• El porcentaje de sombra deseado\n" +
-          "• Tu código postal para calcular el envío\n\n" +
-          "¿Qué medida necesitas?"
-  };
+  const response = await generateBotResponse("custom_size_query", {
+    offersCustomSize: true,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
  * Handle accessory query - "Incluye cuerda?", "Viene con arnés?"
  */
-async function handleAccessory({ psid }) {
+async function handleAccessory({ psid, convo }) {
   await updateConversation(psid, {
     lastIntent: "accessory_query",
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: "La malla sombra confeccionada viene lista para instalar con argollas en todo el perímetro, pero no incluye cuerda ni arnés.\n\n" +
-          "Te ofrecemos estos accesorios por separado:\n\n" +
-          "• Lazo con protección UV (rollo de 47m)\n" +
-          "• Kit de Instalación para Malla Sombra\n\n" +
-          "¿Te interesa agregar alguno de estos accesorios?"
-  };
+  const response = await generateBotResponse("accessory_query", {
+    includesRope: false,
+    hasEyelets: true,
+    availableAccessories: ['Lazo con protección UV (rollo de 47m)', 'Kit de Instalación para Malla Sombra'],
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 module.exports = {

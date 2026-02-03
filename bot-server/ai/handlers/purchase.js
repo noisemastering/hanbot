@@ -4,6 +4,7 @@
 const { updateConversation } = require("../../conversationManager");
 const { generateClickLink } = require("../../tracking");
 const { getBusinessInfo } = require("../../businessInfoManager");
+const { generateBotResponse } = require("../responseGenerator");
 
 const STORE_URL = "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob";
 const WHATSAPP_LINK = "https://wa.me/524425957432";
@@ -25,14 +26,12 @@ async function handleStoreLinkRequest({ psid, convo }) {
       handoffTimestamp: new Date()
     });
 
-    return {
-      type: "text",
-      text: "Los rollos de malla sombra se cotizan directamente con nuestro equipo de ventas.\n\n" +
-            "Para darte precio y disponibilidad, necesito:\n" +
-            "• Tu código postal (para calcular envío)\n" +
-            "• Cantidad de rollos que necesitas\n\n" +
-            "Un asesor te contactará en breve para ayudarte con tu cotización."
-    };
+    const response = await generateBotResponse("store_link_rollo", {
+      needsQuote: true,
+      convo
+    });
+
+    return { type: "text", text: response };
   }
 
   const trackedLink = await generateClickLink(psid, STORE_URL, {
@@ -52,23 +51,21 @@ async function handleStoreLinkRequest({ psid, convo }) {
 
   // If no product context yet, confirm ML and ask what they need
   if (!convo?.productInterest) {
-    return {
-      type: "text",
-      text: "¡Sí! Vendemos por Mercado Libre.\n\n" +
-            "¿Qué producto te interesa?\n\n" +
-            "• Malla Sombra (confeccionada o en rollo)\n" +
-            "• Borde Separador para jardín\n" +
-            "• Groundcover (malla antimaleza)"
-    };
+    const response = await generateBotResponse("store_link_no_context", {
+      link: trackedLink,
+      convo
+    });
+
+    return { type: "text", text: response };
   }
 
   // Has product context - give store link
-  return {
-    type: "text",
-    text: `¡Sí! Puedes comprar en nuestra Tienda Oficial de Mercado Libre:\n\n` +
-          `${trackedLink}\n\n` +
-          `¿Te ayudo a encontrar la medida que necesitas?`
-  };
+  const response = await generateBotResponse("store_link_request", {
+    link: trackedLink,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
@@ -87,18 +84,12 @@ async function handleHowToBuy({ psid, convo }) {
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: `Para realizar tu compra, visita nuestra Tienda Oficial en Mercado Libre:\n\n` +
-          `${trackedLink}\n\n` +
-          `Ahí puedes:\n` +
-          `1. Seleccionar la medida que necesitas\n` +
-          `2. Agregar al carrito\n` +
-          `3. Pagar con tarjeta, efectivo o meses sin intereses\n` +
-          `4. Proporcionar tu dirección de envío\n` +
-          `5. Esperar la entrega en tu domicilio\n\n` +
-          `El envío está incluido en la mayoría de los casos. ¿Te puedo ayudar con algo más?`
-  };
+  const response = await generateBotResponse("how_to_buy", {
+    link: trackedLink,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
@@ -108,15 +99,7 @@ async function handleBulkDiscount({ psid, convo }) {
   const info = await getBusinessInfo();
 
   // Check if we already gave the bulk discount response recently
-  if (convo?.lastIntent === "bulk_discount") {
-    return {
-      type: "text",
-      text: `Como te comenté, para cotizaciones de volumen necesitas comunicarte con nuestros especialistas:\n\n` +
-            `💬 WhatsApp: ${WHATSAPP_LINK}\n` +
-            `📞 ${info?.phones?.join(" / ") || "442 352 1646"}\n\n` +
-            `Ellos podrán darte el precio exacto para la cantidad que necesitas.`
-    };
-  }
+  const isRepeat = convo?.lastIntent === "bulk_discount";
 
   await updateConversation(psid, {
     lastIntent: "bulk_discount",
@@ -124,20 +107,22 @@ async function handleBulkDiscount({ psid, convo }) {
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: `Los descuentos por volumen aplican para pedidos desde $20,000 MXN en adelante.\n\n` +
-          `Para cotizar tu pedido y conocer los descuentos disponibles, te comunico con uno de nuestros especialistas:\n\n` +
-          `💬 WhatsApp: ${WHATSAPP_LINK}\n` +
-          `📞 ${info?.phones?.join(" / ") || "442 352 1646"}\n` +
-          `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`
-  };
+  const response = await generateBotResponse("bulk_discount", {
+    isRepeat,
+    minimumOrder: '$20,000 MXN',
+    whatsapp: WHATSAPP_LINK,
+    phone: info?.phones?.join(" / ") || "442 352 1646",
+    hours: info?.hours || "Lun-Vie 9am-6pm",
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
  * Handle phone request - "Teléfono?", "Número para llamar?"
  */
-async function handlePhoneRequest({ psid }) {
+async function handlePhoneRequest({ psid, convo }) {
   const info = await getBusinessInfo();
 
   await updateConversation(psid, {
@@ -145,30 +130,31 @@ async function handlePhoneRequest({ psid }) {
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: `¡Claro! Nuestro teléfono es:\n\n` +
-          `📞 ${info?.phones?.[0] || "442 352 1646"}\n` +
-          `💬 WhatsApp: ${WHATSAPP_LINK}\n\n` +
-          `🕓 Horario: ${info?.hours || "Lun-Vie 9am-6pm"}\n\n` +
-          `También puedes comprar directamente en nuestra tienda de Mercado Libre si prefieres.`
-  };
+  const response = await generateBotResponse("phone_request", {
+    phone: info?.phones?.[0] || "442 352 1646",
+    whatsapp: WHATSAPP_LINK,
+    hours: info?.hours || "Lun-Vie 9am-6pm",
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
  * Handle price per square meter - "Precio por metro cuadrado", "Cuánto el m2"
  */
-async function handlePricePerSqm({ psid }) {
+async function handlePricePerSqm({ psid, convo }) {
   await updateConversation(psid, {
     lastIntent: "price_per_sqm",
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: "Nuestros precios dependen de las dimensiones de la malla, no manejamos un precio fijo por metro cuadrado.\n\n" +
-          "¿Qué medida te interesa?"
-  };
+  const response = await generateBotResponse("price_per_sqm", {
+    hasPricePerSqm: false,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 module.exports = {

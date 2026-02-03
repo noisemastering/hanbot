@@ -4,6 +4,7 @@
 const { updateConversation } = require("../../conversationManager");
 const { getAvailableSizes } = require("../../measureHandler");
 const { generateClickLink } = require("../../tracking");
+const { generateBotResponse } = require("../responseGenerator");
 const ProductFamily = require("../../models/ProductFamily");
 
 /**
@@ -17,17 +18,20 @@ async function handleCatalogRequest({ psid, convo }) {
 
   // Don't dump entire product list - ask for dimensions instead
   // This follows the CLAUDE.md rule: "NEVER dump long product lists"
-  return {
-    type: "text",
-    text: "Tenemos mallas sombra beige en varias medidas, desde 2x2m hasta 6x10m, y también rollos de 100m.\n\n" +
-          "Para darte el precio exacto, ¿qué medida necesitas para tu proyecto?"
-  };
+  const response = await generateBotResponse("catalog_request", {
+    hasVariousSizes: true,
+    sizeRange: '2x2m hasta 6x10m',
+    hasRolls: true,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
  * Handle product comparison - "Diferencia entre raschel y monofilamento"
  */
-async function handleProductComparison({ entities, psid, userMessage }) {
+async function handleProductComparison({ entities, psid, userMessage, convo }) {
   await updateConversation(psid, {
     lastIntent: "product_comparison",
     unknownCount: 0
@@ -37,47 +41,16 @@ async function handleProductComparison({ entities, psid, userMessage }) {
   const isRaschelMono = /raschel.*monofilamento|monofilamento.*raschel/i.test(userMessage);
   const isConfeccionadaRollo = /confeccionada.*rollo|rollo.*confeccionada/i.test(userMessage);
 
-  if (isRaschelMono) {
-    return {
-      type: "text",
-      text: "**Malla Raschel** (tejido raschel):\n" +
-            "• Material económico y ligero\n" +
-            "• Ideal para uso temporal o agricultura\n" +
-            "• Porcentajes: 35%, 50%, 70%, 80%, 90%\n\n" +
-            "**Malla Monofilamento** (hilo continuo):\n" +
-            "• Mayor durabilidad y resistencia\n" +
-            "• Para uso permanente o industrial\n" +
-            "• Mejor resistencia al viento\n\n" +
-            "¿Qué tipo te interesa?"
-    };
-  }
+  let comparisonType = 'general';
+  if (isRaschelMono) comparisonType = 'raschel_vs_monofilamento';
+  if (isConfeccionadaRollo) comparisonType = 'confeccionada_vs_rollo';
 
-  if (isConfeccionadaRollo) {
-    return {
-      type: "text",
-      text: "**Malla Confeccionada**:\n" +
-            "• Lista para instalar\n" +
-            "• Con argollas en todo el perímetro\n" +
-            "• Medidas de 2x2m hasta 6x10m\n" +
-            "• Ideal para patios, cocheras, terrazas\n\n" +
-            "**Rollo de Malla**:\n" +
-            "• 100 metros de largo\n" +
-            "• Para proyectos grandes o profesionales\n" +
-            "• Tú defines la medida que necesitas\n\n" +
-            "¿Qué tipo te interesa?"
-    };
-  }
+  const response = await generateBotResponse("product_comparison", {
+    comparisonType,
+    convo
+  });
 
-  // General comparison question
-  return {
-    type: "text",
-    text: "Tenemos diferentes tipos de malla según tu necesidad:\n\n" +
-          "• **Confeccionada**: lista para instalar con argollas\n" +
-          "• **Rollos**: 100m para proyectos grandes\n" +
-          "• **Raschel**: económica y ligera\n" +
-          "• **Monofilamento**: máxima durabilidad\n\n" +
-          "¿Para qué la necesitas? Así te recomiendo la mejor opción."
-  };
+  return { type: "text", text: response };
 }
 
 /**
@@ -122,12 +95,14 @@ async function handleLargestProduct({ psid, convo }) {
             unknownCount: 0
           });
 
-          return {
-            type: "text",
-            text: `Nuestra malla sombra confeccionada más grande es de **${largest.sizeStr}** a **$${largest.price}** con envío incluido.\n\n` +
-                  `Viene reforzada con argollas en todo el perímetro, lista para instalar.\n\n` +
-                  `Cómprala aquí:\n${trackedLink}`
-          };
+          const response = await generateBotResponse("largest_product", {
+            dimensions: largest.sizeStr,
+            price: largest.price,
+            link: trackedLink,
+            convo
+          });
+
+          return { type: "text", text: response };
         }
       }
     } catch (err) {
@@ -140,18 +115,22 @@ async function handleLargestProduct({ psid, convo }) {
       unknownCount: 0
     });
 
-    return {
-      type: "text",
-      text: `Nuestra malla sombra confeccionada más grande es de **${largest.sizeStr}** a **$${largest.price}**.\n\n` +
-            `Viene reforzada con argollas en todo el perímetro, lista para instalar. ¿Te interesa?`
-    };
+    const response = await generateBotResponse("largest_product", {
+      dimensions: largest.sizeStr,
+      price: largest.price,
+      convo
+    });
+
+    return { type: "text", text: response };
   }
 
   // Fallback
-  return {
-    type: "text",
-    text: "Nuestra malla sombra confeccionada más grande es de 6x10m. ¿Te paso el precio y link?"
-  };
+  const response = await generateBotResponse("largest_product", {
+    dimensions: '6x10m',
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
@@ -175,37 +154,39 @@ async function handleSmallestProduct({ psid, convo }) {
       unknownCount: 0
     });
 
-    return {
-      type: "text",
-      text: `Nuestra malla sombra confeccionada más pequeña es de **${smallest.sizeStr}** a **$${smallest.price}**.\n\n` +
-            `¿Te interesa o necesitas una medida diferente?`
-    };
+    const response = await generateBotResponse("smallest_product", {
+      dimensions: smallest.sizeStr,
+      price: smallest.price,
+      convo
+    });
+
+    return { type: "text", text: response };
   }
 
-  return {
-    type: "text",
-    text: "Nuestra malla sombra confeccionada más pequeña es de 2x2m. ¿Te paso el precio?"
-  };
+  const response = await generateBotResponse("smallest_product", {
+    dimensions: '2x2m',
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
  * Handle durability query - "Cuánto tiempo dura?", "Vida útil?"
  */
-async function handleDurabilityQuery({ psid }) {
+async function handleDurabilityQuery({ psid, convo }) {
   await updateConversation(psid, {
     lastIntent: "durability_query",
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: "La malla sombra reforzada tiene una vida útil de 8 a 10 años aproximadamente, dependiendo de:\n\n" +
-          "• Exposición al sol y clima\n" +
-          "• Tensión de la instalación\n" +
-          "• Mantenimiento (limpieza ocasional)\n\n" +
-          "Nuestras mallas son de alta calidad con protección UV, por lo que son muy resistentes a la intemperie.\n\n" +
-          "¿Qué medida te interesa?"
-  };
+  const response = await generateBotResponse("durability_query", {
+    lifespan: '8-10 años',
+    hasUVProtection: true,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 module.exports = {

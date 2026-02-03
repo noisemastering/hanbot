@@ -4,6 +4,7 @@
 const { updateConversation } = require("../../conversationManager");
 const { getBusinessInfo } = require("../../businessInfoManager");
 const { detectMexicanLocation } = require("../../mexicanLocations");
+const { generateBotResponse } = require("../responseGenerator");
 
 /**
  * Handle shipping query - "Hacen envíos?", "Envían a mi ciudad?"
@@ -19,12 +20,15 @@ async function handleShipping({ entities, psid, convo, userMessage }) {
       unknownCount: 0
     });
 
-    return {
-      type: "text",
-      text: `¡Sí! Enviamos a ${locationInfo.normalized} y a todo el país a través de Mercado Libre.\n\n` +
-            `El envío está incluido en la mayoría de los productos.\n\n` +
-            `¿Qué medida te interesa?`
-    };
+    const response = await generateBotResponse("shipping_query", {
+      userLocation: locationInfo.normalized,
+      shipsNationwide: true,
+      freeShipping: true,
+      carrier: "Mercado Libre",
+      convo
+    });
+
+    return { type: "text", text: response };
   }
 
   // Check product context for specific response
@@ -36,12 +40,12 @@ async function handleShipping({ entities, psid, convo, userMessage }) {
       unknownCount: 0
     });
 
-    return {
-      type: "text",
-      text: "Enviamos a todo el país.\n\n" +
-            "Para rollos de malla sombra y pedidos de mayoreo, necesitamos tu código postal para calcular el envío.\n\n" +
-            "¿Me lo compartes?"
-    };
+    const response = await generateBotResponse("shipping_query_roll", {
+      needsZipcode: true,
+      convo
+    });
+
+    return { type: "text", text: response };
   }
 
   await updateConversation(psid, {
@@ -49,19 +53,20 @@ async function handleShipping({ entities, psid, convo, userMessage }) {
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: "Enviamos a todo el país.\n\n" +
-          "En rollos de malla sombra y pedidos de mayoreo, necesitamos tu código postal para calcular el envío.\n\n" +
-          "En todos nuestros demás productos, enviamos a través de Mercado Libre con envío incluido.\n\n" +
-          "¿Qué producto te interesa?"
-  };
+  const response = await generateBotResponse("shipping_query", {
+    shipsNationwide: true,
+    freeShipping: true,
+    carrier: "Mercado Libre",
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
  * Handle location query - "Dónde están?", "Tienen tienda física?"
  */
-async function handleLocation({ psid, userMessage }) {
+async function handleLocation({ psid, userMessage, convo }) {
   const businessInfo = await getBusinessInfo();
 
   // Check if they want to visit physically
@@ -72,32 +77,23 @@ async function handleLocation({ psid, userMessage }) {
     unknownCount: 0
   });
 
-  if (wantsPhysicalVisit) {
-    return {
-      type: "text",
-      text: `Nos ubicamos en Querétaro. Somos principalmente tienda en línea, pero si gustas visitarnos puedes contactarnos para coordinar:\n\n` +
-            `📍 ${businessInfo?.address || 'Calle Loma de San Gremal 108, bodega 73'}\n` +
-            `📞 ${businessInfo?.phones?.[0] || '442 352 1646'}\n` +
-            `💬 WhatsApp: https://wa.me/524425957432\n\n` +
-            `También puedes ver todos nuestros productos en nuestra Tienda Oficial de Mercado Libre con envío a todo el país.`
-    };
-  }
+  const response = await generateBotResponse("location_query", {
+    wantsPhysicalVisit,
+    address: businessInfo?.address || 'Calle Loma de San Gremal 108, bodega 73',
+    phone: businessInfo?.phones?.[0] || '442 352 1646',
+    hours: businessInfo?.hours || 'Lun-Vie 9am-6pm',
+    whatsapp: "https://wa.me/524425957432",
+    convo
+  });
 
-  return {
-    type: "text",
-    text: `Estamos ubicados en Querétaro pero enviamos a todo el país.\n\n` +
-          `📍 ${businessInfo?.address || 'Calle Loma de San Gremal 108, bodega 73'}\n` +
-          `🕓 ${businessInfo?.hours || 'Lun-Vie 9am-6pm'}\n` +
-          `📞 ${businessInfo?.phones?.[0] || '442 352 1646'}\n\n` +
-          `¿Te gustaría ver nuestros productos?`
-  };
+  return { type: "text", text: response };
 }
 
 /**
  * Handle location mention - user says where they're from
  * "Soy de Monterrey", "Vivo en Jalisco"
  */
-async function handleLocationMention({ psid, userMessage }) {
+async function handleLocationMention({ psid, userMessage, convo }) {
   const locationInfo = await detectMexicanLocation(userMessage);
 
   if (locationInfo) {
@@ -107,95 +103,98 @@ async function handleLocationMention({ psid, userMessage }) {
       unknownCount: 0
     });
 
-    return {
-      type: "text",
-      text: `¡Sí! Enviamos a ${locationInfo.normalized} a través de Mercado Libre.\n\n` +
-            `¿Qué medida de malla sombra necesitas?`
-    };
+    const response = await generateBotResponse("location_mentioned", {
+      userLocation: locationInfo.normalized,
+      shipsNationwide: true,
+      convo
+    });
+
+    return { type: "text", text: response };
   }
 
-  // Could not detect location - ask for clarification
+  // Could not detect location
   await updateConversation(psid, {
     lastIntent: "location_mentioned",
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: "Enviamos a todo el país por Mercado Libre.\n\n" +
-          "¿Qué producto te interesa?"
-  };
+  const response = await generateBotResponse("location_mentioned", {
+    shipsNationwide: true,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
  * Handle payment query - "Cómo pago?", "Aceptan tarjeta?"
  */
-async function handlePayment({ psid }) {
+async function handlePayment({ psid, convo }) {
   await updateConversation(psid, {
     lastIntent: "payment_query",
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: "Puedes pagar de forma segura a través de Mercado Libre:\n\n" +
-          "• Tarjeta de crédito/débito\n" +
-          "• Transferencia bancaria\n" +
-          "• Efectivo en OXXO/7-Eleven\n" +
-          "• Hasta 12 meses sin intereses\n\n" +
-          "¿Qué producto te interesa?"
-  };
+  const response = await generateBotResponse("payment_query", {
+    paymentMethods: ['Tarjeta de crédito/débito', 'Transferencia bancaria', 'Efectivo en OXXO/7-Eleven'],
+    monthsWithoutInterest: 12,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
  * Handle pay on delivery query - "Pago al entregar?", "Contra entrega?"
  */
-async function handlePayOnDelivery({ psid }) {
+async function handlePayOnDelivery({ psid, convo }) {
   await updateConversation(psid, {
     lastIntent: "pay_on_delivery_query",
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: "El pago es 100% POR ADELANTADO en Mercado Libre al momento de hacer tu pedido.\n\n" +
-          "No manejamos pago contra entrega.\n\n" +
-          "Aceptan tarjeta, efectivo en OXXO, o meses sin intereses. ¿Te paso el link para que puedas hacer tu pedido?"
-  };
+  const response = await generateBotResponse("pay_on_delivery_query", {
+    payOnDeliveryAvailable: false,
+    requiresAdvancePayment: true,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
  * Handle delivery time query - "Cuándo llega?", "Tiempo de entrega?"
  */
-async function handleDeliveryTime({ psid }) {
+async function handleDeliveryTime({ psid, convo }) {
   await updateConversation(psid, {
     lastIntent: "delivery_time_query",
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: "Tiempos de entrega:\n\n" +
-          "• CDMX y zona metropolitana: 1-2 días hábiles\n" +
-          "• Interior de la República: 3-5 días hábiles\n\n" +
-          "El pago se realiza en Mercado Libre al momento de hacer el pedido. ¿Qué medida te interesa?"
-  };
+  const response = await generateBotResponse("delivery_time_query", {
+    cdmxDays: '1-2 días hábiles',
+    interiorDays: '3-5 días hábiles',
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
  * Handle shipping included query - "Ya incluye envío?", "El precio es con entrega?"
  */
-async function handleShippingIncluded({ psid }) {
+async function handleShippingIncluded({ psid, convo }) {
   await updateConversation(psid, {
     lastIntent: "shipping_included_query",
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: "¡Sí! El envío está incluido en el precio o se calcula automáticamente en Mercado Libre dependiendo de tu ubicación.\n\n" +
-          "En la mayoría de los casos el envío es gratis."
-  };
+  const response = await generateBotResponse("shipping_included_query", {
+    shippingIncluded: true,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 module.exports = {

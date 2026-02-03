@@ -4,6 +4,7 @@
 const { updateConversation } = require("../../conversationManager");
 const { sendHandoffNotification } = require("../../services/pushNotifications");
 const { getBusinessInfo } = require("../../businessInfoManager");
+const { generateBotResponse } = require("../responseGenerator");
 
 /**
  * Handle frustration - "Ya te dije!", "No entienden", "No leen"
@@ -26,18 +27,24 @@ async function handleFrustration({ psid, convo, userMessage }) {
     const size = hasRequestedSize ||
                  `${convo.productSpecs.width}x${convo.productSpecs.height}`;
 
-    return {
-      type: "text",
-      text: `Tienes razón, disculpa. Tenías ${size}m.\n\n¿Te paso el link para esa medida?`
-    };
+    const response = await generateBotResponse("frustration_recovery", {
+      hasSizeContext: true,
+      previousSize: size,
+      convo
+    });
+
+    return { type: "text", text: response };
   }
 
   // Check if we have product context
   if (convo?.productInterest) {
-    return {
-      type: "text",
-      text: `Disculpa la confusión. ¿Me puedes confirmar la medida que necesitas?`
-    };
+    const response = await generateBotResponse("frustration_recovery", {
+      hasProductContext: true,
+      productInterest: convo.productInterest,
+      convo
+    });
+
+    return { type: "text", text: response };
   }
 
   // No context - hand off to human
@@ -50,11 +57,12 @@ async function handleFrustration({ psid, convo, userMessage }) {
 
   await sendHandoffNotification(psid, convo, `Cliente frustrado: "${userMessage.substring(0, 100)}"`);
 
-  return {
-    type: "text",
-    text: "Disculpa, parece que hay algo que no estoy entendiendo bien. Déjame contactar a un especialista para que te ayude mejor.\n\n" +
-          "En un momento te atienden."
-  };
+  const response = await generateBotResponse("frustration_handoff", {
+    needsHuman: true,
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 /**
@@ -71,10 +79,9 @@ async function handleHumanRequest({ psid, convo }) {
 
   await sendHandoffNotification(psid, convo, "Cliente solicitó hablar con un agente");
 
-  return {
-    type: "text",
-    text: "¡Claro! Te comunico con un asesor. En un momento te atienden."
-  };
+  const response = await generateBotResponse("human_request", { convo });
+
+  return { type: "text", text: response };
 }
 
 /**
@@ -91,11 +98,9 @@ async function handleComplaint({ psid, convo, userMessage }) {
 
   await sendHandoffNotification(psid, convo, `Queja de cliente: "${userMessage.substring(0, 100)}"`);
 
-  return {
-    type: "text",
-    text: "Lamento escuchar eso. Te comunico con un especialista para que te ayude a resolver tu situación.\n\n" +
-          "En un momento te atienden."
-  };
+  const response = await generateBotResponse("complaint", { convo });
+
+  return { type: "text", text: response };
 }
 
 /**
@@ -107,20 +112,12 @@ async function handlePriceConfusion({ psid, convo, userMessage }) {
     unknownCount: 0
   });
 
-  // Try to provide context about the price
-  if (convo?.requestedSize) {
-    return {
-      type: "text",
-      text: `Los precios pueden variar según la medida y disponibilidad en Mercado Libre.\n\n` +
-            `¿Me confirmas qué medida necesitas para darte el precio actualizado?`
-    };
-  }
+  const response = await generateBotResponse("price_confusion", {
+    requestedSize: convo?.requestedSize,
+    convo
+  });
 
-  return {
-    type: "text",
-    text: "Los precios de nuestros productos se actualizan directamente en Mercado Libre.\n\n" +
-          "¿Qué medida te interesa para darte el precio actual?"
-  };
+  return { type: "text", text: response };
 }
 
 /**
@@ -145,19 +142,22 @@ async function handleOutOfStock({ psid, convo, userMessage }) {
 
     await sendHandoffNotification(psid, convo, `Producto agotado: ${convo.requestedSize}`);
 
-    return {
-      type: "text",
-      text: `Lamento que esa medida aparezca agotada. Te comunico con un especialista para verificar disponibilidad y alternativas.\n\n` +
-            `También puedes contactarnos directamente:\n` +
-            `📞 ${businessInfo?.phones?.[0] || '442 352 1646'}\n` +
-            `💬 WhatsApp: https://wa.me/524425957432`
-    };
+    const response = await generateBotResponse("out_of_stock", {
+      requestedSize: convo.requestedSize,
+      phone: businessInfo?.phones?.[0] || '442 352 1646',
+      whatsapp: "https://wa.me/524425957432",
+      needsHuman: true,
+      convo
+    });
+
+    return { type: "text", text: response };
   }
 
-  return {
-    type: "text",
-    text: "Lamento que el producto aparezca agotado. ¿Qué medida buscabas? Puedo verificar alternativas disponibles."
-  };
+  const response = await generateBotResponse("out_of_stock", {
+    convo
+  });
+
+  return { type: "text", text: response };
 }
 
 module.exports = {
