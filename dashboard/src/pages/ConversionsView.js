@@ -139,6 +139,11 @@ function ConversionsView() {
     return styles[confidence] || 'bg-gray-500/20 text-gray-300 border border-gray-500/30';
   };
 
+  const getConfidenceLabel = (confidence) => {
+    const labels = { high: 'alta', medium: 'media', low: 'baja' };
+    return labels[confidence] || confidence || 'N/A';
+  };
+
   // Chart data comes directly from the daily API (already has clicks + conversions)
   const chartData = useMemo(() => {
     return dailyClicks.map(day => ({
@@ -412,7 +417,7 @@ function ConversionsView() {
                       <span className="mx-2 text-gray-500">→</span>
                       <span className="text-green-400">{formatCurrency(c.totalAmount)}</span>
                       <span className={`ml-2 px-1 py-0.5 rounded text-xs ${getConfidenceBadge(c.confidence)}`}>
-                        {c.confidence}
+                        {getConfidenceLabel(c.confidence)}
                       </span>
                     </div>
                   ))}
@@ -548,7 +553,7 @@ function ConversionsView() {
                       </td>
                       <td className="px-4 py-3 text-center">
                         <span className={`px-2 py-0.5 rounded text-xs font-medium ${getConfidenceBadge(conversion.correlationConfidence)}`}>
-                          {conversion.correlationConfidence || 'N/A'}
+                          {getConfidenceLabel(conversion.correlationConfidence)}
                         </span>
                       </td>
                     </tr>
