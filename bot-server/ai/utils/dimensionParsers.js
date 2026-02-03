@@ -31,6 +31,18 @@ function parseConfeccionadaDimensions(str) {
   // Check if dimensions are in feet
   const isFeet = /\b(pies?|ft|feet|foot)\b/i.test(s);
 
+  // Convert 3-digit numbers to decimals (common Mexican shorthand)
+  // 610 → 6.10, 420 → 4.20, 315 → 3.15, etc.
+  // Only applies to standalone 3-digit numbers that look like dimension values (1-9 range)
+  s = s.replace(/\b([1-9])(\d{2})\b(?!\d)/g, (match, first, rest) => {
+    const asDecimal = parseFloat(`${first}.${rest}`);
+    // Only convert if result is a reasonable dimension (1-10 meters)
+    if (asDecimal >= 1 && asDecimal <= 10) {
+      return `${first}.${rest}`;
+    }
+    return match; // Keep original if not a reasonable dimension
+  });
+
   // Convert "y medio" to .5 (e.g., "2 y medio" -> "2.5")
   s = s.replace(/(\d+)\s*y\s*medio/gi, (_, num) => `${num}.5`);
 
@@ -40,7 +52,19 @@ function parseConfeccionadaDimensions(str) {
   const largoAnchoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*d(?:e)?\s*largo\s*(?:x|×|por|y)\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*(?:d(?:e)?\s*ancho)?/i;
   const anchoLargoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*d(?:e)?\s*ancho\s*(?:x|×|por|y)\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*(?:d(?:e)?\s*largo)?/i;
 
-  let m = s.match(largoAnchoPattern);
+  // Pattern 1b: "N de ancho y de largo M" (number comes AFTER largo)
+  // Example: "8 d ancho y d largo 610" -> width=8, height=6.10
+  const anchoYLargoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*d(?:e)?\s*ancho\s*(?:x|×|por|y)\s*d(?:e)?\s*largo\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?/i;
+
+  let m = s.match(anchoYLargoPattern);
+  if (m) {
+    // "ancho ... y ... largo N" format - first number is width, second is height
+    const width = parseFloat(m[1]);
+    const height = parseFloat(m[2]);
+    return buildResult(width, height, isFeet, `${m[1]} x ${m[2]}`);
+  }
+
+  m = s.match(largoAnchoPattern);
   if (m) {
     // "largo x ancho" format - first number is height (largo), second is width (ancho)
     const height = parseFloat(m[1]);
@@ -198,6 +222,16 @@ function parseRollDimensions(str) {
 
   let s = String(str).toLowerCase();
 
+  // Convert 3-digit numbers to decimals (common Mexican shorthand)
+  // 420 → 4.20, 315 → 3.15, etc.
+  s = s.replace(/\b([1-9])(\d{2})\b(?!\d)/g, (match, first, rest) => {
+    const asDecimal = parseFloat(`${first}.${rest}`);
+    if (asDecimal >= 1 && asDecimal <= 10) {
+      return `${first}.${rest}`;
+    }
+    return match;
+  });
+
   // Standard roll lengths
   const standardLengths = [50, 100];
 
@@ -254,6 +288,16 @@ function parseSingleDimension(str) {
 
   let s = String(str).toLowerCase();
 
+  // Convert 3-digit numbers to decimals (common Mexican shorthand)
+  // 610 → 6.10, 420 → 4.20, etc.
+  s = s.replace(/\b([1-9])(\d{2})\b(?!\d)/g, (match, first, rest) => {
+    const asDecimal = parseFloat(`${first}.${rest}`);
+    if (asDecimal >= 1 && asDecimal <= 10) {
+      return `${first}.${rest}`;
+    }
+    return match;
+  });
+
   // Convert "y medio" to .5
   s = s.replace(/(\d+)\s*y\s*medio/gi, (_, num) => `${num}.5`);
 
@@ -282,6 +326,15 @@ function extractAllDimensions(str, type = 'confeccionada') {
 
   const results = [];
   let s = String(str).toLowerCase();
+
+  // Convert 3-digit numbers to decimals (common Mexican shorthand)
+  s = s.replace(/\b([1-9])(\d{2})\b(?!\d)/g, (match, first, rest) => {
+    const asDecimal = parseFloat(`${first}.${rest}`);
+    if (asDecimal >= 1 && asDecimal <= 10) {
+      return `${first}.${rest}`;
+    }
+    return match;
+  });
 
   // Convert "y medio" to .5
   s = s.replace(/(\d+)\s*y\s*medio/gi, (_, num) => `${num}.5`);
