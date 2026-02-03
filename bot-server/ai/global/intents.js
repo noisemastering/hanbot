@@ -990,6 +990,110 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 📏 LARGEST/SMALLEST PRODUCT REQUEST - "la más grande", "la mayor medida", "la más chica"
+  // User wants to know the extreme sizes available
+  if (/\b(la\s+)?m[aá]s\s+grande|mayor\s+medida|medida\s+m[aá]s\s+grande|m[aá]s\s+grande\s+que\s+teng/i.test(msg) ||
+      /\b(la\s+)?m[aá]xima|tama[ñn]o\s+m[aá]ximo/i.test(msg)) {
+
+    console.log("📏 User asking for largest product");
+
+    // Fetch all available sizes and get the largest
+    const availableSizes = await getAvailableSizes(convo);
+
+    if (availableSizes.length > 0) {
+      // Sort by area (largest first)
+      const sorted = [...availableSizes].sort((a, b) => {
+        const areaA = (a.width || 0) * (a.height || 0);
+        const areaB = (b.width || 0) * (b.height || 0);
+        return areaB - areaA;
+      });
+
+      const largest = sorted[0];
+
+      // Try to find the product in the database for the ML link
+      try {
+        const product = await ProductFamily.findOne({
+          size: { $regex: new RegExp(`^${largest.sizeStr?.replace('m', '')}m?$`, 'i') },
+          sellable: true,
+          active: { $ne: false }
+        }).lean();
+
+        if (product) {
+          const preferredLink = product.onlineStoreLinks?.find(l => l.isPreferred)?.url ||
+                               product.onlineStoreLinks?.[0]?.url;
+
+          if (preferredLink) {
+            const trackedLink = await generateClickLink(psid, preferredLink, {
+              productName: product.name,
+              productId: product._id,
+              city: convo?.city,
+              stateMx: convo?.stateMx
+            });
+
+            await updateConversation(psid, { lastIntent: "largest_product_shown", unknownCount: 0 });
+
+            return {
+              type: "text",
+              text: `Nuestra malla sombra confeccionada más grande es de **${largest.sizeStr}** a **$${largest.price}** con envío incluido.\n\n` +
+                    `Viene reforzada con argollas en todo el perímetro, lista para instalar.\n\n` +
+                    `🛒 Cómprala aquí:\n${trackedLink}`
+            };
+          }
+        }
+      } catch (err) {
+        console.error("Error fetching largest product:", err);
+      }
+
+      // Fallback without link
+      await updateConversation(psid, { lastIntent: "largest_product_shown", unknownCount: 0 });
+
+      return {
+        type: "text",
+        text: `Nuestra malla sombra confeccionada más grande es de **${largest.sizeStr}** a **$${largest.price}**.\n\n` +
+              `Viene reforzada con argollas en todo el perímetro, lista para instalar. ¿Te interesa?`
+      };
+    }
+
+    // No sizes found - fallback
+    return {
+      type: "text",
+      text: "Nuestra malla sombra confeccionada más grande es de 6x10m. ¿Te paso el precio y link?"
+    };
+  }
+
+  // Handle "smallest" request too
+  if (/\b(la\s+)?m[aá]s\s+(chica|peque[ñn]a|chiquita)|menor\s+medida|medida\s+m[aá]s\s+(chica|peque[ñn]a)/i.test(msg) ||
+      /\b(la\s+)?m[ií]nima|tama[ñn]o\s+m[ií]nimo/i.test(msg)) {
+
+    console.log("📏 User asking for smallest product");
+
+    const availableSizes = await getAvailableSizes(convo);
+
+    if (availableSizes.length > 0) {
+      // Sort by area (smallest first)
+      const sorted = [...availableSizes].sort((a, b) => {
+        const areaA = (a.width || 0) * (a.height || 0);
+        const areaB = (b.width || 0) * (b.height || 0);
+        return areaA - areaB;
+      });
+
+      const smallest = sorted[0];
+
+      await updateConversation(psid, { lastIntent: "smallest_product_shown", unknownCount: 0 });
+
+      return {
+        type: "text",
+        text: `Nuestra malla sombra confeccionada más pequeña es de **${smallest.sizeStr}** a **$${smallest.price}**.\n\n` +
+              `¿Te interesa o necesitas una medida diferente?`
+      };
+    }
+
+    return {
+      type: "text",
+      text: "Nuestra malla sombra confeccionada más pequeña es de 2x2m. ¿Te paso el precio?"
+    };
+  }
+
   // 📋 CATALOG REQUEST - Handle requests for general pricing, sizes, and colors listing
   // Instead of dumping a huge list, ask for specific dimensions
   // NOTE: "precios y medidas" is handled by EXPLICIT LIST REQUEST below to show the full list
