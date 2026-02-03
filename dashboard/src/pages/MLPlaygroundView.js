@@ -133,6 +133,7 @@ function MLPlaygroundView() {
 
   useEffect(() => {
     fetchStatus();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const filteredItems = items.filter(item =>
