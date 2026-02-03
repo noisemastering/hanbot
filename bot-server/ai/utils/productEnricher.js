@@ -640,76 +640,45 @@ async function buildProductSalesPitch(product) {
 }
 
 /**
- * Format a complete product response with sales pitch
+ * Format a complete product response with sales pitch using AI
  * @param {object} product - Product document
  * @param {object} options - { price, link, quantity }
  * @returns {string} - Formatted response text
  */
 async function formatProductResponse(product, options = {}) {
   const { price, link, quantity, userExpressedSize } = options;
+  const { generatePriceResponse } = require('../responseGenerator');
 
   const pitch = await buildProductSalesPitch(product);
-  if (!pitch) {
-    // Fallback to simple format
-    const displayName = await getProductDisplayName(product, 'short');
-    return `Tenemos la ${displayName}${price ? ` por $${price}` : ''}.`;
-  }
 
-  // Build formatted response with bullet points
-  const isMallaSombra = pitch.productType === 'rectangular' || pitch.productType === 'triangular';
-
-  if (isMallaSombra) {
-    // New bullet-point format for malla sombra
-    const percentageText = pitch.percentage ? `al ${pitch.percentage}% de cobertura` : '';
-    // Use user's expressed size order if available, otherwise use database size
-    const displaySize = userExpressedSize || pitch.sizeText;
-    const sizeInParens = displaySize ? `(${displaySize.replace(' metros', ' m')})` : '';
-
-    let response = `Le ofrecemos una malla sombra ${percentageText} ${sizeInParens}, diseñada para mayor durabilidad con las siguientes características:\n\n`;
-
-    // Bullet points for features
-    const features = [];
-    if (pitch.isReforzada) {
-      features.push('Reforzada en las esquinas');
+  // Extract dimensions from product
+  let dimensions = null;
+  if (product.size) {
+    const match = product.size.match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/);
+    if (match) {
+      dimensions = { width: parseFloat(match[1]), height: parseFloat(match[2]) };
     }
-    features.push('Sujetadores y argollas en todos los lados, lista para instalar fácilmente');
-    features.push('Incluye envío a domicilio');
+  }
 
-    for (const feature of features) {
-      response += `• ${feature}.\n`;
+  // Use AI to generate response
+  try {
+    const aiResponse = await generatePriceResponse({
+      dimensions: dimensions || { width: 0, height: 0 },
+      price: price,
+      link: link,
+      userExpression: userExpressedSize || pitch?.sizeText || product.size
+    });
+
+    if (aiResponse) {
+      return aiResponse;
     }
-
-    // Add price
-    if (price) {
-      const formattedPrice = typeof price === 'number'
-        ? price.toLocaleString('es-MX', { maximumFractionDigits: 0 })
-        : price;
-      response += `\nPrecio: $${formattedPrice} MXN.\n`;
-    }
-
-    // Shopping prompt
-    response += `\n🛒 Adquiérala de forma rápida y segura desde nuestra tienda oficial en Mercado Libre:`;
-
-    return response;
+  } catch (err) {
+    console.error("AI response generation failed in formatProductResponse:", err.message);
   }
 
-  // Original format for other products
-  let response = `Claro, ${pitch.description}`;
-
-  for (const point of pitch.sellingPoints) {
-    response += `, ${point}`;
-  }
-
-  if (price) {
-    const formattedPrice = typeof price === 'number'
-      ? price.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 })
-      : `$${price}`;
-    response += `, la tenemos en ${formattedPrice}`;
-  }
-
-  response += `, ${pitch.shippingInfo}.`;
-
-  return response;
+  // Minimal fallback if AI fails
+  const displayName = await getProductDisplayName(product, 'short');
+  return `${displayName} - $${price}. Envío incluido.\n\n${link || ''}`;
 }
 
 module.exports = {
