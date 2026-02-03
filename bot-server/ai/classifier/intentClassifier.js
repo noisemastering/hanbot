@@ -540,9 +540,11 @@ function quickClassify(message, dbIntents = null) {
 
   // Polite request confirmations (e.g., "por favor si me la comparte", "si me la pasa")
   // These are affirmative responses meaning "yes, please do it"
+  // Note: "x" is common shorthand for "por" in Mexican Spanish (e.g., "si x favor")
+  // Note: "fabor" is common typo for "favor"
   if (/\b(por\s*favor|s[ií])\s*(s[ií]\s*)?(me\s+)?(la|lo|las|los)?\s*(comparte|pasa|manda|env[ií]a|muestra|ense[ñn]a)/i.test(msg) ||
       /\b(comp[aá]rt[ae]me|p[aá]s[ae]me|m[aá]nd[ae]me|env[ií][ae]me|mu[eé]str[ae]me)\b/i.test(msg) ||
-      /\b(s[ií]\s+por\s*favor|por\s*favor\s+s[ií])\b/i.test(msg)) {
+      /\b(s[ií]\s+(por\s*fa(v|b)or|x\s*fa(v|b)or|porfa)|por\s*fa(v|b)or\s+s[ií]|s[ií]\s+x\s*fa(v|b)or)\b/i.test(msg)) {
     return { intent: INTENTS.CONFIRMATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.85 };
   }
 

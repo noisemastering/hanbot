@@ -22,6 +22,7 @@ const DEFAULT_SIGNALS = {
   materialQuestions: 0,
   techSpecQuestions: 0,
   catalogRequests: 0,
+  askingAroundQuestions: 0,
   messagesWithoutProgress: 0,
 
   // Typing patterns
@@ -94,6 +95,12 @@ function detectNegativeSignals(message, currentSignals) {
     signals.catalogRequests = (currentSignals.catalogRequests || 0) + 1;
   }
 
+  // "Asking around" questions - indicates shopping around/comparing
+  // "¿Dónde están ubicados?", "¿Tienen tienda?", "¿De dónde son?"
+  if (/\b(d[oó]nde\s+(est[aá]n|se\s+ubican|quedan)|tienen\s+tienda|de\s+d[oó]nde\s+son|en\s+qu[eé]\s+(ciudad|parte|estado))\b/i.test(cleanMsg)) {
+    signals.askingAroundQuestions = (currentSignals.askingAroundQuestions || 0) + 1;
+  }
+
   return signals;
 }
 
@@ -163,6 +170,14 @@ function calculateScore(signals) {
   if (signals.catalogRequests >= 2) {
     score -= 25;
   } else if (signals.catalogRequests === 1) {
+    score -= 10;
+  }
+
+  // "Asking around" questions (where are you located, do you have a store)
+  // Indicates shopping around, not ready to buy
+  if (signals.askingAroundQuestions >= 2) {
+    score -= 20;
+  } else if (signals.askingAroundQuestions === 1) {
     score -= 10;
   }
 
@@ -268,6 +283,7 @@ function getScoreExplanation(signals) {
   if (signals.materialQuestions >= 2) reasons.push(`⚠️ Preguntas sobre materiales: ${signals.materialQuestions}x`);
   if (signals.techSpecQuestions >= 2) reasons.push(`⚠️ Preguntas técnicas: ${signals.techSpecQuestions}x`);
   if (signals.catalogRequests >= 1) reasons.push(`⚠️ Pidió catálogo/lista de precios`);
+  if (signals.askingAroundQuestions >= 1) reasons.push(`⚠️ Preguntó por ubicación/tienda (comparando opciones)`);
   if (signals.messagesWithoutProgress >= 5) reasons.push(`⚠️ ${signals.messagesWithoutProgress} mensajes sin dar medidas`);
   if (signals.erraticTypingCount >= 2) reasons.push(`⚠️ Escritura errática detectada`);
 

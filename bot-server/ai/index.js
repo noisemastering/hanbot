@@ -308,10 +308,29 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
       return null;
     }
 
-    // 🚨 CRITICAL: If conversation needs human (handoff requested), bot should NOT respond
-    // This happens for custom orders, frustrated users, explicit handoff requests, etc.
+    // 🚨 CRITICAL: If conversation needs human (handoff requested), bot should NOT generate AI response
+    // BUT instead of total silence, send a reminder if they keep messaging
     if (convo.state === "needs_human") {
-      console.log("🚨 Conversation is waiting for human (needs_human state), bot will not respond");
+      console.log("🚨 Conversation is waiting for human (needs_human state)");
+
+      // Check when we last sent a reminder (avoid spamming)
+      const lastReminder = convo.lastNeedsHumanReminder ? new Date(convo.lastNeedsHumanReminder) : null;
+      const minutesSinceReminder = lastReminder
+        ? (Date.now() - lastReminder.getTime()) / (1000 * 60)
+        : 999;
+
+      // Send reminder at most every 10 minutes
+      if (minutesSinceReminder >= 10) {
+        await updateConversation(psid, { lastNeedsHumanReminder: new Date() });
+
+        return {
+          type: "text",
+          text: "Tu mensaje fue recibido. Un especialista te atenderá en breve. 🙏"
+        };
+      }
+
+      // Already sent a recent reminder, stay silent
+      console.log(`⏳ Already sent reminder ${minutesSinceReminder.toFixed(1)} min ago, staying silent`);
       return null;
     }
 

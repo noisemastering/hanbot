@@ -1,13 +1,17 @@
 // Message debouncer to handle rapid-fire messages from users
 // Waits for user to finish typing before responding
 
-const MESSAGE_DEBOUNCE_MS = 5000; // 5 seconds
+const MESSAGE_DEBOUNCE_MS = 3000; // 3 seconds - wait for more messages
+const MAX_WAIT_MS = 8000; // 8 seconds max wait before forcing processing
 
 // Store timers per user
 const pendingTimers = new Map();
 
 // Store queued messages per user
 const queuedMessages = new Map();
+
+// Track when first message arrived (for max wait)
+const firstMessageTime = new Map();
 
 /**
  * Debounce incoming messages to wait for user to finish typing
@@ -25,29 +29,48 @@ function debounceMessage(psid, messageText, callback) {
   // Add message to queue
   if (!queuedMessages.has(psid)) {
     queuedMessages.set(psid, []);
+    firstMessageTime.set(psid, Date.now());
   }
   queuedMessages.get(psid).push(messageText);
   console.log(`📝 Queued message ${queuedMessages.get(psid).length} for ${psid}: "${messageText}"`);
 
-  // Set new timer
-  const timer = setTimeout(async () => {
-    console.log(`✅ Debounce period ended for ${psid}. Processing ${queuedMessages.get(psid).length} message(s)...`);
+  // Check if we've exceeded max wait time
+  const elapsed = Date.now() - firstMessageTime.get(psid);
+  if (elapsed >= MAX_WAIT_MS) {
+    console.log(`⏰ Max wait time reached for ${psid}, processing immediately`);
+    processQueue(psid, callback);
+    return;
+  }
 
-    // Get all queued messages
-    const messages = queuedMessages.get(psid) || [];
+  // Set new timer (remaining time capped at debounce interval)
+  const remainingMaxWait = MAX_WAIT_MS - elapsed;
+  const waitTime = Math.min(MESSAGE_DEBOUNCE_MS, remainingMaxWait);
 
-    // Clear queue and timer
-    queuedMessages.delete(psid);
-    pendingTimers.delete(psid);
-
-    // Combine all messages into one (separated by newlines if multiple)
-    const combinedMessage = messages.join('\n');
-
-    // Call the callback with combined message
-    await callback(combinedMessage);
-  }, MESSAGE_DEBOUNCE_MS);
-
+  const timer = setTimeout(() => processQueue(psid, callback), waitTime);
   pendingTimers.set(psid, timer);
+}
+
+/**
+ * Process the queued messages for a user
+ */
+async function processQueue(psid, callback) {
+  console.log(`✅ Debounce period ended for ${psid}. Processing ${queuedMessages.get(psid)?.length || 0} message(s)...`);
+
+  // Get all queued messages
+  const messages = queuedMessages.get(psid) || [];
+
+  // Clear queue and timer
+  queuedMessages.delete(psid);
+  pendingTimers.delete(psid);
+  firstMessageTime.delete(psid);
+
+  if (messages.length === 0) return;
+
+  // Combine all messages into one (separated by newlines if multiple)
+  const combinedMessage = messages.join('\n');
+
+  // Call the callback with combined message
+  await callback(combinedMessage);
 }
 
 /**

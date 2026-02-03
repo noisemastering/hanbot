@@ -7,6 +7,9 @@ const { updateConversation } = require("../../conversationManager");
 const { INTENTS } = require("../classifier");
 const { getAvailableSizes, generateGenericSizeResponse } = require("../../measureHandler");
 
+// Global intents - parent handler for cross-cutting questions
+const { handleGlobalIntents } = require("../global/intents");
+
 /**
  * Check if this flow should handle the message
  * Default flow handles everything that isn't product-specific
@@ -219,6 +222,14 @@ async function handleRejection(convo, psid) {
  */
 async function handleUnclear(convo, psid, userMessage, flowContext = {}) {
   const intentLevel = flowContext.intentScore?.intent || 'medium';
+
+  // DELEGATE TO GLOBAL INTENTS - let parent handle cross-cutting questions
+  // (argollas, shipping, location, payment, etc.)
+  const globalResponse = await handleGlobalIntents(userMessage, psid, convo);
+  if (globalResponse) {
+    console.log(`📋 Default flow delegated to global intents`);
+    return globalResponse;
+  }
 
   // If low intent (possible troll/competitor), keep response minimal
   if (intentLevel === 'low') {

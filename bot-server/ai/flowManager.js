@@ -59,8 +59,15 @@ function detectFlow(classification, convo, userMessage) {
 
   // Check product interest from conversation
   if (convo?.productInterest) {
+    const pi = convo.productInterest.toLowerCase();
+
+    // Handle malla_sombra variants (malla_sombra, malla_sombra_raschel, etc.)
+    if (pi.startsWith('malla_sombra') || pi === 'confeccionada') {
+      return 'malla_sombra';
+    }
+
+    // Direct mappings for other products
     const interestMap = {
-      'malla_sombra': 'malla_sombra',
       'rollo': 'rollo',
       'borde_separador': 'borde_separador',
       'ground_cover': 'groundcover',
@@ -68,8 +75,8 @@ function detectFlow(classification, convo, userMessage) {
       'monofilamento': 'monofilamento'
     };
 
-    if (interestMap[convo.productInterest]) {
-      return interestMap[convo.productInterest];
+    if (interestMap[pi]) {
+      return interestMap[pi];
     }
   }
 

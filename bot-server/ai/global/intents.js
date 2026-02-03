@@ -697,9 +697,12 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   }
 
   // 🛒 HOW TO PURCHASE - Handle questions about the purchase process
+  // Includes "se puede pedir en mercado libre?", "puedo comprar por ML?", etc.
   if (/\bc[oó]mo\s+(realiz[oa]|hago|hacer|efectu[oa]r?|concret[oa]r?)\s+(una?\s+)?(compra|pedido|orden)/i.test(msg) ||
       /\b(proceso|pasos?)\s+(de\s+|para\s+)?(compra|comprar|pedir|ordenar)/i.test(msg) ||
-      /\b(d[oó]nde|c[oó]mo)\s+(compro|pido|ordeno|puedo\s+comprar)/i.test(msg)) {
+      /\b(d[oó]nde|c[oó]mo)\s+(compro|pido|ordeno|puedo\s+comprar)/i.test(msg) ||
+      /\b(se\s+puede|puedo|pueden)\s+(pedir|comprar|ordenar|adquirir)\s+(en|por|x)?\s*(mercado\s*libre|ml)\b/i.test(msg) ||
+      /\b(tienen|venden|est[aá]n?)\s+(en|por)?\s*(mercado\s*libre|ml)\b/i.test(msg)) {
 
     // Check if user is asking about a specific product that requires human advisor
     if (convo.requestedProduct) {
@@ -1463,7 +1466,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
       return {
         type: "text",
-        text: `Sí, nuestra malla confeccionada viene con ojillos reforzados cada 50cm en todo el perímetro, lista para instalar.\n\n` +
+        text: `Sí, nuestra malla confeccionada viene con argollas reforzadas en todo el perímetro, lista para instalar.\n\n` +
               `Permíteme comunicarte con un especialista para cotizar la medida exacta (${dimensions.width}m x ${dimensions.height}m).` +
               linkText
       };
@@ -1473,7 +1476,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
     return {
       type: "text",
-      text: "Sí, nuestra malla confeccionada viene con ojillos reforzados cada 50cm en todo el perímetro para facilitar la instalación.\n\n" +
+      text: "Sí, nuestra malla confeccionada viene con argollas reforzadas en todo el perímetro, lista para instalar.\n\n" +
             "Solo necesitas amarrarla o usar ganchos. ¿Qué medida te interesa?"
     };
   }

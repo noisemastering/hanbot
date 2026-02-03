@@ -646,7 +646,7 @@ async function buildProductSalesPitch(product) {
  * @returns {string} - Formatted response text
  */
 async function formatProductResponse(product, options = {}) {
-  const { price, link, quantity } = options;
+  const { price, link, quantity, userExpressedSize } = options;
 
   const pitch = await buildProductSalesPitch(product);
   if (!pitch) {
@@ -661,7 +661,9 @@ async function formatProductResponse(product, options = {}) {
   if (isMallaSombra) {
     // New bullet-point format for malla sombra
     const percentageText = pitch.percentage ? `al ${pitch.percentage}% de cobertura` : '';
-    const sizeInParens = pitch.sizeText ? `(${pitch.sizeText.replace(' metros', ' m')})` : '';
+    // Use user's expressed size order if available, otherwise use database size
+    const displaySize = userExpressedSize || pitch.sizeText;
+    const sizeInParens = displaySize ? `(${displaySize.replace(' metros', ' m')})` : '';
 
     let response = `Le ofrecemos una malla sombra ${percentageText} ${sizeInParens}, diseñada para mayor durabilidad con las siguientes características:\n\n`;
 

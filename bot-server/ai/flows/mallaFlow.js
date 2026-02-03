@@ -42,6 +42,9 @@ const { detectMexicanLocation, detectZipCode } = require("../../mexicanLocations
 // Push notifications for handoffs
 const { sendHandoffNotification } = require("../../services/pushNotifications");
 
+// Global intents - parent handler for cross-cutting questions
+const { handleGlobalIntents } = require("../global/intents");
+
 /**
  * Parse zip code from message and look up location
  * Patterns: CP 12345, C.P. 12345, cp12345, al 12345, codigo postal 12345
@@ -408,6 +411,58 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     }
   }
 
+  // CHECK FOR "SHOW ALTERNATIVES" CONFIRMATION
+  // When bot asked "¿Te muestro las alternativas?" and user says "sí", "cuáles", "muéstrame", etc.
+  if (convo?.lastIntent === "awaiting_alternatives_confirmation") {
+    const wantsToSeeAlternatives = /\b(s[ií]|cu[aá]les|mu[eé]str|ver|dale|claro|ok|va|por\s*favor|ens[eé][ñn]|d[ií]me|ser[ií]an)\b/i.test(userMessage);
+
+    if (wantsToSeeAlternatives) {
+      console.log(`🌐 Malla flow - User wants to see alternatives for ${convo.requestedSize}`);
+
+      // Get available sizes and show them
+      const availableSizes = await getAvailableSizes(convo);
+
+      if (availableSizes.length > 0) {
+        // Parse the original requested size
+        const reqMatch = (convo.requestedSize || '').match(/(\d+)x(\d+)/);
+        const reqArea = reqMatch ? parseInt(reqMatch[1]) * parseInt(reqMatch[2]) : 0;
+
+        // Find sizes closest to what they asked for
+        const sizesWithArea = availableSizes.map(s => ({
+          ...s,
+          area: s.width * s.height
+        }));
+
+        // Sort by how close to requested area
+        sizesWithArea.sort((a, b) => Math.abs(a.area - reqArea) - Math.abs(b.area - reqArea));
+
+        // Take top 3-5 closest options
+        const options = sizesWithArea.slice(0, 4);
+        const optionsList = options.map(o => `• ${o.sizeStr} → $${o.price}`).join('\n');
+
+        await updateConversation(psid, { lastIntent: "alternatives_shown" });
+
+        return {
+          type: "text",
+          text: `Las medidas más cercanas que tenemos son:\n\n${optionsList}\n\n¿Te interesa alguna de estas?`
+        };
+      }
+
+      // No alternatives available - hand off
+      await updateConversation(psid, {
+        handoffRequested: true,
+        handoffReason: `Sin alternativas para ${convo.requestedSize}`,
+        handoffTimestamp: new Date(),
+        state: "needs_human"
+      });
+
+      return {
+        type: "text",
+        text: "Déjame comunicarte con un especialista para buscar opciones para tu medida."
+      };
+    }
+  }
+
   // FIRST: Try to parse dimensions directly from user message
   // This is more reliable than depending on classifier entities
   const dimsFromMessage = parseDimensions(userMessage);
@@ -415,6 +470,8 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     console.log(`🌐 Malla flow - Parsed dimensions from message: ${dimsFromMessage.width}x${dimsFromMessage.height}`);
     state.width = dimsFromMessage.width;
     state.height = dimsFromMessage.height;
+    // Preserve user's expressed order for display (e.g., "7 x 5" not "5 x 7")
+    state.userExpressedSize = dimsFromMessage.userExpressed;
   }
 
   // SECOND: Try single dimension - assume square (e.g., "2 y medio" -> 3x3)
@@ -440,12 +497,16 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       if (dims) {
         state.width = dims.width;
         state.height = dims.height;
+        // Preserve user's expressed order for display
+        state.userExpressedSize = dims.userExpressed;
       }
     }
     // Also check for width/height separately
     if (entities.width && entities.height) {
       state.width = entities.width;
       state.height = entities.height;
+      // When parsed separately, construct userExpressed from raw values
+      state.userExpressedSize = `${entities.width} x ${entities.height}`;
     }
   }
   if (entities.percentage) {
@@ -495,7 +556,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   switch (stage) {
     case STAGES.AWAITING_DIMENSIONS:
-      response = handleAwaitingDimensions(intent, state, sourceContext, userMessage, convo);
+      response = await handleAwaitingDimensions(intent, state, sourceContext, userMessage, convo, psid);
       break;
 
     case STAGES.COMPLETE:
@@ -560,7 +621,7 @@ function handleStart(sourceContext) {
 /**
  * Handle awaiting dimensions stage
  */
-function handleAwaitingDimensions(intent, state, sourceContext, userMessage = '', convo = null) {
+async function handleAwaitingDimensions(intent, state, sourceContext, userMessage = '', convo = null, psid = null) {
   // Check if user is frustrated about repeating info ("ya te dije", "ya te di las medidas")
   const alreadyToldPattern = /\b(ya\s+te\s+di(je)?|ya\s+lo\s+di(je)?|ya\s+mencion[eé]|te\s+dije|las?\s+medidas?\s+ya)\b/i;
   if (userMessage && alreadyToldPattern.test(userMessage)) {
@@ -674,8 +735,8 @@ function handleAwaitingDimensions(intent, state, sourceContext, userMessage = ''
       response: "tiene protección UV"
     },
     {
-      pattern: /\b(ojillos?|ojales?|arillos?)\b/i,
-      response: "viene con ojillos en todo el perímetro"
+      pattern: /\b(ojillos?|ojales?|arillos?|argollas?)\b/i,
+      response: "viene con argollas reforzadas en todo el perímetro, lista para instalar"
     }
   ];
 
@@ -735,7 +796,15 @@ function handleAwaitingDimensions(intent, state, sourceContext, userMessage = ''
     }
   }
 
-  // General ask for dimensions
+  // DELEGATE TO GLOBAL INTENTS - let parent handle cross-cutting questions
+  // (argollas, shipping, location, payment, etc.)
+  const globalResponse = await handleGlobalIntents(userMessage, psid, convo);
+  if (globalResponse) {
+    console.log(`🌐 Malla flow delegated to global intents`);
+    return globalResponse;
+  }
+
+  // General ask for dimensions (only if global intents didn't handle it)
   return {
     type: "text",
     text: "Para darte el precio necesito la medida.\n\n" +
@@ -747,7 +816,7 @@ function handleAwaitingDimensions(intent, state, sourceContext, userMessage = ''
  * Handle complete - we have dimensions
  */
 async function handleComplete(intent, state, sourceContext, psid, convo, userMessage = '') {
-  const { width, height, percentage, color, quantity } = state;
+  const { width, height, percentage, color, quantity, userExpressedSize } = state;
 
   // Parse zip code from message if provided
   const zipInfo = await parseAndLookupZipCode(userMessage);
@@ -870,7 +939,13 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
         };
       }
 
-      // No sellable products found - generic not available
+      // No sellable products found - offer to show alternatives
+      await updateConversation(psid, {
+        lastIntent: "awaiting_alternatives_confirmation",
+        requestedSize: `${width}x${height}`,
+        productSpecs: { ...convo?.productSpecs, width, height, updatedAt: new Date() }
+      });
+
       return {
         type: "text",
         text: getNotAvailableResponse(`${width}x${height}m`, convo.poiRootName || 'Malla Sombra')
@@ -939,8 +1014,11 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       stateMx: convo?.stateMx
     });
 
-    // Build sales-style response
-    const salesPitch = await formatProductResponse(product, { price: product.price });
+    // Build sales-style response - use user's expressed dimension order for display
+    const salesPitch = await formatProductResponse(product, {
+      price: product.price,
+      userExpressedSize: userExpressedSize ? `${userExpressedSize} m` : null
+    });
 
     // Add wholesale mention if product is eligible
     let wholesaleMention = "";
@@ -1032,10 +1110,44 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     response += `La más cercana que cubre esa área es de ${recommendedSize} por ${formatMoney(nearestCover.product.price)}.\n\n`;
     response += `¿Te interesa esa medida, o prefieres que te pase con un especialista para cotización a medida?`;
   } else if (largest) {
-    // Show largest available and offer custom
-    recommendedSize = largest.product.size;
-    response += `Nuestra medida más grande en confeccionada es de ${largest.product.size} por ${formatMoney(largest.product.price)}.\n\n`;
-    response += `Para ${width}x${height}m necesitarías una cotización a medida. ¿Te interesa la de ${largest.product.size} o te paso con un especialista?`;
+    // Check if the requested area is MUCH larger than the largest available
+    // If so, suggest multiple pieces or hand off for custom order
+    const requestedAreaSqM = width * height;
+    const largestAreaSqM = largest.area;
+    const piecesNeeded = Math.ceil(requestedAreaSqM / largestAreaSqM);
+
+    if (piecesNeeded >= 3) {
+      // Very large area - hand off for custom order
+      await updateConversation(psid, {
+        handoffRequested: true,
+        handoffReason: `Área grande: ${width}x${height}m (${requestedAreaSqM}m²) - requiere cotización especial`,
+        handoffTimestamp: new Date(),
+        state: "needs_human"
+      });
+
+      sendHandoffNotification(psid, `Malla ${width}x${height}m (${requestedAreaSqM}m²) - área muy grande`).catch(err => {
+        console.error("❌ Failed to send push notification:", err);
+      });
+
+      const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
+      response = `Para cubrir ${width}x${height}m (${requestedAreaSqM}m²) necesitarías múltiples piezas o un pedido especial.\n\n`;
+      response += `Déjame comunicarte con un especialista para cotizarte la mejor opción.\n\n`;
+      response += `📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`;
+
+      return { type: "text", text: response };
+    } else if (piecesNeeded === 2) {
+      // Could cover with 2 pieces - suggest this option
+      const totalPrice = largest.product.price * 2;
+      recommendedSize = largest.product.size;
+      response += `Para cubrir ${width}x${height}m necesitarías **2 piezas** de ${largest.product.size} (nuestra medida más grande).\n\n`;
+      response += `• 2 x ${largest.product.size} = $${formatMoney(totalPrice).replace('$', '')} aprox.\n\n`;
+      response += `¿Te interesa esta opción, o prefieres que te cotice una malla a medida exacta?`;
+    } else {
+      // Single piece might work, show largest available
+      recommendedSize = largest.product.size;
+      response += `Nuestra medida más grande en confeccionada es de ${largest.product.size} por ${formatMoney(largest.product.price)}.\n\n`;
+      response += `¿Te interesa esta medida, o prefieres cotización a medida exacta?`;
+    }
   }
 
   // Save the custom request and recommended size for follow-up

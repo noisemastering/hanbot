@@ -36,15 +36,17 @@ function parseConfeccionadaDimensions(str) {
 
   // Pattern 1: "N de largo x M de ancho" or "N de ancho x M de largo"
   // Examples: "8 mts. de largo x 5 de ancho", "5 de ancho por 8 de largo", "4 metros de ancho y 10 de largo"
-  const largoAnchoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*de\s*largo\s*(?:x|×|por|y)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*(?:de\s*ancho)?/i;
-  const anchoLargoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*de\s*ancho\s*(?:x|×|por|y)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*(?:de\s*largo)?/i;
+  // Note: "d" is common abbreviation for "de" in Mexican Spanish (e.g., "7 mtrs d ancho")
+  const largoAnchoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*d(?:e)?\s*largo\s*(?:x|×|por|y)\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*(?:d(?:e)?\s*ancho)?/i;
+  const anchoLargoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*d(?:e)?\s*ancho\s*(?:x|×|por|y)\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*(?:d(?:e)?\s*largo)?/i;
 
   let m = s.match(largoAnchoPattern);
   if (m) {
     // "largo x ancho" format - first number is height (largo), second is width (ancho)
     const height = parseFloat(m[1]);
     const width = parseFloat(m[2]);
-    return buildResult(width, height, isFeet);
+    // User expressed as "largo x ancho", preserve that order
+    return buildResult(width, height, isFeet, `${m[1]} x ${m[2]}`);
   }
 
   m = s.match(anchoLargoPattern);
@@ -52,13 +54,14 @@ function parseConfeccionadaDimensions(str) {
     // "ancho x largo" format - first number is width (ancho), second is height (largo)
     const width = parseFloat(m[1]);
     const height = parseFloat(m[2]);
-    return buildResult(width, height, isFeet);
+    // User expressed as "ancho x largo", preserve that order
+    return buildResult(width, height, isFeet, `${m[1]} x ${m[2]}`);
   }
 
   // Pattern 2: Universal pattern for rectangular dimensions:
   // Number + optional unit + separator (x/×/*/por/de) + number + optional unit
   // Also handles feet: "16x10 pies", "16 por 10 ft"
-  const pattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?|(?:pies?|ft|feet))?\s*(?:x|×|\*|por|de)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?|(?:pies?|ft|feet))?/i;
+  const pattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?|(?:pies?|ft|feet))?\s*(?:x|×|\*|por|de)\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?|(?:pies?|ft|feet))?/i;
 
   m = s.match(pattern);
   if (!m) return null;
@@ -66,7 +69,8 @@ function parseConfeccionadaDimensions(str) {
   const dim1 = parseFloat(m[1]);
   const dim2 = parseFloat(m[2]);
 
-  return buildResult(dim1, dim2, isFeet);
+  // Preserve the order user typed
+  return buildResult(dim1, dim2, isFeet, `${m[1]} x ${m[2]}`);
 }
 
 /**
@@ -74,8 +78,9 @@ function parseConfeccionadaDimensions(str) {
  * @param {number} dim1 - First dimension
  * @param {number} dim2 - Second dimension
  * @param {boolean} isFeet - Whether dimensions are in feet (need conversion)
+ * @param {string} userExpressed - The dimension string in the order user expressed it (e.g., "7 x 5")
  */
-function buildResult(dim1, dim2, isFeet = false) {
+function buildResult(dim1, dim2, isFeet = false, userExpressed = null) {
   if (Number.isNaN(dim1) || Number.isNaN(dim2)) return null;
   if (dim1 <= 0 || dim2 <= 0) return null;
 
@@ -105,6 +110,8 @@ function buildResult(dim1, dim2, isFeet = false) {
     original: { dim1: originalDim1, dim2: originalDim2 },
     area: dim1 * dim2,
     normalized: `${width}x${height}`,
+    // Display format: preserve user's order, or fall back to normalized
+    userExpressed: userExpressed || `${dim1} x ${dim2}`,
     hasFractional
   };
 
@@ -143,9 +150,9 @@ function parseCintaDimensions(str) {
   // "10m", "10 metros", "de 10m", "rollo de 10"
   const patterns = [
     // "10 metros", "10m", "10 mts"
-    /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)/i,
+    /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)/i,
     // "de 10", "unos 10" (when followed by context about borde/cinta)
-    /(?:de|unos?|como)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?/i,
+    /(?:de|unos?|como)\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?/i,
     // Just a number if it's a common length
     /\b(\d+)\b/
   ];
@@ -195,7 +202,7 @@ function parseRollDimensions(str) {
   const standardLengths = [50, 100];
 
   // Pattern for width x length
-  const pattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*(?:x|×|\*|por|de)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?/i;
+  const pattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*(?:x|×|\*|por|de)\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?/i;
 
   const m = s.match(pattern);
   if (m) {
@@ -218,7 +225,7 @@ function parseRollDimensions(str) {
   }
 
   // Also try to match just width if user mentions "rollo de X metros"
-  const widthOnlyPattern = /rollo\s*(?:de)?\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?/i;
+  const widthOnlyPattern = /rollo\s*(?:de)?\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?/i;
   const widthMatch = s.match(widthOnlyPattern);
   if (widthMatch) {
     const width = parseFloat(widthMatch[1]);
@@ -251,7 +258,7 @@ function parseSingleDimension(str) {
   s = s.replace(/(\d+)\s*y\s*medio/gi, (_, num) => `${num}.5`);
 
   // Match single number with optional units
-  const pattern = /(?:de|como|ha\s*de|unos?)?\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?(?:\s|$)/i;
+  const pattern = /(?:de|como|ha\s*de|unos?)?\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?(?:\s|$)/i;
 
   const m = s.match(pattern);
   if (!m) return null;
@@ -280,7 +287,7 @@ function extractAllDimensions(str, type = 'confeccionada') {
   s = s.replace(/(\d+)\s*y\s*medio/gi, (_, num) => `${num}.5`);
 
   // Global pattern to find all dimension pairs
-  const pattern = /(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?\s*(?:x|×|\*|por)\s*(\d+(?:\.\d+)?)\s*(?:m(?:ts|etros?|t)?\.?)?/gi;
+  const pattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*(?:x|×|\*|por)\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?/gi;
 
   let match;
   while ((match = pattern.exec(s)) !== null) {

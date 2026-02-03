@@ -808,10 +808,10 @@ function generateSizeResponse(options) {
  * @returns {string}
  */
 function generateGenericSizeResponse(availableSizes) {
-  // Simple response asking for size - don't quote specific prices that may be outdated
+  // Ask directly for the size they need - DON'T offer lists we can't provide
   const responses = [
-    "El precio depende de la medida, manejamos desde 2x2m hasta 6x10m. ¿Deseas ver la lista?",
-    "El precio varía según la medida. Tenemos desde 2x2m hasta 6x10m. ¿Te muestro las opciones?",
+    "El precio depende de la medida, manejamos desde 2x2m hasta 6x10m. ¿Qué medida necesitas?",
+    "El precio varía según la medida. Tenemos desde 2x2m hasta 6x10m. ¿Qué tamaño buscas?",
     "Manejamos medidas desde 2x2m hasta 6x10m. ¿Qué medida necesitas para darte el precio exacto?"
   ];
 

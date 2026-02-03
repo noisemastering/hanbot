@@ -7,6 +7,14 @@ const User = require('../../models/User');
 const { generateClickLink } = require('../../tracking');
 const { sendHandoffNotification } = require('../../services/pushNotifications');
 
+// Message aggregation for handling rapid-fire messages
+const {
+  aggregateMessage,
+  setProcessingLock,
+  clearProcessingLock,
+  hasPendingMessages
+} = require('./messageAggregator');
+
 // Import channel-specific send functions
 const { sendTextMessage: sendWhatsAppText } = require('../whatsapp/api');
 
@@ -135,6 +143,7 @@ async function sendMessageViaChannel(channel, userId, messageData) {
 
 /**
  * Process incoming message (channel-agnostic)
+ * Uses message aggregation to batch rapid-fire messages from same user
  */
 async function processMessage(normalizedMessage, io = null) {
   const {
@@ -148,7 +157,7 @@ async function processMessage(normalizedMessage, io = null) {
     referral
   } = normalizedMessage;
 
-  console.log(`\n📨 Processing ${channel} message from ${userId}`);
+  console.log(`\n📨 Received ${channel} message from ${userId}`);
   console.log(`   Text: "${text}"`);
 
   // 1. Deduplication
@@ -157,7 +166,7 @@ async function processMessage(normalizedMessage, io = null) {
     return;
   }
 
-  // 2. Handle human agent messages
+  // 2. Handle human agent messages (no aggregation needed)
   if (isFromPage) {
     console.log(`👨‍💼 Human agent message on ${channel}`);
     const targetPsid = recipientId || unifiedId;
@@ -169,13 +178,30 @@ async function processMessage(normalizedMessage, io = null) {
   // 3. Register user if needed
   await registerUserIfNeeded(userId, channel, unifiedId);
 
-  // 4. Save incoming message
+  // 4. Save incoming message immediately (for dashboard visibility)
   await saveMessage(unifiedId, text, 'user', messageId, io);
 
-  // 5. Get/create conversation
+  // 5. Aggregate messages - wait for more messages from this user
+  // This returns null if this message was batched with others
+  const aggregatedMessage = await aggregateMessage(unifiedId, normalizedMessage);
+
+  if (!aggregatedMessage) {
+    console.log(`📦 Message batched with others, skipping individual processing`);
+    return;
+  }
+
+  // Use the combined text if multiple messages were batched
+  const processText = aggregatedMessage.text;
+  const wasBatched = aggregatedMessage.isBatched;
+
+  if (wasBatched) {
+    console.log(`📬 Processing batched messages: "${processText.substring(0, 100)}..."`);
+  }
+
+  // 6. Get/create conversation
   const conversation = await getOrCreateConversation(unifiedId, channel);
 
-  // 6. Handle campaign referrals (Facebook and WhatsApp)
+  // 7. Handle campaign referrals (Facebook and WhatsApp)
   if (referral) {
     if (channel === 'facebook') {
       await updateConversation(unifiedId, {
@@ -186,7 +212,6 @@ async function processMessage(normalizedMessage, io = null) {
       });
     } else if (channel === 'whatsapp') {
       // WhatsApp CTWA (Click-to-WhatsApp) ad referral
-      // Fields: source_id (ad ID), source_type, source_url, headline, body
       console.log(`📣 WhatsApp ad referral: ad=${referral.source_id}, type=${referral.source_type}`);
       await updateConversation(unifiedId, {
         lastIntent: 'ad_entry',
@@ -199,25 +224,47 @@ async function processMessage(normalizedMessage, io = null) {
     }
   }
 
-  // 7. Check if conversation is in human_active state
+  // 8. Check if conversation is in human_active state
   if (conversation.state === 'human_active') {
     console.log(`🚫 Conversation in human_active state, bot not responding`);
     return;
   }
 
-  // 8. Generate AI response (existing logic - channel-agnostic!)
-  console.log(`🤖 Generating AI response...`);
-  const aiResponse = await generateReply(text, unifiedId, conversation);
+  // 9. Set processing lock to queue any new incoming messages
+  setProcessingLock(unifiedId);
 
-  console.log(`💬 AI response: "${aiResponse.text?.substring(0, 100)}..."`);
+  try {
+    // 10. Generate AI response
+    console.log(`🤖 Generating AI response...`);
+    const aiResponse = await generateReply(processText, unifiedId, conversation);
 
-  // 9. Send response via appropriate channel
-  await sendMessageViaChannel(channel, userId, aiResponse);
+    // 11. Check if more messages arrived while processing
+    const newMessagesArrived = hasPendingMessages(unifiedId);
+    if (newMessagesArrived) {
+      console.log(`🔔 New messages arrived while processing - they will be handled next`);
+      // We still send this response, but the new messages will trigger another batch
+    }
 
-  // 10. Save bot response
-  await saveMessage(unifiedId, aiResponse.text, 'bot', null, io);
+    if (aiResponse && aiResponse.text) {
+      console.log(`💬 AI response: "${aiResponse.text.substring(0, 100)}..."`);
 
-  console.log(`✅ Message processed successfully\n`);
+      // 12. Send response via appropriate channel
+      await sendMessageViaChannel(channel, userId, aiResponse);
+
+      // 13. Save bot response
+      await saveMessage(unifiedId, aiResponse.text, 'bot', null, io);
+
+      console.log(`✅ Message processed successfully\n`);
+    } else {
+      console.log(`⚠️  No AI response generated`);
+    }
+  } finally {
+    // 14. Clear processing lock - this may trigger processing of queued messages
+    const queued = clearProcessingLock(unifiedId);
+    if (queued) {
+      console.log(`📋 Will process ${queued.messages.length} queued message(s) next`);
+    }
+  }
 }
 
 module.exports = {
