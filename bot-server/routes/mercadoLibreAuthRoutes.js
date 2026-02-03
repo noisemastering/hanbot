@@ -770,4 +770,280 @@ router.get("/price-status", authenticate, async (req, res) => {
   }
 });
 
+// ============================================
+// ML API PLAYGROUND ENDPOINTS
+// ============================================
+
+// GET /ml/playground/status - Check ML API connection and token status
+router.get("/playground/status", authenticate, async (req, res) => {
+  try {
+    const auth = await MercadoLibreAuth.findOne({ active: true }).sort({ updatedAt: -1 });
+
+    if (!auth) {
+      return res.json({
+        success: true,
+        connected: false,
+        message: "No active ML authorization found"
+      });
+    }
+
+    // Try to get a valid token
+    const token = await getValidAccessToken(auth.sellerId);
+
+    if (!token) {
+      return res.json({
+        success: true,
+        connected: false,
+        sellerId: auth.sellerId,
+        sellerNickname: auth.sellerNickname,
+        message: "Token expired and could not be refreshed"
+      });
+    }
+
+    // Test the token by fetching user info
+    try {
+      const userResponse = await axios.get("https://api.mercadolibre.com/users/me", {
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      return res.json({
+        success: true,
+        connected: true,
+        sellerId: auth.sellerId,
+        sellerNickname: auth.sellerNickname || userResponse.data.nickname,
+        userId: userResponse.data.id,
+        siteId: userResponse.data.site_id,
+        tokenExpiresAt: auth.tokenExpiresAt,
+        message: "Connected and authenticated"
+      });
+    } catch (apiError) {
+      return res.json({
+        success: true,
+        connected: false,
+        sellerId: auth.sellerId,
+        error: apiError.response?.data?.message || apiError.message,
+        message: "Token invalid or API error"
+      });
+    }
+  } catch (error) {
+    console.error("❌ Playground status error:", error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /ml/playground/item/:itemId - Get full item details from ML
+router.get("/playground/item/:itemId", authenticate, async (req, res) => {
+  try {
+    const { itemId } = req.params;
+    const auth = await MercadoLibreAuth.findOne({ active: true }).sort({ updatedAt: -1 });
+
+    if (!auth) {
+      return res.status(400).json({ success: false, error: "No active ML authorization" });
+    }
+
+    const token = await getValidAccessToken(auth.sellerId);
+    if (!token) {
+      return res.status(401).json({ success: false, error: "Could not get valid token" });
+    }
+
+    // Fetch item details
+    const itemResponse = await axios.get(
+      `https://api.mercadolibre.com/items/${itemId}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+
+    // Also fetch price details (includes promotions)
+    let priceDetails = null;
+    try {
+      const priceResponse = await axios.get(
+        `https://api.mercadolibre.com/items/${itemId}/prices`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      priceDetails = priceResponse.data;
+    } catch (e) {
+      // Price endpoint might not be available for all items
+      console.log(`Note: Could not fetch price details for ${itemId}`);
+    }
+
+    const item = itemResponse.data;
+
+    res.json({
+      success: true,
+      item: {
+        id: item.id,
+        title: item.title,
+        price: item.price,
+        original_price: item.original_price,
+        currency_id: item.currency_id,
+        available_quantity: item.available_quantity,
+        sold_quantity: item.sold_quantity,
+        status: item.status,
+        listing_type_id: item.listing_type_id,
+        category_id: item.category_id,
+        permalink: item.permalink,
+        thumbnail: item.thumbnail,
+        seller_custom_field: item.seller_custom_field, // SKU
+        date_created: item.date_created,
+        last_updated: item.last_updated,
+        health: item.health,
+        catalog_listing: item.catalog_listing
+      },
+      priceDetails,
+      raw: item // Full response for debugging
+    });
+  } catch (error) {
+    console.error("❌ Playground item fetch error:", error.response?.data || error.message);
+    res.status(error.response?.status || 500).json({
+      success: false,
+      error: error.response?.data?.message || error.message,
+      mlError: error.response?.data
+    });
+  }
+});
+
+// PUT /ml/playground/item/:itemId/price - Update item price on ML
+router.put("/playground/item/:itemId/price", authenticate, async (req, res) => {
+  try {
+    const { itemId } = req.params;
+    const { price } = req.body;
+
+    if (!price || typeof price !== "number" || price <= 0) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid price. Must be a positive number."
+      });
+    }
+
+    const auth = await MercadoLibreAuth.findOne({ active: true }).sort({ updatedAt: -1 });
+
+    if (!auth) {
+      return res.status(400).json({ success: false, error: "No active ML authorization" });
+    }
+
+    const token = await getValidAccessToken(auth.sellerId);
+    if (!token) {
+      return res.status(401).json({ success: false, error: "Could not get valid token" });
+    }
+
+    console.log(`🏷️ Playground: Updating price for ${itemId} to $${price}`);
+
+    // Update the price on ML
+    const updateResponse = await axios.put(
+      `https://api.mercadolibre.com/items/${itemId}`,
+      { price: price },
+      {
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    console.log(`✅ Playground: Price updated for ${itemId}`);
+
+    res.json({
+      success: true,
+      message: `Price updated to $${price}`,
+      item: {
+        id: updateResponse.data.id,
+        title: updateResponse.data.title,
+        price: updateResponse.data.price,
+        original_price: updateResponse.data.original_price,
+        status: updateResponse.data.status,
+        last_updated: updateResponse.data.last_updated
+      }
+    });
+  } catch (error) {
+    console.error("❌ Playground price update error:", error.response?.data || error.message);
+    res.status(error.response?.status || 500).json({
+      success: false,
+      error: error.response?.data?.message || error.message,
+      mlError: error.response?.data,
+      cause: error.response?.data?.cause
+    });
+  }
+});
+
+// GET /ml/playground/items - List seller's items for testing
+router.get("/playground/items", authenticate, async (req, res) => {
+  try {
+    const { limit = 20, offset = 0, status = "active" } = req.query;
+
+    const auth = await MercadoLibreAuth.findOne({ active: true }).sort({ updatedAt: -1 });
+
+    if (!auth) {
+      return res.status(400).json({ success: false, error: "No active ML authorization" });
+    }
+
+    const token = await getValidAccessToken(auth.sellerId);
+    if (!token) {
+      return res.status(401).json({ success: false, error: "Could not get valid token" });
+    }
+
+    // Search for seller's items
+    const searchResponse = await axios.get(
+      `https://api.mercadolibre.com/users/${auth.sellerId}/items/search`,
+      {
+        params: {
+          status,
+          limit: Math.min(parseInt(limit), 50),
+          offset: parseInt(offset)
+        },
+        headers: { Authorization: `Bearer ${token}` }
+      }
+    );
+
+    const itemIds = searchResponse.data.results || [];
+
+    // Fetch details for each item (in batches of 20)
+    let items = [];
+    for (let i = 0; i < itemIds.length; i += 20) {
+      const batch = itemIds.slice(i, i + 20);
+      try {
+        const multiResponse = await axios.get(
+          "https://api.mercadolibre.com/items",
+          {
+            params: { ids: batch.join(",") },
+            headers: { Authorization: `Bearer ${token}` }
+          }
+        );
+
+        const batchItems = multiResponse.data
+          .filter(r => r.code === 200)
+          .map(r => ({
+            id: r.body.id,
+            title: r.body.title,
+            price: r.body.price,
+            original_price: r.body.original_price,
+            currency: r.body.currency_id,
+            status: r.body.status,
+            available_quantity: r.body.available_quantity,
+            sold_quantity: r.body.sold_quantity,
+            thumbnail: r.body.thumbnail,
+            permalink: r.body.permalink,
+            sku: r.body.seller_custom_field
+          }));
+
+        items = items.concat(batchItems);
+      } catch (e) {
+        console.error("Error fetching batch:", e.message);
+      }
+    }
+
+    res.json({
+      success: true,
+      total: searchResponse.data.paging?.total || items.length,
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      items
+    });
+  } catch (error) {
+    console.error("❌ Playground items list error:", error.response?.data || error.message);
+    res.status(error.response?.status || 500).json({
+      success: false,
+      error: error.response?.data?.message || error.message
+    });
+  }
+});
+
 module.exports = router;
