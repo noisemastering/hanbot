@@ -33,14 +33,19 @@ function parseConfeccionadaDimensions(str) {
 
   // Convert 3-digit numbers to decimals (common Mexican shorthand)
   // 610 → 6.10, 420 → 4.20, 315 → 3.15, etc.
-  // Only applies to standalone 3-digit numbers that look like dimension values (1-9 range)
+  // BUT keep multiples of 50 as-is (100, 150, 200, 250...) - those are real large dimensions
   s = s.replace(/\b([1-9])(\d{2})\b(?!\d)/g, (match, first, rest) => {
+    const num = parseInt(match, 10);
+    // Keep multiples of 50 as-is (100, 150, 200, 250, 300, etc.)
+    if (num % 50 === 0) {
+      return match;
+    }
     const asDecimal = parseFloat(`${first}.${rest}`);
     // Only convert if result is a reasonable dimension (1-10 meters)
     if (asDecimal >= 1 && asDecimal <= 10) {
       return `${first}.${rest}`;
     }
-    return match; // Keep original if not a reasonable dimension
+    return match;
   });
 
   // Convert "y medio" to .5 (e.g., "2 y medio" -> "2.5")
@@ -224,7 +229,10 @@ function parseRollDimensions(str) {
 
   // Convert 3-digit numbers to decimals (common Mexican shorthand)
   // 420 → 4.20, 315 → 3.15, etc.
+  // BUT keep multiples of 50 as-is (100, 150, 200, 250...)
   s = s.replace(/\b([1-9])(\d{2})\b(?!\d)/g, (match, first, rest) => {
+    const num = parseInt(match, 10);
+    if (num % 50 === 0) return match;
     const asDecimal = parseFloat(`${first}.${rest}`);
     if (asDecimal >= 1 && asDecimal <= 10) {
       return `${first}.${rest}`;
@@ -290,7 +298,10 @@ function parseSingleDimension(str) {
 
   // Convert 3-digit numbers to decimals (common Mexican shorthand)
   // 610 → 6.10, 420 → 4.20, etc.
+  // BUT keep multiples of 50 as-is (100, 150, 200, 250...)
   s = s.replace(/\b([1-9])(\d{2})\b(?!\d)/g, (match, first, rest) => {
+    const num = parseInt(match, 10);
+    if (num % 50 === 0) return match;
     const asDecimal = parseFloat(`${first}.${rest}`);
     if (asDecimal >= 1 && asDecimal <= 10) {
       return `${first}.${rest}`;
@@ -328,7 +339,10 @@ function extractAllDimensions(str, type = 'confeccionada') {
   let s = String(str).toLowerCase();
 
   // Convert 3-digit numbers to decimals (common Mexican shorthand)
+  // BUT keep multiples of 50 as-is (100, 150, 200, 250...)
   s = s.replace(/\b([1-9])(\d{2})\b(?!\d)/g, (match, first, rest) => {
+    const num = parseInt(match, 10);
+    if (num % 50 === 0) return match;
     const asDecimal = parseFloat(`${first}.${rest}`);
     if (asDecimal >= 1 && asDecimal <= 10) {
       return `${first}.${rest}`;
