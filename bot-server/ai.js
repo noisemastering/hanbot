@@ -306,7 +306,7 @@ async function generateReply(userMessage, psid, referral = null) {
       });
 
       const businessInfo = await getBusinessInfo();
-      const sizeResponse = generateSizeResponse({
+      const sizeResponse = await generateSizeResponse({
         smaller: closest.smaller,
         bigger: closest.bigger,
         exact: closest.exact,
@@ -341,16 +341,17 @@ async function generateReply(userMessage, psid, referral = null) {
           requestedSize: `${dimensions.width}x${dimensions.height}`
         });
 
+        const sizeResp = await generateSizeResponse({
+          smaller: closest.smaller,
+          bigger: closest.bigger,
+          exact: closest.exact,
+          requestedDim: dimensions,
+          availableSizes,
+          businessInfo
+        });
         return {
           type: "text",
-          text: generateSizeResponse({
-            smaller: closest.smaller,
-            bigger: closest.bigger,
-            exact: closest.exact,
-            requestedDim: dimensions,
-            availableSizes,
-            businessInfo
-          }).text
+          text: sizeResp.text
         };
       } else {
         // Generic inquiry - show all available sizes

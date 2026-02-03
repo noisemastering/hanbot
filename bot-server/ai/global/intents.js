@@ -573,7 +573,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       const closest = findClosestSizes(correctedDims, availableSizes);
       const businessInfo = await getBusinessInfo();
 
-      const sizeResponse = generateSizeResponse({
+      const sizeResponse = await generateSizeResponse({
         smaller: closest.smaller,
         bigger: closest.bigger,
         exact: closest.exact,
@@ -1329,7 +1329,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         if (dimensions.width && dimensions.height) {
           const closest = findClosestSizes(dimensions, availableSizes);
 
-          const sizeResponse = generateSizeResponse({
+          const sizeResponse = await generateSizeResponse({
             smaller: closest.smaller,
             bigger: closest.bigger,
             exact: closest.exact,
@@ -2223,7 +2223,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       };
       const closest = findClosestSizes(dimensions, availableSizes);
 
-      const sizeResponse = generateSizeResponse({
+      const sizeResponse = await generateSizeResponse({
         smaller: closest.smaller,
         bigger: closest.bigger,
         exact: closest.exact,
@@ -2463,7 +2463,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
       // No exact match - generate response with alternatives
       const businessInfo = await getBusinessInfo();
-      const sizeResponse = generateSizeResponse({
+      const sizeResponse = await generateSizeResponse({
         smaller: closest.smaller,
         bigger: closest.bigger,
         exact: closest.exact,

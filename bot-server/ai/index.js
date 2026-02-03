@@ -42,6 +42,10 @@ const { buildSourceContext, logSourceContext, getProductFromSource } = require("
 // Layer 1: Intent Classification
 const { classify, logClassification } = require("./classifier");
 
+// Layer 1.5: Intent Dispatcher - AI-first routing to handlers
+// This runs BEFORE flows - handles intents that don't need multi-step flow processing
+const { dispatch: dispatchToHandler } = require("./intentDispatcher");
+
 // Layer 2-3: Flow Router (legacy - being replaced by flowManager)
 const { processMessage: processWithFlows } = require("./flows");
 
@@ -1043,6 +1047,22 @@ async function generateReply(userMessage, psid, referral = null) {
     return await checkForRepetition(intentResponse, psid, convo);
   }
   // ====== END INTENT DB HANDLING ======
+
+  // ====== INTENT DISPATCHER - AI-FIRST ROUTING ======
+  // Route classified intents to pure business logic handlers
+  // This runs BEFORE flows - handles intents that don't need multi-step flow processing
+  // Examples: color_query, frustration, phone_request, human_request, etc.
+  const dispatcherResponse = await dispatchToHandler(classification, {
+    psid,
+    convo,
+    userMessage
+  });
+
+  if (dispatcherResponse) {
+    console.log(`✅ Intent handled by dispatcher (${dispatcherResponse.handledBy})`);
+    return await checkForRepetition(dispatcherResponse, psid, convo);
+  }
+  // ====== END INTENT DISPATCHER ======
 
   // ====== FLOW MANAGER - CENTRAL ROUTING ======
   // ALL messages go through the flow manager

@@ -42,51 +42,79 @@ function clearIntentCache() {
 
 /**
  * All possible intents the classifier can return
+ * Organized by category for easier maintenance
  */
 const INTENTS = {
-  // Greetings & Social
+  // ===== GREETINGS & SOCIAL =====
   GREETING: "greeting",                    // "Hola", "Buenos días"
   THANKS: "thanks",                        // "Gracias", "Muchas gracias"
   GOODBYE: "goodbye",                      // "Adiós", "Hasta luego"
 
-  // Product Queries
+  // ===== PRODUCT QUERIES =====
   PRICE_QUERY: "price_query",              // "Cuánto cuesta?", "Precio?"
   PRODUCT_INQUIRY: "product_inquiry",      // "Tienen malla sombra?", "Qué productos manejan?"
   AVAILABILITY_QUERY: "availability_query", // "Tienen en stock?", "Hay disponible?"
+  CATALOG_REQUEST: "catalog_request",      // "Muéstrame opciones", "Qué medidas tienen"
+  PRODUCT_COMPARISON: "product_comparison", // "Diferencia entre raschel y monofilamento"
+  PHOTO_REQUEST: "photo_request",          // "Foto del producto", "Cómo se ve"
+  LARGEST_PRODUCT: "largest_product",      // "La más grande", "Medida máxima"
+  SMALLEST_PRODUCT: "smallest_product",    // "La más chica", "Medida mínima"
 
-  // Specifications (user providing info)
+  // ===== SPECIFICATIONS (user providing info) =====
   SIZE_SPECIFICATION: "size_specification",         // "4x5", "3 metros por 4"
   PERCENTAGE_SPECIFICATION: "percentage_specification", // "90%", "al 80 por ciento"
   QUANTITY_SPECIFICATION: "quantity_specification",     // "15 rollos", "quiero 10"
   COLOR_SPECIFICATION: "color_specification",           // "negro", "en verde"
+  COLOR_QUERY: "color_query",                           // "Qué colores tienen?", "De qué colores hay?"
   LENGTH_SPECIFICATION: "length_specification",         // "de 18 metros" (for borde)
+  SHADE_PERCENTAGE_QUERY: "shade_percentage_query",     // "Qué porcentaje de sombra?", "Cuánta sombra da?"
 
-  // Logistics
-  SHIPPING_QUERY: "shipping_query",        // "Hacen envíos?", "Cuánto tarda?"
+  // ===== LOGISTICS =====
+  SHIPPING_QUERY: "shipping_query",        // "Hacen envíos?", "Envían a mi ciudad?"
   LOCATION_QUERY: "location_query",        // "Dónde están?", "Tienen tienda física?"
+  LOCATION_MENTION: "location_mention",    // User says where they're from: "Soy de Monterrey"
   PAYMENT_QUERY: "payment_query",          // "Cómo pago?", "Aceptan tarjeta?"
+  PAY_ON_DELIVERY_QUERY: "pay_on_delivery_query", // "Pago al entregar?", "Contra entrega?"
   DELIVERY_TIME_QUERY: "delivery_time_query", // "Cuándo llega?", "Tiempo de entrega?"
+  SHIPPING_INCLUDED_QUERY: "shipping_included_query", // "Incluye envío?", "Ya con entrega?"
 
-  // Service
+  // ===== SERVICE & INSTALLATION =====
   INSTALLATION_QUERY: "installation_query", // "Instalan?", "Incluye instalación?"
   WARRANTY_QUERY: "warranty_query",         // "Tiene garantía?", "Cuánto dura?"
+  DURABILITY_QUERY: "durability_query",     // "Cuánto tiempo dura?", "Vida útil?"
   CUSTOM_SIZE_QUERY: "custom_size_query",   // "Hacen a medida?", "Tamaño personalizado?"
+  STRUCTURE_QUERY: "structure_query",       // "Hacen la estructura?", "Incluye postes?"
+  ACCESSORY_QUERY: "accessory_query",       // "Incluye cuerda?", "Viene con arnés?"
+  EYELETS_QUERY: "eyelets_query",           // "Tiene ojillos?", "Trae argollas?"
 
-  // Conversation Flow
+  // ===== PURCHASE FLOW =====
+  STORE_LINK_REQUEST: "store_link_request", // "Link de la tienda", "Mercado Libre?"
+  HOW_TO_BUY: "how_to_buy",                 // "Cómo compro?", "Proceso de compra?"
+  BULK_DISCOUNT: "bulk_discount",           // "Precio por mayoreo", "Descuento por volumen"
+  PRICE_PER_SQM: "price_per_sqm",           // "Precio por metro cuadrado", "Cuánto el m2"
+  DETAILS_REQUEST: "details_request",       // "Más información", "Déjame ver"
+
+  // ===== CONVERSATION FLOW =====
   CONFIRMATION: "confirmation",            // "Sí", "Ok", "Esa", "Perfecto"
   REJECTION: "rejection",                  // "No", "Otra", "No me interesa"
   CLARIFICATION: "clarification",          // User clarifying something
   FOLLOW_UP: "follow_up",                  // Following up on previous topic
   MULTI_QUESTION: "multi_question",        // "Precio y ubicación", multiple questions in one
+  WILL_GET_BACK: "will_get_back",          // "Mañana te aviso", "Voy a medir"
+  FUTURE_INTEREST: "future_interest",      // "En un par de meses", "Más adelante"
 
-  // Human Handoff
+  // ===== ESCALATION =====
   HUMAN_REQUEST: "human_request",          // "Quiero hablar con alguien", "Agente"
-  COMPLAINT: "complaint",                  // User expressing frustration
+  COMPLAINT: "complaint",                  // User expressing general frustration
+  FRUSTRATION: "frustration",              // "Ya te dije", "No entienden", "Estoy diciendo"
+  PRICE_CONFUSION: "price_confusion",      // "Es otro precio?", "Me dijiste diferente"
+  OUT_OF_STOCK_REPORT: "out_of_stock_report", // "Dice agotado", "No hay en stock"
 
-  // Contact Info (hot leads!)
+  // ===== CONTACT INFO (hot leads!) =====
   PHONE_SHARED: "phone_shared",            // User shared their phone number
+  PHONE_REQUEST: "phone_request",          // "Teléfono?", "Número para llamar"
 
-  // Other
+  // ===== OTHER =====
   OFF_TOPIC: "off_topic",                  // Unrelated to products
   UNCLEAR: "unclear"                       // Can't determine intent
 };
@@ -280,23 +308,95 @@ CLASSIFICATION INSTRUCTIONS:
 `;
   } else {
     prompt += `
-CLASSIFICATION RULES:
-1. If user just says "Precio", "Precio!", "Cuánto cuesta?" without specifying product → intent: "price_query", product: use context or "unknown"
-2. If user provides dimensions like "4x5", "3 por 4 metros", "10 x 10" → intent: "size_specification"
-3. If user provides percentage like "90%", "al 80" → intent: "percentage_specification"
-4. If user provides quantity like "15 rollos", "quiero 10" → intent: "quantity_specification"
-5. If user mentions borde lengths (6, 9, 18, 54 meters) → product: "borde_separador"
-6. If user mentions 100m length or widths 2.10/4.20 → product: "rollo"
-7. If user says "sí", "ok", "esa", "perfecto" → intent: "confirmation"
-8. If user says "no", "otra", "diferente" → intent: "rejection"
-9. If user asks about shipping, delivery, envío → intent: "shipping_query"
-10. If user asks about location, dónde están, tienda → intent: "location_query"
-11. If user asks about installation → intent: "installation_query"
-12. If user mentions "maleza" in context of WANTING ground cover → product: "groundcover"
-13. If user mentions "maleza" explaining WHY they need shade (para que no salga maleza) → keep original product context
-14. If campaign context specifies products, prefer those products in classification
-15. CRITICAL: If user says "malla sombra" + ANY dimensions (e.g., "malla sombra de 10x10", "malla sombra 5x4") → product: "malla_sombra", intent: "product_inquiry", extract dimensions
-16. CRITICAL: "malla sombra" WITHOUT mentioning "rollo" or "100 metros" = product: "malla_sombra" (confeccionada/pre-made)
+AVAILABLE INTENTS (choose the most specific one):
+
+[GREETINGS & SOCIAL]
+- greeting: "Hola", "Buenos días", "Buenas tardes"
+- thanks: "Gracias", "Muchas gracias"
+- goodbye: "Adiós", "Hasta luego", "Bye"
+
+[PRODUCT QUERIES]
+- price_query: "Cuánto cuesta?", "Precio?", "Qué precio tiene?"
+- product_inquiry: "Tienen malla?", "Qué productos manejan?"
+- availability_query: "Tienen en stock?", "Hay disponible?"
+- catalog_request: "Muéstrame las opciones", "Qué medidas tienen", "Lista de precios"
+- product_comparison: "Diferencia entre raschel y monofilamento", "Cuál es mejor?"
+- photo_request: "Foto del producto", "Cómo se ve?", "Tiene imagen?"
+- largest_product: "La más grande", "Medida máxima", "La mayor que tengan"
+- smallest_product: "La más chica", "Medida mínima", "La menor"
+
+[SPECIFICATIONS - user providing info]
+- size_specification: "4x5", "3 metros por 4", "10x10", "de 8 metros" (dimensions)
+- percentage_specification: "90%", "al 80 por ciento" (shade percentage)
+- quantity_specification: "15 rollos", "quiero 10", "necesito 5"
+- color_specification: "negro", "en beige", "la verde" (specifying a color)
+- color_query: "Qué colores tienen?", "De qué colores hay?", "Tienen en otro color?" (asking about colors)
+- length_specification: "de 18 metros", "6m" (for borde separador)
+- shade_percentage_query: "Qué porcentaje de sombra?", "Cuánta sombra da?"
+
+[LOGISTICS]
+- shipping_query: "Hacen envíos?", "Envían a mi ciudad?", "Llegan a Monterrey?"
+- location_query: "Dónde están ubicados?", "Tienen tienda física?", "Dirección?"
+- location_mention: User says where they're from: "Soy de Monterrey", "Vivo en Jalisco", "En Guadalajara"
+- payment_query: "Cómo pago?", "Aceptan tarjeta?", "Formas de pago?"
+- pay_on_delivery_query: "Pago al entregar?", "Contra entrega?", "Cuando llegue pago?"
+- delivery_time_query: "Cuándo llega?", "Tiempo de entrega?", "Cuántos días?"
+- shipping_included_query: "Ya incluye envío?", "El precio es con entrega?"
+
+[SERVICE & INSTALLATION]
+- installation_query: "Ustedes instalan?", "Incluye instalación?", "Pasan a medir?"
+- warranty_query: "Tiene garantía?", "Cuánto de garantía?"
+- durability_query: "Cuánto tiempo dura?", "Vida útil?", "Cuántos años dura?"
+- custom_size_query: "Hacen a medida exacta?", "Medidas personalizadas?"
+- structure_query: "Hacen la estructura?", "Incluye postes?", "Venden estructura metálica?"
+- accessory_query: "Incluye cuerda?", "Viene con arnés?", "Kit de instalación?"
+- eyelets_query: "Tiene ojillos?", "Trae argollas?", "Viene con hoyitos?"
+
+[PURCHASE FLOW]
+- store_link_request: "Link de la tienda", "Mercado Libre?", "Donde compro?"
+- how_to_buy: "Cómo compro?", "Proceso de compra?", "Cómo hago mi pedido?"
+- bulk_discount: "Precio por mayoreo", "Descuento por volumen", "Si compro varios?"
+- price_per_sqm: "Precio por metro cuadrado", "Cuánto el m2?"
+- details_request: "Más información", "Déjame ver", "Muéstrame el producto"
+
+[CONVERSATION FLOW]
+- confirmation: "Sí", "Ok", "Esa", "Perfecto", "Dale", "Claro"
+- rejection: "No", "Otra", "No me interesa", "Diferente"
+- multi_question: Multiple questions in one message (price AND shipping, etc.)
+- will_get_back: "Mañana te aviso", "Voy a medir", "Al rato te confirmo"
+- future_interest: "En un par de meses", "Más adelante", "Ahorita no pero después sí"
+
+[ESCALATION]
+- human_request: "Quiero hablar con alguien", "Un agente", "Persona real"
+- complaint: User expressing general frustration with service
+- frustration: "Ya te dije!", "No entienden", "Estoy diciendo que...", "No leen"
+- price_confusion: "Es otro precio?", "Me dijiste diferente", "Por qué cambió?"
+- out_of_stock_report: "Dice agotado", "No hay en stock", "Sale que no disponible"
+
+[CONTACT]
+- phone_shared: User shared their phone number (10 digits)
+- phone_request: "Teléfono?", "Número para llamar?", "WhatsApp?"
+
+[OTHER]
+- off_topic: Unrelated to products (weather, politics, jokes)
+- unclear: Can't determine intent
+
+PRODUCT CLASSIFICATION RULES:
+1. "malla sombra" + dimensions (e.g., "malla 10x10") → product: "malla_sombra", intent: "product_inquiry"
+2. "malla sombra" without "rollo" or "100 metros" → product: "malla_sombra" (confeccionada)
+3. "rollo" or "100 metros" mentioned → product: "rollo"
+4. Borde lengths (6, 9, 18, 54 meters) → product: "borde_separador"
+5. "antimaleza" or "ground cover" → product: "groundcover"
+6. "monofilamento" → product: "monofilamento"
+7. If campaign context specifies products, prefer those
+
+CRITICAL EXAMPLES:
+- "Qué colores tienen en existencia?" → intent: "color_query" (NOT location_query!)
+- "Soy de Monterrey" → intent: "location_mention"
+- "Ya te dije las medidas!" → intent: "frustration"
+- "En un par de meses" → intent: "future_interest"
+- "4x5" (just dimensions) → intent: "size_specification"
+- "Envían a Guadalajara?" → intent: "shipping_query", entities.location: "Guadalajara"
 `;
   }
 
@@ -577,6 +677,99 @@ function quickClassify(message, dbIntents = null) {
   // Human request
   if (/\b(humano|persona|agente|asesor|especialista|hablar\s*con\s*alguien)\b/i.test(msg)) {
     return { intent: INTENTS.HUMAN_REQUEST, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.95 };
+  }
+
+  // ===== NEW HIGH-IMPACT INTENTS =====
+
+  // Frustration detection - CRITICAL for customer experience
+  const frustrationPatterns = /\b(estoy\s+diciendo|no\s+leen|no\s+entienden|ya\s+(te|les?)\s+dije|les?\s+repito|no\s+me\s+escuchan?|no\s+ponen\s+atenci[oó]n|acabo\s+de\s+decir|como\s+te\s+dije|como\s+ya\s+dije|ya\s+lo\s+dije|no\s+est[aá]n?\s+entendiendo|pero\s+ya\s+dije)\b/i;
+  if (frustrationPatterns.test(msg)) {
+    return { intent: INTENTS.FRUSTRATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.95 };
+  }
+
+  // Color query - "qué colores tienen", "de qué colores hay" (NOT location!)
+  // CRITICAL: This was being misclassified as location_query before
+  if (/\b(qu[eé]\s+colou?re?s?|colou?re?s?\s+(tiene[ns]?|hay|manejan?|disponible)|de\s+qu[eé]\s+colou?re?s?|tienen?\s+en\s+otro\s+colou?r|colou?re?s?\s+en\s+existencia)\b/i.test(msg)) {
+    return { intent: INTENTS.COLOR_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.92 };
+  }
+
+  // Phone request - "teléfono", "número para llamar"
+  if (/\b(tel[eé]fono|n[uú]mero|llamar|whatsapp|contacto)\b/i.test(msg) &&
+      /\b(tienen|tendr[aá]n?|hay|cu[aá]l|dame|p[aá]same|me\s+(dan|das|pasan?))\b/i.test(msg)) {
+    return { intent: INTENTS.PHONE_REQUEST, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
+  }
+
+  // Future interest - "en un par de meses", "más adelante"
+  if (/\b(en\s+un\s+(par|mes|par\s+de)\s+(de\s+)?(meses?|semanas?)|m[aá]s\s+adelante|despu[eé]s\s+me\s+interesa|por\s+ahora\s+no|ahorita\s+no\s+pero)\b/i.test(msg)) {
+    return { intent: INTENTS.FUTURE_INTEREST, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
+  }
+
+  // Will get back - "mañana te aviso", "voy a medir"
+  if (/\b(mañana|al\s+rato|luego|despu[eé]s)\s+(te\s+)?(aviso|confirmo|digo|escribo)\b/i.test(msg) ||
+      /\b(voy\s+a\s+medir|deja\s+mido|tengo\s+que\s+medir)\b/i.test(msg)) {
+    return { intent: INTENTS.WILL_GET_BACK, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
+  }
+
+  // Location mention - "soy de X", "vivo en X" (user providing their location)
+  if (/\b(soy\s+de|vivo\s+en|estoy\s+en|me\s+encuentro\s+en)\s+/i.test(msg)) {
+    return { intent: INTENTS.LOCATION_MENTION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.85 };
+  }
+
+  // Store link request - "mercado libre", "link de la tienda"
+  if (/\b(tienes?|tienen?|venden?|est[aá]n?)\s+(en\s+|por\s+)?mercado\s*libre\b/i.test(msg) ||
+      /\b(link|enlace)\s+(de\s+)?(la\s+)?(tienda|catalogo)\b/i.test(msg)) {
+    return { intent: INTENTS.STORE_LINK_REQUEST, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
+  }
+
+  // How to buy - "cómo compro", "proceso de compra"
+  if (/\b(c[oó]mo\s+(compro|pido|hago\s+(mi\s+)?pedido)|proceso\s+de\s+compra|pasos?\s+para\s+comprar)\b/i.test(msg)) {
+    return { intent: INTENTS.HOW_TO_BUY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
+  }
+
+  // Bulk discount - "mayoreo", "descuento por volumen"
+  if (/\b(mayoreo|precio\s+especial|descuento\s+(por\s+)?(volumen|cantidad)|si\s+compro\s+varios)\b/i.test(msg)) {
+    return { intent: INTENTS.BULK_DISCOUNT, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
+  }
+
+  // Eyelets/argollas query
+  if (/\b(ojillo|ojillos|argolla|argollas|ojito|ojitos|para\s+colgar|para\s+amarrar)\b/i.test(msg)) {
+    return { intent: INTENTS.EYELETS_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
+  }
+
+  // Installation query
+  if (/\b(instalan|colocan|ponen\s+la\s+malla|servicio\s+de\s+instalaci[oó]n|pasan\s+a\s+medir|vienen\s+a\s+medir)\b/i.test(msg)) {
+    return { intent: INTENTS.INSTALLATION_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
+  }
+
+  // Structure query
+  if (/\b(realizan|hacen|fabrican|venden)\s+(la\s+)?estructura/i.test(msg)) {
+    return { intent: INTENTS.STRUCTURE_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
+  }
+
+  // Pay on delivery query
+  if (/\b(pago|pagar)\s+(al\s+entregar|contra\s+entrega)|hasta\s+que\s+llegue|cuando\s+llegue\s+pago/i.test(msg)) {
+    return { intent: INTENTS.PAY_ON_DELIVERY_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
+  }
+
+  // Shipping included query
+  if (/\b(precio|costo)\s+(ya\s+)?(incluye|con)\s+(el\s+)?(env[ií]o|entrega)|ya\s+incluye\s+(env[ií]o|entrega)|con\s+entrega\s+incluid[ao]/i.test(msg)) {
+    return { intent: INTENTS.SHIPPING_INCLUDED_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
+  }
+
+  // Durability query
+  if (/\b(cu[aá]nto\s+tiempo\s+dura|vida\s+[uú]til|cu[aá]ntos?\s+a[ñn]os|duraci[oó]n|resistencia)\b/i.test(msg) &&
+      !/\b(entrega|env[ií]o)\b/i.test(msg)) {
+    return { intent: INTENTS.DURABILITY_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.85 };
+  }
+
+  // Out of stock report
+  if (/\b(agotad[oa]s?|sin\s+stock|no\s+hay\s+(en\s+)?stock|no\s+est[aá]\s+disponible|dice\s+(que\s+)?(no\s+hay|agotado)|fuera\s+de\s+stock)\b/i.test(msg)) {
+    return { intent: INTENTS.OUT_OF_STOCK_REPORT, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.92 };
+  }
+
+  // Price confusion
+  if (/\b(es\s+otr[ao]\s+precio|otro\s+precio|diferente\s+precio|por\s*qu[eé]\s+(dice|sale)\s+(otro|diferente)|no\s+es\s+el\s+mismo\s+precio)\b/i.test(msg)) {
+    return { intent: INTENTS.PRICE_CONFUSION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.92 };
   }
 
   // ===== PRODUCT KEYWORD DETECTION =====

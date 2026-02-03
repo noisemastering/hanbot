@@ -7,8 +7,10 @@ const { updateConversation } = require("../../conversationManager");
 const { INTENTS } = require("../classifier");
 const { getAvailableSizes, generateGenericSizeResponse } = require("../../measureHandler");
 
-// Global intents - parent handler for cross-cutting questions
-const { handleGlobalIntents } = require("../global/intents");
+// NOTE: Global intents are now handled by the Intent Dispatcher (ai/intentDispatcher.js)
+// which runs BEFORE flows. This delegation is no longer needed.
+// Keeping import for backwards compatibility during migration.
+// const { handleGlobalIntents } = require("../global/intents");
 
 /**
  * Check if this flow should handle the message
@@ -219,17 +221,13 @@ async function handleRejection(convo, psid) {
 
 /**
  * Unclear intent - guide the conversation
+ *
+ * NOTE: Cross-cutting intents (color_query, shipping, location, payment, etc.)
+ * are now handled by the Intent Dispatcher BEFORE flows are reached.
+ * This function only handles truly unclear messages that weren't classified.
  */
 async function handleUnclear(convo, psid, userMessage, flowContext = {}) {
   const intentLevel = flowContext.intentScore?.intent || 'medium';
-
-  // DELEGATE TO GLOBAL INTENTS - let parent handle cross-cutting questions
-  // (argollas, shipping, location, payment, etc.)
-  const globalResponse = await handleGlobalIntents(userMessage, psid, convo);
-  if (globalResponse) {
-    console.log(`📋 Default flow delegated to global intents`);
-    return globalResponse;
-  }
 
   // If low intent (possible troll/competitor), keep response minimal
   if (intentLevel === 'low') {

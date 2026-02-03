@@ -646,12 +646,13 @@ function wasAlreadyOffered(sizeStr, offeredSizes) {
 }
 
 /**
- * Generates natural response for size inquiry
+ * Generates natural response for size inquiry using AI
  * @param {object} options - Response configuration
- * @returns {object} - {text, suggestedSizes, isCustomOrder, requiresHandoff} where suggestedSizes is array of size strings for context
+ * @returns {Promise<object>} - {text, suggestedSizes, isCustomOrder, requiresHandoff}
  */
-function generateSizeResponse(options) {
+async function generateSizeResponse(options) {
   const { smaller, bigger, exact, requestedDim, availableSizes, isRepeated, businessInfo, offeredSizes } = options;
+  const { generatePriceResponse } = require('./ai/responseGenerator');
 
   const responses = [];
   const suggestedSizes = []; // Track suggested sizes for context
@@ -710,20 +711,40 @@ function generateSizeResponse(options) {
   if (exact) {
     suggestedSizes.push(exact.sizeStr);
     const link = exact.mLink || exact.permalink;
-    if (link) {
-      // Include purchase link when product is found
-      responses.push(
-        `¡Claro! 😊 De ${exact.sizeStr} la tenemos en $${exact.price}\n\nAquí puedes verla y comprarla:\n${link}`,
-        `¡Perfecto! La ${exact.sizeStr} está disponible por $${exact.price} 🌿\n\nLink de compra:\n${link}`,
-        `Con gusto 😊 La malla de ${exact.sizeStr} la manejamos en $${exact.price}\n\n${link}`
-      );
-    } else {
-      responses.push(
-        `¡Claro! 😊 De ${exact.sizeStr} la tenemos en $${exact.price}`,
-        `¡Perfecto! La ${exact.sizeStr} está disponible por $${exact.price} 🌿`,
-        `Con gusto 😊 La malla de ${exact.sizeStr} la manejamos en $${exact.price}`
-      );
+
+    // Use AI to generate natural response
+    try {
+      const aiResponse = await generatePriceResponse({
+        dimensions: requestedDim || { width: exact.width, height: exact.height },
+        price: exact.price,
+        link: link,
+        userExpression: requestedDim ? `${requestedDim.width} x ${requestedDim.height} metros` : exact.sizeStr
+      });
+
+      if (aiResponse) {
+        return {
+          text: aiResponse,
+          suggestedSizes,
+          offeredToShowAllSizes: false
+        };
+      }
+    } catch (err) {
+      console.error("AI response generation failed, using fallback:", err.message);
     }
+
+    // Fallback if AI fails
+    const dimStr = requestedDim
+      ? `${requestedDim.width} x ${requestedDim.height} metros`
+      : exact.sizeStr;
+    const fallbackText = link
+      ? `Malla sombra confeccionada.\n\nPrecio ${dimStr}: $${exact.price} Incluye envío.\n\n${link}`
+      : `Malla sombra confeccionada.\n\nPrecio ${dimStr}: $${exact.price} Incluye envío.`;
+
+    return {
+      text: fallbackText,
+      suggestedSizes,
+      offeredToShowAllSizes: false
+    };
   } else {
     const parts = [];
 

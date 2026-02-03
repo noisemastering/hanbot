@@ -1,8 +1,11 @@
 // ai/intentRouter.js
-// ⚠️ DEPRECATED: This file is being replaced by ai/flows/index.js
-// The new flow router uses product-specific state machines.
+// ⚠️ DEPRECATED: This file is being replaced by:
+//   1. ai/intentDispatcher.js - Routes intents to pure business logic handlers
+//   2. ai/handlers/* - Intent handlers (no regex, receive classification entities)
+//   3. ai/flows/index.js - Product-specific state machines
+//
 // This file remains as fallback during migration. Remove after validation.
-// See REFACTOR_PLAN.md for details.
+// See AI-First Intent Architecture plan for details.
 //
 // Smart routing based on AI-classified intents
 

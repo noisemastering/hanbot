@@ -43,7 +43,9 @@ const { detectMexicanLocation, detectZipCode } = require("../../mexicanLocations
 // Push notifications for handoffs
 const { sendHandoffNotification } = require("../../services/pushNotifications");
 
-// Global intents - parent handler for cross-cutting questions
+// NOTE: Global intents are now handled by the Intent Dispatcher (ai/intentDispatcher.js)
+// which runs BEFORE flows. This delegation is being phased out.
+// Keeping import for backwards compatibility during migration.
 const { handleGlobalIntents } = require("../global/intents");
 
 /**
@@ -797,15 +799,17 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
     }
   }
 
-  // DELEGATE TO GLOBAL INTENTS - let parent handle cross-cutting questions
-  // (argollas, shipping, location, payment, etc.)
+  // DELEGATE TO GLOBAL INTENTS - FALLBACK for intents not handled by dispatcher
+  // Most cross-cutting intents (color_query, shipping, frustration) are now handled
+  // by the Intent Dispatcher BEFORE flows. This is kept as fallback during migration.
+  // TODO: Remove this delegation once all intents are migrated to handlers
   const globalResponse = await handleGlobalIntents(userMessage, psid, convo);
   if (globalResponse) {
-    console.log(`🌐 Malla flow delegated to global intents`);
+    console.log(`🌐 Malla flow delegated to global intents (fallback)`);
     return globalResponse;
   }
 
-  // General ask for dimensions (only if global intents didn't handle it)
+  // General ask for dimensions
   return {
     type: "text",
     text: "Para darte el precio necesito la medida.\n\n" +
