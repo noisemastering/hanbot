@@ -1831,7 +1831,13 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       } else {
         // We already have their location
         const locationStr = convo.city || convo.stateMx || '';
-        responseText = `¡Sí! Enviamos a ${locationStr} y toda la república 📦\n\nLa mayoría de productos se envían por Mercado Libre con envío incluido.\n\n¿Qué medida necesitas?`;
+        // Don't ask "¿Qué medida necesitas?" if we already gave them a price
+        const alreadyGavePrice = convo.lastIntent === "specific_measure_price_given" || convo.requestedSize;
+        if (alreadyGavePrice) {
+          responseText = `¡Sí! Enviamos a ${locationStr} y toda la república 📦\n\nLa mayoría de productos se envían por Mercado Libre con envío incluido.\n\n✨ Contamos con inventario listo para envío inmediato.`;
+        } else {
+          responseText = `¡Sí! Enviamos a ${locationStr} y toda la república 📦\n\nLa mayoría de productos se envían por Mercado Libre con envío incluido.\n\n¿Qué medida necesitas?`;
+        }
         await updateConversation(psid, { lastIntent: "shipping_info" });
       }
 
@@ -1852,9 +1858,14 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   // 🏢 ASKING IF WE'RE PHYSICALLY LOCATED IN THEIR CITY
   // "Trabajan aquí en Reynosa?" / "Están en Monterrey?" / "Tienen tienda en Guadalajara?"
   // "Pensé que estaban en Tijuana" / "Creí que estaban en Monterrey"
-  if (/\b(trabajan?|est[aá]n?|tienen?|hay)\s+(aqu[ií]|all[aá]|alguna?|tienda|local|sucursal)?\s*(en|aqui en|alla en)\s+(\w+)/i.test(msg) ||
-      /\b(son|eres|est[aá]s?|estaban?)\s+(de|en)\s+(\w+)/i.test(msg) ||
-      /\b(pens[eé]|cre[ií]|pensaba|cre[ií]a)\s+que\s+(estaban?|eran?|son)\s+(de|en)\s+/i.test(msg)) {
+  // EXCLUDE: "tiene en existencia", "tienen en stock" - these are inventory questions, not location
+  const isLocationQuery = (
+    /\b(trabajan?|est[aá]n?|tienen?|hay)\s+(aqu[ií]|all[aá]|alguna?|tienda|local|sucursal)?\s*(en|aqui en|alla en)\s+(\w+)/i.test(msg) ||
+    /\b(son|eres|est[aá]s?|estaban?)\s+(de|en)\s+(\w+)/i.test(msg) ||
+    /\b(pens[eé]|cre[ií]|pensaba|cre[ií]a)\s+que\s+(estaban?|eran?|son)\s+(de|en)\s+/i.test(msg)
+  ) && !/\b(existencia|stock|inventario|disponible|bodega)\b/i.test(msg);
+
+  if (isLocationQuery) {
 
     const location = await detectLocationEnhanced(msg);
     const cityName = location ? (location.normalized.charAt(0).toUpperCase() + location.normalized.slice(1)) : "esa ciudad";
