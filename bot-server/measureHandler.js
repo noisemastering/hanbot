@@ -652,67 +652,72 @@ function wasAlreadyOffered(sizeStr, offeredSizes) {
  */
 async function generateSizeResponse(options) {
   const { smaller, bigger, exact, requestedDim, availableSizes, isRepeated, businessInfo, offeredSizes } = options;
-  const { generatePriceResponse } = require('./ai/responseGenerator');
+  const { generatePriceResponse, generateCustomOrderResponse, generateNoMatchResponse } = require('./ai/responseGenerator');
 
-  const responses = [];
-  const suggestedSizes = []; // Track suggested sizes for context
+  const suggestedSizes = [];
 
   // Check if we're about to suggest a size we already offered
   const suggestedSize = exact?.sizeStr || bigger?.sizeStr;
   const previousOffer = suggestedSize ? wasAlreadyOffered(suggestedSize, offeredSizes) : null;
 
   if (previousOffer && requestedDim) {
-    // We already offered this size before - give a shorter, contextual response
+    suggestedSizes.push(suggestedSize);
     const link = exact?.mLink || exact?.permalink || bigger?.mLink || bigger?.permalink;
     const price = exact?.price || bigger?.price;
-    suggestedSizes.push(suggestedSize);
 
-    let text = `Como te mencioné, la medida estándar más cercana a ${requestedDim.width}x${requestedDim.height}m es ${suggestedSize} por $${price}.`;
-    if (link) {
-      text += `\n\nAquí está el link:\n${link}`;
+    // Use AI for repeat offer
+    try {
+      const { generateResponse } = require('./ai/responseGenerator');
+      const aiResponse = await generateResponse({
+        intent: "repeat_offer",
+        context: {
+          requestedSize: `${requestedDim.width}x${requestedDim.height}m`,
+          offeredSize: suggestedSize,
+          price: price,
+          link: link
+        }
+      });
+      if (aiResponse) {
+        return { text: aiResponse, suggestedSizes, offeredToShowAllSizes: false, alreadyOffered: true };
+      }
+    } catch (err) {
+      console.error("AI failed for repeat offer:", err.message);
     }
-    text += `\n\n¿Te la quedas o prefieres cotizar fabricación a tu medida exacta?`;
-
-    return {
-      text,
-      suggestedSizes,
-      offeredToShowAllSizes: false,
-      alreadyOffered: true
-    };
   }
 
-  // FIRST: Check if this is a custom order (both sides >= 8m)
-  // These ALWAYS need human attention, even if product exists in inventory
+  // CUSTOM ORDER: Both sides >= 8m
   if (requestedDim && isCustomOrder(requestedDim)) {
     const inBusinessHours = isBusinessHours();
-
-    // Find the largest standard sizes that could be combined
     const largestSizes = availableSizes
       .filter(s => s.price > 0)
       .sort((a, b) => b.area - a.area)
       .slice(0, 4);
 
-    const sizeList = largestSizes.map(s => `${s.sizeStr} ($${s.price})`).join(', ');
-
-    let customOrderText = `En dimensiones tan grandes es necesaria una confección especial. `;
-    customOrderText += `¿Deseas combinar dos medidas estándar? ${sizeList}\n\n`;
-    customOrderText += `Si quieres la medida específica que mencionas (${requestedDim.width}x${requestedDim.height}m) te puedo comunicar con un especialista.`;
-
-    return {
-      text: customOrderText,
-      suggestedSizes: largestSizes.map(s => s.sizeStr),
-      offeredToShowAllSizes: false,
-      isCustomOrder: true,
-      requiresHandoff: inBusinessHours,
-      largestSizes: largestSizes
-    };
+    try {
+      const aiResponse = await generateCustomOrderResponse({
+        dimensions: requestedDim,
+        largestSizes
+      });
+      if (aiResponse) {
+        return {
+          text: aiResponse,
+          suggestedSizes: largestSizes.map(s => s.sizeStr),
+          offeredToShowAllSizes: false,
+          isCustomOrder: true,
+          requiresHandoff: inBusinessHours,
+          largestSizes
+        };
+      }
+    } catch (err) {
+      console.error("AI failed for custom order:", err.message);
+    }
   }
 
+  // EXACT MATCH
   if (exact) {
     suggestedSizes.push(exact.sizeStr);
     const link = exact.mLink || exact.permalink;
 
-    // Use AI to generate natural response
     try {
       const aiResponse = await generatePriceResponse({
         dimensions: requestedDim || { width: exact.width, height: exact.height },
@@ -720,105 +725,39 @@ async function generateSizeResponse(options) {
         link: link,
         userExpression: requestedDim ? `${requestedDim.width} x ${requestedDim.height} metros` : exact.sizeStr
       });
-
       if (aiResponse) {
-        return {
-          text: aiResponse,
-          suggestedSizes,
-          offeredToShowAllSizes: false
-        };
+        return { text: aiResponse, suggestedSizes, offeredToShowAllSizes: false };
       }
     } catch (err) {
-      console.error("AI response generation failed, using fallback:", err.message);
+      console.error("AI failed for price response:", err.message);
     }
-
-    // Fallback if AI fails
-    const dimStr = requestedDim
-      ? `${requestedDim.width} x ${requestedDim.height} metros`
-      : exact.sizeStr;
-    const fallbackText = link
-      ? `Malla sombra confeccionada.\n\nPrecio ${dimStr}: $${exact.price} Incluye envío.\n\n${link}`
-      : `Malla sombra confeccionada.\n\nPrecio ${dimStr}: $${exact.price} Incluye envío.`;
-
-    return {
-      text: fallbackText,
-      suggestedSizes,
-      offeredToShowAllSizes: false
-    };
-  } else {
-    const parts = [];
-
-    // No exact match - suggest closest size that can cover the dimensions, or custom fabrication
-    if (bigger) {
-      // We have a size that can cover the requested dimensions
-      if (requestedDim) {
-        parts.push(`La medida exacta de ${requestedDim.width}x${requestedDim.height}m no la manejamos, pero tengo dos opciones para ti:\n`);
-        parts.push(`\nOpción 1: Medida estándar más cercana que cubre tus dimensiones:`);
-        parts.push(`\n• ${bigger.sizeStr} por $${bigger.price}`);
-        suggestedSizes.push(bigger.sizeStr);
-
-        // ALWAYS mention custom fabrication option with contact info
-        if (businessInfo) {
-          const whatsappLink = "https://wa.me/524425957432";
-          parts.push(`\n\nOpción 2: Fabricación a la medida exacta (${requestedDim.width}x${requestedDim.height}m)`);
-          parts.push(`\nPara cotizar medidas personalizadas, contáctanos:`);
-          parts.push(`\n💬 WhatsApp: ${whatsappLink}`);
-          parts.push(`\n📞 ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}`);
-          parts.push(`\n🕓 ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}`);
-        }
-
-        parts.push('\n\n¿Te interesa la medida estándar o prefieres cotizar la fabricación personalizada?');
-      } else {
-        parts.push(`Esa medida no la manejamos como estándar.\n`);
-        parts.push(`\nLa medida más cercana disponible es:`);
-        parts.push(`\n• ${bigger.sizeStr} por $${bigger.price}`);
-        suggestedSizes.push(bigger.sizeStr);
-        parts.push('\n\n¿Te interesa esta opción?');
-      }
-    } else {
-      // No standard size can cover the requested dimensions - custom fabrication only
-      if (availableSizes.length > 0) {
-        const largest = availableSizes[availableSizes.length - 1];
-
-        if (requestedDim) {
-          parts.push(`La medida de ${requestedDim.width}x${requestedDim.height}m excede nuestras medidas estándar.`);
-          parts.push(`\n\nNuestra medida más grande disponible es ${largest.sizeStr} por $${largest.price}.`);
-          suggestedSizes.push(largest.sizeStr);
-        } else {
-          parts.push(`Esa medida excede nuestras medidas estándar.`);
-          parts.push(`\n\nLa más grande disponible es ${largest.sizeStr} por $${largest.price}.`);
-          suggestedSizes.push(largest.sizeStr);
-        }
-      }
-
-      // Offer custom fabrication
-      if (businessInfo && requestedDim) {
-        const whatsappLink = "https://wa.me/524425957432";
-        parts.push(`\n\nPara la medida que necesitas (${requestedDim.width}x${requestedDim.height}m), podemos fabricarla a la medida. Para cotizar, contáctanos:\n`);
-        parts.push(`\n💬 WhatsApp: ${whatsappLink}`);
-        parts.push(`\n📞 ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}`);
-        parts.push(`\n🕓 ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}`);
-      } else if (businessInfo) {
-        const whatsappLink = "https://wa.me/524425957432";
-        parts.push(`\n\nPara medidas personalizadas, contáctanos:\n`);
-        parts.push(`\n💬 WhatsApp: ${whatsappLink}`);
-        parts.push(`\n📞 ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}`);
-        parts.push(`\n🕓 ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}`);
-      }
-
-      parts.push(`\n\nO también puedes ver todas nuestras medidas estándar en nuestra Tienda Oficial:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob`);
-    }
-
-    responses.push(parts.join(''));
   }
 
-  // Check if we're offering to show all sizes (when we ask the question)
-  const offeredToShowAllSizes = responses.some(r => r.includes('¿Te gustaría ver todas nuestras medidas estándar?'));
+  // NO EXACT MATCH - suggest alternative or custom fabrication
+  const closestSize = bigger || null;
+  const largestSize = availableSizes.length > 0 ? availableSizes[availableSizes.length - 1] : null;
 
+  if (closestSize) suggestedSizes.push(closestSize.sizeStr);
+  else if (largestSize) suggestedSizes.push(largestSize.sizeStr);
+
+  try {
+    const aiResponse = await generateNoMatchResponse({
+      dimensions: requestedDim,
+      closestSize,
+      largestSize
+    });
+    if (aiResponse) {
+      return { text: aiResponse, suggestedSizes, offeredToShowAllSizes: false };
+    }
+  } catch (err) {
+    console.error("AI failed for no-match response:", err.message);
+  }
+
+  // Final fallback - should rarely hit this
   return {
-    text: responses[Math.floor(Math.random() * responses.length)],
+    text: "Esa medida no la manejamos como estándar. Contáctanos por WhatsApp para cotizar: https://wa.me/524425957432",
     suggestedSizes,
-    offeredToShowAllSizes
+    offeredToShowAllSizes: false
   };
 }
 

@@ -61,7 +61,18 @@ REGLAS:
 - Cuando des un link, ponlo en su propia línea
 - NO inventes precios ni medidas - usa solo los datos que te proporciono
 - Si no tienes un dato, NO lo menciones
-- Mantén las respuestas cortas (2-4 oraciones máximo, excepto cuando describas el producto)`;
+- Mantén las respuestas cortas (2-4 oraciones máximo, excepto cuando describas el producto)
+
+ESCENARIOS ESPECIALES:
+- custom_order: Medida muy grande que requiere fabricación especial. SIEMPRE incluye las alternativas de medidas estándar que te doy (con precios) y el link de WhatsApp.
+- size_not_available: La medida no existe. SIEMPRE incluye la alternativa más cercana (con precio y link si hay) y el WhatsApp para fabricación a medida.
+- price_quote: Tenemos la medida exacta. Da el precio, menciona características y envío incluido. SIEMPRE incluye el link de compra.
+- repeat_offer: Ya ofrecimos esta medida antes. Responde brevemente recordando el precio y pregunta si la quiere o prefiere cotizar fabricación personalizada.
+
+IMPORTANTE:
+- Cuando te doy datos (precios, links, WhatsApp), SIEMPRE inclúyelos EXACTAMENTE como te los doy. No los omitas.
+- NUNCA inventes precios, medidas ni links. Usa SOLO los datos exactos que te proporciono.
+- Si no te doy un dato, NO lo menciones ni lo inventes.`;
 }
 
 function buildUserPrompt({ intent, context, product, convo }) {
@@ -78,11 +89,18 @@ function buildUserPrompt({ intent, context, product, convo }) {
   }
 
   if (product) {
-    prompt += `PRODUCTO:\n`;
+    prompt += `DATOS DEL PRODUCTO (usa EXACTAMENTE estos valores, no inventes otros):\n`;
     if (product.dimensions) prompt += `- Medida: ${product.dimensions}\n`;
     if (product.price) prompt += `- Precio: $${product.price}\n`;
-    if (product.link) prompt += `- Link: ${product.link}\n`;
+    if (product.link) prompt += `- Link de compra: ${product.link}\n`;
     if (product.features) prompt += `- Características: ${product.features.join(', ')}\n`;
+    if (product.availableAlternatives) prompt += `- Alternativas disponibles: ${product.availableAlternatives}\n`;
+    if (product.whatsapp) prompt += `- WhatsApp: ${product.whatsapp}\n`;
+    if (product.alternativeSize) prompt += `- Medida alternativa: ${product.alternativeSize}\n`;
+    if (product.alternativePrice) prompt += `- Precio alternativa: $${product.alternativePrice}\n`;
+    if (product.alternativeLink) prompt += `- Link alternativa: ${product.alternativeLink}\n`;
+    if (product.largestSize) prompt += `- Medida más grande: ${product.largestSize}\n`;
+    if (product.largestPrice) prompt += `- Precio más grande: $${product.largestPrice}\n`;
     prompt += `\n`;
   }
 
@@ -92,7 +110,7 @@ function buildUserPrompt({ intent, context, product, convo }) {
     if (convo.requestedSize) prompt += `- Medida solicitada anteriormente: ${convo.requestedSize}\n`;
   }
 
-  prompt += `\nGenera una respuesta natural y concisa para este intent.`;
+  prompt += `\nGenera una respuesta natural y concisa. USA SOLO los datos proporcionados arriba, no inventes precios ni links.`;
 
   return prompt;
 }
@@ -198,11 +216,67 @@ async function generateFrustrationResponse({ convo, hasContext }) {
   });
 }
 
+/**
+ * Generate custom order response (large sizes needing special fabrication)
+ */
+async function generateCustomOrderResponse({ dimensions, largestSizes, convo }) {
+  const context = {
+    requestedSize: `${dimensions.width} x ${dimensions.height} metros`,
+    isCustomOrder: true,
+    needsSpecialist: true,
+    canCombineSizes: true
+  };
+
+  const product = {
+    availableAlternatives: largestSizes.map(s => `${s.sizeStr} por $${s.price}`).join(', '),
+    whatsapp: "https://wa.me/524425957432"
+  };
+
+  return await generateResponse({
+    intent: "custom_order",
+    context,
+    product,
+    convo
+  });
+}
+
+/**
+ * Generate no-match response (size not available, suggest alternatives)
+ */
+async function generateNoMatchResponse({ dimensions, closestSize, largestSize, convo }) {
+  const context = {
+    requestedSize: dimensions ? `${dimensions.width} x ${dimensions.height} metros` : null,
+    hasCloserAlternative: !!closestSize,
+    exceedsMaxSize: !closestSize && !!largestSize
+  };
+
+  const product = {};
+  if (closestSize) {
+    product.alternativeSize = closestSize.sizeStr;
+    product.alternativePrice = closestSize.price;
+    product.alternativeLink = closestSize.mLink || closestSize.permalink;
+  }
+  if (largestSize) {
+    product.largestSize = largestSize.sizeStr;
+    product.largestPrice = largestSize.price;
+  }
+  product.whatsapp = "https://wa.me/524425957432";
+
+  return await generateResponse({
+    intent: "size_not_available",
+    context,
+    product,
+    convo
+  });
+}
+
 module.exports = {
   generateResponse,
   generatePriceResponse,
   generateGreetingResponse,
   generateShippingResponse,
   generateColorResponse,
-  generateFrustrationResponse
+  generateFrustrationResponse,
+  generateCustomOrderResponse,
+  generateNoMatchResponse
 };
