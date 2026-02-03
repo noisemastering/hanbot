@@ -1361,19 +1361,20 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
             updates.$set = { offeredToShowAllSizes: true };
           }
 
-          // Handle custom order (both sides >= 8m) - start collection flow
+          // Handle custom order (both sides >= 8m) - offer standard size combinations
           if (sizeResponse.isCustomOrder && sizeResponse.requiresHandoff) {
-            console.log(`🏭 Custom order detected (${dimensions.width}x${dimensions.height}m), starting collection flow`);
+            console.log(`🏭 Custom order detected (${dimensions.width}x${dimensions.height}m), offering standard size combinations`);
 
             await updateConversation(psid, {
-              lastIntent: "custom_order_awaiting_purpose",
+              lastIntent: "custom_order_awaiting_decision",
               customOrderSize: `${dimensions.width}x${dimensions.height}m`,
+              suggestedSizes: sizeResponse.suggestedSizes,
               unknownCount: 0
             });
 
             return {
               type: "text",
-              text: `¡Claro! ¿Qué te gustaría proteger del sol?`
+              text: sizeResponse.text
             };
           } else if (updates.$push || updates.$set) {
             // Save offered size tracking
@@ -2221,19 +2222,20 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         businessInfo
       });
 
-      // Handle custom order (both sides >= 8m) - start collection flow
+      // Handle custom order (both sides >= 8m) - offer standard size combinations
       if (sizeResponse.isCustomOrder && sizeResponse.requiresHandoff) {
-        console.log(`🏭 Custom order detected (${dimensions.width}x${dimensions.height}m), starting collection flow`);
+        console.log(`🏭 Custom order detected (${dimensions.width}x${dimensions.height}m), offering standard size combinations`);
 
         await updateConversation(psid, {
-          lastIntent: "custom_order_awaiting_purpose",
+          lastIntent: "custom_order_awaiting_decision",
           customOrderSize: `${dimensions.width}x${dimensions.height}m`,
+          suggestedSizes: sizeResponse.suggestedSizes,
           unknownCount: 0
         });
 
         return {
           type: "text",
-          text: `¡Claro! ¿Qué te gustaría proteger del sol?`
+          text: sizeResponse.text
         };
       } else {
         await updateConversation(psid, {
@@ -2460,19 +2462,20 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         businessInfo
       });
 
-      // Handle custom order handoff (both sides >= 8m)
+      // Handle custom order handoff (both sides >= 8m) - offer standard size combinations
       if (sizeResponse.isCustomOrder && sizeResponse.requiresHandoff) {
-        console.log(`🏭 Custom order detected (${dimensions.width}x${dimensions.height}m), starting collection flow`);
+        console.log(`🏭 Custom order detected (${dimensions.width}x${dimensions.height}m), offering standard size combinations`);
 
         await updateConversation(psid, {
-          lastIntent: "custom_order_awaiting_purpose",
+          lastIntent: "custom_order_awaiting_decision",
           customOrderSize: `${dimensions.width}x${dimensions.height}m`,
+          suggestedSizes: sizeResponse.suggestedSizes,
           unknownCount: 0
         });
 
         return {
           type: "text",
-          text: `¡Claro! ¿Qué te gustaría proteger del sol?`
+          text: sizeResponse.text
         };
       } else {
         // Update conversation state with suggested sizes for context

@@ -685,26 +685,25 @@ function generateSizeResponse(options) {
   if (requestedDim && isCustomOrder(requestedDim)) {
     const inBusinessHours = isBusinessHours();
 
-    let customOrderText = `La medida de ${requestedDim.width}x${requestedDim.height}m es un pedido especial que requiere fabricación personalizada.\n\n`;
-    customOrderText += `Este tipo de medidas necesitan cotización directa con nuestro equipo de ventas.\n\n`;
+    // Find the largest standard sizes that could be combined
+    const largestSizes = availableSizes
+      .filter(s => s.price > 0)
+      .sort((a, b) => b.area - a.area)
+      .slice(0, 4);
 
-    if (businessInfo) {
-      const whatsappLink = "https://wa.me/524425957432";
-      customOrderText += `💬 WhatsApp: ${whatsappLink}\n`;
-      customOrderText += `📞 Contáctanos: ${businessInfo.phones?.join(' / ') || 'Contacto no disponible'}\n`;
-      customOrderText += `🕓 Horario: ${businessInfo.hours || 'Lunes a Viernes 9:00-18:00'}`;
-    }
+    const sizeList = largestSizes.map(s => `${s.sizeStr} ($${s.price})`).join(', ');
 
-    if (inBusinessHours) {
-      customOrderText += `\n\n✅ Estamos en horario de atención. Un especialista te contactará en breve para ayudarte con tu cotización.`;
-    }
+    let customOrderText = `En dimensiones tan grandes es necesaria una confección especial. `;
+    customOrderText += `¿Deseas combinar dos medidas estándar? ${sizeList}\n\n`;
+    customOrderText += `Si quieres la medida específica que mencionas (${requestedDim.width}x${requestedDim.height}m) te puedo comunicar con un especialista.`;
 
     return {
       text: customOrderText,
-      suggestedSizes: [],
+      suggestedSizes: largestSizes.map(s => s.sizeStr),
       offeredToShowAllSizes: false,
       isCustomOrder: true,
-      requiresHandoff: inBusinessHours
+      requiresHandoff: inBusinessHours,
+      largestSizes: largestSizes
     };
   }
 

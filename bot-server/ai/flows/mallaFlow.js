@@ -7,6 +7,7 @@ const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
 const ZipCode = require("../../models/ZipCode");
 const { INTENTS } = require("../classifier");
+const { getAvailableSizes } = require("../../measureHandler");
 
 // Import existing utilities - USE THESE, don't reinvent
 const { getAncestors, getRootFamily } = require("../utils/productMatcher");
@@ -900,18 +901,28 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
   const maxSide = Math.max(width, height);
 
   if (minSide >= 8 && maxSide >= 8) {
-    // Custom order - start collection flow instead of immediate handoff
-    console.log(`🏭 Custom order detected in mallaFlow (${width}x${height}m), starting collection flow`);
+    // Custom order - offer standard size combinations
+    console.log(`🏭 Custom order detected in mallaFlow (${width}x${height}m), offering standard size combinations`);
+
+    // Find the largest standard sizes that could be combined
+    const availableSizes = await getAvailableSizes(convo);
+    const largestSizes = availableSizes
+      .filter(s => s.price > 0)
+      .sort((a, b) => b.area - a.area)
+      .slice(0, 4);
+
+    const sizeList = largestSizes.map(s => `${s.sizeStr} ($${s.price})`).join(', ');
 
     await updateConversation(psid, {
-      lastIntent: "custom_order_awaiting_purpose",
+      lastIntent: "custom_order_awaiting_decision",
       customOrderSize: `${width}x${height}m`,
+      suggestedSizes: largestSizes.map(s => s.sizeStr),
       unknownCount: 0
     });
 
     return {
       type: "text",
-      text: `¡Claro! ¿Qué te gustaría proteger del sol?`
+      text: `En dimensiones tan grandes es necesaria una confección especial. ¿Deseas combinar dos medidas estándar? ${sizeList}\n\nSi quieres la medida específica que mencionas (${width}x${height}m) te puedo comunicar con un especialista.`
     };
   }
 
