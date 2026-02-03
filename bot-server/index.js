@@ -280,6 +280,103 @@ async function registerUserIfNeeded(senderPsid) {
 }
 
 
+// Bot persona names for comment replies
+const commentBotNames = ["Paula", "Sofía", "Camila", "Valeria", "Daniela"];
+
+// KILLSWITCH: Set FB_COMMENT_AUTO_REPLY=false in env to disable all comment auto-replies
+function isCommentAutoReplyEnabled() {
+  const setting = process.env.FB_COMMENT_AUTO_REPLY;
+  // Enabled by default, set to 'false' to disable
+  return setting !== 'false' && setting !== '0';
+}
+
+// KILLSWITCH: Set FB_SHIPPING_AUTO_REPLY=false to disable shipping-specific replies only
+// When disabled, shipping questions still get the general reply
+function isShippingAutoReplyEnabled() {
+  const setting = process.env.FB_SHIPPING_AUTO_REPLY;
+  // Enabled by default, set to 'false' to disable
+  return setting !== 'false' && setting !== '0';
+}
+
+// Detect if a comment is specifically about SHIPPING (high confidence only)
+function isShippingQuestion(text) {
+  if (!text) return false;
+  const lowerText = text.toLowerCase()
+    .normalize('NFD').replace(/[\u0300-\u036f]/g, '') // Remove accents for matching
+    .trim();
+
+  // High-confidence shipping patterns
+  const shippingPatterns = [
+    /\benvios?\b/,                    // envío, envíos, envio, envios
+    /\benvian\b/,                     // envían, envian
+    /\bmandan\b/,                     // mandan
+    /\bflete\b/,                      // flete
+    /\bpaqueteria\b/,                 // paquetería
+    /\ba domicilio\b/,                // a domicilio
+    /\bhacen envio/,                  // hacen envío
+    /\bllega a\b/,                    // llega a [location]
+    /\bllegan a\b/,                   // llegan a [location]
+    /\bentregan\b/,                   // entregan
+    /\bcosto.{0,5}envio/,             // costo de envío, costo del envio
+    /\benvio.{0,10}(gratis|incluido)/ // envío gratis, envío incluido
+  ];
+
+  for (const pattern of shippingPatterns) {
+    if (pattern.test(lowerText)) return true;
+  }
+
+  return false;
+}
+
+// Detect if a comment is a general question (for non-shipping auto-reply)
+function isQuestion(text) {
+  if (!text) return false;
+  const lowerText = text.toLowerCase().trim();
+
+  // Contains question mark
+  if (lowerText.includes('?')) return true;
+
+  // Common Spanish question starters
+  const questionWords = [
+    'cuánto', 'cuanto', 'cómo', 'como', 'dónde', 'donde', 'cuál', 'cual',
+    'qué', 'que', 'quién', 'quien', 'por qué', 'porqué', 'porque',
+    'tienen', 'tienes', 'hay', 'puedo', 'pueden', 'puedes',
+    'cuestan', 'cuesta', 'vale', 'valen', 'precio', 'precios',
+    'hacen', 'haces', 'manejan', 'manejas', 'venden', 'vendes',
+    'envían', 'envias', 'envian', 'mandan', 'llegan',
+    'sirve', 'funciona', 'es para', 'son para'
+  ];
+
+  for (const word of questionWords) {
+    if (lowerText.includes(word)) return true;
+  }
+
+  return false;
+}
+
+// Reply to a Facebook comment
+async function replyToComment(commentId, message) {
+  const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN;
+
+  try {
+    const response = await axios.post(
+      `https://graph.facebook.com/v18.0/${commentId}/comments`,
+      { message },
+      {
+        headers: {
+          Authorization: `Bearer ${FB_PAGE_TOKEN}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    console.log(`✅ Auto-replied to comment ${commentId}:`, response.data);
+    return { success: true, data: response.data };
+  } catch (error) {
+    console.error(`❌ Error replying to comment ${commentId}:`, error.response?.data || error.message);
+    return { success: false, error: error.response?.data || error.message };
+  }
+}
+
 // Reemplaza los lugares donde guardas mensajes:
 async function callSendAPI(senderPsid, messageData) {
   const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN;
@@ -669,6 +766,35 @@ app.post("/webhook", async (req, res) => {
                   { upsert: true, new: true }
                 );
                 console.log(`   ✅ Stored comment context for user ${from.id}`);
+
+                // Auto-reply to comments (with killswitch)
+                if (comment_id && isCommentAutoReplyEnabled()) {
+                  const operatorName = commentBotNames[Math.floor(Math.random() * commentBotNames.length)];
+                  let replyMessage = null;
+                  let replyType = null;
+
+                  // Check for shipping question first (high confidence) - has its own killswitch
+                  if (isShippingAutoReplyEnabled() && isShippingQuestion(message)) {
+                    replyMessage = `¡Hola! Sí hacemos envíos a todo México por paquetería. Escríbenos un mensaje privado para cotizarte, soy ${operatorName}.`;
+                    replyType = 'shipping';
+                    console.log(`   📦 Shipping question detected, auto-replying...`);
+                  }
+                  // Fall back to general question detection
+                  else if (isQuestion(message)) {
+                    replyMessage = `Hola, soy ${operatorName} de Hanlob, si requieres más información escríbenos un mensaje privado.`;
+                    replyType = 'general';
+                    console.log(`   💬 General question detected, auto-replying...`);
+                  }
+
+                  if (replyMessage) {
+                    const replyResult = await replyToComment(comment_id, replyMessage);
+                    if (replyResult.success) {
+                      console.log(`   ✅ Auto-reply sent (${replyType})`);
+                    }
+                  }
+                } else if (comment_id && !isCommentAutoReplyEnabled()) {
+                  console.log(`   ⏸️ Auto-reply disabled (FB_COMMENT_AUTO_REPLY=false)`);
+                }
               } catch (err) {
                 console.error(`   ❌ Failed to store comment context:`, err.message);
               }
