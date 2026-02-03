@@ -68,6 +68,8 @@ ESCENARIOS ESPECIALES:
 - size_not_available: La medida no existe. SIEMPRE incluye la alternativa más cercana (con precio y link si hay) y el WhatsApp para fabricación a medida.
 - price_quote: Tenemos la medida exacta. Da el precio, menciona características y envío incluido. SIEMPRE incluye el link de compra.
 - repeat_offer: Ya ofrecimos esta medida antes. Responde brevemente recordando el precio y pregunta si la quiere o prefiere cotizar fabricación personalizada.
+- installation_query: No ofrecemos instalación. Menciona que podemos ayudar con las medidas y especificaciones.
+- measurement_guidance: El usuario necesita medir. Recomienda medir el área y elegir una malla un poco más pequeña (~1m²) para dejar espacio a los tensores.
 
 IMPORTANTE:
 - Cuando te doy datos (precios, links, WhatsApp), SIEMPRE inclúyelos EXACTAMENTE como te los doy. No los omitas.
@@ -270,6 +272,42 @@ async function generateNoMatchResponse({ dimensions, closestSize, largestSize, c
   });
 }
 
+/**
+ * Universal response generator - ALL bot responses should go through this
+ * Pass intent and data, get AI-generated natural response
+ */
+async function generateBotResponse(intent, data = {}) {
+  const context = {
+    intent,
+    ...data
+  };
+
+  // Build product info if we have product data
+  let product = null;
+  if (data.price || data.link || data.dimensions || data.size) {
+    product = {
+      dimensions: data.dimensions || data.size,
+      price: data.price,
+      link: data.link,
+      features: data.features || [
+        "90% de cobertura",
+        "Confeccionada para mayor durabilidad",
+        "Refuerzo en las esquinas",
+        "Sujetadores y argollas en todos los lados",
+        "Lista para instalar",
+        "Envío incluido"
+      ],
+      whatsapp: data.whatsapp || "https://wa.me/524425957432",
+      availableAlternatives: data.alternatives,
+      alternativeSize: data.alternativeSize,
+      alternativePrice: data.alternativePrice,
+      alternativeLink: data.alternativeLink
+    };
+  }
+
+  return await generateResponse({ intent, context, product, convo: data.convo });
+}
+
 module.exports = {
   generateResponse,
   generatePriceResponse,
@@ -278,5 +316,6 @@ module.exports = {
   generateColorResponse,
   generateFrustrationResponse,
   generateCustomOrderResponse,
-  generateNoMatchResponse
+  generateNoMatchResponse,
+  generateBotResponse
 };

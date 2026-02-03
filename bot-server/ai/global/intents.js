@@ -2054,13 +2054,15 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       // They were asking about sizes in general
       response = `No ofrecemos instalación, pero puedo ayudarte a elegir la medida correcta y darte las especificaciones para que la instalación sea fácil 🌿. ¿Te interesa alguna de las opciones que te mencioné?`;
     } else {
-      // Generic installation question
-      const genericResponses = [
-        `No ofrecemos servicio de instalación 😊, pero puedo ayudarte con las especificaciones para que la instales tú o contrates a alguien de confianza.`,
-        `No contamos con instalación, pero te puedo asesorar con las medidas exactas que necesitas 🌿.`,
-        `Nosotros no instalamos, pero si me dices el área a cubrir, te ayudo a elegir la medida perfecta 😊.`
-      ];
-      response = genericResponses[Math.floor(Math.random() * genericResponses.length)];
+      // Generic installation question - use AI
+      const { generateBotResponse } = require('./responseGenerator');
+      try {
+        const aiResp = await generateBotResponse('installation_query', { convo });
+        if (aiResp) response = aiResp;
+        else response = "No ofrecemos instalación, pero te ayudamos con las medidas.";
+      } catch (e) {
+        response = "No ofrecemos instalación, pero te ayudamos con las medidas.";
+      }
     }
 
     return {
@@ -2123,14 +2125,14 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   // BUT only if no dimensions were parsed (including from reference objects)
   if (isApproximateMeasure(msg) && !dimensions) {
     await updateConversation(psid, { lastIntent: "measurement_guidance", unknownCount: 0 });
-    const guidanceResponses = [
-      `¡Perfecto! 📏 Te recomiendo medir el área total y luego elegir una malla aproximadamente 1 metro cuadrado más pequeña que el espacio. Esto deja espacio para los tensores y asegura una instalación adecuada.\n\nCuando tengas la medida exacta, con gusto te ayudo a elegir el tamaño ideal 🌿`,
-      `Muy bien pensado medir con precisión 👍. Un consejo: la malla debe ser cerca de 1m² más pequeña que el área total para dejar espacio a los tensores.\n\n¿Ya tienes una idea aproximada de las dimensiones?`,
-      `Excelente idea medir bien 📐. Recuerda que la malla debe ser un poco más pequeña que el área (aproximadamente 1m² menos) para los tensores.\n\nCuando tengas las medidas, cuéntame y te sugiero la opción perfecta 🌿`
-    ];
+    const { generateBotResponse } = require('./responseGenerator');
+    try {
+      const aiResp = await generateBotResponse('measurement_guidance', { convo });
+      if (aiResp) return { type: "text", text: aiResp };
+    } catch (e) { /* fallback below */ }
     return {
       type: "text",
-      text: guidanceResponses[Math.floor(Math.random() * guidanceResponses.length)]
+      text: "Te recomiendo medir el área y elegir una malla un poco más pequeña para los tensores. Cuando tengas las medidas me dices."
     };
   }
 
@@ -2592,22 +2594,25 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
             stateMx: convo.stateMx
           });
 
-          // Warm, friendly responses
-          const warmResponses = [
-            `¡Claro! 😊 La malla de ${requestedSizeStr} la tenemos disponible en $${product.price}\n\n` +
-            `Te paso el link para que la veas:\n\n${trackedLink}`,
-
-            `¡Perfecto! La tenemos en ${requestedSizeStr} por $${product.price} 🌿\n\n` +
-            `Aquí está el enlace:\n\n${trackedLink}`,
-
-            `Con gusto 😊 De ${requestedSizeStr} la manejamos en $${product.price}\n\n` +
-            `Te dejo el link directo:\n\n${trackedLink}`
-          ];
-
-          const selectedResponse = warmResponses[Math.floor(Math.random() * warmResponses.length)];
+          // Use AI to generate response
+          const { generateBotResponse } = require('./responseGenerator');
+          try {
+            const aiResponse = await generateBotResponse('price_quote', {
+              dimensions: requestedSizeStr,
+              price: product.price,
+              link: trackedLink,
+              convo
+            });
+            if (aiResponse) {
+              return { type: "text", text: aiResponse };
+            }
+          } catch (err) {
+            console.error("AI response failed:", err.message);
+          }
+          // Fallback
           return {
             type: "text",
-            text: addOfferHookIfRelevant(selectedResponse, convo)
+            text: `Malla ${requestedSizeStr}: $${product.price}. Envío incluido.\n\n${trackedLink}`
           };
         }
       }
