@@ -33,6 +33,10 @@ function parseConfeccionadaDimensions(str) {
   // "seis por cuatro" -> "6 por 4"
   let s = convertSpanishNumbers(String(str).toLowerCase());
 
+  // Normalize spaces within decimal numbers: "4. 50" -> "4.50", "4 .50" -> "4.50"
+  // This handles typos where users add spaces around decimal points
+  s = s.replace(/(\d+)\s*\.\s*(\d+)/g, '$1.$2');
+
   // Check if dimensions are in feet
   const isFeet = /\b(pies?|ft|feet|foot)\b/i.test(s);
 

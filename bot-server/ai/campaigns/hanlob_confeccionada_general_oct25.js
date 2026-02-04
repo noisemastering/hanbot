@@ -5,6 +5,7 @@ const { generateClickLink } = require("../../tracking");
 const { getAvailableSizes } = require("../../measureHandler");
 const { sendHandoffNotification } = require("../../services/pushNotifications");
 const { parseConfeccionadaDimensions } = require("../utils/dimensionParsers");
+const { generateBotResponse } = require("../responseGenerator");
 
 // --- Helpers ---
 // Use centralized parser - converts Spanish numbers and handles all formats
@@ -180,10 +181,11 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
         console.error("Error getting closest size link:", err);
       }
 
-      return {
-        type: "text",
-        text: `Permíteme comunicarte con un especialista para cotizar la medida exacta (${requested.w}m x ${requested.h}m).` + linkText
-      };
+      const response = await generateBotResponse("specialist_handoff", {
+        dimensions: `${requested.w}x${requested.h}m`,
+        additionalInfo: linkText
+      });
+      return { type: "text", text: response };
     }
 
     // 2a) ¿Existe exacta?

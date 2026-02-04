@@ -903,10 +903,11 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     });
 
     const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
-    return {
-      type: "text",
-      text: `Permíteme comunicarte con un especialista para cotizar ${width}x${height}m.\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
-    };
+    const response = await generateBotResponse("specialist_handoff", {
+      dimensions: `${width}x${height}m`,
+      videoLink: VIDEO_LINK
+    });
+    return { type: "text", text: response };
   }
 
   // Check if this is a custom order (both sides >= 8m)
