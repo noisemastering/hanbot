@@ -69,8 +69,11 @@ async function handleShipping({ entities, psid, convo, userMessage }) {
 async function handleLocation({ psid, userMessage, convo }) {
   const businessInfo = await getBusinessInfo();
 
-  // Check if they want to visit physically
-  const wantsPhysicalVisit = /f[ií]sicamente|en\s+persona|ir\s+a\s+ver|verlo|visitarlos/i.test(userMessage);
+  // Detect if user mentioned a specific city
+  const locationInfo = await detectMexicanLocation(userMessage);
+
+  // Check if they explicitly ask for address (ubicados, dirección)
+  const wantsFullAddress = /\bubicados?\b|\bdirecci[oó]n\b|\bd[oó]nde\s+est[aá]n?\s+ubicados/i.test(userMessage);
 
   await updateConversation(psid, {
     lastIntent: "location_query",
@@ -78,11 +81,12 @@ async function handleLocation({ psid, userMessage, convo }) {
   });
 
   const response = await generateBotResponse("location_query", {
-    wantsPhysicalVisit,
-    address: businessInfo?.address || 'Calle Loma de San Gremal 108, bodega 73',
-    phone: businessInfo?.phones?.[0] || '442 352 1646',
-    hours: businessInfo?.hours || 'Lun-Vie 9am-6pm',
-    whatsapp: "https://wa.me/524425957432",
+    userQuestion: userMessage,
+    mentionedCity: locationInfo?.normalized || null,
+    wantsFullAddress,
+    city: "Querétaro",
+    address: businessInfo?.address || 'Calle Loma de San Gremal 108, bodega 73, Navex Park',
+    shipsNationwide: true,
     convo
   });
 
