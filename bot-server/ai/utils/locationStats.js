@@ -4,6 +4,7 @@
 const { updateConversation } = require("../../conversationManager");
 const { detectLocationEnhanced, detectZipCode } = require("../../mexicanLocations");
 const User = require("../../models/User");
+const { generateBotResponse } = require("../responseGenerator");
 
 // Mexican states mapping for normalization
 const STATE_ALIASES = {
@@ -96,9 +97,14 @@ const CITY_STATE_MAP = {
 };
 
 /**
- * Stats question to append after sending ML link
+ * Generate stats question to append after sending ML link
+ * @param {object} convo - Conversation state for context
+ * @returns {Promise<string>} AI-generated question
  */
-const STATS_QUESTION = "\n\nPor cierto, para fines estadísticos, ¿de qué ciudad nos escribes?";
+async function generateStatsQuestion(convo) {
+  const response = await generateBotResponse("location_stats_question", { convo });
+  return response ? `\n\n${response}` : "";
+}
 
 /**
  * Check if response contains a Mercado Libre link
@@ -140,8 +146,10 @@ async function appendStatsQuestionIfNeeded(responseText, convo, psid) {
 
   console.log("📊 Appending location stats question after ML link");
 
+  const statsQuestion = await generateStatsQuestion(convo);
+
   return {
-    text: responseText + STATS_QUESTION,
+    text: responseText + statsQuestion,
     askedStats: true
   };
 }
@@ -310,9 +318,14 @@ async function handleLocationStatsResponse(message, psid, convo) {
     locationStr = `CP ${location.zipcode}`;
   }
 
+  const response = await generateBotResponse("location_acknowledged", {
+    location: locationStr,
+    convo
+  });
+
   return {
     type: "text",
-    text: `¡Gracias! Anotado: ${locationStr} 📍\n\n¿Hay algo más en lo que te pueda ayudar?`
+    text: response
   };
 }
 
@@ -439,5 +452,5 @@ module.exports = {
   syncConversationLocationToUser,
   syncPOIToUser,
   syncConversationPOIToUser,
-  STATS_QUESTION
+  generateStatsQuestion
 };
