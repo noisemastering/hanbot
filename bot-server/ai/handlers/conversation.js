@@ -27,9 +27,6 @@ async function handleFutureInterest({ psid, convo, userMessage }) {
  * User needs to take action before continuing
  */
 async function handleWillGetBack({ psid, convo, userMessage }) {
-  // Detect if they mentioned measuring
-  const isMeasuring = /\b(medir|medidas|mido)\b/i.test(userMessage);
-
   await updateConversation(psid, {
     lastIntent: "will_get_back",
     leadStatus: "pending_action",
@@ -37,7 +34,7 @@ async function handleWillGetBack({ psid, convo, userMessage }) {
   });
 
   const response = await generateBotResponse("will_get_back", {
-    isMeasuring,
+    userMessage,
     convo
   });
 
@@ -77,10 +74,8 @@ async function handleStoreVisit({ psid, convo, userMessage }) {
     unknownCount: 0
   });
 
-  const mentionsMalla = /\b(malla|sombra)\b/i.test(userMessage);
-
   const response = await generateBotResponse("store_visit", {
-    mentionsProduct: mentionsMalla,
+    userMessage,
     storeAddress: "Calle Loma de San Gremal 108, bodega 73, Navex Park, Querétaro",
     convo
   });

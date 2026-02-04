@@ -70,16 +70,8 @@ async function handleProductComparison({ entities, psid, userMessage, convo }) {
     unknownCount: 0
   });
 
-  // Check what products are being compared
-  const isRaschelMono = /raschel.*monofilamento|monofilamento.*raschel/i.test(userMessage);
-  const isConfeccionadaRollo = /confeccionada.*rollo|rollo.*confeccionada/i.test(userMessage);
-
-  let comparisonType = 'general';
-  if (isRaschelMono) comparisonType = 'raschel_vs_monofilamento';
-  if (isConfeccionadaRollo) comparisonType = 'confeccionada_vs_rollo';
-
   const response = await generateBotResponse("product_comparison", {
-    comparisonType,
+    userMessage,
     convo
   });
 
