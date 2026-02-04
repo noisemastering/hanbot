@@ -283,11 +283,11 @@ async function registerUserIfNeeded(senderPsid) {
 // Bot persona names for comment replies
 const commentBotNames = ["Paula", "Sofía", "Camila", "Valeria", "Daniela"];
 
-// KILLSWITCH: Set FB_COMMENT_AUTO_REPLY=false in env to disable all comment auto-replies
+// KILLSWITCH: Set FB_COMMENT_AUTO_REPLY=true in env to enable comment auto-replies
 function isCommentAutoReplyEnabled() {
   const setting = process.env.FB_COMMENT_AUTO_REPLY;
-  // Enabled by default, set to 'false' to disable
-  return setting !== 'false' && setting !== '0';
+  // DISABLED by default, set to 'true' to enable
+  return setting === 'true' || setting === '1';
 }
 
 // KILLSWITCH: Set FB_SHIPPING_AUTO_REPLY=false to disable shipping-specific replies only
