@@ -72,18 +72,15 @@ async function handleLocation({ psid, userMessage, convo }) {
   // Detect if user mentioned a specific city
   const locationInfo = await detectMexicanLocation(userMessage);
 
-  // Check if they explicitly ask for address (ubicados, dirección)
-  const wantsFullAddress = /\bubicados?\b|\bdirecci[oó]n\b|\bd[oó]nde\s+est[aá]n?\s+ubicados/i.test(userMessage);
-
   await updateConversation(psid, {
     lastIntent: "location_query",
     unknownCount: 0
   });
 
+  // Let AI decide from context whether to give full address
   const response = await generateBotResponse("location_query", {
     userQuestion: userMessage,
     mentionedCity: locationInfo?.normalized || null,
-    wantsFullAddress,
     city: "Querétaro",
     address: businessInfo?.address || 'Calle Loma de San Gremal 108, bodega 73, Navex Park',
     shipsNationwide: true,
