@@ -255,19 +255,61 @@ async function handleProductInquiry({ entities, psid, convo, userMessage }) {
         return { type: "text", text: response };
       }
 
-      // Product not found - offer alternatives
+      // Product not found - find closest alternative
+      const requestedArea = w * h;
+      const availableSizes = await getAvailableSizes(convo);
+
+      // Find closest size by area
+      let closestSize = null;
+      let closestDiff = Infinity;
+
+      for (const size of availableSizes) {
+        const area = (size.width || 0) * (size.height || 0);
+        const diff = Math.abs(area - requestedArea);
+        if (diff < closestDiff) {
+          closestDiff = diff;
+          closestSize = size;
+        }
+      }
+
       await updateConversation(psid, {
         lastIntent: "size_not_available",
         requestedSize: `${w}x${h}`,
         unknownCount: 0
       });
 
-      const response = await generateBotResponse("size_not_available", {
+      // Build response with closest alternative
+      const responseData = {
         dimensions: `${w}x${h}m`,
         concerns: concerns,
         whatsapp: "https://wa.me/524425957432",
         convo
-      });
+      };
+
+      if (closestSize) {
+        responseData.alternativeSize = closestSize.sizeStr;
+        responseData.alternativePrice = closestSize.price;
+
+        // Get link for alternative
+        const altProduct = await ProductFamily.findOne({
+          sellable: true,
+          active: true,
+          size: new RegExp(closestSize.sizeStr.replace('x', '\\s*[xX×]\\s*'), 'i')
+        }).lean();
+
+        if (altProduct) {
+          const altLink = altProduct.onlineStoreLinks?.find(l => l.isPreferred)?.url ||
+                         altProduct.onlineStoreLinks?.[0]?.url;
+          if (altLink) {
+            responseData.alternativeLink = await generateClickLink(psid, altLink, {
+              productName: altProduct.name,
+              productId: altProduct._id
+            });
+          }
+        }
+      }
+
+      const response = await generateBotResponse("size_not_available", responseData);
 
       return { type: "text", text: response };
 
