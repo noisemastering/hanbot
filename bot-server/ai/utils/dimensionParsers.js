@@ -61,14 +61,15 @@ function parseConfeccionadaDimensions(str) {
   s = s.replace(/(\d+)\s*y\s*medio/gi, (_, num) => `${num}.5`);
 
   // Pattern 1: "N de largo x M de ancho" or "N de ancho x M de largo"
-  // Examples: "8 mts. de largo x 5 de ancho", "5 de ancho por 8 de largo", "4 metros de ancho y 10 de largo"
+  // Examples: "8 mts. de largo x 5 de ancho", "5 de ancho por 8 de largo", "3 largo x 2 ancho"
   // Note: "d" is common abbreviation for "de" in Mexican Spanish (e.g., "7 mtrs d ancho")
-  const largoAnchoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*d(?:e)?\s*largo\s*(?:x|×|por|y)\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*(?:d(?:e)?\s*ancho)?/i;
-  const anchoLargoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*d(?:e)?\s*ancho\s*(?:x|×|por|y)\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*(?:d(?:e)?\s*largo)?/i;
+  // The "de"/"d" is now optional to handle "3 largo x 2 ancho" format
+  const largoAnchoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*(?:d(?:e)?\s*)?largo\s*(?:x|×|por|y)\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*(?:(?:d(?:e)?\s*)?ancho)?/i;
+  const anchoLargoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*(?:d(?:e)?\s*)?ancho\s*(?:x|×|por|y)\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*(?:(?:d(?:e)?\s*)?largo)?/i;
 
   // Pattern 1b: "N de ancho y de largo M" (number comes AFTER largo)
   // Example: "8 d ancho y d largo 610" -> width=8, height=6.10
-  const anchoYLargoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*d(?:e)?\s*ancho\s*(?:x|×|por|y)\s*d(?:e)?\s*largo\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?/i;
+  const anchoYLargoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*(?:d(?:e)?\s*)?ancho\s*(?:x|×|por|y)\s*(?:d(?:e)?\s*)?largo\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?/i;
 
   let m = s.match(anchoYLargoPattern);
   if (m) {
