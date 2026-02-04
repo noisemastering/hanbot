@@ -10,6 +10,35 @@
 const FEET_TO_METERS = 0.3048;
 
 /**
+ * Convert Spanish number words to digits
+ * "seis por cuatro" -> "6 por 4"
+ * "tres y medio" -> "3.5"
+ */
+function convertSpanishNumbersToDigits(text) {
+  const numberMap = {
+    'cero': '0', 'uno': '1', 'una': '1', 'dos': '2', 'tres': '3', 'cuatro': '4',
+    'cinco': '5', 'seis': '6', 'siete': '7', 'ocho': '8', 'nueve': '9',
+    'diez': '10', 'once': '11', 'doce': '12'
+  };
+
+  let converted = text.toLowerCase();
+
+  // Handle "NUMBER y medio" (e.g., "tres y medio" -> "3.5")
+  converted = converted.replace(/\b(uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s+y\s+medio\b/gi, (match, num) => {
+    const numVal = numberMap[num.toLowerCase()];
+    return numVal ? `${numVal}.5` : match;
+  });
+
+  // Replace simple number words
+  for (const [word, digit] of Object.entries(numberMap)) {
+    const regex = new RegExp(`\\b${word}\\b`, 'gi');
+    converted = converted.replace(regex, digit);
+  }
+
+  return converted;
+}
+
+/**
  * Parse dimensions for CONFECCIONADA products (malla sombra confeccionada, etc.)
  * These are rectangular products with dimensions in whole meters.
  *
@@ -26,7 +55,9 @@ const FEET_TO_METERS = 0.3048;
 function parseConfeccionadaDimensions(str) {
   if (!str) return null;
 
-  let s = String(str).toLowerCase();
+  // First, convert Spanish number words to digits
+  // "seis por cuatro" -> "6 por 4"
+  let s = convertSpanishNumbersToDigits(String(str).toLowerCase());
 
   // Check if dimensions are in feet
   const isFeet = /\b(pies?|ft|feet|foot)\b/i.test(s);
