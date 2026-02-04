@@ -230,17 +230,22 @@ async function handleAcknowledgment(cleanMsg, psid, convo) {
     console.log("👍 Acknowledgment detected:", cleanMsg);
     await updateConversation(psid, { lastIntent: "acknowledgment", unknownCount: 0 });
 
-    const userName = convo.userName;
-    if (userName) {
-      return {
-        type: "text",
-        text: `Perfecto, ${userName}! ¿Hay algo más en lo que pueda ayudarte?`
-      };
+    // Check if we should ask for location stats (after they acknowledged receiving a link)
+    const { askLocationStatsQuestion } = require("../utils/locationStats");
+    const locationQuestion = await askLocationStatsQuestion(psid, convo);
+    if (locationQuestion) {
+      console.log("📊 Asking location stats after acknowledgment");
+      return locationQuestion;
     }
-    return {
-      type: "text",
-      text: "Perfecto! ¿Hay algo más en lo que pueda ayudarte?"
-    };
+
+    // Otherwise, ask if they need anything else
+    const { generateBotResponse } = require("../responseGenerator");
+    const response = await generateBotResponse("acknowledgment", {
+      userName: convo?.userName,
+      convo
+    });
+
+    return { type: "text", text: response };
   }
   return null;
 }

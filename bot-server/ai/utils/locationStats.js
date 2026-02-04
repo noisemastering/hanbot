@@ -115,43 +115,85 @@ function containsMLLink(responseText) {
 }
 
 /**
- * Append stats question to response if conditions are met
+ * Mark that we should ask for location on the NEXT user message
+ * (after they acknowledge receiving the link)
  * @param {string} responseText - The bot's response
  * @param {object} convo - Conversation state
  * @param {string} psid - User's PSID
- * @returns {object} { text: modifiedText, askedStats: boolean }
+ * @returns {object} { text: unchanged, markedForStats: boolean }
  */
-async function appendStatsQuestionIfNeeded(responseText, convo, psid) {
-  // Don't ask if already asked
+async function markForLocationStatsIfNeeded(responseText, convo, psid) {
+  // Don't mark if already asked
   if (convo.askedLocationStats) {
-    return { text: responseText, askedStats: false };
+    return { text: responseText, markedForStats: false };
   }
 
-  // Don't ask if we already have their location
+  // Don't mark if we already have their location
   if (convo.city && convo.stateMx) {
-    return { text: responseText, askedStats: false };
+    return { text: responseText, markedForStats: false };
   }
 
-  // Only ask if response contains ML link
+  // Only mark if response contains ML link
   if (!containsMLLink(responseText)) {
-    return { text: responseText, askedStats: false };
+    return { text: responseText, markedForStats: false };
   }
 
-  // Append the question and mark as asked
+  // Mark to ask on NEXT message (not now)
   await updateConversation(psid, {
-    askedLocationStats: true,
-    pendingLocationResponse: true,
+    shouldAskLocationStats: true,
     lastLinkSentAt: new Date()
   });
 
-  console.log("📊 Appending location stats question after ML link");
-
-  const statsQuestion = await generateStatsQuestion(convo);
+  console.log("📊 Marked to ask location stats on next user message");
 
   return {
-    text: responseText + statsQuestion,
-    askedStats: true
+    text: responseText, // Don't modify the response
+    markedForStats: true
   };
+}
+
+/**
+ * Check if we should ask for location stats now (user just acknowledged link)
+ * @param {object} convo - Conversation state
+ * @returns {boolean}
+ */
+function shouldAskLocationStatsNow(convo) {
+  // Check if we marked to ask and haven't asked yet
+  if (!convo.shouldAskLocationStats) return false;
+  if (convo.askedLocationStats) return false;
+  if (convo.city && convo.stateMx) return false;
+  return true;
+}
+
+/**
+ * Generate the location stats question as a standalone response
+ * Call this when user acknowledges the link
+ * @param {string} psid - User's PSID
+ * @param {object} convo - Conversation state
+ * @returns {object|null} Response object or null
+ */
+async function askLocationStatsQuestion(psid, convo) {
+  if (!shouldAskLocationStatsNow(convo)) {
+    return null;
+  }
+
+  // Mark as asked
+  await updateConversation(psid, {
+    askedLocationStats: true,
+    shouldAskLocationStats: false,
+    pendingLocationResponse: true
+  });
+
+  console.log("📊 Asking location stats question after user acknowledgment");
+
+  const response = await generateBotResponse("location_stats_question", { convo });
+
+  return response ? { type: "text", text: response } : null;
+}
+
+// Keep old function name for backwards compatibility during migration
+async function appendStatsQuestionIfNeeded(responseText, convo, psid) {
+  return await markForLocationStatsIfNeeded(responseText, convo, psid);
 }
 
 /**
@@ -445,7 +487,10 @@ async function syncConversationPOIToUser(psid, convo) {
 
 module.exports = {
   containsMLLink,
-  appendStatsQuestionIfNeeded,
+  appendStatsQuestionIfNeeded, // Legacy - now just marks for later
+  markForLocationStatsIfNeeded,
+  shouldAskLocationStatsNow,
+  askLocationStatsQuestion,
   parseLocationResponse,
   handleLocationStatsResponse,
   syncLocationToUser,
