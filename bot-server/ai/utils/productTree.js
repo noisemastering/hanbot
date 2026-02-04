@@ -187,12 +187,21 @@ async function navigateForAttribute(currentProductId, attributeType, attributeVa
 }
 
 /**
- * Parse dimensions from a query string (e.g., "4x5", "5x4m", "4 x 5")
+ * Parse dimensions from a query string (e.g., "4x5", "5x4m", "4 x 5", "seis por cuatro")
  * Returns normalized { w, h } with smaller dimension first
  */
 function parseDimensionsFromQuery(query) {
   if (!query) return null;
-  const match = query.match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/);
+
+  // Convert Spanish numbers first
+  const { convertSpanishNumbers } = require('./spanishNumbers');
+  const converted = convertSpanishNumbers(query);
+
+  // Try various patterns
+  let match = converted.match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/);
+  if (!match) {
+    match = converted.match(/(\d+(?:\.\d+)?)\s*por\s*(\d+(?:\.\d+)?)/);
+  }
   if (!match) return null;
 
   const d1 = parseFloat(match[1]);
