@@ -567,10 +567,26 @@ function quickClassify(message, dbIntents = null) {
           const regex = new RegExp(pattern, 'i');
           if (regex.test(msg)) {
             console.log(`✅ Pattern match for intent "${intent.key}": ${pattern}`);
+
+            // Extract dimensions if present (for price queries with sizes like "7x11")
+            const entities = {};
+            const dimPattern = /(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*(?:x|×|\*|por)\s*(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?/i;
+            const dimMatch = msg.match(dimPattern);
+            if (dimMatch) {
+              const d1 = parseFloat(dimMatch[1].replace(',', '.'));
+              const d2 = parseFloat(dimMatch[2].replace(',', '.'));
+              if (!isNaN(d1) && !isNaN(d2)) {
+                entities.width = Math.min(d1, d2);
+                entities.height = Math.max(d1, d2);
+                entities.dimensions = `${d1}x${d2}`;
+                console.log(`⚡ Extracted dimensions from DB pattern match: ${d1}x${d2}`);
+              }
+            }
+
             return {
               intent: intent.key,
               product: PRODUCTS.UNKNOWN,
-              entities: {},
+              entities,
               confidence: 0.92,
               matchedPattern: pattern
             };
