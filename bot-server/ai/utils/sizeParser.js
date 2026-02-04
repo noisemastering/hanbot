@@ -1,9 +1,29 @@
 // ai/utils/sizeParser.js
 // Utility to parse dimensions from user messages
 
+// Convert Spanish number words to digits
+function convertSpanishNumbers(text) {
+  const numberMap = {
+    'cero': '0', 'uno': '1', 'una': '1', 'dos': '2', 'tres': '3', 'cuatro': '4',
+    'cinco': '5', 'seis': '6', 'siete': '7', 'ocho': '8', 'nueve': '9',
+    'diez': '10', 'once': '11', 'doce': '12'
+  };
+  let converted = text.toLowerCase();
+  converted = converted.replace(/\b(uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s+y\s+medio\b/gi, (match, num) => {
+    const numVal = numberMap[num.toLowerCase()];
+    return numVal ? `${numVal}.5` : match;
+  });
+  for (const [word, digit] of Object.entries(numberMap)) {
+    const regex = new RegExp(`\\b${word}\\b`, 'gi');
+    converted = converted.replace(regex, digit);
+  }
+  return converted;
+}
+
 /**
  * Parse dimensions from a text string
  * Handles formats like: "3.5x4", "3.5 x 4", "3,5 por 4", "3.5m x 4m", "3.5 de 4"
+ * Also handles Spanish: "seis por cuatro" -> 6x4
  *
  * @param {string} text - User message containing dimensions
  * @returns {object|null} { width, length, hasFractional, raw } or null if not found
@@ -11,8 +31,8 @@
 function parseDimensions(text) {
   if (!text) return null;
 
-  // Normalize: replace commas with dots, convert to lowercase
-  let normalized = text.toLowerCase()
+  // First convert Spanish number words to digits
+  let normalized = convertSpanishNumbers(text.toLowerCase())
     .replace(/,/g, '.')
     .replace(/\s+/g, ' ');
 
