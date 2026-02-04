@@ -77,20 +77,15 @@ async function handleStoreVisit({ psid, convo, userMessage }) {
     unknownCount: 0
   });
 
-  // Check if they mentioned a product
   const mentionsMalla = /\b(malla|sombra)\b/i.test(userMessage);
 
-  if (mentionsMalla) {
-    return {
-      type: "text",
-      text: "¡Perfecto! Te esperamos. ¿Qué medida de malla sombra ocupas?"
-    };
-  }
+  const response = await generateBotResponse("store_visit", {
+    mentionsProduct: mentionsMalla,
+    storeAddress: "Calle Loma de San Gremal 108, bodega 73, Navex Park, Querétaro",
+    convo
+  });
 
-  return {
-    type: "text",
-    text: "¡Perfecto! Te esperamos. Estamos en Querétaro: Calle Loma de San Gremal 108, bodega 73, Navex Park.\n\n¿Hay algo que pueda adelantarte?"
-  };
+  return { type: "text", text: response };
 }
 
 /**
@@ -103,10 +98,9 @@ async function handlePurchaseDeferral({ psid, convo }) {
     unknownCount: 0
   });
 
-  return {
-    type: "text",
-    text: "Excelente, quedamos a tus órdenes. Aquí estaré cuando lo necesites."
-  };
+  const response = await generateBotResponse("purchase_deferral", { convo });
+
+  return { type: "text", text: response };
 }
 
 module.exports = {

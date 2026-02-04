@@ -31,31 +31,32 @@ async function handleCatalogRequest({ psid, convo }) {
     const largest = sorted[sorted.length - 1];
 
     // Build size list - show key sizes with prices
-    // Pick: smallest, a few middle ones, largest
     const keyIndices = [0];
     if (sorted.length > 4) keyIndices.push(Math.floor(sorted.length * 0.25));
     if (sorted.length > 2) keyIndices.push(Math.floor(sorted.length * 0.5));
     if (sorted.length > 4) keyIndices.push(Math.floor(sorted.length * 0.75));
     keyIndices.push(sorted.length - 1);
 
-    // Remove duplicates and get unique sizes
     const uniqueIndices = [...new Set(keyIndices)];
     const keySizes = uniqueIndices.map(i => sorted[i]);
+    const sizeList = keySizes.map(s => `${s.sizeStr} - $${s.price}`).join(', ');
 
-    // Format as list
-    const sizeList = keySizes.map(s => `• ${s.sizeStr} - $${s.price}`).join('\n');
-
-    const response = `Estas son algunas de nuestras medidas disponibles:\n\n${sizeList}\n\nTenemos ${sorted.length} medidas en total, desde ${smallest.sizeStr} hasta ${largest.sizeStr}.\n\n¿Qué medida te interesa?`;
+    // Let AI generate the response with real data
+    const response = await generateBotResponse("catalog_request", {
+      sizeList,
+      totalSizes: sorted.length,
+      smallestSize: smallest.sizeStr,
+      smallestPrice: smallest.price,
+      largestSize: largest.sizeStr,
+      largestPrice: largest.price,
+      convo
+    });
 
     return { type: "text", text: response };
   }
 
   // Fallback if no sizes found
-  const response = await generateBotResponse("catalog_request", {
-    hasVariousSizes: true,
-    sizeRange: '2x2m hasta 6x10m',
-    convo
-  });
+  const response = await generateBotResponse("catalog_request", { convo });
 
   return { type: "text", text: response };
 }
