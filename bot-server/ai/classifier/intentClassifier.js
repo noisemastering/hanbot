@@ -102,6 +102,9 @@ const INTENTS = {
   MULTI_QUESTION: "multi_question",        // "Precio y ubicación", multiple questions in one
   WILL_GET_BACK: "will_get_back",          // "Mañana te aviso", "Voy a medir"
   FUTURE_INTEREST: "future_interest",      // "En un par de meses", "Más adelante"
+  LOCATION_TOO_FAR: "location_too_far",    // "Muy lejos", "Cómo puedo adquirir desde aquí"
+  STORE_VISIT: "store_visit",              // "Los visito", "Voy a su tienda"
+  PURCHASE_DEFERRAL: "purchase_deferral",  // "Lo voy a pensar", "Después te aviso"
 
   // ===== ESCALATION =====
   HUMAN_REQUEST: "human_request",          // "Quiero hablar con alguien", "Agente"
@@ -365,6 +368,9 @@ AVAILABLE INTENTS (choose the most specific one):
 - multi_question: Multiple questions in one message (price AND shipping, etc.)
 - will_get_back: "Mañana te aviso", "Voy a medir", "Al rato te confirmo"
 - future_interest: "En un par de meses", "Más adelante", "Ahorita no pero después sí"
+- store_visit: "Los visito", "Voy a su tienda", "Puedo ir a ver?", "Quiero ir a verlas"
+- purchase_deferral: "Lo voy a pensar", "Después te aviso", "Déjame ver"
+- location_too_far: "Muy lejos", "Están muy lejos", "Cómo puedo adquirir desde aquí?", "No me queda cerca"
 
 [ESCALATION]
 - human_request: "Quiero hablar con alguien", "Un agente", "Persona real"
@@ -397,6 +403,9 @@ CRITICAL EXAMPLES:
 - "En un par de meses" → intent: "future_interest"
 - "4x5" (just dimensions) → intent: "size_specification"
 - "Envían a Guadalajara?" → intent: "shipping_query", entities.location: "Guadalajara"
+- "Muy lejos, cómo le hago?" → intent: "location_too_far" (NOT frustration - they're saying our location is too far)
+- "Los visito en su tienda" → intent: "store_visit"
+- "Lo voy a pensar" → intent: "purchase_deferral"
 `;
   }
 
@@ -410,6 +419,7 @@ ENTITY EXTRACTION:
 - borde_length: 6, 9, 18, or 54 (only for borde_separador)
 - dimensions: full dimension string if detected (e.g., "4x5")
 - location: city or state if mentioned
+- concerns: array of secondary topics/concerns the user mentions (e.g., ["durability", "price", "features", "reinforcement", "weather_resistance", "installation"]). Extract ALL concerns, don't lose information.
 
 Respond with ONLY valid JSON, no explanation:
 {
@@ -423,7 +433,8 @@ Respond with ONLY valid JSON, no explanation:
     "color": "<string or null>",
     "borde_length": <number or null>,
     "dimensions": "<string or null>",
-    "location": "<string or null>"
+    "location": "<string or null>,
+    "concerns": <array of strings or null>
   },
   "confidence": <0.0-1.0>,
   "suggested_action": "<optional: what the bot should do next>"
@@ -464,8 +475,15 @@ async function classifyMessage(message, sourceContext = null, conversationFlow =
     const result = JSON.parse(response.choices[0].message.content);
 
     // Validate and normalize the result
+    // Map unknown intents with dimensions to product_inquiry
+    let mappedIntent = INTENTS[result.intent?.toUpperCase()] || result.intent;
+    if (!INTENTS[result.intent?.toUpperCase()] && result.entities?.dimensions) {
+      console.log(`🔄 Unknown intent "${result.intent}" with dimensions, mapping to product_inquiry`);
+      mappedIntent = INTENTS.PRODUCT_INQUIRY;
+    }
+
     const classification = {
-      intent: INTENTS[result.intent?.toUpperCase()] || result.intent || INTENTS.UNCLEAR,
+      intent: mappedIntent || INTENTS.UNCLEAR,
       product: PRODUCTS[result.product?.toUpperCase()] || result.product || PRODUCTS.UNKNOWN,
       entities: {
         width: result.entities?.width || null,
@@ -475,7 +493,8 @@ async function classifyMessage(message, sourceContext = null, conversationFlow =
         color: result.entities?.color || null,
         borde_length: result.entities?.borde_length || null,
         dimensions: result.entities?.dimensions || null,
-        location: result.entities?.location || null
+        location: result.entities?.location || null,
+        concerns: result.entities?.concerns || null
       },
       confidence: result.confidence || 0.5,
       suggestedAction: result.suggested_action || null,
@@ -523,6 +542,20 @@ async function classifyMessage(message, sourceContext = null, conversationFlow =
  */
 function quickClassify(message, dbIntents = null) {
   const msg = message.toLowerCase().trim();
+
+  // Skip quick classification for messages that need AI interpretation
+  // These contain ambiguous words that could change the intent
+  if (/\b(lejos|mu+y\s*lejos|cómo\s*(le\s*hago|puedo|adquirir))\b/i.test(msg)) {
+    console.log(`⚡ Skipping quick classify - needs AI interpretation (location/distance)`);
+    return null;
+  }
+
+  // Skip quick classification for long/complex messages (likely multi-topic)
+  // These need AI to extract all concerns and entities properly
+  if (message.length > 100) {
+    console.log(`⚡ Skipping quick classify - message too long (${message.length} chars), needs AI`);
+    return null;
+  }
 
   // First, check DB intent patterns (highest priority for custom patterns)
   if (dbIntents && dbIntents.length > 0) {

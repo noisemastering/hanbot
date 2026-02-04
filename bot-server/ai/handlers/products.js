@@ -197,6 +197,110 @@ async function handleSmallestProduct({ psid, convo }) {
 }
 
 /**
+ * Handle product inquiry with dimensions - "Necesito 3x3", "Malla de 4x5"
+ * Looks up product, gets price/link, and addresses any concerns
+ */
+async function handleProductInquiry({ entities, psid, convo, userMessage }) {
+  const { width, height, dimensions, location, concerns } = entities;
+
+  // If we have dimensions, look up the product
+  if (width && height) {
+    const w = Math.min(Math.floor(width), Math.floor(height));
+    const h = Math.max(Math.floor(width), Math.floor(height));
+
+    // Build size regex for matching
+    const sizeRegex = new RegExp(
+      `^\\s*(${w}\\s*m?\\s*[xX×]\\s*${h}|${h}\\s*m?\\s*[xX×]\\s*${w})\\s*m?\\s*$`,
+      'i'
+    );
+
+    try {
+      const product = await ProductFamily.findOne({
+        sellable: true,
+        active: true,
+        size: sizeRegex
+      }).sort({ price: 1 }).lean();
+
+      if (product) {
+        // Get purchase link
+        const preferredLink = product.onlineStoreLinks?.find(l => l.isPreferred)?.url ||
+                             product.onlineStoreLinks?.[0]?.url;
+
+        let trackedLink = null;
+        if (preferredLink) {
+          trackedLink = await generateClickLink(psid, preferredLink, {
+            productName: product.name,
+            productId: product._id,
+            city: convo?.city || location,
+            stateMx: convo?.stateMx
+          });
+        }
+
+        await updateConversation(psid, {
+          lastIntent: "product_inquiry_quoted",
+          requestedSize: `${w}x${h}`,
+          unknownCount: 0,
+          city: location || convo?.city
+        });
+
+        const response = await generateBotResponse("price_quote", {
+          dimensions: `${w}x${h}m`,
+          price: product.price,
+          link: trackedLink,
+          concerns: concerns,
+          userMessage,
+          convo: { ...convo, city: location || convo?.city }
+        });
+
+        return { type: "text", text: response };
+      }
+
+      // Product not found - offer alternatives
+      await updateConversation(psid, {
+        lastIntent: "size_not_available",
+        requestedSize: `${w}x${h}`,
+        unknownCount: 0
+      });
+
+      const response = await generateBotResponse("size_not_available", {
+        dimensions: `${w}x${h}m`,
+        concerns: concerns,
+        whatsapp: "https://wa.me/524425957432",
+        convo
+      });
+
+      return { type: "text", text: response };
+
+    } catch (err) {
+      console.error("Error finding product:", err);
+    }
+  }
+
+  // No dimensions - general product inquiry
+  await updateConversation(psid, {
+    lastIntent: "product_inquiry_general",
+    unknownCount: 0
+  });
+
+  const response = await generateBotResponse("product_inquiry", {
+    userMessage,
+    concerns: concerns,
+    convo
+  });
+
+  return { type: "text", text: response };
+}
+
+/**
+ * Handle size specification - "4x5", "3 metros por 4"
+ * Same as product inquiry but intent is more specific
+ */
+async function handleSizeSpecification({ entities, psid, convo, userMessage }) {
+  // Delegate to product inquiry handler
+  return handleProductInquiry({ entities, psid, convo, userMessage });
+}
+
+/**
  * Handle durability query - "Cuánto tiempo dura?", "Vida útil?"
  */
 async function handleDurabilityQuery({ psid, convo }) {
@@ -219,5 +323,7 @@ module.exports = {
   handleProductComparison,
   handleLargestProduct,
   handleSmallestProduct,
-  handleDurabilityQuery
+  handleDurabilityQuery,
+  handleProductInquiry,
+  handleSizeSpecification
 };

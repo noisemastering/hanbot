@@ -51,6 +51,9 @@ const handlers = {
   [INTENTS.LARGEST_PRODUCT]: productsHandlers.handleLargestProduct,
   [INTENTS.SMALLEST_PRODUCT]: productsHandlers.handleSmallestProduct,
   [INTENTS.DURABILITY_QUERY]: productsHandlers.handleDurabilityQuery,
+  [INTENTS.PRODUCT_INQUIRY]: productsHandlers.handleProductInquiry,
+  [INTENTS.SIZE_SPECIFICATION]: productsHandlers.handleSizeSpecification,
+  [INTENTS.PRICE_QUERY]: productsHandlers.handleProductInquiry,
 
   // ===== PURCHASE =====
   [INTENTS.STORE_LINK_REQUEST]: purchaseHandlers.handleStoreLinkRequest,
@@ -70,6 +73,9 @@ const handlers = {
   [INTENTS.FUTURE_INTEREST]: conversationHandlers.handleFutureInterest,
   [INTENTS.WILL_GET_BACK]: conversationHandlers.handleWillGetBack,
   [INTENTS.CONFIRMATION]: conversationHandlers.handleConfirmation,
+  [INTENTS.STORE_VISIT]: conversationHandlers.handleStoreVisit,
+  [INTENTS.PURCHASE_DEFERRAL]: conversationHandlers.handlePurchaseDeferral,
+  [INTENTS.LOCATION_TOO_FAR]: conversationHandlers.handleLocationTooFar,
 };
 
 /**

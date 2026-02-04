@@ -98,10 +98,29 @@ async function handlePurchaseDeferral({ psid, convo }) {
   return { type: "text", text: response };
 }
 
+/**
+ * Handle location too far - "Muy lejos", "Cómo puedo adquirir"
+ */
+async function handleLocationTooFar({ psid, convo, userMessage }) {
+  await updateConversation(psid, {
+    lastIntent: "location_too_far",
+    unknownCount: 0
+  });
+
+  const response = await generateBotResponse("location_too_far", {
+    userMessage,
+    leadScore: convo?.leadScore || null,
+    convo
+  });
+
+  return { type: "text", text: response };
+}
+
 module.exports = {
   handleFutureInterest,
   handleWillGetBack,
   handleConfirmation,
   handleStoreVisit,
-  handlePurchaseDeferral
+  handlePurchaseDeferral,
+  handleLocationTooFar
 };
