@@ -583,6 +583,14 @@ function quickClassify(message, dbIntents = null) {
               }
             }
 
+            // Extract color if present
+            const colorPattern = /\b(negro|negra|beige|rojo|roja|verde|azul|blanco|blanca|gris|cafe|café|marr[oó]n)\b/i;
+            const colorMatch = msg.match(colorPattern);
+            if (colorMatch) {
+              entities.color = colorMatch[1].toLowerCase();
+              console.log(`⚡ Extracted color from DB pattern match: ${entities.color}`);
+            }
+
             return {
               intent: intent.key,
               product: PRODUCTS.UNKNOWN,

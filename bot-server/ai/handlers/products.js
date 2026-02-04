@@ -196,12 +196,40 @@ async function handleSmallestProduct({ psid, convo }) {
   return { type: "text", text: response };
 }
 
+// Available colors for malla sombra confeccionada
+const AVAILABLE_COLORS = ['beige', 'negro'];
+
 /**
  * Handle product inquiry with dimensions - "Necesito 3x3", "Malla de 4x5"
  * Looks up product, gets price/link, and addresses any concerns
  */
 async function handleProductInquiry({ entities, psid, convo, userMessage }) {
-  const { width, height, dimensions, location, concerns } = entities;
+  const { width, height, dimensions, location, concerns, color } = entities;
+
+  // Check if requested color is available
+  if (color) {
+    const normalizedColor = color.toLowerCase().trim();
+    const isColorAvailable = AVAILABLE_COLORS.some(c =>
+      normalizedColor.includes(c) || c.includes(normalizedColor)
+    );
+
+    if (!isColorAvailable) {
+      await updateConversation(psid, {
+        lastIntent: "color_not_available",
+        requestedColor: color,
+        unknownCount: 0
+      });
+
+      const response = await generateBotResponse("color_not_available", {
+        requestedColor: color,
+        availableColors: AVAILABLE_COLORS.join(" y "),
+        dimensions: width && height ? `${Math.min(width, height)}x${Math.max(width, height)}m` : null,
+        convo
+      });
+
+      return { type: "text", text: response };
+    }
+  }
 
   // If we have dimensions, look up the product
   if (width && height) {
