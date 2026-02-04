@@ -770,18 +770,25 @@ app.post("/webhook", async (req, res) => {
                 // Auto-reply to comments (with killswitch)
                 if (comment_id && isCommentAutoReplyEnabled()) {
                   const operatorName = commentBotNames[Math.floor(Math.random() * commentBotNames.length)];
+                  const { generateBotResponse } = require('./ai/responseGenerator');
                   let replyMessage = null;
                   let replyType = null;
 
                   // Check for shipping question first (high confidence) - has its own killswitch
                   if (isShippingAutoReplyEnabled() && isShippingQuestion(message)) {
-                    replyMessage = `¡Hola! Sí hacemos envíos a todo México por paquetería. Escríbenos un mensaje privado para cotizarte, soy ${operatorName}.`;
+                    replyMessage = await generateBotResponse("comment_reply_shipping", {
+                      operatorName,
+                      userComment: message
+                    });
                     replyType = 'shipping';
                     console.log(`   📦 Shipping question detected, auto-replying...`);
                   }
                   // Fall back to general question detection
                   else if (isQuestion(message)) {
-                    replyMessage = `Hola, soy ${operatorName} de Hanlob, si requieres más información escríbenos un mensaje privado.`;
+                    replyMessage = await generateBotResponse("comment_reply_general", {
+                      operatorName,
+                      userComment: message
+                    });
                     replyType = 'general';
                     console.log(`   💬 General question detected, auto-replying...`);
                   }
