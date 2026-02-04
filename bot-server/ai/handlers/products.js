@@ -16,12 +16,44 @@ async function handleCatalogRequest({ psid, convo }) {
     unknownCount: 0
   });
 
-  // Don't dump entire product list - ask for dimensions instead
-  // This follows the CLAUDE.md rule: "NEVER dump long product lists"
+  // Fetch REAL sizes from database
+  const availableSizes = await getAvailableSizes(convo);
+
+  if (availableSizes.length > 0) {
+    // Sort by area
+    const sorted = [...availableSizes].sort((a, b) => {
+      const areaA = (a.width || 0) * (a.height || 0);
+      const areaB = (b.width || 0) * (b.height || 0);
+      return areaA - areaB;
+    });
+
+    const smallest = sorted[0];
+    const largest = sorted[sorted.length - 1];
+
+    // Build size list - show key sizes with prices
+    // Pick: smallest, a few middle ones, largest
+    const keyIndices = [0];
+    if (sorted.length > 4) keyIndices.push(Math.floor(sorted.length * 0.25));
+    if (sorted.length > 2) keyIndices.push(Math.floor(sorted.length * 0.5));
+    if (sorted.length > 4) keyIndices.push(Math.floor(sorted.length * 0.75));
+    keyIndices.push(sorted.length - 1);
+
+    // Remove duplicates and get unique sizes
+    const uniqueIndices = [...new Set(keyIndices)];
+    const keySizes = uniqueIndices.map(i => sorted[i]);
+
+    // Format as list
+    const sizeList = keySizes.map(s => `• ${s.sizeStr} - $${s.price}`).join('\n');
+
+    const response = `Estas son algunas de nuestras medidas disponibles:\n\n${sizeList}\n\nTenemos ${sorted.length} medidas en total, desde ${smallest.sizeStr} hasta ${largest.sizeStr}.\n\n¿Qué medida te interesa?`;
+
+    return { type: "text", text: response };
+  }
+
+  // Fallback if no sizes found
   const response = await generateBotResponse("catalog_request", {
     hasVariousSizes: true,
     sizeRange: '2x2m hasta 6x10m',
-    hasRolls: true,
     convo
   });
 
