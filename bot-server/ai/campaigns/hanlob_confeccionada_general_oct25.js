@@ -4,50 +4,14 @@ const { getCampaignProductFromConversation } = require("../../utils/productCompa
 const { generateClickLink } = require("../../tracking");
 const { getAvailableSizes } = require("../../measureHandler");
 const { sendHandoffNotification } = require("../../services/pushNotifications");
-
-// Convert Spanish number words to digits
-function convertSpanishNumbers(text) {
-  const numberMap = {
-    'cero': '0', 'uno': '1', 'una': '1', 'dos': '2', 'tres': '3', 'cuatro': '4',
-    'cinco': '5', 'seis': '6', 'siete': '7', 'ocho': '8', 'nueve': '9',
-    'diez': '10', 'once': '11', 'doce': '12'
-  };
-  let converted = text.toLowerCase();
-  // Handle "NUMBER y medio" (e.g., "tres y medio" -> "3.5")
-  converted = converted.replace(/\b(uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s+y\s+medio\b/gi, (match, num) => {
-    const numVal = numberMap[num.toLowerCase()];
-    return numVal ? `${numVal}.5` : match;
-  });
-  for (const [word, digit] of Object.entries(numberMap)) {
-    const regex = new RegExp(`\\b${word}\\b`, 'gi');
-    converted = converted.replace(regex, digit);
-  }
-  return converted;
-}
+const { parseConfeccionadaDimensions } = require("../utils/dimensionParsers");
 
 // --- Helpers ---
+// Use centralized parser - converts Spanish numbers and handles all formats
 function parseSize(str) {
-  // First convert Spanish number words to digits
-  const converted = convertSpanishNumbers(String(str));
-
-  // Pattern 1: Simple "3x4" or "3 x 4"
-  let m = converted.match(/(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)/i);
-
-  // Pattern 2: "3 metros x 1.70" - handles "metros" between number and x
-  if (!m) {
-    m = converted.match(/(\d+(?:\.\d+)?)\s*metros?\s*x\s*(\d+(?:\.\d+)?)/i);
-  }
-
-  // Pattern 3: "3 por 4" or "3 metros por 4"
-  if (!m) {
-    m = converted.match(/(\d+(?:\.\d+)?)\s*(?:metros?\s+)?por\s+(\d+(?:\.\d+)?)/i);
-  }
-
-  if (!m) return null;
-  const w = parseFloat(m[1]);
-  const h = parseFloat(m[2]);
-  if (Number.isNaN(w) || Number.isNaN(h)) return null;
-  return { w, h, area: w * h };
+  const result = parseConfeccionadaDimensions(str);
+  if (!result) return null;
+  return { w: result.width, h: result.height, area: result.area };
 }
 
 function normalizeVariants(variants = []) {
