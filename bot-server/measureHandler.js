@@ -7,6 +7,7 @@
 //
 const ProductFamily = require("./models/ProductFamily");
 const { extractReference } = require("./referenceEstimator");
+const { convertSpanishNumbers } = require("./ai/utils/spanishNumbers");
 
 /**
  * Check if we're in business hours (Mon-Fri, 9am-6pm Mexico City time)
@@ -39,67 +40,6 @@ function isCustomOrder(dimensions) {
   const maxSide = Math.max(dimensions.width, dimensions.height);
 
   return minSide >= 8 && maxSide >= 8;
-}
-
-/**
- * Converts Spanish number words to digits
- * @param {string} text - Text containing number words
- * @returns {string} - Text with numbers converted to digits
- */
-function convertSpanishNumbersToDigits(text) {
-  const numberMap = {
-    'cero': '0', 'uno': '1', 'una': '1', 'dos': '2', 'tres': '3', 'cuatro': '4',
-    'cinco': '5', 'seis': '6', 'siete': '7', 'ocho': '8', 'nueve': '9',
-    'diez': '10', 'once': '11', 'doce': '12', 'trece': '13', 'catorce': '14',
-    'quince': '15', 'dieciséis': '16', 'dieciseis': '16', 'diecisiete': '17',
-    'dieciocho': '18', 'diecinueve': '19', 'veinte': '20', 'veintiuno': '21',
-    'veintidós': '22', 'veintidos': '22', 'veintitrés': '23', 'veintitres': '23',
-    'veinticuatro': '24', 'veinticinco': '25', 'treinta': '30', 'cuarenta': '40',
-    'cincuenta': '50', 'sesenta': '60', 'setenta': '70', 'ochenta': '80', 'noventa': '90'
-  };
-
-  let converted = text.toLowerCase();
-
-  // STEP 1: Handle "NUMBER y medio" patterns first (e.g., "nueve metros y medio" → "9.5")
-  // This must happen BEFORE we replace individual number words
-  // Note: We remove "metros" from the output to allow "9.5 por 1.30" pattern matching
-  converted = converted.replace(/\b(uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce|trece|catorce|quince|dieciséis|dieciseis|diecisiete|dieciocho|diecinueve|veinte|veintiuno|veintidós|veintidos|veintitrés|veintitres|veinticuatro|veinticinco|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa)\s+metros?\s+y\s+medio\b/gi, (match, num) => {
-    const numVal = numberMap[num.toLowerCase()];
-    if (numVal) {
-      return `${numVal}.5`;
-    }
-    return match;
-  });
-
-  // STEP 2: Handle decimal patterns like "uno treinta" (1.30)
-  // Small number (≤10) followed by another number = decimal
-  converted = converted.replace(/\b(uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s+(diez|veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa|cero|uno|dos|tres|cuatro|cinco|seis|siete|ocho|nueve)\b/gi, (match, ones, decimal) => {
-    const onesVal = numberMap[ones.toLowerCase()];
-    const decimalVal = numberMap[decimal.toLowerCase()];
-
-    if (onesVal && decimalVal && parseInt(onesVal) <= 10) {
-      return `${onesVal}.${decimalVal}`;
-    }
-    return match;
-  });
-
-  // STEP 3: Handle compound numbers like "treinta y cinco" (35)
-  converted = converted.replace(/\b(veinte|treinta|cuarenta|cincuenta|sesenta|setenta|ochenta|noventa)\s+y\s+(uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve)\b/gi, (match, tens, ones) => {
-    const tensVal = numberMap[tens.toLowerCase()];
-    const onesVal = numberMap[ones.toLowerCase()];
-    if (tensVal && onesVal) {
-      return (parseInt(tensVal) + parseInt(onesVal)).toString();
-    }
-    return match;
-  });
-
-  // STEP 4: Replace remaining simple number words
-  for (const [word, digit] of Object.entries(numberMap)) {
-    const regex = new RegExp(`\\b${word}\\b`, 'gi');
-    converted = converted.replace(regex, digit);
-  }
-
-  return converted;
 }
 
 // Conversion constant for feet to meters
@@ -162,7 +102,7 @@ function parseDimensions(message) {
   }
 
   // Convert Spanish number words to digits first
-  const converted = convertSpanishNumbersToDigits(message);
+  const converted = convertSpanishNumbers(message);
 
   // PREPROCESSING: Handle numeric fractions BEFORE removing units
   // "7mts y 1/2" → "7.5", "7 y medio" → "7.5", "7 y media" → "7.5"
