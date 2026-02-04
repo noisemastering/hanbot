@@ -69,7 +69,7 @@ const handlers = {
   // ===== CONVERSATION =====
   [INTENTS.FUTURE_INTEREST]: conversationHandlers.handleFutureInterest,
   [INTENTS.WILL_GET_BACK]: conversationHandlers.handleWillGetBack,
-  // Note: CONFIRMATION and REJECTION are context-dependent, handled by flows
+  [INTENTS.CONFIRMATION]: conversationHandlers.handleConfirmation,
 };
 
 /**

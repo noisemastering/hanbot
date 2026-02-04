@@ -885,41 +885,9 @@ async function generateReply(userMessage, psid, referral = null) {
     // Not a valid location, continue normal flow
   }
 
-  // 👍 ACKNOWLEDGMENT: Handle simple acknowledgments and emojis
-  const acknowledgmentResponse = await handleAcknowledgment(cleanMsg, psid, convo);
-  if (acknowledgmentResponse) {
-    return await checkForRepetition(acknowledgmentResponse, psid, convo);
-  }
-
-  // 📞 PHONE NUMBER: Handle when user asks for phone/contact number
-  if (/\b(tel[eé]fono|n[uú]mero|cel(ular)?|contacto|llam(ar|o|e)|whatsapp|wsp)\b/i.test(cleanMsg) &&
-      !/precio|cuanto|cuesta|medida|cotiza/i.test(cleanMsg)) {
-    console.log("📞 Phone number request detected");
-    const { getBusinessInfo } = require("./core/businessInfo");
-    const info = await getBusinessInfo();
-    await updateConversation(psid, { lastIntent: "phone_request" });
-    return await checkForRepetition({
-      type: "text",
-      text: `¡Claro! Aquí tienes nuestros datos de contacto:\n\n` +
-            `📞 ${info.phones.join(" / ")}\n` +
-            `💬 WhatsApp: wa.me/524421809696\n` +
-            `🕓 ${info.hours}\n\n` +
-            `¿Hay algo más en lo que pueda ayudarte?`
-    }, psid, convo);
-  }
-
-  // 🏪 STORE VISIT: Handle when user says they'll visit the physical store
-  const storeVisitResponse = await handleStoreVisit(cleanMsg, psid, convo);
-  if (storeVisitResponse) {
-    return await checkForRepetition(storeVisitResponse, psid, convo);
-  }
-
-  // 📅 PURCHASE DEFERRAL: Handle when user wants to think about it
-  const deferralResponse = await handlePurchaseDeferral(cleanMsg, psid, convo, BOT_PERSONA_NAME);
-  if (deferralResponse) {
-    return await checkForRepetition(deferralResponse, psid, convo);
-  }
-
+  // ====== EARLY HANDLERS REMOVED - AI CLASSIFICATION RUNS FIRST ======
+  // All intent detection now happens via AI classifier (line ~1014)
+  // Handlers moved to intentDispatcher: acknowledgment, phone_request, store_visit, purchase_deferral
   // ====== END EARLY HANDLERS ======
 
   // ====== LAYER 0: SOURCE CONTEXT ======

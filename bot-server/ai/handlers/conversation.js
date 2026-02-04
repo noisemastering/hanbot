@@ -44,11 +44,75 @@ async function handleWillGetBack({ psid, convo, userMessage }) {
   return { type: "text", text: response };
 }
 
-// Note: CONFIRMATION and REJECTION intents are context-dependent
-// They are handled by product flows (mallaFlow, defaultFlow, etc.)
-// rather than here because they need to know what was offered
+/**
+ * Handle confirmation/acknowledgment - "Ok", "De acuerdo", "Perfecto", 👍
+ * User acknowledges info we provided
+ */
+async function handleConfirmation({ psid, convo, userMessage }) {
+  await updateConversation(psid, { lastIntent: "confirmation", unknownCount: 0 });
+
+  // Check if we should ask for location stats (after they acknowledged receiving a link)
+  const { askLocationStatsQuestion } = require("../utils/locationStats");
+  const locationQuestion = await askLocationStatsQuestion(psid, convo);
+  if (locationQuestion) {
+    console.log("📊 Asking location stats after confirmation");
+    return locationQuestion;
+  }
+
+  // Otherwise, ask if they need anything else
+  const response = await generateBotResponse("acknowledgment", {
+    userName: convo?.userName,
+    convo
+  });
+
+  return { type: "text", text: response };
+}
+
+/**
+ * Handle store visit intention - "Los visito en su tienda"
+ */
+async function handleStoreVisit({ psid, convo, userMessage }) {
+  await updateConversation(psid, {
+    lastIntent: "store_visit_planned",
+    unknownCount: 0
+  });
+
+  // Check if they mentioned a product
+  const mentionsMalla = /\b(malla|sombra)\b/i.test(userMessage);
+
+  if (mentionsMalla) {
+    return {
+      type: "text",
+      text: "¡Perfecto! Te esperamos. ¿Qué medida de malla sombra ocupas?"
+    };
+  }
+
+  return {
+    type: "text",
+    text: "¡Perfecto! Te esperamos. Estamos en Querétaro: Calle Loma de San Gremal 108, bodega 73, Navex Park.\n\n¿Hay algo que pueda adelantarte?"
+  };
+}
+
+/**
+ * Handle purchase deferral - "Lo voy a pensar", "Mañana te aviso"
+ */
+async function handlePurchaseDeferral({ psid, convo }) {
+  await updateConversation(psid, {
+    state: "deferred",
+    lastIntent: "purchase_deferred",
+    unknownCount: 0
+  });
+
+  return {
+    type: "text",
+    text: "Excelente, quedamos a tus órdenes. Aquí estaré cuando lo necesites."
+  };
+}
 
 module.exports = {
   handleFutureInterest,
-  handleWillGetBack
+  handleWillGetBack,
+  handleConfirmation,
+  handleStoreVisit,
+  handlePurchaseDeferral
 };

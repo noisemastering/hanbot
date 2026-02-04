@@ -223,7 +223,8 @@ async function handleAcknowledgment(cleanMsg, psid, convo) {
   // Check for acknowledgment emojis or simple confirmations (with or without text)
   // Also includes common Mexican chat abbreviations: ntp (no te preocupes), np (no problem), sta bien (está bien)
   // "aok" is common typo/variant of "ok" / "a ok"
-  const isAcknowledgment = /^(👍|👌|✅|❤️|😊|🙂|👏|💯|a?ok|vale|perfecto|excelente|entendido|si|sí|dale|claro|listo|ntp|np|sta\s*bien|esta\s*bien|está\s*bien)[\s!]*$/i.test(cleanMsg) ||
+  // "de acuerdo" is a common acknowledgment phrase
+  const isAcknowledgment = /^(👍|👌|✅|❤️|😊|🙂|👏|💯|a?ok|vale|perfecto|excelente|entendido|si|sí|dale|claro|listo|ntp|np|de\s*acuerdo|sta\s*bien|esta\s*bien|está\s*bien)[\s👍👌✅❤️😊🙂👏💯!]*$/i.test(cleanMsg) ||
                             /^(ntp|np)\s+(está|esta|sta)\s+bien[\s!]*$/i.test(cleanMsg);
 
   if (isAcknowledgment) {

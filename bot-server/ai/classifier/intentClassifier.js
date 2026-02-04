@@ -634,7 +634,8 @@ function quickClassify(message, dbIntents = null) {
 
   // Simple confirmations (allow emojis like 👍 👌 ✅)
   // Include "aok" as common typo/variant of "a ok" / "ok"
-  if (/^(s[ií]|a?ok|okey|va|vale|claro|perfecto|exacto|correcto|eso|esa|ese|dale|listo|órale|simon|simón)[\s!?.👍👌✅🙌💪]*$/i.test(msg)) {
+  // Include "de acuerdo" as common Mexican acknowledgment
+  if (/^(s[ií]|a?ok|okey|va|vale|claro|perfecto|exacto|correcto|eso|esa|ese|dale|listo|órale|simon|simón|de\s*acuerdo|entendido)[\s!?.👍👌✅🙌💪]*$/i.test(msg)) {
     return { intent: INTENTS.CONFIRMATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
   }
 
