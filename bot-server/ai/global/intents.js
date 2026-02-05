@@ -84,6 +84,36 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   }
   // ====== END SKIP ======
 
+  // ====== REPEATED PRICE QUESTION ======
+  // If we already quoted a price and user asks about price again without new dimensions,
+  // confirm the previous quote instead of giving generic info
+  // Patterns: "en cuánto sale", "cuánto cuesta", "qué precio", "ustedes en cuánto"
+  const hadPriceQuote = convo?.lastIntent?.includes('quoted') || (convo?.requestedSize && convo?.lastProductLink);
+  if (hadPriceQuote) {
+    const isPriceQuestion = /\b(cu[aá]nto\s*(sale|cuesta|es|vale|cobran)|qu[eé]\s*precio|precio\s*(de|del)|en\s*cu[aá]nto|ustedes\s*(en\s*)?cu[aá]nto)\b/i.test(msg);
+    const hasNewDimensions = parseDimensions(msg);
+
+    if (isPriceQuestion && !hasNewDimensions) {
+      console.log(`🔄 Repeated price question detected - confirming previous quote`);
+      const size = convo.requestedSize;
+      const link = convo.lastProductLink;
+
+      await updateConversation(psid, {
+        lastIntent: "repeated_price_confirmed",
+        unknownCount: 0
+      });
+
+      let response = `Sí, ese es nuestro precio por la de ${size}m.`;
+      if (link) {
+        response += ` Aquí está el link para comprarla:\n${link}`;
+      }
+      response += `\n\n¿Te interesa?`;
+
+      return { type: "text", text: response };
+    }
+  }
+  // ====== END REPEATED PRICE QUESTION ======
+
   // Lazy-generate tracked store link only when needed
   const STORE_URL = "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob";
   let _trackedStoreLink = null;
