@@ -735,7 +735,8 @@ function quickClassify(message, dbIntents = null) {
   }
 
   // Human request
-  if (/\b(humano|persona|agente|asesor|especialista|hablar\s*con\s*alguien)\b/i.test(msg)) {
+  // Includes "a qué número" - user asking for phone number after bot offered to connect with specialist
+  if (/\b(humano|persona|agente|asesor|especialista|hablar\s*con\s*alguien|a\s*q(u[eé])?\s*n[uú]mero)\b/i.test(msg)) {
     return { intent: INTENTS.HUMAN_REQUEST, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.95 };
   }
 
