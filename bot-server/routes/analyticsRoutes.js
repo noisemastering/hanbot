@@ -58,11 +58,33 @@ router.get('/', async (req, res) => {
       { $sort: { _id: 1 } }
     ]);
 
+    // Top region (most active state)
+    const topRegionData = await Conversation.aggregate([
+      {
+        $match: {
+          stateMx: { $type: 'string', $ne: '' }
+        }
+      },
+      {
+        $group: {
+          _id: '$stateMx',
+          conversations: { $sum: 1 }
+        }
+      },
+      { $sort: { conversations: -1 } },
+      { $limit: 1 }
+    ]);
+    const topRegion = topRegionData[0] ? {
+      state: topRegionData[0]._id,
+      conversations: topRegionData[0].conversations
+    } : null;
+
     res.json({
       totalMessages,
       totalUsers,
       botResponseRate: parseFloat(botResponseRate),
       unanswered,
+      topRegion,
       activityData: activityData.map(item => ({
         date: item._id,
         messages: item.count
