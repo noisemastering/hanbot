@@ -1462,6 +1462,24 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 📦 DELIVERY VS PICKUP - "punto de entrega", "hay que ir a traer", "entregan o recojo"
+  // Questions about shipping method, not specifically about store location
+  if (/\b(punto\s+de\s+entrega|hay\s+que\s+ir\s+a\s+(traer|recoger)|ir\s+a\s+traerlo?|tienen\s+que\s+recoger|lo\s+recojo|la\s+recojo|entregan\s+o\s+recojo|recojo\s+o\s+entregan|hacen\s+env[ií]os?|env[ií]an|lo\s+mandan|la\s+mandan)\b/i.test(msg)) {
+    const businessInfo = await getBusinessInfo();
+    console.log("📦 Delivery vs pickup question detected");
+    await updateConversation(psid, { lastIntent: "delivery_method" });
+
+    return {
+      type: "text",
+      text: `¡Te lo enviamos a domicilio! 🚚\n\n` +
+            `Enviamos a todo México por Mercado Libre con envío incluido en el precio.\n\n` +
+            `También puedes recoger en nuestra bodega en Querétaro si lo prefieres:\n` +
+            `📍 ${businessInfo.address}\n` +
+            `🕓 ${businessInfo.hours}\n\n` +
+            `¿Prefieres envío o recoger en persona?`
+    };
+  }
+
   // 🏪 RETAIL SALES / STORE VISIT - "venta al público", "si voy a Querétaro", "puedo ir/pasar"
   if (/\b(venta\s+al\s+p[uú]blico|venden\s+al\s+p[uú]blico|atienden\s+al\s+p[uú]blico)\b/i.test(msg) ||
       /\b(si\s+voy|puedo\s+ir|puedo\s+pasar|paso\s+a|pasar\s+a\s+comprar|comprar\s+en\s+persona|comprar\s+directo|recoger\s+en)\b/i.test(msg) ||
