@@ -60,6 +60,29 @@ function isAlsoAskingLocation(msg) {
   return /\b(d[oó]nde\s+est[aá]n|d[oó]nde\s+quedan|ubicaci[oó]n|direcci[oó]n|d[oó]nde\s+se\s+encuentran)\b/i.test(msg);
 }
 
+/**
+ * Pattern stacking: Detect secondary phrases in multi-part messages
+ * Returns a prefix to acknowledge deferral/acknowledgment before answering the main question
+ */
+function getSecondaryPhrasePrefix(msg) {
+  // Deferral phrases - "déjame checar", "lo pienso", "voy a ver"
+  if (/\b(d[eé]jame\s+(checar|pensar|ver)|lo\s+(pienso|checo|veo)|voy\s+a\s+(ver|checar|pensar)|deja\s+(lo\s+)?(pienso|checo|veo)|ahorita\s+no|por\s+ahora)\b/i.test(msg)) {
+    return "¡Claro, sin presión! ";
+  }
+
+  // Acknowledgment phrases - "ok", "está bien", "gracias"
+  if (/^(ok(ay)?|va|dale|sale|est[aá]\s+bien|perfecto|gracias|orale)\b/i.test(msg)) {
+    return "¡Perfecto! ";
+  }
+
+  // Uncertainty phrases - "no sé si", "no estoy seguro"
+  if (/\b(no\s+s[eé]\s+si|no\s+estoy\s+segur[oa])\b/i.test(msg)) {
+    return "¡Te explico! ";
+  }
+
+  return null;
+}
+
 // Helper to get location text for combined responses
 function getLocationAppendix() {
   return "\n\n📍 Estamos en Querétaro:\n" +
@@ -1469,9 +1492,12 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     console.log("📦 Delivery vs pickup question detected");
     await updateConversation(psid, { lastIntent: "delivery_method" });
 
+    // Check for secondary phrases (deferral, acknowledgment) to prepend
+    const prefix = getSecondaryPhrasePrefix(msg) || '';
+
     return {
       type: "text",
-      text: `¡Te lo enviamos a domicilio! 🚚\n\n` +
+      text: `${prefix}¡Te lo enviamos a domicilio! 🚚\n\n` +
             `Enviamos a todo México por Mercado Libre con envío incluido en el precio.\n\n` +
             `También puedes recoger en nuestra bodega en Querétaro si lo prefieres:\n` +
             `📍 ${businessInfo.address}\n` +
