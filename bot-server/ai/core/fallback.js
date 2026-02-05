@@ -150,10 +150,9 @@ TIEMPOS DE ENTREGA:
 - Interior de la República: 3-5 días hábiles
 
 FORMA DE PAGO:
-- Pago 100% POR ADELANTADO en Mercado Libre al momento de hacer el pedido (NO se paga al recibir)
-- Mercado Libre ofrece múltiples opciones de pago (el cliente las verá al comprar - NO las listes tú)
-- Alternativa: Aceptamos efectivo y tarjetas en nuestra tienda física en Querétaro
-- ⚠️ Si preguntan formas de pago: "Aceptamos todas las formas de pago de Mercado Libre. También aceptamos efectivo y tarjetas en nuestra tienda física."
+- Pago 100% POR ADELANTADO al momento de hacer el pedido (NO se paga al recibir)
+- En nuestra tienda en Mercado Libre aceptamos: tarjetas de crédito/débito, efectivo en OXXO y 7-Eleven, transferencia SPEI, saldo de Mercado Pago, y meses sin intereses (3, 6, 12, 18 MSI)
+- En nuestra tienda física aceptamos efectivo y tarjeta
 
 LO QUE NO OFRECEMOS:
 - ❌ NO ofrecemos servicio de instalación, montaje, colocación ni armado
