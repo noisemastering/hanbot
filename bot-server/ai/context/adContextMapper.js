@@ -3,6 +3,8 @@
 // Uses the Ad model to look up full ad details
 
 const Ad = require("../../models/Ad");
+const AdSet = require("../../models/AdSet");
+const Campaign = require("../../models/Campaign");
 const { getProductInterest } = require("../utils/productEnricher");
 
 /**
@@ -63,11 +65,32 @@ async function enrichAdContext(source) {
       source.ad.callToAction = ad.creative.callToAction || null;
     }
 
+    // Load campaign via AdSet chain (Ad → AdSet → Campaign)
+    if (ad.adSetId) {
+      try {
+        const adSet = await AdSet.findById(ad.adSetId).lean();
+        if (adSet?.campaignId) {
+          const campaign = await Campaign.findById(adSet.campaignId).lean();
+          if (campaign) {
+            source.ad.campaign = campaign;
+            source.ad.campaignId = campaign._id;
+            source.ad.campaignGoal = campaign.conversationGoal;
+            source.ad.campaignAudience = campaign.audience;
+            source.ad.campaignCatalog = campaign.catalog?.url || null;
+            console.log(`📣 Campaign loaded from ad chain: ${campaign.name} (goal: ${campaign.conversationGoal})`);
+          }
+        }
+      } catch (err) {
+        console.error(`⚠️ Error loading campaign from ad chain:`, err.message);
+      }
+    }
+
     console.log(`📦 Ad context enriched:`, {
       adId: source.ad.id,
       product: source.ad.product,
       angle: source.ad.angle,
-      audienceType: source.ad.audienceType
+      audienceType: source.ad.audienceType,
+      campaignGoal: source.ad.campaignGoal || null
     });
 
     return source;

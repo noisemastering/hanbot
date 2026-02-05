@@ -79,6 +79,8 @@ ESCENARIOS ESPECIALES:
 - store_visit: El cliente dice que visitará la tienda. Lee userMessage - si mencionan un producto (malla, sombra, etc.), pregunta qué medida necesitan. Si no, da la dirección (storeAddress) y pregunta si puedes adelantar algo.
 - purchase_deferral: El cliente va a pensarlo o contactar después. Despídete amablemente y deja la puerta abierta.
 - catalog_request: El cliente pregunta qué medidas/tamaños tienen. Si te doy sizeList, muéstrala. Menciona el total de medidas disponibles y pregunta cuál le interesa.
+- greeting: Saludo inicial. Si te doy productType, agradece su interés en ese producto específico (ej: "Gracias por tu interés en nuestra malla sombra raschel"). Ofrece ayuda con dudas o información. No hagas preguntas genéricas - pregunta específicamente qué medida necesitan o si tienen dudas sobre el producto.
+- delivery_time_query: El cliente pregunta cuánto tarda la entrega. El envío es gratis vía Mercado Libre. Tiempos APROXIMADOS (no afirmes, usa "aproximadamente"): CDMX/área metropolitana 1-2 días hábiles, resto del país 3-5 días hábiles. Si preguntan por entrega inmediata/hoy mismo, explica amablemente que no hacemos entregas el mismo día pero el envío es rápido.
 - future_interest: El cliente está interesado pero no ahora (en unos meses, más adelante). Agradece el interés y deja la puerta abierta.
 - will_get_back: El cliente va a medir o avisará después. Lee userMessage - si mencionan medir, deséales suerte con las medidas. Despídete amablemente.
 - product_comparison: El cliente pregunta la diferencia entre productos. Lee userMessage para entender qué comparan (raschel vs monofilamento, confeccionada vs rollo, etc.) y explica las diferencias.
@@ -89,6 +91,7 @@ ESCENARIOS ESPECIALES:
   4. Si solo preguntan "dónde están?" sin contexto → Menciona Querétaro + enviamos a todo México. No des dirección.
 - location_too_far: El cliente dice que estamos muy lejos o pregunta cómo puede adquirir desde lejos. Responde que enviamos a todo México sin costo adicional vía Mercado Libre. Si leadScore es bajo (deadbeat), responde breve y sin mucho entusiasmo.
 - color_not_available: El cliente pidió un color que no manejamos (requestedColor). Dile amablemente que ese color no lo tenemos y menciona los colores disponibles (availableColors). Si te doy dimensions, pregunta si le interesa en los colores que sí tenemos para esa medida.
+- durability_query: El cliente pregunta por la durabilidad o vida útil. Usa el lifespan que te doy (ej: 5 años). Menciona que es confeccionada para mayor durabilidad, resiste sol/viento/lluvia, y tiene protección UV. Mantén la respuesta breve.
 
 CONCERNS (preocupaciones secundarias):
 Cuando el contexto incluya "concerns", el cliente tiene preocupaciones adicionales que debes abordar en tu respuesta:
@@ -181,9 +184,17 @@ async function generatePriceResponse({ dimensions, price, link, userExpression, 
  * Generate greeting response
  */
 async function generateGreetingResponse({ convo, hasProductContext }) {
+  // Map product type to friendly name
+  const productNames = {
+    'malla_sombra': 'malla sombra raschel',
+    'rollo': 'malla sombra en rollo',
+    'monofilamento': 'malla monofilamento'
+  };
+
   const context = {
     isReturningUser: convo?.greeted || false,
     productInterest: convo?.productInterest || null,
+    productType: productNames[convo?.productType] || convo?.productType || null,
     hasProductContext
   };
 

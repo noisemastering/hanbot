@@ -139,6 +139,21 @@ function checkFlowTransfer(currentFlow, detectedFlow, convo) {
 async function processMessage(userMessage, psid, convo, classification, sourceContext, campaign = null) {
   console.log(`\n🎯 ===== FLOW MANAGER =====`);
 
+  // ===== STEP 0: CHECK FOR LEAD CAPTURE CAMPAIGN =====
+  // B2B/Distributor campaigns should go through lead capture flow
+  if (campaign && leadCaptureFlow.shouldHandle(classification, sourceContext, convo, userMessage, campaign)) {
+    console.log(`📋 Routing to lead capture flow (campaign: ${campaign.name})`);
+    const leadResponse = await leadCaptureFlow.handle(classification, sourceContext, convo, psid, campaign, userMessage);
+    if (leadResponse) {
+      console.log(`🎯 ===== END FLOW MANAGER (handled by lead_capture) =====\n`);
+      return {
+        ...leadResponse,
+        handledBy: "flow:lead_capture"
+      };
+    }
+  }
+  // ===== END LEAD CAPTURE CHECK =====
+
   // ===== STEP 1: ALWAYS SCORE PURCHASE INTENT =====
   const isWholesale = isWholesaleInquiry(userMessage, convo);
   const intentScore = scorePurchaseIntent(userMessage, convo);

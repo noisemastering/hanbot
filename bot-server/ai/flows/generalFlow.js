@@ -192,6 +192,7 @@ async function handleMultiQuestion(entities, convo, psid) {
 
   // Response snippets for each intent type (emoji as bullet, no markdown)
   const intentResponses = {
+    'confirmation': `✅ Perfecto, anotado.`,
     'price_query': `💰 Los precios dependen de la medida que necesites. ¿Qué medida te interesa?`,
     'location_query': `📍 ¡Enviamos a todo México y USA! Nuestra tienda está en ${BUSINESS_INFO.city}, pero te lo enviamos a domicilio.`,
     'shipping_query': `📦 Enviamos a todo México y también a Estados Unidos. El envío está incluido en la mayoría de nuestros productos.`,
@@ -204,7 +205,7 @@ async function handleMultiQuestion(entities, convo, psid) {
 
   // Special handling for pay-on-delivery question
   if (entities.payOnDelivery) {
-    intentResponses['payment_query'] = `💳 El pago es por adelantado a través de Mercado Libre. No manejamos pago contra entrega. Aceptan tarjeta, OXXO, o meses sin intereses.`;
+    intentResponses['payment_query'] = `💳 Las compras en línea se pagan por adelantado a través de Mercado Libre. No manejamos pago contra entrega, pero puedes pagar con tarjeta, efectivo en OXXO, o a meses sin intereses.`;
   }
 
   // Build combined response

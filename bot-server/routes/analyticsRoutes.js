@@ -849,6 +849,87 @@ router.get('/ad-metrics', async (req, res) => {
   }
 });
 
+// GET /analytics/top-region - Get most active region by conversations
+router.get('/top-region', async (req, res) => {
+  try {
+    // Aggregate conversations by stateMx (state in Mexico)
+    // Only count conversations with actual state data
+    const regionStats = await Conversation.aggregate([
+      {
+        $match: {
+          stateMx: { $type: 'string', $ne: '' }
+        }
+      },
+      {
+        $group: {
+          _id: '$stateMx',
+          conversations: { $sum: 1 },
+          cities: { $addToSet: '$city' }
+        }
+      },
+      { $sort: { conversations: -1 } },
+      { $limit: 10 }
+    ]);
+
+    // Get top region
+    const topRegion = regionStats[0] || null;
+
+    // Also get top cities overall (not just from top region)
+    const topCities = await Conversation.aggregate([
+      {
+        $match: {
+          city: { $type: 'string', $ne: '' }
+        }
+      },
+      {
+        $group: {
+          _id: '$city',
+          conversations: { $sum: 1 },
+          state: { $first: '$stateMx' }
+        }
+      },
+      { $sort: { conversations: -1 } },
+      { $limit: 5 }
+    ]);
+
+    // Count conversations with/without location data
+    const totalWithState = await Conversation.countDocuments({
+      stateMx: { $type: 'string', $ne: '' }
+    });
+    const totalConversations = await Conversation.countDocuments();
+
+    res.json({
+      success: true,
+      topRegion: topRegion ? {
+        state: topRegion._id,
+        conversations: topRegion.conversations,
+        uniqueCities: topRegion.cities.filter(c => c).length
+      } : null,
+      topCities: topCities.map(c => ({
+        city: c._id,
+        state: c.state,
+        conversations: c.conversations
+      })),
+      allRegions: regionStats.map(r => ({
+        state: r._id,
+        conversations: r.conversations,
+        uniqueCities: r.cities.filter(c => c).length
+      })),
+      coverage: {
+        withLocation: totalWithState,
+        total: totalConversations,
+        percentage: totalConversations > 0 ? ((totalWithState / totalConversations) * 100).toFixed(1) : 0
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error fetching top region:', error);
+    res.status(500).json({
+      success: false,
+      error: error.message
+    });
+  }
+});
+
 // GET /analytics/clicks-by-ad - Get click stats aggregated by ad
 router.get('/clicks-by-ad', async (req, res) => {
   try {

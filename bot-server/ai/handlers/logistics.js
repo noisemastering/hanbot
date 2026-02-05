@@ -164,17 +164,22 @@ async function handlePayOnDelivery({ psid, convo }) {
 }
 
 /**
- * Handle delivery time query - "Cuándo llega?", "Tiempo de entrega?"
+ * Handle delivery time query - "Cuándo llega?", "Tiempo de entrega?", "Pueden entregarme hoy?"
  */
-async function handleDeliveryTime({ psid, convo }) {
+async function handleDeliveryTime({ psid, convo, userMessage }) {
   await updateConversation(psid, {
     lastIntent: "delivery_time_query",
     unknownCount: 0
   });
 
+  // Check if asking for same-day delivery
+  const wantsSameDay = /\b(hoy|ahora|ahorita|inmediato|ya|mismo\s*d[ií]a|de\s*inmediato)\b/i.test(userMessage);
+
   const response = await generateBotResponse("delivery_time_query", {
-    cdmxDays: '1-2 días hábiles',
-    interiorDays: '3-5 días hábiles',
+    cdmxDays: 'aproximadamente 1-2 días hábiles',
+    interiorDays: 'aproximadamente 3-5 días hábiles',
+    wantsSameDay,
+    userMessage,
     convo
   });
 

@@ -39,7 +39,7 @@ async function handleCatalogRequest({ psid, convo }) {
 
     const uniqueIndices = [...new Set(keyIndices)];
     const keySizes = uniqueIndices.map(i => sorted[i]);
-    const sizeList = keySizes.map(s => `${s.sizeStr} - $${s.price}`).join(', ');
+    const sizeList = keySizes.map(s => `${s.sizeStr} en $${s.price}`).join(', ');
 
     // Let AI generate the response with real data
     const response = await generateBotResponse("catalog_request", {
@@ -202,6 +202,7 @@ const AVAILABLE_COLORS = ['beige', 'negro'];
 /**
  * Handle product inquiry with dimensions - "Necesito 3x3", "Malla de 4x5"
  * Looks up product, gets price/link, and addresses any concerns
+ * NOTE: This handler is for malla_sombra only. Rollo inquiries go through rolloFlow.
  */
 async function handleProductInquiry({ entities, psid, convo, userMessage }) {
   const { width, height, dimensions, location, concerns, color } = entities;
@@ -267,6 +268,7 @@ async function handleProductInquiry({ entities, psid, convo, userMessage }) {
         await updateConversation(psid, {
           lastIntent: "product_inquiry_quoted",
           requestedSize: `${w}x${h}`,
+          lastProductLink: trackedLink,
           unknownCount: 0,
           city: location || convo?.city
         });
@@ -380,12 +382,78 @@ async function handleDurabilityQuery({ psid, convo }) {
   });
 
   const response = await generateBotResponse("durability_query", {
-    lifespan: '8-10 años',
+    lifespan: '5 años',
     hasUVProtection: true,
     convo
   });
 
   return { type: "text", text: response };
+}
+
+// Default catalog link for sharing images
+const DEFAULT_CATALOG_LINK = "https://www.mercadolibre.com.mx/perfil/HANLOB";
+
+// Models for looking up campaign catalog
+const Ad = require("../../models/Ad");
+const Campaign = require("../../models/Campaign");
+
+/**
+ * Handle photo/image request - "Fotos?", "Me compartes imágenes?"
+ */
+async function handlePhotoRequest({ psid, convo }) {
+  await updateConversation(psid, {
+    lastIntent: "photo_request",
+    unknownCount: 0
+  });
+
+  // Check if we have a specific product context with a link
+  const hasProductLink = convo?.lastProductLink || convo?.productSpecs?.link;
+
+  if (hasProductLink) {
+    return {
+      type: "text",
+      text: `En el link que te compartí puedes ver fotos del producto. ¿Necesitas algo más?`
+    };
+  }
+
+  // Check if conversation came from an ad/campaign with a catalog
+  let catalogUrl = null;
+
+  try {
+    // Try to get catalog from Ad first
+    if (convo?.adId) {
+      const ad = await Ad.findOne({ fbAdId: convo.adId }).lean();
+      if (ad?.catalog?.url) {
+        catalogUrl = ad.catalog.url;
+        console.log(`📄 Found catalog from Ad: ${catalogUrl}`);
+      }
+    }
+
+    // Fall back to Campaign catalog
+    if (!catalogUrl && convo?.campaignId) {
+      const campaign = await Campaign.findOne({ fbCampaignId: convo.campaignId }).lean();
+      if (campaign?.catalog?.url) {
+        catalogUrl = campaign.catalog.url;
+        console.log(`📄 Found catalog from Campaign: ${catalogUrl}`);
+      }
+    }
+  } catch (err) {
+    console.error("Error looking up catalog:", err.message);
+  }
+
+  // If we have a campaign catalog (PDF), share it
+  if (catalogUrl) {
+    return {
+      type: "text",
+      text: `¡Claro! Aquí está nuestro catálogo con fotos y precios:\n\n📄 ${catalogUrl}\n\n¿Qué medida te interesa?`
+    };
+  }
+
+  // No campaign catalog - share default ML profile
+  return {
+    type: "text",
+    text: `Aquí puedes ver fotos de todos nuestros productos:\n\n${DEFAULT_CATALOG_LINK}\n\nSi me dices qué medida necesitas, te paso el link directo con fotos y precio.`
+  };
 }
 
 module.exports = {
@@ -395,5 +463,6 @@ module.exports = {
   handleSmallestProduct,
   handleDurabilityQuery,
   handleProductInquiry,
-  handleSizeSpecification
+  handleSizeSpecification,
+  handlePhotoRequest
 };

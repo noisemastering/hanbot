@@ -557,6 +557,47 @@ function quickClassify(message, dbIntents = null) {
     return null;
   }
 
+  // ===== MULTI-QUESTION DETECTION (runs FIRST - before any single-intent patterns) =====
+  // Dynamically detect ALL question types in a message (supports 2, 3, or more questions)
+  const questionIndicators = [
+    { intent: 'confirmation', pattern: /\b(s[ií]|las?\s+dos|los?\s+dos|ambos?|ambas?|esa|ese|esas|esos|dale|ok|vale|perfecto|m[eé]?\s*interesa|lo\s*quiero|la\s*quiero)\b/i },
+    { intent: 'price_query', pattern: /\b(precio|costo|cu[aá]nto\s*(cuesta|vale|es)|qu[eé]\s*precio)\b/i },
+    { intent: 'availability_query', pattern: /\b(medidas?|tamaños?|disponib|stock|tienen|manejan|qu[eé]\s*medidas?)\b/i },
+    { intent: 'payment_query', pattern: /\b(pago|pagar|tarjeta|efectivo|transferencia|forma\s*de\s*pago|meses)\b/i },
+    { intent: 'location_query', pattern: /\b(ubicaci[oó]n|direcci[oó]n|d[oó]nde\s*(est[aá]n|quedan|se\s*encuentran))\b/i },
+    { intent: 'shipping_query', pattern: /\b(env[ií]o|envi[aá]n|entrega|llega|mandan|cu[aá]nto\s*tarda)\b/i },
+    { intent: 'installation_query', pattern: /\b(instal[ae]n?|ponen|colocan|c[oó]mo\s*se\s*(instala|pone|coloca))\b/i },
+    { intent: 'product_inquiry', pattern: /\b(informes?|info|caracter[ií]sticas?|especificaciones?|de\s*qu[eé]\s*(es|est[aá]|material))\b/i },
+    { intent: 'delivery_time_query', pattern: /\b(cu[aá]nto\s*tarda|cu[aá]ntos?\s*d[ií]as?|tiempo\s*de\s*entrega|cuando\s*llega)\b/i }
+  ];
+
+  // Detect pay-on-delivery specifically
+  const isPayOnDelivery = /\b(pago|pagar)\b.*\b(entreg|llega|recib)/i.test(msg) ||
+                          /\b(al\s*entregar|contra\s*entrega|cuando\s*llegue)\b/i.test(msg);
+
+  // Find all matching question types
+  const detectedIntents = [];
+  for (const { intent, pattern } of questionIndicators) {
+    if (pattern.test(msg)) {
+      detectedIntents.push(intent);
+    }
+  }
+
+  // If 2+ intents detected, return as MULTI_QUESTION
+  if (detectedIntents.length >= 2) {
+    console.log(`⚡ Multi-question detected: ${detectedIntents.join(', ')}`);
+    const entities = { subIntents: detectedIntents };
+    if (isPayOnDelivery) {
+      entities.payOnDelivery = true;
+    }
+    return {
+      intent: INTENTS.MULTI_QUESTION,
+      product: PRODUCTS.UNKNOWN,
+      entities,
+      confidence: 0.85
+    };
+  }
+
   // First, check DB intent patterns (highest priority for custom patterns)
   if (dbIntents && dbIntents.length > 0) {
     for (const intent of dbIntents) {
@@ -650,49 +691,10 @@ function quickClassify(message, dbIntents = null) {
     }
   }
 
-  // ===== MULTI-QUESTION DETECTION =====
-  // Dynamically detect ALL question types in a message (supports 2, 3, or more questions)
-  const questionIndicators = [
-    { intent: 'price_query', pattern: /\b(precio|costo|cu[aá]nto\s*(cuesta|vale|es)|qu[eé]\s*precio)\b/i },
-    { intent: 'availability_query', pattern: /\b(medidas?|tamaños?|disponib|stock|tienen|manejan|qu[eé]\s*medidas?)\b/i },
-    { intent: 'payment_query', pattern: /\b(pago|pagar|tarjeta|efectivo|transferencia|forma\s*de\s*pago|meses)\b/i },
-    { intent: 'location_query', pattern: /\b(ubicaci[oó]n|direcci[oó]n|d[oó]nde\s*(est[aá]n|quedan|se\s*encuentran))\b/i },
-    { intent: 'shipping_query', pattern: /\b(env[ií]o|envi[aá]n|entrega|llega|mandan|cu[aá]nto\s*tarda)\b/i },
-    { intent: 'installation_query', pattern: /\b(instal[ae]n?|ponen|colocan|c[oó]mo\s*se\s*(instala|pone|coloca))\b/i },
-    { intent: 'product_inquiry', pattern: /\b(informes?|info|caracter[ií]sticas?|especificaciones?|de\s*qu[eé]\s*(es|est[aá]|material))\b/i },
-    { intent: 'delivery_time_query', pattern: /\b(cu[aá]nto\s*tarda|cu[aá]ntos?\s*d[ií]as?|tiempo\s*de\s*entrega|cuando\s*llega)\b/i }
-  ];
-
-  // Detect pay-on-delivery specifically
-  const isPayOnDelivery = /\b(pago|pagar)\b.*\b(entreg|llega|recib)/i.test(msg) ||
-                          /\b(al\s*entregar|contra\s*entrega|cuando\s*llegue)\b/i.test(msg);
-
-  // Find all matching question types
-  const detectedIntents = [];
-  for (const { intent, pattern } of questionIndicators) {
-    if (pattern.test(msg)) {
-      detectedIntents.push(intent);
-    }
-  }
-
-  // If 2+ questions detected, return as MULTI_QUESTION
-  if (detectedIntents.length >= 2) {
-    const entities = { subIntents: detectedIntents };
-    if (isPayOnDelivery) {
-      entities.payOnDelivery = true;
-    }
-    return {
-      intent: INTENTS.MULTI_QUESTION,
-      product: PRODUCTS.UNKNOWN,
-      entities,
-      confidence: 0.85
-    };
-  }
-
   // Simple confirmations (allow emojis like 👍 👌 ✅)
   // Include "aok" as common typo/variant of "a ok" / "ok"
-  // Include "de acuerdo" as common Mexican acknowledgment
-  if (/^(s[ií]|a?ok|okey|va|vale|claro|perfecto|exacto|correcto|eso|esa|ese|dale|listo|órale|simon|simón|de\s*acuerdo|entendido)[\s!?.👍👌✅🙌💪]*$/i.test(msg)) {
+  // Include "de acuerdo" as common Mexican acknowledgment, and "me interesa" as purchase intent
+  if (/^(s[ií]|a?ok|okey|va|vale|claro|perfecto|exacto|correcto|eso|esa|ese|dale|listo|órale|simon|simón|de\s*acuerdo|entendido|m[eé]?\s*interesa|lo\s*quiero|la\s*quiero)[\s!?.👍👌✅🙌💪]*$/i.test(msg)) {
     return { intent: INTENTS.CONFIRMATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
   }
 
@@ -805,7 +807,7 @@ function quickClassify(message, dbIntents = null) {
   }
 
   // Pay on delivery query
-  if (/\b(pago|pagar)\s+(al\s+entregar|contra\s+entrega)|hasta\s+que\s+llegue|cuando\s+llegue\s+pago/i.test(msg)) {
+  if (/\b(pago|pagar)\s+(al\s+(entregar|recibir)|contra\s+entrega)|hasta\s+que\s+llegue|cuando\s+llegue\s+pago/i.test(msg)) {
     return { intent: INTENTS.PAY_ON_DELIVERY_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
   }
 
@@ -815,7 +817,7 @@ function quickClassify(message, dbIntents = null) {
   }
 
   // Durability query
-  if (/\b(cu[aá]nto\s+tiempo\s+dura|vida\s+[uú]til|cu[aá]ntos?\s+a[ñn]os|duraci[oó]n|resistencia)\b/i.test(msg) &&
+  if (/\b(cu[aá]nto\s+tiempo\s+dura|vida\s+[uú]til|cu[aá]ntos?\s+a[ñn]os|duraci[oó]n|durabilidad|resistencia)\b/i.test(msg) &&
       !/\b(entrega|env[ií]o)\b/i.test(msg)) {
     return { intent: INTENTS.DURABILITY_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.85 };
   }

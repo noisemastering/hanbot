@@ -78,9 +78,45 @@ function detectRolloType(msg, convo = null) {
 }
 
 /**
- * Valid widths for rolls (in meters)
+ * Cache for available rollo widths (refreshed every 5 minutes)
  */
-const VALID_WIDTHS = [2.10, 4.20];
+let rolloWidthsCache = null;
+let rolloWidthsCacheExpiry = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Get available rollo widths from database
+ */
+async function getAvailableWidths() {
+  if (rolloWidthsCache && Date.now() < rolloWidthsCacheExpiry) {
+    return rolloWidthsCache;
+  }
+
+  try {
+    const products = await ProductFamily.find({
+      sellable: true,
+      active: true,
+      size: /\d+x100/i  // Rollo pattern: NxN100
+    }).select('size').lean();
+
+    // Extract unique widths from size strings like "2x100m", "4x100m"
+    const widths = new Set();
+    for (const p of products) {
+      const match = p.size?.match(/^(\d+(?:\.\d+)?)\s*x\s*100/i);
+      if (match) {
+        widths.add(parseFloat(match[1]));
+      }
+    }
+
+    rolloWidthsCache = [...widths].sort((a, b) => a - b);
+    rolloWidthsCacheExpiry = Date.now() + CACHE_TTL;
+    console.log(`🔄 Rollo widths cache refreshed: ${rolloWidthsCache.join(', ')}m`);
+    return rolloWidthsCache;
+  } catch (err) {
+    console.error("Error fetching rollo widths:", err.message);
+    return [2, 4]; // Fallback
+  }
+}
 
 /**
  * Valid percentages
@@ -88,13 +124,26 @@ const VALID_WIDTHS = [2.10, 4.20];
 const VALID_PERCENTAGES = [35, 50, 70, 80, 90];
 
 /**
- * Normalize width to standard format
+ * Normalize width to closest available
  */
-function normalizeWidth(width) {
+async function normalizeWidth(width) {
   if (!width) return null;
-  if (width >= 1.5 && width <= 2.5) return 2.10;
-  if (width >= 3.5 && width <= 4.5) return 4.20;
-  return null;
+
+  const availableWidths = await getAvailableWidths();
+
+  // Find closest match
+  let closest = null;
+  let minDiff = Infinity;
+
+  for (const w of availableWidths) {
+    const diff = Math.abs(width - w);
+    if (diff < minDiff && diff <= 1) { // Within 1m tolerance
+      minDiff = diff;
+      closest = w;
+    }
+  }
+
+  return closest;
 }
 
 /**
@@ -143,18 +192,18 @@ async function parseAndLookupZipCode(msg) {
 async function findMatchingProducts(width, percentage = null) {
   try {
     // Build query for rolls - match by size pattern
-    // Roll sizes are like "4.20x100m", "4.2x100", "4.20 x 100m"
-    const widthStr = width.toFixed(2).replace('.00', '');
-    const sizeRegex = new RegExp(`${widthStr}.*100`, 'i');
+    // Roll sizes are like "2x100m", "4x100m"
+    const widthSearch = String(width).replace('.00', '');
+    const sizeRegex = new RegExp(`${widthSearch}.*100`, 'i');
 
-    console.log(`🔍 Searching for roll ${widthStr}m x 100m`);
+    console.log(`🔍 Searching for roll ${widthSearch}m x 100m`);
 
     const query = {
       sellable: true,
       active: true,
       $or: [
         { size: sizeRegex },
-        { name: new RegExp(`${widthStr}.*100`, 'i') }
+        { name: new RegExp(`${widthSearch}.*100`, 'i') }
       ]
     };
 
@@ -269,7 +318,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       const match = userMessage.match(pattern);
       if (match) {
         const parsedWidth = parseFloat(match[1].replace(',', '.'));
-        const normalized = normalizeWidth(parsedWidth);
+        const normalized = await normalizeWidth(parsedWidth);
         if (normalized) {
           console.log(`📦 Rollo flow - Parsed width from message: ${parsedWidth} → ${normalized}m`);
           state.width = normalized;
@@ -281,7 +330,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   // Update state with any new entities from classifier
   if (!state.width && entities.width) {
-    const normalized = normalizeWidth(entities.width);
+    const normalized = await normalizeWidth(entities.width);
     if (normalized) state.width = normalized;
   }
 
@@ -316,7 +365,43 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   if (!state.percentage && entities.percentage) {
     state.percentage = entities.percentage;
   }
-  if (entities.quantity) {
+  // Parse quantity from user message
+  if (!state.quantity && userMessage) {
+    const msg = userMessage.toLowerCase();
+    // "un par" = 2
+    if (/\b(un\s*par|par\s+de)\b/i.test(msg)) {
+      console.log(`📦 Rollo flow - Parsed quantity "un par" → 2`);
+      state.quantity = 2;
+    }
+    // "uno", "una", "1", "ocuparía uno", "necesito uno"
+    else if (/\b(un[oa]?|1)\s*(rollo|pza|pieza)?\b/i.test(msg) || /\bocupar[ií]a\s+un[oa]?\b/i.test(msg)) {
+      console.log(`📦 Rollo flow - Parsed quantity "uno" → 1`);
+      state.quantity = 1;
+    }
+    // "dos", "2"
+    else if (/\b(dos|2)\s*(rollos?|pzas?|piezas?)?\b/i.test(msg)) {
+      console.log(`📦 Rollo flow - Parsed quantity "dos" → 2`);
+      state.quantity = 2;
+    }
+    // "tres", "3"
+    else if (/\b(tres|3)\s*(rollos?|pzas?|piezas?)?\b/i.test(msg)) {
+      console.log(`📦 Rollo flow - Parsed quantity "tres" → 3`);
+      state.quantity = 3;
+    }
+    // Generic number
+    else {
+      const qtyMatch = msg.match(/\b(\d+)\s*(rollos?|pzas?|piezas?)?\b/i);
+      if (qtyMatch) {
+        const qty = parseInt(qtyMatch[1]);
+        if (qty > 0 && qty <= 100) {
+          console.log(`📦 Rollo flow - Parsed quantity → ${qty}`);
+          state.quantity = qty;
+        }
+      }
+    }
+  }
+
+  if (!state.quantity && entities.quantity) {
     state.quantity = entities.quantity;
   }
   if (entities.color) {
@@ -347,7 +432,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       break;
 
     case STAGES.AWAITING_WIDTH:
-      response = handleAwaitingWidth(intent, state, sourceContext);
+      response = await handleAwaitingWidth(intent, state, sourceContext);
       break;
 
     case STAGES.AWAITING_PERCENTAGE:
@@ -363,7 +448,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       break;
 
     default:
-      response = handleStart(sourceContext);
+      response = await handleStart(sourceContext);
   }
 
   // Save updated specs
@@ -411,33 +496,34 @@ function handleAwaitingType(intent, state, sourceContext) {
 /**
  * Handle start - user just mentioned rolls (type already known)
  */
-function handleStart(sourceContext) {
+async function handleStart(sourceContext) {
+  const widths = await getAvailableWidths();
+  const widthList = widths.map(w => `• ${w}m x 100m`).join('\n');
+
   return {
     type: "text",
-    text: "¡Claro! Manejamos rollos de malla sombra en dos anchos:\n\n" +
-          "• 4.20m x 100m\n" +
-          "• 2.10m x 100m\n\n" +
-          "¿Qué ancho necesitas?"
+    text: `¡Claro! Manejamos rollos de malla sombra en estos anchos:\n\n${widthList}\n\n¿Qué ancho necesitas?`
   };
 }
 
 /**
  * Handle awaiting width stage
  */
-function handleAwaitingWidth(intent, state, sourceContext) {
+async function handleAwaitingWidth(intent, state, sourceContext) {
+  const widths = await getAvailableWidths();
+  const widthOptions = widths.map(w => `${w}m`).join(' o ');
+  const widthList = widths.map(w => `• ${w}m x 100m`).join('\n');
+
   if (intent === INTENTS.CONFIRMATION) {
     return {
       type: "text",
-      text: "¿Cuál ancho te interesa? ¿4.20m o 2.10m?"
+      text: `¿Cuál ancho te interesa? ¿${widthOptions}?`
     };
   }
 
   return {
     type: "text",
-    text: "Los rollos los manejamos en:\n\n" +
-          "• 4.20m x 100m\n" +
-          "• 2.10m x 100m\n\n" +
-          "¿Qué ancho necesitas?"
+    text: `Los rollos los manejamos en:\n\n${widthList}\n\n¿Qué ancho necesitas?`
   };
 }
 
@@ -445,11 +531,9 @@ function handleAwaitingWidth(intent, state, sourceContext) {
  * Handle awaiting percentage stage
  */
 function handleAwaitingPercentage(intent, state, sourceContext) {
-  const widthStr = state.width === 4.20 ? "4.20" : "2.10";
-
   return {
     type: "text",
-    text: `Perfecto, rollo de ${widthStr}m x 100m.\n\n` +
+    text: `Perfecto, rollo de ${state.width}m x 100m.\n\n` +
           `Lo tenemos desde 35% hasta 90% de sombra.\n\n` +
           `¿Qué porcentaje necesitas?`
   };
@@ -459,12 +543,10 @@ function handleAwaitingPercentage(intent, state, sourceContext) {
  * Handle awaiting zip code stage
  */
 function handleAwaitingZip(intent, state, sourceContext) {
-  const widthStr = state.width === 4.20 ? "4.20" : "2.10";
-
   return {
     type: "text",
     text: `✅ Perfecto, te confirmo:\n\n` +
-          `📦 Rollo de ${widthStr}m x 100m al ${state.percentage}%\n` +
+          `📦 Rollo de ${state.width}m x 100m al ${state.percentage}%\n` +
           `📊 Cantidad: ${state.quantity || 1} rollo${(state.quantity || 1) > 1 ? 's' : ''}\n\n` +
           `Para calcular el envío, ¿me compartes tu código postal?`
   };
@@ -474,7 +556,6 @@ function handleAwaitingZip(intent, state, sourceContext) {
  * Handle complete - we have width and percentage
  */
 async function handleComplete(intent, state, sourceContext, psid, convo) {
-  const widthStr = state.width === 4.20 ? "4.20" : "2.10";
   const quantity = state.quantity || 1;
 
   // Check if already asked quantity
@@ -489,7 +570,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
 
     await updateConversation(psid, {
       handoffRequested: true,
-      handoffReason: `Roll quote: ${quantity}x ${widthStr}m x 100m @ ${state.percentage}%${locationText}`,
+      handoffReason: `Roll quote: ${quantity}x ${state.width}m x 100m @ ${state.percentage}%${locationText}`,
       handoffTimestamp: new Date()
     });
 
@@ -574,11 +655,11 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
 
     await updateConversation(psid, {
       handoffRequested: true,
-      handoffReason: `Roll quote: ${quantity}x ${widthStr}m x 100m @ ${state.percentage}%${locationText}`,
+      handoffReason: `Roll quote: ${quantity}x ${state.width}m x 100m @ ${state.percentage}%${locationText}`,
       handoffTimestamp: new Date()
     });
 
-    let responseText = `Perfecto, ${quantity} rollo${quantity > 1 ? 's' : ''} de ${widthStr}m x 100m al ${state.percentage}%.`;
+    let responseText = `Perfecto, ${quantity} rollo${quantity > 1 ? 's' : ''} de ${state.width}m x 100m al ${state.percentage}%.`;
     if (state.zipInfo) {
       responseText += `\n\n📍 Envío a ${state.zipInfo.city}, ${state.zipInfo.state}`;
     }
@@ -593,7 +674,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
   } else {
     return {
       type: "text",
-      text: `Tenemos el rollo de ${widthStr}m x 100m al ${state.percentage}%.\n\n` +
+      text: `Tenemos el rollo de ${state.width}m x 100m al ${state.percentage}%.\n\n` +
             `¿Cuántos rollos necesitas?`
     };
   }

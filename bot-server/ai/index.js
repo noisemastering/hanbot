@@ -178,13 +178,13 @@ const { sendHandoffNotification } = require("../services/pushNotifications");
 async function checkForRepetition(response, psid, convo) {
   if (!response || !response.text) return response;
 
-  // Check time since last message - if more than 6 hours, treat as fresh conversation
+  // Check time since last message - if more than 24 hours, treat as fresh conversation
   const lastMessageTime = convo.lastMessageAt ? new Date(convo.lastMessageAt) : null;
   const hoursSinceLastMessage = lastMessageTime
     ? (Date.now() - lastMessageTime.getTime()) / (1000 * 60 * 60)
     : 999;
 
-  if (hoursSinceLastMessage > 6) {
+  if (hoursSinceLastMessage > 24) {
     console.log(`⏰ Conversation resumed after ${hoursSinceLastMessage.toFixed(1)} hours - treating as fresh`);
     // Clear lastBotResponse to prevent false repetition detection
     await updateConversation(psid, { lastBotResponse: response.text });
@@ -913,7 +913,7 @@ async function generateReply(userMessage, psid, referral = null) {
       campaign = await Campaign.findOne({ ref: campaignRef, active: true });
       if (campaign) {
         campaignContext = campaign.toAIContext();
-        console.log(`📣 Campaign loaded: ${campaign.name} (goal: ${campaign.conversationGoal})`);
+        console.log(`📣 Campaign loaded from ref: ${campaign.name} (goal: ${campaign.conversationGoal})`);
 
         // Save campaign ref to conversation if new
         if (!convo?.campaignRef && referral?.ref) {
@@ -923,6 +923,12 @@ async function generateReply(userMessage, psid, referral = null) {
     } catch (err) {
       console.error(`⚠️ Error loading campaign:`, err.message);
     }
+  }
+
+  // If no campaign from ref, check if we have one from ad context
+  if (!campaign && sourceContext?.ad?.campaign) {
+    campaign = sourceContext.ad.campaign;
+    console.log(`📣 Campaign loaded from ad chain: ${campaign.name} (goal: ${campaign.conversationGoal})`);
   }
   // ====== END CAMPAIGN CONTEXT ======
 

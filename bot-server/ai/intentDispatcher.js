@@ -46,14 +46,15 @@ const handlers = {
   [INTENTS.OUT_OF_STOCK_REPORT]: escalationHandlers.handleOutOfStock,
 
   // ===== PRODUCTS =====
+  // NOTE: PRODUCT_INQUIRY, SIZE_SPECIFICATION, and PRICE_QUERY are NOT here
+  // They fall through to flow manager which routes to the right flow (rolloFlow, mallaFlow, etc.)
+  // based on the product type from classification
   [INTENTS.CATALOG_REQUEST]: productsHandlers.handleCatalogRequest,
   [INTENTS.PRODUCT_COMPARISON]: productsHandlers.handleProductComparison,
   [INTENTS.LARGEST_PRODUCT]: productsHandlers.handleLargestProduct,
   [INTENTS.SMALLEST_PRODUCT]: productsHandlers.handleSmallestProduct,
   [INTENTS.DURABILITY_QUERY]: productsHandlers.handleDurabilityQuery,
-  [INTENTS.PRODUCT_INQUIRY]: productsHandlers.handleProductInquiry,
-  [INTENTS.SIZE_SPECIFICATION]: productsHandlers.handleSizeSpecification,
-  [INTENTS.PRICE_QUERY]: productsHandlers.handleProductInquiry,
+  [INTENTS.PHOTO_REQUEST]: productsHandlers.handlePhotoRequest,
 
   // ===== PURCHASE =====
   [INTENTS.STORE_LINK_REQUEST]: purchaseHandlers.handleStoreLinkRequest,
