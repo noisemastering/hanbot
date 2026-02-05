@@ -97,12 +97,23 @@ function parseConfeccionadaDimensions(str) {
     return buildResult(width, height, isFeet, `${m[1]} x ${m[2]}`);
   }
 
-  // Pattern 2: Universal pattern for rectangular dimensions:
-  // Number + optional unit + separator (x/×/*/por/de) + number + optional unit
-  // Also handles feet: "16x10 pies", "16 por 10 ft"
-  const pattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?|(?:pies?|ft|feet))?\s*(?:x|×|\*|por|de)\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?|(?:pies?|ft|feet))?/i;
+  // Pattern 2a: EXPLICIT separators (x, ×, *) - highest priority
+  // These are unambiguous dimension separators, check first
+  const explicitPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?|(?:pies?|ft|feet))?\s*(?:x|×|\*)\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?|(?:pies?|ft|feet))?/i;
 
-  m = s.match(pattern);
+  m = s.match(explicitPattern);
+  if (m) {
+    const dim1 = parseFloat(m[1]);
+    const dim2 = parseFloat(m[2]);
+    return buildResult(dim1, dim2, isFeet, `${m[1]} x ${m[2]}`);
+  }
+
+  // Pattern 2b: "por" and "de" separators - lower priority
+  // "de" is ambiguous (can be "una de 10x8" where "de" doesn't mean dimensions)
+  // Only use these when no explicit x/×/* pattern was found
+  const softPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?|(?:pies?|ft|feet))?\s*(?:por|de)\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?|(?:pies?|ft|feet))?/i;
+
+  m = s.match(softPattern);
   if (!m) return null;
 
   const dim1 = parseFloat(m[1]);
