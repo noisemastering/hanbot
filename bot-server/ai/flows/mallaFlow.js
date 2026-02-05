@@ -1057,7 +1057,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     return {
       type: "text",
       text: `${quantityText}${salesPitch}\n` +
-            `${trackedLink}${wholesaleMention}`
+            `🛒 Cómprala aquí:\n${trackedLink}${wholesaleMention}`
     };
   }
 

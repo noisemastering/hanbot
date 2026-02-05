@@ -236,9 +236,8 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
 
       return {
         type: "text",
-        text: `¡Perfecto! ${quantityText}Tenemos ${displayName}${priceText}:\n\n` +
-              `${trackedLink}\n\n` +
-              `Ahí puedes ver el precio y comprar. El envío está incluido.${wholesaleMention}\n\n` +
+        text: `¡Perfecto! ${quantityText}Tenemos ${displayName}${priceText}. El envío está incluido.\n\n` +
+              `🛒 Cómpralo aquí:\n${trackedLink}${wholesaleMention}\n\n` +
               `¿Necesitas algo más?`
       };
     }
