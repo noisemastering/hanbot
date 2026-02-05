@@ -225,7 +225,10 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
         stateMx: convo?.stateMx
       });
 
-      const priceText = product.price ? ` por ${formatMoney(product.price)}` : "";
+      // Clarify "c/u" when asking for multiple items
+      const priceText = product.price
+        ? ` por ${formatMoney(product.price)}${quantity && quantity > 1 ? ' c/u' : ''}`
+        : "";
       const quantityText = quantity ? `Para ${quantity} rollos, ` : "";
 
       let wholesaleMention = "";

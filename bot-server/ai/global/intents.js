@@ -93,7 +93,9 @@ function getLocationAppendix() {
 
 async function handleGlobalIntents(msg, psid, convo = {}) {
 
-  console.log("🌍 INTENTOS GLOBALES CHECANDO →", msg);
+  // ⚠️ DEACTIVATED: Testing AI-first approach - all messages go to AI fallback
+  console.log("🌍 GLOBAL INTENTS DEACTIVATED - passing to AI fallback");
+  return null;
 
   // ====== SKIP IF PENDING RECOMMENDATION ======
   // If we recommended a size and user is asking about it, let the flow system handle it
@@ -270,6 +272,134 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       text: `¡Gracias! Permíteme consultar con producción para la confección.\n\n` +
             `📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
     };
+  }
+
+  // 🏭 CUSTOM ORDER DECISION - User responds to oversized alternatives offer
+  // When we offered standard size combinations (e.g., 4x8 + 4x8 for 8x8 request)
+  if (convo.lastIntent === "custom_order_awaiting_decision") {
+    const affirmative = /^(s[ií]|ok|va|dale|sale|perfecto|est[aá]\s*bien|claro|de\s*acuerdo|me\s*interesa|qu[eé]\s*bien|esas?|esos?)\b/i.test(msg);
+    const wantsSpecialist = /\b(especialista|humano|persona|medida\s*(exacta|espec[ií]fica)|la\s+de\s+\d|cotiza|whatsapp)\b/i.test(msg);
+    const negative = /^(no|nel|nop|nope|paso|mejor\s*no)\b/i.test(msg);
+    const askingAboutML = /\b(mercado\s*libre|merca\s*libre|ml|por\s+mercado|en\s+mercado|de\s+mercado)\b/i.test(msg);
+
+    // Handle Mercado Libre questions while maintaining context
+    if (askingAboutML) {
+      console.log(`🏭 ML question while in custom_order_awaiting_decision - answering in context`);
+      const orderSize = convo.customOrderSize || 'la medida que necesitas';
+      const suggestedSizes = convo.suggestedSizes || [];
+
+      // Don't change the state - keep them in the decision flow
+      await updateConversation(psid, { unknownCount: 0 });
+
+      if (suggestedSizes.length > 0) {
+        return {
+          type: "text",
+          text: `¡Sí! Las medidas estándar (${suggestedSizes.slice(0, 3).join(', ')}) están disponibles en nuestra tienda de Mercado Libre con envío incluido.\n\n` +
+                `Para ${orderSize} necesitarías combinar piezas o cotizar fabricación especial.\n\n` +
+                `¿Te interesa alguna de las medidas estándar, o prefieres que te cotice la medida exacta?`
+        };
+      }
+
+      return {
+        type: "text",
+        text: `¡Sí, vendemos por Mercado Libre! Las medidas estándar tienen envío incluido.\n\n` +
+              `Para ${orderSize} podemos cotizarte fabricación especial.\n\n` +
+              `¿Qué prefieres?`
+      };
+    }
+
+    if (affirmative && !wantsSpecialist) {
+      console.log(`🏭 User accepted alternative sizes, showing options`);
+
+      // Get the suggested sizes and look up their prices/links
+      const suggestedSizes = convo.suggestedSizes || [];
+
+      if (suggestedSizes.length > 0) {
+        const sizePrices = [];
+
+        for (const sizeStr of suggestedSizes) {
+          // Try to find this size in the database
+          const sizeVariants = [sizeStr, sizeStr + 'm', sizeStr.replace(/m$/, '')];
+          const match = sizeStr.match(/(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)/);
+          if (match) {
+            sizeVariants.push(`${match[2]}x${match[1]}`, `${match[2]}x${match[1]}m`);
+          }
+
+          const product = await ProductFamily.findOne({
+            sizeString: { $in: sizeVariants },
+            category: "malla_sombra",
+            price: { $gt: 0 }
+          }).lean();
+
+          if (product) {
+            const link = product.onlineStoreLinks?.find(l => l.isPreferred)?.url ||
+                         product.onlineStoreLinks?.[0]?.url ||
+                         product.mLink;
+            if (link) {
+              const trackedLink = await generateClickLink(psid, link, {
+                productName: product.name,
+                productId: product._id,
+                campaignId: convo?.campaignId
+              });
+              sizePrices.push({
+                size: sizeStr,
+                price: product.price,
+                link: trackedLink
+              });
+            }
+          }
+        }
+
+        if (sizePrices.length > 0) {
+          await updateConversation(psid, {
+            lastIntent: "custom_order_alternatives_shown",
+            unknownCount: 0
+          });
+
+          const sizeList = sizePrices.map(s => `• ${s.size}m - $${s.price}\n  ${s.link}`).join('\n\n');
+
+          return {
+            type: "text",
+            text: `¡Perfecto! Aquí están las medidas disponibles:\n\n${sizeList}\n\n¿Cuál te funciona mejor?`
+          };
+        }
+      }
+
+      // Fallback if we couldn't get the sizes
+      await updateConversation(psid, {
+        lastIntent: "custom_order_need_sizes",
+        unknownCount: 0
+      });
+
+      return {
+        type: "text",
+        text: "¡Perfecto! ¿Cuál de las medidas te interesa?"
+      };
+    }
+
+    if (wantsSpecialist || negative) {
+      console.log(`🏭 User wants specialist or declined alternatives`);
+
+      const orderSize = convo.customOrderSize || 'personalizada';
+
+      await updateConversation(psid, {
+        lastIntent: "custom_order_handoff",
+        handoffRequested: true,
+        handoffReason: `Medida especial ${orderSize} - cliente prefiere cotización específica`,
+        handoffTimestamp: new Date(),
+        state: "needs_human",
+        unknownCount: 0
+      });
+
+      sendHandoffNotification(psid, `Pedido especial: ${orderSize} - cliente quiere cotización específica`).catch(err => {
+        console.error("❌ Failed to send push notification:", err);
+      });
+
+      return {
+        type: "text",
+        text: `Entendido, te comunico con un especialista para cotizar la medida exacta.\n\n📽️ Mientras tanto, conoce más sobre nuestra malla:\n${VIDEO_LINK}`
+      };
+    }
   }
 
   // 😤 FRUSTRATION DETECTION - Escalate to human when user is frustrated

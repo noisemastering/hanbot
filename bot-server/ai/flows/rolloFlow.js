@@ -625,7 +625,10 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
         stateMx: state.zipInfo?.state || convo?.stateMx
       });
 
-      const priceText = product.price ? ` por ${formatMoney(product.price)}` : "";
+      // Clarify "c/u" when asking for multiple items
+      const priceText = product.price
+        ? ` por ${formatMoney(product.price)}${quantity > 1 ? ' c/u' : ''}`
+        : "";
 
       let wholesaleMention = "";
       if (product.wholesaleEnabled && product.wholesaleMinQty && quantity < product.wholesaleMinQty) {

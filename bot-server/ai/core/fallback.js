@@ -110,6 +110,21 @@ async function tryUnderstandMessage(message, convo, openai, BOT_PERSONA_NAME, bu
     historyContext += "\n⚠️ IMPORTANTE: NO repitas información que YA le dijiste al cliente en el historial anterior. Si ya explicaste algo, simplemente reconoce su respuesta y ofrece el siguiente paso.";
   }
 
+  // Build conversation state context (what we already know about this customer)
+  let stateContext = "";
+  if (convo.customOrderSize) {
+    stateContext += `\n🎯 ESTADO ACTUAL: El cliente ya pidió la medida ${convo.customOrderSize} (medida grande que requiere fabricación especial).`;
+    if (convo.suggestedSizes?.length > 0) {
+      stateContext += ` Le ofrecimos las alternativas: ${convo.suggestedSizes.join(', ')}.`;
+    }
+    stateContext += ` NO vuelvas a preguntar la medida - ya la sabemos.`;
+  } else if (convo.requestedSize) {
+    stateContext += `\n🎯 ESTADO ACTUAL: El cliente ya pidió la medida ${convo.requestedSize}. NO vuelvas a preguntar la medida.`;
+  }
+  if (convo.productInterest) {
+    stateContext += `\n📦 Producto de interés: ${convo.productInterest}`;
+  }
+
   try {
     const response = await openai.chat.completions.create({
       model: process.env.AI_MODEL || "gpt-3.5-turbo",
@@ -117,7 +132,7 @@ async function tryUnderstandMessage(message, convo, openai, BOT_PERSONA_NAME, bu
         {
           role: "system",
           content: `Eres ${BOT_PERSONA_NAME}, asesora de ventas de Hanlob, empresa mexicana de mallas sombra en Querétaro.
-${conversationContext}${historyContext}${adContextPrompt}
+${conversationContext}${historyContext}${stateContext}${adContextPrompt}
 
 PRODUCTOS Y CARACTERÍSTICAS:
 - Ofrecemos una amplia variedad de mallas sombra en diferentes medidas y precios
