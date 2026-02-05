@@ -151,9 +151,9 @@ TIEMPOS DE ENTREGA:
 
 FORMA DE PAGO:
 - Pago 100% POR ADELANTADO en Mercado Libre al momento de hacer el pedido (NO se paga al recibir)
-- Mercado Libre acepta: tarjetas de crédito/débito, y meses sin intereses
-- Alternativa: Venir a las oficinas en Querétaro y pagar en efectivo o con tarjeta en persona
-- ⚠️ NO menciones métodos de pago específicos que no estén listados aquí (NO OXXO, NO 7-Eleven, NO transferencia bancaria directa)
+- Mercado Libre ofrece múltiples opciones de pago (el cliente las verá al comprar - NO las listes tú)
+- Alternativa: Aceptamos efectivo y tarjetas en nuestra tienda física en Querétaro
+- ⚠️ Si preguntan formas de pago: "Aceptamos todas las formas de pago de Mercado Libre. También aceptamos efectivo y tarjetas en nuestra tienda física."
 
 LO QUE NO OFRECEMOS:
 - ❌ NO ofrecemos servicio de instalación, montaje, colocación ni armado
