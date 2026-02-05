@@ -113,13 +113,13 @@ async function tryUnderstandMessage(message, convo, openai, BOT_PERSONA_NAME, bu
   // Build conversation state context (what we already know about this customer)
   let stateContext = "";
   if (convo.customOrderSize) {
-    stateContext += `\n🎯 ESTADO ACTUAL: El cliente ya pidió la medida ${convo.customOrderSize} (medida grande que requiere fabricación especial).`;
+    stateContext += `\n🎯 ESTADO ACTUAL: El cliente pidió ${convo.customOrderSize} que es medida especial (requiere cotización personalizada, NO está en catálogo de ML).`;
     if (convo.suggestedSizes?.length > 0) {
-      stateContext += ` Le ofrecimos las alternativas: ${convo.suggestedSizes.join(', ')}.`;
+      stateContext += ` Le ofrecimos alternativas disponibles: ${convo.suggestedSizes.join(', ')}.`;
     }
-    stateContext += ` NO vuelvas a preguntar la medida - ya la sabemos.`;
+    stateContext += `\n⚠️ IMPORTANTE: Si preguntan si pueden ordenar en Mercado Libre, la respuesta es SÍ para medidas estándar. Su medida ${convo.customOrderSize} requiere cotización especial pero SÍ VENDEMOS EN ML otras medidas.`;
   } else if (convo.requestedSize) {
-    stateContext += `\n🎯 ESTADO ACTUAL: El cliente ya pidió la medida ${convo.requestedSize}. NO vuelvas a preguntar la medida.`;
+    stateContext += `\n🎯 ESTADO ACTUAL: El cliente pidió ${convo.requestedSize}. NO vuelvas a preguntar la medida.`;
   }
   if (convo.productInterest) {
     stateContext += `\n📦 Producto de interés: ${convo.productInterest}`;
@@ -187,7 +187,7 @@ INSTRUCCIONES CRÍTICAS:
 - NUNCA inventes información o servicios que no ofrecemos
 
 🚨 REGLAS APRENDIDAS (MUY IMPORTANTE):
-- **Si preguntan "se puede pedir en mercado libre", "venden en mercado libre", "tienen mercado libre", o similar**: ¡SÍ! Vendemos en Mercado Libre. Confirma y da el link de la tienda. Luego pregunta qué medida necesitan.
+- **Si preguntan "se puede pedir en mercado libre", "venden en mercado libre", "tienen mercado libre", o similar**: ¡SÍ! SIEMPRE responde que SÍ vendemos en Mercado Libre. Da el link de la tienda: https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob. Si tienen una medida especial/custom que no está en catálogo, explica que esa medida específica requiere cotización aparte, pero que SÍ pueden ver nuestras medidas estándar en ML.
 - **NUNCA des respuestas genéricas como "Puedo ayudarte con precios, medidas o cotizaciones" en medio de una conversación** - esto hace que el bot parezca tonto
 - **Si preguntaste la ciudad del cliente y responde con una ciudad (ej: "En Mérida", "Monterrey")**: Confirma que envías ahí y pregunta qué medida necesita
 - **Si preguntaste qué medida necesita y responde con dimensiones**: Da el precio y el link de esa medida
