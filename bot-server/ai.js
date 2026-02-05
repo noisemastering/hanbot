@@ -449,7 +449,7 @@ async function generateReply(userMessage, psid, referral = null) {
 
     // 7) Fallback IA
     const response = await openai.chat.completions.create({
-      model: process.env.AI_MODEL || "gpt-3.5-turbo",
+      model: process.env.AI_MODEL || "gpt-4o-mini",
       messages: [
         {
           role: "system",

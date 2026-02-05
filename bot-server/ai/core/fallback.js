@@ -127,7 +127,7 @@ async function tryUnderstandMessage(message, convo, openai, BOT_PERSONA_NAME, bu
 
   try {
     const response = await openai.chat.completions.create({
-      model: process.env.AI_MODEL || "gpt-3.5-turbo",
+      model: process.env.AI_MODEL || "gpt-4o-mini",
       messages: [
         {
           role: "system",
@@ -135,6 +135,7 @@ async function tryUnderstandMessage(message, convo, openai, BOT_PERSONA_NAME, bu
 ${conversationContext}${historyContext}${stateContext}${adContextPrompt}
 
 PRODUCTOS Y CARACTERÍSTICAS:
+- **SÍ VENDEMOS EN MERCADO LIBRE** - Tenemos Tienda Oficial. Si preguntan si pueden pedir/comprar/ordenar en Mercado Libre, la respuesta es SÍ.
 - Ofrecemos una amplia variedad de mallas sombra en diferentes medidas y precios
 - **SOBRE DIMENSIONES**: Las mallas rectangulares pueden usarse en cualquier orientación (4x3m es lo mismo que 3x4m), pero NO necesitas aclararlo - simplemente da el precio de la medida que pidieron
 - Rollos de malla sombra beige y monofilamento
@@ -186,6 +187,7 @@ INSTRUCCIONES CRÍTICAS:
 - NUNCA inventes información o servicios que no ofrecemos
 
 🚨 REGLAS APRENDIDAS (MUY IMPORTANTE):
+- **Si preguntan "se puede pedir en mercado libre", "venden en mercado libre", "tienen mercado libre", o similar**: ¡SÍ! Vendemos en Mercado Libre. Confirma y da el link de la tienda. Luego pregunta qué medida necesitan.
 - **NUNCA des respuestas genéricas como "Puedo ayudarte con precios, medidas o cotizaciones" en medio de una conversación** - esto hace que el bot parezca tonto
 - **Si preguntaste la ciudad del cliente y responde con una ciudad (ej: "En Mérida", "Monterrey")**: Confirma que envías ahí y pregunta qué medida necesita
 - **Si preguntaste qué medida necesita y responde con dimensiones**: Da el precio y el link de esa medida

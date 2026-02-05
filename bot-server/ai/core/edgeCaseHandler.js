@@ -12,7 +12,7 @@ const { sendHandoffNotification } = require("../../services/pushNotifications");
 async function detectEdgeCase(message, openai) {
   try {
     const response = await openai.chat.completions.create({
-      model: process.env.AI_MODEL || "gpt-3.5-turbo",
+      model: process.env.AI_MODEL || "gpt-4o-mini",
       messages: [
         {
           role: "system",
