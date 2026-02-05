@@ -807,8 +807,8 @@ function quickClassify(message, dbIntents = null) {
     return { intent: INTENTS.STRUCTURE_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
   }
 
-  // Pay on delivery query
-  if (/\b(pago|pagar)\s+(al\s+(entregar|recibir)|contra\s+entrega)|hasta\s+que\s+llegue|cuando\s+llegue\s+pago/i.test(msg)) {
+  // Pay on delivery query - tolerant of typos like "recibbir", "resibir"
+  if (/\b(pago|pagar)\s+(al\s+(entregar|re[sc]i[bv]+ir)|contra\s+entrega)|contra\s*entrega|hasta\s+que\s+llegue|cuando\s+llegue\s+pago/i.test(msg)) {
     return { intent: INTENTS.PAY_ON_DELIVERY_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
   }
 
