@@ -861,6 +861,53 @@ app.post("/webhook", async (req, res) => {
         return;
       }
 
+      // 📢 MESSAGE ECHO: Page sent a message (through native inbox or API)
+      // This detects when a human replies through Facebook's native Page Inbox
+      if (webhookEvent.message?.is_echo) {
+        const recipientPsid = webhookEvent.recipient.id;
+        const messageText = webhookEvent.message.text || '[attachment]';
+        const appId = webhookEvent.message.app_id;
+
+        console.log(`📢 MESSAGE ECHO detected:`);
+        console.log(`   Recipient: ${recipientPsid}`);
+        console.log(`   Text: ${messageText.slice(0, 100)}`);
+        console.log(`   App ID: ${appId || 'native inbox'}`);
+
+        // If no app_id, it was sent through Facebook's native Page Inbox (human agent)
+        // If app_id matches our bot, it's our own message (ignore)
+        const isFromBot = appId === process.env.FB_APP_ID;
+
+        if (!isFromBot) {
+          console.log(`👨‍💼 Human agent message detected via echo - marking conversation as human_active`);
+
+          // Save as human message
+          const Message = require('./models/Message');
+          await Message.create({
+            psid: recipientPsid,
+            text: messageText,
+            senderType: 'human',
+            timestamp: new Date()
+          });
+
+          // Update conversation state
+          await updateConversation(recipientPsid, {
+            state: 'human_active',
+            agentTookOverAt: new Date(),
+            lastMessageAt: new Date()
+          });
+
+          // Emit to dashboard
+          io.emit("humanMessage", {
+            psid: recipientPsid,
+            text: messageText,
+            timestamp: new Date()
+          });
+        }
+
+        res.sendStatus(200);
+        return;
+      }
+
       // 🧩 BLOQUE NUEVO: detección de campañas o enlaces con ?ref=
       const referral = webhookEvent.referral || webhookEvent.postback?.referral;
       if (referral) {
