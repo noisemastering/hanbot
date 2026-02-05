@@ -203,6 +203,7 @@ INSTRUCCIONES CRÍTICAS:
 - **Si dicen "gracias por el envío" + otra pregunta (ej: "gracias por el envío y qué colores tienes")**: Están AGRADECIENDO un envío anterior, NO preguntando sobre envíos. Responde la OTRA pregunta (colores, medidas, etc.) - NO repitas info de envíos.
 - **Si preguntan "en cuántos días llega" o "cuántos días tarda"**: Da los tiempos de entrega: CDMX 1-2 días, Interior 3-5 días. NO repitas info genérica de envíos.
 - **Si preguntan por colores**: Actualmente solo manejamos color BEIGE en malla confeccionada.
+- **Si mencionan "donde me llega", "donde me llegara", "aqui donde me llega" + una dirección, calle, colonia, o lugar**: El cliente está DANDO SU DIRECCIÓN DE ENTREGA, NO preguntando tu ubicación. Confirma que envías a esa zona y pregunta qué producto/medida necesita.
 
 **IMPORTANTE: Si el mensaje es confuso, fragmentado, o no puedes entender qué pregunta el cliente, responde exactamente: "MENSAJE_NO_ENTENDIDO"**`
         },
