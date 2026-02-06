@@ -1300,6 +1300,29 @@ app.post("/webhook", async (req, res) => {
             res.sendStatus(200);
             return;
           }
+
+          // 🎬 Check for video attachments
+          const videoAttachment = attachments.find(att => att.type === "video");
+
+          if (videoAttachment) {
+            console.log(`🎬 Video received from ${senderPsid}`);
+
+            await registerUserIfNeeded(senderPsid);
+            await saveMessage(senderPsid, "[Video enviado]", "user", messageId);
+
+            // Respond friendly without analyzing - videos are usually just friendly shares
+            const reply = "¡Gracias por compartir! 😊 ¿En qué puedo ayudarte con malla sombra?";
+            await callSendAPI(senderPsid, { text: reply });
+            await saveMessage(senderPsid, reply, "bot");
+
+            await updateConversation(senderPsid, {
+              lastIntent: "video_received",
+              state: "active"
+            });
+
+            res.sendStatus(200);
+            return;
+          }
         }
 
         await registerUserIfNeeded(senderPsid);
