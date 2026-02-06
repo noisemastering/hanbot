@@ -243,12 +243,10 @@ function getFlowState(convo) {
 
 /**
  * Determine what's missing and what stage we should be in
+ * SIMPLIFIED: Skip type/width/percentage questions, just collect zip and handoff
  */
 function determineStage(state) {
-  // Must know rollo type first (only for malla sombra do we continue in this flow)
-  if (!state.rolloType) return STAGES.AWAITING_TYPE;
-  if (!state.width) return STAGES.AWAITING_WIDTH;
-  if (!state.percentage) return STAGES.AWAITING_PERCENTAGE;
+  // Only need zip code before handoff
   if (!state.zipCode) return STAGES.AWAITING_ZIP;
   return STAGES.COMPLETE;
 }
@@ -540,146 +538,49 @@ function handleAwaitingPercentage(intent, state, sourceContext) {
 }
 
 /**
- * Handle awaiting zip code stage
+ * Handle awaiting zip code stage - just ask for zip to calculate shipping
  */
 function handleAwaitingZip(intent, state, sourceContext) {
   return {
     type: "text",
-    text: `✅ Perfecto, te confirmo:\n\n` +
-          `📦 Rollo de ${state.width}m x 100m al ${state.percentage}%\n` +
-          `📊 Cantidad: ${state.quantity || 1} rollo${(state.quantity || 1) > 1 ? 's' : ''}\n\n` +
-          `Para calcular el envío, ¿me compartes tu código postal?`
+    text: `¡Claro! Para cotizarte el rollo de malla sombra y calcular el envío, ¿me compartes tu código postal o ciudad?`
   };
 }
 
 /**
- * Handle complete - we have width and percentage
+ * Handle complete - we have zip code, hand off to human
+ * SIMPLIFIED: No more width/percentage collection, just handoff
  */
 async function handleComplete(intent, state, sourceContext, psid, convo) {
-  const quantity = state.quantity || 1;
+  const locationText = state.zipInfo
+    ? `${state.zipInfo.city}, ${state.zipInfo.state}`
+    : (state.zipCode || 'ubicación no especificada');
 
-  // Check if already asked quantity
-  const alreadyAskedQuantity = convo?.lastIntent === "roll_complete";
-  const userProvidedQuantity = intent === INTENTS.QUANTITY_SPECIFICATION || state.quantity;
+  await updateConversation(psid, {
+    handoffRequested: true,
+    handoffReason: `Rollo inquiry - location: ${locationText}`,
+    handoffTimestamp: new Date(),
+    state: "needs_human"
+  });
 
-  // If user is confirming quantity, give short response
-  if (alreadyAskedQuantity && userProvidedQuantity) {
-    const locationText = state.zipInfo
-      ? ` a ${state.zipInfo.city}, ${state.zipInfo.state}`
-      : '';
+  // Send push notification
+  const { sendHandoffNotification } = require("../services/pushNotifications");
+  sendHandoffNotification(psid, convo, `Cliente pregunta por rollo - ${locationText}`).catch(err => {
+    console.error("❌ Failed to send push notification:", err);
+  });
 
-    await updateConversation(psid, {
-      handoffRequested: true,
-      handoffReason: `Roll quote: ${quantity}x ${state.width}m x 100m @ ${state.percentage}%${locationText}`,
-      handoffTimestamp: new Date()
-    });
-
-    const qtyText = quantity > 1 ? `los ${quantity} rollos` : "el rollo";
-    let responseText = `¡Perfecto! Un especialista te contactará para cotizarte ${qtyText}.`;
-    if (state.zipInfo) {
-      responseText += `\n\n📍 Envío a ${state.zipInfo.city}, ${state.zipInfo.state}`;
-    }
-
-    const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
-    responseText += `\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`;
-
-    return {
-      type: "text",
-      text: responseText
-    };
+  let responseText = `¡Perfecto! Un especialista te contactará para cotizarte el rollo de malla sombra.`;
+  if (state.zipInfo) {
+    responseText += `\n\n📍 Envío a ${state.zipInfo.city}, ${state.zipInfo.state}`;
   }
 
-  // Try to find matching products in inventory
-  const products = await findMatchingProducts(state.width, state.percentage);
+  const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
+  responseText += `\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`;
 
-  if (products.length > 0) {
-    const product = products[0];
-
-    // ENRICH WITH TREE CONTEXT
-    const displayName = await getProductDisplayName(product, 'short');
-    const productInterest = await getProductInterest(product);
-
-    if (productInterest) {
-      await updateConversation(psid, { productInterest });
-    }
-
-    // Check for wholesale
-    if (quantity && product.wholesaleEnabled && product.wholesaleMinQty) {
-      if (quantity >= product.wholesaleMinQty) {
-        const { handleWholesaleRequest } = require("../utils/wholesaleHandler");
-        const wholesaleResponse = await handleWholesaleRequest(product, quantity, psid, convo);
-        if (wholesaleResponse) return wholesaleResponse;
-      }
-    }
-
-    // Get preferred link
-    const preferredLink = product.onlineStoreLinks?.find(link => link.isPreferred);
-    const productUrl = preferredLink?.url || product.onlineStoreLinks?.[0]?.url;
-
-    if (productUrl && userProvidedQuantity) {
-      // Has link and quantity - provide link
-      const trackedLink = await generateClickLink(psid, productUrl, {
-        productName: product.name,
-        productId: product._id,
-        city: state.zipInfo?.city || convo?.city,
-        stateMx: state.zipInfo?.state || convo?.stateMx
-      });
-
-      // Clarify "c/u" when asking for multiple items
-      const priceText = product.price
-        ? ` por ${formatMoney(product.price)}${quantity > 1 ? ' c/u' : ''}`
-        : "";
-
-      let wholesaleMention = "";
-      if (product.wholesaleEnabled && product.wholesaleMinQty && quantity < product.wholesaleMinQty) {
-        wholesaleMention = `\n\nA partir de ${product.wholesaleMinQty} rollos manejamos precio de mayoreo.`;
-      }
-
-      let locationMention = "";
-      if (state.zipInfo) {
-        locationMention = `\n\n📍 Envío a ${state.zipInfo.city}, ${state.zipInfo.state}`;
-      }
-
-      return {
-        type: "text",
-        text: `¡Perfecto! Tenemos el ${displayName}${priceText}.\n\n` +
-              `🛒 Cómpralo aquí:\n${trackedLink}${wholesaleMention}${locationMention}\n\n` +
-              `¿Necesitas algo más?`
-      };
-    }
-  }
-
-  // No product found or no quantity yet - hand off or ask quantity
-  if (userProvidedQuantity) {
-    const locationText = state.zipInfo
-      ? ` a ${state.zipInfo.city}, ${state.zipInfo.state}`
-      : '';
-
-    await updateConversation(psid, {
-      handoffRequested: true,
-      handoffReason: `Roll quote: ${quantity}x ${state.width}m x 100m @ ${state.percentage}%${locationText}`,
-      handoffTimestamp: new Date()
-    });
-
-    let responseText = `Perfecto, ${quantity} rollo${quantity > 1 ? 's' : ''} de ${state.width}m x 100m al ${state.percentage}%.`;
-    if (state.zipInfo) {
-      responseText += `\n\n📍 Envío a ${state.zipInfo.city}, ${state.zipInfo.state}`;
-    }
-
-    const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
-    responseText += `\n\nUn especialista te contactará con el precio.\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`;
-
-    return {
-      type: "text",
-      text: responseText
-    };
-  } else {
-    return {
-      type: "text",
-      text: `Tenemos el rollo de ${state.width}m x 100m al ${state.percentage}%.\n\n` +
-            `¿Cuántos rollos necesitas?`
-    };
-  }
+  return {
+    type: "text",
+    text: responseText
+  };
 }
 
 /**
