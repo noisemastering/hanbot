@@ -3,6 +3,12 @@ const mongoose = require("mongoose");
 const usoSchema = new mongoose.Schema({
   name: { type: String, required: true, trim: true },
   description: { type: String, trim: true },
+  // Keywords for matching user intent (e.g., "carro", "estacionamiento", "patio")
+  keywords: [{
+    type: String,
+    trim: true,
+    lowercase: true
+  }],
   // Products associated with this use case
   products: [{
     type: mongoose.Schema.Types.ObjectId,
@@ -24,6 +30,7 @@ const usoSchema = new mongoose.Schema({
 
 // Index for faster queries
 usoSchema.index({ name: 1 });
+usoSchema.index({ keywords: 1 });
 usoSchema.index({ available: 1, priority: -1 });
 
 // Virtual to get product count

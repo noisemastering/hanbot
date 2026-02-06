@@ -16,6 +16,38 @@ router.get("/", async (req, res) => {
   }
 });
 
+// Find usos by keyword match
+router.get("/match/:keyword", async (req, res) => {
+  try {
+    const keyword = req.params.keyword.toLowerCase().trim();
+    const usos = await Uso.find({
+      keywords: keyword,
+      available: true
+    })
+      .populate('products', 'name description imageUrl price sellable generation')
+      .sort({ priority: -1 });
+    res.json({ success: true, data: usos });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Search usos by partial keyword match
+router.get("/search/:query", async (req, res) => {
+  try {
+    const query = req.params.query.toLowerCase().trim();
+    const usos = await Uso.find({
+      keywords: { $regex: query, $options: 'i' },
+      available: true
+    })
+      .populate('products', 'name description imageUrl price sellable generation')
+      .sort({ priority: -1 });
+    res.json({ success: true, data: usos });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Get a single uso
 router.get("/:id", async (req, res) => {
   try {
