@@ -67,8 +67,9 @@ VARIANTES QUE NO FABRICAMOS:
 - Lonas impermeables
 - Toldos rígidos / estructuras metálicas
 - Instalación (solo vendemos el producto)
-- Reparación de sombrillas o toldos existentes
+- Reparación de lonas, sombrillas o toldos existentes
 - Forrado de estructuras
+- Servicio de reparación o mantenimiento
 
 DATOS DEL NEGOCIO:
 - Ciudad: Querétaro
