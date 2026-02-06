@@ -294,8 +294,8 @@ async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME
         `Voy a transferir tu caso con un especialista que te dará una cotización personalizada. ` +
         `Por favor comunícate con nuestro equipo:\n\n` +
         `📞 ${businessInfo.phones.join(" / ")}\n` +
-        `🕓 ${businessInfo.hours}\n\n` +
-        `📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
+        `🕓 ${businessInfo.hours}`,
+      followUp: `📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
     };
   }
 
@@ -371,7 +371,11 @@ async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME
     const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
 
     if (!info) {
-      return { type: "text", text: `Déjame conectarte con un especialista que pueda ayudarte mejor 😊\n\n💬 WhatsApp: ${whatsappLink}\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}` };
+      return {
+        type: "text",
+        text: `Déjame conectarte con un especialista que pueda ayudarte mejor 😊\n\n💬 WhatsApp: ${whatsappLink}`,
+        followUp: `📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
+      };
     }
 
     return {
@@ -379,8 +383,8 @@ async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME
       text:
         `Déjame conectarte con un especialista que pueda ayudarte mejor 😊\n\n` +
         `💬 WhatsApp: ${whatsappLink}\n\n` +
-        `📞 ${info.phones.join(" / ")}\n🕓 ${info.hours}\n\n` +
-        `📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
+        `📞 ${info.phones.join(" / ")}\n🕓 ${info.hours}`,
+      followUp: `📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
     };
   }
 

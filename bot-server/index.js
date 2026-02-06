@@ -1354,6 +1354,15 @@ app.post("/webhook", async (req, res) => {
               console.log(`✅ [DEBUG] Bot message saved! ID: ${savedMsg._id}`);
             }
 
+            // Send follow-up message if exists (e.g., video link as separate bubble)
+            if (reply.followUp) {
+              console.log(`🔍 [DEBUG] Sending follow-up message...`);
+              await new Promise(resolve => setTimeout(resolve, 500)); // Small delay between messages
+              await callSendAPI(senderPsid, { text: reply.followUp });
+              await saveMessage(senderPsid, reply.followUp, "bot");
+              console.log(`✅ [DEBUG] Follow-up message sent`);
+            }
+
           } catch (err) {
             console.error("❌ Error al responder con IA:", err);
             console.error("❌ Stack trace:", err.stack);
