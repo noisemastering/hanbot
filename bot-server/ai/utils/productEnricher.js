@@ -646,7 +646,7 @@ async function buildProductSalesPitch(product) {
  * @returns {string} - Formatted response text
  */
 async function formatProductResponse(product, options = {}) {
-  const { price, link, quantity, userExpressedSize } = options;
+  const { price, link, quantity, userExpressedSize, concerns } = options;
   const { generatePriceResponse } = require('../responseGenerator');
 
   const pitch = await buildProductSalesPitch(product);
@@ -666,7 +666,8 @@ async function formatProductResponse(product, options = {}) {
       dimensions: dimensions || { width: 0, height: 0 },
       price: price,
       link: link,
-      userExpression: userExpressedSize || pitch?.sizeText || product.size
+      userExpression: userExpressedSize || pitch?.sizeText || product.size,
+      concerns: concerns
     });
 
     if (aiResponse) {

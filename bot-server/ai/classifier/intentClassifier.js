@@ -419,7 +419,7 @@ ENTITY EXTRACTION:
 - borde_length: 6, 9, 18, or 54 (only for borde_separador)
 - dimensions: full dimension string if detected (e.g., "4x5")
 - location: city or state if mentioned
-- concerns: array of secondary topics/concerns the user mentions (e.g., ["durability", "price", "features", "reinforcement", "weather_resistance", "installation"]). Extract ALL concerns, don't lose information.
+- concerns: array of secondary topics/concerns the user mentions (e.g., ["color", "durability", "price", "features", "reinforcement", "weather_resistance", "installation"]). Extract ALL concerns, don't lose information. If user asks "y que colores" or similar, include "color" in concerns.
 
 Respond with ONLY valid JSON, no explanation:
 {

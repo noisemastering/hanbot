@@ -125,6 +125,7 @@ ESCENARIOS ESPECIALES:
 
 CONCERNS (preocupaciones secundarias):
 Cuando el contexto incluya "concerns", el cliente tiene preocupaciones adicionales que debes abordar en tu respuesta:
+- color/colores: Menciona que manejamos la malla en beige y negro.
 - durability/weather_resistance: Menciona que la malla es confeccionada para mayor durabilidad, resiste sol, viento y lluvia.
 - reinforcement: Menciona el refuerzo en las esquinas y sujetadores/argollas en todos los lados.
 - price/precio: Incluye el precio si te lo doy.
@@ -181,10 +182,11 @@ function buildUserPrompt({ intent, context, product, convo }) {
 /**
  * Generate price quote response
  */
-async function generatePriceResponse({ dimensions, price, link, userExpression, convo }) {
+async function generatePriceResponse({ dimensions, price, link, userExpression, convo, concerns }) {
   const context = {
     userAskedFor: userExpression || `${dimensions.width} x ${dimensions.height} metros`,
-    includeFreeShipping: true
+    includeFreeShipping: true,
+    concerns: concerns ? concerns.join(", ") : null
   };
 
   const product = {

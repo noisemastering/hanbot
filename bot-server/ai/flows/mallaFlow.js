@@ -609,6 +609,9 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   if (entities.quantity) {
     state.quantity = entities.quantity;
   }
+  if (entities.concerns) {
+    state.concerns = entities.concerns;
+  }
 
   // Check if user is asking about product condition (new vs used)
   const conditionRequest = /\b(nuev[oa]s?|usad[oa]s?|segunda\s*mano|de\s*segunda|reciclad[oa]s?)\b/i;
@@ -915,7 +918,7 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
  * Handle complete - we have dimensions
  */
 async function handleComplete(intent, state, sourceContext, psid, convo, userMessage = '') {
-  const { width, height, percentage, color, quantity, userExpressedSize } = state;
+  const { width, height, percentage, color, quantity, userExpressedSize, concerns } = state;
 
   // Parse zip code from message if provided
   const zipInfo = await parseAndLookupZipCode(userMessage);
@@ -1127,7 +1130,8 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     // Build sales-style response - use user's expressed dimension order for display
     const salesPitch = await formatProductResponse(product, {
       price: product.price,
-      userExpressedSize: userExpressedSize ? `${userExpressedSize} m` : null
+      userExpressedSize: userExpressedSize ? `${userExpressedSize} m` : null,
+      concerns: concerns
     });
 
     // Add wholesale mention if product is eligible
