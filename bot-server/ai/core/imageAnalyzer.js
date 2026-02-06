@@ -40,11 +40,15 @@ Si ves una estructura que YA tiene sombra (sombrilla de jardín, toldo, carpa, p
 - NO intentes analizar dimensiones
 - NO sugieras productos
 
-CATEGORÍA C - IMAGEN NO RELACIONADA:
-Si la imagen no es de un espacio exterior o no está relacionada con sombra:
+CATEGORÍA C - IMAGEN POSITIVA/AMIGABLE:
+Si la imagen es de emojis positivos (caritas felices, pulgares arriba, corazones), stickers amigables, o imágenes que expresan gratitud/felicidad:
+- Responde: "POSITIVE_IMAGE"
+
+CATEGORÍA D - IMAGEN NO RELACIONADA:
+Si la imagen no es de un espacio exterior, no está relacionada con sombra, y no es positiva/amigable:
 - Responde: "UNRELATED_IMAGE"
 
-Responde en español de forma concisa. Para categorías B y C, solo responde con el código indicado.`
+Responde en español de forma concisa. Para categorías B, C y D, solo responde con el código indicado.`
         },
         {
           role: "user",
@@ -75,6 +79,8 @@ Responde en español de forma concisa. Para categorías B y C, solo responde con
     // Detect special cases
     const isCustomServiceRequest = analysis.includes("CUSTOM_SERVICE_REQUEST") ||
                                     /sombrilla|toldo|parasol|carpa|pérgola.*tela|forrar|reparar|cambiar.*tela/i.test(analysis);
+    const isPositiveImage = analysis.includes("POSITIVE_IMAGE") ||
+                            /emoji|carita|feliz|pulgar|coraz[oó]n|gracias|amigable/i.test(analysis);
     const isUnrelated = analysis.includes("UNRELATED_IMAGE");
 
     // Detect when AI can't properly analyze the image
@@ -90,6 +96,7 @@ Responde en español de forma concisa. Para categorías B y C, solo responde con
       analysis,
       imageUrl,
       isCustomServiceRequest,
+      isPositiveImage,
       isUnrelated,
       cantAnalyze
     };
@@ -125,6 +132,14 @@ function generateImageResponse(analysisResult) {
       text: "Gracias por la imagen. No logro verla bien, te comunico con un especialista que pueda ayudarte mejor.\n\nEn un momento te atienden.",
       needsHandoff: true,
       handoffReason: "No se pudo analizar la imagen correctamente"
+    };
+  }
+
+  // Handle positive/friendly images (emojis, thumbs up, hearts, etc.)
+  if (analysisResult.isPositiveImage) {
+    return {
+      type: "text",
+      text: "¡Gracias! 😊 ¿Hay algo más en lo que pueda ayudarte?"
     };
   }
 
