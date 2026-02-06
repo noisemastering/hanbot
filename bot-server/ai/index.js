@@ -695,6 +695,61 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
 async function generateReply(userMessage, psid, referral = null) {
   let convo = await getConversation(psid);
 
+  // ====== RESET CLOSED CONVERSATIONS ======
+  // If conversation was closed (needs_human with goodbye) and user sends a new inquiry,
+  // reset the state so the bot can respond to the new conversation
+  if (convo.state === "needs_human" && convo.lastIntent === "goodbye") {
+    // Check time since last message - if more than 1 hour, treat as new conversation
+    const lastMessageTime = convo.lastMessageAt ? new Date(convo.lastMessageAt) : null;
+    const hoursSinceLastMessage = lastMessageTime
+      ? (Date.now() - lastMessageTime.getTime()) / (1000 * 60 * 60)
+      : 999;
+
+    if (hoursSinceLastMessage >= 1) {
+      console.log(`🔄 Resetting closed conversation (was needs_human + goodbye, ${hoursSinceLastMessage.toFixed(1)}h since last message)`);
+      await updateConversation(psid, {
+        state: "active",
+        lastIntent: null,
+        handoffRequested: false,
+        handoffReason: null,
+        lastBotResponse: null,
+        lastNeedsHumanReminder: null
+      });
+      // Update local convo object
+      convo.state = "active";
+      convo.lastIntent = null;
+      convo.handoffRequested = false;
+    }
+  }
+  // ====== END RESET CLOSED CONVERSATIONS ======
+
+  // ====== CHECK NEEDS_HUMAN STATE ======
+  // If conversation still needs human (active handoff, not a closed convo), stay mostly silent
+  if (convo.state === "needs_human") {
+    console.log("🚨 Conversation is waiting for human (needs_human state)");
+
+    // Check when we last sent a reminder (avoid spamming)
+    const lastReminder = convo.lastNeedsHumanReminder ? new Date(convo.lastNeedsHumanReminder) : null;
+    const minutesSinceReminder = lastReminder
+      ? (Date.now() - lastReminder.getTime()) / (1000 * 60)
+      : 999;
+
+    // Send reminder at most every 10 minutes
+    if (minutesSinceReminder >= 10) {
+      await updateConversation(psid, { lastNeedsHumanReminder: new Date() });
+
+      return {
+        type: "text",
+        text: "Tu mensaje fue recibido. Un especialista te atenderá en breve. 🙏"
+      };
+    }
+
+    // Already sent a recent reminder, stay silent
+    console.log(`⏳ Already sent reminder ${minutesSinceReminder.toFixed(1)} min ago, staying silent`);
+    return null;
+  }
+  // ====== END CHECK NEEDS_HUMAN STATE ======
+
   // ====== CONVERSATION BASKET: Extract and merge specs from EVERY message ======
   // This ensures we never lose information the customer gave us
   const { extractAllSpecs, mergeSpecs } = require("./utils/specExtractor");
