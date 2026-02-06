@@ -37,31 +37,17 @@ const FLOWS = {
 function detectFlow(classification, convo, userMessage) {
   const msg = (userMessage || '').toLowerCase();
 
-  // Check classification product first
-  if (classification.product && classification.product !== PRODUCTS.UNKNOWN) {
-    const flowMap = {
-      [PRODUCTS.MALLA_SOMBRA]: 'malla_sombra',
-      [PRODUCTS.ROLLO]: 'rollo',
-      [PRODUCTS.BORDE_SEPARADOR]: 'borde_separador',
-      [PRODUCTS.GROUNDCOVER]: 'groundcover',
-      [PRODUCTS.MONOFILAMENTO]: 'monofilamento'
-    };
-
-    if (flowMap[classification.product]) {
-      return flowMap[classification.product];
-    }
-  }
-
-  // Check conversation context (already in a product flow)
+  // FIRST: Check if already in a product flow - prioritize conversation continuity
+  // This prevents "De 5 metros" in a rollo conversation from being hijacked by malla flow
   if (convo?.currentFlow && convo.currentFlow !== 'default') {
     return convo.currentFlow;
   }
 
-  // Check product interest from conversation
+  // SECOND: Check product interest from conversation (mid-flow state)
   if (convo?.productInterest) {
     const pi = convo.productInterest.toLowerCase();
 
-    // Handle malla_sombra variants (malla_sombra, malla_sombra_raschel, etc.)
+    // Handle malla_sombra variants
     if (pi.startsWith('malla_sombra') || pi === 'confeccionada') {
       return 'malla_sombra';
     }
@@ -77,6 +63,21 @@ function detectFlow(classification, convo, userMessage) {
 
     if (interestMap[pi]) {
       return interestMap[pi];
+    }
+  }
+
+  // THIRD: Check classification product (new product detected in message)
+  if (classification.product && classification.product !== PRODUCTS.UNKNOWN) {
+    const flowMap = {
+      [PRODUCTS.MALLA_SOMBRA]: 'malla_sombra',
+      [PRODUCTS.ROLLO]: 'rollo',
+      [PRODUCTS.BORDE_SEPARADOR]: 'borde_separador',
+      [PRODUCTS.GROUNDCOVER]: 'groundcover',
+      [PRODUCTS.MONOFILAMENTO]: 'monofilamento'
+    };
+
+    if (flowMap[classification.product]) {
+      return flowMap[classification.product];
     }
   }
 
