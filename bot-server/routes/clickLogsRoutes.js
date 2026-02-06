@@ -222,12 +222,12 @@ router.get("/daily", async (req, res) => {
     if (startDate) dateFilter.$gte = new Date(startDate + 'T00:00:00');
     if (endDate) dateFilter.$lte = new Date(endDate + 'T23:59:59.999');
 
-    // Aggregate links created per day
+    // Aggregate links created per day (using Mexico City timezone)
     const linksPerDay = await ClickLog.aggregate([
       { $match: dateFilter.$gte ? { createdAt: dateFilter } : {} },
       {
         $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt" } },
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "America/Mexico_City" } },
           links: { $sum: 1 },
           clicks: { $sum: { $cond: ["$clicked", 1, 0] } },
           conversions: { $sum: { $cond: ["$converted", 1, 0] } }
