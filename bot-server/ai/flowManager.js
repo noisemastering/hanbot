@@ -6,6 +6,7 @@ const { updateConversation } = require("../conversationManager");
 const { scorePurchaseIntent, isWholesaleInquiry } = require("./utils/purchaseIntentScorer");
 const { parseDimensions } = require("../measureHandler");
 const { INTENTS, PRODUCTS } = require("./classifier");
+const { analyzeUseCaseFit, generateSuggestionMessage } = require("./utils/usoCaseMatcher");
 
 // Flow imports
 const defaultFlow = require("./flows/defaultFlow");
@@ -140,7 +141,62 @@ function checkFlowTransfer(currentFlow, detectedFlow, convo) {
 async function processMessage(userMessage, psid, convo, classification, sourceContext, campaign = null) {
   console.log(`\n🎯 ===== FLOW MANAGER =====`);
 
-  // ===== STEP 0: CHECK FOR LEAD CAPTURE CAMPAIGN =====
+  // ===== STEP 0: CHECK FOR PENDING FLOW CHANGE CONFIRMATION =====
+  // If we suggested a product change and user confirms, execute the switch
+  if (convo?.pendingFlowChange) {
+    const msg = userMessage.toLowerCase();
+    const isConfirmation = /\b(s[ií]|ok|claro|dale|va|me\s*interesa|esa|ese|la\s*quiero|lo\s*quiero)\b/i.test(msg);
+    const isRejection = /\b(no|mejor\s*no|as[ií]\s*est[aá]|el\s*que\s*te\s*dije|la\s*que\s*te\s*dije|la\s*confeccionada|el\s*original)\b/i.test(msg);
+
+    if (isConfirmation) {
+      const newFlow = convo.pendingFlowChange;
+      console.log(`✅ User confirmed flow change to: ${newFlow}`);
+
+      // Clear pending and switch flow
+      await updateConversation(psid, {
+        currentFlow: newFlow,
+        productInterest: newFlow,
+        pendingFlowChange: null,
+        pendingUseCaseProducts: null,
+        flowTransferredFrom: convo.currentFlow,
+        flowTransferredAt: new Date()
+      });
+
+      convo.currentFlow = newFlow;
+      convo.productInterest = newFlow;
+
+      // Route to new flow with a greeting
+      const flowGreetings = {
+        'rollo': '¡Perfecto! Para el rollo de malla sombra, ¿qué porcentaje de sombra necesitas? Tenemos 35%, 50%, 70%, 80% y 90%.',
+        'groundcover': '¡Perfecto! Para el ground cover antimaleza, ¿qué medida necesitas?',
+        'monofilamento': '¡Perfecto! Para la malla monofilamento, ¿qué porcentaje de sombra necesitas?',
+        'borde_separador': '¡Perfecto! Para el borde separador, ¿qué largo necesitas? Tenemos 6m, 9m, 18m y 54m.'
+      };
+
+      console.log(`🎯 ===== END FLOW MANAGER (flow changed to ${newFlow}) =====\n`);
+      return {
+        type: "text",
+        text: flowGreetings[newFlow] || `¡Perfecto! ¿Qué medida necesitas?`,
+        handledBy: `flow:${newFlow}`,
+        purchaseIntent: 'medium'
+      };
+    }
+
+    if (isRejection) {
+      console.log(`❌ User rejected flow change, staying in: ${convo.currentFlow}`);
+
+      // Clear pending change
+      await updateConversation(psid, {
+        pendingFlowChange: null,
+        pendingUseCaseProducts: null
+      });
+
+      // Continue with current flow
+    }
+  }
+  // ===== END PENDING FLOW CHANGE CHECK =====
+
+  // ===== STEP 0.5: CHECK FOR LEAD CAPTURE CAMPAIGN =====
   // B2B/Distributor campaigns should go through lead capture flow
   if (campaign && leadCaptureFlow.shouldHandle(classification, sourceContext, convo, userMessage, campaign)) {
     console.log(`📋 Routing to lead capture flow (campaign: ${campaign.name})`);
@@ -196,6 +252,54 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
   }
   // ===== END FLOW DETECTION =====
 
+  // ===== STEP 3.5: CHECK USE CASE FIT =====
+  // Detect if user mentions a use case and validate product fit
+  const productInterest = convo?.productInterest || activeFlow;
+  const useCaseAnalysis = await analyzeUseCaseFit(userMessage, productInterest);
+
+  if (useCaseAnalysis.detected) {
+    // Store the detected use case in conversation
+    await updateConversation(psid, {
+      detectedUseCase: useCaseAnalysis.keywords[0],
+      useCaseFits: useCaseAnalysis.fits
+    });
+
+    // If product doesn't fit the use case, suggest alternatives
+    if (useCaseAnalysis.shouldSuggestChange) {
+      const suggestionMsg = generateSuggestionMessage(useCaseAnalysis);
+
+      if (suggestionMsg) {
+        console.log(`🔄 Product mismatch detected - suggesting alternatives`);
+
+        // Determine the best flow for suggested products
+        let suggestedFlow = activeFlow;
+        const suggestedProduct = useCaseAnalysis.suggestedProducts[0];
+        if (suggestedProduct) {
+          const name = suggestedProduct.name.toLowerCase();
+          if (name.includes('rollo')) suggestedFlow = 'rollo';
+          else if (name.includes('ground') || name.includes('antimaleza')) suggestedFlow = 'groundcover';
+          else if (name.includes('monofilamento')) suggestedFlow = 'monofilamento';
+          else if (name.includes('borde')) suggestedFlow = 'borde_separador';
+        }
+
+        // Store pending flow change (user needs to confirm)
+        await updateConversation(psid, {
+          pendingFlowChange: suggestedFlow,
+          pendingUseCaseProducts: useCaseAnalysis.suggestedProducts.map(p => p._id)
+        });
+
+        console.log(`🎯 ===== END FLOW MANAGER (use case mismatch) =====\n`);
+        return {
+          type: "text",
+          text: suggestionMsg,
+          handledBy: "flow:use_case_matcher",
+          purchaseIntent: intentScore.intent
+        };
+      }
+    }
+  }
+  // ===== END USE CASE FIT CHECK =====
+
   // ===== STEP 4: ROUTE TO ACTIVE FLOW =====
   const flow = FLOWS[activeFlow];
 
@@ -213,7 +317,8 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
     transferredFrom: transferTo ? currentFlow : null,
     classification,
     sourceContext,
-    campaign
+    campaign,
+    useCaseAnalysis
   };
 
   try {
