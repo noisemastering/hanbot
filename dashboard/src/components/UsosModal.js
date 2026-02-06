@@ -6,6 +6,7 @@ function UsosModal({ uso, onSave, onClose }) {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
+    keywords: '',
     products: [],
     available: true,
     imageUrl: '',
@@ -35,6 +36,7 @@ function UsosModal({ uso, onSave, onClose }) {
       setFormData({
         name: uso.name || '',
         description: uso.description || '',
+        keywords: uso.keywords?.join(', ') || '',
         products: uso.products?.map(p => typeof p === 'string' ? p : p._id) || [],
         available: uso.available !== undefined ? uso.available : true,
         imageUrl: uso.imageUrl || '',
@@ -45,7 +47,15 @@ function UsosModal({ uso, onSave, onClose }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    onSave(formData);
+    // Convert keywords string to array
+    const dataToSave = {
+      ...formData,
+      keywords: formData.keywords
+        .split(',')
+        .map(k => k.trim().toLowerCase())
+        .filter(k => k.length > 0)
+    };
+    onSave(dataToSave);
   };
 
   const handleChange = (e) => {
@@ -131,6 +141,23 @@ function UsosModal({ uso, onSave, onClose }) {
                   className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="Descripción del uso o aplicación del producto..."
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Palabras Clave
+                </label>
+                <input
+                  type="text"
+                  name="keywords"
+                  value={formData.keywords}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder="carro, cochera, estacionamiento, auto"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  Separadas por coma. El bot detectará estas palabras para sugerir productos.
+                </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
