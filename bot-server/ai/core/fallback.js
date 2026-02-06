@@ -3,6 +3,61 @@ const { getBusinessInfo } = require("../../businessInfoManager");
 const { updateConversation } = require("../../conversationManager");
 const { sendHandoffNotification } = require("../../services/pushNotifications");
 const { getAngleMessaging } = require("../utils/adContextHelper");
+const { generateClickLink } = require("../../tracking");
+const ProductFamily = require("../../models/ProductFamily");
+
+// Helper to append product link if we have dimensions in conversation
+async function appendProductLinkIfAvailable(responseText, convo, psid) {
+  // Check if we have dimensions in conversation state
+  const specs = convo?.productSpecs || {};
+  let width = specs.width;
+  let height = specs.height;
+
+  // Also check requestedSize
+  if (!width || !height) {
+    const sizeMatch = (convo?.requestedSize || '').match(/(\d+)\s*[xX×]\s*(\d+)/);
+    if (sizeMatch) {
+      width = Math.min(parseInt(sizeMatch[1]), parseInt(sizeMatch[2]));
+      height = Math.max(parseInt(sizeMatch[1]), parseInt(sizeMatch[2]));
+    }
+  }
+
+  if (!width || !height) return responseText;
+
+  // Don't append if response already has a link
+  if (responseText.includes('mercadolibre.com') || responseText.includes('agente.hanlob.com')) {
+    return responseText;
+  }
+
+  try {
+    // Find the product
+    const w = Math.min(width, height);
+    const h = Math.max(width, height);
+    const sizeRegex = new RegExp(`^\\s*(${w}\\s*m?\\s*[xX×]\\s*${h}|${h}\\s*m?\\s*[xX×]\\s*${w})\\s*m?\\s*$`, 'i');
+
+    const product = await ProductFamily.findOne({
+      sellable: true,
+      active: true,
+      size: sizeRegex
+    }).lean();
+
+    if (product) {
+      const productUrl = product.mlLink || product.onlineStoreLinks?.[0]?.url;
+      if (productUrl) {
+        const trackedLink = await generateClickLink(psid, productUrl, {
+          productName: product.name,
+          productId: product._id
+        });
+        console.log(`🔗 Appending product link for ${w}x${h}m to AI response`);
+        return responseText + `\n\n🛒 Cómprala aquí:\n${trackedLink}`;
+      }
+    }
+  } catch (err) {
+    console.error("Error appending product link:", err.message);
+  }
+
+  return responseText;
+}
 
 // Helper function to check if we're in business hours (Mon-Fri, 9am-6pm Mexico City time)
 function isBusinessHours() {
@@ -310,7 +365,9 @@ async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME
   if (contextualResponse && !contextualResponse.isGeneric) {
     console.log(`✅ Message understood with conversation context!`);
     await updateConversation(psid, { lastIntent: "fallback_contextual", unknownCount: 0 });
-    return { type: "text", text: contextualResponse.text };
+    // Append product link if we have dimensions and response doesn't have one
+    const textWithLink = await appendProductLinkIfAvailable(contextualResponse.text, convo, psid);
+    return { type: "text", text: textWithLink };
   }
 
   // 🔗 Try stitching with previous message as fallback
@@ -325,7 +382,9 @@ async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME
     if (stitchedResponse && !stitchedResponse.isGeneric) {
       console.log(`✅ Stitched message understood!`);
       await updateConversation(psid, { lastIntent: "fallback_stitched", unknownCount: 0 });
-      return { type: "text", text: stitchedResponse.text };
+      // Append product link if we have dimensions and response doesn't have one
+      const textWithLink = await appendProductLinkIfAvailable(stitchedResponse.text, convo, psid);
+      return { type: "text", text: textWithLink };
     }
   }
 
