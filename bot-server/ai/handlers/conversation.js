@@ -46,6 +46,18 @@ async function handleWillGetBack({ psid, convo, userMessage }) {
  * Also handles purchase intent: "Me interesa", "Lo quiero"
  */
 async function handleConfirmation({ psid, convo, userMessage }) {
+  // If we just responded to an acknowledgment, don't repeat - close the conversation
+  if (convo?.lastIntent === "confirmation") {
+    console.log("👋 Repeated acknowledgment detected, closing conversation gracefully");
+    await updateConversation(psid, {
+      lastIntent: "goodbye",
+      state: "closed",
+      unknownCount: 0
+    });
+    // Stay silent - no need to respond to repeated "Ok"
+    return null;
+  }
+
   await updateConversation(psid, { lastIntent: "confirmation", unknownCount: 0 });
 
   // Check if this is purchase intent ("me interesa", "lo quiero") after a price quote
