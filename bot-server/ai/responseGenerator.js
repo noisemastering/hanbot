@@ -51,7 +51,7 @@ PERSONALIDAD:
 PRODUCTO - MALLA SOMBRA CONFECCIONADA:
 - 90% de cobertura/sombra
 - Confeccionada para mayor durabilidad
-- Refuerzo en las esquinas
+- Refuerzo en las esquinas para ofrecer una vida útil de hasta 5 años
 - Sujetadores y argollas en todos los lados, lista para instalar
 - Envío a domicilio incluido en el precio
 - Se vende por Mercado Libre
@@ -164,7 +164,7 @@ async function generatePriceResponse({ dimensions, price, link, userExpression, 
     features: [
       "90% de cobertura",
       "Confeccionada para mayor durabilidad",
-      "Refuerzo en las esquinas",
+      "Refuerzo en las esquinas para una vida útil de hasta 5 años",
       "Sujetadores y argollas en todos los lados",
       "Lista para instalar"
     ]
@@ -331,7 +331,7 @@ async function generateBotResponse(intent, data = {}) {
       features: data.features || [
         "90% de cobertura",
         "Confeccionada para mayor durabilidad",
-        "Refuerzo en las esquinas",
+        "Refuerzo en las esquinas para una vida útil de hasta 5 años",
         "Sujetadores y argollas en todos los lados",
         "Lista para instalar",
         "Envío incluido"

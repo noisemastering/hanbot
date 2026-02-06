@@ -197,6 +197,7 @@ PRODUCTOS Y CARACTERÍSTICAS:
 - Color: Solo BEIGE
 - **IMPORTANTE: La malla sombra es PERMEABLE (permite que pase el agua). NO es impermeable ni repele el agua.**
 - Proporciona sombra 90% y permite circulación de aire
+- Refuerzo en las esquinas para ofrecer una vida útil de hasta 5 años
 - Si preguntan por impermeabilidad: aclarar que es PERMEABLE, sugerir lona si necesitan impermeabilidad
 - Para conocer todas las medidas y precios disponibles, consulta el catálogo en Mercado Libre
 
