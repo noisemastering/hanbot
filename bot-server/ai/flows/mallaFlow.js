@@ -128,6 +128,62 @@ function determineStage(state) {
 }
 
 /**
+ * Find standard sizes near a given area (±2m²)
+ * Returns sizes sorted by how close they are to the requested area
+ */
+async function findSizesNearArea(targetArea, convo = null) {
+  try {
+    // Get all sellable malla products
+    const products = await ProductFamily.find({
+      sellable: true,
+      active: true,
+      size: { $regex: /^\d+\s*[xX×]\s*\d+/, $options: 'i' }
+    }).lean();
+
+    // Parse sizes and calculate areas
+    const sizesWithArea = [];
+    for (const p of products) {
+      const match = p.size?.match(/(\d+)\s*[xX×]\s*(\d+)/);
+      if (match) {
+        const w = parseInt(match[1]);
+        const h = parseInt(match[2]);
+        const area = w * h;
+        // Only include if within ±3m² of target
+        if (Math.abs(area - targetArea) <= 3) {
+          sizesWithArea.push({
+            width: Math.min(w, h),
+            height: Math.max(w, h),
+            area,
+            price: p.price,
+            product: p
+          });
+        }
+      }
+    }
+
+    // Remove duplicates (same dimensions)
+    const unique = [];
+    const seen = new Set();
+    for (const s of sizesWithArea) {
+      const key = `${s.width}x${s.height}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        unique.push(s);
+      }
+    }
+
+    // Sort by how close to target area
+    unique.sort((a, b) => Math.abs(a.area - targetArea) - Math.abs(b.area - targetArea));
+
+    // Return top 3-4 closest options
+    return unique.slice(0, 4);
+  } catch (error) {
+    console.error("❌ Error finding sizes near area:", error);
+    return [];
+  }
+}
+
+/**
  * Find matching sellable products by size
  * Searches ONLY sellable products and dimensions are interchangeable
  * If poiRootId is provided, searches only within that tree
@@ -493,6 +549,35 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       state.height = rounded;
     } else if (singleDim && singleDim > 10) {
       console.log(`⚠️ Single dimension ${singleDim}m is too large for confeccionada, ignoring`);
+    }
+  }
+
+  // CHECK FOR AREA (metros cuadrados) - offer closest standard sizes
+  if (!state.width || !state.height) {
+    const areaMatch = userMessage.match(/(\d+(?:\.\d+)?)\s*(?:metros?\s*cuadrados?|m2|m²)/i);
+    if (areaMatch) {
+      const requestedArea = parseFloat(areaMatch[1]);
+      console.log(`📐 Area detected: ${requestedArea}m² - finding closest standard sizes`);
+
+      // Find standard sizes close to this area (±2m²)
+      const closestSizes = await findSizesNearArea(requestedArea, convo);
+
+      if (closestSizes.length > 0) {
+        const optionsList = closestSizes.map(s =>
+          `• ${s.width}x${s.height}m (${s.area}m²) → $${s.price}`
+        ).join('\n');
+
+        await updateConversation(psid, {
+          lastIntent: 'malla_area_options_shown',
+          requestedArea: requestedArea,
+          productInterest: 'malla_sombra'
+        });
+
+        return {
+          type: "text",
+          text: `${requestedArea} metros cuadrados puede ser varias medidas. Te muestro las más cercanas:\n\n${optionsList}\n\n¿Cuál te interesa?`
+        };
+      }
     }
   }
 
