@@ -4,6 +4,19 @@
 const Uso = require("../../models/Uso");
 
 /**
+ * Normalize text: remove accents, lowercase, trim
+ * "Agrícola" → "agricola", "Jardín" → "jardin"
+ */
+function normalizeText(text) {
+  if (!text) return '';
+  return text
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '') // Remove accent marks
+    .trim();
+}
+
+/**
  * Extract potential use case keywords from a message
  * Looks for patterns like "para mi X", "para un X", "lo necesito para X"
  */
@@ -26,7 +39,7 @@ function extractUseKeywords(message) {
     let match;
     while ((match = pattern.exec(msg)) !== null) {
       if (match[1] && match[1].length > 2) {
-        keywords.push(match[1].toLowerCase());
+        keywords.push(normalizeText(match[1]));
       }
     }
   }
@@ -52,21 +65,36 @@ function extractUseKeywords(message) {
 }
 
 /**
- * Find Usos that match the given keywords
+ * Find Usos that match the given keywords (with accent/typo tolerance)
  */
 async function findMatchingUsos(keywords) {
   if (!keywords || keywords.length === 0) return [];
 
   try {
-    const usos = await Uso.find({
-      keywords: { $in: keywords },
-      available: true
-    })
+    // Normalize input keywords
+    const normalizedInput = keywords.map(k => normalizeText(k));
+
+    // Fetch all available Usos and match in JS for accent tolerance
+    const allUsos = await Uso.find({ available: true })
       .populate('products', 'name description sellable generation parentId')
       .sort({ priority: -1 })
       .lean();
 
-    return usos;
+    // Filter Usos where any of their keywords match (normalized)
+    const matchingUsos = allUsos.filter(uso => {
+      if (!uso.keywords || uso.keywords.length === 0) return false;
+
+      const normalizedUsoKeywords = uso.keywords.map(k => normalizeText(k));
+
+      // Check if any input keyword matches any uso keyword
+      return normalizedInput.some(inputKw =>
+        normalizedUsoKeywords.some(usoKw =>
+          usoKw === inputKw || usoKw.includes(inputKw) || inputKw.includes(usoKw)
+        )
+      );
+    });
+
+    return matchingUsos;
   } catch (err) {
     console.error("Error finding matching usos:", err.message);
     return [];
