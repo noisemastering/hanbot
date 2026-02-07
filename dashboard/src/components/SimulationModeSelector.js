@@ -83,7 +83,11 @@ const SimulationModeSelector = () => {
 
   // Get profiles for a specific role
   const getProfilesForRole = (roleName) => {
-    return profiles.filter(p => p.role === roleName && p.active);
+    return profiles.filter(p => {
+      // Handle both populated role object and string role
+      const profileRoleName = p.role?.name || p.role;
+      return profileRoleName === roleName && p.active;
+    });
   };
 
   // Only show for super_admin

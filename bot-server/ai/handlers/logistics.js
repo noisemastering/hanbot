@@ -129,6 +129,7 @@ async function handleLocationMention({ psid, userMessage, convo }) {
 
 /**
  * Handle payment query - "Cómo pago?", "Aceptan tarjeta?"
+ * Response varies by flow (confeccionada vs wholesale)
  */
 async function handlePayment({ psid, convo }) {
   await updateConversation(psid, {
@@ -136,17 +137,26 @@ async function handlePayment({ psid, convo }) {
     unknownCount: 0
   });
 
-  const response = await generateBotResponse("payment_query", {
-    paymentMethods: ['Tarjeta de crédito/débito', 'Transferencia bancaria', 'Efectivo en OXXO/7-Eleven'],
-    monthsWithoutInterest: 12,
-    convo
-  });
+  // Determine if wholesale flow (rollo, etc.) or retail (confeccionada)
+  const isWholesale = convo?.currentFlow === 'rollo' ||
+    convo?.productInterest === 'rollo' ||
+    convo?.currentFlow === 'ground_cover' ||
+    convo?.currentFlow === 'monofilamento';
+
+  let response;
+  if (isWholesale) {
+    response = "En nuestra tienda física aceptamos efectivo y tarjetas, en envíos aceptamos transferencia bancaria.";
+  } else {
+    // Confeccionada (retail) - Mercado Libre payment options
+    response = "Nuestra tienda en Mercado Libre acepta tarjeta de crédito/débito, efectivo en OXXO y tiendas de conveniencia, y Mercado Crédito. En nuestra tienda física aceptamos efectivo y tarjetas.";
+  }
 
   return { type: "text", text: response };
 }
 
 /**
- * Handle pay on delivery query - "Pago al entregar?", "Contra entrega?"
+ * Handle pay on delivery query - "Pago al entregar?", "Contra entrega?", "Se paga al entregar?"
+ * Response varies by flow (confeccionada vs wholesale)
  */
 async function handlePayOnDelivery({ psid, convo }) {
   await updateConversation(psid, {
@@ -154,11 +164,19 @@ async function handlePayOnDelivery({ psid, convo }) {
     unknownCount: 0
   });
 
-  const response = await generateBotResponse("pay_on_delivery_query", {
-    payOnDeliveryAvailable: false,
-    requiresAdvancePayment: true,
-    convo
-  });
+  // Determine if wholesale flow (rollo, etc.) or retail (confeccionada)
+  const isWholesale = convo?.currentFlow === 'rollo' ||
+    convo?.productInterest === 'rollo' ||
+    convo?.currentFlow === 'ground_cover' ||
+    convo?.currentFlow === 'monofilamento';
+
+  let response;
+  if (isWholesale) {
+    response = "Los pedidos deben ser liquidados al 100% al momento de ordenar.";
+  } else {
+    // Confeccionada (retail) - Mercado Libre protected purchase
+    response = "Los artículos comprados a través de nuestra tienda en Mercado Libre requieren el pago al ordenar, pero son compra segura: si no recibes tu pedido, se te devuelve tu dinero.";
+  }
 
   return { type: "text", text: response };
 }

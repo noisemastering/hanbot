@@ -190,13 +190,21 @@ async function handleMultiQuestion(entities, convo, psid) {
   const subIntents = entities.subIntents || [];
   const responses = [];
 
+  // Determine if wholesale flow (rollo, etc.) or retail (confeccionada)
+  const isWholesale = convo?.currentFlow === 'rollo' ||
+    convo?.productInterest === 'rollo' ||
+    convo?.currentFlow === 'ground_cover' ||
+    convo?.currentFlow === 'monofilamento';
+
   // Response snippets for each intent type (emoji as bullet, no markdown)
   const intentResponses = {
     'confirmation': `✅ Perfecto, anotado.`,
     'price_query': `💰 Los precios dependen de la medida que necesites. ¿Qué medida te interesa?`,
     'location_query': `📍 ¡Enviamos a todo México y USA! Nuestra tienda está en ${BUSINESS_INFO.city}, pero te lo enviamos a domicilio.`,
     'shipping_query': `📦 Enviamos a todo México y también a Estados Unidos. El envío está incluido en la mayoría de nuestros productos.`,
-    'payment_query': `💳 Aceptamos tarjeta, efectivo en OXXO, o meses sin intereses a través de Mercado Libre.`,
+    'payment_query': isWholesale
+      ? `En nuestra tienda física aceptamos efectivo y tarjetas, en envíos aceptamos transferencia bancaria.`
+      : `Nuestra tienda en Mercado Libre acepta tarjeta de crédito/débito, efectivo en OXXO y tiendas de conveniencia, y Mercado Crédito. En nuestra tienda física aceptamos efectivo y tarjetas.`,
     'availability_query': `✅ Manejamos malla sombra confeccionada desde 2x2m hasta 6x10m, lista para instalar.`,
     'delivery_time_query': `🚚 Normalmente de 3 a 5 días hábiles dependiendo de tu ubicación.`,
     'installation_query': `🔧 No ofrecemos servicio de instalación, pero la malla viene lista para instalar con argollas en todo el perímetro.`,
@@ -205,7 +213,9 @@ async function handleMultiQuestion(entities, convo, psid) {
 
   // Special handling for pay-on-delivery question
   if (entities.payOnDelivery) {
-    intentResponses['payment_query'] = `💳 Las compras en línea se pagan por adelantado a través de Mercado Libre. No manejamos pago contra entrega, pero puedes pagar con tarjeta, efectivo en OXXO, o a meses sin intereses.`;
+    intentResponses['payment_query'] = isWholesale
+      ? `Los pedidos deben ser liquidados al 100% al momento de ordenar.`
+      : `Los artículos comprados a través de nuestra tienda en Mercado Libre requieren el pago al ordenar, pero son compra segura: si no recibes tu pedido, se te devuelve tu dinero.`;
   }
 
   // Build combined response
@@ -227,17 +237,28 @@ async function handleMultiQuestion(entities, convo, psid) {
 
 /**
  * Handle payment query
+ * Response varies by flow (confeccionada vs wholesale)
  */
 async function handlePayment(entities, convo, psid) {
   await updateConversation(psid, { lastIntent: "payment_query" });
 
+  // Determine if wholesale flow (rollo, etc.) or retail (confeccionada)
+  const isWholesale = convo?.currentFlow === 'rollo' ||
+    convo?.productInterest === 'rollo' ||
+    convo?.currentFlow === 'ground_cover' ||
+    convo?.currentFlow === 'monofilamento';
+
   // Check for pay-on-delivery question
   if (entities.payOnDelivery) {
+    if (isWholesale) {
+      return {
+        type: "text",
+        text: "Los pedidos deben ser liquidados al 100% al momento de ordenar."
+      };
+    }
     return {
       type: "text",
-      text: "El pago es 100% POR ADELANTADO en Mercado Libre al momento de hacer tu pedido.\n\n" +
-            "❌ No manejamos pago contra entrega.\n\n" +
-            "Aceptan tarjeta, efectivo en OXXO, o meses sin intereses. ¿Te paso el link?"
+      text: "Los artículos comprados a través de nuestra tienda en Mercado Libre requieren el pago al ordenar, pero son compra segura: si no recibes tu pedido, se te devuelve tu dinero."
     };
   }
 
@@ -253,11 +274,17 @@ async function handlePayment(entities, convo, psid) {
     };
   }
 
+  // Flow-specific payment response
+  if (isWholesale) {
+    return {
+      type: "text",
+      text: "En nuestra tienda física aceptamos efectivo y tarjetas, en envíos aceptamos transferencia bancaria."
+    };
+  }
+
   return {
     type: "text",
-    text: "El pago se realiza a través de Mercado Libre al momento de hacer tu pedido.\n\n" +
-          "Aceptan tarjeta, efectivo en OXXO, o meses sin intereses.\n\n" +
-          "¿Te paso el link del producto?"
+    text: "Nuestra tienda en Mercado Libre acepta tarjeta de crédito/débito, efectivo en OXXO y tiendas de conveniencia, y Mercado Crédito. En nuestra tienda física aceptamos efectivo y tarjetas."
   };
 }
 

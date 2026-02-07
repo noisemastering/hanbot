@@ -37,7 +37,11 @@ const dashboardUserSchema = new mongoose.Schema(
 
     // Metadata
     lastLogin: { type: Date },
-    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "DashboardUser" }
+    createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "DashboardUser" },
+
+    // Password Reset
+    resetPasswordToken: { type: String },
+    resetPasswordExpires: { type: Date }
   },
   { timestamps: true }
 );

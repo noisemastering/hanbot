@@ -55,7 +55,7 @@ router.get("/", async (req, res) => {
 
     res.json({
       success: true,
-      profiles
+      data: profiles
     });
   } catch (error) {
     console.error("Error fetching profiles:", error);

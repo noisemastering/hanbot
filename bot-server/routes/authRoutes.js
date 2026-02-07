@@ -2,7 +2,9 @@
 const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
+const crypto = require("crypto");
 const DashboardUser = require("../models/DashboardUser");
+const { sendPasswordResetEmail } = require("../utils/emailService");
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-jwt-key-change-in-production";
 const JWT_EXPIRES_IN = "7d"; // Token expires in 7 days
@@ -236,6 +238,166 @@ router.post("/change-password", async (req, res) => {
     res.status(500).json({
       success: false,
       error: "Server error during password change"
+    });
+  }
+});
+
+// POST /auth/forgot-password - Request password reset
+router.post("/forgot-password", async (req, res) => {
+  try {
+    const { email } = req.body;
+
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: "Email is required"
+      });
+    }
+
+    // Find user by email
+    const user = await DashboardUser.findOne({ email: email.toLowerCase().trim() });
+
+    // Always return success to prevent email enumeration attacks
+    if (!user || !user.active) {
+      console.log(`⚠️ Password reset requested for non-existent/inactive email: ${email}`);
+      return res.json({
+        success: true,
+        message: "If an account with that email exists, a password reset link has been sent."
+      });
+    }
+
+    // Generate reset token
+    const resetToken = crypto.randomBytes(32).toString("hex");
+    const resetTokenHash = crypto.createHash("sha256").update(resetToken).digest("hex");
+
+    // Save hashed token and expiry (1 hour)
+    user.resetPasswordToken = resetTokenHash;
+    user.resetPasswordExpires = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    await user.save();
+
+    // Build reset URL
+    const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3001";
+    const resetUrl = `${frontendUrl}/reset-password?token=${resetToken}`;
+
+    // Send email
+    try {
+      await sendPasswordResetEmail(user.email, resetUrl, user.firstName);
+      console.log(`✅ Password reset email sent to ${user.email} (User: ${user.username})`);
+    } catch (emailError) {
+      console.error(`❌ Failed to send reset email to ${user.email}:`, emailError.message);
+      // Don't expose email failure to user
+    }
+
+    res.json({
+      success: true,
+      message: "If an account with that email exists, a password reset link has been sent."
+    });
+  } catch (error) {
+    console.error("Forgot password error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Server error processing request"
+    });
+  }
+});
+
+// POST /auth/reset-password - Reset password with token
+router.post("/reset-password", async (req, res) => {
+  try {
+    const { token, password } = req.body;
+
+    if (!token || !password) {
+      return res.status(400).json({
+        success: false,
+        error: "Token and new password are required"
+      });
+    }
+
+    // Validate password strength
+    if (password.length < 6) {
+      return res.status(400).json({
+        success: false,
+        error: "Password must be at least 6 characters long"
+      });
+    }
+
+    // Hash the provided token to compare with stored hash
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+    // Find user with valid token
+    const user = await DashboardUser.findOne({
+      resetPasswordToken: tokenHash,
+      resetPasswordExpires: { $gt: new Date() },
+      active: true
+    });
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid or expired reset token"
+      });
+    }
+
+    // Update password and clear reset token
+    user.password = password; // Will be hashed by pre-save hook
+    user.resetPasswordToken = undefined;
+    user.resetPasswordExpires = undefined;
+    await user.save();
+
+    console.log(`✅ Password reset successful for user: ${user.username}`);
+
+    res.json({
+      success: true,
+      message: "Password has been reset successfully"
+    });
+  } catch (error) {
+    console.error("Reset password error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Server error processing request"
+    });
+  }
+});
+
+// GET /auth/verify-reset-token - Verify if reset token is valid (for frontend validation)
+router.get("/verify-reset-token", async (req, res) => {
+  try {
+    const { token } = req.query;
+
+    if (!token) {
+      return res.status(400).json({
+        success: false,
+        error: "Token is required"
+      });
+    }
+
+    // Hash the provided token
+    const tokenHash = crypto.createHash("sha256").update(token).digest("hex");
+
+    // Find user with valid token
+    const user = await DashboardUser.findOne({
+      resetPasswordToken: tokenHash,
+      resetPasswordExpires: { $gt: new Date() },
+      active: true
+    }).select("email firstName");
+
+    if (!user) {
+      return res.status(400).json({
+        success: false,
+        error: "Invalid or expired reset token"
+      });
+    }
+
+    res.json({
+      success: true,
+      email: user.email,
+      firstName: user.firstName
+    });
+  } catch (error) {
+    console.error("Verify reset token error:", error);
+    res.status(500).json({
+      success: false,
+      error: "Server error processing request"
     });
   }
 });

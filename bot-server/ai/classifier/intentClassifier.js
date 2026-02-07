@@ -765,9 +765,11 @@ function quickClassify(message, dbIntents = null) {
     return { intent: INTENTS.FUTURE_INTEREST, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
   }
 
-  // Will get back - "mañana te aviso", "voy a medir"
-  if (/\b(mañana|al\s+rato|luego|despu[eé]s)\s+(te\s+)?(aviso|confirmo|digo|escribo)\b/i.test(msg) ||
-      /\b(voy\s+a\s+medir|deja\s+mido|tengo\s+que\s+medir)\b/i.test(msg)) {
+  // Will get back - "mañana te aviso", "voy a medir", "me contacto de nuevo"
+  if (/\b(mañana|al\s+rato|luego|despu[eé]s)\s+(te\s+|les?\s+)?(aviso|confirmo|digo|escribo|contacto|comunico)\b/i.test(msg) ||
+      /\b(voy\s+a\s+medir|deja\s+mido|tengo\s+que\s+medir|rectifico\s+medidas?|checo\s+medidas?|verifico\s+medidas?)\b/i.test(msg) ||
+      /\b(me\s+)?(contacto|comunico)\s+(de\s+nuevo|luego|despu[eé]s|contigo|con\s+ustedes)\b/i.test(msg) ||
+      /\b(les?\s+|te\s+)(aviso|escribo|marco|contacto|hablo)\b/i.test(msg)) {
     return { intent: INTENTS.WILL_GET_BACK, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
   }
 

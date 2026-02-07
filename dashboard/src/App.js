@@ -48,6 +48,8 @@ import ProductFamilyModal from "./components/ProductFamilyModal";
 import ImportProductsModal from "./components/ImportProductsModal";
 import Messages from "./pages/Messages";
 import Login from "./pages/Login";
+import ForgotPassword from "./pages/ForgotPassword";
+import ResetPassword from "./pages/ResetPassword";
 import Settings from "./pages/Settings";
 import InventarioView from "./pages/InventarioView";
 import PuntosDeVentaView from "./pages/PuntosDeVentaView";
@@ -273,14 +275,6 @@ const menuItems = [
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
         )
-      },
-      {
-        id: "ml-playground",
-        label: "Playground",
-        path: "/ml-playground",
-        icon: (
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-        )
       }
     ]
   },
@@ -306,6 +300,25 @@ const menuItems = [
         path: "/flows",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+        )
+      }
+    ]
+  },
+  // Playground section - superadmin only (experimental features)
+  {
+    id: "playground",
+    label: "Playground",
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
+    ),
+    isExpandable: true,
+    children: [
+      {
+        id: "playground-ml",
+        label: "Mercado Libre",
+        path: "/playground/mercado-libre",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
         )
       }
     ]
@@ -1293,8 +1306,8 @@ function App() {
     if (item.id === 'users') {
       return canManageUsers();
     }
-    // Roles, Profiles, and Bot sections only visible to super_admin
-    if (item.id === 'roles' || item.id === 'profiles' || item.id === 'bot') {
+    // Roles, Profiles, Bot, and Playground sections only visible to super_admin
+    if (item.id === 'roles' || item.id === 'profiles' || item.id === 'bot' || item.id === 'playground') {
       return effectiveRole === 'super_admin';
     }
 
@@ -1700,6 +1713,10 @@ function App() {
         <Routes>
           {/* Login Route (Public) */}
           <Route path="/login" element={<Login />} />
+
+          {/* Password Recovery Routes (Public) */}
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* Overview Route */}
           <Route path="/" element={
@@ -2372,7 +2389,7 @@ function App() {
           {/* Mercado Libre Routes */}
           <Route path="/ml-orders" element={<OrdersView />} />
           <Route path="/ml-importer" element={<MLImporterView />} />
-          <Route path="/ml-playground" element={<MLPlaygroundView />} />
+          <Route path="/playground/mercado-libre" element={<MLPlaygroundView />} />
 
           {/* Bot Configuration Routes */}
           <Route path="/intents" element={<IntentsView />} />

@@ -53,7 +53,7 @@ router.get("/", async (req, res) => {
 
     res.json({
       success: true,
-      roles
+      data: roles
     });
   } catch (error) {
     console.error("Error fetching roles:", error);

@@ -695,33 +695,37 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
 async function generateReply(userMessage, psid, referral = null) {
   let convo = await getConversation(psid);
 
-  // ====== RESET CLOSED CONVERSATIONS ======
-  // If conversation was closed (needs_human with goodbye) and user sends a new inquiry,
-  // reset the state so the bot can respond to the new conversation
-  if (convo.state === "needs_human" && convo.lastIntent === "goodbye") {
-    // Check time since last message - if more than 1 hour, treat as new conversation
+  // ====== RESET STALE NEEDS_HUMAN CONVERSATIONS ======
+  // If conversation was handed off but client returns after 12+ hours,
+  // treat as a new conversation so the bot can respond
+  if (convo.state === "needs_human") {
     const lastMessageTime = convo.lastMessageAt ? new Date(convo.lastMessageAt) : null;
     const hoursSinceLastMessage = lastMessageTime
       ? (Date.now() - lastMessageTime.getTime()) / (1000 * 60 * 60)
       : 999;
 
-    if (hoursSinceLastMessage >= 1) {
-      console.log(`🔄 Resetting closed conversation (was needs_human + goodbye, ${hoursSinceLastMessage.toFixed(1)}h since last message)`);
+    // After 12 hours, reset the conversation - client is starting fresh
+    if (hoursSinceLastMessage >= 12) {
+      console.log(`🔄 Resetting stale needs_human conversation (${hoursSinceLastMessage.toFixed(1)}h since last message)`);
       await updateConversation(psid, {
         state: "active",
         lastIntent: null,
         handoffRequested: false,
         handoffReason: null,
         lastBotResponse: null,
-        lastNeedsHumanReminder: null
+        lastNeedsHumanReminder: null,
+        currentFlow: null,
+        flowStep: null,
+        flowData: {}
       });
       // Update local convo object
       convo.state = "active";
       convo.lastIntent = null;
       convo.handoffRequested = false;
+      convo.currentFlow = null;
     }
   }
-  // ====== END RESET CLOSED CONVERSATIONS ======
+  // ====== END RESET STALE NEEDS_HUMAN CONVERSATIONS ======
 
   // ====== CHECK NEEDS_HUMAN STATE ======
   // If conversation still needs human (active handoff, not a closed convo), stay mostly silent

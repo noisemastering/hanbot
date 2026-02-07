@@ -147,14 +147,21 @@ async function handleLocation(convo, psid) {
 }
 
 /**
- * Payment query
+ * Payment query - response varies by flow
  */
 async function handlePayment(convo, psid) {
-  const response = await generateBotResponse("payment_query", {
-    paymentMethods: ['Tarjeta de crédito/débito', 'Transferencia bancaria', 'Efectivo en OXXO/7-Eleven'],
-    monthsWithoutInterest: 12,
-    convo
-  });
+  // Determine if wholesale flow (rollo, etc.) or retail (confeccionada)
+  const isWholesale = convo?.currentFlow === 'rollo' ||
+    convo?.productInterest === 'rollo' ||
+    convo?.currentFlow === 'ground_cover' ||
+    convo?.currentFlow === 'monofilamento';
+
+  let response;
+  if (isWholesale) {
+    response = "En nuestra tienda física aceptamos efectivo y tarjetas, en envíos aceptamos transferencia bancaria.";
+  } else {
+    response = "Nuestra tienda en Mercado Libre acepta tarjeta de crédito/débito, efectivo en OXXO y tiendas de conveniencia, y Mercado Crédito. En nuestra tienda física aceptamos efectivo y tarjetas.";
+  }
 
   return { type: "text", text: response };
 }
