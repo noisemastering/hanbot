@@ -32,6 +32,51 @@ const FLOWS = {
 };
 
 /**
+ * Detect if user explicitly mentioned a different product than current flow
+ * Returns the new product flow if detected, null otherwise
+ */
+function detectExplicitProductSwitch(userMessage, currentFlow, classification) {
+  const msg = (userMessage || '').toLowerCase();
+
+  // Map of explicit product keywords to flows
+  const explicitProductPatterns = {
+    'rollo': { pattern: /\b(rollo|rollos|100\s*m(etros)?)\b/i, flow: 'rollo' },
+    'borde_separador': { pattern: /\b(borde|separador|cinta\s*pl[aá]stica)\b/i, flow: 'borde_separador' },
+    'groundcover': { pattern: /\b(ground\s*cover|antimaleza|malla\s*(para\s*)?maleza)\b/i, flow: 'groundcover' },
+    'monofilamento': { pattern: /\b(monofilamento)\b/i, flow: 'monofilamento' },
+    'malla_sombra': { pattern: /\b(confeccionada|malla\s*sombra)\b/i, flow: 'malla_sombra' }
+  };
+
+  // Also check classification product
+  const classificationFlowMap = {
+    [PRODUCTS.ROLLO]: 'rollo',
+    [PRODUCTS.BORDE_SEPARADOR]: 'borde_separador',
+    [PRODUCTS.GROUNDCOVER]: 'groundcover',
+    [PRODUCTS.MONOFILAMENTO]: 'monofilamento',
+    [PRODUCTS.MALLA_SOMBRA]: 'malla_sombra'
+  };
+
+  // Check for explicit keyword mentions
+  for (const [productKey, config] of Object.entries(explicitProductPatterns)) {
+    if (config.pattern.test(msg) && config.flow !== currentFlow) {
+      console.log(`🔍 Explicit product mention detected: ${productKey} (current: ${currentFlow})`);
+      return config.flow;
+    }
+  }
+
+  // Check classification if it detected a different product
+  if (classification?.product && classification.product !== PRODUCTS.UNKNOWN) {
+    const classifiedFlow = classificationFlowMap[classification.product];
+    if (classifiedFlow && classifiedFlow !== currentFlow) {
+      console.log(`🔍 Classification detected different product: ${classifiedFlow} (current: ${currentFlow})`);
+      return classifiedFlow;
+    }
+  }
+
+  return null;
+}
+
+/**
  * Detect which flow should handle this conversation
  * Based on: product mentions, classification, conversation context
  */
@@ -39,7 +84,7 @@ function detectFlow(classification, convo, userMessage) {
   const msg = (userMessage || '').toLowerCase();
 
   // FIRST: Check if already in a product flow - prioritize conversation continuity
-  // This prevents "De 5 metros" in a rollo conversation from being hijacked by malla flow
+  // But allow explicit product switches to be detected (handled separately)
   if (convo?.currentFlow && convo.currentFlow !== 'default') {
     return convo.currentFlow;
   }
@@ -168,6 +213,7 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
       // Route to new flow with a greeting
       const flowGreetings = {
         'rollo': '¡Perfecto! Para el rollo de malla sombra, ¿qué porcentaje de sombra necesitas? Tenemos 35%, 50%, 70%, 80% y 90%.',
+        'malla_sombra': '¡Perfecto! Para la malla sombra confeccionada, ¿qué medida necesitas?',
         'groundcover': '¡Perfecto! Para el ground cover antimaleza, ¿qué medida necesitas?',
         'monofilamento': '¡Perfecto! Para la malla monofilamento, ¿qué porcentaje de sombra necesitas?',
         'borde_separador': '¡Perfecto! Para el borde separador, ¿qué largo necesitas? Tenemos 6m, 9m, 18m y 54m.'
@@ -188,15 +234,69 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
       // Clear pending change
       await updateConversation(psid, {
         pendingFlowChange: null,
+        pendingFlowChangeReason: null,
         pendingUseCaseProducts: null
       });
 
-      // Continue with current flow
+      // Confirm staying with current product
+      const currentProductNames = {
+        'rollo': 'rollo de malla sombra',
+        'malla_sombra': 'malla sombra confeccionada',
+        'borde_separador': 'borde separador',
+        'groundcover': 'ground cover',
+        'monofilamento': 'malla monofilamento'
+      };
+      const currentName = currentProductNames[convo.currentFlow] || 'producto actual';
+
+      console.log(`🎯 ===== END FLOW MANAGER (staying in ${convo.currentFlow}) =====\n`);
+      return {
+        type: "text",
+        text: `Perfecto, seguimos con el ${currentName}. ¿En qué te puedo ayudar?`,
+        handledBy: `flow:${convo.currentFlow}`,
+        purchaseIntent: 'medium'
+      };
     }
   }
   // ===== END PENDING FLOW CHANGE CHECK =====
 
-  // ===== STEP 0.5: CHECK FOR LEAD CAPTURE CAMPAIGN =====
+  // ===== STEP 0.5: CHECK FOR EXPLICIT PRODUCT SWITCH =====
+  // If user is in a product flow and mentions a different product, ask for confirmation
+  const currentFlow = convo?.currentFlow || 'default';
+  if (currentFlow !== 'default' && !convo?.pendingFlowChange) {
+    const switchToFlow = detectExplicitProductSwitch(userMessage, currentFlow, classification);
+
+    if (switchToFlow) {
+      console.log(`🔄 Product switch detected: ${currentFlow} → ${switchToFlow}`);
+
+      // Store pending flow change
+      await updateConversation(psid, {
+        pendingFlowChange: switchToFlow,
+        pendingFlowChangeReason: 'product_switch'
+      });
+
+      // Generate confirmation message
+      const productNames = {
+        'rollo': 'rollo de malla sombra',
+        'malla_sombra': 'malla sombra confeccionada',
+        'borde_separador': 'borde separador para jardín',
+        'groundcover': 'ground cover antimaleza',
+        'monofilamento': 'malla monofilamento'
+      };
+
+      const newProductName = productNames[switchToFlow] || switchToFlow;
+
+      console.log(`🎯 ===== END FLOW MANAGER (product switch confirmation) =====\n`);
+      return {
+        type: "text",
+        text: `Veo que te interesa el ${newProductName}. ¿Quieres que te cotice eso en lugar de lo anterior?`,
+        handledBy: "flow:product_switch_confirmation",
+        purchaseIntent: 'medium'
+      };
+    }
+  }
+  // ===== END PRODUCT SWITCH CHECK =====
+
+  // ===== STEP 0.6: CHECK FOR LEAD CAPTURE CAMPAIGN =====
   // B2B/Distributor campaigns should go through lead capture flow
   if (campaign && leadCaptureFlow.shouldHandle(classification, sourceContext, convo, userMessage, campaign)) {
     console.log(`📋 Routing to lead capture flow (campaign: ${campaign.name})`);
@@ -226,7 +326,7 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
   // ===== END SCORING =====
 
   // ===== STEP 2: DETECT APPROPRIATE FLOW =====
-  const currentFlow = convo?.currentFlow || 'default';
+  // Note: currentFlow already declared in step 0.5
   const detectedFlow = detectFlow(classification, convo, userMessage);
 
   console.log(`📍 Current flow: ${currentFlow}, Detected: ${detectedFlow}`);
