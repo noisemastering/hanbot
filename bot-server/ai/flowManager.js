@@ -284,11 +284,12 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
       };
 
       const newProductName = productNames[switchToFlow] || switchToFlow;
+      const currentProductName = productNames[currentFlow] || currentFlow;
 
       console.log(`🎯 ===== END FLOW MANAGER (product switch confirmation) =====\n`);
       return {
         type: "text",
-        text: `Veo que te interesa el ${newProductName}. ¿Quieres que te cotice eso en lugar de lo anterior?`,
+        text: `¿Quieres que te cotice un ${newProductName} en lugar de ${currentProductName}?`,
         handledBy: "flow:product_switch_confirmation",
         purchaseIntent: 'medium'
       };
