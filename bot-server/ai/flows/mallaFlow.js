@@ -942,8 +942,37 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
   const hasFractions = (width % 1 !== 0) || (height % 1 !== 0);
 
   if (hasFractions) {
-    const flooredW = Math.floor(width);
-    const flooredH = Math.floor(height);
+    const fractionalKey = `${Math.min(width, height)}x${Math.max(width, height)}`;
+    const isInsisting = convo?.lastFractionalSize === fractionalKey;
+
+    // Customer insists on exact fractional size - hand off to human
+    if (isInsisting) {
+      console.log(`📏 Customer insists on ${fractionalKey}m, handing off`);
+
+      await updateConversation(psid, {
+        lastIntent: "fractional_meters_handoff",
+        handoffRequested: true,
+        handoffReason: `Medida con decimales: ${width}x${height}m (insiste en medida exacta)`,
+        handoffTimestamp: new Date(),
+        state: "needs_human",
+        unknownCount: 0
+      });
+
+      sendHandoffNotification(psid, `Medida con decimales: ${width}x${height}m - cliente insiste en medida exacta`).catch(err => {
+        console.error("❌ Failed to send push notification:", err);
+      });
+
+      const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
+      const response = await generateBotResponse("specialist_handoff", {
+        dimensions: `${width}x${height}m`,
+        videoLink: VIDEO_LINK
+      });
+      return { type: "text", text: response };
+    }
+
+    // First time - floor and offer standard size
+    const flooredW = Math.floor(Math.min(width, height));
+    const flooredH = Math.floor(Math.max(width, height));
     console.log(`📏 Fractional size ${width}x${height}m → offering ${flooredW}x${flooredH}m`);
 
     try {
@@ -979,6 +1008,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
             lastIntent: "size_confirmed",
             lastSharedProductId: product._id?.toString(),
             lastSharedProductLink: productUrl,
+            lastFractionalSize: fractionalKey,
             unknownCount: 0
           });
 
@@ -992,7 +1022,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       console.error("Error getting floored size:", err);
     }
 
-    // No standard size found - hand off directly with video
+    // No standard size found - hand off directly
     await updateConversation(psid, {
       lastIntent: "fractional_meters_handoff",
       handoffRequested: true,

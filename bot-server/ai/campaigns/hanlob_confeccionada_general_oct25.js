@@ -152,7 +152,33 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     const hasFractions = (requested.w % 1 !== 0) || (requested.h % 1 !== 0);
 
     if (hasFractions) {
-      // Floor dimensions and offer the standard size directly
+      const fractionalKey = `${Math.min(requested.w, requested.h)}x${Math.max(requested.w, requested.h)}`;
+      const isInsisting = convo?.lastFractionalSize === fractionalKey;
+
+      // Customer insists on exact fractional size - hand off
+      if (isInsisting) {
+        console.log(`📏 Campaign: customer insists on ${fractionalKey}m, handing off`);
+
+        await updateConversation(psid, {
+          lastIntent: "fractional_meters_handoff",
+          handoffRequested: true,
+          handoffReason: `Medida con decimales: ${requested.w}x${requested.h}m (insiste en medida exacta)`,
+          handoffTimestamp: new Date(),
+          state: "needs_human",
+          unknownCount: 0
+        });
+
+        sendHandoffNotification(psid, `Medida con decimales: ${requested.w}x${requested.h}m - cliente insiste en medida exacta`).catch(err => {
+          console.error("❌ Failed to send push notification:", err);
+        });
+
+        const response = await generateBotResponse("specialist_handoff", {
+          dimensions: `${requested.w}x${requested.h}m`
+        });
+        return { type: "text", text: response };
+      }
+
+      // First time - floor and offer standard size
       const flooredW = Math.floor(Math.min(requested.w, requested.h));
       const flooredH = Math.floor(Math.max(requested.w, requested.h));
       console.log(`📏 Campaign: fractional ${requested.w}x${requested.h}m → offering ${flooredW}x${flooredH}m`);
@@ -164,6 +190,7 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
         const line = await variantLine(flooredMatch, true, psid, convo);
         await updateConversation(psid, {
           lastIntent: "size_confirmed",
+          lastFractionalSize: fractionalKey,
           unknownCount: 0
         });
 

@@ -1667,7 +1667,33 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     const hasFractions = dimensions && hasFractionalMeters(dimensions);
 
     if (hasFractions) {
-      // Floor dimensions and offer the standard size directly
+      const fractionalKey = `${Math.min(dimensions.width, dimensions.height)}x${Math.max(dimensions.width, dimensions.height)}`;
+      const isInsisting = convo?.lastFractionalSize === fractionalKey;
+
+      // Customer insists on exact fractional size - hand off
+      if (isInsisting) {
+        console.log(`🔘📏 Customer insists on ${fractionalKey}m with argollas, handing off`);
+
+        await updateConversation(psid, {
+          lastIntent: "fractional_meters_handoff",
+          handoffRequested: true,
+          handoffReason: `Medida con decimales: ${dimensions.width}x${dimensions.height}m (insiste, preguntó por argollas)`,
+          handoffTimestamp: new Date(),
+          state: "needs_human",
+          unknownCount: 0
+        });
+
+        sendHandoffNotification(psid, `Medida con decimales: ${dimensions.width}x${dimensions.height}m - cliente insiste en medida exacta`).catch(err => {
+          console.error("❌ Failed to send push notification:", err);
+        });
+
+        return {
+          type: "text",
+          text: `Sí, nuestra malla viene con argollas reforzadas. Permíteme comunicarte con un especialista para cotizar la medida exacta de ${dimensions.width}x${dimensions.height}m.`
+        };
+      }
+
+      // First time - floor and offer standard size
       const flooredW = Math.floor(Math.min(dimensions.width, dimensions.height));
       const flooredH = Math.floor(Math.max(dimensions.width, dimensions.height));
       console.log(`🔘📏 Argollas + fractional ${dimensions.width}x${dimensions.height}m → offering ${flooredW}x${flooredH}m`);
@@ -1701,6 +1727,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
               lastIntent: "size_confirmed",
               lastSharedProductId: product._id?.toString(),
               lastSharedProductLink: productLink,
+              lastFractionalSize: fractionalKey,
               unknownCount: 0
             });
 
@@ -2480,6 +2507,34 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       const hasFractions = hasFractionalMeters(dimensions);
 
       if (hasFractions) {
+        const fractionalKey = `${Math.min(dimensions.width, dimensions.height)}x${Math.max(dimensions.width, dimensions.height)}`;
+        const isInsisting = convo?.lastFractionalSize === fractionalKey;
+
+        // Customer insists on exact fractional size - hand off
+        if (isInsisting) {
+          console.log(`📏 Customer insists on ${fractionalKey}m, handing off`);
+
+          await updateConversation(psid, {
+            lastIntent: "fractional_meters_handoff",
+            handoffRequested: true,
+            handoffReason: `Medida con decimales: ${dimensions.width}x${dimensions.height}m (insiste en medida exacta)`,
+            handoffTimestamp: new Date(),
+            state: "needs_human",
+            unknownCount: 0,
+            requestedSize: requestedSizeStr
+          });
+
+          sendHandoffNotification(psid, `Medida con decimales: ${dimensions.width}x${dimensions.height}m - cliente insiste en medida exacta`).catch(err => {
+            console.error("❌ Failed to send push notification:", err);
+          });
+
+          return {
+            type: "text",
+            text: `Entendido, necesitas exactamente ${dimensions.width}x${dimensions.height}m. Permíteme comunicarte con un especialista para cotizar esa medida.`
+          };
+        }
+
+        // First time - floor and offer standard size
         const flooredW = Math.floor(Math.min(dimensions.width, dimensions.height));
         const flooredH = Math.floor(Math.max(dimensions.width, dimensions.height));
         console.log(`📏 Fractional ${dimensions.width}x${dimensions.height}m → offering ${flooredW}x${flooredH}m`);
@@ -2513,6 +2568,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
                 lastIntent: "size_confirmed",
                 lastSharedProductId: product._id?.toString(),
                 lastSharedProductLink: productLink,
+                lastFractionalSize: fractionalKey,
                 unknownCount: 0
               });
 
