@@ -1174,16 +1174,19 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     const quantityText = quantity ? `Para ${quantity} piezas:\n\n` : "";
 
     // Save product reference for duplicate detection and stats
+    const hasLocation = convo?.city || convo?.stateMx || convo?.zipCode;
     await updateConversation(psid, {
       lastSharedProductId: product._id?.toString(),
       lastSharedProductLink: productUrl,
       unknownCount: 0
     });
 
+    const zipAsk = hasLocation ? '' : '\n\n¿Me puedes compartir tu código postal para fines estadísticos?';
+
     return {
       type: "text",
       text: `${quantityText}${salesPitch}\n` +
-            `🛒 Cómprala aquí:\n${trackedLink}${wholesaleMention}`
+            `🛒 Cómprala aquí:\n${trackedLink}${wholesaleMention}${zipAsk}`
     };
   }
 
