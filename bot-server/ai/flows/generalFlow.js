@@ -475,8 +475,8 @@ function shouldHandle(classification, sourceContext, convo, userMessage = '') {
       return true;
     }
 
-    // Payment patterns
-    if (/c[oó]mo\s+(se\s+)?paga|formas?\s+de\s+pago|pago\s+contra\s+entrega|aceptan\s+tarjeta/i.test(msg)) {
+    // Payment patterns (exclude "contra entrega" - handled by PAY_ON_DELIVERY_QUERY in dispatcher)
+    if (/c[oó]mo\s+(se\s+)?paga|formas?\s+de\s+pago|aceptan\s+tarjeta/i.test(msg)) {
       classification.intent = INTENTS.PAYMENT_QUERY;
       return true;
     }

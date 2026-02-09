@@ -1694,24 +1694,13 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   }
 
   // 💰 Where to pay/deposit - Direct ML payment answer
-  // Patterns: donde deposito, donde pago, onde te mando $$, pago al entregar, hasta que llegue
-  const payOnDeliveryPattern = /\b(pago|deposito)\s+(al\s+entregar|contra\s+entrega)\b/i.test(msg) ||
-                               /\b(hasta\s+que\s+llegue|cuando\s+llegue\s+pago|pago\s+cuando\s+llegue)\b/i.test(msg);
+  // NOTE: Pay-on-delivery ("pago contra entrega") is handled by intentDispatcher → handlePayOnDelivery
+  // with flow-specific responses (confeccionada vs wholesale). Only "where to pay" stays here.
   const whereToPayPattern = /\b(d[oó]nde|donde|onde|a\s+d[oó]nde)\s+(deposito|pago|se\s+paga|se\s+deposita|hago\s+el\s+pago|realizo\s+el\s+pago|te\s+mando|mando)\b/i.test(msg) ||
                             /\b(donde|onde)\s+(te\s+)?(mando|envio|transfiero)\s*(\$|\$\$|dinero|lana|pago)\b/i.test(msg);
 
-  if (whereToPayPattern || payOnDeliveryPattern) {
+  if (whereToPayPattern) {
     await updateConversation(psid, { lastIntent: "payment_location" });
-
-    // Different response if asking about pay-on-delivery
-    if (payOnDeliveryPattern) {
-      return {
-        type: "text",
-        text: "El pago es 100% POR ADELANTADO en Mercado Libre al momento de hacer tu pedido.\n\n" +
-              "❌ No manejamos pago contra entrega.\n\n" +
-              "Aceptan tarjeta, efectivo en OXXO, o meses sin intereses. ¿Te paso el link para que puedas hacer tu pedido?"
-      };
-    }
 
     return {
       type: "text",
