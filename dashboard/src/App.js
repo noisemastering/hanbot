@@ -68,6 +68,7 @@ import IntentsView from "./components/IntentsView";
 import FlowsView from "./components/FlowsView";
 import ApiHealthAlerts from "./components/ApiHealthAlerts";
 import SimulationModeSelector from "./components/SimulationModeSelector";
+import useNewVersionCheck from "./hooks/useNewVersionCheck";
 
 const API_URL = process.env.REACT_APP_API_URL || "https://hanbot-production.up.railway.app";
 const socket = io(API_URL, {
@@ -337,6 +338,7 @@ function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, loading: authLoading, canAccess, canManageUsers, logout, simulationMode, stopSimulation } = useAuth();
+  const updateAvailable = useNewVersionCheck();
 
   // All useState hooks must be called BEFORE any early returns
   const [messages, setMessages] = useState([]);
@@ -1476,6 +1478,18 @@ function App() {
           },
         }}
       />
+      {/* New version banner */}
+      {updateAvailable && (
+        <div className="fixed top-0 inset-x-0 z-[100] flex items-center justify-center gap-3 bg-blue-600 text-white text-sm py-2 px-4 shadow-lg">
+          <span>Hay una nueva versión del dashboard disponible.</span>
+          <button
+            onClick={() => window.location.reload()}
+            className="bg-white text-blue-700 font-semibold px-3 py-0.5 rounded hover:bg-blue-50 transition-colors"
+          >
+            Actualizar
+          </button>
+        </div>
+      )}
       {/* Sidebar Overlay */}
       {sidebarOpen && (
         <div
