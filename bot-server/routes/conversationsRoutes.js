@@ -106,42 +106,52 @@ router.get('/follow-ups', async (req, res) => {
   }
 });
 
-// GET /conversations/pending-handoffs - Get unresolved handoffs awaiting human attention
-const { wasBusinessHours } = require('../ai/utils/businessHours');
+// GET /conversations/pending-handoffs - Get after-hours handoffs since last business close
+const { wasBusinessHours, getLastBusinessClose } = require('../ai/utils/businessHours');
 
 router.get('/pending-handoffs', async (req, res) => {
   try {
+    // Only look at handoffs since the last business close (yesterday 6pm or Friday 6pm)
+    const cutoff = getLastBusinessClose();
+
     const conversations = await Conversation.find({
       handoffRequested: true,
       state: { $in: ['needs_human'] },
       $or: [
         { handoffResolved: false },
         { handoffResolved: { $exists: false } }
-      ]
+      ],
+      handoffTimestamp: { $gte: cutoff }
     }).sort({ handoffTimestamp: 1 }).lean();
 
     const now = new Date();
-    const data = conversations.map(conv => {
-      const handoffTime = conv.handoffTimestamp ? new Date(conv.handoffTimestamp) : null;
-      const isAfterHours = handoffTime ? !wasBusinessHours(handoffTime) : false;
-      const waitTimeMinutes = handoffTime ? Math.round((now - handoffTime) / 60000) : null;
 
-      return {
-        psid: conv.psid,
-        channel: conv.channel || 'facebook',
-        handoffReason: conv.handoffReason,
-        handoffTimestamp: conv.handoffTimestamp,
-        productInterest: conv.productInterest,
-        requestedSize: conv.requestedSize,
-        city: conv.city,
-        stateMx: conv.stateMx,
-        currentFlow: conv.currentFlow,
-        lastMessageAt: conv.lastMessageAt,
-        purchaseIntent: conv.purchaseIntent,
-        isAfterHours,
-        waitTimeMinutes
-      };
-    });
+    // Only include handoffs that came in outside business hours
+    const data = conversations
+      .filter(conv => {
+        const handoffTime = conv.handoffTimestamp ? new Date(conv.handoffTimestamp) : null;
+        return handoffTime && !wasBusinessHours(handoffTime);
+      })
+      .map(conv => {
+        const handoffTime = new Date(conv.handoffTimestamp);
+        const waitTimeMinutes = Math.round((now - handoffTime) / 60000);
+
+        return {
+          psid: conv.psid,
+          channel: conv.channel || 'facebook',
+          handoffReason: conv.handoffReason,
+          handoffTimestamp: conv.handoffTimestamp,
+          productInterest: conv.productInterest,
+          requestedSize: conv.requestedSize,
+          city: conv.city,
+          stateMx: conv.stateMx,
+          currentFlow: conv.currentFlow,
+          lastMessageAt: conv.lastMessageAt,
+          purchaseIntent: conv.purchaseIntent,
+          isAfterHours: true,
+          waitTimeMinutes
+        };
+      });
 
     res.json({ success: true, total: data.length, data });
   } catch (error) {
