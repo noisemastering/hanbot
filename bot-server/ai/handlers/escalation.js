@@ -5,6 +5,7 @@ const { updateConversation } = require("../../conversationManager");
 const { sendHandoffNotification } = require("../../services/pushNotifications");
 const { getBusinessInfo } = require("../../businessInfoManager");
 const { generateBotResponse } = require("../responseGenerator");
+const { isBusinessHours } = require("../utils/businessHours");
 
 const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
 
@@ -31,6 +32,8 @@ async function handleFrustration({ psid, convo, userMessage }) {
     unknownCount: 0
   });
 
+  const inBusinessHours = isBusinessHours();
+
   // If we have dimensions in context, acknowledge and continue with them
   if (hasSize || hasRequestedSize) {
     const size = hasRequestedSize ||
@@ -39,6 +42,7 @@ async function handleFrustration({ psid, convo, userMessage }) {
     const response = await generateBotResponse("frustration_recovery", {
       hasSizeContext: true,
       previousSize: size,
+      isAfterHours: !inBusinessHours,
       convo
     });
 
@@ -50,6 +54,7 @@ async function handleFrustration({ psid, convo, userMessage }) {
     const response = await generateBotResponse("frustration_recovery", {
       hasProductContext: true,
       productInterest: convo.productInterest,
+      isAfterHours: !inBusinessHours,
       convo
     });
 
@@ -68,6 +73,7 @@ async function handleFrustration({ psid, convo, userMessage }) {
 
   const response = await generateBotResponse("frustration_handoff", {
     needsHuman: true,
+    isAfterHours: !inBusinessHours,
     convo
   });
 
@@ -82,6 +88,8 @@ async function handleFrustration({ psid, convo, userMessage }) {
  * Handle human request - "Quiero hablar con alguien", "Un agente"
  */
 async function handleHumanRequest({ psid, convo }) {
+  const inBusinessHours = isBusinessHours();
+
   await updateConversation(psid, {
     handoffRequested: true,
     handoffReason: "User requested human agent",
@@ -92,7 +100,7 @@ async function handleHumanRequest({ psid, convo }) {
 
   await sendHandoffNotification(psid, convo, "Cliente solicitó hablar con un agente");
 
-  const response = await generateBotResponse("human_request", { convo });
+  const response = await generateBotResponse("human_request", { isAfterHours: !inBusinessHours, convo });
 
   const videoSuffix = isMallaContext(convo)
     ? `\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
@@ -105,6 +113,8 @@ async function handleHumanRequest({ psid, convo }) {
  * Handle general complaint
  */
 async function handleComplaint({ psid, convo, userMessage }) {
+  const inBusinessHours = isBusinessHours();
+
   await updateConversation(psid, {
     handoffRequested: true,
     handoffReason: `Complaint: ${userMessage.substring(0, 100)}`,
@@ -115,7 +125,7 @@ async function handleComplaint({ psid, convo, userMessage }) {
 
   await sendHandoffNotification(psid, convo, `Queja de cliente: "${userMessage.substring(0, 100)}"`);
 
-  const response = await generateBotResponse("complaint", { convo });
+  const response = await generateBotResponse("complaint", { isAfterHours: !inBusinessHours, convo });
 
   const videoSuffix = isMallaContext(convo)
     ? `\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
@@ -146,6 +156,7 @@ async function handlePriceConfusion({ psid, convo, userMessage }) {
  */
 async function handleOutOfStock({ psid, convo, userMessage }) {
   const businessInfo = await getBusinessInfo();
+  const inBusinessHours = isBusinessHours();
 
   await updateConversation(psid, {
     lastIntent: "out_of_stock_report",
@@ -168,6 +179,7 @@ async function handleOutOfStock({ psid, convo, userMessage }) {
       phone: businessInfo?.phones?.[0] || '442 352 1646',
       whatsapp: "https://wa.me/524425957432",
       needsHuman: true,
+      isAfterHours: !inBusinessHours,
       convo
     });
 
@@ -175,6 +187,7 @@ async function handleOutOfStock({ psid, convo, userMessage }) {
   }
 
   const response = await generateBotResponse("out_of_stock", {
+    isAfterHours: !inBusinessHours,
     convo
   });
 

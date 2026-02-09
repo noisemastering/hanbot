@@ -32,6 +32,7 @@ const { generateClickLink } = require("../../tracking");
 const { sendHandoffNotification } = require("../../services/pushNotifications");
 const { selectRelevantAsset, trackAssetMention, insertAssetIntoResponse } = require("../assetManager");
 const { handleRollQuery } = require("../core/rollQuery");
+const { isBusinessHours } = require("../utils/businessHours");
 const { getOfferHook, shouldMentionOffer, applyAdContext, getAngleMessaging } = require("../utils/adContextHelper");
 const { isContextualMention, isExplicitProductRequest } = require("../utils/productMatcher");
 const { getProductDisplayName, determineVerbosity, formatProductResponse } = require("../utils/productEnricher");
@@ -154,73 +155,6 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   // 🏭 CUSTOM ORDER FLOW - Handle multi-step collection for oversized orders
   const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
-
-  // 📏 FRACTIONAL SIZE CHOICE - User chose between standard size or custom quote
-  if (convo.lastIntent === "fractional_awaiting_choice") {
-    const originalSize = convo.fractionalOriginalSize;
-    const standardSize = convo.fractionalStandardSize;
-    const productId = convo.fractionalProductId;
-
-    // Check if they want the standard size
-    const wantsStandard = /\b(s[ií]|funciona|esa|est[aá]\s*bien|ok|perfecto|va|dale|sale|me\s*sirve|esa\s*medida|la\s*estandar|la\s*est[aá]ndar|me\s*quedo|quiero\s*esa)\b/i.test(msg);
-    const wantsCustom = /\b(exacta|cotiza|custom|especial|prefiero|la\s*otra|no\s*me\s*sirve|no\s*funciona|quiero\s*la\s*de|necesito)\b/i.test(msg);
-
-    if (wantsStandard || (!wantsCustom && !wantsStandard)) {
-      // Default to standard if unclear, or they explicitly accepted
-      console.log(`📏 User accepted standard size ${standardSize}`);
-
-      try {
-        const ProductFamily = require("../../models/ProductFamily");
-        const { generateClickLink } = require("../../services/clickTracking");
-
-        const product = await ProductFamily.findById(productId);
-        if (product) {
-          const productLink = product.onlineStoreLinks?.mercadoLibre || product.mLink;
-          if (productLink) {
-            const trackedLink = await generateClickLink(psid, productLink, {
-              productName: product.name,
-              productId: product._id,
-              campaignId: convo?.campaignId,
-              adId: convo?.adId
-            });
-
-            await updateConversation(psid, {
-              lastIntent: "size_confirmed",
-              unknownCount: 0
-            });
-
-            return {
-              type: "text",
-              text: `¡Excelente! Aquí tienes la malla ${standardSize}m:\n${trackedLink}\n\n¿Necesitas algo más?`
-            };
-          }
-        }
-      } catch (err) {
-        console.error("Error getting standard size product:", err);
-      }
-    }
-
-    // They want custom quote - hand off with video
-    console.log(`📏 User wants custom quote for ${originalSize}, triggering handoff`);
-
-    await updateConversation(psid, {
-      lastIntent: "fractional_meters_handoff",
-      handoffRequested: true,
-      handoffReason: `Medida con decimales: ${originalSize}m (rechazó ${standardSize}m estándar)`,
-      handoffTimestamp: new Date(),
-      state: "needs_human",
-      unknownCount: 0
-    });
-
-    sendHandoffNotification(psid, `Medida especial: ${originalSize}m - cliente prefiere cotización exacta`).catch(err => {
-      console.error("❌ Failed to send push notification:", err);
-    });
-
-    return {
-      type: "text",
-      text: `Perfecto, te comunico con un especialista para cotizar ${originalSize}m.\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
-    };
-  }
 
   // Step 2: Waiting for purpose (what they want to protect)
   if (convo.lastIntent === "custom_order_awaiting_purpose") {
@@ -816,7 +750,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   if (/\b(ver|visitar|ir a|mostrar|enviar|dar|darme|dame|quiero)\s+(la\s+)?(tienda|catalogo|cat[aá]logo)\b/i.test(msg) ||
       /\b(tienda\s+(en\s+l[ií]nea|online|virtual|mercado\s+libre))\b/i.test(msg) ||
       /\b(link|enlace)\s+(de\s+)?(la\s+)?(tienda|catalogo)\b/i.test(msg) ||
-      /\b(tienes?|tienen?|venden?|est[aá]n?)\s+(en\s+|por\s+)?mercado\s*libre\b/i.test(msg)) {
+      /\b(tienes?|tienen?|tendr[aá]s?|venden?|est[aá]n?|manejan?)\s+(en\s+|por\s+)?\.?\s*mercado\s*libre\b/i.test(msg)) {
 
     // If conversation is about ROLLOS, they need human contact (rollos aren't on ML directly)
     const isRolloContext = convo.productInterest === 'rollo' ||
@@ -838,7 +772,9 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
               "Para darte precio y disponibilidad, necesito:\n" +
               "• Tu código postal (para calcular envío)\n" +
               "• Cantidad de rollos que necesitas\n\n" +
-              "Un asesor te contactará en breve para ayudarte con tu cotización."
+              (isBusinessHours()
+                ? "Un asesor te contactará en breve para ayudarte con tu cotización."
+                : "Un asesor te contactará el siguiente día hábil para ayudarte con tu cotización.")
       };
     }
 
@@ -885,7 +821,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       /\b(proceso|pasos?)\s+(de\s+|para\s+)?(compra|comprar|pedir|ordenar)/i.test(msg) ||
       /\b(d[oó]nde|c[oó]mo)\s+(compro|pido|ordeno|puedo\s+comprar)/i.test(msg) ||
       /\b(se\s+puede|puedo|pueden)\s+(pedir|comprar|ordenar|adquirir)\s+(en|por|x)?\s*(mercado\s*libre|ml)\b/i.test(msg) ||
-      /\b(tienen|venden|est[aá]n?)\s+(en|por)?\s*(mercado\s*libre|ml)\b/i.test(msg)) {
+      /\b(tienes?|tienen?|tendr[aá]s?|venden?|est[aá]n?|manejan?)\s+(en|por)?\s*\.?\s*(mercado\s*libre|ml)\b/i.test(msg)) {
 
     // Check if user is asking about a specific product that requires human advisor
     if (convo.requestedProduct) {
@@ -1406,7 +1342,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   // e.g., "si de esa medida" or "si con argollas" will now be detected
 
   // Skip if message contains thanks/closing words (avoid redundant messages after user is done)
-  const hasThanksClosure = /\b(gracias|muchas gracias|perfecto.*gracias|ok.*gracias|excelente.*gracias|muy amable|adiós|bye|nos vemos|ago\s+mi\s+pedido|hago\s+mi\s+pedido)\b/i.test(msg);
+  const hasThanksClosure = /\b(gracias|muchas gracias|agradezco|le\s+agradezco|perfecto.*gracias|ok.*gracias|excelente.*gracias|muy amable|adiós|bye|nos vemos|ago\s+mi\s+pedido|hago\s+mi\s+pedido)\b/i.test(msg);
 
   // Check for "me interesa" - generic interest expression
   const isInterested = /\b(me\s+interesa|estoy\s+interesad[oa]|interesad[oa])\b/i.test(msg);
@@ -1906,6 +1842,39 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     return {
       type: "text",
       text: "¡Sí! El envío está incluido en el precio o se calcula automáticamente en Mercado Libre dependiendo de tu ubicación.\n\nEn la mayoría de los casos el envío es gratis. 🚚"
+    };
+  }
+
+  // 🛒 "Me lo envía / me lo manda / envíamelo" after product link = purchase intent, redirect to ML
+  const wantsSentToThem = /\b(me\s+lo|me\s+la|me\s+los|me\s+las)\s+(podr[ií]a[ns]?|puede[ns]?|puedes)\s+(enviar|mandar)\b/i.test(msg) ||
+                          /\b(me\s+lo|me\s+la)\s+(env[ií]a[ns]?|manda[ns]?)\b/i.test(msg) ||
+                          /\b(env[ií]a|manda|env[ií]en|manden)(me)?lo\b/i.test(msg) ||
+                          /\b(lo|la)\s+(podr[ií]a[ns]?|puede[ns]?)\s+enviar\b/i.test(msg);
+
+  if (wantsSentToThem && (convo.lastSharedProductLink || convo.lastSharedProductId)) {
+    console.log("🛒 'Send it to me' detected after product link — redirecting to ML");
+    await updateConversation(psid, { lastIntent: "ml_redirect", unknownCount: 0 });
+    return {
+      type: "text",
+      text: "Debes realizar tu compra a través de Mercado Libre en el enlace que te compartí hace un momento, tu compra es segura y el envío está incluido."
+    };
+  }
+
+  // 📷 "Mándame foto / cómo se ve / qué color" after product link = redirect to ML listing
+  const wantsToSeeProduct = /\b(foto|fotos|imagen|imágenes|imagenes|como\s+se\s+ve|c[oó]mo\s+se\s+ve|ver\s+(el|la|los)\s+(producto|malla)|que\s+color|qu[eé]\s+color|de\s+qu[eé]\s+color|muestra|mostrar)\b/i.test(msg) &&
+                            !(/\b(mand[eé]|envi[eé]|ya\s+te)\b/i.test(msg)); // Exclude "ya te mandé foto"
+
+  if (wantsToSeeProduct && (convo.lastSharedProductLink || convo.lastSharedProductId)) {
+    console.log("📷 Photo/color request detected after product link — redirecting to ML");
+    await updateConversation(psid, { lastIntent: "ml_photo_redirect", unknownCount: 0 });
+
+    // Re-share the last product link
+    const link = convo.lastSharedProductLink || null;
+    const linkText = link ? `\n\nAquí puedes ver fotos, color y todos los detalles:\n${link}` : '';
+
+    return {
+      type: "text",
+      text: `La malla es color beige arena. En el enlace de Mercado Libre que te compartí puedes ver fotos reales del producto.${linkText}`
     };
   }
 

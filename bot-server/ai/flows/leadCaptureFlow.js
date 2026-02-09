@@ -5,6 +5,7 @@
 const { updateConversation, getConversation } = require("../../conversationManager");
 const { INTENTS } = require("../classifier");
 const Campaign = require("../../models/Campaign");
+const { isBusinessHours } = require("../utils/businessHours");
 
 /**
  * Lead capture stages
@@ -349,7 +350,7 @@ async function handleContact(psid, msg, leadData, campaign) {
 
   return {
     type: "text",
-    text: `¡Perfecto! Ya tengo todos los datos:\n\n${summary}\n\nUn especialista te contactará pronto con la cotización. ¡Gracias!`
+    text: `¡Perfecto! Ya tengo todos los datos:\n\n${summary}\n\n${isBusinessHours() ? 'Un especialista te contactará pronto con la cotización.' : 'Un especialista te contactará el siguiente día hábil con la cotización.'} ¡Gracias!`
   };
 }
 

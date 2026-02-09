@@ -877,8 +877,8 @@ function quickClassify(message, dbIntents = null) {
   // These bypass AI for obvious product mentions
 
   // First, check for "N de ancho y M de largo" or "N de largo y M de ancho" patterns
-  const anchoLargoPattern = /(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*de\s*ancho\s*(?:y|x|por)\s*(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*(?:de\s*largo)?/i;
-  const largoAnchoPattern = /(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*de\s*largo\s*(?:y|x|por)\s*(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*(?:de\s*ancho)?/i;
+  const anchoLargoPattern = /(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*de\s*ancho\s*(?:\w+\s+)*?(?:[yi]|x|por)\s*(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*(?:de\s*largo)?/i;
+  const largoAnchoPattern = /(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*de\s*largo\s*(?:\w+\s+)*?(?:[yi]|x|por)\s*(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*(?:de\s*ancho)?/i;
 
   let dimensions = null;
   let anchoLargoMatch = msg.match(anchoLargoPattern);

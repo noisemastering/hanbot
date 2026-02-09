@@ -7,6 +7,7 @@ const { updateConversation } = require("../../conversationManager");
 const { INTENTS } = require("../classifier");
 const { getAvailableSizes, generateGenericSizeResponse } = require("../../measureHandler");
 const { generateBotResponse } = require("../responseGenerator");
+const { isBusinessHours } = require("../utils/businessHours");
 
 /**
  * Check if this flow should handle the message
@@ -185,6 +186,8 @@ async function handlePayment(convo, psid) {
  * Human request
  */
 async function handleHumanRequest(convo, psid) {
+  const inBusinessHours = isBusinessHours();
+
   await updateConversation(psid, {
     handoffRequested: true,
     handoffReason: "User requested human",
@@ -192,7 +195,7 @@ async function handleHumanRequest(convo, psid) {
     state: "needs_human"
   });
 
-  const response = await generateBotResponse("human_request", { convo });
+  const response = await generateBotResponse("human_request", { isAfterHours: !inBusinessHours, convo });
   return { type: "text", text: response };
 }
 

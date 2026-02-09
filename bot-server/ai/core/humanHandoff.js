@@ -1,6 +1,7 @@
 // ai/core/humanHandoff.js
 const { getBusinessInfo } = require("../../businessInfoManager");
 const { updateConversation } = require("../../conversationManager");
+const { isBusinessHours } = require("../utils/businessHours");
 
 /**
  * Detects if user explicitly wants to talk to a human agent
@@ -49,22 +50,30 @@ async function handleHumanHandoff(userMessage, psid, convo, reason = "explicit")
 
   // WhatsApp link for direct contact
   const whatsappLink = "https://wa.me/524425957432";
+  const inBusinessHours = isBusinessHours();
+
+  console.log(`🕒 Handoff during business hours: ${inBusinessHours ? 'YES' : 'NO'}`);
+
+  // Timing suffix based on business hours
+  const timingSuffix = inBusinessHours
+    ? "Un especialista tomará tu conversación pronto 👍"
+    : "Nuestro horario de atención es de lunes a viernes de 9am a 6pm. Un especialista te contactará el siguiente día hábil a primera hora 👍";
 
   // Different responses based on reason
   const responses = {
     explicit: [
-      `Perfecto, te conectaré con uno de nuestros especialistas.\n\nPuedes contactarnos directamente por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nUn especialista tomará tu conversación pronto 👍`,
-      `Claro, con gusto te paso con nuestro equipo.\n\nEscríbenos por WhatsApp para atención inmediata:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nO si prefieres, un especialista atenderá tu mensaje aquí en breve 😊`,
-      `Entendido, voy a transferir tu conversación con un especialista.\n\nSi es urgente, escríbenos por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\n¡Un especialista estará contigo pronto! 👍`
+      `Perfecto, te conectaré con uno de nuestros especialistas.\n\nPuedes contactarnos directamente por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\n${timingSuffix}`,
+      `Claro, con gusto te paso con nuestro equipo.\n\nEscríbenos por WhatsApp para atención inmediata:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\n${timingSuffix}`,
+      `Entendido, voy a transferir tu conversación con un especialista.\n\nEscríbenos por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\n${timingSuffix}`
     ],
     frustrated: [
-      `Entiendo tu frustración, déjame conectarte con uno de nuestros especialistas para ayudarte mejor.\n\nEscríbenos directo por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nUn especialista atenderá tu caso personalmente 🙏`
+      `Entiendo tu frustración, déjame conectarte con uno de nuestros especialistas para ayudarte mejor.\n\nEscríbenos directo por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\n${timingSuffix}`
     ],
     complex: [
-      `Esta consulta requiere atención especializada. Te paso con un especialista que podrá ayudarte mejor.\n\nContáctanos por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nUn experto revisará tu caso pronto 🤓`
+      `Esta consulta requiere atención especializada. Te paso con un especialista que podrá ayudarte mejor.\n\nContáctanos por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\n${timingSuffix}`
     ],
     auto_escalation: [
-      `Disculpa que no haya podido ayudarte como esperabas. Déjame conectarte con un especialista.\n\nEscríbenos por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\nNuestro equipo te atenderá pronto 💚`
+      `Disculpa que no haya podido ayudarte como esperabas. Déjame conectarte con un especialista.\n\nEscríbenos por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\n${timingSuffix}`
     ]
   };
 

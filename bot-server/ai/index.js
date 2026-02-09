@@ -937,7 +937,10 @@ async function generateReply(userMessage, psid, referral = null) {
         response += `\n\nTambién puedes visitar nuestra tienda en el parque industrial Navex, Tlacote.`;
       }
 
-      response += `\n\n¿Qué medida de malla sombra necesitas?`;
+      // If we already shared a product, don't ask "what size?" again
+      if (!convo.lastSharedProductId) {
+        response += `\n\n¿Qué medida de malla sombra necesitas?`;
+      }
 
       return await checkForRepetition({ type: "text", text: response }, psid, convo);
     }

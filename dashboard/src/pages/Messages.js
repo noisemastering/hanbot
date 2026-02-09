@@ -15,6 +15,7 @@ function Messages() {
   const [showLinkGenerator, setShowLinkGenerator] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
+  const [pendingHandoffs, setPendingHandoffs] = useState([]);
 
   // Helper function to show message excerpt
   const getMessageExcerpt = (text, maxLength = 60) => {
@@ -43,6 +44,16 @@ function Messages() {
       default:
         return { emoji: '🔵', color: '#2196F3', label: 'Media' };
     }
+  };
+
+  // Helper function to format wait time
+  const formatWaitTime = (minutes) => {
+    if (minutes == null) return '';
+    if (minutes < 60) return `hace ${minutes}min`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `hace ${hours}h`;
+    const days = Math.floor(hours / 24);
+    return `hace ${days}d`;
   };
 
   // Helper function to determine handoff type and colors
@@ -122,6 +133,15 @@ function Messages() {
     }
   };
 
+  const fetchPendingHandoffs = async () => {
+    try {
+      const res = await API.get("/conversations/pending-handoffs");
+      setPendingHandoffs(res.data.data || []);
+    } catch (err) {
+      console.error("Error fetching pending handoffs:", err);
+    }
+  };
+
   useEffect(() => {
     const fetchMessages = async () => {
       try {
@@ -162,11 +182,13 @@ function Messages() {
     // Initial fetch
     fetchMessages();
     fetchUsers();
+    fetchPendingHandoffs();
 
     // Auto-refresh every 30 seconds
     const interval = setInterval(() => {
       fetchMessages();
       fetchUsers();
+      fetchPendingHandoffs();
     }, 30000);
 
     // Cleanup interval on unmount
@@ -195,6 +217,20 @@ function Messages() {
     } finally {
       setLoading(prev => ({ ...prev, [psid]: false }));
     }
+  };
+
+  const handleResolveHandoff = async (psid) => {
+    try {
+      await API.post(`/conversations/${psid}/resolve-handoff`);
+      setPendingHandoffs(prev => prev.filter(h => h.psid !== psid));
+    } catch (err) {
+      console.error("Error resolving handoff:", err);
+    }
+  };
+
+  const handleTakeoverAndResolve = async (psid) => {
+    await handleTakeover(psid);
+    await handleResolveHandoff(psid);
   };
 
   const handleRelease = async (psid) => {
@@ -285,6 +321,9 @@ function Messages() {
       });
       setUsers(usersMap);
 
+      // Refresh pending handoffs too
+      await fetchPendingHandoffs();
+
       console.log("✅ Refresh COMPLETE!");
     } catch (err) {
       console.error("❌ REFRESH ERROR:", err);
@@ -344,6 +383,153 @@ function Messages() {
           {refreshing ? "🔄 Actualizando..." : "🔄 Actualizar"}
         </button>
       </div>
+
+      {/* SECTION 0: Pending Handoffs */}
+      {pendingHandoffs.length > 0 && (
+        <div style={{ marginBottom: "2.5rem" }}>
+          <div style={{
+            backgroundColor: "#5c3d00",
+            padding: "12px 16px",
+            borderRadius: "8px 8px 0 0",
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center"
+          }}>
+            <h2 style={{ color: "#ffb300", margin: 0, fontSize: "1.3rem", fontWeight: "bold" }}>
+              Pendientes de Atención - {pendingHandoffs.length}
+            </h2>
+          </div>
+          <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #555" }}>
+            <thead>
+              <tr style={{ backgroundColor: "#3d2900", color: "#ffb300" }}>
+                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Canal</th>
+                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Usuario</th>
+                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Esperando desde</th>
+                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Motivo</th>
+                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Producto</th>
+                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Ciudad</th>
+                <th style={{ padding: "10px", textAlign: "center", borderBottom: "2px solid #555" }}>Intención</th>
+                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Acción</th>
+              </tr>
+            </thead>
+            <tbody>
+              {pendingHandoffs.map((handoff) => {
+                const channelDisplay = getChannelDisplay(handoff.channel);
+                const intentDisplay = getIntentDisplay(handoff.purchaseIntent);
+                return (
+                  <tr
+                    key={handoff.psid}
+                    onClick={() => {
+                      setSelectedPsid(handoff.psid);
+                      setSelectedChannel(handoff.channel);
+                      fetchFullConversation(handoff.psid);
+                    }}
+                    style={{
+                      borderBottom: "1px solid #555",
+                      cursor: "pointer",
+                      borderLeft: handoff.isAfterHours ? "4px solid #ff9800" : "4px solid transparent",
+                      backgroundColor: "transparent"
+                    }}
+                  >
+                    <td style={{ padding: "10px", textAlign: "center" }}>
+                      <span
+                        style={{
+                          backgroundColor: channelDisplay.color,
+                          color: 'white',
+                          padding: '4px 8px',
+                          borderRadius: '4px',
+                          fontSize: '0.75rem',
+                          fontWeight: 'bold'
+                        }}
+                        title={channelDisplay.label}
+                      >
+                        {channelDisplay.icon}
+                      </span>
+                    </td>
+                    <td style={{ padding: "10px", color: "#e0e0e0", fontSize: "0.85rem" }}>
+                      {handoff.channel === 'whatsapp' && handoff.psid?.startsWith('wa:') ? (
+                        <span
+                          style={{ cursor: 'pointer' }}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigator.clipboard.writeText(handoff.psid.substring(3));
+                            alert('Número copiado: ' + handoff.psid.substring(3));
+                          }}
+                          title="Click para copiar"
+                        >
+                          {handoff.psid.substring(3)}
+                        </span>
+                      ) : (
+                        <span style={{ color: '#888' }}>{handoff.psid?.substring(0, 10)}...</span>
+                      )}
+                    </td>
+                    <td style={{ padding: "10px", color: "#e0e0e0", fontSize: "0.85rem" }}>
+                      <div>
+                        {handoff.handoffTimestamp ? new Date(handoff.handoffTimestamp).toLocaleString('es-MX', {
+                          month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
+                        }) : '—'}
+                      </div>
+                      <div style={{ fontSize: "0.75rem", color: "#ffb300" }}>
+                        {formatWaitTime(handoff.waitTimeMinutes)}
+                      </div>
+                      {handoff.isAfterHours && (
+                        <span style={{
+                          display: "inline-block",
+                          marginTop: "4px",
+                          backgroundColor: "#ff9800",
+                          color: "#000",
+                          padding: "2px 6px",
+                          borderRadius: "4px",
+                          fontSize: "0.65rem",
+                          fontWeight: "bold"
+                        }}>
+                          Fuera de horario
+                        </span>
+                      )}
+                    </td>
+                    <td style={{ padding: "10px", color: "#e0e0e0", fontSize: "0.85rem", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                      {getMessageExcerpt(handoff.handoffReason, 40) || '—'}
+                    </td>
+                    <td style={{ padding: "10px", color: "#e0e0e0", fontSize: "0.85rem" }}>
+                      {handoff.productInterest || handoff.currentFlow || '—'}
+                    </td>
+                    <td style={{ padding: "10px", color: "#e0e0e0", fontSize: "0.85rem" }}>
+                      {[handoff.city, handoff.stateMx].filter(Boolean).join(', ') || '—'}
+                    </td>
+                    <td style={{ padding: "10px", textAlign: "center" }}>
+                      <span title={intentDisplay.label} style={{ fontSize: "1.2rem" }}>
+                        {intentDisplay.emoji}
+                      </span>
+                    </td>
+                    <td style={{ padding: "10px" }}>
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleTakeoverAndResolve(handoff.psid);
+                        }}
+                        disabled={loading[handoff.psid]}
+                        style={{
+                          padding: "6px 12px",
+                          backgroundColor: "#ff9800",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "8px",
+                          cursor: loading[handoff.psid] ? "not-allowed" : "pointer",
+                          opacity: loading[handoff.psid] ? 0.6 : 1,
+                          fontSize: "0.85rem",
+                          fontWeight: "bold"
+                        }}
+                      >
+                        {loading[handoff.psid] ? "..." : "Tomar"}
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* SECTION 1: Recent Activity Table */}
       <div style={{ marginBottom: "2.5rem" }}>

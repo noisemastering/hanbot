@@ -5,6 +5,7 @@ const Flow = require("../models/Flow");
 const { updateConversation } = require("../conversationManager");
 const { sendHandoffNotification } = require("../services/pushNotifications");
 const { parseDimensions } = require("./utils/sizeParser");
+const { isBusinessHours } = require("./utils/businessHours");
 
 // Dynamic action handlers
 const customSizeActions = require("./flows/customSizeActions");
@@ -450,7 +451,7 @@ async function completeFlow(flow, collectedData, psid, convo) {
 
       return {
         type: "text",
-        text: onComplete.message || "Un especialista te contactará pronto.",
+        text: onComplete.message || (isBusinessHours() ? "Un especialista te contactará pronto." : "Un especialista te contactará el siguiente día hábil en horario de atención (lunes a viernes 9am-6pm)."),
         handledBy: `flow_${flow.key}_complete_handoff`
       };
 

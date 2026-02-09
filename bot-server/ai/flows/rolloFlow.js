@@ -7,6 +7,7 @@ const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
 const ZipCode = require("../../models/ZipCode");
 const { INTENTS } = require("../classifier");
+const { isBusinessHours } = require("../utils/businessHours");
 
 // Import existing utilities - USE THESE
 const { getAncestors, getRootFamily } = require("../utils/productMatcher");
@@ -569,7 +570,9 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
     console.error("❌ Failed to send push notification:", err);
   });
 
-  let responseText = `¡Perfecto! Un especialista te contactará para cotizarte el rollo de malla sombra.`;
+  let responseText = isBusinessHours()
+    ? `¡Perfecto! Un especialista te contactará pronto para cotizarte el rollo de malla sombra.`
+    : `¡Perfecto! Un especialista te contactará el siguiente día hábil para cotizarte el rollo de malla sombra.`;
   if (state.zipInfo) {
     responseText += `\n\n📍 Envío a ${state.zipInfo.city}, ${state.zipInfo.state}`;
   }

@@ -5,6 +5,7 @@ const { sendHandoffNotification } = require("../../services/pushNotifications");
 const { getAngleMessaging } = require("../utils/adContextHelper");
 const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
+const { isBusinessHours } = require("../utils/businessHours");
 
 // Helper to append product link if we have dimensions in conversation
 async function appendProductLinkIfAvailable(responseText, convo, psid) {
@@ -57,22 +58,6 @@ async function appendProductLinkIfAvailable(responseText, convo, psid) {
   }
 
   return responseText;
-}
-
-// Helper function to check if we're in business hours (Mon-Fri, 9am-6pm Mexico City time)
-function isBusinessHours() {
-  // Get current time in Mexico City (UTC-6)
-  const now = new Date();
-  const mexicoTime = new Date(now.toLocaleString("en-US", { timeZone: "America/Mexico_City" }));
-
-  const day = mexicoTime.getDay(); // 0 = Sunday, 6 = Saturday
-  const hour = mexicoTime.getHours();
-
-  // Monday-Friday (1-5) and between 9am-6pm
-  const isWeekday = day >= 1 && day <= 5;
-  const isDuringHours = hour >= 9 && hour < 18;
-
-  return isWeekday && isDuringHours;
 }
 
 // Helper function to get recent conversation history
@@ -348,12 +333,15 @@ async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME
     });
 
     const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
+    const customTiming = isBusinessHours()
+      ? "Un especialista te contactará pronto."
+      : "Un especialista te contactará el siguiente día hábil en horario de atención (lunes a viernes 9am-6pm).";
     return {
       type: "text",
       text:
         `Tienes toda la razón, somos fabricantes y SÍ podemos hacer mallas a la medida que necesites.\n\n` +
         `Voy a transferir tu caso con un especialista que te dará una cotización personalizada. ` +
-        `Por favor comunícate con nuestro equipo:\n\n` +
+        `${customTiming}\n\n` +
         `📞 ${businessInfo.phones.join(" / ")}\n` +
         `🕓 ${businessInfo.hours}`,
       followUp: `📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`

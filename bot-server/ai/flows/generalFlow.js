@@ -5,6 +5,7 @@
 const { updateConversation } = require("../../conversationManager");
 const { INTENTS } = require("../classifier");
 const { getAvailableSizes } = require("../../measureHandler");
+const { isBusinessHours } = require("../utils/businessHours");
 
 /**
  * Business information constants
@@ -321,6 +322,8 @@ async function handleDeliveryTime(convo, psid) {
  * Handle human request
  */
 async function handleHumanRequest(convo, psid) {
+  const inBusinessHours = isBusinessHours();
+
   await updateConversation(psid, {
     lastIntent: "human_request",
     handoffRequested: true,
@@ -333,7 +336,11 @@ async function handleHumanRequest(convo, psid) {
                          convo?.currentFlow === 'rollo' ||
                          convo?.productInterest?.toLowerCase()?.includes('malla');
 
-  let response = "¡Claro! Un especialista te contactará a la brevedad.\n\n" +
+  const timingNote = inBusinessHours
+    ? "Un especialista te contactará a la brevedad."
+    : "Nuestro horario de atención es de lunes a viernes de 9am a 6pm. Un especialista te contactará el siguiente día hábil a primera hora.";
+
+  let response = `¡Claro! ${timingNote}\n\n` +
                  "También puedes llamarnos al 📞 " + BUSINESS_INFO.phones[0] +
                  "\n🕓 " + BUSINESS_INFO.hours;
 

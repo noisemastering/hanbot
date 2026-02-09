@@ -46,6 +46,9 @@ const { detectMexicanLocation, detectZipCode } = require("../../mexicanLocations
 // Push notifications for handoffs
 const { sendHandoffNotification } = require("../../services/pushNotifications");
 
+// Business hours check
+const { isBusinessHours } = require("../utils/businessHours");
+
 // NOTE: Global intents are now handled by the Intent Dispatcher (ai/intentDispatcher.js)
 // which runs BEFORE flows. This delegation is being phased out.
 // Keeping import for backwards compatibility during migration.
@@ -518,9 +521,12 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
         state: "needs_human"
       });
 
+      const timingMsg = isBusinessHours()
+        ? "Un especialista te contactará pronto."
+        : "Un especialista te contactará el siguiente día hábil en horario de atención (lunes a viernes 9am-6pm).";
       return {
         type: "text",
-        text: "Déjame comunicarte con un especialista para buscar opciones para tu medida."
+        text: `Déjame comunicarte con un especialista para buscar opciones para tu medida. ${timingMsg}`
       };
     }
   }
@@ -932,20 +938,18 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     });
   }
 
-  // Check if dimensions are fractional - offer standard size first before handoff
+  // Check if dimensions are fractional - offer the immediate smaller standard size
   const hasFractions = (width % 1 !== 0) || (height % 1 !== 0);
 
   if (hasFractions) {
-    console.log(`📏 Fractional meters detected in mallaFlow (${width}x${height}m), offering standard size first`);
+    const flooredW = Math.floor(width);
+    const flooredH = Math.floor(height);
+    console.log(`📏 Fractional size ${width}x${height}m → offering ${flooredW}x${flooredH}m`);
 
-    const roundedW = Math.round(width);
-    const roundedH = Math.round(height);
-
-    // Find closest standard size to offer
     try {
       const sizeVariants = [
-        `${roundedW}x${roundedH}`, `${roundedW}x${roundedH}m`,
-        `${roundedH}x${roundedW}`, `${roundedH}x${roundedW}m`
+        `${flooredW}x${flooredH}`, `${flooredW}x${flooredH}m`,
+        `${flooredH}x${flooredW}`, `${flooredH}x${flooredW}m`
       ];
 
       const product = await ProductFamily.findOne({
@@ -955,25 +959,37 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       });
 
       if (product) {
-        const productLink = product.onlineStoreLinks?.mercadoLibre || product.mLink;
-        if (productLink) {
-          // Save state to await their choice
+        const preferredLink = product.onlineStoreLinks?.find(link => link.isPreferred);
+        const productUrl = preferredLink?.url || product.onlineStoreLinks?.[0]?.url;
+
+        if (productUrl) {
+          const trackedLink = await generateClickLink(psid, productUrl, {
+            productName: product.name,
+            productId: product._id,
+            city: convo?.city,
+            stateMx: convo?.stateMx
+          });
+
+          const salesPitch = await formatProductResponse(product, {
+            price: product.price,
+            userExpressedSize: `${flooredW} x ${flooredH} m`
+          });
+
           await updateConversation(psid, {
-            lastIntent: "fractional_awaiting_choice",
-            fractionalOriginalSize: `${width}x${height}`,
-            fractionalStandardSize: `${roundedW}x${roundedH}`,
-            fractionalProductId: product._id.toString(),
+            lastIntent: "size_confirmed",
+            lastSharedProductId: product._id?.toString(),
+            lastSharedProductLink: productUrl,
             unknownCount: 0
           });
 
           return {
             type: "text",
-            text: `Tenemos la medida estándar ${roundedW}x${roundedH}m por $${product.price}. ¿Te funciona o prefieres cotización exacta para ${width}x${height}m?`
+            text: `Te ofrecemos ${flooredW}x${flooredH} ya que es necesario considerar un tamaño menor para dar espacio a los tensores o soga sujetadora.\n\n${salesPitch}\n🛒 Cómprala aquí:\n${trackedLink}`
           };
         }
       }
     } catch (err) {
-      console.error("Error getting closest size:", err);
+      console.error("Error getting floored size:", err);
     }
 
     // No standard size found - hand off directly with video
@@ -1074,6 +1090,17 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     // Found exact matches - use the first one
     const product = products[0];
 
+    // CHECK: Are we about to quote the same product we just shared?
+    if (convo?.lastSharedProductId && product._id?.toString() === convo.lastSharedProductId) {
+      console.log(`🔁 Same product detected (${product._id}), confirming instead of re-quoting`);
+      const sizeDisplay = userExpressedSize || `${width}x${height}`;
+      await updateConversation(psid, { lastIntent: "size_confirmed", unknownCount: 0 });
+      return {
+        type: "text",
+        text: `Es correcto, ${sizeDisplay} metros a $${product.price} con envío incluido. Puedes realizar tu compra en el enlace que te compartí.`
+      };
+    }
+
     // ENRICH PRODUCT WITH TREE CONTEXT
     const enrichedProduct = await enrichProductWithContext(product);
     const displayName = await getProductDisplayName(product, 'short');
@@ -1114,9 +1141,12 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       });
 
       const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
+      const contactTiming = isBusinessHours()
+        ? "Un especialista te contactará pronto con el precio y link de compra."
+        : "Un especialista te contactará el siguiente día hábil con el precio y link de compra.";
       return {
         type: "text",
-        text: `¡Tenemos la ${displayName}! Un especialista te contactará con el precio y link de compra.\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
+        text: `¡Tenemos la ${displayName}! ${contactTiming}\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
       };
     }
 
@@ -1143,23 +1173,17 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     // Build quantity prefix if needed
     const quantityText = quantity ? `Para ${quantity} piezas:\n\n` : "";
 
-    // Ask for zip code for ML purchase attribution (ties conversation to ML order)
-    const hasLocation = convo?.city || convo?.stateMx || convo?.zipCode;
-    const zipAsk = hasLocation ? '' : '\n\n¿Me compartes tu código postal para calcular el envío?';
-
-    if (!hasLocation) {
-      await updateConversation(psid, {
-        pendingShippingLocation: true,
-        lastSharedProductId: product._id?.toString(),
-        lastSharedProductLink: productUrl,
-        unknownCount: 0
-      });
-    }
+    // Save product reference for duplicate detection and stats
+    await updateConversation(psid, {
+      lastSharedProductId: product._id?.toString(),
+      lastSharedProductLink: productUrl,
+      unknownCount: 0
+    });
 
     return {
       type: "text",
       text: `${quantityText}${salesPitch}\n` +
-            `🛒 Cómprala aquí:\n${trackedLink}${wholesaleMention}${zipAsk}`
+            `🛒 Cómprala aquí:\n${trackedLink}${wholesaleMention}`
     };
   }
 
@@ -1257,8 +1281,11 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       });
 
       const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
+      const specialistTiming = isBusinessHours()
+        ? "Déjame comunicarte con un especialista para cotizarte la mejor opción."
+        : "Un especialista te contactará el siguiente día hábil en horario de atención (lunes a viernes 9am-6pm) para cotizarte la mejor opción.";
       response = `Para cubrir ${width}x${height}m (${requestedAreaSqM}m²) necesitarías múltiples piezas o un pedido especial.\n\n`;
-      response += `Déjame comunicarte con un especialista para cotizarte la mejor opción.\n\n`;
+      response += `${specialistTiming}\n\n`;
       response += `📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`;
 
       return { type: "text", text: response };
@@ -1297,8 +1324,11 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     });
 
     const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
+    const priceTiming = isBusinessHours()
+      ? "Un especialista te contactará pronto con el precio."
+      : "Un especialista te contactará el siguiente día hábil con el precio.";
     response = `La medida ${width}x${height}m requiere cotización especial.\n\n`;
-    response += `Un especialista te contactará con el precio.\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`;
+    response += `${priceTiming}\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`;
   }
 
   return {

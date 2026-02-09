@@ -6,6 +6,7 @@ const { updateConversation } = require("../../conversationManager");
 const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
 const { INTENTS } = require("../classifier");
+const { isBusinessHours } = require("../utils/businessHours");
 
 // Import existing utilities - USE THESE
 const { getAncestors, getRootFamily } = require("../utils/productMatcher");
@@ -252,7 +253,9 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
   return {
     type: "text",
     text: `El borde de ${length} metros está disponible.\n\n` +
-          `Un especialista te contactará con el precio.\n\n` +
+          (isBusinessHours()
+            ? `Un especialista te contactará pronto con el precio.\n\n`
+            : `Un especialista te contactará el siguiente día hábil con el precio.\n\n`) +
           `¿Necesitas algo más?`
   };
 }

@@ -6,6 +6,7 @@ const { updateConversation } = require("../../conversationManager");
 const ProductFamily = require("../../models/ProductFamily");
 const { enrichProductWithContext, formatProductForBot, getProductDisplayName } = require("../utils/productEnricher");
 const { getMissingSpecs: getMissingSpecsFromExtractor, isMultiItemOrder, extractMultipleItems, formatMultipleItems } = require("../utils/specExtractor");
+const { isBusinessHours } = require("../utils/businessHours");
 
 /**
  * Extract product specs from a user message
@@ -345,7 +346,7 @@ async function handleRollQuery(userMessage, psid, convo) {
 
         return {
           type: "text",
-          text: `✅ Perfecto, tu pedido:\n\n${formatted}\n\nUn especialista te contactará para confirmar precio, disponibilidad y coordinar el envío.`
+          text: `✅ Perfecto, tu pedido:\n\n${formatted}\n\n${isBusinessHours() ? 'Un especialista te contactará pronto para confirmar precio, disponibilidad y coordinar el envío.' : 'Un especialista te contactará el siguiente día hábil para confirmar precio, disponibilidad y coordinar el envío.'}`
         };
       }
     }
@@ -422,7 +423,9 @@ async function handleRollQuery(userMessage, psid, convo) {
         response += `\n👤 Cliente: ${mergedSpecs.customerName}`;
       }
 
-      response += `\n\nUn especialista te contactará para confirmar precio y disponibilidad. `;
+      response += isBusinessHours()
+        ? `\n\nUn especialista te contactará pronto para confirmar precio y disponibilidad. `
+        : `\n\nUn especialista te contactará el siguiente día hábil para confirmar precio y disponibilidad. `;
       response += `¿Necesitas algo más?`;
 
       // Mark for human handoff

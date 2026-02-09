@@ -210,25 +210,34 @@ async function handleProductInquiry({ entities, psid, convo, userMessage }) {
   // Check if requested color is available
   if (color) {
     const normalizedColor = color.toLowerCase().trim();
-    const isColorAvailable = AVAILABLE_COLORS.some(c =>
-      normalizedColor.includes(c) || c.includes(normalizedColor)
-    );
 
-    if (!isColorAvailable) {
-      await updateConversation(psid, {
-        lastIntent: "color_not_available",
-        requestedColor: color,
-        unknownCount: 0
-      });
+    // "qué colores", "colores disponibles", etc. = asking what colors exist, not requesting a specific one
+    const isAskingWhatColors = /colou?res|qu[eé]\s+color/i.test(normalizedColor);
 
-      const response = await generateBotResponse("color_not_available", {
-        requestedColor: color,
-        availableColors: AVAILABLE_COLORS.join(" y "),
-        dimensions: width && height ? `${Math.min(width, height)}x${Math.max(width, height)}m` : null,
-        convo
-      });
+    if (isAskingWhatColors) {
+      // They're asking what colors we have, possibly with a size — answer both
+      // Don't return here, let the product lookup continue and we'll mention colors
+    } else {
+      const isColorAvailable = AVAILABLE_COLORS.some(c =>
+        normalizedColor.includes(c) || c.includes(normalizedColor)
+      );
 
-      return { type: "text", text: response };
+      if (!isColorAvailable) {
+        await updateConversation(psid, {
+          lastIntent: "color_not_available",
+          requestedColor: color,
+          unknownCount: 0
+        });
+
+        const response = await generateBotResponse("color_not_available", {
+          requestedColor: color,
+          availableColors: AVAILABLE_COLORS.join(" y "),
+          dimensions: width && height ? `${Math.min(width, height)}x${Math.max(width, height)}m` : null,
+          convo
+        });
+
+        return { type: "text", text: response };
+      }
     }
   }
 
@@ -282,7 +291,13 @@ async function handleProductInquiry({ entities, psid, convo, userMessage }) {
           convo: { ...convo, city: location || convo?.city }
         });
 
-        return { type: "text", text: response };
+        // If user asked about colors, append available colors
+        const askedAboutColors = color && /colou?res|qu[eé]\s+color/i.test(color.toLowerCase());
+        const colorNote = askedAboutColors
+          ? `\n\nSolo la manejamos en ${AVAILABLE_COLORS.join(' y ')}.`
+          : '';
+
+        return { type: "text", text: response + colorNote };
       }
 
       // Product not found - find closest alternative

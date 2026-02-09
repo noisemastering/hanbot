@@ -106,6 +106,76 @@ router.get('/follow-ups', async (req, res) => {
   }
 });
 
+// GET /conversations/pending-handoffs - Get unresolved handoffs awaiting human attention
+const { wasBusinessHours } = require('../ai/utils/businessHours');
+
+router.get('/pending-handoffs', async (req, res) => {
+  try {
+    const conversations = await Conversation.find({
+      handoffRequested: true,
+      state: { $in: ['needs_human'] },
+      $or: [
+        { handoffResolved: false },
+        { handoffResolved: { $exists: false } }
+      ]
+    }).sort({ handoffTimestamp: 1 }).lean();
+
+    const now = new Date();
+    const data = conversations.map(conv => {
+      const handoffTime = conv.handoffTimestamp ? new Date(conv.handoffTimestamp) : null;
+      const isAfterHours = handoffTime ? !wasBusinessHours(handoffTime) : false;
+      const waitTimeMinutes = handoffTime ? Math.round((now - handoffTime) / 60000) : null;
+
+      return {
+        psid: conv.psid,
+        channel: conv.channel || 'facebook',
+        handoffReason: conv.handoffReason,
+        handoffTimestamp: conv.handoffTimestamp,
+        productInterest: conv.productInterest,
+        requestedSize: conv.requestedSize,
+        city: conv.city,
+        stateMx: conv.stateMx,
+        currentFlow: conv.currentFlow,
+        lastMessageAt: conv.lastMessageAt,
+        purchaseIntent: conv.purchaseIntent,
+        isAfterHours,
+        waitTimeMinutes
+      };
+    });
+
+    res.json({ success: true, total: data.length, data });
+  } catch (error) {
+    console.error('Error fetching pending handoffs:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch pending handoffs' });
+  }
+});
+
+// POST /conversations/:psid/resolve-handoff - Mark a handoff as resolved
+router.post('/:psid/resolve-handoff', async (req, res) => {
+  try {
+    const { psid } = req.params;
+
+    const result = await Conversation.findOneAndUpdate(
+      { psid },
+      {
+        handoffResolved: true,
+        handoffResolvedAt: new Date(),
+        handoffRequested: false
+      },
+      { new: true }
+    );
+
+    if (!result) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error resolving handoff:', error);
+    res.status(500).json({ success: false, error: 'Failed to resolve handoff' });
+  }
+});
+
 // GET /conversations/:psid - Get messages for specific user with channel information
 router.get('/:psid', async (req, res) => {
   try {
