@@ -4,6 +4,15 @@
 const { updateConversation } = require("../../conversationManager");
 const { generateBotResponse } = require("../responseGenerator");
 
+const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
+
+function isMallaContext(convo) {
+  return convo?.productInterest === 'malla_sombra' ||
+    convo?.currentFlow === 'malla_sombra' ||
+    convo?.currentFlow === 'rollo' ||
+    convo?.poiRootId;
+}
+
 /**
  * Handle greeting intent
  * @param {object} context - { intent, entities, confidence, psid, convo, userMessage }
@@ -45,7 +54,11 @@ async function handleThanks({ psid, convo }) {
 
   const response = await generateBotResponse("thanks", { convo });
 
-  return { type: "text", text: response };
+  const videoSuffix = isMallaContext(convo)
+    ? `\n\n📽️ Conoce más sobre nuestra malla sombra en este video: ${VIDEO_LINK}`
+    : '';
+
+  return { type: "text", text: response + videoSuffix };
 }
 
 /**
@@ -69,7 +82,11 @@ async function handleGoodbye({ psid, convo, entities }) {
     convo
   });
 
-  return { type: "text", text: response };
+  const videoSuffix = isMallaContext(convo)
+    ? `\n\n📽️ Conoce más sobre nuestra malla sombra en este video: ${VIDEO_LINK}`
+    : '';
+
+  return { type: "text", text: response + videoSuffix };
 }
 
 module.exports = {

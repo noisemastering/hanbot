@@ -102,11 +102,18 @@ async function handleGreeting(convo, psid) {
  * Handle thanks
  */
 async function handleThanks(convo, psid) {
+  const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
   await updateConversation(psid, { lastIntent: "thanks" });
+
+  const isMalla = convo?.productInterest === 'malla_sombra' ||
+    convo?.currentFlow === 'malla_sombra' || convo?.poiRootId;
+  const videoSuffix = isMalla
+    ? `\n\n📽️ Conoce más sobre nuestra malla sombra en este video: ${VIDEO_LINK}`
+    : '';
 
   return {
     type: "text",
-    text: "¡Con gusto! Si tienes más preguntas, aquí estamos 😊"
+    text: `¡Con gusto! Si tienes más preguntas, aquí estamos 😊${videoSuffix}`
   };
 }
 
@@ -114,14 +121,21 @@ async function handleThanks(convo, psid) {
  * Handle goodbye
  */
 async function handleGoodbye(convo, psid) {
+  const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
   await updateConversation(psid, {
     lastIntent: "goodbye",
     state: "closed"
   });
 
+  const isMalla = convo?.productInterest === 'malla_sombra' ||
+    convo?.currentFlow === 'malla_sombra' || convo?.poiRootId;
+  const videoSuffix = isMalla
+    ? `\n\n📽️ Conoce más sobre nuestra malla sombra en este video: ${VIDEO_LINK}`
+    : '';
+
   return {
     type: "text",
-    text: "¡Gracias por contactarnos! Que tengas excelente día 🌿"
+    text: `¡Gracias por contactarnos! Que tengas excelente día 🌿${videoSuffix}`
   };
 }
 

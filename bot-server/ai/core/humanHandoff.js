@@ -72,9 +72,20 @@ async function handleHumanHandoff(userMessage, psid, convo, reason = "explicit")
     ? responses[reason][Math.floor(Math.random() * responses[reason].length)]
     : responses.explicit[0];
 
+  // Include video link if conversation was about malla sombra
+  const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
+  const isMallaContext = convo?.productInterest === 'malla_sombra' ||
+    convo?.currentFlow === 'malla_sombra' ||
+    convo?.currentFlow === 'rollo' ||
+    convo?.poiRootId;
+
+  const videoSuffix = isMallaContext
+    ? `\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
+    : '';
+
   return {
     type: "text",
-    text: responseText
+    text: responseText + videoSuffix
   };
 }
 

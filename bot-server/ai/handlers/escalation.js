@@ -6,6 +6,15 @@ const { sendHandoffNotification } = require("../../services/pushNotifications");
 const { getBusinessInfo } = require("../../businessInfoManager");
 const { generateBotResponse } = require("../responseGenerator");
 
+const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
+
+function isMallaContext(convo) {
+  return convo?.productInterest === 'malla_sombra' ||
+    convo?.currentFlow === 'malla_sombra' ||
+    convo?.currentFlow === 'rollo' ||
+    convo?.poiRootId;
+}
+
 /**
  * Handle frustration - "Ya te dije!", "No entienden", "No leen"
  *
@@ -62,7 +71,11 @@ async function handleFrustration({ psid, convo, userMessage }) {
     convo
   });
 
-  return { type: "text", text: response };
+  const videoSuffix = isMallaContext(convo)
+    ? `\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
+    : '';
+
+  return { type: "text", text: response + videoSuffix };
 }
 
 /**
@@ -81,7 +94,11 @@ async function handleHumanRequest({ psid, convo }) {
 
   const response = await generateBotResponse("human_request", { convo });
 
-  return { type: "text", text: response };
+  const videoSuffix = isMallaContext(convo)
+    ? `\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
+    : '';
+
+  return { type: "text", text: response + videoSuffix };
 }
 
 /**
@@ -100,7 +117,11 @@ async function handleComplaint({ psid, convo, userMessage }) {
 
   const response = await generateBotResponse("complaint", { convo });
 
-  return { type: "text", text: response };
+  const videoSuffix = isMallaContext(convo)
+    ? `\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
+    : '';
+
+  return { type: "text", text: response + videoSuffix };
 }
 
 /**

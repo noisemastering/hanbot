@@ -98,14 +98,23 @@ async function handleGreeting(convo, psid, flowContext = {}) {
  * Thanks handler
  */
 async function handleThanks(convo, psid) {
+  const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
   const response = await generateBotResponse("thanks", { convo });
-  return { type: "text", text: response };
+
+  const isMalla = convo?.productInterest === 'malla_sombra' ||
+    convo?.currentFlow === 'malla_sombra' || convo?.poiRootId;
+  const videoSuffix = isMalla
+    ? `\n\n📽️ Conoce más sobre nuestra malla sombra en este video: ${VIDEO_LINK}`
+    : '';
+
+  return { type: "text", text: response + videoSuffix };
 }
 
 /**
  * Goodbye handler
  */
 async function handleGoodbye(convo, psid) {
+  const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
   await updateConversation(psid, { state: "closed" });
 
   const response = await generateBotResponse("goodbye", {
@@ -113,7 +122,13 @@ async function handleGoodbye(convo, psid) {
     convo
   });
 
-  return { type: "text", text: response };
+  const isMalla = convo?.productInterest === 'malla_sombra' ||
+    convo?.currentFlow === 'malla_sombra' || convo?.poiRootId;
+  const videoSuffix = isMalla
+    ? `\n\n📽️ Conoce más sobre nuestra malla sombra en este video: ${VIDEO_LINK}`
+    : '';
+
+  return { type: "text", text: response + videoSuffix };
 }
 
 /**
