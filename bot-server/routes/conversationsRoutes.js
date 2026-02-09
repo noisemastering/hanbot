@@ -126,32 +126,27 @@ router.get('/pending-handoffs', async (req, res) => {
 
     const now = new Date();
 
-    // Only include handoffs that came in outside business hours
-    const data = conversations
-      .filter(conv => {
-        const handoffTime = conv.handoffTimestamp ? new Date(conv.handoffTimestamp) : null;
-        return handoffTime && !wasBusinessHours(handoffTime);
-      })
-      .map(conv => {
-        const handoffTime = new Date(conv.handoffTimestamp);
-        const waitTimeMinutes = Math.round((now - handoffTime) / 60000);
+    const data = conversations.map(conv => {
+      const handoffTime = conv.handoffTimestamp ? new Date(conv.handoffTimestamp) : null;
+      const isAfterHours = handoffTime ? !wasBusinessHours(handoffTime) : false;
+      const waitTimeMinutes = handoffTime ? Math.round((now - handoffTime) / 60000) : null;
 
-        return {
-          psid: conv.psid,
-          channel: conv.channel || 'facebook',
-          handoffReason: conv.handoffReason,
-          handoffTimestamp: conv.handoffTimestamp,
-          productInterest: conv.productInterest,
-          requestedSize: conv.requestedSize,
-          city: conv.city,
-          stateMx: conv.stateMx,
-          currentFlow: conv.currentFlow,
-          lastMessageAt: conv.lastMessageAt,
-          purchaseIntent: conv.purchaseIntent,
-          isAfterHours: true,
-          waitTimeMinutes
-        };
-      });
+      return {
+        psid: conv.psid,
+        channel: conv.channel || 'facebook',
+        handoffReason: conv.handoffReason,
+        handoffTimestamp: conv.handoffTimestamp,
+        productInterest: conv.productInterest,
+        requestedSize: conv.requestedSize,
+        city: conv.city,
+        stateMx: conv.stateMx,
+        currentFlow: conv.currentFlow,
+        lastMessageAt: conv.lastMessageAt,
+        purchaseIntent: conv.purchaseIntent,
+        isAfterHours,
+        waitTimeMinutes
+      };
+    });
 
     res.json({ success: true, total: data.length, data });
   } catch (error) {
