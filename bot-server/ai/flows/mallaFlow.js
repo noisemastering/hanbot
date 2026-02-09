@@ -1143,10 +1143,21 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     // Build quantity prefix if needed
     const quantityText = quantity ? `Para ${quantity} piezas:\n\n` : "";
 
+    // Ask for zip code if we don't have it yet
+    const hasLocation = convo?.city || convo?.stateMx || convo?.zipCode;
+    const zipAsk = hasLocation ? '' : '\n\n¿Me compartes tu código postal para calcular el envío?';
+
+    if (!hasLocation) {
+      await updateConversation(psid, {
+        pendingShippingLocation: true,
+        unknownCount: 0
+      });
+    }
+
     return {
       type: "text",
       text: `${quantityText}${salesPitch}\n` +
-            `🛒 Cómprala aquí:\n${trackedLink}${wholesaleMention}`
+            `🛒 Cómprala aquí:\n${trackedLink}${wholesaleMention}${zipAsk}`
     };
   }
 
