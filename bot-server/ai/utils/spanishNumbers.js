@@ -61,9 +61,16 @@ function convertSpanishNumbers(text) {
   });
 
   // Replace simple number words
+  // Skip "una/uno" when used as quantity before "de" + number (e.g., "una de 6x5" = one piece of 6x5)
   for (const [word, digit] of Object.entries(NUMBER_MAP)) {
-    const regex = new RegExp(`\\b${word}\\b`, 'gi');
-    converted = converted.replace(regex, digit);
+    if (word === 'una' || word === 'uno') {
+      // Only convert una/uno when NOT followed by "de" + digit (quantity pattern)
+      const regex = new RegExp(`\\b${word}\\b(?!\\s+de\\s+\\d)`, 'gi');
+      converted = converted.replace(regex, digit);
+    } else {
+      const regex = new RegExp(`\\b${word}\\b`, 'gi');
+      converted = converted.replace(regex, digit);
+    }
   }
 
   return converted;

@@ -51,12 +51,18 @@ async function handleThanks({ psid, convo }) {
 /**
  * Handle goodbye intent
  */
-async function handleGoodbye({ psid, convo }) {
+async function handleGoodbye({ psid, convo, entities }) {
   await updateConversation(psid, {
     lastIntent: "goodbye",
     state: "closed",
     unknownCount: 0
   });
+
+  // Spam/inappropriate content - close silently, don't engage
+  if (entities?.spam) {
+    console.log(`🚫 Spam detected for ${psid} - closing silently`);
+    return null;
+  }
 
   const response = await generateBotResponse("goodbye", {
     userName: convo?.userName,

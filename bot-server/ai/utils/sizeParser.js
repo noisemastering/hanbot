@@ -32,11 +32,16 @@ function parseDimensions(text) {
     .replace(/metros?/g, 'm');
 
   // Patterns to match dimensions (most specific first)
+  // IMPORTANT: "por" and "x" patterns come before "de" patterns because
+  // "de" is ambiguous - "una de 6 por 5" means quantity=1, size=6x5
   const patterns = [
-    // 3.5x4, 3.5 x 4, 3.5m x 4m, 3.5 por 4, 3.5 de 4
-    /(\d+(?:\.\d+)?)\s*(?:m\s*)?\s*(?:x|por|de|\*)\s*(\d+(?:\.\d+)?)\s*(?:m)?/,
+    // 3.5x4, 3.5 x 4, 3.5m x 4m, 3.5 por 4 (explicit dimension separators)
+    /(\d+(?:\.\d+)?)\s*(?:m\s*)?\s*(?:x|por|\*)\s*(\d+(?:\.\d+)?)\s*(?:m)?/,
     // "3.5 metros por 4 metros"
-    /(\d+(?:\.\d+)?)\s*m?\s*(?:x|por|de|\*)\s*(\d+(?:\.\d+)?)\s*m?/,
+    /(\d+(?:\.\d+)?)\s*m?\s*(?:x|por|\*)\s*(\d+(?:\.\d+)?)\s*m?/,
+    // N de M (only when NOT preceded by a quantity word like "una/uno/1 de")
+    // "3.5 de 4" but not "una de 6 por 5" where "de" is a quantity separator
+    /(?<!\b(?:1|una?|uno)\s+)(\d+(?:\.\d+)?)\s*(?:m\s*)?\s*de\s*(\d+(?:\.\d+)?)\s*(?:m)?/,
     // Just a single dimension with decimal like "3.5m" or "3.5 metros"
     /(\d+\.\d+)\s*m?(?:\s|$)/
   ];

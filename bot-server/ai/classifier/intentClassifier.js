@@ -406,10 +406,17 @@ CRITICAL EXAMPLES:
 - "Muy lejos, cómo le hago?" → intent: "location_too_far" (NOT frustration - they're saying our location is too far)
 - "Los visito en su tienda" → intent: "store_visit"
 - "Lo voy a pensar" → intent: "purchase_deferral"
+- "De cuantos metros son las mallas sonbras" → intent: "catalog_request", product: "malla_sombra" (NOT location! "sonbras" is a misspelling of "sombras", NOT "Sonora")
+- "Son para sombra o también protejan de la lluvia?" → intent: "product_inquiry" (asking about product features, NOT location! "Son" = "Are they", NOT "Sonora")
 `;
   }
 
   prompt += `
+CRITICAL WARNING - COMMON HALLUCINATION:
+"sombra" / "sombras" is the PRODUCT NAME (malla sombra = shade mesh). It is NOT the state of Sonora.
+NEVER extract "Sonora" as a location unless the user explicitly writes "Sonora" by name.
+"Son para sombra" means "Are they for shade?" — "Son" = "Are they", NOT an abbreviation of Sonora.
+
 ENTITY EXTRACTION:
 - width: number in meters (e.g., 4.20, 2.10, 3)
 - height/length: number in meters
@@ -480,6 +487,24 @@ async function classifyMessage(message, sourceContext = null, conversationFlow =
     if (!INTENTS[result.intent?.toUpperCase()] && result.entities?.dimensions) {
       console.log(`🔄 Unknown intent "${result.intent}" with dimensions, mapping to product_inquiry`);
       mappedIntent = INTENTS.PRODUCT_INQUIRY;
+    }
+
+    // ===== POST-CLASSIFICATION VALIDATION =====
+    // Catch hallucinated locations: if AI extracted a location that doesn't
+    // actually appear in the message, it's likely a hallucination
+    if (result.entities?.location) {
+      const extractedLocation = result.entities.location.toLowerCase();
+      const msgLower = message.toLowerCase();
+      // Check if the location string actually appears in the message
+      if (!msgLower.includes(extractedLocation)) {
+        console.log(`⚠️ Hallucinated location "${result.entities.location}" not found in message, removing`);
+        result.entities.location = null;
+        // If intent was location-based, reclassify as product_inquiry
+        if (mappedIntent === INTENTS.LOCATION_MENTION || mappedIntent === INTENTS.SHIPPING_QUERY) {
+          console.log(`⚠️ Overriding location-based intent "${mappedIntent}" → product_inquiry`);
+          mappedIntent = INTENTS.PRODUCT_INQUIRY;
+        }
+      }
     }
 
     const classification = {
@@ -555,6 +580,12 @@ function quickClassify(message, dbIntents = null) {
   if (message.length > 100) {
     console.log(`⚡ Skipping quick classify - message too long (${message.length} chars), needs AI`);
     return null;
+  }
+
+  // ===== SPAM / INAPPROPRIATE CONTENT - close conversation immediately =====
+  if (/\b(sexual|apetito\s*sexual|sexo|xxx)\b/i.test(msg)) {
+    console.log(`🚫 Inappropriate content detected, closing conversation`);
+    return { intent: INTENTS.GOODBYE, product: PRODUCTS.UNKNOWN, entities: { spam: true }, confidence: 0.99 };
   }
 
   // ===== MULTI-QUESTION DETECTION (runs FIRST - before any single-intent patterns) =====
@@ -819,6 +850,13 @@ function quickClassify(message, dbIntents = null) {
     return { intent: INTENTS.SHIPPING_INCLUDED_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
   }
 
+  // Rain/waterproof/feature questions - "protejan de la lluvia", "es impermeable", "para el agua"
+  // CRITICAL: "Son para sombra o protejan de lluvia" is a feature question, NOT location (Son ≠ Sonora)
+  if (/\b(lluvia|impermeable|agua|mojarse|mojar|filtra|gotea|waterproof)\b/i.test(msg) &&
+      /\b(proteg|protejan?|resiste|aguanta|sirve|funciona|para\s+(la|el)|tambi[eé]n|impermeable)\b/i.test(msg)) {
+    return { intent: INTENTS.PRODUCT_INQUIRY, product: PRODUCTS.MALLA_SOMBRA, entities: { concerns: ['waterproof'] }, confidence: 0.90 };
+  }
+
   // Durability query
   if (/\b(cu[aá]nto\s+tiempo\s+dura|vida\s+[uú]til|cu[aá]ntos?\s+a[ñn]os|duraci[oó]n|durabilidad|resistencia)\b/i.test(msg) &&
       !/\b(entrega|env[ií]o)\b/i.test(msg)) {
@@ -878,7 +916,8 @@ function quickClassify(message, dbIntents = null) {
   }
 
   // "malla sombra" + dimensions = definitely malla_sombra product
-  if (/malla\s*sombra/i.test(msg) && dimensions) {
+  // Handles plurals: "mallas sombras", "mallas sombra"
+  if (/mallas?\s*sombras?/i.test(msg) && dimensions) {
     console.log(`⚡ Quick classify: malla sombra with dimensions ${dimensions.raw}`);
     return {
       intent: INTENTS.PRODUCT_INQUIRY,
@@ -889,7 +928,7 @@ function quickClassify(message, dbIntents = null) {
   }
 
   // "malla sombra" without "rollo" = malla_sombra (confeccionada)
-  if (/malla\s*sombra/i.test(msg) && !/rollo/i.test(msg)) {
+  if (/mallas?\s*sombras?/i.test(msg) && !/rollo/i.test(msg)) {
     console.log(`⚡ Quick classify: malla sombra (no rollo mentioned)`);
     return {
       intent: INTENTS.PRODUCT_INQUIRY,
@@ -953,9 +992,9 @@ function quickClassify(message, dbIntents = null) {
     };
   }
 
-  // Just "malla" (without "sombra", "maleza", "anti") = malla_sombra (confeccionada)
-  // This is the default product when someone just says "malla"
-  if (/\bmalla\b/i.test(msg) && !/rollo|maleza|anti|granizo|[aá]fido/i.test(msg)) {
+  // Just "malla/mallas" (without "sombra", "maleza", "anti") = malla_sombra (confeccionada)
+  // This is the default product when someone just says "malla" or "mallas"
+  if (/\bmallas?\b/i.test(msg) && !/rollo|maleza|anti|granizo|[aá]fido/i.test(msg)) {
     // Check if it's a price query
     const isPrice = /precio|costo|cu[aá]nto|vale|cuesta/i.test(msg);
     console.log(`⚡ Quick classify: just "malla" → malla_sombra (${isPrice ? 'price_query' : 'product_inquiry'})`);
@@ -969,6 +1008,29 @@ function quickClassify(message, dbIntents = null) {
 
   // Need AI for anything else
   return null;
+}
+
+/**
+ * Normalize common product name misspellings before classification.
+ * In Mexican Spanish, "n" before "b/p" is a very common error (should be "m").
+ * e.g., "sonbra" → "sombra", "sonbras" → "sombras"
+ *
+ * @param {string} text - User message
+ * @returns {string} - Normalized text
+ */
+function normalizeProductSpelling(text) {
+  if (!text) return text;
+
+  let normalized = text;
+
+  // "sonbra/sonbras/zonbra" → "sombra/sombras" (n→m before b, z→s)
+  normalized = normalized.replace(/\b(mallas?\s+)?(s|z)onbras?\b/gi, (match, prefix) => {
+    const fixed = match.replace(/(s|z)onbra/gi, 'sombra');
+    console.log(`🔤 Spelling fix: "${match}" → "${fixed}"`);
+    return fixed;
+  });
+
+  return normalized;
 }
 
 /**
@@ -991,11 +1053,14 @@ async function classify(message, sourceContext = null, conversationFlow = null, 
     });
   }
 
+  // Normalize common product name misspellings before any classification
+  const normalizedMessage = normalizeProductSpelling(message);
+
   // Load DB intents for pattern matching and AI prompt
   const dbIntents = await getIntentsFromDB();
 
   // Try quick classification first (includes DB patterns)
-  const quickResult = quickClassify(message, dbIntents);
+  const quickResult = quickClassify(normalizedMessage, dbIntents);
   if (quickResult) {
     console.log(`⚡ Quick classification (no AI):`, quickResult.intent);
     console.log(`🧠 ===== END LAYER 1 =====\n`);
@@ -1003,7 +1068,7 @@ async function classify(message, sourceContext = null, conversationFlow = null, 
   }
 
   // Use AI classification
-  const aiResult = await classifyMessage(message, sourceContext, conversationFlow, campaignContext);
+  const aiResult = await classifyMessage(normalizedMessage, sourceContext, conversationFlow, campaignContext);
   console.log(`🧠 ===== END LAYER 1 =====\n`);
   return { ...aiResult, source: "ai" };
 }
@@ -1031,6 +1096,7 @@ module.exports = {
   classify,
   classifyMessage,
   quickClassify,
+  normalizeProductSpelling,
   logClassification,
   buildCampaignContext,
   clearIntentCache,
