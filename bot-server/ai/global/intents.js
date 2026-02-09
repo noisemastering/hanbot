@@ -1667,67 +1667,60 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     const hasFractions = dimensions && hasFractionalMeters(dimensions);
 
     if (hasFractions) {
-      // Answer argollas AND hand off for fractional dimensions
-      console.log(`🔘📏 Argollas question with fractional dimensions (${dimensions.width}x${dimensions.height}m), answering both and triggering handoff`);
+      // Floor dimensions and offer the standard size directly
+      const flooredW = Math.floor(Math.min(dimensions.width, dimensions.height));
+      const flooredH = Math.floor(Math.max(dimensions.width, dimensions.height));
+      console.log(`🔘📏 Argollas + fractional ${dimensions.width}x${dimensions.height}m → offering ${flooredW}x${flooredH}m`);
 
-      await updateConversation(psid, {
-        lastIntent: "fractional_meters_handoff",
-        handoffRequested: true,
-        handoffReason: `Medida con decimales: ${dimensions.width}x${dimensions.height}m (preguntó por argollas)`,
-        handoffTimestamp: new Date(),
-        state: "needs_human",
-        unknownCount: 0,
-        requestedSize: `${dimensions.width}x${dimensions.height}`
-      });
-
-      sendHandoffNotification(psid, `Medida con decimales: ${dimensions.width}x${dimensions.height}m con argollas - requiere atención`).catch(err => {
-        console.error("❌ Failed to send push notification:", err);
-      });
-
-      // Find closest standard size to offer while they wait
-      let linkText = "";
       try {
-        const availableSizes = await getAvailableSizes(convo);
-        const closest = findClosestSizes(dimensions, availableSizes);
-        const closestOption = closest.bigger || closest.smaller || closest.exact;
+        const sizeVariants = [
+          `${flooredW}x${flooredH}`, `${flooredW}x${flooredH}m`,
+          `${flooredH}x${flooredW}`, `${flooredH}x${flooredW}m`
+        ];
 
-        if (closestOption) {
-          const sizeVariants = [closestOption.sizeStr, closestOption.sizeStr + 'm'];
-          const sizeMatch = closestOption.sizeStr.match(/(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)/);
-          if (sizeMatch) {
-            const swapped = `${sizeMatch[2]}x${sizeMatch[1]}`;
-            sizeVariants.push(swapped, swapped + 'm');
-          }
+        const product = await ProductFamily.findOne({
+          size: { $in: sizeVariants },
+          sellable: true,
+          active: true
+        });
 
-          const product = await ProductFamily.findOne({
-            size: { $in: sizeVariants },
-            sellable: true,
-            active: true
-          });
-
+        if (product) {
           const productLink = getProductLink(product);
           if (productLink) {
             const trackedLink = await generateClickLink(psid, productLink, {
-              productName: product?.name,
-              productId: product?._id,
+              productName: product.name,
+              productId: product._id,
               campaignId: convo.campaignId,
               adSetId: convo.adSetId,
               adId: convo.adId,
               city: convo.city,
               stateMx: convo.stateMx
             });
-            linkText = `\n\nMientras tanto, la medida estándar más cercana es ${closestOption.sizeStr} por si te resulta útil $${closestOption.price}:\n${trackedLink}`;
+
+            await updateConversation(psid, {
+              lastIntent: "size_confirmed",
+              lastSharedProductId: product._id?.toString(),
+              lastSharedProductLink: productLink,
+              unknownCount: 0
+            });
+
+            return {
+              type: "text",
+              text: `Sí, nuestra malla confeccionada viene con argollas reforzadas en todo el perímetro, lista para instalar.\n\n` +
+                    `Te ofrecemos ${flooredW}x${flooredH} ya que es necesario considerar un tamaño menor para dar espacio a los tensores o soga sujetadora.\n\n` +
+                    `$${product.price}\n🛒 Cómprala aquí:\n${trackedLink}`
+            };
           }
         }
       } catch (err) {
-        console.error("Error getting closest size link:", err);
+        console.error("Error getting floored size for argollas:", err);
       }
 
+      // Fallback: answer argollas question without product link
+      await updateConversation(psid, { lastIntent: "eyelets_question", unknownCount: 0 });
       return {
         type: "text",
-        text: `Sí, nuestra malla confeccionada viene con argollas reforzadas en todo el perímetro, lista para instalar.\n\n` +
-              `Permíteme comunicarte con un especialista para cotizar la medida exacta (${dimensions.width}m x ${dimensions.height}m).` +
-              linkText
+        text: `Sí, nuestra malla confeccionada viene con argollas reforzadas en todo el perímetro, lista para instalar. ¿Qué medida necesitas?`
       };
     }
 
@@ -2483,40 +2476,19 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
                         convo.lastUnavailableSize === requestedSizeStr &&
                         convo.lastIntent === "specific_measure";
 
-      // 📏 Check if dimensions contain fractional meters
+      // 📏 Check if dimensions contain fractional meters - floor and offer standard size
       const hasFractions = hasFractionalMeters(dimensions);
 
-      // 📏 Handle fractional meters - hand off to human for custom quote
       if (hasFractions) {
-        console.log(`📏 Fractional meters detected (${dimensions.width}x${dimensions.height}m), triggering handoff`);
+        const flooredW = Math.floor(Math.min(dimensions.width, dimensions.height));
+        const flooredH = Math.floor(Math.max(dimensions.width, dimensions.height));
+        console.log(`📏 Fractional ${dimensions.width}x${dimensions.height}m → offering ${flooredW}x${flooredH}m`);
 
-        await updateConversation(psid, {
-          lastIntent: "fractional_meters_handoff",
-          handoffRequested: true,
-          handoffReason: `Medida con decimales: ${dimensions.width}x${dimensions.height}m`,
-          handoffTimestamp: new Date(),
-          state: "needs_human",
-          unknownCount: 0,
-          requestedSize: requestedSizeStr
-        });
-
-        // Send push notification
-        sendHandoffNotification(psid, `Medida con decimales: ${dimensions.width}x${dimensions.height}m - requiere atención`).catch(err => {
-          console.error("❌ Failed to send push notification:", err);
-        });
-
-        // Find closest standard size to offer while they wait
-        const closestOption = closest.bigger || closest.smaller || closest.exact;
-        let responseText = `Permíteme comunicarte con un especialista para cotizar la medida exacta (${dimensions.width}m x ${dimensions.height}m).`;
-
-        if (closestOption) {
-          // Get product link for the closest standard size
-          const sizeVariants = [closestOption.sizeStr, closestOption.sizeStr + 'm'];
-          const sizeMatch = closestOption.sizeStr.match(/(\d+(?:\.\d+)?)x(\d+(?:\.\d+)?)/);
-          if (sizeMatch) {
-            const swapped = `${sizeMatch[2]}x${sizeMatch[1]}`;
-            sizeVariants.push(swapped, swapped + 'm');
-          }
+        try {
+          const sizeVariants = [
+            `${flooredW}x${flooredH}`, `${flooredW}x${flooredH}m`,
+            `${flooredH}x${flooredW}`, `${flooredH}x${flooredW}m`
+          ];
 
           const product = await ProductFamily.findOne({
             size: { $in: sizeVariants },
@@ -2524,25 +2496,37 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
             active: true
           });
 
-          const productLink = getProductLink(product);
-          if (productLink) {
-            const trackedLink = await generateClickLink(psid, productLink, {
-              productName: product?.name,
-              productId: product?._id,
-              campaignId: convo.campaignId,
-              adSetId: convo.adSetId,
-              adId: convo.adId,
-              city: convo.city,
-              stateMx: convo.stateMx
-            });
-            responseText += `\n\nMientras tanto, la medida estándar más cercana es ${closestOption.sizeStr} por $${closestOption.price}:\n${trackedLink}`;
-          }
-        }
+          if (product) {
+            const productLink = getProductLink(product);
+            if (productLink) {
+              const trackedLink = await generateClickLink(psid, productLink, {
+                productName: product.name,
+                productId: product._id,
+                campaignId: convo.campaignId,
+                adSetId: convo.adSetId,
+                adId: convo.adId,
+                city: convo.city,
+                stateMx: convo.stateMx
+              });
 
-        return {
-          type: "text",
-          text: responseText
-        };
+              await updateConversation(psid, {
+                lastIntent: "size_confirmed",
+                lastSharedProductId: product._id?.toString(),
+                lastSharedProductLink: productLink,
+                unknownCount: 0
+              });
+
+              return {
+                type: "text",
+                text: `Te ofrecemos ${flooredW}x${flooredH} ya que es necesario considerar un tamaño menor para dar espacio a los tensores o soga sujetadora.\n\n` +
+                      `$${product.price}\n🛒 Cómprala aquí:\n${trackedLink}`
+              };
+            }
+          }
+        } catch (err) {
+          console.error("Error getting floored size:", err);
+        }
+        // If no floored product found, fall through to normal size matching below
       }
 
       // If exact match, provide ML link immediately

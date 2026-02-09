@@ -152,40 +152,27 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     const hasFractions = (requested.w % 1 !== 0) || (requested.h % 1 !== 0);
 
     if (hasFractions) {
-      console.log(`📏 Fractional meters detected in campaign (${requested.w}x${requested.h}m), triggering handoff`);
+      // Floor dimensions and offer the standard size directly
+      const flooredW = Math.floor(Math.min(requested.w, requested.h));
+      const flooredH = Math.floor(Math.max(requested.w, requested.h));
+      console.log(`📏 Campaign: fractional ${requested.w}x${requested.h}m → offering ${flooredW}x${flooredH}m`);
 
-      await updateConversation(psid, {
-        lastIntent: "fractional_meters_handoff",
-        handoffRequested: true,
-        handoffReason: `Medida con decimales: ${requested.w}x${requested.h}m`,
-        handoffTimestamp: new Date(),
-        state: "needs_human",
-        unknownCount: 0
-      });
+      const flooredReq = { w: flooredW, h: flooredH, area: flooredW * flooredH };
+      const flooredMatch = findExactVariant(variants, flooredReq);
 
-      // Send push notification
-      sendHandoffNotification(psid, `Medida con decimales: ${requested.w}x${requested.h}m - requiere atención`).catch(err => {
-        console.error("❌ Failed to send push notification:", err);
-      });
+      if (flooredMatch) {
+        const line = await variantLine(flooredMatch, true, psid, convo);
+        await updateConversation(psid, {
+          lastIntent: "size_confirmed",
+          unknownCount: 0
+        });
 
-      // Find closest standard size to offer while they wait
-      let linkText = "";
-      try {
-        const { lower, upper } = findClosestUpDown(variants, requested);
-        const closestOption = upper || lower;
-        if (closestOption) {
-          const line = await variantLine(closestOption, true, psid, convo);
-          linkText = `\n\nMientras tanto, la medida estándar más cercana por si te resulta útil:\n${line}`;
-        }
-      } catch (err) {
-        console.error("Error getting closest size link:", err);
+        return {
+          type: "text",
+          text: `Te ofrecemos ${flooredW}x${flooredH} ya que es necesario considerar un tamaño menor para dar espacio a los tensores o soga sujetadora.\n\n${line}`
+        };
       }
-
-      const response = await generateBotResponse("specialist_handoff", {
-        dimensions: `${requested.w}x${requested.h}m`,
-        additionalInfo: linkText
-      });
-      return { type: "text", text: response };
+      // If no floored variant found, fall through to normal size matching below
     }
 
     // 2a) ¿Existe exacta?
