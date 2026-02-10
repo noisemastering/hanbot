@@ -671,9 +671,18 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
     }
 
     // 📍 Physical location questions - where are you located
-    if (/d[oó]nde\s+(est[aá]n|se\s+ubican|quedan)|h?ubicaci[oó]n|direcci[oó]n/i.test(cleanMsg)) {
+    if (/d[oó]nde\s+(est[aá]n|se\s+ubican|quedan)|h?ubicaci[oó]n|direcci[oó]n|domicilio/i.test(cleanMsg)) {
       console.log("📍 Physical location question detected");
       await updateConversation(psid, { lastIntent: "location_info" });
+
+      // If they explicitly ask for address/direction/domicilio, share Google Maps link
+      if (/\b(direcci[oó]n|domicilio|ubicaci[oó]n)\b/i.test(cleanMsg)) {
+        return {
+          type: "text",
+          text: "Te comparto nuestra ubicación en Google Maps:\n\nhttps://maps.app.goo.gl/WJbhpMqfUPYPSMdA7\n\nEnviamos a todo el país por Mercado Libre 📦"
+        };
+      }
+
       return {
         type: "text",
         text: "Estamos en Querétaro en el parque industrial Navex, Tlacote. Pero enviamos a todo el país por Mercado Libre 📦\n\n¿De qué ciudad nos escribes?"

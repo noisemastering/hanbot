@@ -12,7 +12,7 @@ const { isBusinessHours } = require("../utils/businessHours");
  */
 const BUSINESS_INFO = {
   name: "Hanlob",
-  address: "Calle Loma de San Gremal 108, bodega 73, Navex Park, C.P. 76137, Santiago de Querétaro",
+  address: "https://maps.app.goo.gl/WJbhpMqfUPYPSMdA7",
   city: "Querétaro",
   phones: ["442 352 1646"],
   hours: "Lunes a Viernes 9am - 6pm",
@@ -190,7 +190,7 @@ async function handleLocation(convo, psid) {
   return {
     type: "text",
     text: `¡Enviamos a todo México y también a Estados Unidos! 📦\n\n` +
-          `Nuestra tienda física está en ${BUSINESS_INFO.city}:\n📍 ${BUSINESS_INFO.address}\n\n` +
+          `Nuestra tienda física está en ${BUSINESS_INFO.city}. Te comparto nuestra ubicación en Google Maps:\n${BUSINESS_INFO.address}\n\n` +
           `Pero no necesitas visitarnos, te lo enviamos a domicilio.`
   };
 }

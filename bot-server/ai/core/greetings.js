@@ -118,8 +118,8 @@ async function handleThanks(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
 
     return {
       type: "text",
-      text: `¡Claro! También puedes visitarnos en nuestra tienda física:\n\n` +
-            `📍 Calle Loma de San Gremal 108, bodega 73, Navex Park, Querétaro.\n\n` +
+      text: `¡Claro! También puedes visitarnos. Te comparto nuestra ubicación en Google Maps:\n\n` +
+            `https://maps.app.goo.gl/WJbhpMqfUPYPSMdA7\n\n` +
             `🕐 Horario: Lunes a Viernes de 9:00 a 18:00 hrs, Sábados de 9:00 a 14:00 hrs.\n\n` +
             `¡Te esperamos!`
     };
@@ -282,11 +282,11 @@ async function handleStoreVisit(cleanMsg, psid, convo) {
     unknownCount: 0
   });
 
-  // If they asked for the address, always give full address
+  // If they asked for the address, share Google Maps link
   if (asksForAddress) {
     return {
       type: "text",
-      text: "¡Con gusto! Aquí está nuestra dirección:\n\n📍 Calle Loma de San Gremal 108, bodega 73, Navex Park,\nCol. Ejido Santa María Magdalena,\nC.P. 76137, Santiago de Querétaro, Qro.\n\n🕓 Lunes a Viernes de 9:00 a 18:00, Sábados de 9:00 a 14:00.\n\n¡Te esperamos!"
+      text: "¡Con gusto! Te comparto nuestra ubicación en Google Maps:\n\nhttps://maps.app.goo.gl/WJbhpMqfUPYPSMdA7\n\n¡Te esperamos!"
     };
   }
 
@@ -308,7 +308,7 @@ async function handleStoreVisit(cleanMsg, psid, convo) {
   // General store visit
   return {
     type: "text",
-    text: "¡Perfecto! Te esperamos. Estamos en Querétaro: Calle Loma de San Gremal 108, bodega 73, Navex Park.\n\n¿Hay algo que pueda adelantarte?"
+    text: "¡Perfecto! Te comparto nuestra ubicación en Google Maps:\n\nhttps://maps.app.goo.gl/WJbhpMqfUPYPSMdA7\n\n¿Hay algo que pueda adelantarte?"
   };
 }
 

@@ -82,7 +82,7 @@ async function handleLocation({ psid, userMessage, convo }) {
     userQuestion: userMessage,
     mentionedCity: locationInfo?.normalized || null,
     city: "Querétaro",
-    address: businessInfo?.address || 'Calle Loma de San Gremal 108, bodega 73, Navex Park',
+    address: 'https://maps.app.goo.gl/WJbhpMqfUPYPSMdA7',
     shipsNationwide: true,
     convo
   });

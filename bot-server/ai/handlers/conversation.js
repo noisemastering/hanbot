@@ -152,7 +152,7 @@ async function handleStoreVisit({ psid, convo, userMessage }) {
 
   const response = await generateBotResponse("store_visit", {
     userMessage,
-    storeAddress: "Calle Loma de San Gremal 108, bodega 73, Navex Park, Querétaro",
+    storeAddress: "https://maps.app.goo.gl/WJbhpMqfUPYPSMdA7",
     convo
   });
 

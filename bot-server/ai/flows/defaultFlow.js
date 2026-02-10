@@ -152,7 +152,7 @@ async function handleShipping(entities, convo, psid) {
  */
 async function handleLocation(convo, psid) {
   const response = await generateBotResponse("location_query", {
-    address: 'Calle Loma de San Gremal 108, bodega 73, Parque Industrial Navex',
+    address: 'https://maps.app.goo.gl/WJbhpMqfUPYPSMdA7',
     phone: '442 352 1646',
     hours: 'Lunes a Viernes 9am - 6pm',
     whatsapp: "https://wa.me/524425957432",

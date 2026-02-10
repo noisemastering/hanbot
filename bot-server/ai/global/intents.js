@@ -86,9 +86,7 @@ function getSecondaryPhrasePrefix(msg) {
 
 // Helper to get location text for combined responses
 function getLocationAppendix() {
-  return "\n\n📍 Estamos en Querétaro:\n" +
-         "Calle Loma de San Gremal 108, bodega 73, Navex Park\n" +
-         "C.P. 76137, Santiago de Querétaro\n\n" +
+  return "\n\nTe comparto nuestra ubicación en Google Maps:\nhttps://maps.app.goo.gl/WJbhpMqfUPYPSMdA7\n\n" +
          "Enviamos a todo el país por Mercado Libre.";
 }
 
@@ -1582,8 +1580,8 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
     return {
       type: "text",
-      text: `¡Sí! Tenemos venta al público en nuestra bodega en Querétaro 🏪\n\n` +
-            `📍 ${businessInfo.address}\n` +
+      text: `¡Sí! Tenemos venta al público en Querétaro 🏪\n\n` +
+            `Te comparto nuestra ubicación en Google Maps:\nhttps://maps.app.goo.gl/WJbhpMqfUPYPSMdA7\n\n` +
             `📞 ${businessInfo.phones.join(" / ")}\n` +
             `🕓 ${businessInfo.hours}\n\n` +
             `Puedes venir a ver el producto y pagar en efectivo o con tarjeta. ¿Qué medida te interesa?`
