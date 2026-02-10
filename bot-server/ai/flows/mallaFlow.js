@@ -1211,12 +1211,10 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       unknownCount: 0
     });
 
-    const zipAsk = hasLocation ? '' : '\n\n¿Me puedes compartir tu código postal para fines estadísticos?';
-
     return {
       type: "text",
       text: `${quantityText}${salesPitch}\n` +
-            `🛒 Cómprala aquí:\n${trackedLink}${wholesaleMention}${zipAsk}`
+            `🛒 Cómprala aquí:\n${trackedLink}${wholesaleMention}`
     };
   }
 

@@ -34,7 +34,7 @@ const { correctTypos, logTypoCorrection } = require("./utils/typoCorrection");
 const { getProductDisplayName, determineVerbosity } = require("./utils/productEnricher");
 const { identifyAndSetProduct } = require("./utils/productIdentifier");
 const { lockPOI, checkVariantExists, getNotAvailableResponse } = require("./utils/productTree");
-const { handleLocationStatsResponse, appendStatsQuestionIfNeeded, syncConversationLocationToUser } = require("./utils/locationStats");
+const { handleLocationStatsResponse, appendStatsQuestionIfNeeded, shouldAskLocationStatsNow, syncConversationLocationToUser } = require("./utils/locationStats");
 
 // Layer 0: Source Context Detection
 const { buildSourceContext, logSourceContext, getProductFromSource } = require("./context");
@@ -1166,6 +1166,18 @@ async function generateReply(userMessage, psid, referral = null) {
     }
   }
   // ====== END LOCATION STATS QUESTION ======
+
+  // ====== DEFERRED ZIP CODE QUESTION ======
+  // If previous message set shouldAskLocationStats, append the question now
+  if (response && response.text && shouldAskLocationStatsNow(convo)) {
+    response.text += '\n\n¿Me puedes compartir tu código postal para fines estadísticos?';
+    await updateConversation(psid, {
+      askedLocationStats: true,
+      shouldAskLocationStats: false,
+      pendingLocationResponse: true
+    });
+  }
+  // ====== END DEFERRED ZIP CODE QUESTION ======
 
   // Check for repetition and escalate if needed
   return await checkForRepetition(response, psid, convo);
