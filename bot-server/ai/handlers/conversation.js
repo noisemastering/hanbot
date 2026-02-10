@@ -58,6 +58,25 @@ async function handleConfirmation({ psid, convo, userMessage }) {
     return null;
   }
 
+  // Defer to flow manager when a flow is waiting for this confirmation
+  const flowAwaitingStates = [
+    "awaiting_alternatives_confirmation",
+    "custom_order_awaiting_decision",
+    "custom_order_awaiting_purpose",
+    "custom_order_awaiting_zipcode",
+    "awaiting_zipcode",
+    "roll_awaiting_width",
+    "lead_awaiting_catalog_choice",
+    "lead_awaiting_name",
+    "lead_awaiting_zipcode",
+    "lead_awaiting_products"
+  ];
+
+  if (flowAwaitingStates.some(s => convo?.lastIntent === s)) {
+    console.log(`✋ Confirmation deferred to flow (lastIntent: ${convo.lastIntent})`);
+    return null;
+  }
+
   await updateConversation(psid, { lastIntent: "confirmation", unknownCount: 0 });
 
   // Check if this is purchase intent ("me interesa", "lo quiero") after a price quote
