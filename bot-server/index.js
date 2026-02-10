@@ -688,16 +688,23 @@ app.get("/r/:clickId", async (req, res) => {
       return res.status(404).send("Link not found");
     }
 
-    // Record the click with metadata
-    await recordClick(clickId, {
-      userAgent: req.get('user-agent'),
-      ipAddress: req.ip || req.connection.remoteAddress,
-      referrer: req.get('referrer')
-    });
+    // Filter out bot/crawler user agents (Facebook link preview, WhatsApp, etc.)
+    const userAgent = req.get('user-agent') || '';
+    const isCrawler = /facebookexternalhit|Facebot|facebookcatalog|WhatsApp|Twitterbot|Slackbot|LinkedInBot|Googlebot|bingbot|Pinterestbot/i.test(userAgent);
 
-    console.log(`📊 Click tracked: ${clickId} -> ${clickLog.originalUrl}`);
+    if (isCrawler) {
+      console.log(`🤖 Crawler detected for ${clickId}, skipping click record (UA: ${userAgent.slice(0, 50)})`);
+    } else {
+      // Record the click with metadata (real user only)
+      await recordClick(clickId, {
+        userAgent,
+        ipAddress: req.ip || req.connection.remoteAddress,
+        referrer: req.get('referrer')
+      });
+      console.log(`📊 Click tracked: ${clickId} -> ${clickLog.originalUrl}`);
+    }
 
-    // Redirect to the original URL
+    // Always redirect regardless
     res.redirect(302, clickLog.originalUrl);
   } catch (error) {
     console.error("❌ Error processing click:", error);
