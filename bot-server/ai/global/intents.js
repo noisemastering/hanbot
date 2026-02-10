@@ -1901,10 +1901,12 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   // 🚚 Envíos / entregas
   // Skip if it's a THANK YOU for shipping (not a question about shipping)
   const isThankingForShipping = /\b(gracias|grax|thx|thanks)\s+(por\s+)?(el\s+|la\s+)?(env[ií]o|entrega|paquete)/i.test(msg);
+  // Skip if they're asking for the physical address ("mandar el domicilio" = send me the address)
+  const isAskingForAddress = /\b(mandar|pasar|dar|enviar)\s+(el\s+|la\s+|su\s+)?(domicilio|direcci[oó]n|ubicaci[oó]n)\b/i.test(msg);
   // Also catch "mandar a mi lugar/estado", "pueden mandar", etc.
-  const isAskingAboutShipping = /env[ií]o|entregan|domicilio|reparto|llega|envias?|envian|paquete/i.test(msg) ||
+  const isAskingAboutShipping = (/env[ií]o|entregan|domicilio|reparto|llega|envias?|envian|paquete/i.test(msg) ||
                                 /\b(mand[ae]n?|pueden?\s+mandar)\s*(a\s+)?(mi\s+)?(lugar|estado|ciudad|domicilio)/i.test(msg) ||
-                                /\bmandar\s+(lugar|estado)\b/i.test(msg);
+                                /\bmandar\s+(lugar|estado)\b/i.test(msg)) && !isAskingForAddress;
 
   if (isAskingAboutShipping && !isThankingForShipping) {
     // Check if message also contains dimensions - if so, skip shipping handler and let dimension handler process it

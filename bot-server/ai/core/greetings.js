@@ -260,14 +260,17 @@ async function handleStoreVisit(cleanMsg, psid, convo) {
 
   // Detect store visit intentions
   // "la visito en su tienda", "los visito", "paso a su tienda", "voy a ir a la tienda"
-  // "la siguiente semana", "próxima semana", "mañana", "en estos días"
-  const isStoreVisitIntent = /\b(l[oa]s?\s+visit[oa]|visit[oa]\s+(en\s+)?(su\s+)?tienda|pas[oa]\s+(a\s+)?(su\s+)?tienda|voy\s+a\s+(ir\s+)?(a\s+)?(la\s+|su\s+)?tienda|ir\s+a\s+(la\s+|su\s+)?tienda)\b/i.test(cleanMsg);
+  // "visitarlos", "visitarnos", "me gustaría visitar"
+  const isStoreVisitIntent = /\b(l[oa]s?\s+visit[oa]|visit[oa]\s+(en\s+)?(su\s+)?tienda|visitar(l[oa]s?|nos|les)?|pas[oa]\s+(a\s+)?(su\s+)?tienda|voy\s+a\s+(ir\s+)?(a\s+)?(la\s+|su\s+)?tienda|ir\s+a\s+(la\s+|su\s+)?tienda)\b/i.test(cleanMsg);
 
   if (!isStoreVisitIntent) {
     return null;
   }
 
   console.log("🏪 Store visit intention detected:", cleanMsg);
+
+  // Check if they explicitly asked for the address (domicilio, dirección)
+  const asksForAddress = /\b(domicilio|direcci[oó]n|ubicaci[oó]n)\b/i.test(cleanMsg);
 
   // Check if they also mentioned a product interest
   const mentionsMalla = /\b(malla|sombra)\b/i.test(cleanMsg);
@@ -278,6 +281,14 @@ async function handleStoreVisit(cleanMsg, psid, convo) {
     state: "active",
     unknownCount: 0
   });
+
+  // If they asked for the address, always give full address
+  if (asksForAddress) {
+    return {
+      type: "text",
+      text: "¡Con gusto! Aquí está nuestra dirección:\n\n📍 Calle Loma de San Gremal 108, bodega 73, Navex Park,\nCol. Ejido Santa María Magdalena,\nC.P. 76137, Santiago de Querétaro, Qro.\n\n🕓 Lunes a Viernes de 9:00 a 18:00, Sábados de 9:00 a 14:00.\n\n¡Te esperamos!"
+    };
+  }
 
   // If they mentioned a product, ask about specifics
   if (mentionsMalla) {

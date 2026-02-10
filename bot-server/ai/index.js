@@ -716,7 +716,9 @@ async function generateReply(userMessage, psid, referral = null) {
         lastNeedsHumanReminder: null,
         currentFlow: null,
         flowStep: null,
-        flowData: {}
+        flowData: {},
+        silenceFollowUpSent: false,
+        silenceFollowUpAt: null
       });
       // Update local convo object
       convo.state = "active";

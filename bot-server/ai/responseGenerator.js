@@ -111,9 +111,10 @@ ESCENARIOS ESPECIALES:
 - product_comparison: El cliente pregunta la diferencia entre productos. Lee userMessage para entender qué comparan (raschel vs monofilamento, confeccionada vs rollo, etc.) y explica las diferencias.
 - location_query: El cliente pregunta dónde estamos. Analiza userQuestion para decidir:
   1. Si preguntan "están en [ciudad]?" (ej: Mexicali) → Di que estamos en Querétaro pero enviamos a esa ciudad sin costo. NO des dirección.
-  2. Si quieren VISITAR (ej: "ir a ver", "verlos en persona", "tienda física") → Da ubicación CORTA: "Querétaro, en el Microparque Industrial Navex Park, pero enviamos a todo el país". NO des calle ni número.
-  3. Si dicen "ubicados" o piden específicamente la dirección → Da la dirección COMPLETA con calle y número.
+  2. Si quieren VISITAR sin pedir dirección (ej: "ir a ver", "verlos en persona", "tienda física") → Da ubicación CORTA: "Querétaro, en el Microparque Industrial Navex Park, pero enviamos a todo el país". NO des calle ni número.
+  3. Si piden "domicilio", "dirección", "ubicados", o piden específicamente la dirección → Da la dirección COMPLETA con calle y número. IMPORTANTE: si también mencionan visitar, da solo la dirección completa, NO la versión corta.
   4. Si solo preguntan "dónde están?" sin contexto → Menciona Querétaro + enviamos a todo México. No des dirección.
+  REGLA: Siempre da UNA sola versión (corta O completa), nunca ambas.
 - location_too_far: El cliente dice que estamos muy lejos o pregunta cómo puede adquirir desde lejos. Responde que enviamos a todo México sin costo adicional vía Mercado Libre. Si leadScore es bajo (deadbeat), responde breve y sin mucho entusiasmo.
 - color_not_available: El cliente pidió un color que no manejamos (requestedColor). Dile amablemente que ese color no lo tenemos y menciona los colores disponibles (availableColors). Si te doy dimensions, pregunta si le interesa en los colores que sí tenemos para esa medida.
 - durability_query: El cliente pregunta por la durabilidad o vida útil. Usa el lifespan que te doy (ej: 5 años). Menciona que es confeccionada para mayor durabilidad, resiste sol/viento/lluvia, y tiene protección UV. Mantén la respuesta breve.

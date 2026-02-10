@@ -1323,6 +1323,69 @@ app.post("/webhook", async (req, res) => {
             res.sendStatus(200);
             return;
           }
+
+          // 🔗 Check for shared links/posts (ads, product links)
+          const sharedAttachment = attachments.find(att =>
+            att.type === "template" || att.type === "fallback"
+          );
+
+          if (sharedAttachment) {
+            const sharedTitle =
+              sharedAttachment.payload?.elements?.[0]?.title ||
+              sharedAttachment.title ||
+              null;
+            const sharedUrl =
+              sharedAttachment.payload?.elements?.[0]?.url ||
+              sharedAttachment.payload?.url ||
+              sharedAttachment.url ||
+              null;
+
+            console.log(`🔗 Shared link received from ${senderPsid}:`);
+            console.log(`   Title: ${sharedTitle || 'N/A'}`);
+            console.log(`   URL: ${sharedUrl || 'N/A'}`);
+
+            const sharedContext = sharedTitle || sharedUrl || 'enlace compartido';
+            const enrichedText = messageText
+              ? `${messageText} [Compartió: ${sharedContext}]`
+              : `[Compartió: ${sharedContext}]`;
+
+            await registerUserIfNeeded(senderPsid);
+            await saveMessage(senderPsid, enrichedText, "user", messageId);
+
+            const { debounceMessage } = require("./messageDebouncer");
+            debounceMessage(senderPsid, enrichedText, async (combinedMessage) => {
+              try {
+                const reply = await generateReply(combinedMessage, senderPsid);
+                if (!reply || (!reply.text?.trim() && !reply.imageUrl?.trim())) return;
+
+                if (reply.type === "image" && reply.imageUrl?.trim()) {
+                  await callSendAPI(senderPsid, {
+                    attachment: { type: "image", payload: { url: reply.imageUrl, is_reusable: true } }
+                  });
+                }
+                if (reply.text?.trim()) {
+                  await callSendAPI(senderPsid, { text: reply.text });
+                  await saveMessage(senderPsid, reply.text, "bot");
+                }
+                if (reply.followUp) {
+                  await new Promise(resolve => setTimeout(resolve, 500));
+                  await callSendAPI(senderPsid, { text: reply.followUp });
+                  await saveMessage(senderPsid, reply.followUp, "bot");
+                }
+
+                const { scheduleFollowUpIfNeeded } = require('./jobs/silenceFollowUp');
+                const lastSentText = reply.followUp || reply.text;
+                scheduleFollowUpIfNeeded(senderPsid, lastSentText).catch(err =>
+                  console.error("❌ Error scheduling silence follow-up:", err.message)
+                );
+              } catch (err) {
+                console.error("❌ Error responding to shared link:", err);
+              }
+            });
+
+            res.sendStatus(200);
+            return;
+          }
         }
 
         await registerUserIfNeeded(senderPsid);
@@ -1385,6 +1448,13 @@ app.post("/webhook", async (req, res) => {
               await saveMessage(senderPsid, reply.followUp, "bot");
               console.log(`✅ [DEBUG] Follow-up message sent`);
             }
+
+            // Schedule silence follow-up (store link after 5min of inactivity)
+            const { scheduleFollowUpIfNeeded } = require('./jobs/silenceFollowUp');
+            const lastSentText = reply.followUp || reply.text;
+            scheduleFollowUpIfNeeded(senderPsid, lastSentText).catch(err =>
+              console.error("❌ Error scheduling silence follow-up:", err.message)
+            );
 
           } catch (err) {
             console.error("❌ Error al responder con IA:", err);
@@ -1561,6 +1631,14 @@ setTimeout(() => {
   // Then run periodically
   setInterval(runMLPriceSync, ML_PRICE_SYNC_INTERVAL);
 }, 60000);
+
+// Silence follow-up job - sends store link after 5min of customer inactivity
+setTimeout(() => {
+  const { runSilenceFollowUpJob } = require('./jobs/silenceFollowUp');
+  console.log('⏰ Silence follow-up job scheduled (every 60s)');
+  runSilenceFollowUpJob();
+  setInterval(runSilenceFollowUpJob, 60 * 1000);
+}, 90000);
 
 server.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);
