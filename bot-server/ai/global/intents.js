@@ -1603,6 +1603,26 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 🚫 OTHER PRODUCTS WE DON'T CARRY - lona, toldo, cortina, sombrilla, etc.
+  // "también manejan lona?", "tienen toldo?", "venden cortinas?", "nadamás malla?"
+  const otherProducts = /\b(lonas?|toldos?|cortinas?|sombrillas?|pl[aá]sticos?|malla\s+cicl[oó]n|malla\s+electrosoldada|telas?|carpas?)\b/i;
+  const asksAboutOtherProduct =
+    // "también manejan lona?", "aparte de malla tienen toldo?"
+    (/\b(tambi[eé]n|además|aparte)\s+(de\s+)?(malla\s+)?(manejan?|tienen?|venden?|hacen?|fabrican?|ofrecen?)\b/i.test(msg) && otherProducts.test(msg)) ||
+    // "tienen lona?", "venden toldo?", "manejan cortinas?"
+    /\b(manejan?|tienen?|venden?|hacen?|fabrican?|ofrecen?)\s+(tambi[eé]n\s+)?(lonas?|toldos?|cortinas?|sombrillas?|pl[aá]sticos?|carpas?|telas?)\b/i.test(msg) ||
+    // "nadamás malla?", "solo venden malla?", "únicamente malla?"
+    /\b(nada\s*m[aá]s|solamente|solo|[uú]nicamente)\s+(manejan?|tienen?|venden?)?\s*(malla)\b/i.test(msg);
+
+  if (asksAboutOtherProduct) {
+    console.log("🚫 Question about products we don't carry detected");
+    await updateConversation(psid, { lastIntent: "other_product_question", unknownCount: 0 });
+    return {
+      type: "text",
+      text: "Solamente manejamos malla sombra ¿te interesa alguna medida?"
+    };
+  }
+
   // 🔧 Measurement/Installation services - We don't offer these
   // Patterns: poner postes, instalar, colocar, medir, etc.
   const installationPattern =
