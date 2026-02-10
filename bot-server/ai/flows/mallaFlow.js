@@ -354,6 +354,45 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   console.log(`🌐 Malla flow - Intent: ${intent}, Entities:`, entities);
   console.log(`🌐 Malla flow - User message: "${userMessage}"`);
 
+  // ====== IMMEDIATE HANDOFF: non-90% shade or oversized for confeccionada ======
+  const nonStandardShade = /\b(al\s*)?(35|50|70|80)\s*(%|porciento|por\s*ciento)\b/i.test(userMessage);
+  const dimsForCheck = parseDimensions(userMessage);
+  const maxDimension = dimsForCheck ? Math.max(dimsForCheck.width, dimsForCheck.height) : 0;
+  const isOversized = maxDimension > 10; // confeccionada max is 6x10m
+
+  if (nonStandardShade || isOversized) {
+    const reasons = [];
+    if (nonStandardShade) reasons.push(`porcentaje no estándar (no 90%)`);
+    if (isOversized) reasons.push(`medida muy grande (${dimsForCheck.width}x${dimsForCheck.height}m)`);
+    const handoffReason = `Malla sombra: ${reasons.join(' + ')} — "${userMessage}"`;
+
+    console.log(`🚨 Malla flow - Immediate handoff: ${handoffReason}`);
+
+    await updateConversation(psid, {
+      lastIntent: "malla_specialist_handoff",
+      handoffRequested: true,
+      handoffReason,
+      handoffTimestamp: new Date(),
+      state: "needs_human",
+      productInterest: "malla_sombra",
+      unknownCount: 0
+    });
+
+    sendHandoffNotification(psid, handoffReason).catch(err => {
+      console.error("❌ Failed to send push notification:", err);
+    });
+
+    const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
+    const timingMsg = isBusinessHours()
+      ? "Un especialista te contactará pronto para darte la mejor opción."
+      : "Un especialista te contactará el siguiente día hábil en horario de atención (lunes a viernes 9am-6pm).";
+
+    return {
+      type: "text",
+      text: `Esa solicitud requiere atención personalizada. ${timingMsg}\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
+    };
+  }
+
   // CHECK FOR PHOTO/IMAGE REQUEST WITH COLOR
   // E.g., "foto del negro", "imagen en color negro", "ver el verde"
   const photoColorPattern = /\b(foto|imagen|ver|mostrar|ense[ñn]ar?)\b.*\b(color\s*)?(negro|verde|beige|blanco|azul|caf[eé])\b/i;
@@ -1375,14 +1414,9 @@ function shouldHandle(classification, sourceContext, convo, userMessage = '') {
   const { product } = classification;
   const msg = (userMessage || '').toLowerCase();
 
-  // FIRST: Check if user is asking for non-90% shade (35%, 50%, 70%, 80%)
-  // These are ROLLO products, not confeccionada (which is only 90%)
-  // Patterns: "al 50%", "50%", "al 50", "malla 50", "50/100" (50% shade, 100m roll)
-  const nonConfeccionadaShade = /\b(al\s*)?(35|50|70|80)\s*(%|porciento|por\s*ciento)?\b|\b(35|50|70|80)\s*[\/]\s*100\b/i;
-  if (nonConfeccionadaShade.test(msg)) {
-    console.log(`🌐 Malla flow - Non-90% shade detected, deferring to rollo flow`);
-    return false;
-  }
+  // Non-90% shade with malla/sombra keywords: accept it here so we can hand off properly
+  // (If rollo flow already matched via "rollo" keyword, it runs first and handles it)
+  // Without this, non-90% shade requests like "malla sombra de 70% 6x20" fall through unhandled
 
   // Explicitly about malla sombra (not rolls)
   if (product === "malla_sombra") return true;
