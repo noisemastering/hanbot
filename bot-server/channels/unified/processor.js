@@ -254,7 +254,7 @@ async function processMessage(normalizedMessage, io = null) {
       // 13. Save bot response
       await saveMessage(unifiedId, aiResponse.text, 'bot', null, io);
 
-      // 14. Schedule silence follow-up (store link after 5min of inactivity)
+      // 14. Schedule silence follow-up (store link after 10min of inactivity)
       const { scheduleFollowUpIfNeeded } = require('../../jobs/silenceFollowUp');
       scheduleFollowUpIfNeeded(unifiedId, aiResponse.text).catch(err =>
         console.error("❌ Error scheduling silence follow-up:", err.message)

@@ -1456,7 +1456,7 @@ app.post("/webhook", async (req, res) => {
               console.log(`✅ [DEBUG] Follow-up message sent`);
             }
 
-            // Schedule silence follow-up (store link after 5min of inactivity)
+            // Schedule silence follow-up (store link after 10min of inactivity)
             const { scheduleFollowUpIfNeeded } = require('./jobs/silenceFollowUp');
             const lastSentText = reply.followUp || reply.text;
             scheduleFollowUpIfNeeded(senderPsid, lastSentText).catch(err =>
@@ -1639,7 +1639,7 @@ setTimeout(() => {
   setInterval(runMLPriceSync, ML_PRICE_SYNC_INTERVAL);
 }, 60000);
 
-// Silence follow-up job - sends store link after 5min of customer inactivity
+// Silence follow-up job - sends store link after 10min of customer inactivity
 setTimeout(() => {
   const { runSilenceFollowUpJob } = require('./jobs/silenceFollowUp');
   console.log('⏰ Silence follow-up job scheduled (every 60s)');

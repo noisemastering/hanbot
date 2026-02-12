@@ -3,6 +3,9 @@
 
 const Product = require("../../models/Product");
 const { parseDimensions, suggestsRoll, inferProductType, formatDimensions } = require("../utils/sizeParser");
+const { generateClickLink } = require("../../tracking");
+
+const STORE_URL = "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob";
 
 /**
  * Determine product type from context
@@ -251,7 +254,7 @@ async function generateFindSimilarResponse(collectedData, convo) {
 /**
  * Process the user's choice after seeing similar sizes
  */
-async function processUserChoice(userChoice, collectedData, convo) {
+async function processUserChoice(userChoice, collectedData, convo, psid) {
   if (userChoice === 'custom_quote' || userChoice.toLowerCase().includes('ninguna') ||
       userChoice.toLowerCase().includes('exacta') || userChoice.toLowerCase().includes('especial')) {
     // User wants custom quote - handoff
@@ -263,16 +266,18 @@ async function processUserChoice(userChoice, collectedData, convo) {
   }
 
   if (userChoice === 'see_catalog') {
+    const trackedLink = psid ? await generateClickLink(psid, STORE_URL, { productName: 'Catálogo completo' }) : STORE_URL;
     return {
       action: 'message',
-      message: "Puedes ver todas nuestras medidas disponibles en nuestra tienda:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n¿Hay algo más en lo que te pueda ayudar?"
+      message: `Puedes ver todas nuestras medidas disponibles en nuestra tienda:\n${trackedLink}\n\n¿Hay algo más en lo que te pueda ayudar?`
     };
   }
 
   if (userChoice === 'rollo') {
+    const trackedLink = psid ? await generateClickLink(psid, STORE_URL, { productName: 'Rollos malla sombra' }) : STORE_URL;
     return {
       action: 'message',
-      message: "Tenemos rollos de malla sombra en 4x50m y 4x100m. Puedes verlos aquí:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n¿Te interesa alguno en específico?"
+      message: `Tenemos rollos de malla sombra en 4x50m y 4x100m. Puedes verlos aquí:\n${trackedLink}\n\n¿Te interesa alguno en específico?`
     };
   }
 
@@ -281,10 +286,11 @@ async function processUserChoice(userChoice, collectedData, convo) {
   try {
     const product = await Product.findById(userChoice);
     if (product) {
-      const mlLink = product.mlLink || "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob";
+      const rawLink = product.mlLink || STORE_URL;
+      const trackedLink = psid ? await generateClickLink(psid, rawLink, { productName: product.name || 'Producto', productId: product._id }) : rawLink;
       return {
         action: 'message',
-        message: `¡Excelente elección! Aquí está el link para ordenar:\n${mlLink}\n\n¿Necesitas algo más?`
+        message: `¡Excelente elección! Aquí está el link para ordenar:\n${trackedLink}\n\n¿Necesitas algo más?`
       };
     }
   } catch (e) {
@@ -292,9 +298,10 @@ async function processUserChoice(userChoice, collectedData, convo) {
   }
 
   // Generic response
+  const trackedLink = psid ? await generateClickLink(psid, STORE_URL, { productName: 'Tienda ML' }) : STORE_URL;
   return {
     action: 'message',
-    message: "Puedes ordenar directamente en nuestra tienda de Mercado Libre:\nhttps://www.mercadolibre.com.mx/tienda/distribuidora-hanlob\n\n¿Hay algo más en lo que te pueda ayudar?"
+    message: `Puedes ordenar directamente en nuestra tienda de Mercado Libre:\n${trackedLink}\n\n¿Hay algo más en lo que te pueda ayudar?`
   };
 }
 

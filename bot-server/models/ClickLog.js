@@ -75,8 +75,22 @@ const clickLogSchema = new mongoose.Schema(
 
     correlationMethod: {
       type: String,
-      enum: ['time_based', 'webhook', 'manual', null],
+      enum: ['time_based', 'webhook', 'manual', 'ml_item_match', 'enhanced', 'orphan', null],
       default: null
+    },
+
+    // Match details for correlation auditing
+    matchDetails: {
+      mlItemMatch: Boolean,
+      nameMatch: Boolean,
+      nicknameMatch: Boolean,
+      cityMatch: Boolean,
+      stateMatch: Boolean,
+      zipMatch: Boolean,
+      poiMatch: Boolean,
+      timeScore: Number,
+      hoursAgo: Number,
+      orphan: Boolean
     },
 
     // Order details snapshot at correlation time

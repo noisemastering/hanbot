@@ -70,4 +70,47 @@ function getLastBusinessClose() {
   return new Date(cutoffMx.getTime() + offsetMs);
 }
 
-module.exports = { isBusinessHours, wasBusinessHours, getLastBusinessClose };
+/**
+ * Get a human-friendly string for the next business hours window.
+ * E.g., "mañana a las 9am", "el lunes a las 9am", "hoy a las 9am"
+ * @returns {string}
+ */
+function getNextBusinessTimeStr() {
+  const now = new Date();
+  const mx = new Date(now.toLocaleString("en-US", { timeZone: "America/Mexico_City" }));
+
+  const day = mx.getDay(); // 0=Sun, 6=Sat
+  const hour = mx.getHours();
+
+  const dayNames = ['domingo', 'lunes', 'martes', 'miércoles', 'jueves', 'viernes', 'sábado'];
+
+  // Weekday before 9am → "hoy a las 9am"
+  if (day >= 1 && day <= 5 && hour < 9) {
+    return "hoy a las 9am";
+  }
+
+  // Friday after 6pm → "el lunes a las 9am"
+  if (day === 5 && hour >= 18) {
+    return "el lunes a las 9am";
+  }
+
+  // Saturday → "el lunes a las 9am"
+  if (day === 6) {
+    return "el lunes a las 9am";
+  }
+
+  // Sunday → "mañana lunes a las 9am"
+  if (day === 0) {
+    return "mañana lunes a las 9am";
+  }
+
+  // Weekday (Mon-Thu) after 6pm → "mañana a las 9am"
+  if (day >= 1 && day <= 4 && hour >= 18) {
+    return "mañana a las 9am";
+  }
+
+  // Fallback (shouldn't reach here during business hours)
+  return "el siguiente día hábil a las 9am";
+}
+
+module.exports = { isBusinessHours, wasBusinessHours, getLastBusinessClose, getNextBusinessTimeStr };

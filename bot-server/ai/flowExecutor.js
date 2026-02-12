@@ -93,7 +93,7 @@ async function handleDynamicMessage(step, collectedData, convo, psid) {
 
     case 'process_size_choice':
       const userChoice = collectedData.userChoice;
-      return await customSizeActions.processUserChoice(userChoice, collectedData, convo);
+      return await customSizeActions.processUserChoice(userChoice, collectedData, convo, psid);
 
     default:
       console.warn(`⚠️ Unknown dynamic action: ${action}`);

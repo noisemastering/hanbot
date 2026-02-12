@@ -1,5 +1,5 @@
 // jobs/silenceFollowUp.js
-// Auto-send store link after 5 minutes of customer silence
+// Auto-send store link after 10 minutes of customer silence
 
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
@@ -8,7 +8,7 @@ const axios = require('axios');
 const { sendTextMessage: sendWhatsAppText } = require('../channels/whatsapp/api');
 
 const STORE_URL = 'https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob';
-const FOLLOW_UP_DELAY_MS = 5 * 60 * 1000; // 5 minutes
+const FOLLOW_UP_DELAY_MS = 10 * 60 * 1000; // 10 minutes
 
 /**
  * Schedule a silence follow-up if needed.

@@ -265,8 +265,9 @@ async function runBackgroundCorrelation() {
     const { getOrders } = require("../utils/mercadoLibreOrders");
     const MercadoLibreAuth = require("../models/MercadoLibreAuth");
 
-    // Get active seller
-    const seller = await MercadoLibreAuth.findOne({ active: true });
+    // Get HANLOB seller (the one with actual ML orders)
+    const seller = await MercadoLibreAuth.findOne({ active: true, sellerId: '482595248' })
+      || await MercadoLibreAuth.findOne({ active: true });
     if (!seller) return;
 
     const sellerId = seller.sellerId;

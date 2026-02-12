@@ -47,7 +47,7 @@ const { detectMexicanLocation, detectZipCode } = require("../../mexicanLocations
 const { sendHandoffNotification } = require("../../services/pushNotifications");
 
 // Business hours check
-const { isBusinessHours } = require("../utils/businessHours");
+const { isBusinessHours, getNextBusinessTimeStr } = require("../utils/businessHours");
 
 // NOTE: Global intents are now handled by the Intent Dispatcher (ai/intentDispatcher.js)
 // which runs BEFORE flows. This delegation is being phased out.
@@ -1088,29 +1088,30 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
   const maxSide = Math.max(width, height);
 
   if (minSide >= 8 && maxSide >= 8) {
-    // Custom order - offer standard size combinations
-    console.log(`🏭 Custom order detected in mallaFlow (${width}x${height}m), offering standard size combinations`);
+    // Custom order - hand off to specialist immediately
+    console.log(`🏭 Custom order detected in mallaFlow (${width}x${height}m), handing off to specialist`);
 
-    // Find the largest standard sizes that could be combined
-    const availableSizes = await getAvailableSizes(convo);
-    const largestSizes = availableSizes
-      .filter(s => s.price > 0)
-      .sort((a, b) => b.area - a.area)
-      .slice(0, 4);
-
-    const sizeList = largestSizes.map(s => `${s.sizeStr} ($${s.price})`).join(', ');
+    const handoffReason = `Medida grande: ${width}x${height}m (ambos lados ≥8m)`;
 
     await updateConversation(psid, {
-      lastIntent: "custom_order_awaiting_decision",
+      lastIntent: "custom_order_handoff",
+      handoffRequested: true,
+      handoffReason,
+      handoffTimestamp: new Date(),
+      state: "needs_human",
       customOrderSize: `${width}x${height}m`,
-      suggestedSizes: largestSizes.map(s => s.sizeStr),
       unknownCount: 0
     });
 
-    return {
-      type: "text",
-      text: `En dimensiones tan grandes es necesaria una confección especial. ¿Deseas combinar dos medidas estándar? ${sizeList}\n\nSi quieres la medida específica que mencionas (${width}x${height}m) te puedo comunicar con un especialista.`
-    };
+    sendHandoffNotification(psid, handoffReason).catch(err => {
+      console.error("❌ Failed to send push notification:", err);
+    });
+
+    const msg = isBusinessHours()
+      ? `Permíteme contactarte con un especialista para cotizarte esa medida.`
+      : `Un especialista se comunicará contigo ${getNextBusinessTimeStr()} para cotizarte esa medida.`;
+
+    return { type: "text", text: msg };
   }
 
   // ====== POI TREE CHECK ======

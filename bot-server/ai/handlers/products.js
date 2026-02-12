@@ -464,10 +464,14 @@ async function handlePhotoRequest({ psid, convo }) {
     };
   }
 
-  // No campaign catalog - share default ML profile
+  // No campaign catalog - share tracked store link
+  const { generateClickLink } = require("../../tracking");
+  const trackedStoreLink = await generateClickLink(psid, "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob", {
+    productName: "Catálogo fotos"
+  });
   return {
     type: "text",
-    text: `Aquí puedes ver fotos de todos nuestros productos:\n\n${DEFAULT_CATALOG_LINK}\n\nSi me dices qué medida necesitas, te paso el link directo con fotos y precio.`
+    text: `Aquí puedes ver fotos de todos nuestros productos:\n\n${trackedStoreLink}\n\nSi me dices qué medida necesitas, te paso el link directo con fotos y precio.`
   };
 }
 

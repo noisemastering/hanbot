@@ -58,7 +58,7 @@ INSTRUCCIONES:
 DATOS DE CONTACTO (si son relevantes):
 - Teléfono: ${businessInfo?.phones?.join(", ") || "442 352 1646"}
 - Horario: ${businessInfo?.hours || "Lunes a Viernes 9am - 6pm"}
-- Tienda: https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob`
+- Vendemos en Mercado Libre (NO incluyas links/URLs - el sistema los agrega automáticamente)`
         },
         { role: "user", content: userMessage }
       ],

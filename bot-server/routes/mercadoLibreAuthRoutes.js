@@ -778,7 +778,8 @@ router.get("/price-status", authenticate, async (req, res) => {
 // GET /ml/playground/status - Check ML API connection and token status
 router.get("/playground/status", authenticate, async (req, res) => {
   try {
-    const auth = await MercadoLibreAuth.findOne({ active: true }).sort({ updatedAt: -1 });
+    const auth = await MercadoLibreAuth.findOne({ active: true, sellerId: '482595248' }).sort({ updatedAt: -1 })
+      || await MercadoLibreAuth.findOne({ active: true }).sort({ updatedAt: -1 });
 
     if (!auth) {
       return res.json({
@@ -836,7 +837,8 @@ router.get("/playground/status", authenticate, async (req, res) => {
 router.get("/playground/item/:itemId", authenticate, async (req, res) => {
   try {
     const { itemId } = req.params;
-    const auth = await MercadoLibreAuth.findOne({ active: true }).sort({ updatedAt: -1 });
+    const auth = await MercadoLibreAuth.findOne({ active: true, sellerId: '482595248' }).sort({ updatedAt: -1 })
+      || await MercadoLibreAuth.findOne({ active: true }).sort({ updatedAt: -1 });
 
     if (!auth) {
       return res.status(400).json({ success: false, error: "No active ML authorization" });
@@ -915,7 +917,8 @@ router.put("/playground/item/:itemId/price", authenticate, async (req, res) => {
       });
     }
 
-    const auth = await MercadoLibreAuth.findOne({ active: true }).sort({ updatedAt: -1 });
+    const auth = await MercadoLibreAuth.findOne({ active: true, sellerId: '482595248' }).sort({ updatedAt: -1 })
+      || await MercadoLibreAuth.findOne({ active: true }).sort({ updatedAt: -1 });
 
     if (!auth) {
       return res.status(400).json({ success: false, error: "No active ML authorization" });
@@ -970,7 +973,8 @@ router.get("/playground/items", authenticate, async (req, res) => {
   try {
     const { limit = 20, offset = 0, status = "active" } = req.query;
 
-    const auth = await MercadoLibreAuth.findOne({ active: true }).sort({ updatedAt: -1 });
+    const auth = await MercadoLibreAuth.findOne({ active: true, sellerId: '482595248' }).sort({ updatedAt: -1 })
+      || await MercadoLibreAuth.findOne({ active: true }).sort({ updatedAt: -1 });
 
     if (!auth) {
       return res.status(400).json({ success: false, error: "No active ML authorization" });
