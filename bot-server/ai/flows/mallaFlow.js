@@ -1157,6 +1157,12 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
   // Check if customer asked for a non-standard percentage
   const requestedInvalidPercentage = percentage && !VALID_PERCENTAGES.includes(Number(percentage));
 
+  // Check if customer asked for an unavailable color
+  const AVAILABLE_COLORS = ['beige', 'negro'];
+  const requestedUnavailableColor = color && !AVAILABLE_COLORS.some(c =>
+    color.toLowerCase().includes(c) || c.includes(color.toLowerCase())
+  );
+
   // Try to find matching products (within POI tree if locked)
   const products = await findMatchingProducts(width, height, percentage, color, convo?.poiRootId);
 
@@ -1255,14 +1261,19 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       unknownCount: 0
     });
 
-    // If customer asked for non-standard percentage, note the correction
-    const percentageNote = requestedInvalidPercentage
-      ? `No manejamos ${percentage}%, pero tenemos esta opción:\n\n`
-      : '';
+    // If customer asked for non-standard percentage or unavailable color, note the correction
+    let correctionNote = '';
+    if (requestedInvalidPercentage && requestedUnavailableColor) {
+      correctionNote = `No manejamos ${percentage}% ni color ${color}. Solo la tenemos en ${AVAILABLE_COLORS.join(' y ')}:\n\n`;
+    } else if (requestedInvalidPercentage) {
+      correctionNote = `No manejamos ${percentage}%, pero tenemos esta opción:\n\n`;
+    } else if (requestedUnavailableColor) {
+      correctionNote = `No la manejamos en color ${color}, solo en ${AVAILABLE_COLORS.join(' y ')}:\n\n`;
+    }
 
     return {
       type: "text",
-      text: `${percentageNote}${quantityText}${salesPitch}\n` +
+      text: `${correctionNote}${quantityText}${salesPitch}\n` +
             `🛒 Cómprala aquí:\n${trackedLink}${wholesaleMention}`
     };
   }
