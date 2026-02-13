@@ -53,7 +53,7 @@ const FLOW_REF_MAP = {
 /**
  * Product-type keywords we don't sell — used to detect "unknown product" questions
  */
-const UNKNOWN_PRODUCTS = /\b(lona|polisombra|media\s*sombra|malla\s*cicl[oó]n|malla\s*electrosoldada|malla\s*galvanizada|pl[aá]stico\s*(para\s*)?invernadero|rafia|costal|tela|alambre|cerca|reja|manguera|tubo)\b/i;
+const UNKNOWN_PRODUCTS = /\b(lona|polisombra|media\s*sombra|malla\s*cicl[oó]n|malla\s*electrosoldada|malla\s*galvanizada|pl[aá]stico\s*(para\s*)?invernadero|rafia|costal|tela|alambre|cerca|reja|manguera|tubo|a[lc]ochado|acolchado)\b/i;
 
 /**
  * Product type to flow mapping (from productInterest string)
@@ -554,6 +554,42 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
     }
   }
   // ===== END LEAD CAPTURE CHECK =====
+
+  // ===== STEP 0.7: CHECK FOR UNKNOWN PRODUCTS (any flow) =====
+  {
+    const unknownMatch = userMessage.match(UNKNOWN_PRODUCTS);
+    if (unknownMatch) {
+      const unknownProduct = unknownMatch[1];
+      console.log(`❓ Unknown product detected: "${unknownProduct}" (we don't sell this)`);
+
+      try {
+        const trackedLink = await generateClickLink(psid, 'https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob', {
+          reason: 'unknown_product',
+          unknownProduct,
+          campaignId: convo?.campaignId,
+          userName: convo?.userName
+        });
+
+        console.log(`🎯 ===== END FLOW MANAGER (unknown product) =====\n`);
+        return {
+          type: "text",
+          text: `No manejamos ${unknownProduct}, pero te comparto nuestra tienda donde puedes ver todo lo que ofrecemos: ${trackedLink}`,
+          handledBy: "flow:unknown_product",
+          purchaseIntent: 'low'
+        };
+      } catch (err) {
+        console.error(`⚠️ Error generating tracked link for unknown product:`, err.message);
+        console.log(`🎯 ===== END FLOW MANAGER (unknown product, no link) =====\n`);
+        return {
+          type: "text",
+          text: `No manejamos ${unknownProduct}. Manejamos malla sombra, borde separador, ground cover y monofilamento. ¿Te interesa alguno?`,
+          handledBy: "flow:unknown_product",
+          purchaseIntent: 'low'
+        };
+      }
+    }
+  }
+  // ===== END UNKNOWN PRODUCT CHECK =====
 
   // ===== STEP 1: ALWAYS SCORE PURCHASE INTENT =====
   const isWholesale = isWholesaleInquiry(userMessage, convo);
