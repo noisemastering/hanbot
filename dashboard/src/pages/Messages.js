@@ -16,6 +16,7 @@ function Messages() {
   const [replyText, setReplyText] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
   const [pendingHandoffs, setPendingHandoffs] = useState([]);
+  const [initialLoading, setInitialLoading] = useState(true);
 
   // Helper function to show message excerpt
   const getMessageExcerpt = (text, maxLength = 60) => {
@@ -180,9 +181,8 @@ function Messages() {
     };
 
     // Initial fetch
-    fetchMessages();
-    fetchUsers();
-    fetchPendingHandoffs();
+    Promise.all([fetchMessages(), fetchUsers(), fetchPendingHandoffs()])
+      .finally(() => setInitialLoading(false));
 
     // Auto-refresh every 30 seconds
     const interval = setInterval(() => {
@@ -360,6 +360,30 @@ function Messages() {
     const status = conversationStatuses[msg.psid];
     return status?.handoffRequested && !status?.humanActive;
   }).length;
+
+  if (initialLoading) {
+    return (
+      <div style={{
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "center",
+        justifyContent: "center",
+        minHeight: "40vh",
+        gap: "1rem"
+      }}>
+        <div style={{
+          width: "40px",
+          height: "40px",
+          border: "4px solid rgba(255,255,255,0.1)",
+          borderTopColor: "#4caf50",
+          borderRadius: "50%",
+          animation: "spin 0.8s linear infinite"
+        }} />
+        <p style={{ color: "#888", fontSize: "1rem" }}>Cargando conversaciones...</p>
+        <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+      </div>
+    );
+  }
 
   return (
     <div>
