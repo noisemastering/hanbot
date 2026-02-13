@@ -979,6 +979,13 @@ async function generateReply(userMessage, psid, referral = null) {
 
   // Log source context for analytics
   logSourceContext(psid, sourceContext, userMessage);
+
+  // Store adFlowRef on conversation when resolved from ad hierarchy
+  if (sourceContext?.ad?.flowRef && !convo.adFlowRef) {
+    await updateConversation(psid, { adFlowRef: sourceContext.ad.flowRef });
+    convo.adFlowRef = sourceContext.ad.flowRef;
+    console.log(`🎯 Ad flowRef stored on conversation: ${sourceContext.ad.flowRef}`);
+  }
   // ====== END LAYER 0 ======
 
   // ====== LOAD CAMPAIGN CONTEXT ======

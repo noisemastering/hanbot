@@ -7,6 +7,9 @@ const { scorePurchaseIntent, isWholesaleInquiry } = require("./utils/purchaseInt
 const { parseDimensions } = require("../measureHandler");
 const { INTENTS, PRODUCTS } = require("./classifier");
 const { analyzeUseCaseFit, generateSuggestionMessage } = require("./utils/usoCaseMatcher");
+const ProductFamily = require("../models/ProductFamily");
+const { generateClickLink } = require("../tracking");
+const { sendHandoffNotification } = require("../services/pushNotifications");
 
 // Flow imports
 const defaultFlow = require("./flows/defaultFlow");
@@ -29,6 +32,40 @@ const FLOWS = {
   groundcover: groundcoverFlow,
   monofilamento: monofilamentoFlow,
   lead_capture: leadCaptureFlow
+};
+
+/**
+ * Maps flowRef values (from ad hierarchy) to flow names
+ */
+const FLOW_REF_MAP = {
+  'mallaFlow': 'malla_sombra',
+  'rolloFlow': 'rollo',
+  'bordeFlow': 'borde_separador',
+  'groundcoverFlow': 'groundcover',
+  'monofilamentoFlow': 'monofilamento',
+  'malla_sombra': 'malla_sombra',
+  'rollo': 'rollo',
+  'borde_separador': 'borde_separador',
+  'groundcover': 'groundcover',
+  'monofilamento': 'monofilamento'
+};
+
+/**
+ * Product-type keywords we don't sell — used to detect "unknown product" questions
+ */
+const UNKNOWN_PRODUCTS = /\b(lona|polisombra|media\s*sombra|malla\s*cicl[oó]n|malla\s*electrosoldada|malla\s*galvanizada|pl[aá]stico\s*(para\s*)?invernadero|rafia|costal|tela|alambre|cerca|reja|manguera|tubo)\b/i;
+
+/**
+ * Product type to flow mapping (from productInterest string)
+ */
+const PRODUCT_TYPE_TO_FLOW = {
+  'malla_sombra': 'malla_sombra',
+  'malla_sombra_raschel': 'malla_sombra',
+  'rollo': 'rollo',
+  'borde_separador': 'borde_separador',
+  'ground_cover': 'groundcover',
+  'groundcover': 'groundcover',
+  'monofilamento': 'monofilamento'
 };
 
 /**
@@ -78,19 +115,34 @@ function detectExplicitProductSwitch(userMessage, currentFlow, classification) {
 
 /**
  * Detect which flow should handle this conversation
- * Based on: product mentions, classification, conversation context
+ * Priority: currentFlow > ad flowRef > ad product > classification > productInterest > keywords > dimensions > default
  */
-function detectFlow(classification, convo, userMessage) {
+function detectFlow(classification, convo, userMessage, sourceContext) {
   const msg = (userMessage || '').toLowerCase();
 
-  // FIRST: Check if already in a product flow - prioritize conversation continuity
-  // But allow explicit product switches to be detected (handled separately)
+  // 1. CONVERSATION CONTINUITY: Already in a product flow
   if (convo?.currentFlow && convo.currentFlow !== 'default') {
     return convo.currentFlow;
   }
 
-  // SECOND: Check classification product (explicit product detected in message)
-  // This takes priority over ad-set productInterest because the user's words matter more
+  // 2. AD HIERARCHY FLOWREF: Direct flow reference from ad cascade
+  const adFlowRef = sourceContext?.ad?.flowRef || convo?.adFlowRef;
+  if (adFlowRef && FLOW_REF_MAP[adFlowRef]) {
+    console.log(`🎯 Flow from ad hierarchy flowRef: ${adFlowRef} → ${FLOW_REF_MAP[adFlowRef]}`);
+    return FLOW_REF_MAP[adFlowRef];
+  }
+
+  // 3. AD HIERARCHY PRODUCT: Product resolved from ad cascade
+  const adProduct = sourceContext?.ad?.product;
+  if (adProduct) {
+    const adFlow = PRODUCT_TYPE_TO_FLOW[adProduct] || PRODUCT_TYPE_TO_FLOW[adProduct.toLowerCase()];
+    if (adFlow) {
+      console.log(`🎯 Flow from ad hierarchy product: ${adProduct} → ${adFlow}`);
+      return adFlow;
+    }
+  }
+
+  // 4. CLASSIFICATION PRODUCT: Explicit product detected in message
   if (classification.product && classification.product !== PRODUCTS.UNKNOWN) {
     const flowMap = {
       [PRODUCTS.MALLA_SOMBRA]: 'malla_sombra',
@@ -105,16 +157,14 @@ function detectFlow(classification, convo, userMessage) {
     }
   }
 
-  // THIRD: Check product interest from conversation (from ads, previous context)
+  // 5. PRODUCT INTEREST: From conversation context (ads, previous context)
   if (convo?.productInterest) {
     const pi = convo.productInterest.toLowerCase();
 
-    // Handle malla_sombra variants
     if (pi.startsWith('malla_sombra') || pi === 'confeccionada') {
       return 'malla_sombra';
     }
 
-    // Direct mappings for other products
     const interestMap = {
       'rollo': 'rollo',
       'borde_separador': 'borde_separador',
@@ -128,7 +178,7 @@ function detectFlow(classification, convo, userMessage) {
     }
   }
 
-  // Keyword detection for products
+  // 6. KEYWORD DETECTION
   if (/\b(malla\s*sombra|confeccionada)\b/i.test(msg) && !/rollo/i.test(msg)) {
     return 'malla_sombra';
   }
@@ -145,14 +195,13 @@ function detectFlow(classification, convo, userMessage) {
     return 'monofilamento';
   }
 
-  // Check for dimensions - implies malla_sombra (most common)
+  // 7. DIMENSION INFERENCE
   const dimensions = parseDimensions(userMessage);
   if (dimensions && !dimensions.isRoll) {
-    // Dimensions without explicit product = malla sombra confeccionada
     return 'malla_sombra';
   }
 
-  // Default flow for everything else
+  // 8. DEFAULT
   return 'default';
 }
 
@@ -187,7 +236,80 @@ function checkFlowTransfer(currentFlow, detectedFlow, convo) {
 async function processMessage(userMessage, psid, convo, classification, sourceContext, campaign = null) {
   console.log(`\n🎯 ===== FLOW MANAGER =====`);
 
-  // ===== STEP 0: CHECK FOR PENDING FLOW CHANGE CONFIRMATION =====
+  // ===== STEP 0a: CHECK FOR PENDING WHOLESALE/RETAIL CHOICE =====
+  if (convo?.pendingWholesaleRetailChoice) {
+    const msg = userMessage.toLowerCase();
+    const isRetail = /\b(menudeo|por\s*pieza|una|pocas?|tienda|mercado\s*libre|en\s*l[ií]nea)\b/i.test(msg);
+    const isWholesaleChoice = /\b(mayoreo|por\s*mayor|varias?|muchas?|cantidad|rollo|rollos|distribuidor|bulk)\b/i.test(msg);
+
+    if (isRetail) {
+      const newFlow = convo.pendingWholesaleRetailChoice;
+      console.log(`🛒 Retail choice confirmed, switching to flow: ${newFlow}`);
+
+      await updateConversation(psid, {
+        currentFlow: newFlow,
+        productInterest: newFlow,
+        pendingWholesaleRetailChoice: null,
+        flowTransferredFrom: convo.currentFlow,
+        flowTransferredAt: new Date()
+      });
+      convo.currentFlow = newFlow;
+      convo.productInterest = newFlow;
+
+      const flowGreetings = {
+        'rollo': '¡Perfecto! Para el rollo de malla sombra, ¿qué porcentaje de sombra necesitas? Tenemos 35%, 50%, 70%, 80% y 90%.',
+        'malla_sombra': '¡Perfecto! Para la malla sombra confeccionada, ¿qué medida necesitas?',
+        'groundcover': '¡Perfecto! Para el ground cover antimaleza, ¿qué medida necesitas?',
+        'monofilamento': '¡Perfecto! Para la malla monofilamento, ¿qué porcentaje de sombra necesitas?',
+        'borde_separador': '¡Perfecto! Para el borde separador, ¿qué largo necesitas? Tenemos 6m, 9m, 18m y 54m.'
+      };
+
+      console.log(`🎯 ===== END FLOW MANAGER (retail → ${newFlow}) =====\n`);
+      return {
+        type: "text",
+        text: flowGreetings[newFlow] || '¡Perfecto! ¿Qué medida necesitas?',
+        handledBy: `flow:${newFlow}`,
+        purchaseIntent: 'medium'
+      };
+    }
+
+    if (isWholesaleChoice) {
+      const productNames = {
+        'rollo': 'rollos de malla sombra',
+        'malla_sombra': 'malla sombra',
+        'borde_separador': 'borde separador',
+        'groundcover': 'ground cover',
+        'monofilamento': 'malla monofilamento'
+      };
+      const productName = productNames[convo.pendingWholesaleRetailChoice] || 'producto';
+
+      console.log(`🏭 Wholesale choice confirmed, handing off to specialist`);
+      await updateConversation(psid, {
+        pendingWholesaleRetailChoice: null,
+        handoffRequested: true,
+        handoffReason: `Mayoreo: ${productName}`,
+        handoffTimestamp: new Date(),
+        state: "needs_human"
+      });
+
+      await sendHandoffNotification(psid, convo, `Cliente quiere ${productName} al mayoreo`).catch(err =>
+        console.error("Error sending wholesale handoff notification:", err.message)
+      );
+
+      console.log(`🎯 ===== END FLOW MANAGER (wholesale handoff) =====\n`);
+      return {
+        type: "text",
+        text: `¡Claro! Para ${productName} al mayoreo te comunico con un especialista que te dará los mejores precios. En un momento te atienden.`,
+        handledBy: "flow:wholesale_handoff",
+        purchaseIntent: 'high'
+      };
+    }
+    // If neither detected, clear pending and continue normal flow
+    await updateConversation(psid, { pendingWholesaleRetailChoice: null });
+  }
+  // ===== END PENDING WHOLESALE/RETAIL CHECK =====
+
+  // ===== STEP 0b: CHECK FOR PENDING FLOW CHANGE CONFIRMATION =====
   // If we suggested a product change and user confirms, execute the switch
   if (convo?.pendingFlowChange) {
     const msg = userMessage.toLowerCase();
@@ -198,7 +320,92 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
       const newFlow = convo.pendingFlowChange;
       console.log(`✅ User confirmed flow change to: ${newFlow}`);
 
-      // Clear pending and switch flow
+      // Check if this product type has both wholesale and retail options
+      try {
+        const productTypeMap = {
+          'malla_sombra': /malla.*sombra/i,
+          'rollo': /rollo/i,
+          'borde_separador': /borde.*separador|cinta.*pl[aá]stica/i,
+          'groundcover': /ground.*cover|antimaleza/i,
+          'monofilamento': /monofilamento/i
+        };
+        const typeRegex = productTypeMap[newFlow];
+
+        if (typeRegex) {
+          const matchingProducts = await ProductFamily.find({
+            name: typeRegex,
+            sellable: true,
+            active: true
+          }).lean();
+
+          const hasRetail = matchingProducts.some(p => p.onlineStoreLinks?.length > 0);
+          const hasWholesale = matchingProducts.some(p => p.wholesaleEnabled || p.wholesaleMinQty > 0);
+
+          if (hasRetail && hasWholesale) {
+            // Both modes available — ask the customer
+            const productNames = {
+              'rollo': 'rollos de malla sombra',
+              'malla_sombra': 'malla sombra',
+              'borde_separador': 'borde separador',
+              'groundcover': 'ground cover',
+              'monofilamento': 'malla monofilamento'
+            };
+            const productName = productNames[newFlow] || newFlow;
+
+            await updateConversation(psid, {
+              pendingFlowChange: null,
+              pendingUseCaseProducts: null,
+              pendingWholesaleRetailChoice: newFlow
+            });
+
+            console.log(`🎯 ===== END FLOW MANAGER (wholesale/retail choice) =====\n`);
+            return {
+              type: "text",
+              text: `Tenemos ${productName}. ¿Lo quieres al menudeo (por pieza) o al mayoreo?`,
+              handledBy: "flow:wholesale_retail_choice",
+              purchaseIntent: 'medium'
+            };
+          }
+
+          if (!hasRetail && hasWholesale) {
+            // Wholesale only — handoff to specialist
+            const productNames = {
+              'rollo': 'rollos de malla sombra',
+              'malla_sombra': 'malla sombra',
+              'borde_separador': 'borde separador',
+              'groundcover': 'ground cover',
+              'monofilamento': 'malla monofilamento'
+            };
+            const productName = productNames[newFlow] || newFlow;
+
+            await updateConversation(psid, {
+              pendingFlowChange: null,
+              pendingUseCaseProducts: null,
+              handoffRequested: true,
+              handoffReason: `Mayoreo: ${productName}`,
+              handoffTimestamp: new Date(),
+              state: "needs_human"
+            });
+
+            await sendHandoffNotification(psid, convo, `Cliente quiere ${productName} (solo mayoreo disponible)`).catch(err =>
+              console.error("Error sending wholesale handoff notification:", err.message)
+            );
+
+            console.log(`🎯 ===== END FLOW MANAGER (wholesale-only handoff) =====\n`);
+            return {
+              type: "text",
+              text: `Para ${productName} te comunico con un especialista. En un momento te atienden.`,
+              handledBy: "flow:wholesale_handoff",
+              purchaseIntent: 'high'
+            };
+          }
+        }
+      } catch (err) {
+        console.error(`⚠️ Error checking wholesale/retail for ${newFlow}:`, err.message);
+        // Continue with normal flow switch on error
+      }
+
+      // Clear pending and switch flow (retail only, or no wholesale/retail distinction found)
       await updateConversation(psid, {
         currentFlow: newFlow,
         productInterest: newFlow,
@@ -295,6 +502,41 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
         purchaseIntent: 'medium'
       };
     }
+
+    // Check for unknown products (things we don't sell)
+    if (!switchToFlow) {
+      const unknownMatch = userMessage.match(UNKNOWN_PRODUCTS);
+      if (unknownMatch) {
+        const unknownProduct = unknownMatch[1];
+        console.log(`❓ Unknown product detected: "${unknownProduct}" (we don't sell this)`);
+
+        try {
+          const trackedLink = await generateClickLink(psid, 'https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob', {
+            reason: 'unknown_product',
+            unknownProduct,
+            campaignId: convo?.campaignId,
+            userName: convo?.userName
+          });
+
+          console.log(`🎯 ===== END FLOW MANAGER (unknown product) =====\n`);
+          return {
+            type: "text",
+            text: `No manejamos ${unknownProduct}, pero te comparto nuestra tienda donde puedes ver todo lo que ofrecemos: ${trackedLink}`,
+            handledBy: "flow:unknown_product",
+            purchaseIntent: 'low'
+          };
+        } catch (err) {
+          console.error(`⚠️ Error generating tracked link for unknown product:`, err.message);
+          console.log(`🎯 ===== END FLOW MANAGER (unknown product, no link) =====\n`);
+          return {
+            type: "text",
+            text: `No manejamos ${unknownProduct}. Manejamos malla sombra, borde separador, ground cover y monofilamento. ¿Te interesa alguno?`,
+            handledBy: "flow:unknown_product",
+            purchaseIntent: 'low'
+          };
+        }
+      }
+    }
   }
   // ===== END PRODUCT SWITCH CHECK =====
 
@@ -329,7 +571,7 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
 
   // ===== STEP 2: DETECT APPROPRIATE FLOW =====
   // Note: currentFlow already declared in step 0.5
-  const detectedFlow = detectFlow(classification, convo, userMessage);
+  const detectedFlow = detectFlow(classification, convo, userMessage, sourceContext);
 
   console.log(`📍 Current flow: ${currentFlow}, Detected: ${detectedFlow}`);
 

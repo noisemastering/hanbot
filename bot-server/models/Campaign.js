@@ -146,6 +146,9 @@ const campaignSchema = new mongoose.Schema(
       uploadedAt: { type: Date }
     },
 
+    // ====== FLOW ROUTING ======
+    flowRef: { type: String, default: null }, // e.g. "mallaFlow", "rolloFlow", "groundcoverFlow"
+
     // ====== FACEBOOK/META INTEGRATION ======
     fbCampaignId: { type: String, unique: true, sparse: true },
     fbAdAccountId: { type: String },

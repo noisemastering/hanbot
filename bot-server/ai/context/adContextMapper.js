@@ -3,9 +3,10 @@
 // Uses the Ad model to look up full ad details
 
 const Ad = require("../../models/Ad");
-const AdSet = require("../../models/AdSet");
 const Campaign = require("../../models/Campaign");
+const ProductFamily = require("../../models/ProductFamily");
 const { getProductInterest } = require("../utils/productEnricher");
+const { resolveByAdId } = require("../../utils/campaignResolver");
 
 /**
  * Product type mapping - consistent naming
@@ -40,49 +41,60 @@ async function enrichAdContext(source) {
       return source;
     }
 
-    // Get product from ad
-    const productDoc = ad.mainProductId || ad.productIds?.[0];
-    if (productDoc) {
-      source.ad.product = await getProductInterest(productDoc);
-      source.ad.productName = productDoc.name;
+    // Use campaign resolver cascade (Ad > AdSet > Campaign) for product and flowRef
+    const resolvedSettings = await resolveByAdId(source.ad.id);
+
+    if (resolvedSettings) {
+      // Get product from cascaded hierarchy
+      const productId = resolvedSettings.mainProductId || resolvedSettings.productIds?.[0];
+      if (productId) {
+        const productDoc = await ProductFamily.findById(productId).lean();
+        if (productDoc) {
+          source.ad.product = await getProductInterest(productDoc);
+          source.ad.productName = productDoc.name;
+        }
+      }
+
+      // Store cascaded flowRef
+      if (resolvedSettings.flowRef) {
+        source.ad.flowRef = resolvedSettings.flowRef;
+      }
+
+      // Load campaign data from resolved settings
+      if (resolvedSettings.campaignId) {
+        const campaign = await Campaign.findById(resolvedSettings.campaignId).lean();
+        if (campaign) {
+          source.ad.campaign = campaign;
+          source.ad.campaignId = campaign._id;
+          source.ad.campaignGoal = campaign.conversationGoal;
+          source.ad.campaignAudience = campaign.audience;
+          source.ad.campaignCatalog = campaign.catalog?.url || null;
+          console.log(`📣 Campaign loaded from resolver: ${campaign.name} (goal: ${campaign.conversationGoal})`);
+        }
+      }
+    } else {
+      // Fallback: get product directly from ad if resolver fails
+      const productDoc = ad.mainProductId || ad.productIds?.[0];
+      if (productDoc) {
+        source.ad.product = await getProductInterest(productDoc);
+        source.ad.productName = productDoc.name;
+      }
     }
 
-    // Get ad angle
+    // Get ad-specific details (angle, intent, creative) — these are ad-level only
     if (ad.adAngle) {
       source.ad.angle = ad.adAngle;
     }
 
-    // Get ad intent details
     if (ad.adIntent) {
       source.ad.audienceType = ad.adIntent.audienceType || null;
       source.ad.primaryUse = ad.adIntent.primaryUse || null;
       source.ad.offerHook = ad.adIntent.offerHook || null;
     }
 
-    // Get creative info for context
     if (ad.creative) {
       source.ad.headline = ad.creative.headline || null;
       source.ad.callToAction = ad.creative.callToAction || null;
-    }
-
-    // Load campaign via AdSet chain (Ad → AdSet → Campaign)
-    if (ad.adSetId) {
-      try {
-        const adSet = await AdSet.findById(ad.adSetId).lean();
-        if (adSet?.campaignId) {
-          const campaign = await Campaign.findById(adSet.campaignId).lean();
-          if (campaign) {
-            source.ad.campaign = campaign;
-            source.ad.campaignId = campaign._id;
-            source.ad.campaignGoal = campaign.conversationGoal;
-            source.ad.campaignAudience = campaign.audience;
-            source.ad.campaignCatalog = campaign.catalog?.url || null;
-            console.log(`📣 Campaign loaded from ad chain: ${campaign.name} (goal: ${campaign.conversationGoal})`);
-          }
-        }
-      } catch (err) {
-        console.error(`⚠️ Error loading campaign from ad chain:`, err.message);
-      }
     }
 
     console.log(`📦 Ad context enriched:`, {

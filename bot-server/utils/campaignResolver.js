@@ -165,7 +165,7 @@ function mergeSettings(campaign, adSet, ad) {
     followupPrompts: campaign.followupPrompts || [],
 
     // Flow
-    flowRef: null,
+    flowRef: campaign.flowRef || null,
 
     // Catalog
     catalog: campaign.catalog?.url ? {

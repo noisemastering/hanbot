@@ -247,7 +247,8 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
   await updateConversation(psid, {
     handoffRequested: true,
     handoffReason: `Borde quote: ${length}m${quantity ? ` x${quantity}` : ''}`,
-    handoffTimestamp: new Date()
+    handoffTimestamp: new Date(),
+    state: "needs_human"
   });
 
   return {
