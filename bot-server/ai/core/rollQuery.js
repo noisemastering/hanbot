@@ -432,7 +432,9 @@ async function handleRollQuery(userMessage, psid, convo) {
       await updateConversation(psid, {
         lastIntent: "roll_quote_ready",
         handoffRequested: true,
-        handoffReason: `Roll quote: ${quantity}x ${width}m x 100m @ ${percentage}%${color ? ' ' + color : ''}`
+        handoffReason: `Roll quote: ${quantity}x ${width}m x 100m @ ${percentage}%${color ? ' ' + color : ''}`,
+        handoffTimestamp: new Date(),
+        state: "needs_human"
       });
 
       return { type: "text", text: response };

@@ -23,7 +23,8 @@ async function handleStoreLinkRequest({ psid, convo }) {
       lastIntent: "rollo_ml_inquiry",
       handoffRequested: true,
       handoffReason: "Rollo inquiry asking about ML - needs quote",
-      handoffTimestamp: new Date()
+      handoffTimestamp: new Date(),
+      state: "needs_human"
     });
 
     const response = await generateBotResponse("store_link_rollo", {

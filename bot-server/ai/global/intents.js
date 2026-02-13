@@ -761,7 +761,8 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         lastIntent: "rollo_ml_inquiry",
         handoffRequested: true,
         handoffReason: "Rollo inquiry asking about ML - needs quote",
-        handoffTimestamp: new Date()
+        handoffTimestamp: new Date(),
+        state: "needs_human"
       });
 
       return {

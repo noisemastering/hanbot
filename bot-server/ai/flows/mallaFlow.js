@@ -1213,7 +1213,8 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       await updateConversation(psid, {
         handoffRequested: true,
         handoffReason: `Malla ${width}x${height}m - no link available`,
-        handoffTimestamp: new Date()
+        handoffTimestamp: new Date(),
+        state: "needs_human"
       });
 
       sendHandoffNotification(psid, `Malla ${width}x${height}m - producto sin link`).catch(err => {
@@ -1407,7 +1408,8 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     await updateConversation(psid, {
       handoffRequested: true,
       handoffReason: `Malla quote request: ${width}x${height}m - no alternatives found`,
-      handoffTimestamp: new Date()
+      handoffTimestamp: new Date(),
+      state: "needs_human"
     });
 
     sendHandoffNotification(psid, `Malla ${width}x${height}m - sin alternativas disponibles`).catch(err => {

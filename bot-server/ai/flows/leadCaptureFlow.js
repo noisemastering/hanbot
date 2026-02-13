@@ -336,7 +336,8 @@ async function handleContact(psid, msg, leadData, campaign) {
     leadData: completeLead,
     handoffRequested: true,
     handoffReason: `Lead capture complete: ${leadData.name} - ${leadData.products}`,
-    handoffTimestamp: new Date()
+    handoffTimestamp: new Date(),
+    state: "needs_human"
   });
 
   // Build summary for user

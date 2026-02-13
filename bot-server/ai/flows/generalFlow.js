@@ -328,7 +328,8 @@ async function handleHumanRequest(convo, psid) {
     lastIntent: "human_request",
     handoffRequested: true,
     handoffReason: "User requested human agent",
-    handoffTimestamp: new Date()
+    handoffTimestamp: new Date(),
+    state: "needs_human"
   });
 
   // Include video if they were talking about malla sombra
