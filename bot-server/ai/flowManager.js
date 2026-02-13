@@ -494,39 +494,31 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
   // ===== END PENDING FLOW CHANGE CHECK =====
 
   // ===== STEP 0.5: CHECK FOR EXPLICIT PRODUCT SWITCH =====
-  // If user is in a product flow and mentions a different product, ask for confirmation
+  // If user is in a product flow and explicitly asks for a different product we sell, switch directly
   const currentFlow = convo?.currentFlow || 'default';
   if (currentFlow !== 'default' && !convo?.pendingFlowChange) {
     const switchToFlow = detectExplicitProductSwitch(userMessage, currentFlow, classification);
 
     if (switchToFlow) {
-      console.log(`🔄 Product switch detected: ${currentFlow} → ${switchToFlow}`);
+      console.log(`🔄 Product switch: ${currentFlow} → ${switchToFlow} (customer explicitly asked)`);
 
-      // Store pending flow change
+      // Switch directly — no confirmation needed when customer asks for a specific product
       await updateConversation(psid, {
-        pendingFlowChange: switchToFlow,
-        pendingFlowChangeReason: 'product_switch'
+        currentFlow: switchToFlow,
+        productInterest: switchToFlow,
+        pendingFlowChange: null,
+        pendingFlowChangeReason: null,
+        flowTransferredFrom: currentFlow,
+        flowTransferredAt: new Date(),
+        // Reset product specs for the new flow
+        productSpecs: { productType: switchToFlow, updatedAt: new Date() }
       });
+      convo.currentFlow = switchToFlow;
+      convo.productInterest = switchToFlow;
+      convo.productSpecs = { productType: switchToFlow };
 
-      // Generate confirmation message
-      const productNames = {
-        'rollo': 'rollo de malla sombra',
-        'malla_sombra': 'malla sombra confeccionada',
-        'borde_separador': 'borde separador para jardín',
-        'groundcover': 'ground cover antimaleza',
-        'monofilamento': 'malla monofilamento'
-      };
-
-      const newProductName = productNames[switchToFlow] || switchToFlow;
-      const currentProductName = productNames[currentFlow] || currentFlow;
-
-      console.log(`🎯 ===== END FLOW MANAGER (product switch confirmation) =====\n`);
-      return {
-        type: "text",
-        text: `¿Quieres que te cotice un ${newProductName} en lugar de ${currentProductName}?`,
-        handledBy: "flow:product_switch_confirmation",
-        purchaseIntent: 'medium'
-      };
+      // Let the message fall through to be handled by the new flow
+      // (the flow detection in step 2 will pick up the new currentFlow)
     }
 
     // Check for unknown products (things we don't sell)

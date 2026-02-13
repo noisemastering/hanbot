@@ -25,6 +25,7 @@ const STAGES = {
   AWAITING_TYPE: "awaiting_type",  // Ask what type of rollo (malla sombra, groundcover, monofilamento)
   AWAITING_WIDTH: "awaiting_width",
   AWAITING_PERCENTAGE: "awaiting_percentage",
+  AWAITING_QUANTITY: "awaiting_quantity",
   AWAITING_ZIP: "awaiting_zip",
   COMPLETE: "complete"
 };
@@ -66,7 +67,7 @@ function detectRolloType(msg, convo = null) {
 
   // Malla sombra indicators
   if (/\b(malla\s*sombra|raschel|sombra|sombreado|porcentaje)\b/i.test(m) ||
-      /\b(35|50|70|80|90)\s*(%|porciento|por\s*ciento)/i.test(m)) {
+      /\b\d{2,3}\s*(%|porciento|por\s*ciento)/i.test(m)) {
     return ROLLO_TYPES.MALLA_SOMBRA;
   }
 
@@ -123,6 +124,7 @@ async function getAvailableWidths() {
  * Valid percentages
  */
 const VALID_PERCENTAGES = [35, 50, 70, 80, 90];
+
 
 /**
  * Normalize width to closest available
@@ -244,10 +246,12 @@ function getFlowState(convo) {
 
 /**
  * Determine what's missing and what stage we should be in
- * SIMPLIFIED: Skip type/width/percentage questions, just collect zip and handoff
  */
 function determineStage(state) {
-  // Only need zip code before handoff
+  if (!state.rolloType) return STAGES.AWAITING_TYPE;
+  if (!state.width) return STAGES.AWAITING_WIDTH;
+  if (state.rolloType === ROLLO_TYPES.MALLA_SOMBRA && !state.percentage) return STAGES.AWAITING_PERCENTAGE;
+  if (!state.quantity) return STAGES.AWAITING_QUANTITY;
   if (!state.zipCode) return STAGES.AWAITING_ZIP;
   return STAGES.COMPLETE;
 }
@@ -340,7 +344,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     const numericMatch = userMessage.match(/\b(\d{2,3})\s*(%|porciento|por\s*ciento)/i);
     if (numericMatch) {
       const pct = parseInt(numericMatch[1]);
-      if (VALID_PERCENTAGES.includes(pct)) {
+      if (pct >= 10 && pct <= 100) {
         console.log(`📦 Rollo flow - Parsed percentage from message: ${pct}%`);
         state.percentage = pct;
       }
@@ -364,32 +368,39 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   if (!state.percentage && entities.percentage) {
     state.percentage = entities.percentage;
   }
+
   // Parse quantity from user message
   if (!state.quantity && userMessage) {
-    const msg = userMessage.toLowerCase();
+    // Strip dimensions, percentages, and width measurements to avoid false positives
+    // e.g. "Precio de 4 x 100 al 30%" → "Precio de   al "
+    const qtyMsg = userMessage.toLowerCase()
+      .replace(/\b\d+(?:[.,]\d+)?\s*[xX×*]\s*\d+\b/g, '')       // Remove NxN dimensions
+      .replace(/\b\d{2,3}\s*(%|porciento|por\s*ciento)\b/gi, '') // Remove percentages
+      .replace(/\b(?:de\s+)?\d+(?:[.,]\d+)?\s*(?:m(?:ts?|etros?)?)\b/gi, ''); // Remove "de 4 mts"
+
     // "un par" = 2
-    if (/\b(un\s*par|par\s+de)\b/i.test(msg)) {
+    if (/\b(un\s*par|par\s+de)\b/i.test(qtyMsg)) {
       console.log(`📦 Rollo flow - Parsed quantity "un par" → 2`);
       state.quantity = 2;
     }
     // "uno", "una", "1", "ocuparía uno", "necesito uno"
-    else if (/\b(un[oa]?|1)\s*(rollo|pza|pieza)?\b/i.test(msg) || /\bocupar[ií]a\s+un[oa]?\b/i.test(msg)) {
+    else if (/\b(un[oa]?|1)\s*(rollo|pza|pieza)?\b/i.test(qtyMsg) || /\bocupar[ií]a\s+un[oa]?\b/i.test(qtyMsg)) {
       console.log(`📦 Rollo flow - Parsed quantity "uno" → 1`);
       state.quantity = 1;
     }
     // "dos", "2"
-    else if (/\b(dos|2)\s*(rollos?|pzas?|piezas?)?\b/i.test(msg)) {
+    else if (/\b(dos|2)\s*(rollos?|pzas?|piezas?)?\b/i.test(qtyMsg)) {
       console.log(`📦 Rollo flow - Parsed quantity "dos" → 2`);
       state.quantity = 2;
     }
     // "tres", "3"
-    else if (/\b(tres|3)\s*(rollos?|pzas?|piezas?)?\b/i.test(msg)) {
+    else if (/\b(tres|3)\s*(rollos?|pzas?|piezas?)?\b/i.test(qtyMsg)) {
       console.log(`📦 Rollo flow - Parsed quantity "tres" → 3`);
       state.quantity = 3;
     }
-    // Generic number
+    // Generic number only if explicitly followed by "rollos/pzas/piezas"
     else {
-      const qtyMatch = msg.match(/\b(\d+)\s*(rollos?|pzas?|piezas?)?\b/i);
+      const qtyMatch = qtyMsg.match(/\b(\d+)\s+(rollos?|pzas?|piezas?)\b/i);
       if (qtyMatch) {
         const qty = parseInt(qtyMatch[1]);
         if (qty > 0 && qty <= 100) {
@@ -436,6 +447,10 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
     case STAGES.AWAITING_PERCENTAGE:
       response = handleAwaitingPercentage(intent, state, sourceContext);
+      break;
+
+    case STAGES.AWAITING_QUANTITY:
+      response = handleAwaitingQuantity(intent, state, sourceContext);
       break;
 
     case STAGES.AWAITING_ZIP:
@@ -539,40 +554,63 @@ function handleAwaitingPercentage(intent, state, sourceContext) {
 }
 
 /**
- * Handle awaiting zip code stage - just ask for zip to calculate shipping
+ * Handle awaiting quantity stage - ask how many rolls
  */
-function handleAwaitingZip(intent, state, sourceContext) {
+function handleAwaitingQuantity(intent, state, sourceContext) {
+  let specsText = `rollo de ${state.width}m x 100m`;
+  if (state.percentage) {
+    specsText += ` al ${state.percentage}%`;
+  }
   return {
     type: "text",
-    text: `¡Claro! Para cotizarte el rollo de malla sombra y calcular el envío, ¿me compartes tu código postal o ciudad?`
+    text: `Perfecto, ${specsText}. ¿Cuántos rollos necesitas?`
   };
 }
 
 /**
- * Handle complete - we have zip code, hand off to human
- * SIMPLIFIED: No more width/percentage collection, just handoff
+ * Handle awaiting zip code stage - ask for zip to calculate shipping
+ */
+function handleAwaitingZip(intent, state, sourceContext) {
+  let specsText = `${state.quantity} rollo${state.quantity > 1 ? 's' : ''} de ${state.width}m x 100m`;
+  if (state.percentage) {
+    specsText += ` al ${state.percentage}%`;
+  }
+  return {
+    type: "text",
+    text: `${specsText}. Para calcular el envío, ¿me compartes tu código postal o ciudad?`
+  };
+}
+
+/**
+ * Handle complete - we have all specs, hand off to human
  */
 async function handleComplete(intent, state, sourceContext, psid, convo) {
   const locationText = state.zipInfo
     ? `${state.zipInfo.city}, ${state.zipInfo.state}`
     : (state.zipCode || 'ubicación no especificada');
 
+  // Build specs summary for handoff
+  let specsText = `${state.quantity} rollo${state.quantity > 1 ? 's' : ''} de ${state.width}m x 100m`;
+  if (state.percentage) {
+    specsText += ` al ${state.percentage}%`;
+  }
+
   await updateConversation(psid, {
     handoffRequested: true,
-    handoffReason: `Rollo inquiry - location: ${locationText}`,
+    handoffReason: `Rollo: ${specsText} - ${locationText}`,
     handoffTimestamp: new Date(),
     state: "needs_human"
   });
 
   // Send push notification
   const { sendHandoffNotification } = require("../services/pushNotifications");
-  sendHandoffNotification(psid, convo, `Cliente pregunta por rollo - ${locationText}`).catch(err => {
+  sendHandoffNotification(psid, convo, `Rollo: ${specsText} - ${locationText}`).catch(err => {
     console.error("❌ Failed to send push notification:", err);
   });
 
   let responseText = isBusinessHours()
-    ? `¡Perfecto! Un especialista te contactará pronto para cotizarte el rollo de malla sombra.`
-    : `¡Perfecto! Un especialista te contactará el siguiente día hábil para cotizarte el rollo de malla sombra.`;
+    ? `¡Perfecto! Un especialista te contactará pronto para cotizarte ${specsText}.`
+    : `¡Perfecto! Un especialista te contactará el siguiente día hábil para cotizarte ${specsText}.`;
   if (state.zipInfo) {
     responseText += `\n\n📍 Envío a ${state.zipInfo.city}, ${state.zipInfo.state}`;
   }

@@ -980,11 +980,16 @@ async function generateReply(userMessage, psid, referral = null) {
   // Log source context for analytics
   logSourceContext(psid, sourceContext, userMessage);
 
-  // Store adFlowRef on conversation when resolved from ad hierarchy
+  // Store ad context on conversation when resolved from ad hierarchy
   if (sourceContext?.ad?.flowRef && !convo.adFlowRef) {
     await updateConversation(psid, { adFlowRef: sourceContext.ad.flowRef });
     convo.adFlowRef = sourceContext.ad.flowRef;
     console.log(`🎯 Ad flowRef stored on conversation: ${sourceContext.ad.flowRef}`);
+  }
+  if (sourceContext?.ad?.productIds?.length && !convo.adProductIds?.length) {
+    await updateConversation(psid, { adProductIds: sourceContext.ad.productIds });
+    convo.adProductIds = sourceContext.ad.productIds;
+    console.log(`🎯 Ad productIds stored on conversation: ${sourceContext.ad.productIds}`);
   }
   // ====== END LAYER 0 ======
 

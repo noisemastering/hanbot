@@ -60,6 +60,11 @@ async function enrichAdContext(source) {
         source.ad.flowRef = resolvedSettings.flowRef;
       }
 
+      // Store cascaded productIds so flows can filter by ad-specific items
+      if (resolvedSettings.productIds?.length) {
+        source.ad.productIds = resolvedSettings.productIds;
+      }
+
       // Load campaign data from resolved settings
       if (resolvedSettings.campaignId) {
         const campaign = await Campaign.findById(resolvedSettings.campaignId).lean();
