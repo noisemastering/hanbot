@@ -1186,7 +1186,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     }
 
     // Check for wholesale qualification
-    if (quantity && product.wholesaleEnabled && product.wholesaleMinQty) {
+    if (quantity && product.wholesaleMinQty) {
       if (quantity >= product.wholesaleMinQty) {
         // Wholesale handoff
         const { handleWholesaleRequest } = require("../utils/wholesaleHandler");
@@ -1240,7 +1240,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
 
     // Add wholesale mention if product is eligible
     let wholesaleMention = "";
-    if (product.wholesaleEnabled && product.wholesaleMinQty && !quantity) {
+    if (product.wholesaleMinQty && !quantity) {
       wholesaleMention = `\n\nA partir de ${product.wholesaleMinQty} piezas manejamos precio de mayoreo.`;
     }
 

@@ -23,9 +23,8 @@ async function checkWholesaleEligibility(product) {
   }
 
   return {
-    eligible: prod.wholesaleEnabled === true,
+    eligible: !!prod.wholesaleMinQty,
     minQty: prod.wholesaleMinQty || null,
-    wholesalePrice: prod.wholesalePrice || null,
     productName: prod.name,
     retailPrice: prod.price
   };
@@ -38,7 +37,7 @@ async function checkWholesaleEligibility(product) {
  * @returns {object} { qualifies, minQty, wholesalePrice }
  */
 function checkWholesaleQuantity(quantity, product) {
-  if (!product.wholesaleEnabled || !product.wholesaleMinQty) {
+  if (!product.wholesaleMinQty) {
     return { qualifies: false };
   }
 
@@ -47,7 +46,6 @@ function checkWholesaleQuantity(quantity, product) {
   return {
     qualifies,
     minQty: product.wholesaleMinQty,
-    wholesalePrice: product.wholesalePrice,
     quantity,
     productName: product.name
   };
@@ -104,16 +102,7 @@ async function handleWholesaleRequest(product, quantity, psid, convo) {
   }
 
   // Build response message
-  let message = `¡Excelente! Para ${quantity} ${quantity > 1 ? 'piezas' : 'pieza'} de ${product.name} calificas para precio de mayoreo.`;
-
-  if (product.wholesalePrice) {
-    message += `\n\nPrecio mayoreo: $${product.wholesalePrice} c/u`;
-    if (product.price) {
-      message += ` (precio normal: $${product.price})`;
-    }
-  }
-
-  message += `\n\nTe comunico con un especialista para finalizar tu pedido. En un momento te atienden.`;
+  const message = `¡Excelente! Para ${quantity} ${quantity > 1 ? 'piezas' : 'pieza'} de ${product.name} te paso con un especialista para darte precio de mayoreo. En un momento te atienden.`;
 
   // Update conversation for handoff
   await updateConversation(psid, {
@@ -125,14 +114,12 @@ async function handleWholesaleRequest(product, quantity, psid, convo) {
       productId: product._id,
       productName: product.name,
       quantity,
-      wholesalePrice: product.wholesalePrice,
       retailPrice: product.price
     }
   });
 
   // Send notification
-  const notificationMsg = `Pedido mayoreo: ${quantity}x ${product.name}` +
-    (product.wholesalePrice ? ` @ $${product.wholesalePrice}` : '');
+  const notificationMsg = `Pedido mayoreo: ${quantity}x ${product.name}`;
   await sendHandoffNotification(psid, convo, notificationMsg).catch(err => {
     console.error("❌ Failed to send wholesale notification:", err);
   });
@@ -153,7 +140,7 @@ async function handleWholesaleRequest(product, quantity, psid, convo) {
  * @returns {string|null} Wholesale mention text or null
  */
 function getWholesaleMention(product) {
-  if (!product.wholesaleEnabled || !product.wholesaleMinQty) {
+  if (!product.wholesaleMinQty) {
     return null;
   }
 
