@@ -89,7 +89,23 @@ function detectFlow(classification, convo, userMessage) {
     return convo.currentFlow;
   }
 
-  // SECOND: Check product interest from conversation (mid-flow state)
+  // SECOND: Check classification product (explicit product detected in message)
+  // This takes priority over ad-set productInterest because the user's words matter more
+  if (classification.product && classification.product !== PRODUCTS.UNKNOWN) {
+    const flowMap = {
+      [PRODUCTS.MALLA_SOMBRA]: 'malla_sombra',
+      [PRODUCTS.ROLLO]: 'rollo',
+      [PRODUCTS.BORDE_SEPARADOR]: 'borde_separador',
+      [PRODUCTS.GROUNDCOVER]: 'groundcover',
+      [PRODUCTS.MONOFILAMENTO]: 'monofilamento'
+    };
+
+    if (flowMap[classification.product]) {
+      return flowMap[classification.product];
+    }
+  }
+
+  // THIRD: Check product interest from conversation (from ads, previous context)
   if (convo?.productInterest) {
     const pi = convo.productInterest.toLowerCase();
 
@@ -109,21 +125,6 @@ function detectFlow(classification, convo, userMessage) {
 
     if (interestMap[pi]) {
       return interestMap[pi];
-    }
-  }
-
-  // THIRD: Check classification product (new product detected in message)
-  if (classification.product && classification.product !== PRODUCTS.UNKNOWN) {
-    const flowMap = {
-      [PRODUCTS.MALLA_SOMBRA]: 'malla_sombra',
-      [PRODUCTS.ROLLO]: 'rollo',
-      [PRODUCTS.BORDE_SEPARADOR]: 'borde_separador',
-      [PRODUCTS.GROUNDCOVER]: 'groundcover',
-      [PRODUCTS.MONOFILAMENTO]: 'monofilamento'
-    };
-
-    if (flowMap[classification.product]) {
-      return flowMap[classification.product];
     }
   }
 
