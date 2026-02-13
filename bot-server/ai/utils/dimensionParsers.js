@@ -78,7 +78,26 @@ function parseConfeccionadaDimensions(str) {
   const labelFirstAnchoLargoPattern = /ancho\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*\.?\s*(?:[.,;]?\s*)?(?:x|×|por|[yi,])?\s*(?:d(?:e)?\s*)?largo\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?/i;
   const labelFirstLargoAnchoPattern = /largo\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*\.?\s*(?:[.,;]?\s*)?(?:x|×|por|[yi,])?\s*(?:d(?:e)?\s*)?ancho\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?/i;
 
-  let m = s.match(labelFirstAnchoLargoPattern);
+  // Pattern 1d: "N ancho .. N largo" (number BEFORE label)
+  // Example: "6mts ancho.. 9mts largo", "6 mts ancho, 9 mts largo"
+  const numberFirstAnchoLargoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*ancho\s*[.,;\s]+\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*largo/i;
+  const numberFirstLargoAnchoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*largo\s*[.,;\s]+\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*ancho/i;
+
+  let m = s.match(numberFirstAnchoLargoPattern);
+  if (m) {
+    const width = parseFloat(m[1]);
+    const height = parseFloat(m[2]);
+    return buildResult(width, height, isFeet, `${m[1]} x ${m[2]}`);
+  }
+
+  m = s.match(numberFirstLargoAnchoPattern);
+  if (m) {
+    const height = parseFloat(m[1]);
+    const width = parseFloat(m[2]);
+    return buildResult(width, height, isFeet, `${m[2]} x ${m[1]}`);
+  }
+
+  m = s.match(labelFirstAnchoLargoPattern);
   if (m) {
     const width = parseFloat(m[1]);
     const height = parseFloat(m[2]);
