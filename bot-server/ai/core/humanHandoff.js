@@ -74,6 +74,9 @@ async function handleHumanHandoff(userMessage, psid, convo, reason = "explicit")
     ],
     auto_escalation: [
       `Disculpa que no haya podido ayudarte como esperabas. Déjame conectarte con un especialista.\n\nEscríbenos por WhatsApp:\n\n💬 ${whatsappLink}\n\n📞 ${businessInfo.phones.join(" / ")}\n🕓 ${businessInfo.hours}\n\n${timingSuffix}`
+    ],
+    purchase_help: [
+      `¡No te preocupes! Te comunico con un especialista que te puede ayudar a realizar tu compra.\n\n${timingSuffix}`
     ]
   };
 

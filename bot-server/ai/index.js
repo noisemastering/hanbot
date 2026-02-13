@@ -414,6 +414,12 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
       return await handleHumanHandoff(userMessage, psid, convo, "auto_escalation");
     }
 
+    // 🛒 PURCHASE HELP: Customer can't buy on ML - hand off immediately (hot lead!)
+    if (/no\s+s[eé]\s+(c[oó]mo\s+)?comprar|no\s+puedo\s+comprar|no\s+le\s+s[eé]\s+a\s+mercado|no\s+s[eé]\s+usar\s+mercado|c[oó]mo\s+(le\s+)?hago\s+para\s+comprar|no\s+(le\s+)?entiendo\s+(a\s+)?mercado|ay[uú]d(a|e)me\s+(a\s+)?comprar/i.test(cleanMsg)) {
+      console.log("🛒 Customer needs help buying - hot lead handoff");
+      return await handleHumanHandoff(userMessage, psid, convo, "purchase_help");
+    }
+
     // 👍 ACKNOWLEDGMENT: Handle simple acknowledgments and emojis (before AI calls)
     const acknowledgmentResponse = await handleAcknowledgment(cleanMsg, psid, convo);
     if (acknowledgmentResponse) return acknowledgmentResponse;
