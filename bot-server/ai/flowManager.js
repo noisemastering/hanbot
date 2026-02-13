@@ -101,6 +101,19 @@ function detectExplicitProductSwitch(userMessage, currentFlow, classification) {
     }
   }
 
+  // Check for roll dimensions (NxN where one side is 100)
+  if (currentFlow !== 'rollo') {
+    const rollMatch = msg.match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)/);
+    if (rollMatch) {
+      const d1 = parseFloat(rollMatch[1]);
+      const d2 = parseFloat(rollMatch[2]);
+      if (d1 === 100 || d2 === 100) {
+        console.log(`🔍 Roll dimension detected: ${d1}x${d2} (current: ${currentFlow})`);
+        return 'rollo';
+      }
+    }
+  }
+
   // Check classification if it detected a different product
   if (classification?.product && classification.product !== PRODUCTS.UNKNOWN) {
     const classifiedFlow = classificationFlowMap[classification.product];
@@ -185,6 +198,15 @@ function detectFlow(classification, convo, userMessage, sourceContext) {
   if (/\brollo\b/i.test(msg) || /\b100\s*m(etros?)?\b/i.test(msg)) {
     return 'rollo';
   }
+  // Roll dimension: NxN where one side is 100 (standard roll length)
+  const rollDimMatch = msg.match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)/);
+  if (rollDimMatch) {
+    const d1 = parseFloat(rollDimMatch[1]);
+    const d2 = parseFloat(rollDimMatch[2]);
+    if (d1 === 100 || d2 === 100) {
+      return 'rollo';
+    }
+  }
   if (/\bborde\b/i.test(msg) || /\bcinta\s*pl[aá]stica\b/i.test(msg)) {
     return 'borde_separador';
   }
@@ -197,7 +219,11 @@ function detectFlow(classification, convo, userMessage, sourceContext) {
 
   // 7. DIMENSION INFERENCE
   const dimensions = parseDimensions(userMessage);
-  if (dimensions && !dimensions.isRoll) {
+  if (dimensions) {
+    // Check if it looks like a roll (one side is 100)
+    if (dimensions.width === 100 || dimensions.height === 100) {
+      return 'rollo';
+    }
     return 'malla_sombra';
   }
 
