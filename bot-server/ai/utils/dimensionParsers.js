@@ -73,7 +73,26 @@ function parseConfeccionadaDimensions(str) {
   // Example: "8 d ancho y d largo 610" -> width=8, height=6.10
   const anchoYLargoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*(?:d(?:e)?\s*)?ancho\s*(?:x|×|por|y)\s*(?:d(?:e)?\s*)?largo\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?/i;
 
-  let m = s.match(anchoYLargoPattern);
+  // Pattern 1c: "ancho N ... largo N" (label BEFORE number)
+  // Example: "ancho 6mts.. largo 9mts", "ancho 3m largo 5m"
+  const labelFirstAnchoLargoPattern = /ancho\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*\.?\s*(?:[.,;]?\s*)?(?:x|×|por|[yi,])?\s*(?:d(?:e)?\s*)?largo\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?/i;
+  const labelFirstLargoAnchoPattern = /largo\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*\.?\s*(?:[.,;]?\s*)?(?:x|×|por|[yi,])?\s*(?:d(?:e)?\s*)?ancho\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?/i;
+
+  let m = s.match(labelFirstAnchoLargoPattern);
+  if (m) {
+    const width = parseFloat(m[1]);
+    const height = parseFloat(m[2]);
+    return buildResult(width, height, isFeet, `${m[1]} x ${m[2]}`);
+  }
+
+  m = s.match(labelFirstLargoAnchoPattern);
+  if (m) {
+    const height = parseFloat(m[1]);
+    const width = parseFloat(m[2]);
+    return buildResult(width, height, isFeet, `${m[2]} x ${m[1]}`);
+  }
+
+  m = s.match(anchoYLargoPattern);
   if (m) {
     // "ancho ... y ... largo N" format - first number is width, second is height
     const width = parseFloat(m[1]);
