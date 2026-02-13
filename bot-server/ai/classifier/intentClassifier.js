@@ -606,6 +606,12 @@ function quickClassify(message, dbIntents = null) {
   const isPayOnDelivery = /\b(pago|pagar)\b.*\b(entreg|llega|recib)/i.test(msg) ||
                           /\b(al\s*entregar|contra\s*entrega|cuando\s*llegue)\b/i.test(msg);
 
+  // If it's a pay-on-delivery question, skip multi-question detection entirely
+  // "pago contra entrega" matches both payment_query and shipping_query but it's a single intent
+  if (isPayOnDelivery) {
+    return { intent: INTENTS.PAY_ON_DELIVERY_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
+  }
+
   // Find all matching question types
   const detectedIntents = [];
   for (const { intent, pattern } of questionIndicators) {
