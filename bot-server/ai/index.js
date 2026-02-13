@@ -1003,6 +1003,23 @@ async function generateReply(userMessage, psid, referral = null) {
     campaign = sourceContext.ad.campaign;
     console.log(`📣 Campaign loaded from ad chain: ${campaign.name} (goal: ${campaign.conversationGoal})`);
   }
+
+  // If still no campaign but we have an adId, resolve via campaign resolver
+  if (!campaign && convo?.adId) {
+    try {
+      const { resolveByAdId } = require("../utils/campaignResolver");
+      const resolved = await resolveByAdId(convo.adId);
+      if (resolved?.campaignId) {
+        campaign = await Campaign.findById(resolved.campaignId);
+        if (campaign) {
+          campaignContext = campaign.toAIContext?.() || null;
+          console.log(`📣 Campaign resolved from adId: ${campaign.name} (goal: ${campaign.conversationGoal})`);
+        }
+      }
+    } catch (err) {
+      console.error(`⚠️ Error resolving campaign from adId:`, err.message);
+    }
+  }
   // ====== END CAMPAIGN CONTEXT ======
 
   // ====== PRODUCT IDENTIFICATION & POI LOCK ======
