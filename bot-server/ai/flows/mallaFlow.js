@@ -213,8 +213,9 @@ async function findMatchingProducts(width, height, percentage = null, color = nu
       size: sizeRegex
     };
 
-    // Add percentage filter if specified (check in name or attributes)
-    if (percentage) {
+    // Add percentage filter if specified AND valid
+    // If percentage is not in VALID_PERCENTAGES, skip filter (will correct in response)
+    if (percentage && VALID_PERCENTAGES.includes(Number(percentage))) {
       query.name = new RegExp(`${percentage}\\s*%`, 'i');
     }
 
@@ -1153,6 +1154,9 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
   }
   // ====== END POI TREE CHECK ======
 
+  // Check if customer asked for a non-standard percentage
+  const requestedInvalidPercentage = percentage && !VALID_PERCENTAGES.includes(Number(percentage));
+
   // Try to find matching products (within POI tree if locked)
   const products = await findMatchingProducts(width, height, percentage, color, convo?.poiRootId);
 
@@ -1251,9 +1255,14 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       unknownCount: 0
     });
 
+    // If customer asked for non-standard percentage, note the correction
+    const percentageNote = requestedInvalidPercentage
+      ? `No manejamos ${percentage}%, pero tenemos esta opción:\n\n`
+      : '';
+
     return {
       type: "text",
-      text: `${quantityText}${salesPitch}\n` +
+      text: `${percentageNote}${quantityText}${salesPitch}\n` +
             `🛒 Cómprala aquí:\n${trackedLink}${wholesaleMention}`
     };
   }
