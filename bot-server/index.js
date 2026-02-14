@@ -1308,6 +1308,83 @@ app.post("/webhook", async (req, res) => {
             return;
           }
 
+          // 🎤 Check for audio/voice messages
+          const audioAttachment = attachments.find(att => att.type === "audio");
+
+          if (audioAttachment) {
+            const audioUrl = audioAttachment.payload.url;
+            console.log(`🎤 Audio message received from ${senderPsid}: ${audioUrl}`);
+
+            await registerUserIfNeeded(senderPsid);
+
+            (async () => {
+              try {
+                const { transcribeAudio } = require("./ai/core/audioTranscriber");
+                const { OpenAI } = require("openai");
+                const openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
+
+                const result = await transcribeAudio(audioUrl, openai);
+
+                if (!result.success || !result.transcription?.trim()) {
+                  await saveMessage(senderPsid, "[Audio no reconocido]", "user", messageId);
+                  await callSendAPI(senderPsid, { text: "No pude entender tu audio, ¿me lo podrías escribir por favor?" });
+                  await saveMessage(senderPsid, "No pude entender tu audio, ¿me lo podrías escribir por favor?", "bot");
+                  return;
+                }
+
+                const transcription = result.transcription.trim();
+                console.log(`🎤 Transcription: "${transcription}"`);
+
+                // Save transcribed text as user message
+                await saveMessage(senderPsid, transcription, "user", messageId);
+
+                // Process through normal pipeline (same as typed text)
+                const { debounceMessage } = require("./messageDebouncer");
+                debounceMessage(senderPsid, transcription, async (combinedMessage) => {
+                  try {
+                    const reply = await generateReply(combinedMessage, senderPsid);
+
+                    if (!reply) return;
+                    const hasText = reply.text && reply.text.trim() !== "";
+                    const hasImage = reply.imageUrl && reply.imageUrl.trim() !== "";
+                    if (!hasText && !hasImage) return;
+
+                    if (reply.type === "image" && hasImage) {
+                      await callSendAPI(senderPsid, {
+                        attachment: { type: "image", payload: { url: reply.imageUrl, is_reusable: true } }
+                      });
+                    }
+                    if (hasText) {
+                      await callSendAPI(senderPsid, { text: reply.text });
+                      await saveMessage(senderPsid, reply.text, "bot");
+                    }
+                    if (reply.followUp) {
+                      await new Promise(resolve => setTimeout(resolve, 500));
+                      await callSendAPI(senderPsid, { text: reply.followUp });
+                      await saveMessage(senderPsid, reply.followUp, "bot");
+                    }
+
+                    const { scheduleFollowUpIfNeeded } = require('./jobs/silenceFollowUp');
+                    const lastSentText = reply.followUp || reply.text;
+                    scheduleFollowUpIfNeeded(senderPsid, lastSentText).catch(err =>
+                      console.error("❌ Error scheduling silence follow-up:", err.message)
+                    );
+                  } catch (err) {
+                    console.error("❌ Error responding to audio transcription:", err);
+                  }
+                });
+              } catch (error) {
+                console.error("❌ Error transcribing audio:", error);
+                await saveMessage(senderPsid, "[Audio enviado]", "user", messageId);
+                await callSendAPI(senderPsid, { text: "No pude procesar tu audio, ¿me lo podrías escribir?" });
+                await saveMessage(senderPsid, "No pude procesar tu audio, ¿me lo podrías escribir?", "bot");
+              }
+            })();
+
+            res.sendStatus(200);
+            return;
+          }
+
           // 🎬 Check for video attachments
           const videoAttachment = attachments.find(att => att.type === "video");
 
