@@ -731,34 +731,55 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 }
 
 /**
+ * Get the standard product description + price range for malla confeccionada.
+ * This should ALWAYS be sent on first contact or info requests.
+ */
+async function getMallaDescription() {
+  // Get dynamic price range from database
+  let priceMin = 350, priceMax = 3450;
+  try {
+    const products = await ProductFamily.find({
+      sellable: true, active: true,
+      size: { $regex: /^\d+\s*[xX×]\s*\d+/, $options: 'i' },
+      price: { $gt: 0 }
+    }).sort({ price: 1 }).lean();
+
+    // Filter to confeccionada only (both dimensions <= 10m)
+    const confec = products.filter(p => {
+      const m = p.size?.match(/(\d+)\s*[xX×]\s*(\d+)/);
+      if (!m) return false;
+      return Math.max(parseInt(m[1]), parseInt(m[2])) <= 10;
+    });
+
+    if (confec.length > 0) {
+      priceMin = Math.round(confec[0].price);
+      priceMax = Math.round(confec[confec.length - 1].price);
+    }
+  } catch (err) {
+    console.error("❌ Error getting malla price range:", err.message);
+  }
+
+  return `Nuestra malla sombra raschel confeccionada es de polietileno de alta densidad con 90% de cobertura y protección UV.\n\n` +
+    `Viene con refuerzo en las esquinas para una vida útil de hasta 5 años, y con sujetadores y argollas en todos los lados, lista para instalar. El envío a domicilio va incluido en el precio.\n\n` +
+    `Manejamos medidas desde 2x2m hasta 7x10m, con precios desde ${formatMoney(priceMin)} hasta ${formatMoney(priceMax)}.\n\n` +
+    `¿Qué medida te interesa?`;
+}
+
+/**
  * Handle product info request - user asking about characteristics
  */
 async function handleProductInfo(userMessage, convo) {
-  const response = await generateBotResponse("product_info", {
-    productType: "malla_sombra_confeccionada",
-    material: "Polietileno de alta densidad (HDPE)",
-    color: "Beige",
-    shadePercentage: "90%",
-    hasEyelets: true,
-    hasUVProtection: true,
-    lifespan: "5+ años",
-    sizeRange: "2x2m hasta 6x10m",
-    convo
-  });
-
-  return { type: "text", text: response };
+  const description = await getMallaDescription();
+  return { type: "text", text: description };
 }
 
 /**
  * Handle start - user just mentioned malla
+ * Always sends the full product description with price range
  */
 async function handleStart(sourceContext, convo) {
-  const response = await generateBotResponse("malla_start", {
-    productType: "malla_sombra_confeccionada",
-    convo
-  });
-
-  return { type: "text", text: response };
+  const description = await getMallaDescription();
+  return { type: "text", text: description };
 }
 
 /**
@@ -835,22 +856,14 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
                            /\b(precios?|costos?)\s*(y|con)\s*(medidas?|tamaños?)\b/i.test(userMessage);
 
   if (sizesListRequest) {
-    // Show range instead of full list (rule: don't dump long lists)
-    const response = await generateBotResponse("catalog_request", {
-      sizeRange: "2x2m hasta 6x10m",
-      priceRange: "$320 hasta $1,800",
-      convo
-    });
-    return { type: "text", text: response };
+    // Send full product description with price range
+    return await handleProductInfo(userMessage, convo);
   }
 
   // If they're asking about prices without dimensions
   if (intent === INTENTS.PRICE_QUERY) {
-    const response = await generateBotResponse("price_query_no_size", {
-      priceRange: "$320 hasta $1,800",
-      convo
-    });
-    return { type: "text", text: response };
+    // Send full product description with price range
+    return await handleProductInfo(userMessage, convo);
   }
 
   // Check if user is asking about product features (material, percentage, color, UV)
@@ -952,12 +965,17 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
     return globalResponse;
   }
 
-  // General ask for dimensions
-  const response = await generateBotResponse("awaiting_dimensions", {
-    productType: "malla_sombra_confeccionada",
-    convo
-  });
-  return { type: "text", text: response };
+  // First contact or no dimensions yet — send full product description
+  // If we've already shown the description, just ask for dimensions
+  const alreadyDescribed = convo?.lastIntent?.startsWith('malla_');
+  if (!alreadyDescribed) {
+    return await handleProductInfo(userMessage, convo);
+  }
+
+  return {
+    type: "text",
+    text: "¿Qué medida necesitas?"
+  };
 }
 
 /**
