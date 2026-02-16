@@ -5,6 +5,7 @@
 const { updateConversation } = require("../../conversationManager");
 const ZipCode = require("../../models/ZipCode");
 const { detectMexicanLocation } = require("../../mexicanLocations");
+const { getBusinessInfo } = require("../../businessInfoManager");
 
 /**
  * Parse zip code from message and look up location (shared utility)
@@ -133,4 +134,34 @@ async function handlePendingZipResponse(psid, convo, userMessage) {
   return { proceed: true, zipInfo: null };
 }
 
-module.exports = { parseAndLookupZipCode, checkZipBeforeHandoff, handlePendingZipResponse };
+/**
+ * Check if a location is in Queretaro (state or city)
+ * @param {object|null} zipInfo - { city, state } from zip lookup
+ * @param {object|null} convo - Conversation object (fallback to stateMx/city)
+ * @returns {boolean}
+ */
+function isQueretaroLocation(zipInfo, convo) {
+  const qroPattern = /quer[eé]taro/i;
+  const qroCityPattern = /quer[eé]taro|santiago.*quer[eé]taro/i;
+
+  if (zipInfo?.state && qroPattern.test(zipInfo.state)) return true;
+  if (zipInfo?.city && qroCityPattern.test(zipInfo.city)) return true;
+  if (convo?.stateMx && qroPattern.test(convo.stateMx)) return true;
+  if (convo?.city && qroCityPattern.test(convo.city)) return true;
+
+  return false;
+}
+
+/**
+ * Get the Queretaro pickup message with business address and hours
+ * @returns {Promise<string>}
+ */
+async function getQueretaroPickupMessage() {
+  const info = await getBusinessInfo();
+  let msg = "Como estás en Querétaro, también puedes recoger directamente en nuestra bodega:";
+  if (info.address) msg += `\n📍 ${info.address}`;
+  if (info.hours) msg += `\n🕓 ${info.hours}`;
+  return msg;
+}
+
+module.exports = { parseAndLookupZipCode, checkZipBeforeHandoff, handlePendingZipResponse, isQueretaroLocation, getQueretaroPickupMessage };

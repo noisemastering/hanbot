@@ -7,7 +7,7 @@ const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
 const { INTENTS } = require("../classifier");
 const { isBusinessHours } = require("../utils/businessHours");
-const { checkZipBeforeHandoff, handlePendingZipResponse } = require("../utils/preHandoffCheck");
+const { checkZipBeforeHandoff, handlePendingZipResponse, isQueretaroLocation, getQueretaroPickupMessage } = require("../utils/preHandoffCheck");
 
 // Import existing utilities - USE THESE
 const { getAncestors, getRootFamily } = require("../utils/productMatcher");
@@ -226,13 +226,18 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
         ? `Perfecto, ${zipResult.zipInfo.city || 'ubicación registrada'}. `
         : '';
       const timingMsg = isBusinessHours()
-        ? "Un especialista te contactará pronto con el precio."
-        : "Un especialista te contactará el siguiente día hábil con el precio.";
+        ? "Un especialista te contactará pronto."
+        : "Un especialista te contactará el siguiente día hábil.";
 
-      return {
-        type: "text",
-        text: `${locationAck}${info.specsText || ''}${timingMsg}`
-      };
+      let responseText = `${locationAck}${info.specsText || ''}${timingMsg}`;
+
+      // Queretaro pickup option
+      if (isQueretaroLocation(zipResult.zipInfo, convo)) {
+        const pickupMsg = await getQueretaroPickupMessage();
+        responseText += `\n\n${pickupMsg}`;
+      }
+
+      return { type: "text", text: responseText };
     }
   }
 
@@ -435,9 +440,35 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
               `¿Necesitas algo más?`
       };
     }
+
+    // Product found but no ML link — show price + ask zip
+    if (product.price) {
+      const specsDesc = displayName || `borde separador de ${length}m`;
+      const qtyText = quantity > 1 ? ` c/u` : '';
+      let priceMsg = `Tenemos ${specsDesc} en ${formatMoney(product.price)}${qtyText}`;
+
+      if (product.wholesaleEnabled && product.wholesaleMinQty && product.wholesalePrice) {
+        priceMsg += `\n\nPor mayoreo (mínimo ${product.wholesaleMinQty} rollos) a ${formatMoney(product.wholesalePrice)} por rollo`;
+      } else if (product.wholesaleEnabled && product.wholesaleMinQty && quantity < product.wholesaleMinQty) {
+        priceMsg += `\n\nA partir de ${product.wholesaleMinQty} rollos manejamos precio de mayoreo`;
+      }
+
+      priceMsg += `, ¿me puedes proporcionar tu código postal para calcular el envío?`;
+
+      const specsText = `${quantity} rollo${quantity > 1 ? 's' : ''} de borde de ${length}m`;
+      await updateConversation(psid, {
+        pendingHandoff: true,
+        pendingHandoffInfo: {
+          reason: `Borde: ${specsText}`,
+          specsText: ''
+        }
+      });
+
+      return { type: "text", text: priceMsg };
+    }
   }
 
-  // No product found in inventory or no link - hand off with full specs
+  // No product found or no price — hand off with full specs
   const specsText = `${quantity} rollo${quantity > 1 ? 's' : ''} de borde de ${length}m`;
 
   const zipCheck = await checkZipBeforeHandoff(psid, convo, userMessage, {

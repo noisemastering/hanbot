@@ -8,7 +8,7 @@ const ProductFamily = require("../../models/ProductFamily");
 const ZipCode = require("../../models/ZipCode");
 const { INTENTS } = require("../classifier");
 const { isBusinessHours } = require("../utils/businessHours");
-const { parseAndLookupZipCode: sharedParseAndLookupZipCode } = require("../utils/preHandoffCheck");
+const { parseAndLookupZipCode: sharedParseAndLookupZipCode, isQueretaroLocation, getQueretaroPickupMessage } = require("../utils/preHandoffCheck");
 
 // Import existing utilities - USE THESE
 const { getAncestors, getRootFamily } = require("../utils/productMatcher");
@@ -111,10 +111,13 @@ async function getAvailableWidths() {
       }
     }
 
-    rolloWidthsCache = [...widths].sort((a, b) => a - b);
-    rolloWidthsCacheExpiry = Date.now() + CACHE_TTL;
-    console.log(`🔄 Rollo widths cache refreshed: ${rolloWidthsCache.join(', ')}m`);
-    return rolloWidthsCache.length > 0 ? rolloWidthsCache : [2, 4]; // Fallback if no products found
+    const sorted = [...widths].sort((a, b) => a - b);
+    if (sorted.length > 0) {
+      rolloWidthsCache = sorted;
+      rolloWidthsCacheExpiry = Date.now() + CACHE_TTL;
+      console.log(`🔄 Rollo widths cache refreshed: ${rolloWidthsCache.join(', ')}m`);
+    }
+    return sorted.length > 0 ? sorted : [2, 4]; // Fallback if no products found
   } catch (err) {
     console.error("Error fetching rollo widths:", err.message);
     return [2, 4]; // Fallback
@@ -223,7 +226,7 @@ function determineStage(state) {
   if (!state.rolloType) return STAGES.AWAITING_TYPE;
   if (!state.width) return STAGES.AWAITING_WIDTH;
   if (state.rolloType === ROLLO_TYPES.MALLA_SOMBRA && !state.percentage) return STAGES.AWAITING_PERCENTAGE;
-  if (!state.quantity) return STAGES.AWAITING_QUANTITY;
+  // Skip AWAITING_QUANTITY — show price + ask zip directly
   if (!state.zipCode) return STAGES.AWAITING_ZIP;
   return STAGES.COMPLETE;
 }
@@ -407,6 +410,48 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   let response;
 
+  // ====== AD PRODUCTS — show all options with prices when asked ======
+  const adProductIds = sourceContext?.ad?.productIds || convo?.adProductIds;
+  if (adProductIds?.length && !state.width) {
+    const askingOptions = [INTENTS.CATALOG_REQUEST, INTENTS.PRODUCT_INQUIRY, INTENTS.AVAILABILITY_QUERY, INTENTS.PRICE_QUERY].includes(intent);
+    if (askingOptions) {
+      try {
+        const adProducts = await ProductFamily.find({
+          _id: { $in: adProductIds },
+          sellable: true,
+          active: true
+        }).sort({ price: 1 }).lean();
+
+        if (adProducts.length > 0) {
+          const lines = adProducts.map(p => {
+            const price = p.price ? ` - ${formatMoney(p.price)}` : '';
+            return `• ${p.name}${price}`;
+          });
+
+          await updateConversation(psid, {
+            lastIntent: `roll_awaiting_width`,
+            productInterest: "rollo",
+            productSpecs: {
+              productType: "rollo",
+              rolloType: state.rolloType,
+              width: state.width,
+              length: 100,
+              percentage: state.percentage,
+              updatedAt: new Date()
+            }
+          });
+
+          return {
+            type: "text",
+            text: `¡Claro! Estas son las opciones que manejamos:\n\n${lines.join('\n')}\n\n¿Cuál te interesa?`
+          };
+        }
+      } catch (err) {
+        console.error("Error fetching ad products:", err.message);
+      }
+    }
+  }
+
   // ====== CATALOG / INFO REQUESTS — show available sizes regardless of stage ======
   const infoIntents = [INTENTS.CATALOG_REQUEST, INTENTS.PRODUCT_INQUIRY, INTENTS.AVAILABILITY_QUERY];
   if (infoIntents.includes(intent) && !state.width) {
@@ -566,21 +611,40 @@ function handleAwaitingQuantity(intent, state, sourceContext) {
 }
 
 /**
- * Handle awaiting zip code stage - ask for zip to calculate shipping
+ * Handle awaiting zip code stage - show price + ask for zip to calculate shipping
  */
-function handleAwaitingZip(intent, state, sourceContext) {
-  let specsText = `${state.quantity} rollo${state.quantity > 1 ? 's' : ''} de ${state.width}m x 100m`;
+async function handleAwaitingZip(intent, state, sourceContext) {
+  let specsText = `rollo de ${state.width}m x 100m`;
   if (state.percentage) {
     specsText += ` al ${state.percentage}%`;
   }
+
+  // Look up product to show price
+  const products = await findMatchingProducts(state.width, state.percentage);
+  if (products.length > 0) {
+    const product = products[0];
+    if (product.price) {
+      let priceMsg = `Tenemos ${specsText} en ${formatMoney(product.price)}`;
+
+      if (product.wholesaleEnabled && product.wholesaleMinQty && product.wholesalePrice) {
+        priceMsg += `\n\nPor mayoreo (mínimo ${product.wholesaleMinQty} rollos) a ${formatMoney(product.wholesalePrice)} por rollo`;
+      }
+
+      priceMsg += `, ¿me puedes proporcionar tu código postal para calcular el envío?`;
+
+      return { type: "text", text: priceMsg };
+    }
+  }
+
+  // No product or no price found — still ask for zip
   return {
     type: "text",
-    text: `${specsText}. Para calcular el envío, ¿me compartes tu código postal o ciudad?`
+    text: `Perfecto, ${specsText}. ¿Me puedes proporcionar tu código postal para calcular el envío?`
   };
 }
 
 /**
- * Handle complete - we have all specs, hand off to human
+ * Handle complete - we have all specs + zip, hand off to human
  */
 async function handleComplete(intent, state, sourceContext, psid, convo) {
   const locationText = state.zipInfo
@@ -588,7 +652,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
     : (state.zipCode || 'ubicación no especificada');
 
   // Build specs summary for handoff
-  let specsText = `${state.quantity} rollo${state.quantity > 1 ? 's' : ''} de ${state.width}m x 100m`;
+  let specsText = `rollo de ${state.width}m x 100m`;
   if (state.percentage) {
     specsText += ` al ${state.percentage}%`;
   }
@@ -611,6 +675,12 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
     : `¡Perfecto! Un especialista te contactará el siguiente día hábil para cotizarte ${specsText}.`;
   if (state.zipInfo) {
     responseText += `\n\n📍 Envío a ${state.zipInfo.city}, ${state.zipInfo.state}`;
+  }
+
+  // Queretaro pickup option
+  if (isQueretaroLocation(state.zipInfo, convo)) {
+    const pickupMsg = await getQueretaroPickupMessage();
+    responseText += `\n\n${pickupMsg}`;
   }
 
   const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
