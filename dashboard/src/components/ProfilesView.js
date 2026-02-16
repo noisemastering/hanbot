@@ -28,7 +28,7 @@ function ProfilesView() {
       });
       const data = await res.json();
       if (data.success) {
-        setProfiles(data.profiles);
+        setProfiles(data.data || data.profiles || []);
       }
     } catch (error) {
       console.error('Error fetching profiles:', error);
@@ -48,7 +48,7 @@ function ProfilesView() {
       });
       const data = await res.json();
       if (data.success) {
-        setRoles(data.roles);
+        setRoles(data.data || data.roles || []);
       }
     } catch (error) {
       console.error('Error fetching roles:', error);

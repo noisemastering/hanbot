@@ -12,6 +12,7 @@ const { generateClickLink } = require("../tracking");
 const { sendHandoffNotification } = require("../services/pushNotifications");
 const { getHandoffTimingMessage } = require("./utils/businessHours");
 const { analyzeProductSwitch } = require("./utils/productSwitchAnalyzer");
+const { matchDimensionToFlow, checkDimensionOwnership } = require("./utils/inventoryMatcher");
 const Ad = require("../models/Ad");
 const Campaign = require("../models/Campaign");
 
@@ -311,7 +312,7 @@ function isUnambiguousSwitch(msg, currentFlow = null, targetFlow = null) {
  * Detect if user explicitly mentioned a different product than current flow
  * Returns the new product flow if detected, null otherwise
  */
-function detectExplicitProductSwitch(userMessage, currentFlow, classification) {
+async function detectExplicitProductSwitch(userMessage, currentFlow, classification) {
   const msg = (userMessage || '').toLowerCase();
 
   // Map of explicit product keywords to flows
@@ -340,16 +341,23 @@ function detectExplicitProductSwitch(userMessage, currentFlow, classification) {
     }
   }
 
-  // Check for roll dimensions (NxN where one side is 100)
-  if (currentFlow !== 'rollo') {
-    const rollMatch = msg.match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)/);
-    if (rollMatch) {
-      const d1 = parseFloat(rollMatch[1]);
-      const d2 = parseFloat(rollMatch[2]);
-      if (d1 === 100 || d2 === 100) {
-        console.log(`🔍 Roll dimension detected: ${d1}x${d2} (current: ${currentFlow})`);
-        return 'rollo';
-      }
+  // Check dimensions against inventory — a known measure outside current flow = product switch
+  const dimMatch = msg.match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)/);
+  if (dimMatch) {
+    const d1 = parseFloat(dimMatch[1]);
+    const d2 = parseFloat(dimMatch[2]);
+
+    // Explicit roll dimension (one side = 100)
+    if ((d1 === 100 || d2 === 100) && currentFlow !== 'rollo') {
+      console.log(`🔍 Roll dimension detected: ${d1}x${d2} (current: ${currentFlow})`);
+      return 'rollo';
+    }
+
+    // Data-driven: check if this dimension belongs to a different flow
+    const ownership = await checkDimensionOwnership(d1, d2, currentFlow);
+    if (ownership.matchedFlow && !ownership.belongsToCurrent) {
+      console.log(`🔍 Dimension ${d1}x${d2} belongs to ${ownership.matchedFlow}, not ${currentFlow} (from inventory)`);
+      return ownership.matchedFlow;
     }
   }
 
@@ -467,14 +475,20 @@ async function detectFlow(classification, convo, userMessage, sourceContext) {
     return 'monofilamento';
   }
 
-  // 7. DIMENSION INFERENCE
+  // 7. DIMENSION INFERENCE — data-driven via inventory matcher
   const dimensions = parseDimensions(userMessage);
   if (dimensions) {
     // Check if it looks like a roll (one side is 100)
     if (dimensions.width === 100 || dimensions.height === 100) {
       return 'rollo';
     }
-    return 'malla_sombra';
+    // Look up which flow owns this size in actual inventory
+    const inventoryFlow = await matchDimensionToFlow(dimensions.width, dimensions.height);
+    if (inventoryFlow) {
+      console.log(`📦 Dimension ${dimensions.width}x${dimensions.height} matched to flow: ${inventoryFlow} (from inventory)`);
+      return inventoryFlow;
+    }
+    // No inventory match — fall through to default
   }
 
   // 8. DEFAULT
@@ -775,7 +789,7 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
   // If user is in a product flow and explicitly asks for a different product we sell, switch directly
   const currentFlow = convo?.currentFlow || 'default';
   if (currentFlow !== 'default' && !convo?.pendingFlowChange) {
-    const switchToFlow = detectExplicitProductSwitch(userMessage, currentFlow, classification);
+    const switchToFlow = await detectExplicitProductSwitch(userMessage, currentFlow, classification);
 
     if (switchToFlow) {
       // Determine if this is an unambiguous switch or needs AI confirmation

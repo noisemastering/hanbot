@@ -26,7 +26,7 @@ function RolesView() {
       });
       const data = await res.json();
       if (data.success) {
-        setRoles(data.roles);
+        setRoles(data.data || data.roles || []);
       }
     } catch (error) {
       console.error('Error fetching roles:', error);
