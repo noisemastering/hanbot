@@ -77,15 +77,26 @@ async function handleLocation({ psid, userMessage, convo }) {
     unknownCount: 0
   });
 
+  const MAPS_URL = 'https://maps.app.goo.gl/WJbhpMqfUPYPSMdA7';
+
   // Let AI decide from context whether to give full address
-  const response = await generateBotResponse("location_query", {
+  let response = await generateBotResponse("location_query", {
     userQuestion: userMessage,
     mentionedCity: locationInfo?.normalized || null,
     city: "Querétaro",
-    address: 'https://maps.app.goo.gl/WJbhpMqfUPYPSMdA7',
+    address: MAPS_URL,
     shipsNationwide: true,
     convo
   });
+
+  // Ensure the actual Google Maps URL is present — AI sometimes replaces it with a placeholder
+  if (response && !response.includes(MAPS_URL)) {
+    response = response.replace(/\[(?:Link|Enlace)\s*(?:de\s*)?Google\s*Maps\]/gi, MAPS_URL);
+    // If still missing (AI used different placeholder), append it
+    if (!response.includes(MAPS_URL)) {
+      response += `\n\n${MAPS_URL}`;
+    }
+  }
 
   return { type: "text", text: response };
 }

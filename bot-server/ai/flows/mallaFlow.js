@@ -1544,5 +1544,6 @@ module.exports = {
   STAGES,
   parseDimensions,
   getFlowState,
-  determineStage
+  determineStage,
+  getMallaDescription
 };

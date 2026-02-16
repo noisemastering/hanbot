@@ -41,7 +41,7 @@ const { getHandoffTimingMessage } = require("./utils/businessHours");
 const { buildSourceContext, logSourceContext, getProductFromSource } = require("./context");
 
 // Layer 1: Intent Classification
-const { classify, logClassification } = require("./classifier");
+const { classify, logClassification, INTENTS } = require("./classifier");
 
 // Layer 1.5: Intent Dispatcher - AI-first routing to handlers
 // This runs BEFORE flows - handles intents that don't need multi-step flow processing
@@ -955,8 +955,9 @@ async function generateReply(userMessage, psid, referral = null) {
         response += `\n\nTambién puedes visitar nuestra tienda en el parque industrial Navex, Tlacote.`;
       }
 
-      // If we already shared a product, don't ask "what size?" again
-      if (!convo.lastSharedProductId) {
+      // If we already have dimensions or shared a product, don't ask "what size?" again
+      const hasSpecs = convo.productSpecs?.width || convo.productSpecs?.height || convo.productSpecs?.dimensions;
+      if (!convo.lastSharedProductId && !hasSpecs) {
         response += `\n\n¿Qué medida de malla sombra necesitas?`;
       }
 
@@ -1130,6 +1131,19 @@ async function generateReply(userMessage, psid, referral = null) {
     return await checkForRepetition(intentResponse, psid, convo);
   }
   // ====== END INTENT DB HANDLING ======
+
+  // ====== MULTI-QUESTION HANDLER ======
+  if (classification.intent === INTENTS.MULTI_QUESTION) {
+    const { handleMultiQuestion } = require("./utils/multiQuestionHandler");
+    const mqResponse = await handleMultiQuestion(
+      userMessage, psid, convo, sourceContext, campaign, campaignContext
+    );
+    if (mqResponse) {
+      return await checkForRepetition(mqResponse, psid, convo);
+    }
+    // If handler returns null, fall through to normal pipeline
+  }
+  // ====== END MULTI-QUESTION HANDLER ======
 
   // ====== INTENT DISPATCHER - AI-FIRST ROUTING ======
   // Route classified intents to pure business logic handlers
