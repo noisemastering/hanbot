@@ -425,7 +425,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
         if (adProducts.length > 0) {
           const lines = adProducts.map(p => {
             const price = p.price ? ` - ${formatMoney(p.price)}` : '';
-            const size = p.size ? ` (${p.size})` : '';
+            const size = p.size ? ` ${p.size}` : '';
             return `• ${p.name}${size}${price}`;
           });
 
