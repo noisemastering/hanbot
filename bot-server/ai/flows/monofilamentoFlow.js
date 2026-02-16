@@ -40,6 +40,52 @@ function formatMoney(n) {
 // NOTE: parseDimensions is now imported from ../utils/dimensionParsers.js (roll parser)
 
 /**
+ * Cache for available monofilamento widths and percentages
+ */
+let monoWidthsCache = null;
+let monoPercentagesCache = null;
+let monoCacheExpiry = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Get available monofilamento widths and shade percentages from database
+ */
+async function getAvailableSpecs() {
+  if (monoWidthsCache && Date.now() < monoCacheExpiry) {
+    return { widths: monoWidthsCache, percentages: monoPercentagesCache };
+  }
+
+  try {
+    const products = await ProductFamily.find({
+      sellable: true,
+      active: true,
+      $or: [
+        { name: /monofilamento/i },
+        { aliases: { $in: [/monofilamento/i] } }
+      ]
+    }).select('size name').lean();
+
+    const widths = new Set();
+    const percentages = new Set();
+    for (const p of products) {
+      const sizeMatch = p.size?.match(/^(\d+(?:\.\d+)?)\s*x\s*\d+/i);
+      if (sizeMatch) widths.add(parseFloat(sizeMatch[1]));
+      const pctMatch = p.name?.match(/(\d+)\s*%/);
+      if (pctMatch) percentages.add(parseInt(pctMatch[1]));
+    }
+
+    monoWidthsCache = [...widths].sort((a, b) => a - b);
+    monoPercentagesCache = [...percentages].sort((a, b) => a - b);
+    monoCacheExpiry = Date.now() + CACHE_TTL;
+    console.log(`🔄 Monofilamento specs cache: widths=${monoWidthsCache.join(',')}m, pct=${monoPercentagesCache.join(',')}%`);
+    return { widths: monoWidthsCache, percentages: monoPercentagesCache };
+  } catch (err) {
+    console.error("Error fetching monofilamento specs:", err.message);
+    return { widths: [4.20], percentages: [35, 50, 70, 80] };
+  }
+}
+
+/**
  * Find matching sellable monofilamento products
  */
 async function findMatchingProducts(width = null, length = null) {
@@ -182,31 +228,40 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 /**
  * Handle start - user just mentioned monofilamento
  */
-function handleStart(sourceContext) {
+async function handleStart(sourceContext) {
+  const { widths, percentages } = await getAvailableSpecs();
+  const widthList = widths.map(w => `${w}m x 100m`).join(' y ');
+  const pctList = percentages.length > 0 ? percentages.join('%, ') + '%' : '35%, 50%, 70%, 80%';
+
   return {
     type: "text",
-    text: "¡Sí manejamos malla monofilamento!\n\n" +
-          "Ideal para aplicaciones agrícolas.\n\n" +
-          "¿Qué medida necesitas? (ancho x largo)"
+    text: `¡Sí manejamos malla monofilamento!\n\n` +
+          `Ideal para aplicaciones agrícolas.\n\n` +
+          `Contamos con rollos de ${widthList}, con porcentajes de sombra de ${pctList}.\n\n` +
+          `¿Qué medida y porcentaje te interesa?`
   };
 }
 
 /**
  * Handle awaiting dimensions stage
  */
-function handleAwaitingDimensions(intent, state, sourceContext) {
+async function handleAwaitingDimensions(intent, state, sourceContext) {
+  const { widths, percentages } = await getAvailableSpecs();
+  const widthList = widths.map(w => `${w}m x 100m`).join(' y ');
+  const pctList = percentages.length > 0 ? percentages.join('%, ') + '%' : '35%, 50%, 70%, 80%';
+
   if (intent === INTENTS.PRICE_QUERY) {
     return {
       type: "text",
-      text: "Los precios dependen de la medida.\n\n" +
-            "¿Qué ancho y largo necesitas?"
+      text: `Los precios dependen de la medida. Contamos con rollos de ${widthList}, con porcentajes de sombra de ${pctList}.\n\n` +
+            `¿Cuál te interesa?`
     };
   }
 
   return {
     type: "text",
-    text: "¿Qué medida de malla monofilamento necesitas?\n\n" +
-          "(ejemplo: 4.20m x 100m)"
+    text: `Contamos con rollos de malla monofilamento de ${widthList}, con porcentajes de sombra de ${pctList}.\n\n` +
+          `¿Cuál te interesa?`
   };
 }
 
@@ -313,6 +368,7 @@ function shouldHandle(classification, sourceContext, convo) {
 
 module.exports = {
   handle,
+  handleStart,
   shouldHandle,
   STAGES,
   getFlowState,

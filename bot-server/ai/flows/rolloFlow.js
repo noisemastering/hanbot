@@ -484,11 +484,12 @@ function handleAwaitingType(intent, state, sourceContext) {
  */
 async function handleStart(sourceContext) {
   const widths = await getAvailableWidths();
-  const widthList = widths.map(w => `• ${w}m x 100m`).join('\n');
+  const widthList = widths.map(w => `${w}m x 100m`).join(' y ');
+  const percentageList = VALID_PERCENTAGES.join('%, ') + '%';
 
   return {
     type: "text",
-    text: `¡Claro! Manejamos rollos de malla sombra en estos anchos:\n\n${widthList}\n\n¿Qué ancho necesitas?`
+    text: `¡Claro! Manejamos rollos de malla sombra de ${widthList}, con porcentajes de sombra de ${percentageList}.\n\n¿Qué medida y porcentaje te interesa?`
   };
 }
 
@@ -498,7 +499,8 @@ async function handleStart(sourceContext) {
 async function handleAwaitingWidth(intent, state, sourceContext) {
   const widths = await getAvailableWidths();
   const widthOptions = widths.map(w => `${w}m`).join(' o ');
-  const widthList = widths.map(w => `• ${w}m x 100m`).join('\n');
+  const widthList = widths.map(w => `${w}m x 100m`).join(' y ');
+  const percentageList = VALID_PERCENTAGES.join('%, ') + '%';
 
   if (intent === INTENTS.CONFIRMATION) {
     return {
@@ -509,7 +511,7 @@ async function handleAwaitingWidth(intent, state, sourceContext) {
 
   return {
     type: "text",
-    text: `Los rollos los manejamos en:\n\n${widthList}\n\n¿Qué ancho necesitas?`
+    text: `Contamos con rollos de ${widthList}, con porcentajes de sombra de ${percentageList}.\n\n¿Qué medida y porcentaje te interesa?`
   };
 }
 
@@ -612,6 +614,7 @@ function shouldHandle(classification, sourceContext, convo) {
 
 module.exports = {
   handle,
+  handleStart,
   shouldHandle,
   STAGES,
   getFlowState,

@@ -293,11 +293,25 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
       convo.currentFlow = newFlow;
       convo.productInterest = newFlow;
 
+      // For roll products, delegate to the flow's handleStart for dynamic sizes
+      const rollFlows = ['rollo', 'groundcover', 'monofilamento'];
+      if (rollFlows.includes(newFlow)) {
+        try {
+          const flowModule = require(`./flows/${newFlow === 'rollo' ? 'rolloFlow' : newFlow + 'Flow'}`);
+          if (flowModule.handleStart) {
+            const flowResponse = await flowModule.handleStart(sourceContext);
+            if (flowResponse) {
+              console.log(`🎯 ===== END FLOW MANAGER (retail → ${newFlow}) =====\n`);
+              return { ...flowResponse, handledBy: `flow:${newFlow}`, purchaseIntent: 'medium' };
+            }
+          }
+        } catch (e) {
+          console.error(`⚠️ Error calling ${newFlow} handleStart:`, e.message);
+        }
+      }
+
       const flowGreetings = {
-        'rollo': '¡Perfecto! Para el rollo de malla sombra, ¿qué porcentaje de sombra necesitas? Tenemos 35%, 50%, 70%, 80% y 90%.',
         'malla_sombra': '¡Perfecto! Para la malla sombra confeccionada, ¿qué medida necesitas?',
-        'groundcover': '¡Perfecto! Para el ground cover antimaleza, ¿qué medida necesitas?',
-        'monofilamento': '¡Perfecto! Para la malla monofilamento, ¿qué porcentaje de sombra necesitas?',
         'borde_separador': '¡Perfecto! Para el borde separador, ¿qué largo necesitas? Tenemos 6m, 9m, 18m y 54m.'
       };
 
@@ -455,12 +469,26 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
       convo.currentFlow = newFlow;
       convo.productInterest = newFlow;
 
+      // For roll products, delegate to the flow's handleStart for dynamic sizes
+      const rollFlows2 = ['rollo', 'groundcover', 'monofilamento'];
+      if (rollFlows2.includes(newFlow)) {
+        try {
+          const flowModule = require(`./flows/${newFlow === 'rollo' ? 'rolloFlow' : newFlow + 'Flow'}`);
+          if (flowModule.handleStart) {
+            const flowResponse = await flowModule.handleStart(sourceContext);
+            if (flowResponse) {
+              console.log(`🎯 ===== END FLOW MANAGER (flow changed to ${newFlow}) =====\n`);
+              return { ...flowResponse, handledBy: `flow:${newFlow}`, purchaseIntent: 'medium' };
+            }
+          }
+        } catch (e) {
+          console.error(`⚠️ Error calling ${newFlow} handleStart:`, e.message);
+        }
+      }
+
       // Route to new flow with a greeting
       const flowGreetings = {
-        'rollo': '¡Perfecto! Para el rollo de malla sombra, ¿qué porcentaje de sombra necesitas? Tenemos 35%, 50%, 70%, 80% y 90%.',
         'malla_sombra': '¡Perfecto! Para la malla sombra confeccionada, ¿qué medida necesitas?',
-        'groundcover': '¡Perfecto! Para el ground cover antimaleza, ¿qué medida necesitas?',
-        'monofilamento': '¡Perfecto! Para la malla monofilamento, ¿qué porcentaje de sombra necesitas?',
         'borde_separador': '¡Perfecto! Para el borde separador, ¿qué largo necesitas? Tenemos 6m, 9m, 18m y 54m.'
       };
 

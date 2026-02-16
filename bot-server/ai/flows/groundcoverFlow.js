@@ -40,6 +40,51 @@ function formatMoney(n) {
 // NOTE: parseDimensions is now imported from ../utils/dimensionParsers.js (roll parser)
 
 /**
+ * Cache for available groundcover widths
+ */
+let gcWidthsCache = null;
+let gcWidthsCacheExpiry = 0;
+const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Get available groundcover widths from database
+ */
+async function getAvailableWidths() {
+  if (gcWidthsCache && Date.now() < gcWidthsCacheExpiry) {
+    return gcWidthsCache;
+  }
+
+  try {
+    const products = await ProductFamily.find({
+      sellable: true,
+      active: true,
+      $or: [
+        { name: /groundcover/i },
+        { name: /antimaleza/i },
+        { name: /ground.*cover/i },
+        { aliases: { $in: [/groundcover/i, /antimaleza/i] } }
+      ]
+    }).select('size').lean();
+
+    const widths = new Set();
+    for (const p of products) {
+      const match = p.size?.match(/^(\d+(?:\.\d+)?)\s*x\s*\d+/i);
+      if (match) {
+        widths.add(parseFloat(match[1]));
+      }
+    }
+
+    gcWidthsCache = [...widths].sort((a, b) => a - b);
+    gcWidthsCacheExpiry = Date.now() + CACHE_TTL;
+    console.log(`🔄 Groundcover widths cache refreshed: ${gcWidthsCache.join(', ')}m`);
+    return gcWidthsCache;
+  } catch (err) {
+    console.error("Error fetching groundcover widths:", err.message);
+    return [2, 4]; // Fallback
+  }
+}
+
+/**
  * Find matching sellable groundcover products
  */
 async function findMatchingProducts(width = null, length = null) {
@@ -184,31 +229,38 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 /**
  * Handle start - user just mentioned groundcover
  */
-function handleStart(sourceContext) {
+async function handleStart(sourceContext) {
+  const widths = await getAvailableWidths();
+  const widthList = widths.map(w => `${w}m x 100m`).join(' y ');
+
   return {
     type: "text",
-    text: "¡Sí manejamos malla antimaleza/groundcover!\n\n" +
-          "Ideal para control de hierbas en cultivos y jardines.\n\n" +
-          "¿Qué medida necesitas? (ancho x largo)"
+    text: `¡Sí manejamos malla antimaleza/groundcover!\n\n` +
+          `Ideal para control de hierbas en cultivos y jardines.\n\n` +
+          `Contamos con rollos de ${widthList}.\n\n` +
+          `¿Qué medida te interesa?`
   };
 }
 
 /**
  * Handle awaiting dimensions stage
  */
-function handleAwaitingDimensions(intent, state, sourceContext) {
+async function handleAwaitingDimensions(intent, state, sourceContext) {
+  const widths = await getAvailableWidths();
+  const widthList = widths.map(w => `${w}m x 100m`).join(' y ');
+
   if (intent === INTENTS.PRICE_QUERY) {
     return {
       type: "text",
-      text: "Los precios dependen de la medida.\n\n" +
-            "¿Qué ancho y largo necesitas?"
+      text: `Los precios dependen de la medida. Contamos con rollos de ${widthList}.\n\n` +
+            `¿Cuál te interesa?`
     };
   }
 
   return {
     type: "text",
-    text: "¿Qué medida de malla antimaleza necesitas?\n\n" +
-          "(ejemplo: 1.05m x 100m)"
+    text: `Contamos con rollos de malla antimaleza de ${widthList}.\n\n` +
+          `¿Cuál te interesa?`
   };
 }
 
@@ -315,6 +367,7 @@ function shouldHandle(classification, sourceContext, convo) {
 
 module.exports = {
   handle,
+  handleStart,
   shouldHandle,
   STAGES,
   getFlowState,
