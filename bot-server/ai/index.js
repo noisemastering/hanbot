@@ -1149,15 +1149,20 @@ async function generateReply(userMessage, psid, referral = null) {
   // Route classified intents to pure business logic handlers
   // This runs BEFORE flows - handles intents that don't need multi-step flow processing
   // Examples: color_query, frustration, phone_request, human_request, etc.
-  const dispatcherResponse = await dispatchToHandler(classification, {
-    psid,
-    convo,
-    userMessage
-  });
+  // SKIP dispatcher when there's a pending handoff waiting for zip/city - let flows handle it
+  if (!convo?.pendingHandoff) {
+    const dispatcherResponse = await dispatchToHandler(classification, {
+      psid,
+      convo,
+      userMessage
+    });
 
-  if (dispatcherResponse) {
-    console.log(`✅ Intent handled by dispatcher (${dispatcherResponse.handledBy})`);
-    return await checkForRepetition(dispatcherResponse, psid, convo);
+    if (dispatcherResponse) {
+      console.log(`✅ Intent handled by dispatcher (${dispatcherResponse.handledBy})`);
+      return await checkForRepetition(dispatcherResponse, psid, convo);
+    }
+  } else {
+    console.log(`⏭️ Skipping dispatcher - pendingHandoff active, letting flow handle zip/city response`);
   }
   // ====== END INTENT DISPATCHER ======
 

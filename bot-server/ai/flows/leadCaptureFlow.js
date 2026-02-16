@@ -31,8 +31,28 @@ function shouldHandle(classification, sourceContext, convo, userMessage, campaig
   const goal = campaign.conversationGoal;
   if (goal !== "lead_capture" && goal !== "cotizacion") return false;
 
+  // Don't capture users asking about specific products — let product flows handle them
+  // e.g. "cuánto cuesta el rollo de 50 metros" should go to rollo flow, not lead form
+  const productIntents = [
+    INTENTS.PRICE_QUERY, INTENTS.PRODUCT_INQUIRY, INTENTS.PURCHASE_INTENT,
+    INTENTS.AVAILABILITY_QUERY, INTENTS.CATALOG_REQUEST
+  ];
+  const hasProductQuery = productIntents.includes(classification?.intent) ||
+    (classification?.product && classification.product !== 'unknown');
+
   // Check if we're already in lead capture flow
-  if (convo?.lastIntent?.startsWith("lead_")) return true;
+  if (convo?.lastIntent?.startsWith("lead_")) {
+    // Escape hatch: if user is clearly asking about a product, break out of lead form
+    if (hasProductQuery) {
+      console.log(`📋 Breaking out of lead capture — user has product query (${classification?.intent}, product: ${classification?.product})`);
+      return false;
+    }
+    return true;
+  }
+
+  // For new conversations: only enter lead capture for explicit wholesale/catalog requests
+  // NOT for customers asking about specific products
+  if (hasProductQuery) return false;
 
   // Check if campaign has catalog (PDF)
   if (campaign.catalog?.url) return true;

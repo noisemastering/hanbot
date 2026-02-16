@@ -24,6 +24,76 @@ const generalFlow = require("./flows/generalFlow");
 const leadCaptureFlow = require("./flows/leadCaptureFlow");
 
 /**
+ * Cache for product-based flow inference
+ */
+let productFlowCache = {};
+let productFlowCacheExpiry = 0;
+const PRODUCT_FLOW_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Infer flow from ad product IDs by checking actual product data in the DB.
+ * Rolls have sizes like "2x100m", "4x100m". Confeccionada have "4x5m", "6x8m".
+ * Borde has sizes like "18m", "54m". Groundcover/monofilamento determined by name.
+ */
+async function inferFlowFromProductIds(productIds) {
+  if (!productIds?.length) return null;
+
+  const cacheKey = productIds.slice(0, 3).join(',');
+  if (productFlowCache[cacheKey] && Date.now() < productFlowCacheExpiry) {
+    return productFlowCache[cacheKey];
+  }
+
+  try {
+    const products = await ProductFamily.find({
+      _id: { $in: productIds },
+      active: true,
+      sellable: true
+    }).select('name size').lean();
+
+    if (products.length === 0) return null;
+
+    // Check product sizes to determine type
+    let rollCount = 0, confecCount = 0, bordeCount = 0, gcCount = 0, monoCount = 0;
+
+    for (const p of products) {
+      const name = (p.name || '').toLowerCase();
+      const size = (p.size || '').toLowerCase();
+
+      // Groundcover/antimaleza by name
+      if (/groundcover|antimaleza|ground.*cover/.test(name)) { gcCount++; continue; }
+      // Monofilamento by name
+      if (/monofilamento/.test(name)) { monoCount++; continue; }
+      // Borde by name or size pattern (just meters, no x)
+      if (/borde|separador/.test(name) || /^\d+m$/i.test(size)) { bordeCount++; continue; }
+      // Roll: size has x100 pattern
+      if (/\d+\s*x\s*100/i.test(size)) { rollCount++; continue; }
+      // Confeccionada: size has NxN but not x100
+      if (/\d+\s*x\s*\d+/i.test(size)) { confecCount++; continue; }
+    }
+
+    let flow = null;
+    const maxCount = Math.max(rollCount, confecCount, bordeCount, gcCount, monoCount);
+    if (maxCount === 0) return null;
+
+    if (rollCount === maxCount) flow = 'rollo';
+    else if (confecCount === maxCount) flow = 'malla_sombra';
+    else if (bordeCount === maxCount) flow = 'borde_separador';
+    else if (gcCount === maxCount) flow = 'groundcover';
+    else if (monoCount === maxCount) flow = 'monofilamento';
+
+    // Cache result
+    productFlowCache[cacheKey] = flow;
+    productFlowCacheExpiry = Date.now() + PRODUCT_FLOW_CACHE_TTL;
+    console.log(`🔍 Inferred flow from ${products.length} ad products: ${flow} (rolls:${rollCount} confec:${confecCount} borde:${bordeCount} gc:${gcCount} mono:${monoCount})`);
+
+    return flow;
+  } catch (err) {
+    console.error("Error inferring flow from products:", err.message);
+    return null;
+  }
+}
+
+/**
  * Flow registry - maps flow names to flow modules
  */
 const FLOWS = {
@@ -157,9 +227,9 @@ function detectExplicitProductSwitch(userMessage, currentFlow, classification) {
 
 /**
  * Detect which flow should handle this conversation
- * Priority: currentFlow > ad flowRef > ad product > classification > productInterest > keywords > dimensions > default
+ * Priority: currentFlow > ad products > ad product interest > ad flowRef > classification > productInterest > keywords > dimensions > default
  */
-function detectFlow(classification, convo, userMessage, sourceContext) {
+async function detectFlow(classification, convo, userMessage, sourceContext) {
   const msg = (userMessage || '').toLowerCase();
 
   // 1. CONVERSATION CONTINUITY: Already in a product flow
@@ -167,21 +237,32 @@ function detectFlow(classification, convo, userMessage, sourceContext) {
     return convo.currentFlow;
   }
 
-  // 2. AD HIERARCHY FLOWREF: Direct flow reference from ad cascade
-  const adFlowRef = sourceContext?.ad?.flowRef || convo?.adFlowRef;
-  if (adFlowRef && FLOW_REF_MAP[adFlowRef]) {
-    console.log(`🎯 Flow from ad hierarchy flowRef: ${adFlowRef} → ${FLOW_REF_MAP[adFlowRef]}`);
-    return FLOW_REF_MAP[adFlowRef];
+  // 2. AD HIERARCHY: Products take priority over flowRef (ad→adSet→campaign)
+  // The products on the ad are more specific than a campaign-level flowRef
+  const adProductIds = sourceContext?.ad?.productIds || convo?.adProductIds;
+  if (adProductIds?.length) {
+    const flowFromProducts = await inferFlowFromProductIds(adProductIds);
+    if (flowFromProducts) {
+      console.log(`🎯 Flow inferred from ad products: ${flowFromProducts}`);
+      return flowFromProducts;
+    }
   }
 
-  // 3. AD HIERARCHY PRODUCT: Product resolved from ad cascade
+  // Fallback to productInterest resolved from ad product
   const adProduct = sourceContext?.ad?.product;
   if (adProduct) {
     const adFlow = PRODUCT_TYPE_TO_FLOW[adProduct] || PRODUCT_TYPE_TO_FLOW[adProduct.toLowerCase()];
     if (adFlow) {
-      console.log(`🎯 Flow from ad hierarchy product: ${adProduct} → ${adFlow}`);
+      console.log(`🎯 Flow from ad product interest: ${adProduct} → ${adFlow}`);
       return adFlow;
     }
+  }
+
+  // 3. AD HIERARCHY FLOWREF: Fallback to cascaded flowRef if no product resolved
+  const adFlowRef = sourceContext?.ad?.flowRef || convo?.adFlowRef;
+  if (adFlowRef && FLOW_REF_MAP[adFlowRef]) {
+    console.log(`🎯 Flow from ad hierarchy flowRef: ${adFlowRef} → ${FLOW_REF_MAP[adFlowRef]}`);
+    return FLOW_REF_MAP[adFlowRef];
   }
 
   // 4. CLASSIFICATION PRODUCT: Explicit product detected in message
@@ -644,6 +725,11 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
         handledBy: "flow:lead_capture"
       };
     }
+  } else if (convo?.lastIntent?.startsWith("lead_")) {
+    // User broke out of lead capture (product query detected) — clear lead state
+    console.log(`📋 Clearing lead capture state — user broke out with product query`);
+    await updateConversation(psid, { lastIntent: null, leadData: null });
+    convo.lastIntent = null;
   }
   // ===== END LEAD CAPTURE CHECK =====
 
@@ -699,7 +785,7 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
 
   // ===== STEP 2: DETECT APPROPRIATE FLOW =====
   // Note: currentFlow already declared in step 0.5
-  const detectedFlow = detectFlow(classification, convo, userMessage, sourceContext);
+  const detectedFlow = await detectFlow(classification, convo, userMessage, sourceContext);
 
   console.log(`📍 Current flow: ${currentFlow}, Detected: ${detectedFlow}`);
 

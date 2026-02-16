@@ -19,6 +19,7 @@ async function handleStoreLinkRequest({ psid, convo }) {
                          convo?.productSpecs?.productType === 'rollo';
 
   if (isRolloContext) {
+    const { isBusinessHours } = require("../utils/businessHours");
     await updateConversation(psid, {
       lastIntent: "rollo_ml_inquiry",
       handoffRequested: true,
@@ -27,12 +28,13 @@ async function handleStoreLinkRequest({ psid, convo }) {
       state: "needs_human"
     });
 
-    const response = await generateBotResponse("store_link_rollo", {
-      needsQuote: true,
-      convo
-    });
-
-    return { type: "text", text: response };
+    return {
+      type: "text",
+      text: "Los rollos de malla sombra se cotizan directamente con nuestro equipo de ventas.\n\n" +
+            (isBusinessHours()
+              ? "Un asesor te contactará en breve para ayudarte con tu cotización."
+              : "Un asesor te contactará el siguiente día hábil para ayudarte con tu cotización.")
+    };
   }
 
   const trackedLink = await generateClickLink(psid, STORE_URL, {
@@ -52,21 +54,17 @@ async function handleStoreLinkRequest({ psid, convo }) {
 
   // If no product context yet, confirm ML and ask what they need
   if (!convo?.productInterest) {
-    const response = await generateBotResponse("store_link_no_context", {
-      link: trackedLink,
-      convo
-    });
-
-    return { type: "text", text: response };
+    return {
+      type: "text",
+      text: `¡Sí, vendemos por Mercado Libre! Te comparto nuestra tienda:\n\n${trackedLink}\n\n¿Qué producto te interesa?`
+    };
   }
 
   // Has product context - give store link
-  const response = await generateBotResponse("store_link_request", {
-    link: trackedLink,
-    convo
-  });
-
-  return { type: "text", text: response };
+  return {
+    type: "text",
+    text: `¡Sí! Puedes comprar en nuestra Tienda Oficial de Mercado Libre:\n\n${trackedLink}\n\n¿Te ayudo a encontrar la medida que necesitas?`
+  };
 }
 
 /**
