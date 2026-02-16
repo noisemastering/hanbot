@@ -114,7 +114,7 @@ async function getAvailableWidths() {
     rolloWidthsCache = [...widths].sort((a, b) => a - b);
     rolloWidthsCacheExpiry = Date.now() + CACHE_TTL;
     console.log(`🔄 Rollo widths cache refreshed: ${rolloWidthsCache.join(', ')}m`);
-    return rolloWidthsCache;
+    return rolloWidthsCache.length > 0 ? rolloWidthsCache : [2, 4]; // Fallback if no products found
   } catch (err) {
     console.error("Error fetching rollo widths:", err.message);
     return [2, 4]; // Fallback

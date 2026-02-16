@@ -78,6 +78,9 @@ async function getAvailableSpecs() {
     monoPercentagesCache = [...percentages].sort((a, b) => a - b);
     monoCacheExpiry = Date.now() + CACHE_TTL;
     console.log(`🔄 Monofilamento specs cache: widths=${monoWidthsCache.join(',')}m, pct=${monoPercentagesCache.join(',')}%`);
+    // Fallback if no products found
+    if (monoWidthsCache.length === 0) monoWidthsCache = [4.20];
+    if (monoPercentagesCache.length === 0) monoPercentagesCache = [35, 50, 70, 80];
     return { widths: monoWidthsCache, percentages: monoPercentagesCache };
   } catch (err) {
     console.error("Error fetching monofilamento specs:", err.message);

@@ -75,8 +75,26 @@ const PRODUCT_TYPE_TO_FLOW = {
  * e.g., "mejor quiero antimaleza", "en vez de malla quiero rollo"
  * These are clear enough to skip AI confirmation
  */
-function isUnambiguousSwitch(msg) {
-  return /\b(en vez de|mejor quiero|cambio a|prefiero|no quiero .+ quiero|ya no .+ sino|en lugar de|cambi[ée]|quiero cambiar a)\b/i.test(msg);
+function isUnambiguousSwitch(msg, currentFlow = null, targetFlow = null) {
+  // Explicit switch language
+  if (/\b(en vez de|mejor quiero|cambio a|prefiero|no quiero .+ quiero|ya no .+ sino|en lugar de|cambi[ée]|quiero cambiar a)\b/i.test(msg)) {
+    return true;
+  }
+  // Naming a completely different product category is unambiguous
+  // e.g., saying "malla sombra" while in groundcover, or "groundcover" while in malla_sombra
+  if (currentFlow && targetFlow && currentFlow !== targetFlow) {
+    const differentCategory = {
+      'malla_sombra': ['groundcover', 'monofilamento', 'borde_separador'],
+      'groundcover': ['malla_sombra', 'rollo', 'borde_separador'],
+      'monofilamento': ['malla_sombra', 'groundcover', 'borde_separador'],
+      'rollo': ['groundcover', 'borde_separador', 'malla_sombra'],
+      'borde_separador': ['malla_sombra', 'rollo', 'groundcover', 'monofilamento']
+    };
+    if (differentCategory[currentFlow]?.includes(targetFlow)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -540,7 +558,7 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
 
     if (switchToFlow) {
       // Determine if this is an unambiguous switch or needs AI confirmation
-      const unambiguous = isUnambiguousSwitch(userMessage);
+      const unambiguous = isUnambiguousSwitch(userMessage, currentFlow, switchToFlow);
       let confirmed = unambiguous;
 
       if (!unambiguous) {

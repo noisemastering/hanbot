@@ -77,7 +77,7 @@ async function getAvailableWidths() {
     gcWidthsCache = [...widths].sort((a, b) => a - b);
     gcWidthsCacheExpiry = Date.now() + CACHE_TTL;
     console.log(`🔄 Groundcover widths cache refreshed: ${gcWidthsCache.join(', ')}m`);
-    return gcWidthsCache;
+    return gcWidthsCache.length > 0 ? gcWidthsCache : [2, 4]; // Fallback if no products found
   } catch (err) {
     console.error("Error fetching groundcover widths:", err.message);
     return [2, 4]; // Fallback
