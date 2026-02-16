@@ -116,10 +116,12 @@ Responde en español de forma concisa. Para categorías B, C y D, solo responde 
  * @returns {object} - Response object for the bot
  */
 function generateImageResponse(analysisResult) {
+  const { getHandoffTimingMessage } = require("../utils/businessHours");
+
   if (!analysisResult.success) {
     return {
       type: "text",
-      text: "Gracias por la imagen. Te comunico con un especialista para ayudarte mejor.\n\nEn un momento te atienden.",
+      text: `Gracias por la imagen. Te comunico con un especialista para ayudarte mejor.\n\n${getHandoffTimingMessage()}`,
       needsHandoff: true,
       handoffReason: "Error al procesar la imagen del cliente"
     };
@@ -129,7 +131,7 @@ function generateImageResponse(analysisResult) {
   if (analysisResult.cantAnalyze) {
     return {
       type: "text",
-      text: "Gracias por la imagen. No logro verla bien, te comunico con un especialista que pueda ayudarte mejor.\n\nEn un momento te atienden.",
+      text: `Gracias por la imagen. No logro verla bien, te comunico con un especialista que pueda ayudarte mejor.\n\n${getHandoffTimingMessage()}`,
       needsHandoff: true,
       handoffReason: "No se pudo analizar la imagen correctamente"
     };
@@ -159,7 +161,7 @@ function generateImageResponse(analysisResult) {
   if (analysisResult.isUnrelated) {
     return {
       type: "text",
-      text: "Gracias por la imagen. Te comunico con un especialista para ayudarte.\n\nEn un momento te atienden.",
+      text: `Gracias por la imagen. Te comunico con un especialista para ayudarte.\n\n${getHandoffTimingMessage()}`,
       needsHandoff: true,
       handoffReason: "Cliente envió imagen no relacionada con mallas sombra"
     };

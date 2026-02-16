@@ -6,7 +6,7 @@ const { updateConversation } = require("../../conversationManager");
 const ProductFamily = require("../../models/ProductFamily");
 const { enrichProductWithContext, formatProductForBot, getProductDisplayName } = require("../utils/productEnricher");
 const { getMissingSpecs: getMissingSpecsFromExtractor, isMultiItemOrder, extractMultipleItems, formatMultipleItems } = require("../utils/specExtractor");
-const { isBusinessHours } = require("../utils/businessHours");
+const { isBusinessHours, getHandoffTimingMessage } = require("../utils/businessHours");
 
 /**
  * Extract product specs from a user message
@@ -298,7 +298,7 @@ async function handleRollQuery(userMessage, psid, convo) {
 
       return {
         type: "text",
-        text: "Las mallas confeccionadas las manejamos en medidas estándar. Para medidas especiales o por metro lineal, un especialista te puede cotizar.\n\nEn un momento te atienden."
+        text: `Las mallas confeccionadas las manejamos en medidas estándar. Para medidas especiales o por metro lineal, un especialista te puede cotizar.\n\n${getHandoffTimingMessage()}`
       };
     }
 

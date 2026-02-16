@@ -35,6 +35,7 @@ const { getProductDisplayName, determineVerbosity } = require("./utils/productEn
 const { identifyAndSetProduct } = require("./utils/productIdentifier");
 const { lockPOI, checkVariantExists, getNotAvailableResponse } = require("./utils/productTree");
 const { handleLocationStatsResponse, appendStatsQuestionIfNeeded, shouldAskLocationStatsNow, syncConversationLocationToUser } = require("./utils/locationStats");
+const { getHandoffTimingMessage } = require("./utils/businessHours");
 
 // Layer 0: Source Context Detection
 const { buildSourceContext, logSourceContext, getProductFromSource } = require("./context");
@@ -127,7 +128,7 @@ async function handleIntentFromDB(intentKey, classification, psid, convo, userMe
 
         return {
           type: "text",
-          text: intent.responseTemplate || "Te comunico con un especialista. En un momento te atienden.",
+          text: intent.responseTemplate || `Te comunico con un especialista. ${getHandoffTimingMessage()}`,
           handledBy: "intent_human_handoff"
         };
 
@@ -266,7 +267,7 @@ async function checkForRepetition(response, psid, convo) {
 
     return {
       type: "text",
-      text: "Déjame comunicarte con un especialista que pueda ayudarte mejor.\n\nEn un momento te atienden."
+      text: `Déjame comunicarte con un especialista que pueda ayudarte mejor.\n\n${getHandoffTimingMessage()}`
     };
   }
 
@@ -1192,7 +1193,7 @@ async function generateReply(userMessage, psid, referral = null) {
 
       response = {
         type: "text",
-        text: "Déjame comunicarte con un especialista que pueda ayudarte mejor.\n\nEn un momento te atienden."
+        text: `Déjame comunicarte con un especialista que pueda ayudarte mejor.\n\n${getHandoffTimingMessage()}`
       };
     } else {
       response = {

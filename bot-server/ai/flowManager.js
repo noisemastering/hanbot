@@ -10,6 +10,8 @@ const { analyzeUseCaseFit, generateSuggestionMessage } = require("./utils/usoCas
 const ProductFamily = require("../models/ProductFamily");
 const { generateClickLink } = require("../tracking");
 const { sendHandoffNotification } = require("../services/pushNotifications");
+const { getHandoffTimingMessage } = require("./utils/businessHours");
+const { analyzeProductSwitch } = require("./utils/productSwitchAnalyzer");
 
 // Flow imports
 const defaultFlow = require("./flows/defaultFlow");
@@ -67,6 +69,15 @@ const PRODUCT_TYPE_TO_FLOW = {
   'groundcover': 'groundcover',
   'monofilamento': 'monofilamento'
 };
+
+/**
+ * Check if the message contains unambiguous switching language
+ * e.g., "mejor quiero antimaleza", "en vez de malla quiero rollo"
+ * These are clear enough to skip AI confirmation
+ */
+function isUnambiguousSwitch(msg) {
+  return /\b(en vez de|mejor quiero|cambio a|prefiero|no quiero .+ quiero|ya no .+ sino|en lugar de|cambi[ée]|quiero cambiar a)\b/i.test(msg);
+}
 
 /**
  * Detect if user explicitly mentioned a different product than current flow
@@ -325,7 +336,7 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
       console.log(`🎯 ===== END FLOW MANAGER (wholesale handoff) =====\n`);
       return {
         type: "text",
-        text: `¡Claro! Para ${productName} al mayoreo te comunico con un especialista que te dará los mejores precios. En un momento te atienden.`,
+        text: `¡Claro! Para ${productName} al mayoreo te comunico con un especialista que te dará los mejores precios. ${getHandoffTimingMessage()}`,
         handledBy: "flow:wholesale_handoff",
         purchaseIntent: 'high'
       };
@@ -420,7 +431,7 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
             console.log(`🎯 ===== END FLOW MANAGER (wholesale-only handoff) =====\n`);
             return {
               type: "text",
-              text: `Para ${productName} te comunico con un especialista. En un momento te atienden.`,
+              text: `Para ${productName} te comunico con un especialista. ${getHandoffTimingMessage()}`,
               handledBy: "flow:wholesale_handoff",
               purchaseIntent: 'high'
             };
@@ -500,25 +511,42 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
     const switchToFlow = detectExplicitProductSwitch(userMessage, currentFlow, classification);
 
     if (switchToFlow) {
-      console.log(`🔄 Product switch: ${currentFlow} → ${switchToFlow} (customer explicitly asked)`);
+      // Determine if this is an unambiguous switch or needs AI confirmation
+      const unambiguous = isUnambiguousSwitch(userMessage);
+      let confirmed = unambiguous;
 
-      // Switch directly — no confirmation needed when customer asks for a specific product
-      await updateConversation(psid, {
-        currentFlow: switchToFlow,
-        productInterest: switchToFlow,
-        pendingFlowChange: null,
-        pendingFlowChangeReason: null,
-        flowTransferredFrom: currentFlow,
-        flowTransferredAt: new Date(),
-        // Reset product specs for the new flow
-        productSpecs: { productType: switchToFlow, updatedAt: new Date() }
-      });
-      convo.currentFlow = switchToFlow;
-      convo.productInterest = switchToFlow;
-      convo.productSpecs = { productType: switchToFlow };
+      if (!unambiguous) {
+        // Ambiguous keyword match — ask AI to confirm
+        console.log(`🔍 Ambiguous product switch detected: ${currentFlow} → ${switchToFlow}, verifying with AI...`);
+        const aiResult = await analyzeProductSwitch(userMessage, currentFlow, convo, sourceContext);
+        confirmed = aiResult.shouldSwitch;
 
-      // Let the message fall through to be handled by the new flow
-      // (the flow detection in step 2 will pick up the new currentFlow)
+        if (!confirmed) {
+          console.log(`🤖 AI says NO switch (staying in ${currentFlow}): ${userMessage}`);
+        }
+      }
+
+      if (confirmed) {
+        console.log(`🔄 Product switch: ${currentFlow} → ${switchToFlow} (${unambiguous ? 'unambiguous' : 'AI confirmed'})`);
+
+        // Switch directly — confirmed by either explicit language or AI
+        await updateConversation(psid, {
+          currentFlow: switchToFlow,
+          productInterest: switchToFlow,
+          pendingFlowChange: null,
+          pendingFlowChangeReason: null,
+          flowTransferredFrom: currentFlow,
+          flowTransferredAt: new Date(),
+          // Reset product specs for the new flow
+          productSpecs: { productType: switchToFlow, updatedAt: new Date() }
+        });
+        convo.currentFlow = switchToFlow;
+        convo.productInterest = switchToFlow;
+        convo.productSpecs = { productType: switchToFlow };
+
+        // Let the message fall through to be handled by the new flow
+        // (the flow detection in step 2 will pick up the new currentFlow)
+      }
     }
 
     // Check for unknown products (things we don't sell)

@@ -7,6 +7,7 @@ const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
 const { INTENTS } = require("../classifier");
 const { isBusinessHours } = require("../utils/businessHours");
+const { checkZipBeforeHandoff, handlePendingZipResponse } = require("../utils/preHandoffCheck");
 
 // Import existing utilities - USE THESE
 const { getAncestors, getRootFamily } = require("../utils/productMatcher");
@@ -105,6 +106,32 @@ function determineStage(state) {
 async function handle(classification, sourceContext, convo, psid, campaign = null, userMessage = '') {
   const { intent, entities } = classification;
 
+  // ====== PENDING ZIP CODE RESPONSE ======
+  if (convo?.pendingHandoff) {
+    const zipResult = await handlePendingZipResponse(psid, convo, userMessage);
+    if (zipResult.proceed) {
+      const info = convo.pendingHandoffInfo || {};
+      await updateConversation(psid, {
+        handoffRequested: true,
+        handoffReason: info.reason || 'Groundcover handoff',
+        handoffTimestamp: new Date(),
+        state: "needs_human"
+      });
+
+      const locationAck = zipResult.zipInfo
+        ? `Perfecto, ${zipResult.zipInfo.city || 'ubicación registrada'}. `
+        : '';
+      const timingMsg = isBusinessHours()
+        ? "Un especialista te contactará pronto con el precio."
+        : "Un especialista te contactará el siguiente día hábil con el precio.";
+
+      return {
+        type: "text",
+        text: `${locationAck}${info.specsText || ''}${timingMsg}`
+      };
+    }
+  }
+
   let state = getFlowState(convo);
 
   console.log(`🌱 Groundcover flow - Current state:`, state);
@@ -131,7 +158,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       break;
 
     case STAGES.COMPLETE:
-      response = await handleComplete(intent, state, sourceContext, psid, convo);
+      response = await handleComplete(intent, state, sourceContext, psid, convo, userMessage);
       break;
 
     default:
@@ -188,7 +215,7 @@ function handleAwaitingDimensions(intent, state, sourceContext) {
 /**
  * Handle complete - we have dimensions
  */
-async function handleComplete(intent, state, sourceContext, psid, convo) {
+async function handleComplete(intent, state, sourceContext, psid, convo, userMessage = '') {
   const { width, length, quantity } = state;
 
   // Try to find matching product in inventory
@@ -247,6 +274,13 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
   }
 
   // No product found in inventory - hand off
+  const specsDesc = `malla antimaleza${width ? ` de ${width}m` : ''}${length ? ` x ${length}m` : ''}`;
+  const zipCheck = await checkZipBeforeHandoff(psid, convo, userMessage, {
+    reason: `Groundcover quote: ${width}m${length ? ` x ${length}m` : ''}${quantity ? ` x${quantity}` : ''}`,
+    specsText: `Te confirmo tu solicitud de ${specsDesc}. `
+  });
+  if (zipCheck) return zipCheck;
+
   await updateConversation(psid, {
     handoffRequested: true,
     handoffReason: `Groundcover quote: ${width}m${length ? ` x ${length}m` : ''}${quantity ? ` x${quantity}` : ''}`,
@@ -256,7 +290,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
 
   return {
     type: "text",
-    text: `Te confirmo tu solicitud de malla antimaleza${width ? ` de ${width}m` : ''}${length ? ` x ${length}m` : ''}.\n\n` +
+    text: `Te confirmo tu solicitud de ${specsDesc}.\n\n` +
           (isBusinessHours()
             ? `Un especialista te contactará pronto con el precio.\n\n`
             : `Un especialista te contactará el siguiente día hábil con el precio.\n\n`) +

@@ -5,7 +5,6 @@
 const { updateConversation } = require("../../conversationManager");
 const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
-const ZipCode = require("../../models/ZipCode");
 const { INTENTS } = require("../classifier");
 const { getAvailableSizes } = require("../../measureHandler");
 
@@ -47,46 +46,18 @@ const { detectMexicanLocation, detectZipCode } = require("../../mexicanLocations
 const { sendHandoffNotification } = require("../../services/pushNotifications");
 
 // Business hours check
-const { isBusinessHours, getNextBusinessTimeStr } = require("../utils/businessHours");
+const { isBusinessHours, getNextBusinessTimeStr, getHandoffTimingMessage } = require("../utils/businessHours");
+
+// Pre-handoff zip code collection
+const { checkZipBeforeHandoff, handlePendingZipResponse } = require("../utils/preHandoffCheck");
 
 // NOTE: Global intents are now handled by the Intent Dispatcher (ai/intentDispatcher.js)
 // which runs BEFORE flows. This delegation is being phased out.
 // Keeping import for backwards compatibility during migration.
 const { handleGlobalIntents } = require("../global/intents");
 
-/**
- * Parse zip code from message and look up location
- * Patterns: CP 12345, C.P. 12345, cp12345, al 12345, codigo postal 12345
- * @param {string} msg - User message
- * @returns {Promise<object|null>} { code, city, state, municipality, shipping } or null
- */
-async function parseAndLookupZipCode(msg) {
-  if (!msg) return null;
-
-  const patterns = [
-    /\b(?:c\.?p\.?|codigo\s*postal|cp)\s*[:\.]?\s*(\d{5})\b/i,
-    /\bal\s+(\d{5})\b/i,
-    /\b(\d{5})\b(?=\s*(?:$|,|\.|\s+(?:para|en|a)\b))/i
-  ];
-
-  for (const pattern of patterns) {
-    const match = msg.match(pattern);
-    if (match) {
-      const code = match[1];
-      try {
-        const location = await ZipCode.lookup(code);
-        if (location) {
-          console.log(`📍 Zip code ${code} → ${location.city}, ${location.state}`);
-          return location;
-        }
-      } catch (err) {
-        console.error(`❌ Zip code lookup failed:`, err.message);
-      }
-    }
-  }
-
-  return null;
-}
+// parseAndLookupZipCode is now shared — imported from ../utils/preHandoffCheck
+const { parseAndLookupZipCode } = require("../utils/preHandoffCheck");
 
 /**
  * Flow stages for malla confeccionada
@@ -348,6 +319,38 @@ async function handleMultipleDimensions(dimensions, psid, convo) {
 async function handle(classification, sourceContext, convo, psid, campaign = null, userMessage = '') {
   const { intent, entities } = classification;
 
+  // ====== PENDING ZIP CODE RESPONSE ======
+  // If we asked for zip/city before handoff, process the response
+  if (convo?.pendingHandoff) {
+    const zipResult = await handlePendingZipResponse(psid, convo, userMessage);
+    if (zipResult.proceed) {
+      const info = convo.pendingHandoffInfo || {};
+      // Now complete the handoff that was pending
+      await updateConversation(psid, {
+        handoffRequested: true,
+        handoffReason: info.reason || 'Malla sombra handoff',
+        handoffTimestamp: new Date(),
+        state: "needs_human"
+      });
+
+      sendHandoffNotification(psid, info.reason || 'Malla sombra - cliente proporcionó ubicación').catch(err => {
+        console.error("❌ Failed to send push notification:", err);
+      });
+
+      const locationAck = zipResult.zipInfo
+        ? `Perfecto, ${zipResult.zipInfo.city || 'ubicación registrada'}. `
+        : '';
+      const timingMsg = isBusinessHours()
+        ? "Un especialista te contactará pronto."
+        : `Un especialista te contactará ${getNextBusinessTimeStr()}.`;
+
+      return {
+        type: "text",
+        text: `${locationAck}${info.specsText || ''}${timingMsg}`
+      };
+    }
+  }
+
   // Get current state
   let state = getFlowState(convo);
 
@@ -368,6 +371,13 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     const handoffReason = `Malla sombra: ${reasons.join(' + ')} — "${userMessage}"`;
 
     console.log(`🚨 Malla flow - Immediate handoff: ${handoffReason}`);
+
+    // Check for zip code before handoff
+    const zipCheck = await checkZipBeforeHandoff(psid, convo, userMessage, {
+      reason: handoffReason,
+      specsText: `Esa solicitud requiere atención personalizada. `
+    });
+    if (zipCheck) return zipCheck;
 
     await updateConversation(psid, {
       lastIntent: "malla_specialist_handoff",
@@ -554,6 +564,12 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       }
 
       // No alternatives available - hand off
+      const zipCheck2 = await checkZipBeforeHandoff(psid, convo, userMessage, {
+        reason: `Sin alternativas para ${convo.requestedSize}`,
+        specsText: `Déjame comunicarte con un especialista para buscar opciones para tu medida. `
+      });
+      if (zipCheck2) return zipCheck2;
+
       await updateConversation(psid, {
         handoffRequested: true,
         handoffReason: `Sin alternativas para ${convo.requestedSize}`,
@@ -1007,6 +1023,12 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     if (isInsisting) {
       console.log(`📏 Customer insists on ${fractionalKey}m, handing off`);
 
+      const zipCheck3 = await checkZipBeforeHandoff(psid, convo, userMessage, {
+        reason: `Medida con decimales: ${width}x${height}m (insiste en medida exacta)`,
+        specsText: `Malla de ${width}x${height}m. `
+      });
+      if (zipCheck3) return zipCheck3;
+
       await updateConversation(psid, {
         lastIntent: "fractional_meters_handoff",
         handoffRequested: true,
@@ -1081,6 +1103,12 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     }
 
     // No standard size found - hand off directly
+    const zipCheck4 = await checkZipBeforeHandoff(psid, convo, userMessage, {
+      reason: `Medida con decimales: ${width}x${height}m`,
+      specsText: `Malla de ${width}x${height}m. `
+    });
+    if (zipCheck4) return zipCheck4;
+
     await updateConversation(psid, {
       lastIntent: "fractional_meters_handoff",
       handoffRequested: true,
@@ -1111,6 +1139,12 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     console.log(`🏭 Custom order detected in mallaFlow (${width}x${height}m), handing off to specialist`);
 
     const handoffReason = `Medida grande: ${width}x${height}m (ambos lados ≥8m)`;
+
+    const zipCheck5 = await checkZipBeforeHandoff(psid, convo, userMessage, {
+      reason: handoffReason,
+      specsText: `Malla de ${width}x${height}m. `
+    });
+    if (zipCheck5) return zipCheck5;
 
     await updateConversation(psid, {
       lastIntent: "custom_order_handoff",
@@ -1228,6 +1262,13 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     if (!productUrl) {
       // No link available - hand off to human with video
       console.log(`⚠️ Product ${product.name} has no online store link`);
+
+      const zipCheck6 = await checkZipBeforeHandoff(psid, convo, userMessage, {
+        reason: `Malla ${width}x${height}m - no link available`,
+        specsText: `Malla de ${width}x${height}m. `
+      });
+      if (zipCheck6) return zipCheck6;
+
       await updateConversation(psid, {
         handoffRequested: true,
         handoffReason: `Malla ${width}x${height}m - no link available`,
@@ -1379,6 +1420,12 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
 
     if (piecesNeeded >= 3) {
       // Very large area - hand off for custom order
+      const zipCheck7 = await checkZipBeforeHandoff(psid, convo, userMessage, {
+        reason: `Área grande: ${width}x${height}m (${requestedAreaSqM}m²) - requiere cotización especial`,
+        specsText: `Malla de ${width}x${height}m. `
+      });
+      if (zipCheck7) return zipCheck7;
+
       await updateConversation(psid, {
         handoffRequested: true,
         handoffReason: `Área grande: ${width}x${height}m (${requestedAreaSqM}m²) - requiere cotización especial`,
@@ -1423,6 +1470,12 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
 
   if (!nearestCover && !largest) {
     // No alternatives found - hand off with video
+    const zipCheck8 = await checkZipBeforeHandoff(psid, convo, userMessage, {
+      reason: `Malla quote request: ${width}x${height}m - no alternatives found`,
+      specsText: `Malla de ${width}x${height}m. `
+    });
+    if (zipCheck8) return zipCheck8;
+
     await updateConversation(psid, {
       handoffRequested: true,
       handoffReason: `Malla quote request: ${width}x${height}m - no alternatives found`,

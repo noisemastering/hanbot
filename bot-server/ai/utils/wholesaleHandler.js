@@ -4,6 +4,7 @@
 const Product = require("../../models/Product");
 const { updateConversation } = require("../../conversationManager");
 const { sendHandoffNotification } = require("../../services/pushNotifications");
+const { getHandoffTimingMessage } = require("./businessHours");
 
 /**
  * Check if a product is eligible for wholesale
@@ -102,7 +103,7 @@ async function handleWholesaleRequest(product, quantity, psid, convo) {
   }
 
   // Build response message
-  const message = `¡Excelente! Para ${quantity} ${quantity > 1 ? 'piezas' : 'pieza'} de ${product.name} te paso con un especialista para darte precio de mayoreo. En un momento te atienden.`;
+  const message = `¡Excelente! Para ${quantity} ${quantity > 1 ? 'piezas' : 'pieza'} de ${product.name} te paso con un especialista para darte precio de mayoreo. ${getHandoffTimingMessage()}`;
 
   // Update conversation for handoff
   await updateConversation(psid, {

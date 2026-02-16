@@ -7,6 +7,7 @@ const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
 const { INTENTS } = require("../classifier");
 const { isBusinessHours } = require("../utils/businessHours");
+const { checkZipBeforeHandoff, handlePendingZipResponse } = require("../utils/preHandoffCheck");
 
 // Import existing utilities - USE THESE
 const { getAncestors, getRootFamily } = require("../utils/productMatcher");
@@ -204,6 +205,37 @@ function parseQuantityFromMessage(msg) {
 async function handle(classification, sourceContext, convo, psid, campaign = null, userMessage = '') {
   const { intent, entities } = classification;
 
+  // ====== PENDING ZIP CODE RESPONSE ======
+  if (convo?.pendingHandoff) {
+    const zipResult = await handlePendingZipResponse(psid, convo, userMessage);
+    if (zipResult.proceed) {
+      const info = convo.pendingHandoffInfo || {};
+      await updateConversation(psid, {
+        handoffRequested: true,
+        handoffReason: info.reason || 'Borde separador handoff',
+        handoffTimestamp: new Date(),
+        state: "needs_human"
+      });
+
+      const { sendHandoffNotification } = require("../../services/pushNotifications");
+      sendHandoffNotification(psid, convo, info.reason || 'Borde - cliente proporcionó ubicación').catch(err => {
+        console.error("❌ Failed to send push notification:", err);
+      });
+
+      const locationAck = zipResult.zipInfo
+        ? `Perfecto, ${zipResult.zipInfo.city || 'ubicación registrada'}. `
+        : '';
+      const timingMsg = isBusinessHours()
+        ? "Un especialista te contactará pronto con el precio."
+        : "Un especialista te contactará el siguiente día hábil con el precio.";
+
+      return {
+        type: "text",
+        text: `${locationAck}${info.specsText || ''}${timingMsg}`
+      };
+    }
+  }
+
   let state = getFlowState(convo);
 
   console.log(`🌱 Borde flow - Current state:`, state);
@@ -273,7 +305,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       break;
 
     case STAGES.COMPLETE:
-      response = await handleComplete(intent, state, sourceContext, psid, convo);
+      response = await handleComplete(intent, state, sourceContext, psid, convo, userMessage);
       break;
 
     default:
@@ -347,7 +379,7 @@ function handleAwaitingQuantity(intent, state, sourceContext) {
 /**
  * Handle complete - we have length and quantity
  */
-async function handleComplete(intent, state, sourceContext, psid, convo) {
+async function handleComplete(intent, state, sourceContext, psid, convo, userMessage = '') {
   const { length, quantity } = state;
 
   // Try to find matching product in inventory
@@ -407,6 +439,12 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
 
   // No product found in inventory or no link - hand off with full specs
   const specsText = `${quantity} rollo${quantity > 1 ? 's' : ''} de borde de ${length}m`;
+
+  const zipCheck = await checkZipBeforeHandoff(psid, convo, userMessage, {
+    reason: `Borde: ${specsText}`,
+    specsText: `${specsText}. `
+  });
+  if (zipCheck) return zipCheck;
 
   await updateConversation(psid, {
     handoffRequested: true,

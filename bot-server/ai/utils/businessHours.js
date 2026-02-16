@@ -113,4 +113,18 @@ function getNextBusinessTimeStr() {
   return "el siguiente día hábil a las 9am";
 }
 
-module.exports = { isBusinessHours, wasBusinessHours, getLastBusinessClose, getNextBusinessTimeStr };
+/**
+ * Get the appropriate timing message for handoff responses.
+ * During hours → "En un momento te atienden."
+ * Outside hours → "Nuestro horario de atención es de lunes a viernes de 9am a 6pm. Un especialista te contactará [el lunes a las 9am]."
+ * @param {string} [suffix] - Optional text to append (e.g., " para confirmar el stock")
+ * @returns {string}
+ */
+function getHandoffTimingMessage(suffix = '') {
+  if (isBusinessHours()) {
+    return `En un momento te atienden${suffix}.`;
+  }
+  return `Nuestro horario de atención es de lunes a viernes de 9am a 6pm. Un especialista te contactará ${getNextBusinessTimeStr()}${suffix}.`;
+}
+
+module.exports = { isBusinessHours, wasBusinessHours, getLastBusinessClose, getNextBusinessTimeStr, getHandoffTimingMessage };

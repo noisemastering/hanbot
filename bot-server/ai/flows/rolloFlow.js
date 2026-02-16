@@ -8,6 +8,7 @@ const ProductFamily = require("../../models/ProductFamily");
 const ZipCode = require("../../models/ZipCode");
 const { INTENTS } = require("../classifier");
 const { isBusinessHours } = require("../utils/businessHours");
+const { parseAndLookupZipCode: sharedParseAndLookupZipCode } = require("../utils/preHandoffCheck");
 
 // Import existing utilities - USE THESE
 const { getAncestors, getRootFamily } = require("../utils/productMatcher");
@@ -157,37 +158,8 @@ function formatMoney(n) {
   return n.toLocaleString("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: 0 });
 }
 
-/**
- * Parse zip code from message and look up location
- */
-async function parseAndLookupZipCode(msg) {
-  if (!msg) return null;
-
-  const patterns = [
-    /\b(?:c\.?p\.?|codigo\s*postal|cp)\s*[:\.]?\s*(\d{5})\b/i,
-    /\bal\s+(\d{5})\b/i,
-    /\b(\d{5})\b(?=\s*(?:$|,|\.|\s+(?:para|en|a)\b))/i,
-    /\b(\d{5})\b/  // Fallback: any 5-digit number
-  ];
-
-  for (const pattern of patterns) {
-    const match = msg.match(pattern);
-    if (match) {
-      const code = match[1];
-      try {
-        const location = await ZipCode.lookup(code);
-        if (location) {
-          console.log(`📍 Zip code ${code} → ${location.city}, ${location.state}`);
-          return location;
-        }
-      } catch (err) {
-        console.error(`❌ Zip code lookup failed:`, err.message);
-      }
-    }
-  }
-
-  return null;
-}
+// parseAndLookupZipCode is now shared — use the import from preHandoffCheck
+const parseAndLookupZipCode = sharedParseAndLookupZipCode;
 
 /**
  * Find matching sellable roll products

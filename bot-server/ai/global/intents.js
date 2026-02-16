@@ -32,7 +32,7 @@ const { generateClickLink } = require("../../tracking");
 const { sendHandoffNotification } = require("../../services/pushNotifications");
 const { selectRelevantAsset, trackAssetMention, insertAssetIntoResponse } = require("../assetManager");
 const { handleRollQuery } = require("../core/rollQuery");
-const { isBusinessHours } = require("../utils/businessHours");
+const { isBusinessHours, getHandoffTimingMessage } = require("../utils/businessHours");
 const { getOfferHook, shouldMentionOffer, applyAdContext, getAngleMessaging } = require("../utils/adContextHelper");
 const { isContextualMention, isExplicitProductRequest } = require("../utils/productMatcher");
 const { getProductDisplayName, determineVerbosity, formatProductResponse } = require("../utils/productEnricher");
@@ -349,7 +349,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     return {
       type: "text",
       text: "Disculpa la confusión. Te comunico con un especialista para ayudarte mejor.\n\n" +
-            "En un momento te atienden."
+            getHandoffTimingMessage()
     };
   }
 
@@ -369,7 +369,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     return {
       type: "text",
       text: "Disculpa la confusión con los precios. Te comunico con un especialista para verificar y darte el precio correcto.\n\n" +
-            "En un momento te atienden."
+            getHandoffTimingMessage()
     };
   }
 
@@ -388,7 +388,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     return {
       type: "text",
       text: "Gracias por avisarnos. Déjame verificar la disponibilidad con nuestro equipo.\n\n" +
-            "En un momento te atienden para confirmar el stock."
+            getHandoffTimingMessage(" para confirmar el stock")
     };
   }
 
@@ -960,7 +960,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       return {
         type: "text",
         text: "Parece que hay algo que no estoy entendiendo bien. Déjame contactar a un especialista para que te ayude mejor.\n\n" +
-              "En un momento te atienden."
+              getHandoffTimingMessage()
       };
     }
 
