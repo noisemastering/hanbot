@@ -993,6 +993,27 @@ async function generateReply(userMessage, psid, referral = null) {
     convo.adProductIds = sourceContext.ad.productIds;
     console.log(`🎯 Ad productIds stored on conversation: ${sourceContext.ad.productIds}`);
   }
+  if (sourceContext?.ad?.product && !convo.productInterest) {
+    await updateConversation(psid, { productInterest: sourceContext.ad.product });
+    convo.productInterest = sourceContext.ad.product;
+    console.log(`🎯 Product interest stored from ad: ${sourceContext.ad.product}`);
+  }
+  // Set currentFlow from ad context so the ad's flow governs the whole conversation
+  if (!convo.currentFlow || convo.currentFlow === 'default') {
+    const adFlowMap = {
+      'malla_sombra': 'malla_sombra',
+      'rollo': 'rollo',
+      'borde_separador': 'borde_separador',
+      'groundcover': 'groundcover',
+      'monofilamento': 'monofilamento'
+    };
+    const adFlow = adFlowMap[sourceContext?.ad?.product];
+    if (adFlow) {
+      await updateConversation(psid, { currentFlow: adFlow });
+      convo.currentFlow = adFlow;
+      console.log(`🎯 currentFlow set from ad product: ${adFlow}`);
+    }
+  }
   // ====== END LAYER 0 ======
 
   // ====== LOAD CAMPAIGN CONTEXT ======

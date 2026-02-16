@@ -302,7 +302,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   switch (stage) {
     case STAGES.AWAITING_LENGTH:
-      response = await handleAwaitingLength(intent, state, sourceContext, availableLengths);
+      response = await handleAwaitingLength(intent, state, sourceContext, availableLengths, userMessage);
       break;
 
     case STAGES.AWAITING_QUANTITY:
@@ -337,8 +337,30 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
  * Handle start - user just mentioned borde
  */
 async function handleStart(sourceContext, availableLengths) {
-  const lengthList = availableLengths.map(l => `${l}m`).join(', ');
+  // Try to show prices alongside lengths
+  const products = await findMatchingProducts();
+  const lengthsWithPrices = availableLengths.map(l => {
+    const product = products.find(p => {
+      const text = `${p.name || ''} ${p.size || ''}`;
+      return new RegExp(`\\b${l}\\b`).test(text);
+    });
+    return product?.price
+      ? `• ${l}m — ${formatMoney(product.price)}`
+      : `• ${l}m`;
+  });
 
+  const hasPrices = products.some(p => p.price);
+  if (hasPrices) {
+    return {
+      type: "text",
+      text: `¡Hola! Sí manejamos borde separador para jardín.\n\n` +
+            `Sirve para delimitar áreas de pasto, crear caminos y separar zonas.\n\n` +
+            `${lengthsWithPrices.join('\n')}\n\n` +
+            `¿Qué largo te interesa?`
+    };
+  }
+
+  const lengthList = availableLengths.map(l => `${l}m`).join(', ');
   return {
     type: "text",
     text: `¡Hola! Sí manejamos borde separador para jardín.\n\n` +
@@ -351,19 +373,47 @@ async function handleStart(sourceContext, availableLengths) {
 /**
  * Handle awaiting length stage
  */
-async function handleAwaitingLength(intent, state, sourceContext, availableLengths) {
-  const lengthList = availableLengths.map(l => `${l}m`).join(', ');
+async function handleAwaitingLength(intent, state, sourceContext, availableLengths, userMessage = '') {
+  // Check if user provided area/patio dimensions (NxN) instead of a linear length
+  const dimMatch = (userMessage || '').match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)/);
+  if (dimMatch) {
+    const w = parseFloat(dimMatch[1]);
+    const h = parseFloat(dimMatch[2]);
+    const perimeter = Math.ceil(2 * (w + h));
 
-  if (intent === INTENTS.PRICE_QUERY) {
-    const bulletList = availableLengths.map(l => `• Rollo de ${l} metros`).join('\n');
+    // Find the smallest available length that covers the perimeter
+    const sorted = [...availableLengths].sort((a, b) => a - b);
+    const recommended = sorted.find(l => l >= perimeter) || sorted[sorted.length - 1];
+
     return {
       type: "text",
-      text: `¡Claro! Manejamos borde separador en diferentes presentaciones:\n\n` +
-            `${bulletList}\n\n` +
+      text: `Para un espacio de ${w}x${h}m necesitarías aproximadamente ${perimeter} metros lineales de borde.\n\n` +
+            `Te recomiendo el rollo de ${recommended}m. ¿Te interesa?`
+    };
+  }
+
+  // Build length list with prices if available
+  const products = await findMatchingProducts();
+  const lengthsWithPrices = availableLengths.map(l => {
+    const product = products.find(p => {
+      const text = `${p.name || ''} ${p.size || ''}`;
+      return new RegExp(`\\b${l}\\b`).test(text);
+    });
+    return product?.price
+      ? `• ${l}m — ${formatMoney(product.price)}`
+      : `• ${l}m`;
+  });
+
+  if (intent === INTENTS.PRICE_QUERY || products.some(p => p.price)) {
+    return {
+      type: "text",
+      text: `¡Claro! Manejamos borde separador en las siguientes presentaciones:\n\n` +
+            `${lengthsWithPrices.join('\n')}\n\n` +
             `¿Qué largo necesitas?`
     };
   }
 
+  const lengthList = availableLengths.map(l => `${l}m`).join(', ');
   return {
     type: "text",
     text: `Tenemos rollos de ${lengthList}.\n\n` +

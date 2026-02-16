@@ -18,6 +18,13 @@ function isMallaContext(convo) {
  * @param {object} context - { intent, entities, confidence, psid, convo, userMessage }
  */
 async function handleGreeting({ psid, convo }) {
+  // When there's ad context, let the flow manager route to the correct product flow
+  // Product flows have proper start/greeting messages for their products
+  if (convo?.adProductIds?.length || convo?.adFlowRef) {
+    console.log(`📋 Greeting with ad context — passing to flow manager for product-specific routing`);
+    return null;
+  }
+
   // Check if returning user
   const isReturningUser = convo?.greeted && convo?.lastMessageAt;
   let hoursSinceLastMessage = null;

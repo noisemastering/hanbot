@@ -83,7 +83,7 @@ async function inferFlowFromProductIds(productIds) {
       // Monofilamento by name
       if (/monofilamento/.test(name)) { monoCount++; continue; }
       // Borde by name or size pattern (just meters, no x)
-      if (/borde|separador/.test(name) || /^\d+m$/i.test(size)) { bordeCount++; continue; }
+      if (/borde|separador/.test(name) || /^\d+\s*m(ts?|etros?)?$/i.test(size)) { bordeCount++; continue; }
       // Roll: size has x100 pattern
       if (/\d+\s*x\s*100/i.test(size)) { rollCount++; continue; }
       // Confeccionada: size has NxN but not x100

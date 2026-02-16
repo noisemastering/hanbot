@@ -9,6 +9,17 @@ const { generateBotResponse } = require("../responseGenerator");
 const AVAILABLE_COLORS = ['beige'];
 const ALL_MALLA_COLORS = ['beige', 'negro', 'verde']; // All colors in product line
 
+// Normalize feminine/variant color names to canonical masculine form
+function normalizeColor(color) {
+  if (!color) return null;
+  const map = {
+    'negra': 'negro', 'blanca': 'blanco', 'roja': 'rojo',
+    'café': 'cafe', 'marrón': 'marron', 'marron': 'marron'
+  };
+  const lower = color.toLowerCase();
+  return map[lower] || lower;
+}
+
 /**
  * Handle color query - "Qué colores tienen?", "De qué colores hay?"
  *
@@ -23,14 +34,15 @@ async function handleColorQuery({ entities, psid, convo }) {
   });
 
   const productType = convo?.productInterest || convo?.productSpecs?.productType;
-  const requestedColor = entities?.color?.toLowerCase();
-  const isUnavailableColor = requestedColor && !AVAILABLE_COLORS.includes(requestedColor);
+  const requestedColor = normalizeColor(entities?.color);
+  const colorList = productType === 'rollo' ? ALL_MALLA_COLORS : AVAILABLE_COLORS;
+  const isUnavailableColor = requestedColor && !colorList.includes(requestedColor);
 
   const response = await generateBotResponse("color_query", {
     requestedColor,
     isUnavailableColor,
     productType,
-    availableColors: productType === 'rollo' ? ALL_MALLA_COLORS : AVAILABLE_COLORS,
+    availableColors: colorList,
     convo
   });
 
