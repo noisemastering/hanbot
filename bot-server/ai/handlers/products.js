@@ -408,12 +408,11 @@ async function handleDurabilityQuery({ psid, convo }) {
 // Default catalog link for sharing images
 const DEFAULT_CATALOG_LINK = "https://www.mercadolibre.com.mx/perfil/HANLOB";
 
-// Models for looking up campaign catalog
-const Ad = require("../../models/Ad");
-const Campaign = require("../../models/Campaign");
+const { getCatalogUrl } = require("../flowManager");
 
 /**
  * Handle photo/image request - "Fotos?", "Me compartes imágenes?"
+ * Uses full catalog hierarchy: Ad → Campaign → Product Family → store link
  */
 async function handlePhotoRequest({ psid, convo }) {
   await updateConversation(psid, {
@@ -431,32 +430,10 @@ async function handlePhotoRequest({ psid, convo }) {
     };
   }
 
-  // Check if conversation came from an ad/campaign with a catalog
-  let catalogUrl = null;
+  // Use centralized catalog lookup (Ad → Campaign → Product Family)
+  const catalogUrl = await getCatalogUrl(convo);
 
-  try {
-    // Try to get catalog from Ad first
-    if (convo?.adId) {
-      const ad = await Ad.findOne({ fbAdId: convo.adId }).lean();
-      if (ad?.catalog?.url) {
-        catalogUrl = ad.catalog.url;
-        console.log(`📄 Found catalog from Ad: ${catalogUrl}`);
-      }
-    }
-
-    // Fall back to Campaign catalog
-    if (!catalogUrl && convo?.campaignId) {
-      const campaign = await Campaign.findOne({ fbCampaignId: convo.campaignId }).lean();
-      if (campaign?.catalog?.url) {
-        catalogUrl = campaign.catalog.url;
-        console.log(`📄 Found catalog from Campaign: ${catalogUrl}`);
-      }
-    }
-  } catch (err) {
-    console.error("Error looking up catalog:", err.message);
-  }
-
-  // If we have a campaign catalog (PDF), share it
+  // If we have a catalog (PDF), share it
   if (catalogUrl) {
     return {
       type: "text",
@@ -464,8 +441,7 @@ async function handlePhotoRequest({ psid, convo }) {
     };
   }
 
-  // No campaign catalog - share tracked store link
-  const { generateClickLink } = require("../../tracking");
+  // No catalog found - share tracked store link
   const trackedStoreLink = await generateClickLink(psid, "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob", {
     productName: "Catálogo fotos"
   });

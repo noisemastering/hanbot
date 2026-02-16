@@ -12,6 +12,8 @@ const { generateClickLink } = require("../tracking");
 const { sendHandoffNotification } = require("../services/pushNotifications");
 const { getHandoffTimingMessage } = require("./utils/businessHours");
 const { analyzeProductSwitch } = require("./utils/productSwitchAnalyzer");
+const Ad = require("../models/Ad");
+const Campaign = require("../models/Campaign");
 
 // Flow imports
 const defaultFlow = require("./flows/defaultFlow");
@@ -29,6 +31,23 @@ const leadCaptureFlow = require("./flows/leadCaptureFlow");
 let productFlowCache = {};
 let productFlowCacheExpiry = 0;
 const PRODUCT_FLOW_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Cache for product family catalog lookups
+ */
+let familyCatalogCache = {};
+let familyCatalogCacheExpiry = 0;
+
+/**
+ * Map flow names to root product family name patterns
+ */
+const FLOW_TO_FAMILY_REGEX = {
+  'rollo': /rollo|malla.*sombra.*raschel/i,
+  'malla_sombra': /malla.*sombra.*confeccionada/i,
+  'borde_separador': /borde.*separador|cinta.*pl[aá]stica/i,
+  'groundcover': /ground.*cover|antimaleza/i,
+  'monofilamento': /monofilamento/i
+};
 
 /**
  * Infer flow from ad product IDs by checking actual product data in the DB.
@@ -126,6 +145,123 @@ const FLOW_REF_MAP = {
  * Product-type keywords we don't sell — used to detect "unknown product" questions
  */
 const UNKNOWN_PRODUCTS = /\b(lona|polisombra|media\s*sombra|malla\s*cicl[oó]n|malla\s*electrosoldada|malla\s*galvanizada|pl[aá]stico\s*(para\s*)?invernadero|rafia|costal|tela|alambre|cerca|reja|manguera|tubo|a[lc]ochado|acolchado)\b/i;
+
+/** Flows considered wholesale/roll context — prefer catalog over ML store link */
+const WHOLESALE_FLOWS = ['rollo', 'groundcover', 'monofilamento'];
+
+/**
+ * Look up catalog URL with hierarchy: Ad → Campaign → Product Family → null
+ */
+async function getCatalogUrl(convo, currentFlow) {
+  try {
+    // 1. Ad catalog
+    if (convo?.adId) {
+      const ad = await Ad.findOne({ fbAdId: convo.adId }).select('catalog').lean();
+      if (ad?.catalog?.url) return ad.catalog.url;
+    }
+    // 2. Campaign catalog
+    if (convo?.campaignId) {
+      const campaign = await Campaign.findOne({ fbCampaignId: convo.campaignId }).select('catalog').lean();
+      if (campaign?.catalog?.url) return campaign.catalog.url;
+    }
+    // 3. Product Family catalog (based on current flow)
+    const flow = currentFlow || convo?.currentFlow;
+    if (flow) {
+      const familyCatalog = await getProductFamilyCatalog(flow);
+      if (familyCatalog) return familyCatalog;
+    }
+  } catch (err) {
+    console.error("Error looking up catalog:", err.message);
+  }
+  return null;
+}
+
+/**
+ * Look up catalog URL from root product family based on flow name
+ */
+async function getProductFamilyCatalog(flow) {
+  const regex = FLOW_TO_FAMILY_REGEX[flow];
+  if (!regex) return null;
+
+  // Check cache
+  const cacheKey = flow;
+  if (familyCatalogCache[cacheKey] && Date.now() < familyCatalogCacheExpiry) {
+    return familyCatalogCache[cacheKey];
+  }
+
+  try {
+    const family = await ProductFamily.findOne({
+      name: regex,
+      parentId: null,
+      'catalog.url': { $exists: true, $ne: null }
+    }).select('catalog name').lean();
+
+    const url = family?.catalog?.url || null;
+
+    // Cache result (even null to avoid repeated queries)
+    familyCatalogCache[cacheKey] = url;
+    familyCatalogCacheExpiry = Date.now() + PRODUCT_FLOW_CACHE_TTL;
+
+    if (url) {
+      console.log(`📄 Found catalog from ProductFamily "${family.name}": ${url}`);
+    }
+
+    return url;
+  } catch (err) {
+    console.error("Error looking up family catalog:", err.message);
+    return null;
+  }
+}
+
+/**
+ * Build the response for an unknown product (something we don't sell).
+ * For roll/wholesale contexts: offer catalog instead of ML store link.
+ */
+async function buildUnknownProductResponse(unknownProduct, psid, convo, currentFlow, campaign) {
+  const isWholesaleContext = WHOLESALE_FLOWS.includes(currentFlow) ||
+    convo?.isWholesaleInquiry ||
+    campaign?.conversationGoal === 'cotizacion' ||
+    campaign?.conversationGoal === 'lead_capture';
+
+  // For wholesale/roll contexts, prefer sending the catalog
+  if (isWholesaleContext) {
+    const catalogUrl = await getCatalogUrl(convo, currentFlow) || campaign?.catalog?.url;
+    if (catalogUrl) {
+      console.log(`📄 Unknown product in wholesale context — sharing catalog instead of ML store`);
+      return {
+        type: "text",
+        text: `No manejamos ${unknownProduct}, pero te comparto nuestro catálogo con todo lo que ofrecemos:\n\n📄 ${catalogUrl}\n\n¿Hay algo que te interese?`,
+        handledBy: "flow:unknown_product",
+        purchaseIntent: 'low'
+      };
+    }
+  }
+
+  // Default: ML store link
+  try {
+    const trackedLink = await generateClickLink(psid, 'https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob', {
+      reason: 'unknown_product',
+      unknownProduct,
+      campaignId: convo?.campaignId,
+      userName: convo?.userName
+    });
+
+    return {
+      type: "text",
+      text: `No manejamos ${unknownProduct}, pero te comparto nuestra tienda donde puedes ver todo lo que ofrecemos: ${trackedLink}`,
+      handledBy: "flow:unknown_product",
+      purchaseIntent: 'low'
+    };
+  } catch (err) {
+    console.error(`⚠️ Error generating tracked link for unknown product:`, err.message);
+    return {
+      type: "text",
+      text: `No manejamos ${unknownProduct}. Manejamos malla sombra, borde separador, ground cover y monofilamento. ¿Te interesa alguno?`,
+      handledBy: "flow:unknown_product",
+      purchaseIntent: 'low'
+    };
+  }
+}
 
 /**
  * Product type to flow mapping (from productInterest string)
@@ -682,32 +818,8 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
       if (unknownMatch) {
         const unknownProduct = unknownMatch[1];
         console.log(`❓ Unknown product detected: "${unknownProduct}" (we don't sell this)`);
-
-        try {
-          const trackedLink = await generateClickLink(psid, 'https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob', {
-            reason: 'unknown_product',
-            unknownProduct,
-            campaignId: convo?.campaignId,
-            userName: convo?.userName
-          });
-
-          console.log(`🎯 ===== END FLOW MANAGER (unknown product) =====\n`);
-          return {
-            type: "text",
-            text: `No manejamos ${unknownProduct}, pero te comparto nuestra tienda donde puedes ver todo lo que ofrecemos: ${trackedLink}`,
-            handledBy: "flow:unknown_product",
-            purchaseIntent: 'low'
-          };
-        } catch (err) {
-          console.error(`⚠️ Error generating tracked link for unknown product:`, err.message);
-          console.log(`🎯 ===== END FLOW MANAGER (unknown product, no link) =====\n`);
-          return {
-            type: "text",
-            text: `No manejamos ${unknownProduct}. Manejamos malla sombra, borde separador, ground cover y monofilamento. ¿Te interesa alguno?`,
-            handledBy: "flow:unknown_product",
-            purchaseIntent: 'low'
-          };
-        }
+        console.log(`🎯 ===== END FLOW MANAGER (unknown product) =====\n`);
+        return await buildUnknownProductResponse(unknownProduct, psid, convo, currentFlow, campaign);
       }
     }
   }
@@ -739,32 +851,9 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
     if (unknownMatch) {
       const unknownProduct = unknownMatch[1];
       console.log(`❓ Unknown product detected: "${unknownProduct}" (we don't sell this)`);
-
-      try {
-        const trackedLink = await generateClickLink(psid, 'https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob', {
-          reason: 'unknown_product',
-          unknownProduct,
-          campaignId: convo?.campaignId,
-          userName: convo?.userName
-        });
-
-        console.log(`🎯 ===== END FLOW MANAGER (unknown product) =====\n`);
-        return {
-          type: "text",
-          text: `No manejamos ${unknownProduct}, pero te comparto nuestra tienda donde puedes ver todo lo que ofrecemos: ${trackedLink}`,
-          handledBy: "flow:unknown_product",
-          purchaseIntent: 'low'
-        };
-      } catch (err) {
-        console.error(`⚠️ Error generating tracked link for unknown product:`, err.message);
-        console.log(`🎯 ===== END FLOW MANAGER (unknown product, no link) =====\n`);
-        return {
-          type: "text",
-          text: `No manejamos ${unknownProduct}. Manejamos malla sombra, borde separador, ground cover y monofilamento. ¿Te interesa alguno?`,
-          handledBy: "flow:unknown_product",
-          purchaseIntent: 'low'
-        };
-      }
+      const currentFlowForUnknown = convo?.currentFlow || 'default';
+      console.log(`🎯 ===== END FLOW MANAGER (unknown product) =====\n`);
+      return await buildUnknownProductResponse(unknownProduct, psid, convo, currentFlowForUnknown, campaign);
     }
   }
   // ===== END UNKNOWN PRODUCT CHECK =====
@@ -931,5 +1020,6 @@ module.exports = {
   detectFlow,
   checkFlowTransfer,
   getFlowState,
+  getCatalogUrl,
   FLOWS
 };

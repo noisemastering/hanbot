@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import API from '../api';
+import CatalogUpload from './CatalogUpload';
+
+const API_URL = process.env.REACT_APP_API_URL || 'https://hanbot-production.up.railway.app';
 
 function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParentId }) {
   const [formData, setFormData] = useState({
@@ -102,6 +105,10 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
 
   // State for Points of Sale
   const [pointsOfSale, setPointsOfSale] = useState([]);
+
+  // State for catalog (root families only)
+  const [currentCatalog, setCurrentCatalog] = useState(null);
+  const [existingCatalogs, setExistingCatalogs] = useState([]);
 
   // Function to extract dimension values from text and populate attributes
   const importDimensionsFromText = () => {
@@ -278,6 +285,8 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
         wholesaleMinQty: product.wholesaleMinQty || '',
         wholesalePrice: product.wholesalePrice || ''
       });
+      // Load catalog for root families
+      setCurrentCatalog(product.catalog || null);
     } else if (presetParentId) {
       // When adding a child, preset the parent
       setFormData(prev => ({
@@ -286,6 +295,27 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
       }));
     }
   }, [product, presetParentId]);
+
+  // Fetch existing catalogs for root family catalog picker
+  useEffect(() => {
+    if (product?._id && !product?.parentId) {
+      const fetchCatalogs = async () => {
+        try {
+          const response = await fetch(`${API_URL}/uploads/catalogs`);
+          const data = await response.json();
+          if (data.success) {
+            // Filter out the current entity's own catalog
+            setExistingCatalogs(data.data.filter(c =>
+              !(c.entityType === 'Familia' && c.entityId === product._id)
+            ));
+          }
+        } catch (error) {
+          console.error('Error fetching existing catalogs:', error);
+        }
+      };
+      fetchCatalogs();
+    }
+  }, [product]);
 
   // Fetch Points of Sale when component mounts
   useEffect(() => {
@@ -941,6 +971,44 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                 </div>
               )}
             </div>
+
+            {/* Catalog Section - Root families only (generation 1, no parent) */}
+            {product?._id && !formData.parentId && (
+              <div className="p-4 bg-blue-500/5 rounded-lg border border-blue-500/20">
+                <div className="flex items-center space-x-2 mb-3">
+                  <svg className="w-5 h-5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <h3 className="text-sm font-semibold text-blue-300">Catálogo de Producto</h3>
+                </div>
+                <CatalogUpload
+                  entityType="product-family"
+                  entityId={product._id}
+                  currentCatalog={currentCatalog}
+                  onUploadSuccess={(catalog) => setCurrentCatalog(catalog)}
+                  onDeleteSuccess={() => setCurrentCatalog(null)}
+                  existingCatalogs={existingCatalogs}
+                  onSelectExisting={async ({ url, name }) => {
+                    try {
+                      const response = await fetch(`${API_URL}/uploads/catalog/product-family/${product._id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url, name })
+                      });
+                      const data = await response.json();
+                      if (data.success) {
+                        setCurrentCatalog(data.data.catalog);
+                      }
+                    } catch (err) {
+                      console.error('Error assigning existing catalog:', err);
+                    }
+                  }}
+                />
+                <p className="text-xs text-gray-500 mt-2">
+                  Este catálogo se usará como respaldo cuando el bot no encuentre catálogo en la campaña o anuncio.
+                </p>
+              </div>
+            )}
 
             {/* Sellable-Only Fields */}
             {formData.sellable && (

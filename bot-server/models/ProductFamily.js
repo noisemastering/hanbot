@@ -129,7 +129,14 @@ const productFamilySchema = new mongoose.Schema({
     type: String,
     lowercase: true,
     trim: true
-  }]
+  }],
+  // Catalog PDF for root product families (generation 1)
+  catalog: {
+    url: { type: String },
+    publicId: { type: String },
+    name: { type: String },
+    uploadedAt: { type: Date }
+  }
 }, {
   timestamps: true
 });

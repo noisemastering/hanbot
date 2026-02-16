@@ -4,14 +4,16 @@ const API_URL = process.env.REACT_APP_API_URL || 'https://hanbot-production.up.r
 
 /**
  * CatalogUpload component for uploading PDF catalogs
- * Works with Campaign, AdSet, or Ad
+ * Works with Campaign, AdSet, Ad, or ProductFamily
  *
- * @param {string} entityType - 'campaign', 'adset', or 'ad'
+ * @param {string} entityType - 'campaign', 'adset', 'ad', or 'product-family'
  * @param {string} entityId - MongoDB _id of the entity
  * @param {object} currentCatalog - Current catalog object { url, name, uploadedAt }
  * @param {function} onUploadSuccess - Callback when upload succeeds
  * @param {function} onDeleteSuccess - Callback when delete succeeds
  * @param {string} inheritedFrom - If catalog is inherited, show source (e.g., "Campaign: Malla Agrícola")
+ * @param {Array} existingCatalogs - Array of existing catalogs for the dropdown picker
+ * @param {function} onSelectExisting - Callback when an existing catalog is selected
  */
 export default function CatalogUpload({
   entityType,
@@ -19,7 +21,9 @@ export default function CatalogUpload({
   currentCatalog,
   onUploadSuccess,
   onDeleteSuccess,
-  inheritedFrom = null
+  inheritedFrom = null,
+  existingCatalogs = null,
+  onSelectExisting = null
 }) {
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -157,6 +161,41 @@ export default function CatalogUpload({
       <label className="block text-sm font-medium text-gray-300">
         Catálogo PDF
       </label>
+
+      {/* Existing catalog picker dropdown */}
+      {existingCatalogs && existingCatalogs.length > 0 && onSelectExisting && !inheritedFrom && (
+        <div>
+          <select
+            onChange={(e) => {
+              const selected = existingCatalogs.find(c => c.url === e.target.value);
+              if (selected) {
+                onSelectExisting({ url: selected.url, name: selected.name });
+                e.target.value = '';
+              }
+            }}
+            defaultValue=""
+            className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
+          >
+            <option value="" disabled>Usar catálogo existente...</option>
+            {/* Group by entity type */}
+            {['Familia', 'Campaña', 'AdSet', 'Ad'].map(group => {
+              const items = existingCatalogs.filter(c => c.entityType === group);
+              if (items.length === 0) return null;
+              return (
+                <optgroup key={group} label={group + 's'}>
+                  {items.map((cat, idx) => (
+                    <option key={`${group}-${idx}`} value={cat.url}>
+                      {cat.name || 'Catálogo'} — {cat.entityType}: {cat.entityName}
+                      {cat.uploadedAt ? ` (${new Date(cat.uploadedAt).toLocaleDateString()})` : ''}
+                    </option>
+                  ))}
+                </optgroup>
+              );
+            })}
+          </select>
+          <p className="text-xs text-gray-500 mt-1">o subir nuevo:</p>
+        </div>
+      )}
 
       {/* Current catalog display */}
       {currentCatalog?.url ? (

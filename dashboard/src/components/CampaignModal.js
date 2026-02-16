@@ -215,6 +215,10 @@ function CampaignModal({ campaign, onSave, onClose }) {
   const [newMustNot, setNewMustNot] = useState('');
   const [newShouldDo, setNewShouldDo] = useState('');
 
+  // Existing catalogs for the picker dropdown
+  const [existingCatalogs, setExistingCatalogs] = useState([]);
+  const [catalogsFetched, setCatalogsFetched] = useState(false);
+
 
   // Fetch product families tree on mount
   useEffect(() => {
@@ -428,7 +432,24 @@ function CampaignModal({ campaign, onSave, onClose }) {
           {tabs.map(tab => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => {
+                setActiveTab(tab.id);
+                // Fetch existing catalogs when catalog tab is opened
+                if (tab.id === 'catalog' && !catalogsFetched) {
+                  setCatalogsFetched(true);
+                  fetch(`${API_URL}/uploads/catalogs`)
+                    .then(r => r.json())
+                    .then(data => {
+                      if (data.success) {
+                        // Filter out current campaign's own catalog
+                        setExistingCatalogs(data.data.filter(c =>
+                          !(c.entityType === 'Campaña' && c.entityId === campaign?._id)
+                        ));
+                      }
+                    })
+                    .catch(err => console.error('Error fetching catalogs:', err));
+                }
+              }}
               className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors whitespace-nowrap ${
                 activeTab === tab.id
                   ? 'bg-primary-500 text-white'
@@ -787,6 +808,22 @@ function CampaignModal({ campaign, onSave, onClose }) {
                   currentCatalog={currentCatalog}
                   onUploadSuccess={(catalog) => setCurrentCatalog(catalog)}
                   onDeleteSuccess={() => setCurrentCatalog(null)}
+                  existingCatalogs={existingCatalogs}
+                  onSelectExisting={async ({ url, name }) => {
+                    try {
+                      const response = await fetch(`${API_URL}/uploads/catalog/campaign/${campaign._id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url, name })
+                      });
+                      const data = await response.json();
+                      if (data.success) {
+                        setCurrentCatalog(data.data.catalog);
+                      }
+                    } catch (err) {
+                      console.error('Error assigning existing catalog:', err);
+                    }
+                  }}
                 />
               ) : (
                 <div className="p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
