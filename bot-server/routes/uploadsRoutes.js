@@ -412,4 +412,86 @@ router.put('/catalog/:entityType/:id', async (req, res) => {
   }
 });
 
+/**
+ * Upload global catalog (stored in BusinessInfo)
+ * POST /uploads/catalog/global
+ */
+const mongoose = require('mongoose');
+
+router.post('/catalog/global', uploadCatalog.single('catalog'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ success: false, error: 'No file uploaded' });
+    }
+
+    const BizInfo = mongoose.model('BusinessInfo');
+    let info = await BizInfo.findById('hanlob-info');
+    if (!info) {
+      info = new BizInfo({ _id: 'hanlob-info' });
+    }
+
+    // Delete old catalog if exists
+    if (info.catalog?.publicId) {
+      await deleteFile(info.catalog.publicId).catch(err => {
+        console.warn('Could not delete old global catalog:', err.message);
+      });
+    }
+
+    info.catalog = {
+      url: req.file.path,
+      publicId: req.file.filename,
+      name: req.file.originalname,
+      uploadedAt: new Date()
+    };
+    await info.save();
+
+    res.json({ success: true, data: { catalog: info.catalog } });
+  } catch (error) {
+    console.error('Error uploading global catalog:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Delete global catalog
+ * DELETE /uploads/catalog/global
+ */
+router.delete('/catalog/global', async (req, res) => {
+  try {
+    const BizInfo = mongoose.model('BusinessInfo');
+    const info = await BizInfo.findById('hanlob-info');
+    if (!info) {
+      return res.status(404).json({ success: false, error: 'BusinessInfo not found' });
+    }
+
+    if (info.catalog?.publicId) {
+      await deleteFile(info.catalog.publicId);
+    }
+
+    info.catalog = undefined;
+    await info.save();
+
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting global catalog:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+/**
+ * Get global catalog
+ * GET /uploads/catalog/global
+ */
+router.get('/catalog/global', async (req, res) => {
+  try {
+    const BizInfo = mongoose.model('BusinessInfo');
+    const info = await BizInfo.findById('hanlob-info').select('catalog').lean();
+
+    res.json({ success: true, data: { catalog: info?.catalog || null } });
+  } catch (error) {
+    console.error('Error fetching global catalog:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;

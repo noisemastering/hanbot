@@ -7,6 +7,12 @@ const businessInfoSchema = new mongoose.Schema({
   phones: [String],
   hours: String,
   address: String,
+  catalog: {
+    url: String,
+    publicId: String,
+    name: String,
+    uploadedAt: Date
+  },
   updatedAt: Date
 });
 

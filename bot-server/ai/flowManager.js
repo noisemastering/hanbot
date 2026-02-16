@@ -150,7 +150,7 @@ const UNKNOWN_PRODUCTS = /\b(lona|polisombra|media\s*sombra|malla\s*cicl[oó]n|m
 const WHOLESALE_FLOWS = ['rollo', 'groundcover', 'monofilamento'];
 
 /**
- * Look up catalog URL with hierarchy: Ad → Campaign → Product Family → null
+ * Look up catalog URL with hierarchy: Ad → Campaign → Product Family → Global → null
  */
 async function getCatalogUrl(convo, currentFlow) {
   try {
@@ -170,6 +170,10 @@ async function getCatalogUrl(convo, currentFlow) {
       const familyCatalog = await getProductFamilyCatalog(flow);
       if (familyCatalog) return familyCatalog;
     }
+    // 4. Global catalog (from BusinessInfo)
+    const { getBusinessInfo } = require("../businessInfoManager");
+    const bizInfo = await getBusinessInfo();
+    if (bizInfo?.catalog?.url) return bizInfo.catalog.url;
   } catch (err) {
     console.error("Error looking up catalog:", err.message);
   }

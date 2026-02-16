@@ -1,4 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import CatalogUpload from './CatalogUpload';
+
+const API_URL = process.env.REACT_APP_API_URL || 'https://hanbot-production.up.railway.app';
 
 // Recursive component to render a single product node and its children
 function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, onDetails, level = 0, expandedNodes, onToggleExpand, parentChain = [] }) {
@@ -242,6 +245,24 @@ function ProductFamilyTreeView({
   // Start with all trees collapsed
   const [expandedNodes, setExpandedNodes] = useState(new Set());
 
+  // Global catalog state
+  const [globalCatalog, setGlobalCatalog] = useState(null);
+
+  useEffect(() => {
+    const fetchGlobalCatalog = async () => {
+      try {
+        const response = await fetch(`${API_URL}/uploads/catalog/global`);
+        const data = await response.json();
+        if (data.success) {
+          setGlobalCatalog(data.data.catalog);
+        }
+      } catch (error) {
+        console.error('Error fetching global catalog:', error);
+      }
+    };
+    fetchGlobalCatalog();
+  }, []);
+
   // Helper function to find path from product to root
   const findPathToRoot = (productId, products, path = []) => {
     // Recursively search through the tree
@@ -312,6 +333,28 @@ function ProductFamilyTreeView({
           </svg>
           <span>Nueva Familia de Productos</span>
         </button>
+      </div>
+
+      {/* Global Catalog */}
+      <div className="bg-gray-800/50 backdrop-blur-lg border border-blue-500/30 rounded-xl p-6 mb-6">
+        <div className="flex items-center space-x-3 mb-4">
+          <div className="p-2 bg-blue-500/20 rounded-lg">
+            <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
+          </div>
+          <div>
+            <h3 className="text-lg font-semibold text-white">Catálogo Global</h3>
+            <p className="text-sm text-gray-400">Se usa cuando no hay catálogo en el anuncio, campaña o familia de producto</p>
+          </div>
+        </div>
+        <CatalogUpload
+          entityType="global"
+          entityId="global"
+          currentCatalog={globalCatalog}
+          onUploadSuccess={(catalog) => setGlobalCatalog(catalog)}
+          onDeleteSuccess={() => setGlobalCatalog(null)}
+        />
       </div>
 
       {/* Product Family Tree */}
