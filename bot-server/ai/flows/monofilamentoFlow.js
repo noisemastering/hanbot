@@ -193,12 +193,34 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   if (entities.length) state.length = entities.length;
   if (entities.quantity) state.quantity = entities.quantity;
 
-  const stage = determineStage(state);
   let response;
+
+  // ====== CATALOG / INFO REQUESTS — show available sizes regardless of stage ======
+  const infoIntents = [INTENTS.CATALOG_REQUEST, INTENTS.PRODUCT_INQUIRY, INTENTS.AVAILABILITY_QUERY];
+  if (infoIntents.includes(intent) && !state.width) {
+    response = await handleStart(sourceContext);
+
+    await updateConversation(psid, {
+      lastIntent: `monofilamento_start`,
+      productInterest: "monofilamento",
+      productSpecs: {
+        productType: "monofilamento",
+        width: state.width,
+        length: state.length,
+        quantity: state.quantity,
+        updatedAt: new Date()
+      }
+    });
+
+    return response;
+  }
+  // ====== END CATALOG / INFO REQUESTS ======
+
+  const stage = determineStage(state);
 
   switch (stage) {
     case STAGES.AWAITING_DIMENSIONS:
-      response = handleAwaitingDimensions(intent, state, sourceContext);
+      response = await handleAwaitingDimensions(intent, state, sourceContext);
       break;
 
     case STAGES.COMPLETE:
@@ -206,7 +228,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       break;
 
     default:
-      response = handleStart(sourceContext);
+      response = await handleStart(sourceContext);
   }
 
   // Save updated specs

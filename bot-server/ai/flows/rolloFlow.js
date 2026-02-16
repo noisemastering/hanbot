@@ -405,8 +405,32 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     }
   }
 
-  const stage = determineStage(state);
   let response;
+
+  // ====== CATALOG / INFO REQUESTS — show available sizes regardless of stage ======
+  const infoIntents = [INTENTS.CATALOG_REQUEST, INTENTS.PRODUCT_INQUIRY, INTENTS.AVAILABILITY_QUERY];
+  if (infoIntents.includes(intent) && !state.width) {
+    response = await handleStart(sourceContext);
+
+    await updateConversation(psid, {
+      lastIntent: `roll_start`,
+      productInterest: "rollo",
+      productSpecs: {
+        productType: "rollo",
+        rolloType: state.rolloType,
+        width: state.width,
+        length: 100,
+        percentage: state.percentage,
+        quantity: state.quantity,
+        updatedAt: new Date()
+      }
+    });
+
+    return response;
+  }
+  // ====== END CATALOG / INFO REQUESTS ======
+
+  const stage = determineStage(state);
 
   switch (stage) {
     case STAGES.AWAITING_TYPE:
