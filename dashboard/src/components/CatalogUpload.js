@@ -53,7 +53,7 @@ export default function CatalogUpload({
       const formData = new FormData();
       formData.append('catalog', file);
 
-      const uploadUrl = `${API_URL}/uploads/catalog/${entityType}/${entityId}`;
+      const uploadUrl = `${API_URL}/uploads/catalog/${entityType}${entityId && entityType !== 'global' ? `/${entityId}` : ''}`;
       console.log('Uploading to:', uploadUrl);
 
       const response = await fetch(uploadUrl, {
@@ -98,7 +98,7 @@ export default function CatalogUpload({
     setError(null);
 
     try {
-      const deleteUrl = `${API_URL}/uploads/catalog/${entityType}/${entityId}`;
+      const deleteUrl = `${API_URL}/uploads/catalog/${entityType}${entityId && entityType !== 'global' ? `/${entityId}` : ''}`;
       console.log('Deleting from:', deleteUrl);
 
       const response = await fetch(deleteUrl, {
