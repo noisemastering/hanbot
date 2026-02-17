@@ -6,6 +6,8 @@ const openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 
 const { INTENTS } = require("../classifier");
 const { dispatch } = require("../intentDispatcher");
+const ProductFamily = require("../../models/ProductFamily");
+const { generateClickLink } = require("../../tracking");
 
 // Intent values for the split+classify prompt
 const AVAILABLE_INTENTS = Object.values(INTENTS).join(", ");
@@ -31,10 +33,17 @@ Tu tarea: dividir el mensaje del usuario en preguntas individuales y clasificar 
 INTENTS DISPONIBLES: ${AVAILABLE_INTENTS}
 
 REGLAS:
-- Si el mensaje tiene solo 1 pregunta, responde con un array vacío []
-- Si tiene 2+ preguntas, sepáralas y clasifica cada una
-- Reformula cada pregunta como oración completa en español
+- Si el mensaje tiene solo 1 pregunta sobre 1 producto/medida, responde con un array vacío []
+- Si tiene 2+ preguntas O pide precio/info de 2+ medidas diferentes, sepáralas
+- Cada medida diferente (ej: "2x4 y 5x6") es un segment separado con intent "price_query"
+- Reformula cada pregunta como oración completa en español, incluyendo las dimensiones exactas
 - Usa los intents exactos de la lista
+
+Ejemplo: "Precio para 2x4m y 5x6m" →
+{ "segments": [
+  { "question": "¿Cuánto cuesta la malla de 2x4 metros?", "intent": "price_query" },
+  { "question": "¿Cuánto cuesta la malla de 5x6 metros?", "intent": "price_query" }
+]}
 
 Responde ÚNICAMENTE con JSON:
 { "segments": [{ "question": "pregunta reformulada", "intent": "intent_key" }] }`
@@ -74,7 +83,24 @@ Responde ÚNICAMENTE con JSON:
  */
 async function getAnswerForSegment(segment, psid, convo, sourceContext, campaign) {
   try {
-    // 1. Try intent dispatcher (covers location, shipping, payment, catalog, etc.)
+    // 1. If price_query or size_specification with dimensions, look up actual product
+    if (segment.intent === "price_query" || segment.intent === "size_specification") {
+      const dimMatch = segment.question.match(/(\d+(?:[.,]\d+)?)\s*[xX×*]\s*(\d+(?:[.,]\d+)?)/);
+      if (dimMatch) {
+        const d1 = parseFloat(dimMatch[1].replace(',', '.'));
+        const d2 = parseFloat(dimMatch[2].replace(',', '.'));
+        const w = Math.min(Math.floor(d1), Math.floor(d2));
+        const h = Math.max(Math.floor(d1), Math.floor(d2));
+
+        const answer = await lookupProductPrice(w, h, psid, convo);
+        if (answer) {
+          console.log(`  ✅ Segment "${segment.intent}" answered with product lookup for ${w}x${h}`);
+          return answer;
+        }
+      }
+    }
+
+    // 2. Try intent dispatcher (covers location, shipping, payment, catalog, etc.)
     const classification = {
       intent: segment.intent,
       entities: {},
@@ -92,7 +118,7 @@ async function getAnswerForSegment(segment, psid, convo, sourceContext, campaign
       return dispatchResult.text;
     }
 
-    // 2. Product-specific intents — if in a product flow, get product description
+    // 3. Product-specific intents — if in a product flow, get product description
     if (segment.intent === "product_inquiry" || segment.intent === "price_query") {
       const currentFlow = convo?.currentFlow || convo?.productInterest;
 
@@ -102,17 +128,58 @@ async function getAnswerForSegment(segment, psid, convo, sourceContext, campaign
         console.log(`  ✅ Segment "${segment.intent}" answered by getMallaDescription`);
         return desc;
       }
-
-      if (segment.intent === "price_query") {
-        return "Los precios dependen de la medida. ¿Qué medida te interesa?";
-      }
     }
 
-    // 3. No handler found — return null, combiner will handle gracefully
+    // 4. No handler found — return null, combiner will handle gracefully
     console.log(`  ⚠️ Segment "${segment.intent}" has no handler, returning null`);
     return null;
   } catch (error) {
     console.error(`❌ Error getting answer for segment "${segment.intent}":`, error.message);
+    return null;
+  }
+}
+
+/**
+ * Look up a product by dimensions and return a price answer string.
+ */
+async function lookupProductPrice(w, h, psid, convo) {
+  try {
+    const sizeRegex = new RegExp(
+      `^\\s*(${w}\\s*m?\\s*[xX×]\\s*${h}|${h}\\s*m?\\s*[xX×]\\s*${w})\\s*m?\\s*$`, 'i'
+    );
+
+    const products = await ProductFamily.find({
+      sellable: true,
+      active: true,
+      size: sizeRegex
+    }).sort({ price: 1 }).lean();
+
+    if (products.length === 0) return null;
+
+    const product = products[0];
+    const price = product.price ? `$${product.price.toLocaleString('es-MX')}` : null;
+    if (!price) return null;
+
+    // Try to get ML link
+    let linkText = '';
+    const storeLink = product.onlineStoreLinks?.find(l => l.platform === 'mercadolibre' || l.platform === 'mercado_libre');
+    if (storeLink?.url) {
+      try {
+        const tracked = await generateClickLink(psid, storeLink.url, {
+          reason: 'multi_size_quote',
+          productId: product._id,
+          size: `${w}x${h}`,
+          userName: convo?.userName
+        });
+        linkText = `\n${tracked}`;
+      } catch (e) {
+        linkText = `\n${storeLink.url}`;
+      }
+    }
+
+    return `Malla de ${w}x${h}m: ${price} con envío gratis${linkText}`;
+  } catch (err) {
+    console.error(`❌ Error looking up product ${w}x${h}:`, err.message);
     return null;
   }
 }
