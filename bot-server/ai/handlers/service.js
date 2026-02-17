@@ -15,12 +15,10 @@ async function handleInstallation({ psid, convo }) {
     unknownCount: 0
   });
 
-  const response = await generateBotResponse("installation_query", {
-    offersInstallation: false,
-    convo
-  });
-
-  return { type: "text", text: response };
+  return {
+    type: "text",
+    text: "En Hanlob no contamos con servicio de instalación, pero nuestra malla sombra confeccionada es muy fácil de instalar. Para saber la medida te sugiero medir el área y restar un metro por lado, por ejemplo si tu área mide 4x5, la malla sombra que ocupas sería la de 3x4 metros."
+  };
 }
 
 /**

@@ -222,7 +222,7 @@ async function handleMultiQuestion(entities, convo, psid) {
       : `Nuestra tienda en Mercado Libre acepta tarjeta de crédito/débito, efectivo en OXXO y tiendas de conveniencia, y Mercado Crédito. En nuestra tienda física aceptamos efectivo y tarjetas.`,
     'availability_query': `✅ Manejamos malla sombra confeccionada desde 2x2m hasta 6x10m, lista para instalar.`,
     'delivery_time_query': `🚚 Normalmente de 3 a 5 días hábiles dependiendo de tu ubicación.`,
-    'installation_query': `🔧 No ofrecemos servicio de instalación, pero la malla viene lista para instalar con argollas en todo el perímetro.`,
+    'installation_query': `En Hanlob no contamos con servicio de instalación, pero nuestra malla sombra confeccionada es muy fácil de instalar. Para saber la medida te sugiero medir el área y restar un metro por lado, por ejemplo si tu área mide 4x5, la malla sombra que ocupas sería la de 3x4 metros.`,
     'product_inquiry': `ℹ️ Tenemos malla sombra confeccionada lista para instalar en diferentes medidas y porcentajes de sombra.`
   };
 

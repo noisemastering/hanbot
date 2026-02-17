@@ -1639,12 +1639,10 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   if (installationPattern) {
     console.log("🔧 Measurement/installation service request detected");
-    await updateConversation(psid, { lastIntent: "service_request" });
+    await updateConversation(psid, { lastIntent: "installation_query" });
     return {
       type: "text",
-      text: "No, mil disculpas, en Hanlob no proveemos servicios de instalación 🔧\n\n" +
-            "Solo vendemos la malla sombra y la enviamos a tu domicilio.\n\n" +
-            "¿Ya tienes la medida que necesitas?"
+      text: "En Hanlob no contamos con servicio de instalación, pero nuestra malla sombra confeccionada es muy fácil de instalar. Para saber la medida te sugiero medir el área y restar un metro por lado, por ejemplo si tu área mide 4x5, la malla sombra que ocupas sería la de 3x4 metros."
     };
   }
 
@@ -2247,30 +2245,9 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   if (isInstallationQuery(msg)) {
     await updateConversation(psid, { lastIntent: "installation_query", unknownCount: 0 });
 
-    // Context-aware responses based on previous conversation
-    let response = "";
-
-    if (convo.lastIntent === "specific_measure" && convo.requestedSize) {
-      // They were asking about a specific size
-      response = `No ofrecemos instalación 😊, pero para la medida de ${convo.requestedSize} que mencionaste, puedo ayudarte con las especificaciones técnicas para que la instales tú o contrates a alguien. ¿Te gustaría saber más sobre alguna de las opciones que te sugerí?`;
-    } else if (convo.lastIntent === "specific_measure") {
-      // They were asking about sizes in general
-      response = `No ofrecemos instalación, pero puedo ayudarte a elegir la medida correcta y darte las especificaciones para que la instalación sea fácil 🌿. ¿Te interesa alguna de las opciones que te mencioné?`;
-    } else {
-      // Generic installation question - use AI
-      const { generateBotResponse } = require('./responseGenerator');
-      try {
-        const aiResp = await generateBotResponse('installation_query', { convo });
-        if (aiResp) response = aiResp;
-        else response = "No ofrecemos instalación, pero te ayudamos con las medidas.";
-      } catch (e) {
-        response = "No ofrecemos instalación, pero te ayudamos con las medidas.";
-      }
-    }
-
     return {
       type: "text",
-      text: response
+      text: "En Hanlob no contamos con servicio de instalación, pero nuestra malla sombra confeccionada es muy fácil de instalar. Para saber la medida te sugiero medir el área y restar un metro por lado, por ejemplo si tu área mide 4x5, la malla sombra que ocupas sería la de 3x4 metros."
     };
   }
 
