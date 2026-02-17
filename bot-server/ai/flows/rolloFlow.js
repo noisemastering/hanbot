@@ -313,9 +313,9 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       console.log(`📦 Rollo flow - Dimensions ${fullDimCheck[1]}x${fullDimCheck[2]} don't match roll pattern, skipping width extraction`);
     } else {
       const widthPatterns = [
-        /\b(?:de\s+)?(\d+(?:[.,]\d+)?)\s*(?:m(?:ts?|etros?)?)\b/i,  // "de 4 mts", "4 metros", "4.20m"
-        /\b(?:el\s+)?(?:de\s+)?(\d+(?:[.,]\d+)?)\s*(?:ancho)?\b/i,   // "el de 4", "4 ancho"
-        /\b(\d+(?:[.,]\d+)?)\s*[xX×]\s*100\b/i                       // "4x100", "4.20x100"
+        /\b(?:de\s+)?(\d+(?:[.,]\d+)?)\s*(?:m(?:ts?|etros?)?)\b/i,              // "de 4 mts", "4 metros", "4.20m"
+        /\b(?:el\s+)?(?:de\s+)?(\d+(?:[.,]\d+)?)\s*(?:ancho)?\b(?!\s*(?:rollos?|pzas?|piezas?|unidades?))/i,  // "el de 4", "4 ancho" — NOT "1 rollo"
+        /\b(\d+(?:[.,]\d+)?)\s*[xX×]\s*100\b/i                                  // "4x100", "4.20x100"
       ];
 
       for (const pattern of widthPatterns) {
@@ -478,7 +478,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   // ====== CATALOG / INFO / PRICE REQUESTS — show available sizes regardless of stage ======
   const infoIntents = [INTENTS.CATALOG_REQUEST, INTENTS.PRODUCT_INQUIRY, INTENTS.AVAILABILITY_QUERY, INTENTS.PRICE_QUERY];
   if (infoIntents.includes(intent) && !state.width) {
-    response = await handleStart(sourceContext);
+    response = await handleStart(sourceContext, state);
 
     await updateConversation(psid, {
       lastIntent: `roll_start`,
@@ -526,7 +526,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       break;
 
     default:
-      response = await handleStart(sourceContext);
+      response = await handleStart(sourceContext, state);
   }
 
   // Save updated specs
@@ -573,15 +573,47 @@ function handleAwaitingType(intent, state, sourceContext) {
 
 /**
  * Handle start - user just mentioned rolls (type already known)
- * Shows price range and asks for specific size
+ * Shows price range and asks for specific size.
+ * If percentage is already known, shows per-width prices for that percentage.
  */
-async function handleStart(sourceContext) {
+async function handleStart(sourceContext, state = {}) {
   const widths = await getAvailableWidths();
   const widthList = widths.map(w => `${w}m`).join(' y ');
   const percentageList = VALID_PERCENTAGES.join('%, ') + '%';
 
-  // Look up all malla sombra roll products for price range
   try {
+    // If percentage already known, show specific prices per width
+    if (state.percentage) {
+      const pctConditions = [
+        { sellable: true },
+        { active: true },
+        { size: /\d+x100/i },
+        { $or: [
+          { name: new RegExp(`${state.percentage}\\s*%`, 'i') },
+          { name: new RegExp(`${state.percentage}\\s*por\\s*ciento`, 'i') }
+        ]}
+      ];
+      const pctProducts = await ProductFamily.find({ $and: pctConditions })
+        .select('price size name').sort({ price: 1 }).lean();
+
+      if (pctProducts.length > 0 && pctProducts.some(p => p.price)) {
+        const lines = [];
+        for (const w of widths) {
+          const match = pctProducts.find(p => p.size && new RegExp(`${w}.*100`, 'i').test(p.size));
+          if (match?.price) {
+            lines.push(`• ${w}m x 100m — ${formatMoney(match.price)}`);
+          }
+        }
+        if (lines.length > 0) {
+          return {
+            type: "text",
+            text: `Rollos de malla sombra al ${state.percentage}%:\n\n${lines.join('\n')}\n\n¿Cuál te interesa?`
+          };
+        }
+      }
+    }
+
+    // No percentage — show general price range
     const products = await ProductFamily.find({
       sellable: true,
       active: true,
