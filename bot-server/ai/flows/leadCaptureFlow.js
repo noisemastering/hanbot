@@ -35,8 +35,7 @@ function shouldHandle(classification, sourceContext, convo, userMessage, campaig
   // e.g. "cuánto cuesta el rollo de 50 metros" should go to rollo flow, not lead form
   const productIntents = [
     INTENTS.PRICE_QUERY, INTENTS.PRODUCT_INQUIRY, INTENTS.PURCHASE_INTENT,
-    INTENTS.AVAILABILITY_QUERY, INTENTS.CATALOG_REQUEST, INTENTS.SIZE_SPECIFICATION,
-    INTENTS.MULTI_QUESTION
+    INTENTS.AVAILABILITY_QUERY, INTENTS.CATALOG_REQUEST, INTENTS.SIZE_SPECIFICATION
   ];
   const msg = (userMessage || '').toLowerCase();
   const hasProductQuery = productIntents.includes(classification?.intent) ||
@@ -61,9 +60,13 @@ function shouldHandle(classification, sourceContext, convo, userMessage, campaig
     return true;
   }
 
-  // For new conversations: only enter lead capture for explicit wholesale/catalog requests
-  // NOT for customers asking about specific products
+  // For new conversations: ONLY enter lead capture when customer explicitly asks for
+  // a quote, wholesale pricing, or catalog. Show prices first for everything else.
   if (hasProductQuery) return false;
+
+  // Only capture explicit wholesale/quote requests — NOT generic messages like "info" or "hola"
+  const wantsQuote = /\b(cotiza|presupuesto|mayoreo|distribuidor|precio\s*especial|por\s*mayor|al\s*mayor|cantidad|cat[aá]logo|lista\s*de?\s*precios)\b/i.test(msg);
+  if (!wantsQuote) return false;
 
   // Check if campaign has catalog (PDF)
   if (campaign.catalog?.url) return true;

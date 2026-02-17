@@ -590,6 +590,8 @@ function quickClassify(message, dbIntents = null) {
 
   // ===== MULTI-QUESTION DETECTION (runs FIRST - before any single-intent patterns) =====
   // Dynamically detect ALL question types in a message (supports 2, 3, or more questions)
+  // Only actual QUESTION TYPES here — NOT data signals like dimensions or product names.
+  // "Precio malla 6x6" is ONE question, not three.
   const questionIndicators = [
     { intent: 'confirmation', pattern: /\b(s[ií]|las?\s+dos|los?\s+dos|ambos?|ambas?|esa|ese|esas|esos|dale|ok|vale|perfecto|m[eé]?\s*interesa|lo\s*quiero|la\s*quiero)\b/i },
     { intent: 'price_query', pattern: /\b(precio|costo|cu[aá]nto\s*(cuesta|vale|es|está)|qu[eé]\s*precio|en\s+cu[aá]nto|a\s+c[oó]mo)\b/i },
@@ -599,9 +601,7 @@ function quickClassify(message, dbIntents = null) {
     { intent: 'shipping_query', pattern: /\b(env[ií]o|envi[aá]n|entrega|llega|mandan|cu[aá]nto\s*tarda)\b/i },
     { intent: 'installation_query', pattern: /\b(instal[ae]n?|ponen|colocan|c[oó]mo\s*se\s*(instala|pone|coloca))\b/i },
     { intent: 'product_inquiry', pattern: /\b(informes?|info|caracter[ií]sticas?|especificaciones?|de\s*qu[eé]\s*(es|est[aá]|material))\b/i },
-    { intent: 'delivery_time_query', pattern: /\b(cu[aá]nto\s*tarda|cu[aá]ntos?\s*d[ií]as?|tiempo\s*de\s*entrega|cuando\s*llega)\b/i },
-    { intent: 'size_specification', pattern: /\d+\s*[xX×*]\s*\d+/ },
-    { intent: 'product_mention', pattern: /\b(malla|rollo|borde|confeccionada|ground\s*cover|monofilamento)\b/i }
+    { intent: 'delivery_time_query', pattern: /\b(cu[aá]nto\s*tarda|cu[aá]ntos?\s*d[ií]as?|tiempo\s*de\s*entrega|cuando\s*llega)\b/i }
   ];
 
   // Detect pay-on-delivery specifically
