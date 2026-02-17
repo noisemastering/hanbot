@@ -35,12 +35,16 @@ function shouldHandle(classification, sourceContext, convo, userMessage, campaig
   // e.g. "cuánto cuesta el rollo de 50 metros" should go to rollo flow, not lead form
   const productIntents = [
     INTENTS.PRICE_QUERY, INTENTS.PRODUCT_INQUIRY, INTENTS.PURCHASE_INTENT,
-    INTENTS.AVAILABILITY_QUERY, INTENTS.CATALOG_REQUEST, INTENTS.SIZE_SPECIFICATION
+    INTENTS.AVAILABILITY_QUERY, INTENTS.CATALOG_REQUEST, INTENTS.SIZE_SPECIFICATION,
+    INTENTS.MULTI_QUESTION
   ];
+  const msg = (userMessage || '').toLowerCase();
   const hasProductQuery = productIntents.includes(classification?.intent) ||
     (classification?.product && classification.product !== 'unknown') ||
     classification?.entities?.dimensions ||
-    classification?.entities?.width;
+    classification?.entities?.width ||
+    // Fallback: check raw message for product data (dimensions + price/product keywords)
+    (/\d+\s*[xX×*]\s*\d+/.test(msg) && /\b(precio|costo|cu[aá]nto|cuanto|malla|rollo|borde|ground|monofilamento)\b/i.test(msg));
 
   // Never hijack a conversation that's already in a product flow
   if (convo?.currentFlow && convo.currentFlow !== 'default') {
