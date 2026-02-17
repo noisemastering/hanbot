@@ -953,7 +953,7 @@ async function generateReply(userMessage, psid, referral = null) {
       const isQueretaro = (location.state && /quer[eé]taro/i.test(location.state)) ||
                           (location.city && /quer[eé]taro/i.test(location.city));
 
-      let response = `Perfecto, enviamos a ${locationStr} sin costo a través de Mercado Libre 📦`;
+      let response = `Perfecto, enviamos a ${locationStr} a través de Mercado Libre 📦`;
 
       if (isQueretaro) {
         response += `\n\nTambién puedes visitar nuestra tienda en el parque industrial Navex, Tlacote.`;
