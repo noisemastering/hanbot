@@ -44,16 +44,23 @@ router.get('/grouped', async (req, res) => {
     // Build exclude list
     const excludeList = excludePsids ? excludePsids.split(',').filter(Boolean) : [];
 
+    const hasDateFilter = !!(start || end);
     const pipeline = [];
 
     // 1. Optional date filter on messages
     const matchStage = {};
-    if (start || end) matchStage.timestamp = dateMatch;
+    if (hasDateFilter) matchStage.timestamp = dateMatch;
     if (excludeList.length > 0) matchStage.psid = { $nin: excludeList };
     if (Object.keys(matchStage).length > 0) pipeline.push({ $match: matchStage });
 
     // 2. Sort by timestamp desc so $first gives latest
     pipeline.push({ $sort: { timestamp: -1 } });
+
+    // 2b. For unfiltered queries (quick actions), pre-limit to recent messages
+    // to avoid scanning the entire collection. 500 messages covers 10+ conversations easily.
+    if (!hasDateFilter && excludeList.length === 0) {
+      pipeline.push({ $limit: 500 });
+    }
 
     // 3. Group by psid, take latest message info
     pipeline.push({
@@ -99,10 +106,13 @@ router.get('/grouped', async (req, res) => {
     // 6. Sort by latest message
     pipeline.push({ $sort: { lastMessageAt: -1 } });
 
-    // Count total before pagination
-    const countPipeline = [...pipeline, { $count: 'total' }];
-    const countResult = await Message.aggregate(countPipeline);
-    const total = countResult.length > 0 ? countResult[0].total : 0;
+    // Count total only when paginating (date-filtered queries)
+    let total = 0;
+    if (hasDateFilter) {
+      const countPipeline = [...pipeline, { $count: 'total' }];
+      const countResult = await Message.aggregate(countPipeline);
+      total = countResult.length > 0 ? countResult[0].total : 0;
+    }
 
     // 7. Paginate
     pipeline.push({ $skip: (pageNum - 1) * limitNum });
@@ -115,8 +125,8 @@ router.get('/grouped', async (req, res) => {
       pagination: {
         page: pageNum,
         limit: limitNum,
-        total,
-        pages: Math.ceil(total / limitNum)
+        total: hasDateFilter ? total : conversations.length,
+        pages: hasDateFilter ? Math.ceil(total / limitNum) : 1
       }
     });
   } catch (error) {

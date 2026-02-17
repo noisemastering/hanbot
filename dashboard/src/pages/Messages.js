@@ -188,7 +188,7 @@ function Messages() {
       const exclude = excludePsids || quickActionPsidsRef.current;
       const params = new URLSearchParams({
         page: String(page),
-        limit: '30',
+        limit: '20',
         start: start.toISOString(),
         end: end.toISOString()
       });
