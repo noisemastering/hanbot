@@ -1,22 +1,30 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef, useCallback } from "react";
 import API from "../api";
 import TrackedLinkGenerator from "../components/TrackedLinkGenerator";
 
 function Messages() {
-  const [messages, setMessages] = useState([]);
+  const [quickActions, setQuickActions] = useState([]);
+  const [filteredConversations, setFilteredConversations] = useState([]);
   const [conversationStatuses, setConversationStatuses] = useState({});
   const [loading, setLoading] = useState({});
   const [selectedPsid, setSelectedPsid] = useState(null);
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [fullConversation, setFullConversation] = useState([]);
   const [dateFilter, setDateFilter] = useState('today');
-  const [, setUsers] = useState({}); // eslint-disable-line no-unused-vars
   const [refreshing, setRefreshing] = useState(false);
   const [showLinkGenerator, setShowLinkGenerator] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
   const [pendingHandoffs, setPendingHandoffs] = useState([]);
   const [initialLoading, setInitialLoading] = useState(true);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [totalConversations, setTotalConversations] = useState(0);
+  const [loadingFiltered, setLoadingFiltered] = useState(false);
+
+  const quickActionPsidsRef = useRef([]);
+  const currentPageRef = useRef(1);
+  const dateFilterRef = useRef('today');
 
   // Helper function to show message excerpt
   const getMessageExcerpt = (text, maxLength = 60) => {
@@ -124,6 +132,21 @@ function Messages() {
     }
   };
 
+  // Build statuses map from grouped API conversations
+  const applyStatusesFromGrouped = (conversations) => {
+    const statuses = {};
+    conversations.forEach(conv => {
+      statuses[conv.psid] = {
+        humanActive: conv.humanActive,
+        handoffRequested: conv.handoffRequested,
+        handoffReason: conv.handoffReason,
+        purchaseIntent: conv.purchaseIntent,
+        state: conv.state
+      };
+    });
+    setConversationStatuses(prev => ({ ...prev, ...statuses }));
+  };
+
   const fetchFullConversation = async (psid) => {
     try {
       const res = await API.get(`/conversations/${psid}`);
@@ -143,57 +166,82 @@ function Messages() {
     }
   };
 
+  const fetchQuickActions = useCallback(async () => {
+    try {
+      const res = await API.get("/conversations/grouped?limit=10");
+      const convs = res.data.conversations || [];
+      setQuickActions(convs);
+      applyStatusesFromGrouped(convs);
+      const psids = convs.map(c => c.psid);
+      quickActionPsidsRef.current = psids;
+      return psids;
+    } catch (err) {
+      console.error("Error fetching quick actions:", err);
+      return quickActionPsidsRef.current;
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const fetchFilteredPage = useCallback(async (page = 1, excludePsids = null) => {
+    setLoadingFiltered(true);
+    try {
+      const { start, end } = getDateRange(dateFilterRef.current);
+      const exclude = excludePsids || quickActionPsidsRef.current;
+      const params = new URLSearchParams({
+        page: String(page),
+        limit: '30',
+        start: start.toISOString(),
+        end: end.toISOString()
+      });
+      if (exclude.length > 0) {
+        params.set('excludePsids', exclude.join(','));
+      }
+      const res = await API.get(`/conversations/grouped?${params}`);
+      const convs = res.data.conversations || [];
+      setFilteredConversations(convs);
+      setCurrentPage(res.data.pagination.page);
+      setTotalPages(res.data.pagination.pages);
+      setTotalConversations(res.data.pagination.total);
+      currentPageRef.current = res.data.pagination.page;
+      applyStatusesFromGrouped(convs);
+    } catch (err) {
+      console.error("Error fetching filtered conversations:", err);
+    } finally {
+      setLoadingFiltered(false);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
-    const fetchMessages = async () => {
-      try {
-        const res = await API.get("/conversations");
-        setMessages(res.data);
-
-        // Fetch status for each unique PSID
-        const uniquePSIDs = [...new Set(res.data.map(m => m.psid))];
-        const statuses = {};
-        for (const psid of uniquePSIDs) {
-          try {
-            const statusRes = await API.get(`/api/conversation/${psid}/status`);
-            statuses[psid] = statusRes.data;
-          } catch (err) {
-            console.error(`Error fetching status for ${psid}:`, err);
-          }
-        }
-        setConversationStatuses(statuses);
-      } catch (err) {
-        console.error(err);
-      }
+    const init = async () => {
+      // Fetch quick actions + pending handoffs in parallel
+      const [excludePsids] = await Promise.all([
+        fetchQuickActions(),
+        fetchPendingHandoffs()
+      ]);
+      setInitialLoading(false);
+      // Then fetch filtered page (needs exclude list)
+      await fetchFilteredPage(1, excludePsids);
     };
-
-    const fetchUsers = async () => {
-      try {
-        const res = await API.get("/users");
-        // Convert array to object with psid as key
-        const usersMap = {};
-        res.data.data.forEach(user => {
-          usersMap[user.psid] = user;
-        });
-        setUsers(usersMap);
-      } catch (err) {
-        console.error("Error fetching users:", err);
-      }
-    };
-
-    // Initial fetch
-    Promise.all([fetchMessages(), fetchUsers(), fetchPendingHandoffs()])
-      .finally(() => setInitialLoading(false));
+    init();
 
     // Auto-refresh every 30 seconds
     const interval = setInterval(() => {
-      fetchMessages();
-      fetchUsers();
+      fetchQuickActions();
+      fetchFilteredPage(currentPageRef.current);
       fetchPendingHandoffs();
     }, 30000);
 
-    // Cleanup interval on unmount
     return () => clearInterval(interval);
-  }, []);
+  }, [fetchQuickActions, fetchFilteredPage]);
+
+  // Refetch filtered page when date filter changes
+  useEffect(() => {
+    dateFilterRef.current = dateFilter;
+    if (!initialLoading) {
+      setCurrentPage(1);
+      currentPageRef.current = 1;
+      fetchFilteredPage(1);
+    }
+  }, [dateFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTakeover = async (psid) => {
     setLoading(prev => ({ ...prev, [psid]: true }));
@@ -291,72 +339,30 @@ function Messages() {
   };
 
   const handleRefresh = async () => {
-    console.log("🔄 handleRefresh CALLED");
     setRefreshing(true);
-
-    const timeout = new Promise((_, reject) =>
-      setTimeout(() => reject(new Error('Request timeout')), 10000)
-    );
-
     try {
-      console.log("🔄 Fetching conversations...");
-      const messagesRes = await Promise.race([
-        API.get("/conversations"),
-        timeout
+      await Promise.all([
+        fetchQuickActions(),
+        fetchFilteredPage(currentPageRef.current),
+        fetchPendingHandoffs()
       ]);
-      console.log(`✅ Got ${messagesRes.data.length} messages`);
-
-      console.log("🔄 Fetching users...");
-      const usersRes = await Promise.race([
-        API.get("/users"),
-        timeout
-      ]);
-      console.log(`✅ Got ${usersRes.data.data.length} users`);
-
-      setMessages(messagesRes.data);
-
-      const usersMap = {};
-      usersRes.data.data.forEach(user => {
-        usersMap[user.psid] = user;
-      });
-      setUsers(usersMap);
-
-      // Refresh pending handoffs too
-      await fetchPendingHandoffs();
-
-      console.log("✅ Refresh COMPLETE!");
     } catch (err) {
-      console.error("❌ REFRESH ERROR:", err);
-      console.error("Error details:", err.response?.data || err.message);
+      console.error("Refresh error:", err);
       alert(`Error: ${err.response?.data?.error || err.message}`);
     } finally {
-      console.log("🔄 Setting refreshing to FALSE");
       setRefreshing(false);
     }
   };
 
-  // Group messages by PSID to show only the latest message per conversation
-  const latestMessages = messages.reduce((acc, msg) => {
-    if (!acc[msg.psid] || new Date(msg.timestamp) > new Date(acc[msg.psid].timestamp)) {
-      acc[msg.psid] = msg;
-    }
-    return acc;
-  }, {});
-
-  // Get 10 most recent conversations for quick actions (always unfiltered)
-  const quickActionConversations = Object.values(latestMessages)
-    .sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp))
-    .slice(0, 10);
-
-  // Filter conversations based on selected date range
-  const { start, end } = getDateRange(dateFilter);
-  const filteredMessages = Object.values(latestMessages).filter(msg => {
-    const msgDate = new Date(msg.timestamp);
-    return msgDate >= start && msgDate < end;
-  });
+  const handlePageChange = (newPage) => {
+    if (newPage < 1 || newPage > totalPages) return;
+    setCurrentPage(newPage);
+    currentPageRef.current = newPage;
+    fetchFilteredPage(newPage);
+  };
 
   // Count conversations needing help (from filtered list)
-  const conversationsNeedingHelp = filteredMessages.filter(msg => {
+  const conversationsNeedingHelp = filteredConversations.filter(msg => {
     const status = conversationStatuses[msg.psid];
     return status?.handoffRequested && !status?.humanActive;
   }).length;
@@ -573,7 +579,7 @@ function Messages() {
             </tr>
           </thead>
           <tbody>
-            {quickActionConversations.map((msg) => {
+            {quickActions.map((msg) => {
               const status = conversationStatuses[msg.psid];
               const isHumanActive = status?.humanActive;
               const needsHelp = status?.handoffRequested && !isHumanActive;
@@ -582,7 +588,7 @@ function Messages() {
 
               return (
                 <tr
-                  key={msg._id}
+                  key={msg.psid}
                   onClick={() => {
                     setSelectedPsid(msg.psid);
                     setSelectedChannel(msg.channel);
@@ -628,7 +634,7 @@ function Messages() {
                     )}
                   </td>
                   <td style={{ padding: "10px", color: "#e0e0e0", fontSize: "0.9rem" }}>
-                    {new Date(msg.timestamp).toLocaleString('es-MX', {
+                    {new Date(msg.lastMessageAt).toLocaleString('es-MX', {
                       month: 'short',
                       day: 'numeric',
                       hour: '2-digit',
@@ -636,7 +642,7 @@ function Messages() {
                     })}
                   </td>
                   <td style={{ padding: "10px", paddingRight: "30px", maxWidth: "350px", overflow: "hidden", textOverflow: "ellipsis", color: "white", position: "relative", whiteSpace: "nowrap" }}>
-                    {getMessageExcerpt(msg.text)}
+                    {getMessageExcerpt(msg.lastMessage)}
                     <span style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)" }}>{msg.senderType === "bot" ? "🤖" : "👤"}</span>
                   </td>
                   <td style={{ padding: "10px", textAlign: "center" }}>
@@ -735,7 +741,7 @@ function Messages() {
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
           <h2 style={{ color: "white", margin: 0, fontSize: "1.3rem", fontWeight: "bold" }}>
-            💬 Todas las Conversaciones - {filteredMessages.length} conversación{filteredMessages.length !== 1 ? 'es' : ''}
+            💬 Todas las Conversaciones - {totalConversations} conversación{totalConversations !== 1 ? 'es' : ''}
           </h2>
           {conversationsNeedingHelp > 0 && (
             <div style={{
@@ -798,169 +804,243 @@ function Messages() {
         </div>
 
         {/* Main conversations table */}
-        <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "1rem", border: "1px solid #555" }}>
-        <thead>
-          <tr style={{ backgroundColor: "#1b3a1b", color: "lightgreen" }}>
-            <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Canal</th>
-            <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Usuario</th>
-            <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Fecha</th>
-            <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Último mensaje</th>
-            <th style={{ padding: "8px", textAlign: "center", borderBottom: "2px solid #555" }}>Intención</th>
-            <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Tipo</th>
-            <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Vocero</th>
-            <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Acción</th>
-          </tr>
-        </thead>
-        <tbody>
-          {filteredMessages.map((msg) => {
-            const status = conversationStatuses[msg.psid];
-            const isHumanActive = status?.humanActive;
-            const needsHelp = status?.handoffRequested && !isHumanActive;
-            const channelDisplay = getChannelDisplay(msg.channel);
-            const handoffStyle = needsHelp ? getHandoffStyle(status?.handoffReason) : null;
+        <div style={{ position: "relative" }}>
+          {loadingFiltered && (
+            <div style={{
+              position: "absolute",
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              backgroundColor: "rgba(0,0,0,0.3)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              zIndex: 10,
+              borderRadius: "4px"
+            }}>
+              <div style={{
+                width: "30px",
+                height: "30px",
+                border: "3px solid rgba(255,255,255,0.1)",
+                borderTopColor: "#4caf50",
+                borderRadius: "50%",
+                animation: "spin 0.8s linear infinite"
+              }} />
+            </div>
+          )}
+          <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "1rem", border: "1px solid #555" }}>
+          <thead>
+            <tr style={{ backgroundColor: "#1b3a1b", color: "lightgreen" }}>
+              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Canal</th>
+              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Usuario</th>
+              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Fecha</th>
+              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Último mensaje</th>
+              <th style={{ padding: "8px", textAlign: "center", borderBottom: "2px solid #555" }}>Intención</th>
+              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Tipo</th>
+              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Vocero</th>
+              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Acción</th>
+            </tr>
+          </thead>
+          <tbody>
+            {filteredConversations.map((msg) => {
+              const status = conversationStatuses[msg.psid];
+              const isHumanActive = status?.humanActive;
+              const needsHelp = status?.handoffRequested && !isHumanActive;
+              const channelDisplay = getChannelDisplay(msg.channel);
+              const handoffStyle = needsHelp ? getHandoffStyle(status?.handoffReason) : null;
 
-            return (
-              <tr
-                key={msg._id}
-                onClick={() => {
-                  setSelectedPsid(msg.psid);
-                  setSelectedChannel(msg.channel);
-                  fetchFullConversation(msg.psid);
-                }}
-                style={{
-                  borderBottom: "1px solid #555",
-                  cursor: "pointer",
-                  backgroundColor: handoffStyle ? handoffStyle.backgroundColor : "transparent",
-                  borderLeft: handoffStyle ? `4px solid ${handoffStyle.borderColor}` : "none"
-                }}
-              >
-                <td style={{ padding: "8px", textAlign: "center" }}>
-                  <span
-                    style={{
-                      backgroundColor: channelDisplay.color,
-                      color: 'white',
-                      padding: '4px 8px',
-                      borderRadius: '4px',
-                      fontSize: '0.75rem',
-                      fontWeight: 'bold'
-                    }}
-                    title={channelDisplay.label}
-                  >
-                    {channelDisplay.icon}
-                  </span>
-                </td>
-                <td style={{ padding: "8px", color: "#e0e0e0", fontSize: "0.85rem" }}>
-                  {msg.channel === 'whatsapp' && msg.psid?.startsWith('wa:') ? (
+              return (
+                <tr
+                  key={msg.psid}
+                  onClick={() => {
+                    setSelectedPsid(msg.psid);
+                    setSelectedChannel(msg.channel);
+                    fetchFullConversation(msg.psid);
+                  }}
+                  style={{
+                    borderBottom: "1px solid #555",
+                    cursor: "pointer",
+                    backgroundColor: handoffStyle ? handoffStyle.backgroundColor : "transparent",
+                    borderLeft: handoffStyle ? `4px solid ${handoffStyle.borderColor}` : "none"
+                  }}
+                >
+                  <td style={{ padding: "8px", textAlign: "center" }}>
                     <span
-                      style={{ cursor: 'pointer' }}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        navigator.clipboard.writeText(msg.psid.substring(3));
-                        alert('Número copiado: ' + msg.psid.substring(3));
-                      }}
-                      title="Click para copiar"
-                    >
-                      📱 {msg.psid.substring(3)}
-                    </span>
-                  ) : (
-                    <span style={{ color: '#888' }}>{msg.psid?.substring(0, 10)}...</span>
-                  )}
-                </td>
-                <td style={{ padding: "8px", color: "#e0e0e0" }}>{new Date(msg.timestamp).toLocaleString()}</td>
-                <td style={{ padding: "8px", paddingRight: "30px", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", color: "white", position: "relative", whiteSpace: "nowrap" }}>
-                  {getMessageExcerpt(msg.text)}
-                  <span style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)" }}>{msg.senderType === "bot" ? "🤖" : "👤"}</span>
-                </td>
-                <td style={{ padding: "8px", textAlign: "center" }}>
-                  <span title={getIntentDisplay(status?.purchaseIntent).label} style={{ fontSize: "1.2rem" }}>
-                    {getIntentDisplay(status?.purchaseIntent).emoji}
-                  </span>
-                </td>
-                <td style={{ padding: "8px", color: msg.senderType === "bot" ? "lightblue" : "white" }}>
-                  {msg.senderType}
-                </td>
-                <td style={{ padding: "8px" }}>
-                  {needsHelp && handoffStyle ? (
-                    <div>
-                      <span style={{ color: handoffStyle.textColor, fontWeight: "bold" }}>{handoffStyle.icon} {handoffStyle.label}</span>
-                      {status?.handoffReason && (
-                        <div style={{ fontSize: "0.75em", color: "#aaa", marginTop: "4px" }}>
-                          {status.handoffReason}
-                        </div>
-                      )}
-                    </div>
-                  ) : isHumanActive ? (
-                    <span style={{ color: "#ff9800" }}>👨‍💼 Humano</span>
-                  ) : (
-                    <span style={{ color: "#4caf50" }}>🤖 Bot</span>
-                  )}
-                </td>
-                <td style={{ padding: "8px" }}>
-                  <div style={{ display: "flex", gap: "0.5rem" }}>
-                    {isHumanActive ? (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleRelease(msg.psid);
-                        }}
-                        disabled={loading[msg.psid]}
-                        style={{
-                          padding: "6px 12px",
-                          backgroundColor: "#4caf50",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "8px",
-                          cursor: loading[msg.psid] ? "not-allowed" : "pointer",
-                          opacity: loading[msg.psid] ? 0.6 : 1
-                        }}
-                      >
-                        {loading[msg.psid] ? "..." : "🤖 Liberar al Bot"}
-                      </button>
-                    ) : (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleTakeover(msg.psid);
-                        }}
-                        disabled={loading[msg.psid]}
-                        style={{
-                          padding: "6px 12px",
-                          backgroundColor: "#ff9800",
-                          color: "white",
-                          border: "none",
-                          borderRadius: "8px",
-                          cursor: loading[msg.psid] ? "not-allowed" : "pointer",
-                          opacity: loading[msg.psid] ? 0.6 : 1
-                        }}
-                      >
-                        {loading[msg.psid] ? "..." : "👨‍💼 Tomar Control"}
-                      </button>
-                    )}
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setSelectedPsid(msg.psid);
-                        setSelectedChannel(msg.channel);
-                        fetchFullConversation(msg.psid);
-                      }}
                       style={{
-                        padding: "6px 12px",
-                        backgroundColor: "#2196F3",
-                        color: "white",
-                        border: "none",
-                        borderRadius: "8px",
-                        cursor: "pointer"
+                        backgroundColor: channelDisplay.color,
+                        color: 'white',
+                        padding: '4px 8px',
+                        borderRadius: '4px',
+                        fontSize: '0.75rem',
+                        fontWeight: 'bold'
                       }}
+                      title={channelDisplay.label}
                     >
-                      💬
-                    </button>
-                  </div>
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-        </table>
+                      {channelDisplay.icon}
+                    </span>
+                  </td>
+                  <td style={{ padding: "8px", color: "#e0e0e0", fontSize: "0.85rem" }}>
+                    {msg.channel === 'whatsapp' && msg.psid?.startsWith('wa:') ? (
+                      <span
+                        style={{ cursor: 'pointer' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigator.clipboard.writeText(msg.psid.substring(3));
+                          alert('Número copiado: ' + msg.psid.substring(3));
+                        }}
+                        title="Click para copiar"
+                      >
+                        📱 {msg.psid.substring(3)}
+                      </span>
+                    ) : (
+                      <span style={{ color: '#888' }}>{msg.psid?.substring(0, 10)}...</span>
+                    )}
+                  </td>
+                  <td style={{ padding: "8px", color: "#e0e0e0" }}>{new Date(msg.lastMessageAt).toLocaleString()}</td>
+                  <td style={{ padding: "8px", paddingRight: "30px", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", color: "white", position: "relative", whiteSpace: "nowrap" }}>
+                    {getMessageExcerpt(msg.lastMessage)}
+                    <span style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)" }}>{msg.senderType === "bot" ? "🤖" : "👤"}</span>
+                  </td>
+                  <td style={{ padding: "8px", textAlign: "center" }}>
+                    <span title={getIntentDisplay(status?.purchaseIntent).label} style={{ fontSize: "1.2rem" }}>
+                      {getIntentDisplay(status?.purchaseIntent).emoji}
+                    </span>
+                  </td>
+                  <td style={{ padding: "8px", color: msg.senderType === "bot" ? "lightblue" : "white" }}>
+                    {msg.senderType}
+                  </td>
+                  <td style={{ padding: "8px" }}>
+                    {needsHelp && handoffStyle ? (
+                      <div>
+                        <span style={{ color: handoffStyle.textColor, fontWeight: "bold" }}>{handoffStyle.icon} {handoffStyle.label}</span>
+                        {status?.handoffReason && (
+                          <div style={{ fontSize: "0.75em", color: "#aaa", marginTop: "4px" }}>
+                            {status.handoffReason}
+                          </div>
+                        )}
+                      </div>
+                    ) : isHumanActive ? (
+                      <span style={{ color: "#ff9800" }}>👨‍💼 Humano</span>
+                    ) : (
+                      <span style={{ color: "#4caf50" }}>🤖 Bot</span>
+                    )}
+                  </td>
+                  <td style={{ padding: "8px" }}>
+                    <div style={{ display: "flex", gap: "0.5rem" }}>
+                      {isHumanActive ? (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleRelease(msg.psid);
+                          }}
+                          disabled={loading[msg.psid]}
+                          style={{
+                            padding: "6px 12px",
+                            backgroundColor: "#4caf50",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "8px",
+                            cursor: loading[msg.psid] ? "not-allowed" : "pointer",
+                            opacity: loading[msg.psid] ? 0.6 : 1
+                          }}
+                        >
+                          {loading[msg.psid] ? "..." : "🤖 Liberar al Bot"}
+                        </button>
+                      ) : (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleTakeover(msg.psid);
+                          }}
+                          disabled={loading[msg.psid]}
+                          style={{
+                            padding: "6px 12px",
+                            backgroundColor: "#ff9800",
+                            color: "white",
+                            border: "none",
+                            borderRadius: "8px",
+                            cursor: loading[msg.psid] ? "not-allowed" : "pointer",
+                            opacity: loading[msg.psid] ? 0.6 : 1
+                          }}
+                        >
+                          {loading[msg.psid] ? "..." : "👨‍💼 Tomar Control"}
+                        </button>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedPsid(msg.psid);
+                          setSelectedChannel(msg.channel);
+                          fetchFullConversation(msg.psid);
+                        }}
+                        style={{
+                          padding: "6px 12px",
+                          backgroundColor: "#2196F3",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "8px",
+                          cursor: "pointer"
+                        }}
+                      >
+                        💬
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+          </table>
+        </div>
+
+        {/* Pagination */}
+        {totalPages > 1 && (
+          <div style={{
+            display: "flex",
+            justifyContent: "center",
+            alignItems: "center",
+            gap: "1rem",
+            marginTop: "1rem",
+            padding: "0.75rem"
+          }}>
+            <button
+              onClick={() => handlePageChange(currentPage - 1)}
+              disabled={currentPage <= 1 || loadingFiltered}
+              style={{
+                padding: "8px 16px",
+                backgroundColor: currentPage <= 1 ? "#333" : "#4caf50",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                cursor: currentPage <= 1 ? "not-allowed" : "pointer",
+                opacity: currentPage <= 1 ? 0.5 : 1,
+                fontSize: "0.9rem"
+              }}
+            >
+              Anterior
+            </button>
+            <span style={{ color: "#ccc", fontSize: "0.9rem" }}>
+              Página {currentPage} de {totalPages} ({totalConversations} conversaciones)
+            </span>
+            <button
+              onClick={() => handlePageChange(currentPage + 1)}
+              disabled={currentPage >= totalPages || loadingFiltered}
+              style={{
+                padding: "8px 16px",
+                backgroundColor: currentPage >= totalPages ? "#333" : "#4caf50",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                cursor: currentPage >= totalPages ? "not-allowed" : "pointer",
+                opacity: currentPage >= totalPages ? 0.5 : 1,
+                fontSize: "0.9rem"
+              }}
+            >
+              Siguiente
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Conversation Detail Modal */}

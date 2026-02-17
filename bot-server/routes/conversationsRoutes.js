@@ -29,7 +29,103 @@ async function sendMessengerMessage(psid, text) {
   return response.data;
 }
 
-// GET /conversations - Get all messages with channel information
+// GET /conversations/grouped - Grouped conversations with pagination (replaces old / + N status calls)
+router.get('/grouped', async (req, res) => {
+  try {
+    const { start, end, page = 1, limit = 30, excludePsids } = req.query;
+    const pageNum = Math.max(1, parseInt(page));
+    const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
+
+    // Build the date match stage
+    const dateMatch = {};
+    if (start) dateMatch.$gte = new Date(start);
+    if (end) dateMatch.$lt = new Date(end);
+
+    // Build exclude list
+    const excludeList = excludePsids ? excludePsids.split(',').filter(Boolean) : [];
+
+    const pipeline = [];
+
+    // 1. Optional date filter on messages
+    const matchStage = {};
+    if (start || end) matchStage.timestamp = dateMatch;
+    if (excludeList.length > 0) matchStage.psid = { $nin: excludeList };
+    if (Object.keys(matchStage).length > 0) pipeline.push({ $match: matchStage });
+
+    // 2. Sort by timestamp desc so $first gives latest
+    pipeline.push({ $sort: { timestamp: -1 } });
+
+    // 3. Group by psid, take latest message info
+    pipeline.push({
+      $group: {
+        _id: '$psid',
+        lastMessage: { $first: '$text' },
+        lastMessageAt: { $first: '$timestamp' },
+        senderType: { $first: '$senderType' },
+        messageId: { $first: '$_id' }
+      }
+    });
+
+    // 4. Lookup conversation metadata
+    pipeline.push({
+      $lookup: {
+        from: 'conversations',
+        localField: '_id',
+        foreignField: 'psid',
+        as: 'conv'
+      }
+    });
+    pipeline.push({ $unwind: { path: '$conv', preserveNullAndEmptyArrays: true } });
+
+    // 5. Project final shape
+    pipeline.push({
+      $project: {
+        _id: 0,
+        psid: '$_id',
+        lastMessage: 1,
+        lastMessageAt: 1,
+        senderType: 1,
+        channel: { $ifNull: ['$conv.channel', 'facebook'] },
+        purchaseIntent: '$conv.purchaseIntent',
+        humanActive: {
+          $cond: [{ $eq: ['$conv.state', 'human_active'] }, true, false]
+        },
+        handoffRequested: { $ifNull: ['$conv.handoffRequested', false] },
+        handoffReason: '$conv.handoffReason',
+        state: '$conv.state'
+      }
+    });
+
+    // 6. Sort by latest message
+    pipeline.push({ $sort: { lastMessageAt: -1 } });
+
+    // Count total before pagination
+    const countPipeline = [...pipeline, { $count: 'total' }];
+    const countResult = await Message.aggregate(countPipeline);
+    const total = countResult.length > 0 ? countResult[0].total : 0;
+
+    // 7. Paginate
+    pipeline.push({ $skip: (pageNum - 1) * limitNum });
+    pipeline.push({ $limit: limitNum });
+
+    const conversations = await Message.aggregate(pipeline);
+
+    res.json({
+      conversations,
+      pagination: {
+        page: pageNum,
+        limit: limitNum,
+        total,
+        pages: Math.ceil(total / limitNum)
+      }
+    });
+  } catch (error) {
+    console.error('Error fetching grouped conversations:', error);
+    res.status(500).json({ error: 'Failed to fetch grouped conversations' });
+  }
+});
+
+// GET /conversations - Get all messages with channel information (legacy)
 router.get('/', async (req, res) => {
   try {
     const messages = await Message.find()
