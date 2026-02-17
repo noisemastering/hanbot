@@ -766,6 +766,12 @@ function quickClassify(message, dbIntents = null) {
     return { intent: INTENTS.REJECTION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
   }
 
+  // Accidental click / not interested — "le di sin querer", "fue sin querer", "me equivoqué", "sorry"
+  if (/\b(sin\s*querer|por\s*(error|equivocaci[oó]n|accident)|me\s*equivoqu[eé]|equivocad[oa]|accident|wrong\s*button|le\s*di\s*por\s*error|sorry|no\s*me\s*interesa|no\s*quer[ií]a)\b/i.test(msg)) {
+    console.log(`👋 Accidental click / not interested detected`);
+    return { intent: INTENTS.GOODBYE, product: PRODUCTS.UNKNOWN, entities: { accidentalClick: true }, confidence: 0.95 };
+  }
+
   // Simple price query
   if (/^(precio|precios?|costo|costos?)[\s!?.]*$/i.test(msg)) {
     return { intent: INTENTS.PRICE_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
@@ -811,8 +817,14 @@ function quickClassify(message, dbIntents = null) {
   }
 
   // Location mention - "soy de X", "vivo en X" (user providing their location)
+  // BUT NOT when combined with product data (dimensions + price query) — let AI handle compound messages
   if (/\b(soy\s+de|vivo\s+en|estoy\s+en|me\s+encuentro\s+en)\s+/i.test(msg)) {
-    return { intent: INTENTS.LOCATION_MENTION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.85 };
+    const hasProductData = /\d+\s*[xX×*]\s*\d+/.test(msg) ||
+      /\b(precio|costo|cu[aá]nto|cuanto|vale|cuesta|en\s+cuanto)\b/i.test(msg) ||
+      /\b(malla|rollo|borde|confeccionada|ground\s*cover|monofilamento)\b/i.test(msg);
+    if (!hasProductData) {
+      return { intent: INTENTS.LOCATION_MENTION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.85 };
+    }
   }
 
   // Store link request - "mercado libre", "link de la tienda"

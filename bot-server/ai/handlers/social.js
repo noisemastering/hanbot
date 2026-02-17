@@ -84,6 +84,12 @@ async function handleGoodbye({ psid, convo, entities }) {
     return null;
   }
 
+  // Accidental click - acknowledge gracefully, don't push product
+  if (entities?.accidentalClick) {
+    console.log(`👋 Accidental click for ${psid} - acknowledging gracefully`);
+    return { type: "text", text: "¡No te preocupes! Si en algún momento necesitas algo, aquí estamos. ¡Que tengas buen día!" };
+  }
+
   const response = await generateBotResponse("goodbye", {
     userName: convo?.userName,
     convo

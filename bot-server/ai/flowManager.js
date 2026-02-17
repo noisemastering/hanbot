@@ -450,7 +450,11 @@ async function detectFlow(classification, convo, userMessage, sourceContext) {
   }
 
   // 6. KEYWORD DETECTION
+  // "malla" alone (without rollo/maleza/monofilamento qualifier) → malla sombra confeccionada
   if (/\b(malla\s*sombra|confeccionada)\b/i.test(msg) && !/rollo/i.test(msg)) {
+    return 'malla_sombra';
+  }
+  if (/\bmalla\b/i.test(msg) && !/rollo|maleza|antimaleza|ground\s*cover|monofilamento|cicl[oó]n|electrosoldada|galvanizada/i.test(msg)) {
     return 'malla_sombra';
   }
   if (/\brollo\b/i.test(msg) || /\b100\s*m(etros?)?\b/i.test(msg)) {
@@ -488,7 +492,9 @@ async function detectFlow(classification, convo, userMessage, sourceContext) {
       console.log(`📦 Dimension ${dimensions.width}x${dimensions.height} matched to flow: ${inventoryFlow} (from inventory)`);
       return inventoryFlow;
     }
-    // No inventory match — fall through to default
+    // No inventory match but reasonable NxN dimensions — default to malla sombra
+    console.log(`📦 Dimension ${dimensions.width}x${dimensions.height} not in inventory — defaulting to malla_sombra`);
+    return 'malla_sombra';
   }
 
   // 8. DEFAULT
