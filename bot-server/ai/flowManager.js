@@ -341,6 +341,12 @@ async function detectExplicitProductSwitch(userMessage, currentFlow, classificat
     }
   }
 
+  // "malla" + shade percentage (35/50/70/80/90%) without "confeccionada" → rollo
+  if (/\bmalla\b/i.test(msg) && /\b(35|50|70|80|90)\s*%/.test(msg) && currentFlow !== 'rollo') {
+    console.log(`🔍 Malla + shade percentage detected → rollo (current: ${currentFlow})`);
+    return 'rollo';
+  }
+
   // Check dimensions against inventory — a known measure outside current flow = product switch
   const dimMatch = msg.match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)/);
   if (dimMatch) {
@@ -458,6 +464,10 @@ async function detectFlow(classification, convo, userMessage, sourceContext) {
     return 'malla_sombra';
   }
   if (/\brollo\b/i.test(msg) || /\b100\s*m(etros?)?\b/i.test(msg)) {
+    return 'rollo';
+  }
+  // "malla" + shade percentage (35/50/70/80/90%) → rollo (rolls come in percentages)
+  if (/\bmalla\b/i.test(msg) && /\b(35|50|70|80|90)\s*%/.test(msg)) {
     return 'rollo';
   }
   // Roll dimension: NxN where one side is 100 (standard roll length)
