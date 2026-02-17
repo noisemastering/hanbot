@@ -1848,8 +1848,21 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       excludeAssets: ["paymentOptions"] // Already mentioned in main response
     });
 
-    let responseText = "💳 El pago se realiza 100% POR ADELANTADO en Mercado Libre al momento de hacer tu pedido (no se paga al recibir).\n\n" +
-          "Aceptamos todas las formas de pago de Mercado Libre: tarjetas, efectivo, meses sin intereses.\n\n" +
+    // Non-ML flows: rollo, groundcover, monofilamento, wholesale
+    const isNonML = convo?.currentFlow === 'rollo' ||
+      convo?.currentFlow === 'groundcover' ||
+      convo?.currentFlow === 'monofilamento' ||
+      convo?.productInterest === 'rollo' ||
+      convo?.productInterest === 'groundcover' ||
+      convo?.productInterest === 'monofilamento' ||
+      convo?.isWholesaleInquiry;
+
+    const paymentText = isNonML
+      ? "💳 El pago se realiza al ordenar a través de transferencia o depósito bancario."
+      : "💳 El pago se realiza 100% POR ADELANTADO en Mercado Libre al momento de hacer tu pedido (no se paga al recibir).\n\n" +
+        "Aceptamos todas las formas de pago de Mercado Libre: tarjetas, efectivo, meses sin intereses.";
+
+    let responseText = paymentText + "\n\n" +
           "⏰ Tiempos de entrega:\n" +
           "• CDMX y zona metropolitana: 1-2 días hábiles\n" +
           "• Interior de la República: 3-5 días hábiles";
@@ -1876,9 +1889,22 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   if (priceIncludesShippingPattern.test(msg)) {
     console.log("💰 Price includes shipping question detected:", msg);
     await updateConversation(psid, { lastIntent: "shipping_included_confirmation" });
+
+    const isNonMLShipping = convo?.currentFlow === 'rollo' ||
+      convo?.currentFlow === 'groundcover' ||
+      convo?.currentFlow === 'monofilamento' ||
+      convo?.productInterest === 'rollo' ||
+      convo?.productInterest === 'groundcover' ||
+      convo?.productInterest === 'monofilamento' ||
+      convo?.isWholesaleInquiry;
+
+    const shippingText = isNonMLShipping
+      ? "El envío se cotiza por separado dependiendo de tu ubicación. ¿Me compartes tu código postal para cotizarte?"
+      : "¡Sí! El envío está incluido en el precio o se calcula automáticamente en Mercado Libre dependiendo de tu ubicación.\n\nEn la mayoría de los casos el envío es gratis. 🚚";
+
     return {
       type: "text",
-      text: "¡Sí! El envío está incluido en el precio o se calcula automáticamente en Mercado Libre dependiendo de tu ubicación.\n\nEn la mayoría de los casos el envío es gratis. 🚚"
+      text: shippingText
     };
   }
 

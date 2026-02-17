@@ -125,7 +125,7 @@ async function handleLocationMention({ psid, userMessage, convo }) {
 
 /**
  * Handle payment query - "Cómo pago?", "Aceptan tarjeta?"
- * Response varies by flow (confeccionada vs wholesale)
+ * Response varies by flow (confeccionada/borde via ML vs rollo/wholesale via transfer)
  */
 async function handlePayment({ psid, convo }) {
   await updateConversation(psid, {
@@ -133,17 +133,20 @@ async function handlePayment({ psid, convo }) {
     unknownCount: 0
   });
 
-  // Determine if wholesale flow (rollo, etc.) or retail (confeccionada)
-  const isWholesale = convo?.currentFlow === 'rollo' ||
+  // Non-ML flows: rollo, groundcover, monofilamento, wholesale
+  const isNonML = convo?.currentFlow === 'rollo' ||
+    convo?.currentFlow === 'groundcover' ||
+    convo?.currentFlow === 'monofilamento' ||
     convo?.productInterest === 'rollo' ||
-    convo?.currentFlow === 'ground_cover' ||
-    convo?.currentFlow === 'monofilamento';
+    convo?.productInterest === 'groundcover' ||
+    convo?.productInterest === 'monofilamento' ||
+    convo?.isWholesaleInquiry;
 
   let response;
-  if (isWholesale) {
-    response = "En nuestra tienda física aceptamos efectivo y tarjetas, en envíos aceptamos transferencia bancaria.";
+  if (isNonML) {
+    response = "El pago se realiza al ordenar a través de transferencia o depósito bancario.";
   } else {
-    // Confeccionada (retail) - Mercado Libre payment options
+    // Confeccionada / borde (retail) - Mercado Libre payment options
     response = "Nuestra tienda en Mercado Libre acepta tarjeta de crédito/débito, efectivo en OXXO y tiendas de conveniencia, y Mercado Crédito. En nuestra tienda física aceptamos efectivo y tarjetas.";
   }
 
@@ -152,7 +155,7 @@ async function handlePayment({ psid, convo }) {
 
 /**
  * Handle pay on delivery query - "Pago al entregar?", "Contra entrega?", "Se paga al entregar?"
- * Response varies by flow (confeccionada vs wholesale)
+ * Response varies by flow (confeccionada/borde via ML vs rollo/wholesale via transfer)
  */
 async function handlePayOnDelivery({ psid, convo }) {
   await updateConversation(psid, {
@@ -160,18 +163,21 @@ async function handlePayOnDelivery({ psid, convo }) {
     unknownCount: 0
   });
 
-  // Determine if wholesale flow (rollo, etc.) or retail (confeccionada)
-  const isWholesale = convo?.currentFlow === 'rollo' ||
+  // Non-ML flows: rollo, groundcover, monofilamento, wholesale
+  const isNonML = convo?.currentFlow === 'rollo' ||
+    convo?.currentFlow === 'groundcover' ||
+    convo?.currentFlow === 'monofilamento' ||
     convo?.productInterest === 'rollo' ||
-    convo?.currentFlow === 'ground_cover' ||
-    convo?.currentFlow === 'monofilamento';
+    convo?.productInterest === 'groundcover' ||
+    convo?.productInterest === 'monofilamento' ||
+    convo?.isWholesaleInquiry;
 
   let response;
-  if (isWholesale) {
-    response = "Los pedidos deben ser liquidados al 100% al momento de ordenar.";
+  if (isNonML) {
+    response = "No manejamos pago contra entrega. El pago se realiza al ordenar a través de transferencia o depósito bancario.";
   } else {
-    // Confeccionada (retail) - Mercado Libre protected purchase
-    response = "Los artículos comprados a través de nuestra tienda en Mercado Libre requieren el pago al ordenar, pero son compra segura: si no recibes tu pedido, se te devuelve tu dinero.";
+    // Confeccionada / borde (retail) - Mercado Libre protected purchase
+    response = "No manejamos pago contra entrega. Los artículos comprados a través de nuestra tienda en Mercado Libre requieren el pago al ordenar, pero son compra segura: si no recibes tu pedido, se te devuelve tu dinero.";
   }
 
   return { type: "text", text: response };
