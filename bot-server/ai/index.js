@@ -690,13 +690,13 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
       if (/\b(direcci[oó]n|domicilio|ubicaci[oó]n)\b/i.test(cleanMsg)) {
         return {
           type: "text",
-          text: "Te comparto nuestra ubicación en Google Maps:\n\nhttps://maps.app.goo.gl/WJbhpMqfUPYPSMdA7\n\nEnviamos a todo el país por Mercado Libre 📦"
+          text: "Te comparto nuestra ubicación en Google Maps:\n\nhttps://maps.app.goo.gl/WJbhpMqfUPYPSMdA7\n\nRecuerda que enviamos a todo México y Estados Unidos 📦"
         };
       }
 
       return {
         type: "text",
-        text: "Estamos en Querétaro en el parque industrial Navex, Tlacote. Pero enviamos a todo el país por Mercado Libre 📦\n\n¿De qué ciudad nos escribes?"
+        text: "Estamos en Querétaro en el parque industrial Navex, Tlacote. Recuerda que enviamos a todo México y Estados Unidos 📦\n\n¿De qué ciudad nos escribes?"
       };
     }
 

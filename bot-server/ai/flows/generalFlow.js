@@ -218,7 +218,7 @@ async function handleMultiQuestion(entities, convo, psid) {
   const intentResponses = {
     'confirmation': `✅ Perfecto, anotado.`,
     'price_query': `💰 Los precios dependen de la medida que necesites. ¿Qué medida te interesa?`,
-    'location_query': `📍 ¡Enviamos a todo México y USA! Nuestra tienda está en ${BUSINESS_INFO.city}, pero te lo enviamos a domicilio.`,
+    'location_query': `📍 ¡Enviamos a todo México y Estados Unidos! Nuestra tienda está en ${BUSINESS_INFO.city}, pero te lo enviamos a domicilio.`,
     'shipping_query': `📦 Enviamos a todo México y también a Estados Unidos. El envío está incluido en la mayoría de nuestros productos.`,
     'payment_query': isNonML
       ? `El pago se realiza al ordenar a través de transferencia o depósito bancario.`

@@ -86,6 +86,7 @@ async function handleLocation({ psid, userMessage, convo }) {
     city: "Querétaro",
     address: MAPS_URL,
     shipsNationwide: true,
+    shipsToUSA: true,
     convo
   });
 

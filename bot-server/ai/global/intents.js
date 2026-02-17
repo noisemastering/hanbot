@@ -87,7 +87,7 @@ function getSecondaryPhrasePrefix(msg) {
 // Helper to get location text for combined responses
 function getLocationAppendix() {
   return "\n\nTe comparto nuestra ubicación en Google Maps:\nhttps://maps.app.goo.gl/WJbhpMqfUPYPSMdA7\n\n" +
-         "Enviamos a todo el país por Mercado Libre.";
+         "Recuerda que enviamos a todo México y Estados Unidos.";
 }
 
 async function handleGlobalIntents(msg, psid, convo = {}) {
@@ -1524,13 +1524,13 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         text: "Nos ubicamos en Querétaro. Somos principalmente tienda en línea, pero si gustas visitarnos puedes contactarnos para coordinar:\n\n" +
               "📞 442 123 4567\n" +
               "💬 WhatsApp: https://wa.me/524425957432\n\n" +
-              "También puedes ver todos nuestros productos en nuestra Tienda Oficial de Mercado Libre con envío a todo el país 📦"
+              "Recuerda que enviamos a todo México y Estados Unidos 📦"
       };
     }
 
     return {
       type: "text",
-      text: "Estamos en Querétaro, pero enviamos a todo el país por Mercado Libre 📦"
+      text: "Estamos en Querétaro, pero enviamos a todo México y Estados Unidos 📦"
     };
   }
 
@@ -2111,14 +2111,14 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     if (/quer[ée]taro/i.test(msg)) {
       return {
         type: "text",
-        text: `Sí, estamos en Querétaro 🏡. Nuestra bodega está en el Microparque Industrial Navex Park.\n\nAdemás, enviamos a todo México a través de Mercado Libre.\n\n¿Qué medida te interesa?`
+        text: `Sí, estamos en Querétaro 🏡. Nuestra bodega está en el Microparque Industrial Navex Park.\n\nRecuerda que enviamos a todo México y Estados Unidos.\n\n¿Qué medida te interesa?`
       };
     }
 
     // They're asking about a different city
     return {
       type: "text",
-      text: `Estamos ubicados en Querétaro, pero enviamos a ${cityName} y todo México sin problema a través de Mercado Libre 📦🚚.\n\n¿Qué medida necesitas?`
+      text: `Estamos ubicados en Querétaro, pero enviamos a ${cityName} y todo México y Estados Unidos sin problema 📦🚚.\n\n¿Qué medida necesitas?`
     };
   }
 
