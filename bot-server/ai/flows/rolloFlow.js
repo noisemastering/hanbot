@@ -587,36 +587,61 @@ function handleAwaitingType(intent, state, sourceContext) {
 }
 
 /**
+ * Build full rollo catalog grouped by width with prices per percentage.
+ * Optionally filter to a single width.
+ */
+async function buildRolloCatalog(filterWidth = null) {
+  const widths = await getAvailableWidths();
+  const products = await ProductFamily.find({
+    sellable: true,
+    active: true,
+    size: /\d+x100/i
+  }).select('name price size').sort({ price: 1 }).lean();
+
+  if (products.length === 0) return null;
+
+  const targetWidths = filterWidth ? [filterWidth] : widths;
+  const sections = [];
+
+  for (const w of targetWidths) {
+    const sizeRegex = new RegExp(`${w}.*100`, 'i');
+    const lines = [];
+
+    for (const pct of VALID_PERCENTAGES) {
+      const pctRegex = new RegExp(`${pct}\\s*%`, 'i');
+      const match = products.find(p =>
+        sizeRegex.test(p.size || '') && pctRegex.test(p.name || '')
+      );
+      if (match?.price) {
+        lines.push(`  • ${pct}% — ${formatMoney(match.price)}`);
+      }
+    }
+
+    if (lines.length > 0) {
+      sections.push(`📦 ${w}m x 100m:\n${lines.join('\n')}`);
+    }
+  }
+
+  return sections.length > 0 ? sections.join('\n\n') : null;
+}
+
+/**
  * Handle start - user just mentioned rolls (type already known)
- * Shows price range and asks for specific size.
- * If percentage is already known, shows per-width prices for that percentage.
+ * Always shows full catalog of available sizes with prices.
  */
 async function handleStart(sourceContext, state = {}) {
-  const widths = await getAvailableWidths();
-  const widthList = widths.map(w => `${w}m`).join(' y ');
-  const percentageList = VALID_PERCENTAGES.join('%, ') + '%';
-
   try {
-    // If percentage already known, show specific prices per width
+    // If percentage already known, show prices for that percentage across widths
     if (state.percentage) {
-      const pctConditions = [
-        { sellable: true },
-        { active: true },
-        { size: /\d+x100/i },
-        { $or: [
-          { name: new RegExp(`${state.percentage}\\s*%`, 'i') },
-          { name: new RegExp(`${state.percentage}\\s*por\\s*ciento`, 'i') }
-        ]}
-      ];
-      const pctProducts = await ProductFamily.find({ $and: pctConditions })
-        .select('price size name').sort({ price: 1 }).lean();
-
-      if (pctProducts.length > 0 && pctProducts.some(p => p.price)) {
+      const catalog = await buildRolloCatalog();
+      if (catalog) {
+        // Filter catalog lines to only the known percentage
+        const widths = await getAvailableWidths();
         const lines = [];
         for (const w of widths) {
-          const match = pctProducts.find(p => p.size && new RegExp(`${w}.*100`, 'i').test(p.size));
-          if (match?.price) {
-            lines.push(`• ${w}m x 100m — ${formatMoney(match.price)}`);
+          const products = await findMatchingProducts(w, state.percentage);
+          if (products.length > 0 && products[0].price) {
+            lines.push(`• ${w}m x 100m al ${state.percentage}% — ${formatMoney(products[0].price)}`);
           }
         }
         if (lines.length > 0) {
@@ -628,65 +653,69 @@ async function handleStart(sourceContext, state = {}) {
       }
     }
 
-    // No percentage — show general price range
-    const products = await ProductFamily.find({
-      sellable: true,
-      active: true,
-      size: /\d+x100/i
-    }).select('price size name').sort({ price: 1 }).lean();
-
-    if (products.length > 0) {
-      const withPrice = products.filter(p => p.price);
-      if (withPrice.length > 0) {
-        const minPrice = formatMoney(withPrice[0].price);
-        const maxPrice = formatMoney(withPrice[withPrice.length - 1].price);
-
-        return {
-          type: "text",
-          text: `Manejamos rollos de malla sombra de ${widthList} de ancho por 100m de largo, ` +
-                `con porcentajes de sombra del ${percentageList}.\n\n` +
-                `Los precios van desde ${minPrice} hasta ${maxPrice} dependiendo del ancho y porcentaje.\n\n` +
-                `¿Buscas alguna medida en particular?`
-        };
-      }
+    // Show full catalog
+    const catalog = await buildRolloCatalog();
+    if (catalog) {
+      return {
+        type: "text",
+        text: `Rollos de malla sombra disponibles:\n\n${catalog}\n\n¿Cuál te interesa?`
+      };
     }
   } catch (err) {
-    console.error("Error fetching roll price range:", err.message);
+    console.error("Error building rollo catalog:", err.message);
   }
 
   // Fallback without prices
+  const widths = await getAvailableWidths();
+  const widthList = widths.map(w => `${w}m`).join(' y ');
+  const percentageList = VALID_PERCENTAGES.join('%, ') + '%';
   return {
     type: "text",
-    text: `Manejamos rollos de malla sombra de ${widthList} de ancho por 100m de largo, con porcentajes de sombra del ${percentageList}.\n\n¿Buscas alguna medida en particular?`
+    text: `Manejamos rollos de malla sombra de ${widthList} de ancho por 100m de largo, con porcentajes de sombra del ${percentageList}.\n\n¿Cuál te interesa?`
   };
 }
 
 /**
- * Handle awaiting width stage
+ * Handle awaiting width stage — show full catalog so customer can pick
  */
 async function handleAwaitingWidth(intent, state, sourceContext) {
-  const widths = await getAvailableWidths();
-  const widthOptions = widths.map(w => `${w}m`).join(' o ');
-  const widthList = widths.map(w => `${w}m x 100m`).join(' y ');
-  const percentageList = VALID_PERCENTAGES.join('%, ') + '%';
-
-  if (intent === INTENTS.CONFIRMATION) {
-    return {
-      type: "text",
-      text: `¿Cuál ancho te interesa? ¿${widthOptions}?`
-    };
+  try {
+    const catalog = await buildRolloCatalog();
+    if (catalog) {
+      return {
+        type: "text",
+        text: `Rollos de malla sombra disponibles:\n\n${catalog}\n\n¿Cuál te interesa?`
+      };
+    }
+  } catch (err) {
+    console.error("Error building rollo catalog:", err.message);
   }
 
+  const widths = await getAvailableWidths();
+  const widthList = widths.map(w => `${w}m`).join(' y ');
+  const percentageList = VALID_PERCENTAGES.join('%, ') + '%';
   return {
     type: "text",
-    text: `Contamos con rollos de ${widthList}, con porcentajes de sombra de ${percentageList}.\n\n¿Qué medida y porcentaje te interesa?`
+    text: `Manejamos rollos de ${widthList} de ancho por 100m de largo, con porcentajes del ${percentageList}.\n\n¿Cuál te interesa?`
   };
 }
 
 /**
- * Handle awaiting percentage stage
+ * Handle awaiting percentage stage — show all percentages for the selected width
  */
-function handleAwaitingPercentage(intent, state, sourceContext) {
+async function handleAwaitingPercentage(intent, state, sourceContext) {
+  try {
+    const catalog = await buildRolloCatalog(state.width);
+    if (catalog) {
+      return {
+        type: "text",
+        text: `Rollo de ${state.width}m x 100m disponible en:\n\n${catalog}\n\n¿Cuál porcentaje te interesa?`
+      };
+    }
+  } catch (err) {
+    console.error("Error building rollo catalog:", err.message);
+  }
+
   return {
     type: "text",
     text: `Perfecto, rollo de ${state.width}m x 100m.\n\n` +

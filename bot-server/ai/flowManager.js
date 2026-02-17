@@ -926,7 +926,7 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
 
   // ===== STEP 3: CHECK FOR FLOW TRANSFER =====
   const transferTo = checkFlowTransfer(currentFlow, detectedFlow, convo);
-  const activeFlow = transferTo || currentFlow;
+  let activeFlow = transferTo || currentFlow;
 
   if (transferTo) {
     // Update conversation with new flow
@@ -942,6 +942,32 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
     // Initialize default flow for new conversations
     await updateConversation(psid, { currentFlow: 'default' });
     convo.currentFlow = 'default';
+  }
+
+  // ===== STEP 3.1: VERIFY NEWLY-ESTABLISHED FLOW AGAINST USER MESSAGE =====
+  // When a flow was just established (transfer from default), the user's explicit
+  // message may contradict the ad context. E.g., ad says "rollo" but user asks
+  // for "malla sombra de 5x6.50m" — the user's intent should win.
+  if (transferTo && currentFlow === 'default' && activeFlow !== 'default') {
+    const switchFromNew = await detectExplicitProductSwitch(userMessage, activeFlow, classification);
+    if (switchFromNew) {
+      const unambiguous = isUnambiguousSwitch(userMessage, activeFlow, switchFromNew);
+      if (unambiguous) {
+        console.log(`🔄 Overriding ad-established flow: ${activeFlow} → ${switchFromNew} (user's message contradicts ad context)`);
+        activeFlow = switchFromNew;
+
+        await updateConversation(psid, {
+          currentFlow: switchFromNew,
+          productInterest: switchFromNew,
+          flowTransferredFrom: transferTo,
+          flowTransferredAt: new Date(),
+          productSpecs: { productType: switchFromNew, updatedAt: new Date() }
+        });
+        convo.currentFlow = switchFromNew;
+        convo.productInterest = switchFromNew;
+        convo.productSpecs = { productType: switchFromNew };
+      }
+    }
   }
   // ===== END FLOW DETECTION =====
 
