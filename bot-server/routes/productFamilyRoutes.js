@@ -2,6 +2,7 @@
 const express = require("express");
 const router = express.Router();
 const ProductFamily = require("../models/ProductFamily");
+const { clearCatalogCache } = require("../ai/classifier/intentClassifier");
 
 // ============================================
 // TREE-SPECIFIC OPERATIONS
@@ -131,6 +132,7 @@ router.post("/", async (req, res) => {
     }
 
     await productFamily.save();
+    clearCatalogCache();
 
     console.log('✅ Saved product family:', productFamily.name);
     console.log('   sellable:', productFamily.sellable);
@@ -205,6 +207,7 @@ router.put("/:id", async (req, res) => {
 
     // Save using .save() method which properly handles nested arrays and Maps
     await productFamily.save();
+    clearCatalogCache();
 
     // Auto-propagate dimensions to children if this is a non-sellable product with dimensions
     if (!productFamily.sellable && productFamily.enabledDimensions && productFamily.enabledDimensions.length > 0) {
@@ -256,6 +259,7 @@ router.delete("/:id", async (req, res) => {
 
     // Recursively delete this product and all its descendants
     const deletedCount = await deleteProductRecursive(req.params.id);
+    clearCatalogCache();
 
     console.log(`✅ Deleted ${deletedCount} product(s) total`);
 

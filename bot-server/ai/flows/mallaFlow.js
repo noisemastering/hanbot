@@ -184,15 +184,29 @@ async function findMatchingProducts(width, height, percentage = null, color = nu
       size: sizeRegex
     };
 
-    // Add percentage filter if specified AND valid
-    // If percentage is not in VALID_PERCENTAGES, skip filter (will correct in response)
-    if (percentage && VALID_PERCENTAGES.includes(Number(percentage))) {
-      query.name = new RegExp(`${percentage}\\s*%`, 'i');
-    }
-
     let products = await ProductFamily.find(query)
       .sort({ price: 1 }) // Cheapest first
       .lean();
+
+    // Filter by percentage using lineage — the percentage lives in an ancestor (Gen 2),
+    // not in the sellable product's own name. Walk the tree to build the full identity.
+    if (percentage && VALID_PERCENTAGES.includes(Number(percentage)) && products.length > 0) {
+      const pctRegex = new RegExp(`\\b${percentage}\\s*%`, 'i');
+      const filtered = [];
+      for (const product of products) {
+        const lineage = await getProductLineage(product);
+        const fullName = lineage.map(l => l.name).join(' ');
+        if (pctRegex.test(fullName)) {
+          filtered.push(product);
+        }
+      }
+      if (filtered.length > 0) {
+        products = filtered;
+        console.log(`🔍 Percentage ${percentage}% filter (via lineage): ${products.length} matches`);
+      } else {
+        console.log(`🔍 Percentage ${percentage}% not found in any lineage, keeping all ${products.length} results`);
+      }
+    }
 
     // If POI tree is locked, filter to only products in that tree
     if (poiRootId && products.length > 0) {
@@ -360,7 +374,9 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   // ====== IMMEDIATE HANDOFF: non-90% shade or oversized for confeccionada ======
   const nonStandardShade = /\b(al\s*)?(35|50|70|80)\s*(%|porciento|por\s*ciento)\b/i.test(userMessage);
-  const dimsForCheck = parseDimensions(userMessage);
+  const dimsForCheck = (entities.width && entities.height)
+    ? { width: entities.width, height: entities.height }
+    : parseDimensions(userMessage);
   const maxDimension = dimsForCheck ? Math.max(dimsForCheck.width, dimsForCheck.height) : 0;
   const isOversized = maxDimension > 10; // confeccionada max is 6x10m
 
@@ -587,18 +603,36 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     }
   }
 
-  // FIRST: Try to parse dimensions directly from user message
-  // This is more reliable than depending on classifier entities
-  const dimsFromMessage = parseDimensions(userMessage);
-  if (dimsFromMessage) {
-    console.log(`🌐 Malla flow - Parsed dimensions from message: ${dimsFromMessage.width}x${dimsFromMessage.height}`);
-    state.width = dimsFromMessage.width;
-    state.height = dimsFromMessage.height;
-    // Preserve user's expressed order for display (e.g., "7 x 5" not "5 x 7")
-    state.userExpressedSize = dimsFromMessage.userExpressed;
+  // FIRST: Check classifier entities (AI or quick classifier already extracted)
+  if (entities.width && entities.height) {
+    state.width = entities.width;
+    state.height = entities.height;
+    state.userExpressedSize = `${entities.width} x ${entities.height}`;
+    console.log(`🌐 Malla flow - Using classifier entities: ${entities.width}x${entities.height}`);
+  }
+  if (!state.width || !state.height) {
+    if (entities.dimensions) {
+      const dims = parseDimensions(entities.dimensions);
+      if (dims) {
+        state.width = dims.width;
+        state.height = dims.height;
+        state.userExpressedSize = dims.userExpressed;
+      }
+    }
   }
 
-  // SECOND: Try single dimension - assume square (e.g., "2 y medio" -> 3x3)
+  // SECOND: Regex fallback on raw message (safety net)
+  if (!state.width || !state.height) {
+    const dimsFromMessage = parseDimensions(userMessage);
+    if (dimsFromMessage) {
+      console.log(`🌐 Malla flow - Regex fallback: ${dimsFromMessage.width}x${dimsFromMessage.height}`);
+      state.width = dimsFromMessage.width;
+      state.height = dimsFromMessage.height;
+      state.userExpressedSize = dimsFromMessage.userExpressed;
+    }
+  }
+
+  // THIRD: Try single dimension - assume square (e.g., "2 y medio" -> 3x3)
   // BUT only for reasonable confeccionada sizes (2-10m), not roll sizes like 100m
   if (!state.width || !state.height) {
     const singleDim = parseSingleDimension(userMessage);
@@ -640,26 +674,6 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
           text: `${requestedArea} metros cuadrados puede ser varias medidas. Te muestro las más cercanas:\n\n${optionsList}\n\n¿Cuál te interesa?`
         };
       }
-    }
-  }
-
-  // THEN: Check classifier entities as backup
-  if (!state.width || !state.height) {
-    if (entities.dimensions) {
-      const dims = parseDimensions(entities.dimensions);
-      if (dims) {
-        state.width = dims.width;
-        state.height = dims.height;
-        // Preserve user's expressed order for display
-        state.userExpressedSize = dims.userExpressed;
-      }
-    }
-    // Also check for width/height separately
-    if (entities.width && entities.height) {
-      state.width = entities.width;
-      state.height = entities.height;
-      // When parsed separately, construct userExpressed from raw values
-      state.userExpressedSize = `${entities.width} x ${entities.height}`;
     }
   }
   if (entities.percentage) {

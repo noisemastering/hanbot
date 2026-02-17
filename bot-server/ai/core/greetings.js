@@ -83,6 +83,14 @@ async function handleThanks(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
     return null;
   }
 
+  // Don't treat as goodbye if there's been no meaningful interaction yet
+  // e.g. "Gracias, precio del de 18 mts" on first message is a product request, not a farewell
+  const hasHadInteraction = convo?.greeted || convo?.lastIntent;
+  if (!hasHadInteraction) {
+    console.log("📝 Thanks/goodbye words but no prior interaction — passing to product handlers");
+    return null;
+  }
+
   // Check for continuation phrases - if user is continuing, don't close
   // "otra pregunta", "una duda", "tengo pregunta", etc.
   const hasContinuation = /\b(pero|aun|todavía|todavia|aún|otra\s+(duda|pregunta|cosa)|tengo\s+(una\s+)?(duda|pregunta)|quiero\s+saber|me\s+gustaría|quisiera|también|tambien)\b/i.test(cleanMsg);
@@ -90,7 +98,7 @@ async function handleThanks(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
   // Check if message contains actual product/size requests
   // Exclude "gracias por la cotización" - that's a thank you, not a quote request
   const isThankingForQuote = /\b(gracias\s+por\s+(la\s+)?cotizaci[oó]n|gracias\s+por\s+cotizar)\b/i.test(cleanMsg);
-  const hasProductRequest = !isThankingForQuote && /\b(\d+\s*x\s*\d+|precio|medida|rollo|metro|malla|sombra|tien[ea]s?|cuanto|cuánto|cotiz|ofrece|disponible)\b/i.test(cleanMsg);
+  const hasProductRequest = !isThankingForQuote && /\b(\d+\s*x\s*\d+|precio|presio|medida|rollo|metro|malla|sombra|tien[ea]s?|cuanto|cuánto|cotiz|ofrece|disponible)\b/i.test(cleanMsg);
 
   // Check if message contains ANY question (location, hours, contact, payment, etc.)
   // "ubicación, gracias" or "forma de pago, gracias" is a question, not a goodbye

@@ -283,36 +283,54 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     }
   }
 
-  // SECOND: Try to parse width directly from user message
+  // SECOND: Extract width — classifier entities first, regex fallback
+  if (!state.width && entities.width) {
+    const normalized = await normalizeWidth(entities.width);
+    if (normalized) {
+      state.width = normalized;
+      console.log(`📦 Rollo flow - Using classifier entity: ${entities.width} → ${normalized}m`);
+    }
+  }
+  // Regex fallback: parse width from user message
   // Patterns: "de 4 mts", "4 metros", "4.20", "el de 4", "2.10m", "2 metros"
   if (!state.width && userMessage) {
-    const widthPatterns = [
-      /\b(?:de\s+)?(\d+(?:[.,]\d+)?)\s*(?:m(?:ts?|etros?)?)\b/i,  // "de 4 mts", "4 metros", "4.20m"
-      /\b(?:el\s+)?(?:de\s+)?(\d+(?:[.,]\d+)?)\s*(?:ancho)?\b/i,   // "el de 4", "4 ancho"
-      /\b(\d+(?:[.,]\d+)?)\s*[xX×]\s*100\b/i                       // "4x100", "4.20x100"
-    ];
+    // Guard: if message contains NxM where neither side is ~100, skip width extraction
+    // These dimensions belong to a different product (e.g., 11x5 = confeccionada)
+    const fullDimCheck = userMessage.match(/\b(\d+(?:[.,]\d+)?)\s*[xX×*]\s*(\d+(?:[.,]\d+)?)\b/);
+    const hasNonRollDimensions = fullDimCheck &&
+      parseFloat(fullDimCheck[1].replace(',', '.')) !== 100 &&
+      parseFloat(fullDimCheck[2].replace(',', '.')) !== 100;
 
-    for (const pattern of widthPatterns) {
-      const match = userMessage.match(pattern);
-      if (match) {
-        const parsedWidth = parseFloat(match[1].replace(',', '.'));
-        const normalized = await normalizeWidth(parsedWidth);
-        if (normalized) {
-          console.log(`📦 Rollo flow - Parsed width from message: ${parsedWidth} → ${normalized}m`);
-          state.width = normalized;
-          break;
+    if (hasNonRollDimensions) {
+      console.log(`📦 Rollo flow - Dimensions ${fullDimCheck[1]}x${fullDimCheck[2]} don't match roll pattern, skipping width extraction`);
+    } else {
+      const widthPatterns = [
+        /\b(?:de\s+)?(\d+(?:[.,]\d+)?)\s*(?:m(?:ts?|etros?)?)\b/i,  // "de 4 mts", "4 metros", "4.20m"
+        /\b(?:el\s+)?(?:de\s+)?(\d+(?:[.,]\d+)?)\s*(?:ancho)?\b/i,   // "el de 4", "4 ancho"
+        /\b(\d+(?:[.,]\d+)?)\s*[xX×]\s*100\b/i                       // "4x100", "4.20x100"
+      ];
+
+      for (const pattern of widthPatterns) {
+        const match = userMessage.match(pattern);
+        if (match) {
+          const parsedWidth = parseFloat(match[1].replace(',', '.'));
+          const normalized = await normalizeWidth(parsedWidth);
+          if (normalized) {
+            console.log(`📦 Rollo flow - Parsed width from message: ${parsedWidth} → ${normalized}m`);
+            state.width = normalized;
+            break;
+          }
         }
       }
     }
   }
 
-  // Update state with any new entities from classifier
-  if (!state.width && entities.width) {
-    const normalized = await normalizeWidth(entities.width);
-    if (normalized) state.width = normalized;
+  // Extract percentage — classifier entities first, regex fallback
+  if (!state.percentage && entities.percentage) {
+    state.percentage = entities.percentage;
+    console.log(`📦 Rollo flow - Using classifier entity percentage: ${entities.percentage}%`);
   }
-
-  // Parse percentage from user message - both numeric and natural language
+  // Regex fallback: parse percentage from user message - both numeric and natural language
   if (!state.percentage && userMessage) {
     // Try numeric percentage: "35%", "al 50%", "50 porciento"
     // IMPORTANT: Require % or porciento suffix to avoid matching dimensions like "4.20"
@@ -338,10 +356,6 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
         state.percentage = 90;
       }
     }
-  }
-
-  if (!state.percentage && entities.percentage) {
-    state.percentage = entities.percentage;
   }
 
   // Parse quantity from user message

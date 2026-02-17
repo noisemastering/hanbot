@@ -2097,13 +2097,30 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   }
 
   // 🏙️ City/Location response - catches standalone city names like "En Mérida", "Monterrey", "76137", etc.
-  // Works regardless of lastIntent - if message is short and is a valid Mexican location, handle it
-  // Use actual Mexican location lookup including zipcode detection
+  // ONLY respond when the conversation was already asking about shipping/location
+  // A city by itself is ambiguous — could be answering our question, asking about shipping, or just context
+  // If no relevant lastIntent, just save the city and let the flow handle it
   const acceptCityAfterMeasure = convo.lastIntent === "specific_measure" && convo.requestedSize;
   const hasZipCode = detectZipCode(msg);
+  const locationContextActive = convo.lastIntent === "shipping_info" || convo.lastIntent === "location_info" || convo.lastIntent === "city_provided" || convo.lastIntent === "awaiting_zipcode" || acceptCityAfterMeasure;
   const standaloneLocation = isLikelyLocationName(msg) || hasZipCode ? await detectLocationEnhanced(msg) : null;
 
-  if (convo.lastIntent === "shipping_info" || convo.lastIntent === "location_info" || convo.lastIntent === "city_provided" || convo.lastIntent === "awaiting_zipcode" || acceptCityAfterMeasure || standaloneLocation) {
+  // If standalone city detected but no location context, just save it and return null
+  if (standaloneLocation && !locationContextActive) {
+    const updateData = { unknownCount: 0 };
+    if (standaloneLocation.type === 'state') {
+      updateData.stateMx = standaloneLocation.normalized || standaloneLocation.location;
+    } else {
+      updateData.city = standaloneLocation.location || standaloneLocation.normalized;
+      if (standaloneLocation.state) updateData.stateMx = standaloneLocation.state;
+    }
+    if (standaloneLocation.code) updateData.zipcode = standaloneLocation.code;
+    console.log(`📍 Standalone city detected, saving but NOT responding (no location context): ${standaloneLocation.normalized}`);
+    await updateConversation(psid, updateData);
+    // Don't return — let the flow manager handle it
+  }
+
+  if (locationContextActive) {
     // Check if message is likely a location name (short, not a question) or contains a zipcode
     if (isLikelyLocationName(msg) || hasZipCode) {
       // Try to detect actual Mexican location (already done above if standalone)

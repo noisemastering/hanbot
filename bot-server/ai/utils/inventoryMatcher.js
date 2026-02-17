@@ -195,4 +195,5 @@ module.exports = {
   checkDimensionOwnership,
   buildSizeIndex,
   invalidateCache,
+  classifyProduct,
 };

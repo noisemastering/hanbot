@@ -446,13 +446,16 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
     // 🧠 Si hay campaña activa, intentar intención global primero
     // BUT: If message has dimensions, skip globalIntents and let flow manager handle
     // This prevents location detection from ignoring dimensions in the same message
+    // ALSO: Skip if pendingHandoff — the flow needs to process the zip/city response first
     if (campaign) {
       const { extractAllDimensions } = require("./utils/dimensionParsers");
       const hasDimensions = extractAllDimensions(cleanMsg, 'confeccionada').length > 0;
 
-      if (!hasDimensions) {
+      if (!hasDimensions && !convo?.pendingHandoff) {
         const globalResponse = await handleGlobalIntents(cleanMsg, psid, convo);
         if (globalResponse) return globalResponse;
+      } else if (convo?.pendingHandoff) {
+        console.log(`⏭️ Skipping globalIntents - pendingHandoff active, letting flow handle zip/city response`);
       } else {
         console.log(`📏 Message has dimensions, skipping globalIntents to let flow manager handle`);
       }
@@ -562,9 +565,10 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
 
     // 🌍 Global intents (measures, shipping, location, etc.) - for ALL users
     // Skip if message has dimensions - let flow manager handle those properly
+    // Skip if pendingHandoff — the flow needs to process the zip/city response first
     const { extractAllDimensions: extractDims } = require("./utils/dimensionParsers");
     const msgHasDimensions = extractDims(cleanMsg, 'confeccionada').length > 0;
-    if (!msgHasDimensions) {
+    if (!msgHasDimensions && !convo?.pendingHandoff) {
       const globalResponse = await handleGlobalIntents(cleanMsg, psid, convo);
       if (globalResponse) return globalResponse;
     }

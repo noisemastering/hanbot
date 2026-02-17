@@ -14,7 +14,8 @@ const { getAncestors, getRootFamily } = require("../utils/productMatcher");
 const {
   enrichProductWithContext,
   getProductDisplayName,
-  getProductInterest
+  getProductInterest,
+  getProductLineage
 } = require("../utils/productEnricher");
 
 /**
@@ -28,11 +29,6 @@ const STAGES = {
 };
 
 /**
- * Valid lengths for borde (in meters)
- */
-const VALID_LENGTHS = [6, 9, 18, 54];
-
-/**
  * Format money for Mexican pesos
  */
 function formatMoney(n) {
@@ -41,7 +37,55 @@ function formatMoney(n) {
 }
 
 /**
+ * Extract meter lengths from product names/sizes
+ * "Rollo de 18 m" → 18, "54 metros" → 54
+ */
+function extractLengthsFromProducts(products) {
+  const lengths = new Set();
+  for (const p of products) {
+    const text = `${p.name || ''} ${p.size || ''}`;
+    const match = text.match(/(\d+)\s*m/i);
+    if (match) {
+      lengths.add(parseInt(match[1]));
+    }
+  }
+  return [...lengths].sort((a, b) => a - b);
+}
+
+/**
+ * Find all sellable borde products from the Borde Separador family tree
+ * Gen 1: Cinta Plástica → Gen 2: Borde Separador → Gen 3: Rollo de Xm (sellable)
+ */
+async function findAllBordeProducts() {
+  try {
+    // Find the "Borde Separador" parent (Gen 2 under "Cinta Plástica")
+    const bordeParent = await ProductFamily.findOne({
+      name: /borde\s*separador/i,
+      sellable: { $ne: true }
+    }).lean();
+
+    if (!bordeParent) {
+      console.log('🌱 Borde Separador parent not found in DB');
+      return [];
+    }
+
+    const products = await ProductFamily.find({
+      parentId: bordeParent._id,
+      sellable: true,
+      active: true
+    }).sort({ price: 1 }).lean();
+
+    console.log(`🌱 Found ${products.length} borde products under "${bordeParent.name}"`);
+    return products;
+  } catch (error) {
+    console.error("❌ Error finding borde products:", error);
+    return [];
+  }
+}
+
+/**
  * Get available lengths, filtered by ad products if specified
+ * Falls back to querying all sellable borde products from the database
  */
 async function getAvailableLengths(sourceContext, convo) {
   // Check ad productIds from sourceContext (first message) or conversation (persisted)
@@ -55,61 +99,48 @@ async function getAvailableLengths(sourceContext, convo) {
         active: true
       }).lean();
 
-      const lengths = new Set();
-      for (const p of products) {
-        const text = `${p.name || ''} ${p.size || ''}`;
-        for (const validLen of VALID_LENGTHS) {
-          if (new RegExp(`\\b${validLen}\\b`).test(text)) {
-            lengths.add(validLen);
-          }
-        }
-      }
-
-      if (lengths.size > 0) {
-        const filtered = [...lengths].sort((a, b) => a - b);
-        console.log(`🌱 Borde lengths from ad products: ${filtered.join(', ')}m`);
-        return filtered;
+      const lengths = extractLengthsFromProducts(products);
+      if (lengths.length > 0) {
+        console.log(`🌱 Borde lengths from ad products: ${lengths.join(', ')}m`);
+        return lengths;
       }
     } catch (err) {
       console.error("Error getting ad product lengths:", err.message);
     }
   }
 
-  return VALID_LENGTHS;
+  // Fallback: query ALL sellable borde products from database
+  const allProducts = await findAllBordeProducts();
+  const lengths = extractLengthsFromProducts(allProducts);
+
+  if (lengths.length > 0) {
+    console.log(`🌱 Borde lengths from database: ${lengths.join(', ')}m`);
+  } else {
+    console.log('🌱 No borde products found in database');
+  }
+
+  return lengths;
 }
 
 /**
- * Find matching sellable borde products
+ * Find matching sellable borde products using the family tree
+ * Optionally filter by length
  */
 async function findMatchingProducts(length = null) {
   try {
-    // Build query for borde separador - search by name/aliases
-    const query = {
-      sellable: true,
-      active: true,
-      $or: [
-        { name: /borde.*separador/i },
-        { name: /separador.*jardin/i },
-        { aliases: { $in: [/borde/i, /separador/i, /garden.*edging/i] } }
-      ]
-    };
+    const products = await findAllBordeProducts();
 
-    // Add length filter if specified
-    if (length) {
-      // Match patterns like "6 metros", "6m", "6 m", "rollo de 6"
-      const lengthRegex = new RegExp(`(^|\\s)${length}\\s*(m(?:etros?)?|metros?)?(\\s|$)`, 'i');
-      query.$and = [{ name: lengthRegex }];
-    }
+    if (!length) return products;
 
-    console.log(`🌱 Searching for borde${length ? ` ${length}m` : ''}`);
+    // Filter by length from product name/size
+    const lengthRegex = new RegExp(`\\b${length}\\s*m`, 'i');
+    const filtered = products.filter(p => {
+      const text = `${p.name || ''} ${p.size || ''}`;
+      return lengthRegex.test(text);
+    });
 
-    const products = await ProductFamily.find(query)
-      .sort({ price: 1 })
-      .lean();
-
-    console.log(`🌱 Found ${products.length} matching borde products`);
-
-    return products;
+    console.log(`🌱 Filtered by ${length}m: ${filtered.length} matches`);
+    return filtered;
   } catch (error) {
     console.error("❌ Error finding borde products:", error);
     return [];
@@ -262,18 +293,19 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   // Get available lengths (filtered by ad if applicable)
   const availableLengths = await getAvailableLengths(sourceContext, convo);
 
-  // Parse length from user message
+  // FIRST: Check classifier entities
+  if (!state.length && entities.borde_length && availableLengths.includes(entities.borde_length)) {
+    state.length = entities.borde_length;
+    console.log(`📏 Borde flow - Using classifier entity: ${entities.borde_length}m`);
+  }
+
+  // SECOND: Regex fallback on raw message
   if (!state.length && userMessage) {
     const parsed = parseLengthFromMessage(userMessage, availableLengths);
     if (parsed) {
-      console.log(`🌱 Borde flow - Parsed length from message: ${parsed}m`);
+      console.log(`🌱 Borde flow - Regex fallback: ${parsed}m`);
       state.length = parsed;
     }
-  }
-
-  // Also check classifier entities
-  if (!state.length && entities.borde_length && VALID_LENGTHS.includes(entities.borde_length)) {
-    state.length = entities.borde_length;
   }
 
   // Parse quantity from user message (only when we already have length)
@@ -306,7 +338,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       break;
 
     case STAGES.AWAITING_QUANTITY:
-      response = handleAwaitingQuantity(intent, state, sourceContext);
+      response = await handleAwaitingQuantity(intent, state, sourceContext);
       break;
 
     case STAGES.COMPLETE:
@@ -422,9 +454,22 @@ async function handleAwaitingLength(intent, state, sourceContext, availableLengt
 }
 
 /**
- * Handle awaiting quantity stage - ask how many
+ * Handle awaiting quantity stage - show price and ask how many
  */
-function handleAwaitingQuantity(intent, state, sourceContext) {
+async function handleAwaitingQuantity(intent, state, sourceContext) {
+  // Look up product to show price
+  const products = await findMatchingProducts(state.length);
+  const product = products[0];
+
+  if (product) {
+    const displayName = await getProductDisplayName(product, 'short');
+    const priceText = product.price ? ` en ${formatMoney(product.price)}` : '';
+    return {
+      type: "text",
+      text: `Tenemos ${displayName}${priceText}. ¿Cuántos rollos necesitas?`
+    };
+  }
+
   return {
     type: "text",
     text: `Borde de ${state.length} metros. ¿Cuántos rollos necesitas?`

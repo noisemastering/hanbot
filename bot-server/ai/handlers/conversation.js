@@ -77,6 +77,14 @@ async function handleConfirmation({ psid, convo, userMessage }) {
     return null;
   }
 
+  // Defer to flow manager when user is in an active product flow
+  // e.g., borde_start, borde_awaiting_length — user saying "sí" should continue the flow
+  const activeProductFlows = ['borde', 'malla', 'rollo', 'groundcover', 'monofilamento'];
+  if (convo?.lastIntent && activeProductFlows.some(f => convo.lastIntent.startsWith(f + '_'))) {
+    console.log(`✋ Confirmation deferred to product flow (lastIntent: ${convo.lastIntent})`);
+    return null;
+  }
+
   await updateConversation(psid, { lastIntent: "confirmation", unknownCount: 0 });
 
   // Check if this is purchase intent ("me interesa", "lo quiero") after a price quote

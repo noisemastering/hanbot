@@ -365,6 +365,18 @@ async function detectExplicitProductSwitch(userMessage, currentFlow, classificat
       console.log(`🔍 Dimension ${d1}x${d2} belongs to ${ownership.matchedFlow}, not ${currentFlow} (from inventory)`);
       return ownership.matchedFlow;
     }
+
+    // Fallback: infer from dimension range when no exact inventory match
+    // Roll-type flows (rollo, groundcover, monofilamento) expect one side ≈ 100m
+    // If neither dimension is ≥ 50, these are confeccionada-sized dimensions
+    if (!ownership.matchedFlow) {
+      const maxDim = Math.max(d1, d2);
+      const rollFlows = ['rollo', 'groundcover', 'monofilamento'];
+      if (rollFlows.includes(currentFlow) && maxDim < 50) {
+        console.log(`🔍 Dimensions ${d1}x${d2} too small for ${currentFlow} (max ${maxDim} < 50) — switching to malla_sombra`);
+        return 'malla_sombra';
+      }
+    }
   }
 
   // Check classification if it detected a different product
@@ -581,7 +593,7 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
 
       const flowGreetings = {
         'malla_sombra': '¡Perfecto! Para la malla sombra confeccionada, ¿qué medida necesitas?',
-        'borde_separador': '¡Perfecto! Para el borde separador, ¿qué largo necesitas? Tenemos 6m, 9m, 18m y 54m.'
+        'borde_separador': '¡Perfecto! Para el borde separador, ¿qué largo necesitas?'
       };
 
       console.log(`🎯 ===== END FLOW MANAGER (retail → ${newFlow}) =====\n`);
@@ -758,7 +770,7 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
       // Route to new flow with a greeting
       const flowGreetings = {
         'malla_sombra': '¡Perfecto! Para la malla sombra confeccionada, ¿qué medida necesitas?',
-        'borde_separador': '¡Perfecto! Para el borde separador, ¿qué largo necesitas? Tenemos 6m, 9m, 18m y 54m.'
+        'borde_separador': '¡Perfecto! Para el borde separador, ¿qué largo necesitas?'
       };
 
       console.log(`🎯 ===== END FLOW MANAGER (flow changed to ${newFlow}) =====\n`);

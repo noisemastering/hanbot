@@ -104,38 +104,23 @@ async function handleLocation({ psid, userMessage, convo }) {
 /**
  * Handle location mention - user says where they're from
  * "Soy de Monterrey", "Vivo en Jalisco"
+ * Just save the city — a location mention is data, not a question.
+ * Don't respond about shipping/location. Let the flow continue.
  */
 async function handleLocationMention({ psid, userMessage, convo }) {
   const locationInfo = await detectMexicanLocation(userMessage);
 
   if (locationInfo) {
     await updateConversation(psid, {
-      lastIntent: "location_mentioned",
       city: locationInfo.normalized,
+      stateMx: locationInfo.state || convo?.stateMx,
       unknownCount: 0
     });
-
-    const response = await generateBotResponse("location_mentioned", {
-      userLocation: locationInfo.normalized,
-      shipsNationwide: true,
-      convo
-    });
-
-    return { type: "text", text: response };
+    console.log(`📍 Location mention saved: ${locationInfo.normalized} — not responding (it's data, not a question)`);
   }
 
-  // Could not detect location
-  await updateConversation(psid, {
-    lastIntent: "location_mentioned",
-    unknownCount: 0
-  });
-
-  const response = await generateBotResponse("location_mentioned", {
-    shipsNationwide: true,
-    convo
-  });
-
-  return { type: "text", text: response };
+  // Return null — let the flow manager handle the message
+  return null;
 }
 
 /**

@@ -6,6 +6,8 @@ const {
   classifyMessage,
   quickClassify,
   logClassification,
+  clearCatalogCache,
+  getProductCatalogForPrompt,
   INTENTS,
   PRODUCTS
 } = require("./intentClassifier");
@@ -20,6 +22,10 @@ module.exports = {
 
   // Logging
   logClassification,
+
+  // Cache management
+  clearCatalogCache,
+  getProductCatalogForPrompt,
 
   // Constants
   INTENTS,

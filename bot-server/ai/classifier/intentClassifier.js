@@ -40,6 +40,110 @@ function clearIntentCache() {
   console.log("🗑️ Intent cache cleared");
 }
 
+// ========== PRODUCT CATALOG CACHE FOR AI PROMPT ==========
+let catalogCache = null;
+let catalogCacheExpiry = 0;
+const CATALOG_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
+/**
+ * Build a compact text representation of available product sizes for the AI prompt.
+ * Queries the database, classifies products by flow, and extracts available dimensions.
+ */
+async function getProductCatalogForPrompt() {
+  if (catalogCache && Date.now() < catalogCacheExpiry) return catalogCache;
+
+  try {
+    const ProductFamily = require("../../models/ProductFamily");
+    const { classifyProduct } = require("../utils/inventoryMatcher");
+
+    // Two queries: sellable products (sizes) + all nodes (for ancestor classification)
+    const [products, allNodes] = await Promise.all([
+      ProductFamily.find({ sellable: true, active: true, size: { $exists: true, $ne: null } })
+        .select('name size price parentId').lean(),
+      ProductFamily.find({ active: true }).select('name parentId').lean()
+    ]);
+
+    const byId = {};
+    allNodes.forEach(p => byId[p._id.toString()] = p);
+
+    // Collect specs per product type
+    const malla = new Set(), rolloW = new Set(), rolloPct = new Set(),
+          borde = new Set(), gcW = new Set(),
+          monoW = new Set(), monoPct = new Set();
+
+    for (const p of products) {
+      const flow = classifyProduct(p, byId);
+      const size = (p.size || '').trim();
+      if (!flow || !size) continue;
+
+      if (flow === 'malla_sombra') {
+        const m = size.match(/(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)/i);
+        if (m) {
+          const w = Math.min(parseFloat(m[1]), parseFloat(m[2]));
+          const h = Math.max(parseFloat(m[1]), parseFloat(m[2]));
+          if (h <= 10) malla.add(`${w}x${h}`);
+        }
+      } else if (flow === 'rollo') {
+        const m = size.match(/(\d+(?:\.\d+)?)\s*x\s*100/i);
+        if (m) rolloW.add(parseFloat(m[1]).toString());
+        const pct = (p.name || '').match(/(\d+)\s*%/);
+        if (pct) rolloPct.add(parseInt(pct[1]));
+      } else if (flow === 'borde_separador') {
+        const m = (size + ' ' + (p.name || '')).match(/(\d+)\s*m/i);
+        if (m) borde.add(parseInt(m[1]));
+      } else if (flow === 'groundcover') {
+        const m = size.match(/(\d+(?:\.\d+)?)\s*x/i);
+        if (m) gcW.add(parseFloat(m[1]).toString());
+      } else if (flow === 'monofilamento') {
+        const m = size.match(/(\d+(?:\.\d+)?)\s*x/i);
+        if (m) monoW.add(parseFloat(m[1]).toString());
+        const pct = (p.name || '').match(/(\d+)\s*%/);
+        if (pct) monoPct.add(parseInt(pct[1]));
+      }
+    }
+
+    // Format compact prompt text
+    const lines = ['AVAILABLE CATALOG SIZES (validate user dimensions against these):'];
+    if (malla.size > 0) {
+      const sorted = [...malla].sort((a, b) => {
+        const [aw, ah] = a.split('x').map(Number);
+        const [bw, bh] = b.split('x').map(Number);
+        return (aw * ah) - (bw * bh);
+      });
+      lines.push(`- malla_sombra: ${sorted.join(', ')}. Max 10m per side.`);
+    }
+    if (rolloW.size > 0) {
+      lines.push(`- rollo: Widths ${[...rolloW].sort().map(w => w + 'm').join(', ')}, length 100m. Shade: ${[...rolloPct].sort((a, b) => a - b).map(p => p + '%').join(', ')}`);
+    }
+    if (borde.size > 0) {
+      lines.push(`- borde_separador: ${[...borde].sort((a, b) => a - b).map(l => l + 'm').join(', ')}`);
+    }
+    if (gcW.size > 0) {
+      lines.push(`- groundcover: Widths ${[...gcW].sort().map(w => w + 'm').join(', ')}, length 100m`);
+    }
+    if (monoW.size > 0) {
+      lines.push(`- monofilamento: Widths ${[...monoW].sort().map(w => w + 'm').join(', ')}, length 100m. Shade: ${[...monoPct].sort((a, b) => a - b).map(p => p + '%').join(', ')}`);
+    }
+
+    catalogCache = lines.join('\n');
+    catalogCacheExpiry = Date.now() + CATALOG_CACHE_TTL;
+    console.log(`🔄 Catalog cache refreshed for AI prompt (${products.length} products scanned)`);
+    return catalogCache;
+  } catch (error) {
+    console.error("❌ Error building catalog for prompt:", error.message);
+    return ''; // Return empty string on error — AI will still work, just without catalog
+  }
+}
+
+/**
+ * Clear catalog cache (called when products are updated via API)
+ */
+function clearCatalogCache() {
+  catalogCache = null;
+  catalogCacheExpiry = 0;
+  console.log("🗑️ Catalog cache cleared");
+}
+
 /**
  * All possible intents the classifier can return
  * Organized by category for easier maintenance
@@ -255,7 +359,7 @@ function buildIntentListForPrompt(dbIntents) {
 /**
  * Build the classification prompt
  */
-function buildClassificationPrompt(sourceContext, conversationFlow, campaignContext, dbIntents = null) {
+function buildClassificationPrompt(sourceContext, conversationFlow, campaignContext, dbIntents = null, catalogText = '') {
   // Add context about current conversation state
   let flowContext = "";
   if (conversationFlow?.product) {
@@ -295,6 +399,7 @@ PRODUCTS WE SELL:
 - borde_separador: Plastic garden edging, comes in 6m, 9m, 18m, or 54m lengths
 - groundcover: Anti-weed ground cover fabric (also called "antimaleza")
 - monofilamento: Monofilament shade mesh (agricultural use)
+${catalogText ? '\n' + catalogText : ''}
 ${flowContext}${sourceInfo}${campaignSection}
 `;
 
@@ -418,14 +523,16 @@ NEVER extract "Sonora" as a location unless the user explicitly writes "Sonora" 
 "Son para sombra" means "Are they for shade?" — "Son" = "Are they", NOT an abbreviation of Sonora.
 
 ENTITY EXTRACTION:
-- width: number in meters (e.g., 4.20, 2.10, 3)
-- height/length: number in meters
+- width: number in meters (e.g., 4.20, 2.10, 3). Parse Spanish number words: "tres" → 3, "cuatro y medio" → 4.5
+- height/length: number in meters. Parse "por" as dimension separator: "tres por cuatro" → width=3, height=4
 - percentage: shade percentage (35-90)
 - quantity: number of units (only when explicitly ordering, e.g., "quiero 5", "necesito 10 rollos". NOT from "una/uno" in price queries like "cuánto sale una")
 - color: negro, verde, beige, blanco, azul
 - borde_length: 6, 9, 18, or 54 (only for borde_separador)
-- dimensions: full dimension string if detected (e.g., "4x5")
+- dimensions: full dimension string if detected (e.g., "4x5", "3 por 4", "tres por cuatro")
+- IMPORTANT: When user says "una de tres por cuatro", "una" means "one piece of 3x4", NOT a dimension. Extract width=3, height=4.
 - location: city or state if mentioned
+- matched_size: If user's dimensions match an available catalog size exactly, return it (e.g., "4x5" for malla, "18m" for borde, "2.10" for rollo width). Return null if not in catalog or no dimensions given.
 - concerns: array of secondary topics/concerns the user mentions (e.g., ["color", "durability", "price", "features", "reinforcement", "weather_resistance", "installation"]). Extract ALL concerns, don't lose information. If user asks "y que colores" or similar, include "color" in concerns.
 
 Respond with ONLY valid JSON, no explanation:
@@ -440,7 +547,8 @@ Respond with ONLY valid JSON, no explanation:
     "color": "<string or null>",
     "borde_length": <number or null>,
     "dimensions": "<string or null>",
-    "location": "<string or null>,
+    "location": "<string or null>",
+    "matched_size": "<string or null>",
     "concerns": <array of strings or null>
   },
   "confidence": <0.0-1.0>,
@@ -463,10 +571,13 @@ async function classifyMessage(message, sourceContext = null, conversationFlow =
   const startTime = Date.now();
 
   try {
-    // Load intents from DB (with caching)
-    const dbIntents = await getIntentsFromDB();
+    // Load intents and catalog in parallel
+    const [dbIntents, catalogText] = await Promise.all([
+      getIntentsFromDB(),
+      getProductCatalogForPrompt()
+    ]);
 
-    const systemPrompt = buildClassificationPrompt(sourceContext, conversationFlow, campaignContext, dbIntents);
+    const systemPrompt = buildClassificationPrompt(sourceContext, conversationFlow, campaignContext, dbIntents, catalogText);
 
     const response = await openai.chat.completions.create({
       model: process.env.CLASSIFIER_MODEL || "gpt-4o-mini",
@@ -519,6 +630,7 @@ async function classifyMessage(message, sourceContext = null, conversationFlow =
         borde_length: result.entities?.borde_length || null,
         dimensions: result.entities?.dimensions || null,
         location: result.entities?.location || null,
+        matched_size: result.entities?.matched_size || null,
         concerns: result.entities?.concerns || null
       },
       confidence: result.confidence || 0.5,
@@ -568,15 +680,7 @@ async function classifyMessage(message, sourceContext = null, conversationFlow =
 function quickClassify(message, dbIntents = null) {
   const msg = message.toLowerCase().trim();
 
-  // Skip quick classification for messages that need AI interpretation
-  // These contain ambiguous words that could change the intent
-  if (/\b(lejos|mu+y\s*lejos|cómo\s*(le\s*hago|puedo|adquirir))\b/i.test(msg)) {
-    console.log(`⚡ Skipping quick classify - needs AI interpretation (location/distance)`);
-    return null;
-  }
-
-  // Skip quick classification for long/complex messages (likely multi-topic)
-  // These need AI to extract all concerns and entities properly
+  // Skip quick classification for long messages — AI handles these better
   if (message.length > 100) {
     console.log(`⚡ Skipping quick classify - message too long (${message.length} chars), needs AI`);
     return null;
@@ -594,7 +698,7 @@ function quickClassify(message, dbIntents = null) {
   // "Precio malla 6x6" is ONE question, not three.
   const questionIndicators = [
     { intent: 'confirmation', pattern: /\b(s[ií]|las?\s+dos|los?\s+dos|ambos?|ambas?|esa|ese|esas|esos|dale|ok|vale|perfecto|m[eé]?\s*interesa|lo\s*quiero|la\s*quiero)\b/i },
-    { intent: 'price_query', pattern: /\b(precio|costo|cu[aá]nto\s*(cuesta|vale|es|está)|qu[eé]\s*precio|en\s+cu[aá]nto|a\s+c[oó]mo)\b/i },
+    { intent: 'price_query', pattern: /\b(precio|presio|costo|cu[aá]nto\s*(cuesta|vale|es|está)|qu[eé]\s*precio|en\s+cu[aá]nto|a\s+c[oó]mo)\b/i },
     { intent: 'availability_query', pattern: /\b(medidas?|tamaños?|disponib|stock|tienen|manejan|qu[eé]\s*medidas?)\b/i },
     { intent: 'payment_query', pattern: /\b(pago|pagar|tarjeta|efectivo|transferencia|forma\s*de\s*pago|meses)\b/i },
     { intent: 'location_query', pattern: /\b(ubicaci[oó]n|direcci[oó]n|d[oó]nde\s*(est[aá]n|quedan|se\s*encuentran)|soy\s+de\s+\w|recog[ei]r|domicilio)\b/i },
@@ -604,17 +708,8 @@ function quickClassify(message, dbIntents = null) {
     { intent: 'delivery_time_query', pattern: /\b(cu[aá]nto\s*tarda|cu[aá]ntos?\s*d[ií]as?|tiempo\s*de\s*entrega|cuando\s*llega)\b/i }
   ];
 
-  // Detect pay-on-delivery specifically
-  const isPayOnDelivery = /\b(pago|pagar)\b.*\b(entreg|llega|recib)/i.test(msg) ||
-                          /\b(al\s*entregar|contra\s*entrega|cuando\s*llegue)\b/i.test(msg);
-
-  // If it's a pay-on-delivery question, skip multi-question detection entirely
-  // "pago contra entrega" matches both payment_query and shipping_query but it's a single intent
-  if (isPayOnDelivery) {
-    return { intent: INTENTS.PAY_ON_DELIVERY_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
-  }
-
-  // Find all matching question types
+  // Find all matching question types (partial patterns are OK here because
+  // we're detecting COMPLEXITY, not classifying intent — 2+ matches → MULTI_QUESTION → AI)
   const detectedIntents = [];
   for (const { intent, pattern } of questionIndicators) {
     if (pattern.test(msg)) {
@@ -622,17 +717,13 @@ function quickClassify(message, dbIntents = null) {
     }
   }
 
-  // If 2+ intents detected, return as MULTI_QUESTION
+  // If 2+ intents detected, return as MULTI_QUESTION so AI can sort out compound messages
   if (detectedIntents.length >= 2) {
     console.log(`⚡ Multi-question detected: ${detectedIntents.join(', ')}`);
-    const entities = { subIntents: detectedIntents };
-    if (isPayOnDelivery) {
-      entities.payOnDelivery = true;
-    }
     return {
       intent: INTENTS.MULTI_QUESTION,
       product: PRODUCTS.UNKNOWN,
-      entities,
+      entities: { subIntents: detectedIntents },
       confidence: 0.85
     };
   }
@@ -699,8 +790,8 @@ function quickClassify(message, dbIntents = null) {
     }
   }
 
-  // Thanks
-  if (/^(gracias|muchas\s*gracias|thanks|thx)[\s!?.]*$/i.test(msg)) {
+  // Thanks — standalone or with common suffixes like "gracias por la información"
+  if (/^(gracias|muchas\s*gracias|thanks|thx)(\s+(por\s+(la\s+)?(informaci[oó]n|info|ayuda|atenci[oó]n|tu\s+ayuda|su\s+ayuda|tu\s+atenci[oó]n|su\s+atenci[oó]n|responder|contestar|todo)|muy\s+amable|es\s+todo|eso\s+es\s+todo))?[\s!?.]*$/i.test(msg)) {
     return { intent: INTENTS.THANKS, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.95 };
   }
 
@@ -730,303 +821,46 @@ function quickClassify(message, dbIntents = null) {
     }
   }
 
-  // Simple confirmations (allow emojis like 👍 👌 ✅)
-  // Include "aok" as common typo/variant of "a ok" / "ok"
-  // Include "de acuerdo" as common Mexican acknowledgment, and "me interesa" as purchase intent
+  // ===== FULL-MESSAGE-ONLY PATTERNS =====
+  // Quick classifier only handles messages where regex matches the ENTIRE sentence.
+  // If a message is more complex (compound intents, extra context), let AI sort it out.
+
+  // Simple confirmations — must be the ENTIRE message
   if (/^(s[ií]|a?ok|okey|va|vale|claro|perfecto|exacto|correcto|eso|esa|ese|dale|listo|órale|simon|simón|de\s*acuerdo|entendido|m[eé]?\s*interesa|lo\s*quiero|la\s*quiero)[\s!?.👍👌✅🙌💪]*$/i.test(msg)) {
     return { intent: INTENTS.CONFIRMATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
   }
 
-  // Polite request confirmations (e.g., "por favor si me la comparte", "si me la pasa")
-  // These are affirmative responses meaning "yes, please do it"
-  // Note: "x" is common shorthand for "por" in Mexican Spanish (e.g., "si x favor")
-  // Note: "fabor" is common typo for "favor"
-  if (/\b(por\s*favor|s[ií])\s*(s[ií]\s*)?(me\s+)?(la|lo|las|los)?\s*(comparte|pasa|manda|env[ií]a|muestra|ense[ñn]a)/i.test(msg) ||
-      /\b(comp[aá]rt[ae]me|p[aá]s[ae]me|m[aá]nd[ae]me|env[ií][ae]me|mu[eé]str[ae]me)\b/i.test(msg) ||
-      /\b(s[ií]\s+(por\s*fa(v|b)or|x\s*fa(v|b)or|porfa)|por\s*fa(v|b)or\s+s[ií]|s[ií]\s+x\s*fa(v|b)or)\b/i.test(msg)) {
+  // Polite confirmations — must be the ENTIRE message
+  // "si por favor", "sí porfa", "por favor sí", "si x favor"
+  if (/^(s[ií]\s+(por\s*fa(v|b)or|x\s*fa(v|b)or|porfa)|por\s*fa(v|b)or(\s+s[ií])?|s[ií]\s+x\s*fa(v|b)or)[\s!?.]*$/i.test(msg)) {
     return { intent: INTENTS.CONFIRMATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.85 };
   }
 
-  // Confirmation at END of message (e.g., "Disculpa no tenía la medida Ok")
-  // This catches messages where user explains something then confirms
-  if (/\b(s[ií]|a?ok|okey|va|vale|claro|perfecto|exacto|correcto|eso|esa|ese|dale|listo|órale|simon|simón)[\s!?.👍👌✅🙌💪]*$/i.test(msg)) {
-    return { intent: INTENTS.CONFIRMATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.80 };
+  // Polite request confirmations — must be the ENTIRE message
+  // "si me la comparte", "pásame info", "compártame por favor"
+  if (/^(por\s*favor\s+)?(s[ií]\s*)?(me\s+)?(la|lo|las|los)?\s*(comparte|pasa|manda|env[ií]a|muestra|ense[ñn]a)(\s+por\s*favor)?[\s!?.]*$/i.test(msg) ||
+      /^(comp[aá]rt[ae]me|p[aá]s[ae]me|m[aá]nd[ae]me|env[ií][ae]me|mu[eé]str[ae]me)(\s+(la\s+)?(info|informaci[oó]n|los\s+precios?))?(\s+por\s*favor)?[\s!?.]*$/i.test(msg)) {
+    return { intent: INTENTS.CONFIRMATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.85 };
   }
 
-  // Emoji-only confirmations
+  // Emoji-only confirmations — must be the ENTIRE message
   if (/^[👍👌✅🙌💪]+$/i.test(msg)) {
     return { intent: INTENTS.CONFIRMATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.85 };
   }
 
-  // Message ending with confirmation emoji
-  if (/[👍👌✅🙌💪]+[\s]*$/i.test(msg)) {
-    return { intent: INTENTS.CONFIRMATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.75 };
-  }
-
-  // Simple rejections
+  // Simple rejections — must be the ENTIRE message
   if (/^(no|nop|nope|nel|negativo)[\s!?.]*$/i.test(msg)) {
     return { intent: INTENTS.REJECTION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
   }
 
-  // Accidental click / not interested — "le di sin querer", "fue sin querer", "me equivoqué", "sorry"
-  if (/\b(sin\s*querer|por\s*(error|equivocaci[oó]n|accident)|me\s*equivoqu[eé]|equivocad[oa]|accident|wrong\s*button|le\s*di\s*por\s*error|sorry|no\s*me\s*interesa|no\s*quer[ií]a)\b/i.test(msg)) {
-    console.log(`👋 Accidental click / not interested detected`);
-    return { intent: INTENTS.GOODBYE, product: PRODUCTS.UNKNOWN, entities: { accidentalClick: true }, confidence: 0.95 };
-  }
-
-  // Simple price query
-  if (/^(precio|precios?|costo|costos?)[\s!?.]*$/i.test(msg)) {
+  // Simple price query — must be the ENTIRE message (includes common misspelling "presio")
+  if (/^(precio|presio|precios?|costos?)[\s!?.]*$/i.test(msg)) {
     return { intent: INTENTS.PRICE_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
   }
 
-  // Human request
-  // Includes "a qué número" - user asking for phone number after bot offered to connect with specialist
-  if (/\b(humano|persona|agente|asesor|especialista|hablar\s*con\s*alguien|a\s*q(u[eé])?\s*n[uú]mero)\b/i.test(msg)) {
-    return { intent: INTENTS.HUMAN_REQUEST, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.95 };
-  }
-
-  // ===== NEW HIGH-IMPACT INTENTS =====
-
-  // Frustration detection - CRITICAL for customer experience
-  const frustrationPatterns = /\b(estoy\s+diciendo|no\s+leen|no\s+entienden|ya\s+(te|les?)\s+dije|les?\s+repito|no\s+me\s+escuchan?|no\s+ponen\s+atenci[oó]n|acabo\s+de\s+decir|como\s+te\s+dije|como\s+ya\s+dije|ya\s+lo\s+dije|no\s+est[aá]n?\s+entendiendo|pero\s+ya\s+dije)\b/i;
-  if (frustrationPatterns.test(msg)) {
-    return { intent: INTENTS.FRUSTRATION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.95 };
-  }
-
-  // Color query - "qué colores tienen", "de qué colores hay" (NOT location!)
-  // CRITICAL: This was being misclassified as location_query before
-  if (/\b(qu[eé]\s+colou?re?s?|colou?re?s?\s+(tiene[ns]?|hay|manejan?|disponible)|de\s+qu[eé]\s+colou?re?s?|tienen?\s+en\s+otro\s+colou?r|colou?re?s?\s+en\s+existencia)\b/i.test(msg)) {
-    return { intent: INTENTS.COLOR_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.92 };
-  }
-
-  // Phone request - "teléfono", "número para llamar"
-  if (/\b(tel[eé]fono|n[uú]mero|llamar|whatsapp|contacto)\b/i.test(msg) &&
-      /\b(tienen|tendr[aá]n?|hay|cu[aá]l|dame|p[aá]same|me\s+(dan|das|pasan?))\b/i.test(msg)) {
-    return { intent: INTENTS.PHONE_REQUEST, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
-  }
-
-  // Future interest - "en un par de meses", "más adelante"
-  if (/\b(en\s+un\s+(par|mes|par\s+de)\s+(de\s+)?(meses?|semanas?)|m[aá]s\s+adelante|despu[eé]s\s+me\s+interesa|por\s+ahora\s+no|ahorita\s+no\s+pero)\b/i.test(msg)) {
-    return { intent: INTENTS.FUTURE_INTEREST, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
-  }
-
-  // Will get back - "mañana te aviso", "voy a medir", "me contacto de nuevo"
-  if (/\b(mañana|al\s+rato|luego|despu[eé]s)\s+(te\s+|les?\s+)?(aviso|confirmo|digo|escribo|contacto|comunico)\b/i.test(msg) ||
-      /\b(voy\s+a\s+medir|deja\s+mido|tengo\s+que\s+medir|rectifico\s+medidas?|checo\s+medidas?|verifico\s+medidas?)\b/i.test(msg) ||
-      /\b(me\s+)?(contacto|comunico)\s+(de\s+nuevo|luego|despu[eé]s|contigo|con\s+ustedes)\b/i.test(msg) ||
-      /\b(les?\s+|te\s+)(aviso|escribo|marco|contacto|hablo)\b/i.test(msg)) {
-    return { intent: INTENTS.WILL_GET_BACK, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
-  }
-
-  // Location mention - "soy de X", "vivo en X" (user providing their location)
-  // BUT NOT when combined with product data (dimensions + price query) — let AI handle compound messages
-  if (/\b(soy\s+de|vivo\s+en|estoy\s+en|me\s+encuentro\s+en)\s+/i.test(msg)) {
-    const hasProductData = /\d+\s*[xX×*]\s*\d+/.test(msg) ||
-      /\b(precio|costo|cu[aá]nto|cuanto|vale|cuesta|en\s+cuanto)\b/i.test(msg) ||
-      /\b(malla|rollo|borde|confeccionada|ground\s*cover|monofilamento)\b/i.test(msg);
-    if (!hasProductData) {
-      return { intent: INTENTS.LOCATION_MENTION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.85 };
-    }
-  }
-
-  // Store link request - "mercado libre", "link de la tienda"
-  if (/\b(tienes?|tienen?|venden?|est[aá]n?)\s+(en\s+|por\s+)?mercado\s*libre\b/i.test(msg) ||
-      /\b(link|enlace)\s+(de\s+)?(la\s+)?(tienda|catalogo)\b/i.test(msg)) {
-    return { intent: INTENTS.STORE_LINK_REQUEST, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
-  }
-
-  // How to buy - "cómo compro", "proceso de compra"
-  if (/\b(c[oó]mo\s+(compro|pido|hago\s+(mi\s+)?pedido)|proceso\s+de\s+compra|pasos?\s+para\s+comprar)\b/i.test(msg)) {
-    return { intent: INTENTS.HOW_TO_BUY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
-  }
-
-  // Bulk discount - "mayoreo", "descuento por volumen"
-  if (/\b(mayoreo|precio\s+especial|descuento\s+(por\s+)?(volumen|cantidad)|si\s+compro\s+varios)\b/i.test(msg)) {
-    return { intent: INTENTS.BULK_DISCOUNT, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
-  }
-
-  // Eyelets/argollas query
-  if (/\b(ojillo|ojillos|argolla|argollas|ojito|ojitos|para\s+colgar|para\s+amarrar)\b/i.test(msg)) {
-    return { intent: INTENTS.EYELETS_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
-  }
-
-  // Installation query
-  if (/\b(instalan|colocan|ponen\s+la\s+malla|servicio\s+de\s+instalaci[oó]n|pasan\s+a\s+medir|vienen\s+a\s+medir)\b/i.test(msg)) {
-    return { intent: INTENTS.INSTALLATION_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
-  }
-
-  // Structure query
-  if (/\b(realizan|hacen|fabrican|venden)\s+(la\s+)?estructura/i.test(msg)) {
-    return { intent: INTENTS.STRUCTURE_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
-  }
-
-  // Pay on delivery query - tolerant of typos like "recibbir", "resibir"
-  if (/\b(pago|pagar)\s+(al\s+(entregar|re[sc]i[bv]+ir)|contra\s+entrega)|contra\s*entrega|hasta\s+que\s+llegue|cuando\s+llegue\s+pago/i.test(msg)) {
-    return { intent: INTENTS.PAY_ON_DELIVERY_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
-  }
-
-  // Shipping included query
-  if (/\b(precio|costo)\s+(ya\s+)?(incluye|con)\s+(el\s+)?(env[ií]o|entrega)|ya\s+incluye\s+(env[ií]o|entrega)|con\s+entrega\s+incluid[ao]/i.test(msg)) {
-    return { intent: INTENTS.SHIPPING_INCLUDED_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.88 };
-  }
-
-  // Rain/waterproof/feature questions - "protejan de la lluvia", "es impermeable", "para el agua"
-  // CRITICAL: "Son para sombra o protejan de lluvia" is a feature question, NOT location (Son ≠ Sonora)
-  if (/\b(lluvia|impermeable|agua|mojarse|mojar|filtra|gotea|waterproof)\b/i.test(msg) &&
-      /\b(proteg|protejan?|resiste|aguanta|sirve|funciona|para\s+(la|el)|tambi[eé]n|impermeable)\b/i.test(msg)) {
-    return { intent: INTENTS.PRODUCT_INQUIRY, product: PRODUCTS.MALLA_SOMBRA, entities: { concerns: ['waterproof'] }, confidence: 0.90 };
-  }
-
-  // Durability query
-  if (/\b(cu[aá]nto\s+tiempo\s+dura|vida\s+[uú]til|cu[aá]ntos?\s+a[ñn]os|duraci[oó]n|durabilidad|resistencia)\b/i.test(msg) &&
-      !/\b(entrega|env[ií]o)\b/i.test(msg)) {
-    return { intent: INTENTS.DURABILITY_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.85 };
-  }
-
-  // Out of stock report
-  if (/\b(agotad[oa]s?|sin\s+stock|no\s+hay\s+(en\s+)?stock|no\s+est[aá]\s+disponible|dice\s+(que\s+)?(no\s+hay|agotado)|fuera\s+de\s+stock)\b/i.test(msg)) {
-    return { intent: INTENTS.OUT_OF_STOCK_REPORT, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.92 };
-  }
-
-  // Price confusion
-  if (/\b(es\s+otr[ao]\s+precio|otro\s+precio|diferente\s+precio|por\s*qu[eé]\s+(dice|sale)\s+(otro|diferente)|no\s+es\s+el\s+mismo\s+precio)\b/i.test(msg)) {
-    return { intent: INTENTS.PRICE_CONFUSION, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.92 };
-  }
-
-  // ===== PRODUCT KEYWORD DETECTION =====
-  // These bypass AI for obvious product mentions
-
-  // First, check for "N de ancho y M de largo" or "N de largo y M de ancho" patterns
-  const anchoLargoPattern = /(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*de\s*ancho\s*(?:\w+\s+)*?(?:[yi]|x|por)\s*(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*(?:de\s*largo)?/i;
-  const largoAnchoPattern = /(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*de\s*largo\s*(?:\w+\s+)*?(?:[yi]|x|por)\s*(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*(?:de\s*ancho)?/i;
-
-  let dimensions = null;
-  let anchoLargoMatch = msg.match(anchoLargoPattern);
-  let largoAnchoMatch = msg.match(largoAnchoPattern);
-
-  if (anchoLargoMatch) {
-    // "N de ancho y M de largo" - first is width, second is height
-    const width = parseFloat(anchoLargoMatch[1].replace(',', '.'));
-    const height = parseFloat(anchoLargoMatch[2].replace(',', '.'));
-    if (!isNaN(width) && !isNaN(height)) {
-      dimensions = { width: Math.min(width, height), height: Math.max(width, height), raw: `${width}x${height}` };
-      console.log(`⚡ Detected "ancho y largo" format: ${width}x${height}`);
-    }
-  } else if (largoAnchoMatch) {
-    // "N de largo y M de ancho" - first is height, second is width
-    const height = parseFloat(largoAnchoMatch[1].replace(',', '.'));
-    const width = parseFloat(largoAnchoMatch[2].replace(',', '.'));
-    if (!isNaN(width) && !isNaN(height)) {
-      dimensions = { width: Math.min(width, height), height: Math.max(width, height), raw: `${width}x${height}` };
-      console.log(`⚡ Detected "largo y ancho" format: ${width}x${height}`);
-    }
-  }
-
-  // Fallback: Standard dimension pattern: NxN, N x N, N*N, N por N
-  if (!dimensions) {
-    const dimPattern = /(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?\s*(?:x|×|\*|por)\s*(\d+(?:[.,]\d+)?)\s*(?:m(?:ts|etros?)?\.?)?/i;
-    const dimMatch = msg.match(dimPattern);
-    if (dimMatch) {
-      const d1 = parseFloat(dimMatch[1].replace(',', '.'));
-      const d2 = parseFloat(dimMatch[2].replace(',', '.'));
-      if (!isNaN(d1) && !isNaN(d2)) {
-        dimensions = { width: Math.min(d1, d2), height: Math.max(d1, d2), raw: `${d1}x${d2}` };
-      }
-    }
-  }
-
-  // "malla sombra" + dimensions = definitely malla_sombra product
-  // Handles plurals: "mallas sombras", "mallas sombra"
-  if (/mallas?\s*sombras?/i.test(msg) && dimensions) {
-    console.log(`⚡ Quick classify: malla sombra with dimensions ${dimensions.raw}`);
-    return {
-      intent: INTENTS.PRODUCT_INQUIRY,
-      product: PRODUCTS.MALLA_SOMBRA,
-      entities: { dimensions: dimensions.raw, width: dimensions.width, height: dimensions.height },
-      confidence: 0.95
-    };
-  }
-
-  // "malla sombra" without "rollo" = malla_sombra (confeccionada)
-  if (/mallas?\s*sombras?/i.test(msg) && !/rollo/i.test(msg)) {
-    console.log(`⚡ Quick classify: malla sombra (no rollo mentioned)`);
-    return {
-      intent: INTENTS.PRODUCT_INQUIRY,
-      product: PRODUCTS.MALLA_SOMBRA,
-      entities: dimensions ? { dimensions: dimensions.raw, width: dimensions.width, height: dimensions.height } : {},
-      confidence: 0.90
-    };
-  }
-
-  // Just dimensions (when in context) - still extract them
-  // Check if message is mostly just dimensions by removing the dimension part and seeing what's left
-  if (dimensions) {
-    // Remove dimension-related text and see if message is mostly about dimensions
-    const withoutDims = msg
-      .replace(/\d+(?:[.,]\d+)?\s*(?:m(?:ts|etros?)?\.?)?\s*(?:de\s*)?(?:ancho|largo)?\s*(?:y|x|×|\*|por)\s*\d+(?:[.,]\d+)?\s*(?:m(?:ts|etros?)?\.?)?\s*(?:de\s*)?(?:ancho|largo)?/gi, '')
-      .replace(/\d+(?:[.,]\d+)?\s*(?:m(?:ts|etros?)?\.?)?/g, '')
-      .trim();
-
-    if (withoutDims.length < 15) {
-      // Message is mostly just dimensions
-      console.log(`⚡ Quick classify: dimensions only ${dimensions.raw}`);
-      return {
-        intent: INTENTS.SIZE_SPECIFICATION,
-        product: PRODUCTS.UNKNOWN, // Let conversation context determine product
-        entities: { dimensions: dimensions.raw, width: dimensions.width, height: dimensions.height },
-        confidence: 0.85
-      };
-    }
-  }
-
-  // "rollo" or "100 metros" = rollo product
-  if (/\brollo\b/i.test(msg) || /100\s*m(etros)?/i.test(msg)) {
-    console.log(`⚡ Quick classify: rollo product`);
-    return {
-      intent: INTENTS.PRODUCT_INQUIRY,
-      product: PRODUCTS.ROLLO,
-      entities: {},
-      confidence: 0.90
-    };
-  }
-
-  // "borde" = borde_separador
-  if (/\bborde\b/i.test(msg)) {
-    console.log(`⚡ Quick classify: borde product`);
-    return {
-      intent: INTENTS.PRODUCT_INQUIRY,
-      product: PRODUCTS.BORDE_SEPARADOR,
-      entities: {},
-      confidence: 0.90
-    };
-  }
-
-  // "antimaleza" or "groundcover" or "malla para maleza"
-  if (/\b(antimaleza|ground\s*cover|malla\s*(para\s*)?maleza)\b/i.test(msg)) {
-    console.log(`⚡ Quick classify: groundcover product`);
-    return {
-      intent: INTENTS.PRODUCT_INQUIRY,
-      product: PRODUCTS.GROUNDCOVER,
-      entities: {},
-      confidence: 0.90
-    };
-  }
-
-  // Just "malla/mallas" (without "sombra", "maleza", "anti") = malla_sombra (confeccionada)
-  // This is the default product when someone just says "malla" or "mallas"
-  if (/\bmallas?\b/i.test(msg) && !/rollo|maleza|anti|granizo|[aá]fido/i.test(msg)) {
-    // Check if it's a price query
-    const isPrice = /precio|costo|cu[aá]nto|vale|cuesta/i.test(msg);
-    console.log(`⚡ Quick classify: just "malla" → malla_sombra (${isPrice ? 'price_query' : 'product_inquiry'})`);
-    return {
-      intent: isPrice ? INTENTS.PRICE_QUERY : INTENTS.PRODUCT_INQUIRY,
-      product: PRODUCTS.MALLA_SOMBRA,
-      entities: dimensions ? { dimensions: dimensions.raw, width: dimensions.width, height: dimensions.height } : {},
-      confidence: 0.85
-    };
-  }
-
-  // Need AI for anything else
+  // ===== EVERYTHING ELSE → AI =====
+  // If regex can't match the full message, let the AI classifier handle it.
+  // AI is better at understanding compound messages, typos, and context.
   return null;
 }
 
@@ -1074,7 +908,9 @@ async function classify(message, sourceContext = null, conversationFlow = null, 
   }
 
   // Normalize common product name misspellings before any classification
-  const normalizedMessage = normalizeProductSpelling(message);
+  // Also convert Spanish number words to digits so classifiers see "3 por 4" instead of "tres por cuatro"
+  const { convertSpanishNumbers } = require("../utils/spanishNumbers");
+  const normalizedMessage = convertSpanishNumbers(normalizeProductSpelling(message));
 
   // Load DB intents for pattern matching and AI prompt
   const dbIntents = await getIntentsFromDB();
@@ -1121,6 +957,8 @@ module.exports = {
   buildCampaignContext,
   clearIntentCache,
   getIntentsFromDB,
+  clearCatalogCache,
+  getProductCatalogForPrompt,
   INTENTS,
   PRODUCTS
 };

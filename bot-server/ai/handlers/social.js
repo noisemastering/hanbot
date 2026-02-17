@@ -54,6 +54,12 @@ async function handleGreeting({ psid, convo }) {
  * Handle thanks intent
  */
 async function handleThanks({ psid, convo }) {
+  // Don't treat as thanks if there's been no meaningful interaction yet
+  if (!convo?.greeted && !convo?.lastIntent) {
+    console.log("📝 Thanks intent but no prior interaction — passing to flows");
+    return null;
+  }
+
   await updateConversation(psid, {
     lastIntent: "thanks",
     unknownCount: 0
