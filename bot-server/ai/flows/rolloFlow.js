@@ -77,7 +77,9 @@ function detectRolloType(msg, convo = null) {
     return convo.productSpecs.rolloType;
   }
 
-  return null; // Ambiguous - need to ask
+  // Default to malla sombra — it's the main product.
+  // Only groundcover/monofilamento need explicit detection.
+  return ROLLO_TYPES.MALLA_SOMBRA;
 }
 
 /**
@@ -473,8 +475,8 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     }
   }
 
-  // ====== CATALOG / INFO REQUESTS — show available sizes regardless of stage ======
-  const infoIntents = [INTENTS.CATALOG_REQUEST, INTENTS.PRODUCT_INQUIRY, INTENTS.AVAILABILITY_QUERY];
+  // ====== CATALOG / INFO / PRICE REQUESTS — show available sizes regardless of stage ======
+  const infoIntents = [INTENTS.CATALOG_REQUEST, INTENTS.PRODUCT_INQUIRY, INTENTS.AVAILABILITY_QUERY, INTENTS.PRICE_QUERY];
   if (infoIntents.includes(intent) && !state.width) {
     response = await handleStart(sourceContext);
 
@@ -571,15 +573,44 @@ function handleAwaitingType(intent, state, sourceContext) {
 
 /**
  * Handle start - user just mentioned rolls (type already known)
+ * Shows price range and asks for specific size
  */
 async function handleStart(sourceContext) {
   const widths = await getAvailableWidths();
-  const widthList = widths.map(w => `${w}m x 100m`).join(' y ');
+  const widthList = widths.map(w => `${w}m`).join(' y ');
   const percentageList = VALID_PERCENTAGES.join('%, ') + '%';
 
+  // Look up all malla sombra roll products for price range
+  try {
+    const products = await ProductFamily.find({
+      sellable: true,
+      active: true,
+      size: /\d+x100/i
+    }).select('price size name').sort({ price: 1 }).lean();
+
+    if (products.length > 0) {
+      const withPrice = products.filter(p => p.price);
+      if (withPrice.length > 0) {
+        const minPrice = formatMoney(withPrice[0].price);
+        const maxPrice = formatMoney(withPrice[withPrice.length - 1].price);
+
+        return {
+          type: "text",
+          text: `Manejamos rollos de malla sombra de ${widthList} de ancho por 100m de largo, ` +
+                `con porcentajes de sombra del ${percentageList}.\n\n` +
+                `Los precios van desde ${minPrice} hasta ${maxPrice} dependiendo del ancho y porcentaje.\n\n` +
+                `¿Buscas alguna medida en particular?`
+        };
+      }
+    }
+  } catch (err) {
+    console.error("Error fetching roll price range:", err.message);
+  }
+
+  // Fallback without prices
   return {
     type: "text",
-    text: `¡Claro! Manejamos rollos de malla sombra de ${widthList}, con porcentajes de sombra de ${percentageList}.\n\n¿Qué medida y porcentaje te interesa?`
+    text: `Manejamos rollos de malla sombra de ${widthList} de ancho por 100m de largo, con porcentajes de sombra del ${percentageList}.\n\n¿Buscas alguna medida en particular?`
   };
 }
 
