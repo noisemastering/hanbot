@@ -55,28 +55,66 @@ function extractLengthsFromProducts(products) {
 /**
  * Find all sellable borde products from the Borde Separador family tree
  * Gen 1: Cinta Plástica → Gen 2: Borde Separador → Gen 3: Rollo de Xm (sellable)
+ * Falls back to name-based search if tree lookup fails.
  */
-async function findAllBordeProducts() {
+async function findAllBordeProducts(adProductIds = null) {
   try {
-    // Find the "Borde Separador" parent (Gen 2 under "Cinta Plástica")
+    // Strategy 1: Tree-based lookup
     const bordeParent = await ProductFamily.findOne({
       name: /borde\s*separador/i,
       sellable: { $ne: true }
     }).lean();
 
-    if (!bordeParent) {
-      console.log('🌱 Borde Separador parent not found in DB');
-      return [];
+    if (bordeParent) {
+      const products = await ProductFamily.find({
+        parentId: bordeParent._id,
+        sellable: true,
+        active: true
+      }).sort({ price: 1 }).lean();
+
+      if (products.length > 0) {
+        console.log(`🌱 Found ${products.length} borde products under "${bordeParent.name}"`);
+        return products;
+      }
     }
 
-    const products = await ProductFamily.find({
-      parentId: bordeParent._id,
+    // Strategy 2: Name-based search (tree might be deeper or structured differently)
+    const byName = await ProductFamily.find({
+      name: /borde.*separador|rollo.*de.*\d+\s*m/i,
       sellable: true,
       active: true
     }).sort({ price: 1 }).lean();
 
-    console.log(`🌱 Found ${products.length} borde products under "${bordeParent.name}"`);
-    return products;
+    // Filter to only products that look like borde (have meter-based sizes, not NxN)
+    const bordeByName = byName.filter(p => {
+      const size = (p.size || '').toLowerCase();
+      const name = (p.name || '').toLowerCase();
+      const isBorde = /borde|separador|cinta/.test(name);
+      const hasMeterSize = /^\d+\s*m/i.test(size) || /\d+\s*m(ts?|etros?)?\s*$/i.test(size);
+      return isBorde || hasMeterSize;
+    });
+
+    if (bordeByName.length > 0) {
+      console.log(`🌱 Found ${bordeByName.length} borde products by name search`);
+      return bordeByName;
+    }
+
+    // Strategy 3: Ad product IDs as last resort
+    if (adProductIds?.length) {
+      const adProducts = await ProductFamily.find({
+        _id: { $in: adProductIds },
+        sellable: true,
+        active: true
+      }).sort({ price: 1 }).lean();
+
+      if (adProducts.length > 0) {
+        console.log(`🌱 Found ${adProducts.length} borde products from ad IDs`);
+        return adProducts;
+      }
+    }
+
+    console.log('🌱 Borde Separador products not found in DB');
+    return [];
   } catch (error) {
     console.error("❌ Error finding borde products:", error);
     return [];
@@ -123,24 +161,43 @@ async function getAvailableLengths(sourceContext, convo) {
 }
 
 /**
- * Find matching sellable borde products using the family tree
- * Optionally filter by length
+ * Find matching sellable borde products
+ * Optionally filter by length. Accepts ad product IDs for fallback.
  */
-async function findMatchingProducts(length = null) {
+async function findMatchingProducts(length = null, adProductIds = null) {
   try {
-    const products = await findAllBordeProducts();
+    const products = await findAllBordeProducts(adProductIds);
 
     if (!length) return products;
 
-    // Filter by length from product name/size
-    const lengthRegex = new RegExp(`\\b${length}\\s*m`, 'i');
+    // Filter by length from product name/size — try multiple patterns
     const filtered = products.filter(p => {
       const text = `${p.name || ''} ${p.size || ''}`;
-      return lengthRegex.test(text);
+      // Match "54m", "54 m", "54 metros", "54 mts"
+      if (new RegExp(`\\b${length}\\s*m`, 'i').test(text)) return true;
+      // Match bare number in size field (size might just be "54")
+      if (new RegExp(`^\\s*${length}\\s*$`).test(p.size || '')) return true;
+      return false;
     });
 
-    console.log(`🌱 Filtered by ${length}m: ${filtered.length} matches`);
-    return filtered;
+    if (filtered.length > 0) {
+      console.log(`🌱 Filtered by ${length}m: ${filtered.length} matches`);
+      return filtered;
+    }
+
+    // Fallback: if filter returned nothing but we have products, try looser match
+    const loose = products.filter(p => {
+      const text = `${p.name || ''} ${p.size || ''}`;
+      return new RegExp(`\\b${length}\\b`).test(text);
+    });
+
+    if (loose.length > 0) {
+      console.log(`🌱 Loose filter by ${length}: ${loose.length} matches`);
+      return loose;
+    }
+
+    console.log(`🌱 No borde products matching ${length}m found`);
+    return [];
   } catch (error) {
     console.error("❌ Error finding borde products:", error);
     return [];
@@ -290,6 +347,9 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     state = { length: null, quantity: null, flowCompleted: false };
   }
 
+  // Ad product IDs — used as fallback for product lookups
+  const adProductIds = sourceContext?.ad?.productIds || convo?.adProductIds || null;
+
   // Get available lengths (filtered by ad if applicable)
   const availableLengths = await getAvailableLengths(sourceContext, convo);
 
@@ -334,19 +394,19 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   switch (stage) {
     case STAGES.AWAITING_LENGTH:
-      response = await handleAwaitingLength(intent, state, sourceContext, availableLengths, userMessage);
+      response = await handleAwaitingLength(intent, state, sourceContext, availableLengths, userMessage, adProductIds);
       break;
 
     case STAGES.AWAITING_QUANTITY:
-      response = await handleAwaitingQuantity(intent, state, sourceContext);
+      response = await handleAwaitingQuantity(intent, state, sourceContext, adProductIds);
       break;
 
     case STAGES.COMPLETE:
-      response = await handleComplete(intent, state, sourceContext, psid, convo, userMessage);
+      response = await handleComplete(intent, state, sourceContext, psid, convo, userMessage, adProductIds);
       break;
 
     default:
-      response = await handleStart(sourceContext, availableLengths);
+      response = await handleStart(sourceContext, availableLengths, adProductIds);
   }
 
   // Save updated specs
@@ -368,9 +428,9 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 /**
  * Handle start - user just mentioned borde
  */
-async function handleStart(sourceContext, availableLengths) {
+async function handleStart(sourceContext, availableLengths, adProductIds = null) {
   // Try to show prices alongside lengths
-  const products = await findMatchingProducts();
+  const products = await findMatchingProducts(null, adProductIds);
   const lengthsWithPrices = availableLengths.map(l => {
     const product = products.find(p => {
       const text = `${p.name || ''} ${p.size || ''}`;
@@ -405,7 +465,7 @@ async function handleStart(sourceContext, availableLengths) {
 /**
  * Handle awaiting length stage
  */
-async function handleAwaitingLength(intent, state, sourceContext, availableLengths, userMessage = '') {
+async function handleAwaitingLength(intent, state, sourceContext, availableLengths, userMessage = '', adProductIds = null) {
   // Check if user provided area/patio dimensions (NxN) instead of a linear length
   const dimMatch = (userMessage || '').match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)/);
   if (dimMatch) {
@@ -413,19 +473,22 @@ async function handleAwaitingLength(intent, state, sourceContext, availableLengt
     const h = parseFloat(dimMatch[2]);
     const perimeter = Math.ceil(2 * (w + h));
 
-    // Find the smallest available length that covers the perimeter
+    // Find the smallest available length that covers the perimeter + show price
     const sorted = [...availableLengths].sort((a, b) => a - b);
     const recommended = sorted.find(l => l >= perimeter) || sorted[sorted.length - 1];
+    const products = await findMatchingProducts(recommended, adProductIds);
+    const product = products[0];
+    const priceText = product?.price ? ` por ${formatMoney(product.price)}` : '';
 
     return {
       type: "text",
       text: `Para un espacio de ${w}x${h}m necesitarías aproximadamente ${perimeter} metros lineales de borde.\n\n` +
-            `Te recomiendo el rollo de ${recommended}m. ¿Te interesa?`
+            `Te recomiendo el rollo de ${recommended}m${priceText}. ¿Te interesa?`
     };
   }
 
   // Build length list with prices if available
-  const products = await findMatchingProducts();
+  const products = await findMatchingProducts(null, adProductIds);
   const lengthsWithPrices = availableLengths.map(l => {
     const product = products.find(p => {
       const text = `${p.name || ''} ${p.size || ''}`;
@@ -456,9 +519,9 @@ async function handleAwaitingLength(intent, state, sourceContext, availableLengt
 /**
  * Handle awaiting quantity stage - show price and ask how many
  */
-async function handleAwaitingQuantity(intent, state, sourceContext) {
+async function handleAwaitingQuantity(intent, state, sourceContext, adProductIds = null) {
   // Look up product to show price
-  const products = await findMatchingProducts(state.length);
+  const products = await findMatchingProducts(state.length, adProductIds);
   const product = products[0];
 
   if (product) {
@@ -479,11 +542,11 @@ async function handleAwaitingQuantity(intent, state, sourceContext) {
 /**
  * Handle complete - we have length and quantity
  */
-async function handleComplete(intent, state, sourceContext, psid, convo, userMessage = '') {
+async function handleComplete(intent, state, sourceContext, psid, convo, userMessage = '', adProductIds = null) {
   const { length, quantity } = state;
 
   // Try to find matching product in inventory
-  const products = await findMatchingProducts(length);
+  const products = await findMatchingProducts(length, adProductIds);
 
   if (products.length > 0) {
     const product = products[0];
