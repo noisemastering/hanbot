@@ -174,23 +174,29 @@ async function findMatchingProducts(width, percentage = null) {
     const widthSearch = String(width).replace('.00', '');
     const sizeRegex = new RegExp(`${widthSearch}.*100`, 'i');
 
-    console.log(`🔍 Searching for roll ${widthSearch}m x 100m`);
+    console.log(`🔍 Searching for roll ${widthSearch}m x 100m${percentage ? ` at ${percentage}%` : ''}`);
 
-    const query = {
-      sellable: true,
-      active: true,
-      $or: [
+    // Use $and to avoid conflicts between $or.name and percentage name filter
+    const conditions = [
+      { sellable: true },
+      { active: true },
+      { $or: [
         { size: sizeRegex },
         { name: new RegExp(`${widthSearch}.*100`, 'i') }
-      ]
-    };
+      ]}
+    ];
 
     // Add percentage filter if specified
     if (percentage) {
-      query.name = new RegExp(`${percentage}\\s*%`, 'i');
+      conditions.push({
+        $or: [
+          { name: new RegExp(`${percentage}\\s*%`, 'i') },
+          { name: new RegExp(`${percentage}\\s*por\\s*ciento`, 'i') }
+        ]
+      });
     }
 
-    const products = await ProductFamily.find(query)
+    const products = await ProductFamily.find({ $and: conditions })
       .sort({ price: 1 })
       .lean();
 
@@ -226,7 +232,7 @@ function determineStage(state) {
   if (!state.rolloType) return STAGES.AWAITING_TYPE;
   if (!state.width) return STAGES.AWAITING_WIDTH;
   if (state.rolloType === ROLLO_TYPES.MALLA_SOMBRA && !state.percentage) return STAGES.AWAITING_PERCENTAGE;
-  // Skip AWAITING_QUANTITY — show price + ask zip directly
+  if (!state.quantity) return STAGES.AWAITING_QUANTITY;
   if (!state.zipCode) return STAGES.AWAITING_ZIP;
   return STAGES.COMPLETE;
 }
@@ -506,11 +512,11 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       break;
 
     case STAGES.AWAITING_QUANTITY:
-      response = handleAwaitingQuantity(intent, state, sourceContext);
+      response = await handleAwaitingQuantity(intent, state, sourceContext);
       break;
 
     case STAGES.AWAITING_ZIP:
-      response = handleAwaitingZip(intent, state, sourceContext);
+      response = await handleAwaitingZip(intent, state, sourceContext, psid, convo);
       break;
 
     case STAGES.COMPLETE:
@@ -612,23 +618,9 @@ function handleAwaitingPercentage(intent, state, sourceContext) {
 }
 
 /**
- * Handle awaiting quantity stage - ask how many rolls
+ * Handle awaiting quantity stage - show price + ask how many rolls
  */
-function handleAwaitingQuantity(intent, state, sourceContext) {
-  let specsText = `rollo de ${state.width}m x 100m`;
-  if (state.percentage) {
-    specsText += ` al ${state.percentage}%`;
-  }
-  return {
-    type: "text",
-    text: `Perfecto, ${specsText}. ¿Cuántos rollos necesitas?`
-  };
-}
-
-/**
- * Handle awaiting zip code stage - show price + ask for zip to calculate shipping
- */
-async function handleAwaitingZip(intent, state, sourceContext) {
+async function handleAwaitingQuantity(intent, state, sourceContext) {
   let specsText = `rollo de ${state.width}m x 100m`;
   if (state.percentage) {
     specsText += ` al ${state.percentage}%`;
@@ -639,22 +631,85 @@ async function handleAwaitingZip(intent, state, sourceContext) {
   if (products.length > 0) {
     const product = products[0];
     if (product.price) {
-      let priceMsg = `Tenemos ${specsText} en ${formatMoney(product.price)}`;
+      let priceMsg = `El ${specsText} tiene un precio de ${formatMoney(product.price)}`;
 
       if (product.wholesaleEnabled && product.wholesaleMinQty && product.wholesalePrice) {
-        priceMsg += `\n\nPor mayoreo (mínimo ${product.wholesaleMinQty} rollos) a ${formatMoney(product.wholesalePrice)} por rollo`;
+        priceMsg += ` (por mayoreo, ${product.wholesaleMinQty}+ rollos, a ${formatMoney(product.wholesalePrice)} c/u)`;
       }
 
-      priceMsg += `, ¿me puedes proporcionar tu código postal para calcular el envío?`;
-
+      priceMsg += `. ¿Cuántos rollos necesitas?`;
       return { type: "text", text: priceMsg };
     }
   }
 
-  // No product or no price found — still ask for zip
   return {
     type: "text",
-    text: `Perfecto, ${specsText}. ¿Me puedes proporcionar tu código postal para calcular el envío?`
+    text: `Perfecto, ${specsText}. ¿Cuántos rollos necesitas?`
+  };
+}
+
+/**
+ * Handle awaiting zip code stage
+ * If retail quantity + product has ML link → share link (done)
+ * Otherwise → ask for zip code to quote shipping
+ */
+async function handleAwaitingZip(intent, state, sourceContext, psid, convo) {
+  let specsText = `rollo de ${state.width}m x 100m`;
+  if (state.percentage) {
+    specsText += ` al ${state.percentage}%`;
+  }
+
+  const products = await findMatchingProducts(state.width, state.percentage);
+  const product = products[0];
+
+  if (product) {
+    // Check if retail order (below wholesale minimum)
+    const isRetail = !product.wholesaleEnabled ||
+      !product.wholesaleMinQty ||
+      state.quantity < product.wholesaleMinQty;
+
+    if (isRetail) {
+      // Try to share ML link for retail purchase
+      const productUrl = product.onlineStoreLinks?.find(l => l.isPreferred)?.url ||
+                         product.onlineStoreLinks?.[0]?.url;
+
+      if (productUrl && psid) {
+        const trackedLink = await generateClickLink(psid, productUrl, {
+          productName: product.name,
+          productId: product._id,
+          city: convo?.city,
+          stateMx: convo?.stateMx
+        });
+
+        const priceText = product.price
+          ? ` por ${formatMoney(product.price)}${state.quantity > 1 ? ' c/u' : ''}`
+          : "";
+        const quantityText = state.quantity > 1
+          ? `Para ${state.quantity} rollos, `
+          : "";
+
+        let wholesaleMention = "";
+        if (product.wholesaleEnabled && product.wholesaleMinQty) {
+          wholesaleMention = `\n\nA partir de ${product.wholesaleMinQty} rollos manejamos precio de mayoreo.`;
+        }
+
+        // Mark as complete — no need for zip
+        state.zipCode = 'ML_PURCHASE';
+
+        return {
+          type: "text",
+          text: `${quantityText}tenemos el ${specsText}${priceText}. El envío está incluido.\n\n` +
+                `🛒 Cómpralo aquí:\n${trackedLink}${wholesaleMention}\n\n` +
+                `¿Necesitas algo más?`
+        };
+      }
+    }
+  }
+
+  // Wholesale or no ML link — ask for zip code
+  return {
+    type: "text",
+    text: `¿Me puedes proporcionar tu código postal para calcular el envío?`
   };
 }
 
