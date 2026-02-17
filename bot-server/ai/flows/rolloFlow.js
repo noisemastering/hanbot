@@ -247,6 +247,18 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   let state = getFlowState(convo);
 
+  // Normalize width if set (may have been set by specExtractor without DB-aware normalization)
+  if (state.width) {
+    const normalizedWidth = await normalizeWidth(state.width);
+    if (normalizedWidth && normalizedWidth !== state.width) {
+      console.log(`📦 Rollo flow - Normalizing stale width: ${state.width} → ${normalizedWidth}m`);
+      state.width = normalizedWidth;
+    } else if (!normalizedWidth) {
+      console.log(`📦 Rollo flow - Width ${state.width}m not valid, clearing`);
+      state.width = null;
+    }
+  }
+
   console.log(`📦 Rollo flow - Current state:`, state);
   console.log(`📦 Rollo flow - Intent: ${intent}, Entities:`, entities);
 
@@ -453,6 +465,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
           await updateConversation(psid, {
             lastIntent: `roll_awaiting_width`,
+            currentFlow: "rollo",
             productInterest: "rollo",
             productSpecs: {
               productType: "rollo",
@@ -482,6 +495,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
     await updateConversation(psid, {
       lastIntent: `roll_start`,
+      currentFlow: "rollo",
       productInterest: "rollo",
       productSpecs: {
         productType: "rollo",
@@ -532,6 +546,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   // Save updated specs
   const updateData = {
     lastIntent: `roll_${stage}`,
+    currentFlow: "rollo",
     productInterest: "rollo",
     productSpecs: {
       productType: "rollo",

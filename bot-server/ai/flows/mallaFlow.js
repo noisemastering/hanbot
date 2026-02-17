@@ -300,17 +300,40 @@ async function handleMultipleDimensions(dimensions, psid, convo) {
   for (const dim of dimensions) {
     const w = Math.min(dim.width, dim.height);
     const h = Math.max(dim.width, dim.height);
+    const hasFractions = (w % 1 !== 0) || (h % 1 !== 0);
 
-    // Find product for this size
-    const products = await findMatchingProducts(w, h, null, null, poiRootId);
+    if (hasFractions) {
+      // Floor to standard size and explain
+      const flooredW = Math.floor(w);
+      const flooredH = Math.floor(h);
+      const products = await findMatchingProducts(flooredW, flooredH, null, null, poiRootId);
 
-    if (products.length > 0) {
-      const product = products[0];
-      responseParts.push(`• ${dim.width}x${dim.height}m: ${formatMoney(product.price)}`);
+      if (products.length > 0) {
+        const product = products[0];
+        responseParts.push(`• ${dim.width}x${dim.height}m → te ofrecemos ${flooredW}x${flooredH}m: ${formatMoney(product.price)}`);
+      } else {
+        responseParts.push(`• ${dim.width}x${dim.height}m: No disponible en esta medida`);
+      }
     } else {
-      responseParts.push(`• ${dim.width}x${dim.height}m: No disponible en esta medida`);
+      // Standard size — direct lookup
+      const products = await findMatchingProducts(w, h, null, null, poiRootId);
+
+      if (products.length > 0) {
+        const product = products[0];
+        responseParts.push(`• ${dim.width}x${dim.height}m: ${formatMoney(product.price)}`);
+      } else {
+        responseParts.push(`• ${dim.width}x${dim.height}m: No disponible en esta medida`);
+      }
     }
   }
+
+  const hasFractionalDims = dimensions.some(d =>
+    (Math.min(d.width, d.height) % 1 !== 0) || (Math.max(d.width, d.height) % 1 !== 0)
+  );
+
+  const fractionalNote = hasFractionalDims
+    ? '\n\nLas medidas con decimales se ajustan al tamaño estándar inmediato inferior para dar espacio a los tensores o soga sujetadora.'
+    : '';
 
   await updateConversation(psid, {
     lastIntent: 'malla_multiple_sizes',
@@ -323,7 +346,7 @@ async function handleMultipleDimensions(dimensions, psid, convo) {
 
   return {
     type: "text",
-    text: `Aquí te van los precios:\n\n${responseParts.join('\n')}\n\n¿Cuál te interesa?`
+    text: `Aquí te van los precios:\n\n${responseParts.join('\n')}${fractionalNote}\n\n¿Cuál te interesa?`
   };
 }
 
@@ -789,7 +812,7 @@ async function getMallaDescription() {
     console.error("❌ Error getting malla price range:", err.message);
   }
 
-  return `Nuestra malla sombra raschel confeccionada es de polietileno de alta densidad con 90% de cobertura y protección UV.\n\n` +
+  return `Nuestra malla sombra raschel confeccionada con 90% de cobertura y protección UV.\n\n` +
     `Viene con refuerzo en las esquinas para una vida útil de hasta 5 años, y con sujetadores y argollas en todos los lados, lista para instalar. El envío a domicilio va incluido en el precio.\n\n` +
     `Manejamos medidas desde 2x2m hasta 7x10m, con precios desde ${formatMoney(priceMin)} hasta ${formatMoney(priceMax)}.\n\n` +
     `¿Qué medida te interesa?`;

@@ -118,9 +118,9 @@ function extractAllSpecs(message, context = {}) {
   const rollDimMatch = cleanMsg.match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(100)\b|(100)\s*[xX×*]\s*(\d+(?:\.\d+)?)/i);
   if (rollDimMatch) {
     let rawWidth = parseFloat(rollDimMatch[1] || rollDimMatch[4]);
-    // Normalize: 4.x → 4, 2.x → 2
-    if (rawWidth >= 4 && rawWidth < 5) rawWidth = 4;
-    else if (rawWidth >= 2 && rawWidth < 3) rawWidth = 2;
+    // Normalize to nearest standard roll width (2m or 4m)
+    if (rawWidth >= 3 && rawWidth < 5) rawWidth = 4;
+    else if (rawWidth >= 1 && rawWidth < 3) rawWidth = 2;
     specs.width = rawWidth;
     specs.length = 100;
     specs.size = `${rawWidth}x100`;
