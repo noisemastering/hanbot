@@ -155,7 +155,24 @@ const conversationSchema = new mongoose.Schema({
   pendingShippingLocation: { type: Boolean, default: false }, // Expecting location for "donde las consigo"
   lastLinkSentAt: { type: Date, default: null },               // When we last sent an ML link
   silenceFollowUpAt: { type: Date, default: null },            // When to send silence follow-up (null = not scheduled)
-  silenceFollowUpSent: { type: Boolean, default: false }       // Whether silence follow-up was already sent
+  silenceFollowUpSent: { type: Boolean, default: false },       // Whether silence follow-up was already sent
+
+  // Pre-handoff zip code collection (dynamic fields used by preHandoffCheck)
+  pendingHandoff: { type: Boolean, default: false },
+  pendingHandoffInfo: { type: mongoose.Schema.Types.Mixed, default: null },
+
+  // Flow AI fallback - products quoted in last bot message
+  lastQuotedProducts: [{ type: mongoose.Schema.Types.Mixed }],
+
+  // Product link tracking (duplicate detection, last shared link)
+  lastSharedProductId: { type: String, default: null },
+  lastSharedProductLink: { type: String, default: null },
+  lastFractionalSize: { type: String, default: null },
+
+  // Location from zip code lookup
+  zipCode: { type: String, default: null }
+}, {
+  strict: false  // Allow ad-hoc fields — codebase uses $set with dynamic fields throughout
 });
 
 module.exports = mongoose.model("Conversation", conversationSchema);

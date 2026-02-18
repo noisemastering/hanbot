@@ -418,7 +418,7 @@ async function correlateOrder(order, sellerId) {
         // Determine confidence based on method
         let confidence = 'low';
         if (method === 'ml_item_match') {
-          confidence = 'medium'; // ML ID alone is medium
+          confidence = 'high'; // ML ID is a definitive match
         } else if (method === 'enhanced') {
           confidence = 'medium'; // Name/location match is medium
         }
@@ -459,8 +459,8 @@ async function correlateOrder(order, sellerId) {
     // Determine confidence level based on method and score
     let confidence;
     if (hasMLItemMatch) {
-      // ML Item ID is a strong signal
-      confidence = bestScore >= 130 ? 'high' : 'medium';
+      // ML Item ID is a definitive match — customer clicked our tracked link and bought that exact product
+      confidence = 'high';
     } else if (method === 'enhanced') {
       // Enhanced correlations (multiple signals) should be at least medium
       if (bestScore >= 100) {

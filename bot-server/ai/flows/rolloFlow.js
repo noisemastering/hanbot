@@ -10,6 +10,9 @@ const { INTENTS } = require("../classifier");
 const { isBusinessHours } = require("../utils/businessHours");
 const { parseAndLookupZipCode: sharedParseAndLookupZipCode, isQueretaroLocation, getQueretaroPickupMessage } = require("../utils/preHandoffCheck");
 
+// AI fallback for flow dead-ends
+const { resolveWithAI } = require("../utils/flowFallback");
+
 // Import existing utilities - USE THESE
 const { getAncestors, getRootFamily } = require("../utils/productMatcher");
 const {
@@ -514,6 +517,40 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   const stage = determineStage(state);
 
+  // ====== AI FALLBACK: when quoted products exist and regex couldn't parse ======
+  if (convo?.lastQuotedProducts?.length > 0 && userMessage) {
+    const aiResult = await resolveWithAI({
+      psid,
+      userMessage,
+      flowType: 'rollo',
+      stage: convo?.lastIntent || stage,
+      basket: convo?.productSpecs,
+      lastQuotedProducts: convo.lastQuotedProducts
+    });
+
+    if (aiResult.confidence >= 0.7) {
+      if (aiResult.action === 'select_one' && convo.lastQuotedProducts[aiResult.selectedIndex]) {
+        const prod = convo.lastQuotedProducts[aiResult.selectedIndex];
+        if (prod.productUrl) {
+          const trackedLink = await generateClickLink(psid, prod.productUrl, {
+            productName: prod.productName || prod.displayText,
+            productId: prod.productId
+          });
+          await updateConversation(psid, { lastIntent: 'roll_complete', unknownCount: 0, lastQuotedProducts: null });
+          return {
+            type: "text",
+            text: `¡Perfecto! Aquí tienes el link de compra:\n\n• ${prod.displayText} — ${formatMoney(prod.price)}\n  🛒 ${trackedLink}\n\nEl envío va incluido.`
+          };
+        }
+      }
+
+      if (aiResult.action === 'answer_question' && aiResult.text) {
+        await updateConversation(psid, { lastIntent: 'roll_ai_answered', unknownCount: 0 });
+        return { type: "text", text: aiResult.text };
+      }
+    }
+  }
+
   switch (stage) {
     case STAGES.AWAITING_TYPE:
       response = handleAwaitingType(intent, state, sourceContext);
@@ -567,6 +604,10 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   if (state.zipInfo) {
     updateData.city = state.zipInfo.city;
     updateData.stateMx = state.zipInfo.state;
+  }
+  // Save quoted products if any were generated during this turn
+  if (state._lastQuotedProducts) {
+    updateData.lastQuotedProducts = state._lastQuotedProducts;
   }
 
   await updateConversation(psid, updateData);
@@ -802,6 +843,13 @@ async function handleAwaitingZip(intent, state, sourceContext, psid, convo) {
 
         // Mark as complete — no need for zip
         state.zipCode = 'ML_PURCHASE';
+        state._lastQuotedProducts = [{
+          displayText: specsText,
+          price: product.price,
+          productId: product._id?.toString(),
+          productUrl,
+          productName: product.name
+        }];
 
         return {
           type: "text",
@@ -842,8 +890,8 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
   });
 
   // Send push notification
-  const { sendHandoffNotification } = require("../services/pushNotifications");
-  sendHandoffNotification(psid, convo, `Rollo: ${specsText} - ${locationText}`).catch(err => {
+  const { sendHandoffNotification } = require("../../services/pushNotifications");
+  sendHandoffNotification(psid, `Rollo: ${specsText} - ${locationText}`).catch(err => {
     console.error("❌ Failed to send push notification:", err);
   });
 

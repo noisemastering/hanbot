@@ -9,6 +9,9 @@ const { INTENTS } = require("../classifier");
 const { isBusinessHours } = require("../utils/businessHours");
 const { checkZipBeforeHandoff, handlePendingZipResponse, isQueretaroLocation, getQueretaroPickupMessage } = require("../utils/preHandoffCheck");
 
+// AI fallback for flow dead-ends
+const { resolveWithAI } = require("../utils/flowFallback");
+
 // Import existing utilities - USE THESE
 const { getAncestors, getRootFamily } = require("../utils/productMatcher");
 const {
@@ -306,7 +309,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       });
 
       const { sendHandoffNotification } = require("../../services/pushNotifications");
-      sendHandoffNotification(psid, convo, info.reason || 'Borde - cliente proporcionó ubicación').catch(err => {
+      sendHandoffNotification(psid, info.reason || 'Borde - cliente proporcionó ubicación').catch(err => {
         console.error("❌ Failed to send push notification:", err);
       });
 
@@ -394,7 +397,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   switch (stage) {
     case STAGES.AWAITING_LENGTH:
-      response = await handleAwaitingLength(intent, state, sourceContext, availableLengths, userMessage, adProductIds);
+      response = await handleAwaitingLength(intent, state, sourceContext, availableLengths, userMessage, adProductIds, psid, convo);
       break;
 
     case STAGES.AWAITING_QUANTITY:
@@ -465,7 +468,7 @@ async function handleStart(sourceContext, availableLengths, adProductIds = null)
 /**
  * Handle awaiting length stage
  */
-async function handleAwaitingLength(intent, state, sourceContext, availableLengths, userMessage = '', adProductIds = null) {
+async function handleAwaitingLength(intent, state, sourceContext, availableLengths, userMessage = '', adProductIds = null, psid = null, convo = null) {
   // Check if user provided area/patio dimensions (NxN) instead of a linear length
   const dimMatch = (userMessage || '').match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)/);
   if (dimMatch) {
@@ -506,6 +509,40 @@ async function handleAwaitingLength(intent, state, sourceContext, availableLengt
             `${lengthsWithPrices.join('\n')}\n\n` +
             `¿Qué largo necesitas?`
     };
+  }
+
+  // ====== AI FALLBACK before static response ======
+  if (userMessage && psid && convo?.lastQuotedProducts?.length > 0) {
+    const aiResult = await resolveWithAI({
+      psid,
+      userMessage,
+      flowType: 'borde',
+      stage: 'awaiting_length',
+      basket: convo?.productSpecs,
+      lastQuotedProducts: convo.lastQuotedProducts
+    });
+
+    if (aiResult.confidence >= 0.7) {
+      if (aiResult.action === 'select_one' && convo.lastQuotedProducts[aiResult.selectedIndex]) {
+        const prod = convo.lastQuotedProducts[aiResult.selectedIndex];
+        if (prod.productUrl) {
+          const trackedLink = await generateClickLink(psid, prod.productUrl, {
+            productName: prod.productName || prod.displayText,
+            productId: prod.productId
+          });
+          await updateConversation(psid, { lastIntent: 'borde_complete', unknownCount: 0, lastQuotedProducts: null });
+          return {
+            type: "text",
+            text: `¡Perfecto! Aquí tienes el link de compra:\n\n• ${prod.displayText} — ${formatMoney(prod.price)}\n  🛒 ${trackedLink}\n\nEl envío va incluido.`
+          };
+        }
+      }
+
+      if (aiResult.action === 'answer_question' && aiResult.text) {
+        await updateConversation(psid, { lastIntent: 'borde_ai_answered', unknownCount: 0 });
+        return { type: "text", text: aiResult.text };
+      }
+    }
   }
 
   const lengthList = availableLengths.map(l => `${l}m`).join(', ');
@@ -591,6 +628,17 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
         wholesaleMention = `\n\nA partir de ${product.wholesaleMinQty} rollos manejamos precio de mayoreo.`;
       }
 
+      // Save quoted product for AI fallback on next message
+      await updateConversation(psid, {
+        lastQuotedProducts: [{
+          displayText: `Borde ${length}m`,
+          price: product.price,
+          productId: product._id?.toString(),
+          productUrl,
+          productName: product.name
+        }]
+      });
+
       return {
         type: "text",
         text: `¡Claro! ${quantityText}tenemos el ${displayName}${priceText}. El envío está incluido.\n\n` +
@@ -643,8 +691,8 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
   });
 
   // Send push notification
-  const { sendHandoffNotification } = require("../services/pushNotifications");
-  sendHandoffNotification(psid, convo, `Borde: ${specsText}`).catch(err => {
+  const { sendHandoffNotification } = require("../../services/pushNotifications");
+  sendHandoffNotification(psid, `Borde: ${specsText}`).catch(err => {
     console.error("❌ Failed to send push notification:", err);
   });
 

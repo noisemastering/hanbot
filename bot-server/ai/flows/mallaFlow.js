@@ -39,6 +39,9 @@ const {
 // AI-powered response generation
 const { generateBotResponse } = require("../responseGenerator");
 
+// AI fallback for flow dead-ends
+const { resolveWithAI } = require("../utils/flowFallback");
+
 // Location detection
 const { detectMexicanLocation, detectZipCode } = require("../../mexicanLocations");
 
@@ -296,6 +299,7 @@ async function handleAccessoryQuestion(psid, convo, userMessage) {
 async function handleMultipleDimensions(dimensions, psid, convo) {
   const poiRootId = convo?.poiRootId;
   const responseParts = [];
+  const quotedProducts = [];
 
   for (const dim of dimensions) {
     const w = Math.min(dim.width, dim.height);
@@ -311,6 +315,15 @@ async function handleMultipleDimensions(dimensions, psid, convo) {
       if (products.length > 0) {
         const product = products[0];
         responseParts.push(`• ${dim.width}x${dim.height}m → te ofrecemos ${flooredW}x${flooredH}m: ${formatMoney(product.price)}`);
+        const productUrl = product.onlineStoreLinks?.find(l => l.isPreferred)?.url || product.onlineStoreLinks?.[0]?.url;
+        quotedProducts.push({
+          width: flooredW, height: flooredH,
+          displayText: `${flooredW}x${flooredH}m`,
+          price: product.price,
+          productId: product._id?.toString(),
+          productUrl,
+          productName: product.name
+        });
       } else {
         responseParts.push(`• ${dim.width}x${dim.height}m: No disponible en esta medida`);
       }
@@ -321,6 +334,15 @@ async function handleMultipleDimensions(dimensions, psid, convo) {
       if (products.length > 0) {
         const product = products[0];
         responseParts.push(`• ${dim.width}x${dim.height}m: ${formatMoney(product.price)}`);
+        const productUrl = product.onlineStoreLinks?.find(l => l.isPreferred)?.url || product.onlineStoreLinks?.[0]?.url;
+        quotedProducts.push({
+          width: w, height: h,
+          displayText: `${w}x${h}m`,
+          price: product.price,
+          productId: product._id?.toString(),
+          productUrl,
+          productName: product.name
+        });
       } else {
         responseParts.push(`• ${dim.width}x${dim.height}m: No disponible en esta medida`);
       }
@@ -338,6 +360,7 @@ async function handleMultipleDimensions(dimensions, psid, convo) {
   await updateConversation(psid, {
     lastIntent: 'malla_multiple_sizes',
     productInterest: 'malla_sombra',
+    lastQuotedProducts: quotedProducts.length > 0 ? quotedProducts : undefined,
     productSpecs: {
       productType: 'malla',
       updatedAt: new Date()
@@ -347,6 +370,51 @@ async function handleMultipleDimensions(dimensions, psid, convo) {
   return {
     type: "text",
     text: `Aquí te van los precios:\n\n${responseParts.join('\n')}${fractionalNote}\n\n¿Cuál te interesa?`
+  };
+}
+
+/**
+ * Handle AI-resolved product selection from lastQuotedProducts.
+ * Takes an AI action + the quoted products array, generates tracked links, returns formatted response.
+ */
+async function handleQuoteSelection(aiAction, lastQuotedProducts, psid, convo) {
+  const indices = aiAction.action === 'select_products'
+    ? aiAction.selectedIndices
+    : [aiAction.selectedIndex];
+
+  // Validate indices
+  const validIndices = indices.filter(i => i >= 0 && i < lastQuotedProducts.length);
+  if (validIndices.length === 0) return null;
+
+  const selectedProducts = validIndices.map(i => lastQuotedProducts[i]);
+  const responseParts = [];
+
+  for (const prod of selectedProducts) {
+    if (!prod.productUrl) {
+      responseParts.push(`• ${prod.displayText}: ${formatMoney(prod.price)} (sin link disponible)`);
+      continue;
+    }
+
+    const trackedLink = await generateClickLink(psid, prod.productUrl, {
+      productName: prod.productName || `Malla ${prod.displayText}`,
+      productId: prod.productId
+    });
+
+    responseParts.push(`• ${prod.displayText} — ${formatMoney(prod.price)}\n  🛒 ${trackedLink}`);
+  }
+
+  await updateConversation(psid, {
+    lastIntent: 'malla_complete',
+    unknownCount: 0
+  });
+
+  const intro = selectedProducts.length > 1
+    ? '¡Perfecto! Aquí tienes los links de compra:'
+    : '¡Perfecto! Aquí tienes el link de compra:';
+
+  return {
+    type: "text",
+    text: `${intro}\n\n${responseParts.join('\n\n')}\n\nEl envío va incluido en el precio.`
   };
 }
 
@@ -395,19 +463,11 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   console.log(`🌐 Malla flow - Intent: ${intent}, Entities:`, entities);
   console.log(`🌐 Malla flow - User message: "${userMessage}"`);
 
-  // ====== IMMEDIATE HANDOFF: non-90% shade or oversized for confeccionada ======
+  // ====== IMMEDIATE HANDOFF: non-90% shade percentage ======
   const nonStandardShade = /\b(al\s*)?(35|50|70|80)\s*(%|porciento|por\s*ciento)\b/i.test(userMessage);
-  const dimsForCheck = (entities.width && entities.height)
-    ? { width: entities.width, height: entities.height }
-    : parseDimensions(userMessage);
-  const maxDimension = dimsForCheck ? Math.max(dimsForCheck.width, dimsForCheck.height) : 0;
-  const isOversized = maxDimension > 10; // confeccionada max is 6x10m
 
-  if (nonStandardShade || isOversized) {
-    const reasons = [];
-    if (nonStandardShade) reasons.push(`porcentaje no estándar (no 90%)`);
-    if (isOversized) reasons.push(`medida muy grande (${dimsForCheck.width}x${dimsForCheck.height}m)`);
-    const handoffReason = `Malla sombra: ${reasons.join(' + ')} — "${userMessage}"`;
+  if (nonStandardShade) {
+    const handoffReason = `Malla sombra: porcentaje no estándar (no 90%) — "${userMessage}"`;
 
     console.log(`🚨 Malla flow - Immediate handoff: ${handoffReason}`);
 
@@ -746,6 +806,40 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   // Determine current stage
   const stage = determineStage(state);
 
+  // ====== AI FALLBACK: when we quoted products and user responds but regex can't parse ======
+  if (stage === STAGES.AWAITING_DIMENSIONS &&
+      convo?.lastQuotedProducts?.length > 0 &&
+      userMessage) {
+    const aiResult = await resolveWithAI({
+      psid,
+      userMessage,
+      flowType: 'malla',
+      stage: convo?.lastIntent || 'awaiting_dimensions',
+      basket: convo?.productSpecs,
+      lastQuotedProducts: convo.lastQuotedProducts
+    });
+
+    if (aiResult.confidence >= 0.7) {
+      if ((aiResult.action === 'select_products' || aiResult.action === 'select_one') &&
+          convo.lastQuotedProducts.length > 0) {
+        const selectionResponse = await handleQuoteSelection(aiResult, convo.lastQuotedProducts, psid, convo);
+        if (selectionResponse) return selectionResponse;
+      }
+
+      if (aiResult.action === 'provide_dimensions' && aiResult.dimensions) {
+        state.width = aiResult.dimensions.width;
+        state.height = aiResult.dimensions.height;
+        return await handleComplete(intent, state, sourceContext, psid, convo, userMessage);
+      }
+
+      if (aiResult.action === 'answer_question' && aiResult.text) {
+        await updateConversation(psid, { lastIntent: 'malla_ai_answered', unknownCount: 0 });
+        return { type: "text", text: aiResult.text };
+      }
+    }
+    // If AI returned "none" or low confidence, fall through to normal flow
+  }
+
   // Generate response based on stage
   let response;
 
@@ -789,7 +883,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
  */
 async function getMallaDescription() {
   // Get dynamic price range from database
-  let priceMin = 350, priceMax = 3450;
+  let priceMin = 350, priceMax = 3450, sizeMin = '2x2m', sizeMax = '7x10m';
   try {
     const products = await ProductFamily.find({
       sellable: true, active: true,
@@ -797,16 +891,26 @@ async function getMallaDescription() {
       price: { $gt: 0 }
     }).sort({ price: 1 }).lean();
 
-    // Filter to confeccionada only (both dimensions <= 10m)
+    // Filter to confeccionada only (exclude rolls — any dimension >= 50m)
     const confec = products.filter(p => {
       const m = p.size?.match(/(\d+)\s*[xX×]\s*(\d+)/);
       if (!m) return false;
-      return Math.max(parseInt(m[1]), parseInt(m[2])) <= 10;
+      return Math.max(parseInt(m[1]), parseInt(m[2])) < 50;
     });
 
     if (confec.length > 0) {
       priceMin = Math.round(confec[0].price);
       priceMax = Math.round(confec[confec.length - 1].price);
+
+      // Compute actual size range from DB
+      const sizes = confec.map(p => {
+        const m = p.size.match(/(\d+)\s*[xX×]\s*(\d+)/);
+        return { w: Math.min(parseInt(m[1]), parseInt(m[2])), h: Math.max(parseInt(m[1]), parseInt(m[2])) };
+      });
+      const smallestArea = sizes.reduce((min, s) => s.w * s.h < min.w * min.h ? s : min, sizes[0]);
+      const largestArea = sizes.reduce((max, s) => s.w * s.h > max.w * max.h ? s : max, sizes[0]);
+      sizeMin = `${smallestArea.w}x${smallestArea.h}m`;
+      sizeMax = `${largestArea.w}x${largestArea.h}m`;
     }
   } catch (err) {
     console.error("❌ Error getting malla price range:", err.message);
@@ -814,7 +918,7 @@ async function getMallaDescription() {
 
   return `Nuestra malla sombra raschel confeccionada con 90% de cobertura y protección UV.\n\n` +
     `Viene con refuerzo en las esquinas para una vida útil de hasta 5 años, y con sujetadores y argollas en todos los lados, lista para instalar. El envío a domicilio va incluido en el precio.\n\n` +
-    `Manejamos medidas desde 2x2m hasta 7x10m, con precios desde ${formatMoney(priceMin)} hasta ${formatMoney(priceMax)}.\n\n` +
+    `Manejamos medidas desde ${sizeMin} hasta ${sizeMax}, con precios desde ${formatMoney(priceMin)} hasta ${formatMoney(priceMax)}.\n\n` +
     `¿Qué medida te interesa?`;
 }
 
@@ -1023,6 +1127,39 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
   const alreadyDescribed = convo?.lastIntent?.startsWith('malla_');
   if (!alreadyDescribed) {
     return await handleProductInfo(userMessage, convo);
+  }
+
+  // ====== AI FALLBACK at end of handleAwaitingDimensions ======
+  // Before giving up with static text, try AI if we have quoted products
+  if (userMessage && convo?.lastQuotedProducts?.length > 0) {
+    const aiResult = await resolveWithAI({
+      psid,
+      userMessage,
+      flowType: 'malla',
+      stage: 'awaiting_dimensions_end',
+      basket: convo?.productSpecs,
+      lastQuotedProducts: convo.lastQuotedProducts
+    });
+
+    if (aiResult.confidence >= 0.7) {
+      if ((aiResult.action === 'select_products' || aiResult.action === 'select_one') &&
+          convo.lastQuotedProducts.length > 0) {
+        const selectionResponse = await handleQuoteSelection(aiResult, convo.lastQuotedProducts, psid, convo);
+        if (selectionResponse) return selectionResponse;
+      }
+
+      if (aiResult.action === 'provide_dimensions' && aiResult.dimensions) {
+        const newState = getFlowState(convo);
+        newState.width = aiResult.dimensions.width;
+        newState.height = aiResult.dimensions.height;
+        return await handleComplete(null, newState, null, psid, convo, userMessage);
+      }
+
+      if (aiResult.action === 'answer_question' && aiResult.text) {
+        await updateConversation(psid, { lastIntent: 'malla_ai_answered', unknownCount: 0 });
+        return { type: "text", text: aiResult.text };
+      }
+    }
   }
 
   return {
@@ -1351,10 +1488,19 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     const quantityText = quantity ? `Para ${quantity} piezas:\n\n` : "";
 
     // Save product reference for duplicate detection and stats
-    const hasLocation = convo?.city || convo?.stateMx || convo?.zipCode;
+    const w = Math.min(width, height);
+    const h = Math.max(width, height);
     await updateConversation(psid, {
       lastSharedProductId: product._id?.toString(),
       lastSharedProductLink: productUrl,
+      lastQuotedProducts: [{
+        width: w, height: h,
+        displayText: `${w}x${h}m`,
+        price: product.price,
+        productId: product._id?.toString(),
+        productUrl,
+        productName: product.name
+      }],
       unknownCount: 0
     });
 
