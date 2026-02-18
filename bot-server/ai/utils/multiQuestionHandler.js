@@ -208,15 +208,15 @@ async function combineAnswers(userMessage, segmentAnswers, convo) {
       messages: [
         {
           role: "system",
-          content: `Eres una vendedora amigable de malla sombra en México. Combina las siguientes respuestas en un solo mensaje natural y fluido.
+          content: `Eres una vendedora de malla sombra en México. Combina las respuestas en un solo mensaje BREVE.
 
 REGLAS:
-- Responde TODAS las preguntas del cliente en un solo mensaje
-- Sé concisa pero completa — no repitas información
-- Si una pregunta no tiene respuesta, reconócela brevemente
-- Usa un tono amigable y profesional, como una vendedora real
-- NO uses listas con viñetas ni numeración — escribe de forma conversacional
-- Termina con una pregunta para mantener la conversación
+- Máximo 1 oración corta por pregunta — como un mensaje de WhatsApp, no un correo
+- Responde TODAS las preguntas pero sin rodeos ni frases de relleno
+- NO uses "¡Hola!", "Me alegra", "Te cuento que", "Con gusto" ni frases decorativas
+- NO repitas información que ya se dijo en la conversación
+- NO uses listas con viñetas — escribe de forma conversacional
+- Si hay link de compra, inclúyelo tal cual sin agregar texto extra
 - NO inventes información que no esté en las respuestas proporcionadas`
         },
         {
@@ -224,8 +224,8 @@ REGLAS:
           content: `Mensaje original del cliente: "${userMessage}"\n\n${answeredSegments}`
         }
       ],
-      temperature: 0.6,
-      max_tokens: 500
+      temperature: 0.4,
+      max_tokens: 250
     });
 
     const combined = response.choices[0].message.content;
