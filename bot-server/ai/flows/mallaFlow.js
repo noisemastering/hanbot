@@ -766,7 +766,13 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     state.color = entities.color;
   }
   if (entities.quantity) {
-    state.quantity = entities.quantity;
+    // Safeguard: if "quantity" equals a dimension, it's a parsing error (e.g., "10x5" → quantity=10, width=5)
+    const qtyMatchesDimension = entities.quantity === state.width || entities.quantity === state.height;
+    if (!qtyMatchesDimension) {
+      state.quantity = entities.quantity;
+    } else {
+      console.log(`⚠️ Ignoring quantity=${entities.quantity} — matches dimension ${state.width}x${state.height}`);
+    }
   }
   if (entities.concerns) {
     state.concerns = entities.concerns;

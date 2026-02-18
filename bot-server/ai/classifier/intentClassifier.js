@@ -527,6 +527,7 @@ ENTITY EXTRACTION:
 - height/length: number in meters. Parse "por" as dimension separator: "tres por cuatro" → width=3, height=4
 - percentage: shade percentage (35-90)
 - quantity: number of units (only when explicitly ordering, e.g., "quiero 5", "necesito 10 rollos". NOT from "una/uno" in price queries like "cuánto sale una")
+- CRITICAL: Numbers that are part of dimensions are NOT quantity. "10x5" = 10m by 5m, quantity=null. "10 x 5 malla" = 10m by 5m, quantity=null. Only extract quantity when it's SEPARATE from dimensions (e.g., "quiero 3 de 5x4" = quantity=3, width=4, height=5).
 - color: negro, verde, beige, blanco, azul
 - borde_length: 6, 9, 18, or 54 (only for borde_separador)
 - dimensions: full dimension string if detected (e.g., "4x5", "3 por 4", "tres por cuatro")
