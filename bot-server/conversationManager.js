@@ -107,8 +107,22 @@ async function isHumanActive(psid) {
     const convo = await Conversation.findOne({ psid });
 
     // Check if conversation is waiting for human (custom orders, explicit handoff)
-    // Bot should NEVER respond when needs_human - only human can clear this state
+    // Auto-resume bot after 48 hours — humans often forget to clear the state
     if (convo && convo.state === "needs_human") {
+      const fortyEightHoursAgo = new Date(Date.now() - 48 * 60 * 60 * 1000);
+      const handoffTime = convo.handoffTimestamp || convo.lastMessageAt;
+
+      if (handoffTime && new Date(handoffTime) < fortyEightHoursAgo) {
+        console.log(`🤖 Auto-resuming bot: needs_human state expired (handoff was ${Math.round((Date.now() - new Date(handoffTime).getTime()) / 3600000)}h ago)`);
+        await updateConversation(psid, {
+          state: "active",
+          lastIntent: "bot_resumed",
+          handoffResolved: true,
+          handoffResolvedAt: new Date()
+        });
+        return false;
+      }
+
       console.log(`🚨 Conversation needs human attention (state: needs_human). Bot will not respond.`);
       return true;
     }
