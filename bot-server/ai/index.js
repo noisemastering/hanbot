@@ -534,6 +534,20 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
       console.log("✅ Mensaje entendido, contador de clarificación reiniciado");
     }
 
+    // 📎 MULTI-QUESTION: skip single-intent handlers and go straight to AI splitter
+    if (classification.intent === INTENTS.MULTI_QUESTION) {
+      console.log(`📎 Multi-question detected, skipping single-intent handlers`);
+      const { handleMultiQuestion } = require("./utils/multiQuestionHandler");
+      const mqResponse = await handleMultiQuestion(
+        userMessage, psid, convo, sourceContext, campaign, campaignContext
+      );
+      if (mqResponse) {
+        return await checkForRepetition(mqResponse, psid, convo);
+      }
+      // If splitter returned null (single question after all), continue normal pipeline
+      console.log(`📎 Multi-question splitter returned null, continuing normal pipeline`);
+    }
+
     // 🤖 AI-POWERED INTENT CLASSIFICATION
     // Try to route by classified intent
     if (classification.confidence > 0.6) {

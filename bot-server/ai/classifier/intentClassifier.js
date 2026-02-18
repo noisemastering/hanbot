@@ -702,10 +702,10 @@ function quickClassify(message, dbIntents = null) {
     { intent: 'availability_query', pattern: /\b(medidas?|tamaños?|disponib|stock|tienen|manejan|qu[eé]\s*medidas?)\b/i },
     { intent: 'payment_query', pattern: /\b(pago|pagar|tarjeta|efectivo|transferencia|forma\s*de\s*pago|meses)\b/i },
     { intent: 'location_query', pattern: /\b(ubicaci[oó]n|direcci[oó]n|d[oó]nde\s*(est[aá]n|quedan|se\s*encuentran)|soy\s+de\s+\w|recog[ei]r|domicilio)\b/i },
-    { intent: 'shipping_query', pattern: /\b(env[ií]o|envi[aá]n|entrega|llega|mandan|cu[aá]nto\s*tarda)\b/i },
+    { intent: 'shipping_query', pattern: /\b(env[ií]o|envi[aá]n|entrega|[ly]lega|mandan|cu[aá]nto\s*tarda)\b/i },
     { intent: 'installation_query', pattern: /\b(instal[ae]n?|ponen|colocan|c[oó]mo\s*se\s*(instala|pone|coloca))\b/i },
     { intent: 'product_inquiry', pattern: /\b(informes?|info|caracter[ií]sticas?|especificaciones?|de\s*qu[eé]\s*(es|est[aá]|material))\b/i },
-    { intent: 'delivery_time_query', pattern: /\b(cu[aá]nto\s*tarda|cu[aá]ntos?\s*d[ií]as?|tiempo\s*de\s*entrega|cuando\s*llega)\b/i }
+    { intent: 'delivery_time_query', pattern: /\b(cu[aá]nto\s*tarda|cu[aá]ntos?\s*d[ií]as?|tiempo\s*de\s*entrega|cuando\s*[ly]lega)\b/i }
   ];
 
   // Find all matching question types (partial patterns are OK here because
