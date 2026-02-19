@@ -194,10 +194,37 @@ async function handleOutOfStock({ psid, convo, userMessage }) {
   return { type: "text", text: response };
 }
 
+/**
+ * Handle custom modification request - "3x2 con argollas extras a 1.7"
+ * These require human quoting — bot can't handle non-standard specs.
+ */
+async function handleCustomModification({ psid, convo, userMessage }) {
+  const inBusinessHours = isBusinessHours();
+
+  await updateConversation(psid, {
+    handoffRequested: true,
+    handoffReason: `Custom modification: ${userMessage.substring(0, 150)}`,
+    handoffTimestamp: new Date(),
+    state: "needs_human",
+    lastIntent: "custom_modification"
+  });
+
+  await sendHandoffNotification(psid, convo, `Solicitud especial: "${userMessage.substring(0, 120)}"`);
+
+  const response = await generateBotResponse("custom_modification", {
+    userMessage,
+    isAfterHours: !inBusinessHours,
+    convo
+  });
+
+  return { type: "text", text: response };
+}
+
 module.exports = {
   handleFrustration,
   handleHumanRequest,
   handleComplaint,
   handlePriceConfusion,
-  handleOutOfStock
+  handleOutOfStock,
+  handleCustomModification
 };

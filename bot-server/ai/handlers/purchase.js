@@ -5,6 +5,7 @@ const { updateConversation } = require("../../conversationManager");
 const { generateClickLink } = require("../../tracking");
 const { getBusinessInfo } = require("../../businessInfoManager");
 const { generateBotResponse } = require("../responseGenerator");
+const { getCatalogUrl } = require("../flowManager");
 
 const STORE_URL = "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob";
 const WHATSAPP_LINK = "https://wa.me/524425957432";
@@ -92,30 +93,52 @@ async function handleHowToBuy({ psid, convo }) {
 }
 
 /**
- * Handle bulk discount - "Precio por mayoreo", "Descuento por volumen"
+ * Handle bulk discount - "Si compro 5 me hacen descuento?", "Precio por cantidad"
+ * Buyer wants multiple units for personal use or a project.
  */
 async function handleBulkDiscount({ psid, convo }) {
-  const info = await getBusinessInfo();
-
-  // Check if we already gave the bulk discount response recently
-  const isRepeat = convo?.lastIntent === "bulk_discount";
-
   await updateConversation(psid, {
     lastIntent: "bulk_discount",
-    state: "needs_human",
     unknownCount: 0
   });
 
-  const response = await generateBotResponse("bulk_discount", {
-    isRepeat,
-    minimumOrder: '$20,000 MXN',
-    whatsapp: WHATSAPP_LINK,
-    phone: info?.phones?.join(" / ") || "442 352 1646",
-    hours: info?.hours || "Lun-Vie 9am-6pm",
-    convo
+  let text = "¡Ahora puedes acceder a precio de mayoreo a partir de la compra de 5 mallas en adelante!\n\n" +
+    "Es una excelente oportunidad para comenzar o fortalecer tu venta de malla sombra con mejores márgenes, sin compras excesivas y de forma sencilla.\n\n" +
+    "Si tienes alguna duda o quieres una cotización personalizada, con gusto te apoyo.";
+
+  // Attach catalog if available
+  const catalogUrl = await getCatalogUrl(convo, convo?.currentFlow);
+  if (catalogUrl) {
+    text += `\n\n📄 Aquí está nuestro catálogo con lista de precios:\n${catalogUrl}`;
+  }
+
+  return { type: "text", text };
+}
+
+/**
+ * Handle reseller inquiry - "Quiero revender", "Soy distribuidor"
+ * Prospect wants to become a distributor/reseller.
+ */
+async function handleResellerInquiry({ psid, convo }) {
+  await updateConversation(psid, {
+    lastIntent: "reseller_inquiry",
+    unknownCount: 0
   });
 
-  return { type: "text", text: response };
+  let text = "Somos fabricantes de malla sombra de alta calidad y buscamos revendedores que quieran expandir su negocio.\n\n" +
+    "Beneficios para revendedores:\n" +
+    "• Descuento por mayoreo para maximizar tu ganancia\n" +
+    "• Variedad de medidas y colores para diferentes usos\n" +
+    "• Entrega rápida y atención personalizada\n\n" +
+    "Si quieres revender un producto rentable, con gusto te preparo una cotización especial.";
+
+  // Attach catalog if available
+  const catalogUrl = await getCatalogUrl(convo, convo?.currentFlow);
+  if (catalogUrl) {
+    text += `\n\n📄 Aquí está nuestro catálogo con lista de precios:\n${catalogUrl}`;
+  }
+
+  return { type: "text", text };
 }
 
 /**
@@ -160,6 +183,7 @@ module.exports = {
   handleStoreLinkRequest,
   handleHowToBuy,
   handleBulkDiscount,
+  handleResellerInquiry,
   handlePhoneRequest,
   handlePricePerSqm
 };

@@ -44,6 +44,7 @@ const handlers = {
   [INTENTS.COMPLAINT]: escalationHandlers.handleComplaint,
   [INTENTS.PRICE_CONFUSION]: escalationHandlers.handlePriceConfusion,
   [INTENTS.OUT_OF_STOCK_REPORT]: escalationHandlers.handleOutOfStock,
+  [INTENTS.CUSTOM_MODIFICATION]: escalationHandlers.handleCustomModification,
 
   // ===== PRODUCTS =====
   // NOTE: PRODUCT_INQUIRY, SIZE_SPECIFICATION, and PRICE_QUERY are NOT here
@@ -60,6 +61,7 @@ const handlers = {
   [INTENTS.STORE_LINK_REQUEST]: purchaseHandlers.handleStoreLinkRequest,
   [INTENTS.HOW_TO_BUY]: purchaseHandlers.handleHowToBuy,
   [INTENTS.BULK_DISCOUNT]: purchaseHandlers.handleBulkDiscount,
+  [INTENTS.RESELLER_INQUIRY]: purchaseHandlers.handleResellerInquiry,
   [INTENTS.PHONE_REQUEST]: purchaseHandlers.handlePhoneRequest,
   [INTENTS.PRICE_PER_SQM]: purchaseHandlers.handlePricePerSqm,
 

@@ -195,6 +195,7 @@ const INTENTS = {
   STORE_LINK_REQUEST: "store_link_request", // "Link de la tienda", "Mercado Libre?"
   HOW_TO_BUY: "how_to_buy",                 // "Cómo compro?", "Proceso de compra?"
   BULK_DISCOUNT: "bulk_discount",           // "Precio por mayoreo", "Descuento por volumen"
+  RESELLER_INQUIRY: "reseller_inquiry",     // "Quiero revender", "Soy distribuidor", "Busco proveedor"
   PRICE_PER_SQM: "price_per_sqm",           // "Precio por metro cuadrado", "Cuánto el m2"
   DETAILS_REQUEST: "details_request",       // "Más información", "Déjame ver"
 
@@ -216,6 +217,7 @@ const INTENTS = {
   FRUSTRATION: "frustration",              // "Ya te dije", "No entienden", "Estoy diciendo"
   PRICE_CONFUSION: "price_confusion",      // "Es otro precio?", "Me dijiste diferente"
   OUT_OF_STOCK_REPORT: "out_of_stock_report", // "Dice agotado", "No hay en stock"
+  CUSTOM_MODIFICATION: "custom_modification", // "3x2 con argollas extras", "malla con refuerzo especial"
 
   // ===== CONTACT INFO (hot leads!) =====
   PHONE_SHARED: "phone_shared",            // User shared their phone number
@@ -463,7 +465,8 @@ AVAILABLE INTENTS (choose the most specific one):
 [PURCHASE FLOW]
 - store_link_request: "Link de la tienda", "Mercado Libre?", "Donde compro?"
 - how_to_buy: "Cómo compro?", "Proceso de compra?", "Cómo hago mi pedido?"
-- bulk_discount: "Precio por mayoreo", "Descuento por volumen", "Si compro varios?"
+- bulk_discount: Buying several units for personal use or a project. "Si compro 5 me hacen descuento?", "Precio por cantidad", "Necesito varias mallas"
+- reseller_inquiry: Wants to RESELL or become a distributor. "Quiero revender", "Soy distribuidor", "Busco proveedor de malla", "Precios para negocio", "Quiero ser distribuidor", "Venta al por mayor para mi ferretería"
 - price_per_sqm: "Precio por metro cuadrado", "Cuánto el m2?"
 - details_request: "Más información", "Déjame ver", "Muéstrame el producto"
 
@@ -483,6 +486,7 @@ AVAILABLE INTENTS (choose the most specific one):
 - frustration: "Ya te dije!", "No entienden", "Estoy diciendo que...", "No leen"
 - price_confusion: "Es otro precio?", "Me dijiste diferente", "Por qué cambió?"
 - out_of_stock_report: "Dice agotado", "No hay en stock", "Sale que no disponible"
+- custom_modification: User requests a standard product WITH non-standard modifications. Examples: extra eyelets at specific positions, custom reinforcement, non-standard cuts, specific eyelet spacing, adding/removing features. E.g. "3x2 con argollas extras a 1.7", "malla con refuerzo en el centro", "sin ojillos de un lado". NOT just asking about eyelets (that's eyelets_query) — this is requesting a MODIFICATION to the standard product.
 
 [CONTACT]
 - phone_shared: User shared their phone number (10 digits)
