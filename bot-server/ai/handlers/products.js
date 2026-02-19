@@ -2,7 +2,7 @@
 // Handlers for product-related intents: catalog, comparison, largest/smallest
 
 const { updateConversation } = require("../../conversationManager");
-const { getAvailableSizes } = require("../../measureHandler");
+const { getAvailableSizes, getMallaSizeRange } = require("../../measureHandler");
 const { generateClickLink } = require("../../tracking");
 const { generateBotResponse } = require("../responseGenerator");
 const ProductFamily = require("../../models/ProductFamily");
@@ -149,9 +149,10 @@ async function handleLargestProduct({ psid, convo }) {
     return { type: "text", text: response };
   }
 
-  // Fallback
+  // Fallback — use cached range for the largest size
+  const fallbackRange = await getMallaSizeRange(convo);
   const response = await generateBotResponse("largest_product", {
-    dimensions: '6x10m',
+    dimensions: fallbackRange.largest,
     convo
   });
 

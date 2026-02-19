@@ -14,7 +14,8 @@ const {
   isColorQuery,
   isApproximateMeasure,
   generateSizeResponse,
-  generateGenericSizeResponse
+  generateGenericSizeResponse,
+  getMallaSizeRange
 } = require("./measureHandler");
 
 // Modelos para consultas ligeras en catálogo general / subfamilias
@@ -359,7 +360,7 @@ async function generateReply(userMessage, psid, referral = null) {
 
         return {
           type: "text",
-          text: generateGenericSizeResponse(availableSizes)
+          text: await generateGenericSizeResponse(availableSizes)
         };
       }
     }
@@ -410,6 +411,7 @@ async function generateReply(userMessage, psid, referral = null) {
         productInterest: "malla_sombra",
         productSpecs: { productType: "malla", updatedAt: new Date() }
       });
+      const infoRange = await getMallaSizeRange();
       return {
         type: "text",
         text: "La malla sombra confeccionada viene lista para instalar:\n\n" +
@@ -419,7 +421,7 @@ async function generateReply(userMessage, psid, referral = null) {
               "• Incluye ojillos en todo el perímetro para fácil instalación\n" +
               "• Resistente a rayos UV\n" +
               "• Durable (5+ años de vida útil)\n\n" +
-              "Las medidas van desde 2x2m hasta 6x10m.\n\n" +
+              `Las medidas van desde ${infoRange.smallest} hasta ${infoRange.largest}.\n\n` +
               "¿Qué medida necesitas?"
       };
     }

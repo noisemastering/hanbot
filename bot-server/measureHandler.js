@@ -444,6 +444,35 @@ async function getAvailableSizes(conversation = null) {
 }
 
 /**
+ * Get the smallest and largest malla sombra confeccionada size strings.
+ * Cached for 5 minutes to avoid repeated DB calls.
+ *
+ * @param {object} convo - Conversation object (for campaign-specific products)
+ * @returns {{ smallest: string, largest: string }} e.g. { smallest: "2x2m", largest: "6x12m" }
+ */
+let _sizeRangeCache = { ts: 0, smallest: "2x2m", largest: "6x10m" };
+async function getMallaSizeRange(convo = null) {
+  const now = Date.now();
+  if (now - _sizeRangeCache.ts < 5 * 60 * 1000) {
+    return _sizeRangeCache;
+  }
+
+  try {
+    const sizes = await getAvailableSizes(convo);
+    if (sizes.length > 0) {
+      const smallest = sizes[0].sizeStr;
+      const largest = sizes[sizes.length - 1].sizeStr;
+      _sizeRangeCache = { ts: now, smallest, largest };
+      return _sizeRangeCache;
+    }
+  } catch (err) {
+    console.error("❌ Error getting malla size range:", err.message);
+  }
+
+  return _sizeRangeCache; // return stale/default cache on error
+}
+
+/**
  * Finds closest smaller and bigger sizes to requested dimension
  *
  * IMPORTANT - DIMENSION INTERCHANGEABILITY:
@@ -706,12 +735,12 @@ async function generateSizeResponse(options) {
  * @param {Array} availableSizes - not used, kept for compatibility
  * @returns {string}
  */
-function generateGenericSizeResponse(availableSizes) {
-  // Ask directly for the size they need - DON'T offer lists we can't provide
+async function generateGenericSizeResponse(availableSizes) {
+  const range = await getMallaSizeRange();
   const responses = [
-    "El precio depende de la medida, manejamos desde 2x2m hasta 6x10m. ¿Qué medida necesitas?",
-    "El precio varía según la medida. Tenemos desde 2x2m hasta 6x10m. ¿Qué tamaño buscas?",
-    "Manejamos medidas desde 2x2m hasta 6x10m. ¿Qué medida necesitas para darte el precio exacto?"
+    `El precio depende de la medida, manejamos desde ${range.smallest} hasta ${range.largest}. ¿Qué medida necesitas?`,
+    `El precio varía según la medida. Tenemos desde ${range.smallest} hasta ${range.largest}. ¿Qué tamaño buscas?`,
+    `Manejamos medidas desde ${range.smallest} hasta ${range.largest}. ¿Qué medida necesitas para darte el precio exacto?`
   ];
 
   return responses[Math.floor(Math.random() * responses.length)];
@@ -752,6 +781,7 @@ module.exports = {
   parseDimensions,
   parseSizeString,
   getAvailableSizes,
+  getMallaSizeRange,
   findClosestSizes,
   calculateRecommendedArea,
   isInstallationQuery,

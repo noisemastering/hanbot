@@ -9,6 +9,7 @@ const { getBusinessInfo } = require("../../businessInfoManager");
 const {
   parseDimensions,
   getAvailableSizes,
+  getMallaSizeRange,
   findClosestSizes,
   isInstallationQuery,
   isColorQuery,
@@ -671,7 +672,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       // User wants confeccionadas - show available sizes
       console.log("✅ User chose confeccionadas after price_by_meter question");
       const availableSizes = await getAvailableSizes(convo);
-      const response = generateGenericSizeResponse(availableSizes);
+      const response = await generateGenericSizeResponse(availableSizes);
       await updateConversation(psid, { lastIntent: "sizes_shown" });
       return { type: "text", text: response };
     }
@@ -1154,9 +1155,10 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     // Default: malla sombra confeccionada
     console.log("💰 → Default to malla sombra (no specific interest)");
     await updateConversation(psid, { lastIntent: "price_query_general" });
+    const range = await getMallaSizeRange(convo);
     return {
       type: "text",
-      text: "Tenemos mallas sombra beige en varias medidas, desde 2x2m hasta 6x10m, y también rollos de 100m.\n\n" +
+      text: `Tenemos mallas sombra beige en varias medidas, desde ${range.smallest} hasta ${range.largest}, y también rollos de 100m.\n\n` +
             "Para darte el precio exacto, ¿qué medida necesitas para tu proyecto? 📐"
     };
   }
@@ -1225,10 +1227,11 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       };
     }
 
-    // No sizes found - fallback
+    // No sizes found - fallback (use cached range)
+    const fallbackRange = await getMallaSizeRange(convo);
     return {
       type: "text",
-      text: "Nuestra malla sombra confeccionada más grande es de 6x10m. ¿Te paso el precio y link?"
+      text: `Nuestra malla sombra confeccionada más grande es de ${fallbackRange.largest}. ¿Te paso el precio y link?`
     };
   }
 
@@ -1279,9 +1282,10 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     await updateConversation(psid, { lastIntent: "catalog_request" });
 
     // Don't dump entire product list - ask for dimensions instead
+    const catRange = await getMallaSizeRange(convo);
     return {
       type: "text",
-      text: "Tenemos mallas sombra beige en varias medidas, desde 2x2m hasta 6x10m, y también rollos de 100m.\n\n" +
+      text: `Tenemos mallas sombra beige en varias medidas, desde ${catRange.smallest} hasta ${catRange.largest}, y también rollos de 100m.\n\n` +
             "Para darte el precio exacto, ¿qué medida necesitas para tu proyecto? 📐"
     };
   }
@@ -1383,10 +1387,11 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     if (isInterested && !convo.lastIntent && !hasSpecificProduct) {
       await updateConversation(psid, { lastIntent: "interest_expressed", unknownCount: 0 });
 
+      const intRange = await getMallaSizeRange(convo);
       return {
         type: "text",
         text: "¡Perfecto! Vendemos malla sombra beige confeccionada lista para instalar.\n\n" +
-              "Tenemos medidas desde 2x2m hasta 6x10m, y también rollos de 100m.\n\n" +
+              `Tenemos medidas desde ${intRange.smallest} hasta ${intRange.largest}, y también rollos de 100m.\n\n` +
               "¿Qué medida necesitas? 📐"
       };
     }
@@ -2409,9 +2414,10 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     } else if (isConfirmation || wantsAvailableColor) {
       // User is confirming they want beige/negro
       await updateConversation(psid, { lastIntent: "color_confirmed", unknownCount: 0 });
+      const colorRange = await getMallaSizeRange(convo);
       return {
         type: "text",
-        text: "¡Perfecto! Tenemos varias medidas disponibles, desde 2x2m hasta 6x12m.\n\n" +
+        text: `¡Perfecto! Tenemos varias medidas disponibles, desde ${colorRange.smallest} hasta ${colorRange.largest}.\n\n` +
               "¿Qué medida necesitas?"
       };
     } else {
@@ -2896,7 +2902,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       // Check if location was mentioned in the message
       const hasLocationInGeneric = /\b(vivo\s+en|soy\s+de|estoy\s+en|me\s+encuentro\s+en)\s+(\w+)/i.test(msg);
 
-      let responseText = generateGenericSizeResponse(availableSizes);
+      let responseText = await generateGenericSizeResponse(availableSizes);
 
       // Add shipping info if location was mentioned
       if (hasLocationInGeneric) {

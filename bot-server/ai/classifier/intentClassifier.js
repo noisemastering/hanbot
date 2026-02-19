@@ -394,7 +394,7 @@ function buildClassificationPrompt(sourceContext, conversationFlow, campaignCont
   let prompt = `You are a classifier for a Mexican shade mesh (malla sombra) company chatbot.
 
 PRODUCTS WE SELL:
-- malla_sombra: Pre-made shade mesh (confeccionada) in custom sizes. Standard sizes 2x2m to 6x10m available. Larger sizes require quote. User asking for "malla sombra" with dimensions = malla_sombra
+- malla_sombra: Pre-made shade mesh (confeccionada) in various standard sizes. User asking for "malla sombra" with dimensions = malla_sombra
 - rollo: Shade mesh rolls, 100m long, widths of 2.10m or 4.20m, various shade percentages (35%-90%)
 - borde_separador: Plastic garden edging, comes in various roll lengths (not 100m rolls)
 - groundcover: Anti-weed ground cover fabric (also called "antimaleza")

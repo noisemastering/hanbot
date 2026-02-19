@@ -1188,8 +1188,23 @@ async function generateReply(userMessage, psid, referral = null) {
   // Route classified intents to pure business logic handlers
   // This runs BEFORE flows - handles intents that don't need multi-step flow processing
   // Examples: color_query, frustration, phone_request, human_request, etc.
-  // SKIP dispatcher when there's a pending handoff waiting for zip/city - let flows handle it
-  if (!convo?.pendingHandoff) {
+  // During pendingHandoff (waiting for zip/city), only dispatch informational FAQ intents
+  // — anything that's clearly a question, not a zip/city response
+  const INFORMATIONAL_INTENTS = new Set([
+    "color_query", "shade_percentage_query", "eyelets_query",
+    "shipping_query", "payment_query", "delivery_time_query",
+    "shipping_included_query", "pay_on_delivery_query",
+    "installation_query", "warranty_query", "structure_query",
+    "durability_query", "custom_size_query", "accessory_query",
+    "photo_request", "product_comparison", "catalog_request",
+    "how_to_buy", "phone_request", "price_per_sqm", "bulk_discount",
+    "frustration", "human_request", "complaint", "out_of_stock_report",
+    "price_confusion", "store_link_request"
+  ]);
+
+  const shouldDispatch = !convo?.pendingHandoff || INFORMATIONAL_INTENTS.has(classification?.intent);
+
+  if (shouldDispatch) {
     const dispatcherResponse = await dispatchToHandler(classification, {
       psid,
       convo,
