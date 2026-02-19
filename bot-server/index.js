@@ -1734,9 +1734,7 @@ validateRequiredEnvVars();
 // BACKGROUND JOBS
 // ============================================
 
-// ML Price Sync - runs every 6 hours
-const ML_PRICE_SYNC_INTERVAL = 6 * 60 * 60 * 1000; // 6 hours in milliseconds
-
+// ML Price Sync - runs daily at 7pm Mexico City time
 async function runMLPriceSync() {
   try {
     const { syncMLPrices } = require('./utils/mlPriceSync');
@@ -1748,14 +1746,31 @@ async function runMLPriceSync() {
   }
 }
 
-// Start periodic ML price sync after 1 minute (let server fully initialize)
-setTimeout(() => {
-  console.log('⏰ ML price sync scheduled to run every 6 hours');
-  // Run immediately on startup
-  runMLPriceSync();
-  // Then run periodically
-  setInterval(runMLPriceSync, ML_PRICE_SYNC_INTERVAL);
-}, 60000);
+function scheduleMLPriceSync() {
+  const now = new Date();
+  // Get current time in Mexico City (America/Mexico_City)
+  const mxTime = new Date(now.toLocaleString('en-US', { timeZone: 'America/Mexico_City' }));
+  const target = new Date(mxTime);
+  target.setHours(19, 0, 0, 0); // 7:00 PM
+
+  // If 7pm already passed today, schedule for tomorrow
+  if (mxTime >= target) {
+    target.setDate(target.getDate() + 1);
+  }
+
+  const msUntilTarget = target.getTime() - mxTime.getTime();
+  const hoursUntil = (msUntilTarget / (1000 * 60 * 60)).toFixed(1);
+  console.log(`⏰ ML price sync scheduled for 7:00 PM Mexico City (in ${hoursUntil}h)`);
+
+  setTimeout(() => {
+    runMLPriceSync();
+    // After running, schedule next day (repeat daily)
+    setInterval(runMLPriceSync, 24 * 60 * 60 * 1000);
+  }, msUntilTarget);
+}
+
+// Start ML price sync scheduler after 1 minute (let server fully initialize)
+setTimeout(scheduleMLPriceSync, 60000);
 
 // Silence follow-up job - sends store link after 10min of customer inactivity
 setTimeout(() => {
