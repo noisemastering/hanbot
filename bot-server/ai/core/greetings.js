@@ -33,6 +33,12 @@ async function handleGreeting(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
     const oneHour = 60 * 60 * 1000;
     const greetedRecently = convo.greeted && (now - lastGreetTime) < oneHour;
 
+    // If ad greeting was just sent (lastIntent is ad_entry), skip — don't double-greet
+    if (convo.lastIntent === "ad_entry" && greetedRecently) {
+      console.log("📝 Ad greeting already sent, skipping duplicate greeting");
+      return null;
+    }
+
     if (greetedRecently) {
       const userName = convo.userName;
       if (userName) {

@@ -8,6 +8,15 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const axios = require('axios');
 
+// Track recently processed referrals to dedup Facebook's duplicate webhooks
+const recentReferrals = new Map();
+setInterval(() => {
+  const cutoff = Date.now() - 60000;
+  for (const [key, time] of recentReferrals) {
+    if (time < cutoff) recentReferrals.delete(key);
+  }
+}, 60000);
+
 const app = express();
 const PORT = process.env.PORT || 3000;
 
@@ -917,18 +926,33 @@ app.post("/webhook", async (req, res) => {
 
       // 🧩 BLOQUE NUEVO: detección de campañas o enlaces con ?ref=
       const referral = webhookEvent.referral || webhookEvent.postback?.referral;
+      let adGreetingSent = false;
       if (referral) {
+        // Dedup: skip if we already processed a referral for this user in the last 30s
+        const referralKey = `${senderPsid}:${referral.ad_id || referral.ref || 'unknown'}`;
+        const now = Date.now();
+        const isDuplicateReferral = recentReferrals.has(referralKey) && (now - recentReferrals.get(referralKey)) < 30000;
+
+        if (isDuplicateReferral) {
+          console.log(`⚠️ Duplicate referral for ${senderPsid}, skipping`);
+        } else {
+          recentReferrals.set(referralKey, now);
+
         console.log("🧭 Usuario llegó desde una campaña o enlace promocional:");
         console.log("  Ref:", referral.ref);
         console.log("  Ad ID:", referral.ad_id);
         console.log("  Campaign ID:", referral.campaign_id);
 
         // Guardamos datos de campaña en la conversación (sin tocar tu modelo User)
+        // Also reset state to active — user re-engaged by clicking an ad,
+        // so any previous needs_human / human_active state is stale
         await updateConversation(senderPsid, {
+          state: "active",
           lastIntent: "ad_entry",
           campaignRef: referral.ref || null,
           adId: referral.ad_id || null,
           campaignId: referral.campaign_id || null,
+          agentTookOverAt: null,
         });
 
         // 🔍 Look up ad with inheritance (Campaign → AdSet → Ad)
@@ -1007,15 +1031,19 @@ app.post("/webhook", async (req, res) => {
 
         // Set product interest and send greeting
         if (adProductInterest) {
-          await updateConversation(senderPsid, { productInterest: adProductInterest });
+          await updateConversation(senderPsid, { productInterest: adProductInterest, greeted: true, lastGreetTime: Date.now() });
           await callSendAPI(senderPsid, { text: adGreeting });
+          adGreetingSent = true;
         } else if (referral.ad_id) {
           // Ad click but couldn't determine product - generic greeting
           console.log(`⚠️ Could not determine product for ad_id: ${referral.ad_id}`);
+          await updateConversation(senderPsid, { greeted: true, lastGreetTime: Date.now() });
           await callSendAPI(senderPsid, {
             text: "👋 ¡Hola! Gracias por contactarnos. ¿En qué producto te puedo ayudar?",
           });
+          adGreetingSent = true;
         }
+        } // close isDuplicateReferral else
       }
 
       if (webhookEvent.message) {

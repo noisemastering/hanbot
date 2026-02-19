@@ -130,9 +130,51 @@ async function getAvailableWidths() {
 }
 
 /**
- * Valid percentages
+ * Valid percentages — used for parsing, not for display
  */
 const VALID_PERCENTAGES = [35, 50, 70, 80, 90];
+
+/**
+ * Get available percentages from database, optionally filtered by width.
+ * Returns array of numbers like [35, 50, 70].
+ */
+let rolloPctCache = null;
+let rolloPctCacheExpiry = 0;
+
+async function getAvailablePercentages(filterWidth = null) {
+  // Use cache for unfiltered queries
+  if (!filterWidth && rolloPctCache && Date.now() < rolloPctCacheExpiry) {
+    return rolloPctCache;
+  }
+
+  try {
+    const query = { sellable: true, active: true, size: /\d+x100/i };
+    const products = await ProductFamily.find(query).select('name size').lean();
+
+    const percentages = new Set();
+    for (const p of products) {
+      // Optionally filter by width
+      if (filterWidth) {
+        const sizeRegex = new RegExp(`${filterWidth}.*100`, 'i');
+        if (!sizeRegex.test(p.size || '')) continue;
+      }
+      const pctMatch = (p.name || '').match(/(\d+)\s*%/);
+      if (pctMatch) {
+        percentages.add(parseInt(pctMatch[1]));
+      }
+    }
+
+    const sorted = [...percentages].sort((a, b) => a - b);
+    if (!filterWidth && sorted.length > 0) {
+      rolloPctCache = sorted;
+      rolloPctCacheExpiry = Date.now() + CACHE_TTL;
+    }
+    return sorted.length > 0 ? sorted : VALID_PERCENTAGES; // Fallback to hardcoded only as last resort
+  } catch (err) {
+    console.error("Error fetching rollo percentages:", err.message);
+    return VALID_PERCENTAGES;
+  }
+}
 
 
 /**
@@ -648,13 +690,12 @@ async function buildRolloCatalog(filterWidth = null) {
     const sizeRegex = new RegExp(`${w}.*100`, 'i');
     const lines = [];
 
-    for (const pct of VALID_PERCENTAGES) {
-      const pctRegex = new RegExp(`${pct}\\s*%`, 'i');
-      const match = products.find(p =>
-        sizeRegex.test(p.size || '') && pctRegex.test(p.name || '')
-      );
-      if (match?.price) {
-        lines.push(`  • ${pct}% — ${formatMoney(match.price)}`);
+    // Find all products for this width and extract their percentages
+    const widthProducts = products.filter(p => sizeRegex.test(p.size || ''));
+    for (const p of widthProducts) {
+      const pctMatch = (p.name || '').match(/(\d+)\s*%/);
+      if (pctMatch && p.price) {
+        lines.push(`  • ${pctMatch[1]}% — ${formatMoney(p.price)}`);
       }
     }
 
@@ -706,10 +747,11 @@ async function handleStart(sourceContext, state = {}) {
     console.error("Error building rollo catalog:", err.message);
   }
 
-  // Fallback without prices
+  // Fallback without prices — still use DB data
   const widths = await getAvailableWidths();
-  const widthList = widths.map(w => `${w}m`).join(' y ');
-  const percentageList = VALID_PERCENTAGES.join('%, ') + '%';
+  const percentages = await getAvailablePercentages();
+  const widthList = widths.map(w => `${w}m`).join(', ');
+  const percentageList = percentages.join('%, ') + '%';
   return {
     type: "text",
     text: `Manejamos rollos de malla sombra de ${widthList} de ancho por 100m de largo, con porcentajes de sombra del ${percentageList}.\n\n¿Cuál te interesa?`
@@ -733,8 +775,9 @@ async function handleAwaitingWidth(intent, state, sourceContext) {
   }
 
   const widths = await getAvailableWidths();
-  const widthList = widths.map(w => `${w}m`).join(' y ');
-  const percentageList = VALID_PERCENTAGES.join('%, ') + '%';
+  const percentages = await getAvailablePercentages();
+  const widthList = widths.map(w => `${w}m`).join(', ');
+  const percentageList = percentages.join('%, ') + '%';
   return {
     type: "text",
     text: `Manejamos rollos de ${widthList} de ancho por 100m de largo, con porcentajes del ${percentageList}.\n\n¿Cuál te interesa?`
@@ -757,10 +800,12 @@ async function handleAwaitingPercentage(intent, state, sourceContext) {
     console.error("Error building rollo catalog:", err.message);
   }
 
+  const percentages = await getAvailablePercentages(state.width);
+  const pctList = percentages.join('%, ') + '%';
   return {
     type: "text",
     text: `Perfecto, rollo de ${state.width}m x 100m.\n\n` +
-          `Lo tenemos desde 35% hasta 90% de sombra.\n\n` +
+          `Lo tenemos en ${pctList} de sombra.\n\n` +
           `¿Qué porcentaje necesitas?`
   };
 }

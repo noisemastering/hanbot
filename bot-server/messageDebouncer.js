@@ -1,8 +1,8 @@
 // Message debouncer to handle rapid-fire messages from users
 // Waits for user to finish typing before responding
 
-const MESSAGE_DEBOUNCE_MS = 3000; // 3 seconds - wait for more messages
-const MAX_WAIT_MS = 8000; // 8 seconds max wait before forcing processing
+const MESSAGE_DEBOUNCE_MS = 10000; // 10 seconds - wait for more messages
+const MAX_WAIT_MS = 20000; // 20 seconds max wait before forcing processing
 
 // Store timers per user
 const pendingTimers = new Map();
