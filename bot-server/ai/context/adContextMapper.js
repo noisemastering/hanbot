@@ -171,7 +171,7 @@ function getAdGreeting(source) {
   const greetings = {
     [PRODUCT_TYPES.MALLA_SOMBRA]: "👋 ¡Hola! Veo que te interesa la *malla sombra* 🌿 ¿Qué medida necesitas?",
     [PRODUCT_TYPES.ROLLO]: "👋 ¡Hola! Veo que te interesan los *rollos de malla sombra* 📦 ¿Qué ancho necesitas? Tenemos 2.10m y 4.20m",
-    [PRODUCT_TYPES.BORDE_SEPARADOR]: "🌱 ¡Hola! Veo que te interesa el *borde separador para jardín*. ¿Qué largo necesitas? Tenemos 6m, 9m, 18m y 54m",
+    [PRODUCT_TYPES.BORDE_SEPARADOR]: "🌱 ¡Hola! Veo que te interesa el *borde separador para jardín*. ¿Qué largo necesitas?",
     [PRODUCT_TYPES.GROUNDCOVER]: "🌱 ¡Hola! Veo que te interesa el *ground cover antimaleza*. ¿Qué medida necesitas?",
     [PRODUCT_TYPES.MONOFILAMENTO]: "👋 ¡Hola! Veo que te interesa la *malla monofilamento*. ¿Qué porcentaje de sombra necesitas?"
   };

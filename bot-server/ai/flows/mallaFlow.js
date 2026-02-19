@@ -259,7 +259,7 @@ async function handleAccessoryQuestion(psid, convo, userMessage) {
   }).lean();
 
   // Build response
-  let response = `La malla sombra confeccionada viene lista para instalar con argollas en todo el perímetro, pero no incluye cuerda ni arnés.\n\n`;
+  let response = `La malla sombra confeccionada viene lista para instalar con ojillos para sujeción cada 80 cm por lado, pero no incluye cuerda ni arnés.\n\n`;
   response += `Te ofrecemos estos accesorios:\n\n`;
 
   if (lazoProduct) {
@@ -923,7 +923,7 @@ async function getMallaDescription() {
   }
 
   return `Nuestra malla sombra raschel confeccionada con 90% de cobertura y protección UV.\n\n` +
-    `Viene con refuerzo en las esquinas para una vida útil de hasta 5 años, y con sujetadores y argollas en todos los lados, lista para instalar. El envío a domicilio va incluido en el precio.\n\n` +
+    `Viene con refuerzo en las esquinas para una vida útil de hasta 5 años, y con ojillos para sujeción cada 80 cm por lado, lista para instalar. El envío a domicilio va incluido en el precio.\n\n` +
     `Manejamos medidas desde ${sizeMin} hasta ${sizeMax}, con precios desde ${formatMoney(priceMin)} hasta ${formatMoney(priceMax)}.\n\n` +
     `¿Qué medida te interesa?`;
 }
@@ -1058,7 +1058,10 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
     },
     {
       pattern: /\b(ojillos?|ojales?|arillos?|argollas?)\b/i,
-      response: "viene con argollas reforzadas en todo el perímetro, lista para instalar"
+      response: (msg) => {
+        const word = /ojillo/i.test(msg) ? 'ojillos' : /ojale/i.test(msg) ? 'ojales' : /arillo/i.test(msg) ? 'arillos' : 'argollas';
+        return `viene con ${word} para sujeción cada 80 cm por lado, lista para instalar`;
+      }
     }
   ];
 
@@ -1066,7 +1069,7 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
 
   if (matchedFeatures.length > 0) {
     // Capitalize first response, join with ", "
-    const responses = matchedFeatures.map(f => f.response);
+    const responses = matchedFeatures.map(f => typeof f.response === 'function' ? f.response(userMessage) : f.response);
     responses[0] = responses[0].charAt(0).toUpperCase() + responses[0].slice(1);
     const combined = responses.length > 1
       ? responses.slice(0, -1).join(', ') + ' y ' + responses[responses.length - 1]

@@ -953,6 +953,7 @@ app.post("/webhook", async (req, res) => {
           adId: referral.ad_id || null,
           campaignId: referral.campaign_id || null,
           agentTookOverAt: null,
+          productSpecs: null,
         });
 
         // 🔍 Look up ad with inheritance (Campaign → AdSet → Ad)
@@ -967,9 +968,21 @@ app.post("/webhook", async (req, res) => {
           // Use campaign resolver for proper inheritance
           const resolvedSettings = await resolveByAdId(referral.ad_id);
 
+          // Dynamic borde greeting from DB
+          const { getAvailableLengths: getBordeLengthsForGreeting, getBordeWidth: getBordeWidthForGreeting } = require("./ai/flows/bordeFlow");
+          let bordeLengthGreeting;
+          try {
+            const bordeLens = await getBordeLengthsForGreeting({}, {});
+            const bordeW = await getBordeWidthForGreeting();
+            const lenList = bordeLens.map(l => `${l}m`).join(', ');
+            bordeLengthGreeting = `🌱 ¡Hola! Te cuento sobre nuestros *bordes para jardín* (${bordeW}cm de ancho). Tenemos rollos de ${lenList}. ¿Qué largo necesitas?`;
+          } catch (e) {
+            bordeLengthGreeting = "🌱 ¡Hola! Te cuento sobre nuestros *bordes para jardín*. ¿Qué largo necesitas?";
+          }
+
           // Set greeting based on product interest
           const greetings = {
-            'borde_separador': "🌱 ¡Hola! Te cuento sobre nuestros *bordes para jardín*. Tenemos rollos de 6m, 9m, 18m y 54m. ¿Qué largo necesitas?",
+            'borde_separador': bordeLengthGreeting,
             'cinta_rompevientos': "🌬️ ¡Hola! Veo que te interesa nuestra *cinta rompevientos*. ¿Te gustaría conocer medidas y precios?",
             'cinta_rigida': "🌿 ¡Hola! Te cuento sobre nuestra *cinta rígida para jardín*. ¿Qué medida necesitas?",
             'malla_sombra': "👋 ¡Hola! Soy Paula de Hanlob. Veo que te interesa la *malla sombra* 🌿 ¿Deseas ver precios o medidas?",
@@ -1022,7 +1035,7 @@ app.post("/webhook", async (req, res) => {
           const refLower = referral.ref.toLowerCase();
           if (refLower.includes('borde') || refLower.includes('separador') || refLower.includes('jardin')) {
             adProductInterest = 'borde_separador';
-            adGreeting = "🌱 ¡Hola! Te cuento sobre nuestros *bordes para jardín*. Tenemos rollos de 6m, 9m, 18m y 54m. ¿Qué largo necesitas?";
+            adGreeting = bordeLengthGreeting;
           } else if (refLower.includes('malla') || refLower.includes('sombra')) {
             adProductInterest = 'malla_sombra';
             adGreeting = "👋 ¡Hola! Soy Camila de Hanlob. Veo que te interesa la *malla sombra beige* 🌿 ¿Deseas ver precios o medidas?";
@@ -1031,7 +1044,7 @@ app.post("/webhook", async (req, res) => {
 
         // Set product interest and send greeting
         if (adProductInterest) {
-          await updateConversation(senderPsid, { productInterest: adProductInterest, greeted: true, lastGreetTime: Date.now() });
+          await updateConversation(senderPsid, { productInterest: adProductInterest, currentFlow: adProductInterest, greeted: true, lastGreetTime: Date.now() });
           await callSendAPI(senderPsid, { text: adGreeting });
           adGreetingSent = true;
         } else if (referral.ad_id) {

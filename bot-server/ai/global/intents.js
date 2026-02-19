@@ -469,15 +469,22 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   // 🌿 BORDE SEPARADOR - Garden edging product (different from malla sombra!)
   // Detect: "borde", "separador", "borde separador", "orilla de jardín", "delimitar jardín"
-  // Also detect borde-specific lengths: 6m, 9m, 18m, 54m (malla sombra uses 100m rolls)
+  // Also detect borde-specific lengths dynamically from DB
   const bordeSeparadorPattern = /\b(borde|separador|bordes?|delineador|delimitar|orilla)\s*(de\s+)?(jard[ií]n|pasto|c[eé]sped)?/i;
 
-  // Detect borde-specific lengths in rollo context (6, 9, 18, 54 meters are ONLY for borde separador)
+  // Lazy-load bordeFlow functions for dynamic data
+  const { getAvailableLengths: getBordeLengths, getBordeWidth: getBordeWidthFn } = require("../flows/bordeFlow");
+
+  // Detect borde-specific lengths in rollo context (dynamically from DB, not hardcoded)
   // BUT EXCLUDE when it's part of a dimension pattern like "4x6", "4 mts x 6", "ancho x largo"
   const hasDimensionPattern = /\d+\s*(?:m(?:ts|etros?)?\.?)?\s*(?:d[e']?\s*)?(?:ancho|largo)?\s*[xX×*]\s*\d+/i.test(msg) ||
                               /\b(?:ancho|largo)\s*[xX×*por]\s*(?:ancho|largo)\b/i.test(msg);
-  const bordeLengthPattern = /\b(rol+[oy]s?|metros?|mts?)\b.*\b(6|9|18|54)\s*(m|metros?|mts?)?\b|\b(6|9|18|54)\s*(m|metros?|mts?)\b.*\b(rol+[oy]s?)\b/i;
-  const isBordeByLength = !hasDimensionPattern && bordeLengthPattern.test(msg) && !/\b(100|4x100|5x100|6x100)\b/i.test(msg);
+  // Dynamic: fetch available borde lengths from DB for detection
+  const bordeLengthsForDetection = await getBordeLengths({}, convo);
+  const bordeLengthRegex = bordeLengthsForDetection.length > 0
+    ? new RegExp(`\\b(rol+[oy]s?|metros?|mts?)\\b.*\\b(${bordeLengthsForDetection.join('|')})\\s*(m|metros?|mts?)?\\b|\\b(${bordeLengthsForDetection.join('|')})\\s*(m|metros?|mts?)\\b.*\\b(rol+[oy]s?)\\b`, 'i')
+    : null;
+  const isBordeByLength = !hasDimensionPattern && bordeLengthRegex && bordeLengthRegex.test(msg) && !/\b(100|4x100|5x100|6x100)\b/i.test(msg);
 
   // CRITICAL: If user already has a different productInterest, don't switch to borde
   // Only switch if: explicitly mentions borde OR already interested in borde
@@ -490,21 +497,33 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     console.log("🌿 Borde separador query detected:", msg);
     await updateConversation(psid, { lastIntent: "borde_separador", productInterest: "borde_separador" });
 
-    // ML links for borde separador products
-    const bordeLinks = {
-      '6': 'https://articulo.mercadolibre.com.mx/MLM-923085679-borde-separador-grueso-para-jardin-rollo-de-6-metros-_JM',
-      '9': 'https://articulo.mercadolibre.com.mx/MLM-923081079-borde-separador-grueso-para-jardin-rollo-de-9-metros-_JM',
-      '18': 'https://articulo.mercadolibre.com.mx/MLM-801430874-borde-separador-grueso-para-jardin-rollo-de-18-metros-_JM',
-      '54': 'https://articulo.mercadolibre.com.mx/MLM-1493170566-borde-separador-para-jardin-rollo-de-54-m-_JM'
-    };
+    // Dynamic lengths and width from DB
+    const bordeWidthCm = await getBordeWidthFn();
+    const availBordeLengths = bordeLengthsForDetection.length > 0 ? bordeLengthsForDetection : await getBordeLengths({}, convo);
+    const bordeLengthList = availBordeLengths.map(l => `${l}m`).join(', ');
 
-    // Check if user already specified a borde length (6, 9, 18, or 54m)
-    const lengthMatch = msg.match(/\b(6|9|18|54)\s*(m|metros?|mts?)?\b/i);
+    // Find matching borde product by length from DB
+    async function findBordeByLength(length) {
+      const parent = await ProductFamily.findOne({ name: /borde\s*separador/i, sellable: { $ne: true } }).lean();
+      if (!parent) return null;
+      const products = await ProductFamily.find({ parentId: parent._id, sellable: true, active: true }).lean();
+      return products.find(p => {
+        const text = `${p.name || ''} ${p.size || ''}`;
+        return new RegExp(`\\b${length}\\b`).test(text);
+      });
+    }
+
+    // Check if user already specified a borde length
+    const lengthMatchRegex = availBordeLengths.length > 0
+      ? new RegExp(`\\b(${availBordeLengths.join('|')})\\s*(m|metros?|mts?)?\\b`, 'i')
+      : null;
+    const lengthMatch = lengthMatchRegex ? msg.match(lengthMatchRegex) : null;
     if (lengthMatch) {
-      const length = lengthMatch[1];
-      const link = bordeLinks[length];
+      const length = parseInt(lengthMatch[1]);
+      const product = await findBordeByLength(length);
+      const productUrl = getProductLink(product);
 
-      if (link) {
+      if (productUrl) {
         // Extract quantity if mentioned (e.g., "6 rollos de 54m")
         const quantityMatch = msg.match(/(\d+)\s*(rol+[oy]s?|piezas?|unidades?)/i);
         const quantity = quantityMatch ? parseInt(quantityMatch[1]) : null;
@@ -515,8 +534,9 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
           await updateConversation(psid, { city: cityMatch[1] });
         }
 
-        const trackedLink = await generateClickLink(psid, link, {
+        const trackedLink = await generateClickLink(psid, productUrl, {
           productName: `Borde Separador ${length}m`,
+          productId: product._id,
           city: convo.city || cityMatch?.[1],
           stateMx: convo.stateMx
         });
@@ -537,31 +557,29 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         /\b(suelo|tierra|piso|c[oó]mo|con\s+qu[eé])\b/i.test(msg)) {
       return {
         type: "text",
-        text: "El borde separador se sujeta al suelo con estacas de jardín, que se consiguen en cualquier ferretería o vivero 🌱\n\n" +
-              "¿Te interesa algún largo? Tenemos 6m, 9m, 18m y 54m."
+        text: `El borde separador se sujeta al suelo con estacas de jardín, que se consiguen en cualquier ferretería o vivero 🌱\n\n` +
+              `¿Te interesa algún largo? Tenemos ${bordeLengthList}.`
       };
     }
 
     // Check for price/availability questions without specific length
     if (/\b(precio|cu[aá]nto|cuesta|costo|vale|ocupo|necesito|quiero)\b/i.test(msg)) {
+      const lengthBullets = availBordeLengths.map(l => `• Rollo de ${l} metros`).join('\n');
       return {
         type: "text",
-        text: "¡Claro! Manejamos borde separador para jardín en diferentes presentaciones:\n\n" +
-              "• Rollo de 6 metros\n" +
-              "• Rollo de 9 metros\n" +
-              "• Rollo de 18 metros\n" +
-              "• Rollo de 54 metros\n\n" +
-              "¿Qué largo necesitas? Te paso el link con precio."
+        text: `¡Claro! Manejamos borde separador para jardín (${bordeWidthCm}cm de ancho) en diferentes presentaciones:\n\n` +
+              `${lengthBullets}\n\n` +
+              `¿Qué largo necesitas? Te paso el link con precio.`
       };
     }
 
     // General borde separador inquiry
     return {
       type: "text",
-      text: "¡Hola! Sí manejamos borde separador para jardín 🌿\n\n" +
-            "Sirve para delimitar áreas de pasto, crear caminos y separar zonas de tu jardín.\n\n" +
-            "Tenemos rollos de 6m, 9m, 18m y 54m.\n\n" +
-            "¿Qué largo te interesa?"
+      text: `¡Hola! Sí manejamos borde separador para jardín 🌿\n\n` +
+            `Sirve para delimitar áreas de pasto, crear caminos y separar zonas de tu jardín. Mide ${bordeWidthCm}cm de ancho.\n\n` +
+            `Tenemos rollos de ${bordeLengthList}.\n\n` +
+            `¿Qué largo te interesa?`
     };
   }
 
@@ -572,46 +590,56 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   if (!isLocationQuestion && (convo.lastIntent === "borde_separador" || convo.productInterest === "borde_separador" ||
       convo.lastIntent === "borde_link_sent")) {
 
+    // Dynamic lengths for follow-up
+    const followupLengths = bordeLengthsForDetection.length > 0 ? bordeLengthsForDetection : await getBordeLengths({}, convo);
+    const followupLengthList = followupLengths.map(l => `${l}m`).join(', ');
+
     // Installation question - "con qué se sujeta", "cómo se instala", etc.
     if (/\b(sujet|ancl|clav|instala|pone|fij|asegur|enterr)/i.test(msg) ||
         /\bc[oó]mo\s+(se\s+)?(pone|coloca|usa)/i.test(msg) ||
         /\bcon\s+qu[eé]\b/i.test(msg)) {
       return {
         type: "text",
-        text: "El borde separador se sujeta al suelo con estacas de jardín, que se consiguen en cualquier ferretería o vivero 🌱\n\n" +
-              "¿Te interesa algún largo? Tenemos 6m, 9m, 18m y 54m."
+        text: `El borde separador se sujeta al suelo con estacas de jardín, que se consiguen en cualquier ferretería o vivero 🌱\n\n` +
+              `¿Te interesa algún largo? Tenemos ${followupLengthList}.`
       };
     }
 
-    // User specifies length
-    const lengthMatch = msg.match(/\b(6|9|18|54)\s*(m|metros?|mts?)?\b/i);
-    if (lengthMatch) {
-      const length = lengthMatch[1];
+    // User specifies length — dynamic regex from DB
+    const followupLengthRegex = followupLengths.length > 0
+      ? new RegExp(`\\b(${followupLengths.join('|')})\\s*(m|metros?|mts?)?\\b`, 'i')
+      : null;
+    const lengthMatch2 = followupLengthRegex ? msg.match(followupLengthRegex) : null;
+    if (lengthMatch2) {
+      const length = parseInt(lengthMatch2[1]);
       console.log(`🌿 Borde separador length selected: ${length}m`);
 
-      // ML links for borde separador products
-      const bordeLinks = {
-        '6': 'https://articulo.mercadolibre.com.mx/MLM-923085679-borde-separador-grueso-para-jardin-rollo-de-6-metros-_JM',
-        '9': 'https://articulo.mercadolibre.com.mx/MLM-923081079-borde-separador-grueso-para-jardin-rollo-de-9-metros-_JM',
-        '18': 'https://articulo.mercadolibre.com.mx/MLM-801430874-borde-separador-grueso-para-jardin-rollo-de-18-metros-_JM',
-        '54': 'https://articulo.mercadolibre.com.mx/MLM-1493170566-borde-separador-para-jardin-rollo-de-54-m-_JM'
-      };
-
-      const link = bordeLinks[length];
-      if (link) {
-        const trackedLink = await generateClickLink(psid, link, {
-          productName: `Borde Separador ${length}m`,
-          city: convo.city,
-          stateMx: convo.stateMx
+      // Find product from DB for link
+      const parent = await ProductFamily.findOne({ name: /borde\s*separador/i, sellable: { $ne: true } }).lean();
+      if (parent) {
+        const products = await ProductFamily.find({ parentId: parent._id, sellable: true, active: true }).lean();
+        const product = products.find(p => {
+          const text = `${p.name || ''} ${p.size || ''}`;
+          return new RegExp(`\\b${length}\\b`).test(text);
         });
+        const productUrl = getProductLink(product);
 
-        await updateConversation(psid, { lastIntent: "borde_link_sent" });
+        if (productUrl) {
+          const trackedLink = await generateClickLink(psid, productUrl, {
+            productName: `Borde Separador ${length}m`,
+            productId: product._id,
+            city: convo.city,
+            stateMx: convo.stateMx
+          });
 
-        return {
-          type: "text",
-          text: `¡Perfecto! Aquí está el borde separador de ${length} metros:\n\n${trackedLink}\n\n` +
-                `Ahí puedes ver el precio, fotos y realizar tu compra con envío incluido 📦`
-        };
+          await updateConversation(psid, { lastIntent: "borde_link_sent" });
+
+          return {
+            type: "text",
+            text: `¡Perfecto! Aquí está el borde separador de ${length} metros:\n\n${trackedLink}\n\n` +
+                  `Ahí puedes ver el precio, fotos y realizar tu compra con envío incluido 📦`
+          };
+        }
       }
     }
   }
@@ -1677,7 +1705,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   }
 
   // 🔘 EYELETS/HOLES QUESTION - "ojitos", "argollas", "orificios"
-  // Confeccionada comes with reinforced eyelets every 50cm
+  // Confeccionada comes with eyelets every 80cm per side
   if (/\b(ojito|ojitos|ojillo|ojillos|argolla|argollas|orificio|orificios|agujero|agujeros|hoyito|hoyitos|para\s+colgar|para\s+amarrar|donde\s+amarro|c[oó]mo\s+se\s+instala)\b/i.test(msg)) {
     // Check if there are also dimensions in the message
     const dimensions = parseDimensions(msg);
@@ -1762,17 +1790,19 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
       // Fallback: answer argollas question without product link
       await updateConversation(psid, { lastIntent: "eyelets_question", unknownCount: 0 });
+      const word1 = /ojillo|ojito/i.test(msg) ? 'ojillos' : /ojale/i.test(msg) ? 'ojales' : 'argollas';
       return {
         type: "text",
-        text: `Sí, nuestra malla confeccionada viene con argollas reforzadas en todo el perímetro, lista para instalar. ¿Qué medida necesitas?`
+        text: `Sí, nuestra malla confeccionada cuenta con ${word1} para sujeción cada 80 cm por lado, lista para instalar. ¿Qué medida necesitas?`
       };
     }
 
     await updateConversation(psid, { lastIntent: "eyelets_question", unknownCount: 0 });
+    const word2 = /ojillo|ojito/i.test(msg) ? 'ojillos' : /ojale/i.test(msg) ? 'ojales' : 'argollas';
 
     return {
       type: "text",
-      text: "Sí, nuestra malla confeccionada viene con argollas reforzadas en todo el perímetro, lista para instalar.\n\n" +
+      text: `Sí, nuestra malla confeccionada cuenta con ${word2} para sujeción cada 80 cm por lado, lista para instalar.\n\n` +
             "Solo necesitas amarrarla o usar ganchos. ¿Qué medida te interesa?"
     };
   }

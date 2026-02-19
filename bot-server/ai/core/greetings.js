@@ -242,6 +242,34 @@ async function handleAcknowledgment(cleanMsg, psid, convo) {
                             /^(ntp|np)\s+(está|esta|sta)\s+bien[\s!]*$/i.test(cleanMsg);
 
   if (isAcknowledgment) {
+    // Defer to flow manager when a flow is waiting for this confirmation
+    const flowAwaitingStates = [
+      "awaiting_alternatives_confirmation",
+      "custom_order_awaiting_decision",
+      "custom_order_awaiting_purpose",
+      "custom_order_awaiting_zipcode",
+      "awaiting_zipcode",
+      "roll_awaiting_width",
+      "lead_awaiting_catalog_choice",
+      "lead_awaiting_name",
+      "lead_awaiting_zipcode",
+      "lead_awaiting_products",
+      "lead_awaiting_quantity",
+      "lead_awaiting_contact"
+    ];
+
+    if (flowAwaitingStates.some(s => convo?.lastIntent === s)) {
+      console.log(`✋ Acknowledgment deferred to flow (lastIntent: ${convo.lastIntent})`);
+      return null;
+    }
+
+    // Defer when user is in an active product flow
+    const activeProductFlows = ['borde', 'malla', 'rollo', 'groundcover', 'monofilamento'];
+    if (convo?.lastIntent && activeProductFlows.some(f => convo.lastIntent.startsWith(f + '_'))) {
+      console.log(`✋ Acknowledgment deferred to product flow (lastIntent: ${convo.lastIntent})`);
+      return null;
+    }
+
     console.log("👍 Acknowledgment detected:", cleanMsg);
     await updateConversation(psid, { lastIntent: "acknowledgment", unknownCount: 0 });
 

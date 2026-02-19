@@ -8,7 +8,7 @@ const ProductFamily = require("../../models/ProductFamily");
 const ZipCode = require("../../models/ZipCode");
 const { INTENTS } = require("../classifier");
 const { isBusinessHours } = require("../utils/businessHours");
-const { parseAndLookupZipCode: sharedParseAndLookupZipCode, isQueretaroLocation, getQueretaroPickupMessage } = require("../utils/preHandoffCheck");
+const { parseAndLookupZipCode: sharedParseAndLookupZipCode, checkZipBeforeHandoff, handlePendingZipResponse, isQueretaroLocation, getQueretaroPickupMessage } = require("../utils/preHandoffCheck");
 
 // AI fallback for flow dead-ends
 const { resolveWithAI } = require("../utils/flowFallback");
@@ -41,6 +41,15 @@ const ROLLO_TYPES = {
   MALLA_SOMBRA: "malla_sombra",
   GROUNDCOVER: "groundcover",
   MONOFILAMENTO: "monofilamento"
+};
+
+/**
+ * Display info per rollo type — drives display strings, percentage-stage logic, and fallbacks
+ */
+const TYPE_DISPLAY = {
+  malla_sombra:  { name: 'malla sombra',        short: 'malla sombra',   hasPercentage: true  },
+  groundcover:   { name: 'malla antimaleza',     short: 'groundcover',    hasPercentage: false },
+  monofilamento: { name: 'malla monofilamento',  short: 'monofilamento',  hasPercentage: true  }
 };
 
 /**
@@ -86,31 +95,58 @@ function detectRolloType(msg, convo = null) {
 }
 
 /**
- * Cache for available rollo widths (refreshed every 5 minutes)
+ * Per-type cache for available rollo widths (refreshed every 5 minutes)
  */
-let rolloWidthsCache = null;
-let rolloWidthsCacheExpiry = 0;
+const widthsCache = {};   // { malla_sombra: [...], groundcover: [...], ... }
+const widthsCacheExpiry = {};
 const CACHE_TTL = 5 * 60 * 1000; // 5 minutes
 
 /**
- * Get available rollo widths from database
+ * Build a DB query filter for the given rollo type
  */
-async function getAvailableWidths() {
-  if (rolloWidthsCache && Date.now() < rolloWidthsCacheExpiry) {
-    return rolloWidthsCache;
+function buildTypeFilter(rolloType) {
+  switch (rolloType) {
+    case ROLLO_TYPES.GROUNDCOVER:
+      return {
+        $or: [
+          { name: /groundcover/i },
+          { name: /antimaleza/i },
+          { name: /ground.*cover/i },
+          { aliases: { $in: [/groundcover/i, /antimaleza/i] } }
+        ]
+      };
+    case ROLLO_TYPES.MONOFILAMENTO:
+      return {
+        $or: [
+          { name: /monofilamento/i },
+          { aliases: { $in: [/monofilamento/i] } }
+        ]
+      };
+    default: // malla_sombra — rolls with NxN100 size, excluding gc/mono names
+      return {
+        size: /\d+x100/i,
+        name: { $not: /groundcover|antimaleza|monofilamento/i }
+      };
+  }
+}
+
+/**
+ * Get available rollo widths from database, filtered by rollo type
+ */
+async function getAvailableWidths(rolloType = ROLLO_TYPES.MALLA_SOMBRA) {
+  const cacheKey = rolloType || 'malla_sombra';
+  if (widthsCache[cacheKey] && Date.now() < (widthsCacheExpiry[cacheKey] || 0)) {
+    return widthsCache[cacheKey];
   }
 
   try {
-    const products = await ProductFamily.find({
-      sellable: true,
-      active: true,
-      size: /\d+x100/i  // Rollo pattern: NxN100
-    }).select('size').lean();
+    const query = { sellable: true, active: true, ...buildTypeFilter(rolloType) };
+    const products = await ProductFamily.find(query).select('size').lean();
 
     // Extract unique widths from size strings like "2x100m", "4x100m"
     const widths = new Set();
     for (const p of products) {
-      const match = p.size?.match(/^(\d+(?:\.\d+)?)\s*x\s*100/i);
+      const match = p.size?.match(/^(\d+(?:\.\d+)?)\s*x\s*\d+/i);
       if (match) {
         widths.add(parseFloat(match[1]));
       }
@@ -118,13 +154,13 @@ async function getAvailableWidths() {
 
     const sorted = [...widths].sort((a, b) => a - b);
     if (sorted.length > 0) {
-      rolloWidthsCache = sorted;
-      rolloWidthsCacheExpiry = Date.now() + CACHE_TTL;
-      console.log(`🔄 Rollo widths cache refreshed: ${rolloWidthsCache.join(', ')}m`);
+      widthsCache[cacheKey] = sorted;
+      widthsCacheExpiry[cacheKey] = Date.now() + CACHE_TTL;
+      console.log(`🔄 ${cacheKey} widths cache refreshed: ${sorted.join(', ')}m`);
     }
     return sorted.length > 0 ? sorted : [2, 4]; // Fallback if no products found
   } catch (err) {
-    console.error("Error fetching rollo widths:", err.message);
+    console.error(`Error fetching ${cacheKey} widths:`, err.message);
     return [2, 4]; // Fallback
   }
 }
@@ -137,18 +173,22 @@ const VALID_PERCENTAGES = [35, 50, 70, 80, 90];
 /**
  * Get available percentages from database, optionally filtered by width.
  * Returns array of numbers like [35, 50, 70].
+ * Groundcover has no percentages — returns [] immediately.
  */
-let rolloPctCache = null;
-let rolloPctCacheExpiry = 0;
+const pctCache = {};
+const pctCacheExpiry = {};
 
-async function getAvailablePercentages(filterWidth = null) {
-  // Use cache for unfiltered queries
-  if (!filterWidth && rolloPctCache && Date.now() < rolloPctCacheExpiry) {
-    return rolloPctCache;
+async function getAvailablePercentages(rolloType = ROLLO_TYPES.MALLA_SOMBRA, filterWidth = null) {
+  // Groundcover has no shade percentages
+  if (rolloType === ROLLO_TYPES.GROUNDCOVER) return [];
+
+  const cacheKey = `${rolloType}_${filterWidth || 'all'}`;
+  if (pctCache[cacheKey] && Date.now() < (pctCacheExpiry[cacheKey] || 0)) {
+    return pctCache[cacheKey];
   }
 
   try {
-    const query = { sellable: true, active: true, size: /\d+x100/i };
+    const query = { sellable: true, active: true, ...buildTypeFilter(rolloType) };
     const products = await ProductFamily.find(query).select('name size').lean();
 
     const percentages = new Set();
@@ -165,25 +205,25 @@ async function getAvailablePercentages(filterWidth = null) {
     }
 
     const sorted = [...percentages].sort((a, b) => a - b);
-    if (!filterWidth && sorted.length > 0) {
-      rolloPctCache = sorted;
-      rolloPctCacheExpiry = Date.now() + CACHE_TTL;
+    if (sorted.length > 0) {
+      pctCache[cacheKey] = sorted;
+      pctCacheExpiry[cacheKey] = Date.now() + CACHE_TTL;
     }
-    return sorted.length > 0 ? sorted : VALID_PERCENTAGES; // Fallback to hardcoded only as last resort
+    return sorted.length > 0 ? sorted : VALID_PERCENTAGES;
   } catch (err) {
-    console.error("Error fetching rollo percentages:", err.message);
+    console.error(`Error fetching ${rolloType} percentages:`, err.message);
     return VALID_PERCENTAGES;
   }
 }
 
 
 /**
- * Normalize width to closest available
+ * Normalize width to closest available for the given rollo type
  */
-async function normalizeWidth(width) {
+async function normalizeWidth(width, rolloType = ROLLO_TYPES.MALLA_SOMBRA) {
   if (!width) return null;
 
-  const availableWidths = await getAvailableWidths();
+  const availableWidths = await getAvailableWidths(rolloType);
 
   // Find closest match
   let closest = null;
@@ -212,26 +252,40 @@ function formatMoney(n) {
 const parseAndLookupZipCode = sharedParseAndLookupZipCode;
 
 /**
- * Find matching sellable roll products
+ * Find matching sellable roll products for the given type
  */
-async function findMatchingProducts(width, percentage = null) {
+async function findMatchingProducts(width, percentage = null, rolloType = ROLLO_TYPES.MALLA_SOMBRA) {
   try {
-    // Build query for rolls - match by size pattern
-    // Roll sizes are like "2x100m", "4x100m"
     const widthSearch = String(width).replace('.00', '');
-    const sizeRegex = new RegExp(`${widthSearch}.*100`, 'i');
+    const typeLabel = TYPE_DISPLAY[rolloType]?.short || rolloType;
+    console.log(`🔍 Searching for ${typeLabel} ${widthSearch}m x 100m${percentage ? ` at ${percentage}%` : ''}`);
 
-    console.log(`🔍 Searching for roll ${widthSearch}m x 100m${percentage ? ` at ${percentage}%` : ''}`);
+    const typeFilter = buildTypeFilter(rolloType);
 
     // Use $and to avoid conflicts between $or.name and percentage name filter
     const conditions = [
       { sellable: true },
-      { active: true },
-      { $or: [
-        { size: sizeRegex },
-        { name: new RegExp(`${widthSearch}.*100`, 'i') }
-      ]}
+      { active: true }
     ];
+
+    // For groundcover/monofilamento, use name-based filter; for malla_sombra, use size
+    if (rolloType === ROLLO_TYPES.GROUNDCOVER || rolloType === ROLLO_TYPES.MONOFILAMENTO) {
+      // Name filter from buildTypeFilter
+      if (typeFilter.$or) conditions.push({ $or: typeFilter.$or });
+      // Size filter for width
+      const sizeRegex = new RegExp(`${widthSearch}`, 'i');
+      conditions.push({ size: sizeRegex });
+    } else {
+      // Malla sombra — size-based + exclude gc/mono
+      const sizeRegex = new RegExp(`${widthSearch}.*100`, 'i');
+      conditions.push({
+        $or: [
+          { size: sizeRegex },
+          { name: new RegExp(`${widthSearch}.*100`, 'i') }
+        ]
+      });
+      conditions.push({ name: { $not: /groundcover|antimaleza|monofilamento/i } });
+    }
 
     // Add percentage filter if specified
     if (percentage) {
@@ -247,23 +301,32 @@ async function findMatchingProducts(width, percentage = null) {
       .sort({ price: 1 })
       .lean();
 
-    console.log(`🔍 Found ${products.length} matching roll products`);
+    console.log(`🔍 Found ${products.length} matching ${typeLabel} products`);
 
     return products;
   } catch (error) {
-    console.error("❌ Error finding roll products:", error);
+    console.error(`❌ Error finding ${rolloType} products:`, error);
     return [];
   }
 }
 
 /**
  * Get current flow state from conversation
+ * Recognizes old productType values ('groundcover', 'monofilamento') for backward compat
  */
 function getFlowState(convo) {
   const specs = convo?.productSpecs || {};
+  const isRolloProduct = ['rollo', 'groundcover', 'monofilamento'].includes(specs.productType);
+
+  // Infer rolloType from old productType if rolloType not set
+  const rolloType = specs.rolloType ||
+    (specs.productType === 'groundcover' ? ROLLO_TYPES.GROUNDCOVER : null) ||
+    (specs.productType === 'monofilamento' ? ROLLO_TYPES.MONOFILAMENTO : null) ||
+    null;
+
   return {
-    stage: specs.productType === 'rollo' ? STAGES.COMPLETE : STAGES.START,
-    rolloType: specs.rolloType || null,  // malla_sombra, groundcover, monofilamento
+    stage: isRolloProduct ? STAGES.COMPLETE : STAGES.START,
+    rolloType,
     width: specs.width || null,
     percentage: specs.percentage || null,
     quantity: specs.quantity || null,
@@ -278,7 +341,8 @@ function getFlowState(convo) {
 function determineStage(state) {
   if (!state.rolloType) return STAGES.AWAITING_TYPE;
   if (!state.width) return STAGES.AWAITING_WIDTH;
-  if (state.rolloType === ROLLO_TYPES.MALLA_SOMBRA && !state.percentage) return STAGES.AWAITING_PERCENTAGE;
+  const typeInfo = TYPE_DISPLAY[state.rolloType];
+  if (typeInfo?.hasPercentage && !state.percentage) return STAGES.AWAITING_PERCENTAGE;
   if (!state.quantity) return STAGES.AWAITING_QUANTITY;
   if (!state.zipCode) return STAGES.AWAITING_ZIP;
   return STAGES.COMPLETE;
@@ -290,11 +354,50 @@ function determineStage(state) {
 async function handle(classification, sourceContext, convo, psid, campaign = null, userMessage = '') {
   const { intent, entities } = classification;
 
+  // ====== PENDING ZIP CODE RESPONSE ======
+  if (convo?.pendingHandoff) {
+    const zipResult = await handlePendingZipResponse(psid, convo, userMessage);
+    if (zipResult.proceed) {
+      const info = convo.pendingHandoffInfo || {};
+      await updateConversation(psid, {
+        handoffRequested: true,
+        handoffReason: info.reason || 'Rollo handoff',
+        handoffTimestamp: new Date(),
+        state: "needs_human"
+      });
+
+      const locationAck = zipResult.zipInfo
+        ? `Perfecto, ${zipResult.zipInfo.city || 'ubicación registrada'}. `
+        : '';
+      const timingMsg = isBusinessHours()
+        ? "Un especialista te contactará pronto."
+        : "Un especialista te contactará el siguiente día hábil.";
+
+      let responseText = `${locationAck}${info.specsText || ''}${timingMsg}`;
+
+      if (isQueretaroLocation(zipResult.zipInfo, convo)) {
+        const pickupMsg = await getQueretaroPickupMessage();
+        responseText += `\n\n${pickupMsg}`;
+      }
+
+      return { type: "text", text: responseText };
+    }
+  }
+
   let state = getFlowState(convo);
+
+  // FIRST: Detect or confirm rollo type (before normalizing width, so we query the right type)
+  if (!state.rolloType) {
+    const detectedType = detectRolloType(userMessage, convo);
+    if (detectedType) {
+      console.log(`📦 Rollo flow - Detected type: ${detectedType}`);
+      state.rolloType = detectedType;
+    }
+  }
 
   // Normalize width if set (may have been set by specExtractor without DB-aware normalization)
   if (state.width) {
-    const normalizedWidth = await normalizeWidth(state.width);
+    const normalizedWidth = await normalizeWidth(state.width, state.rolloType);
     if (normalizedWidth && normalizedWidth !== state.width) {
       console.log(`📦 Rollo flow - Normalizing stale width: ${state.width} → ${normalizedWidth}m`);
       state.width = normalizedWidth;
@@ -307,50 +410,9 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   console.log(`📦 Rollo flow - Current state:`, state);
   console.log(`📦 Rollo flow - Intent: ${intent}, Entities:`, entities);
 
-  // FIRST: Detect or confirm rollo type
-  if (!state.rolloType) {
-    const detectedType = detectRolloType(userMessage, convo);
-    if (detectedType) {
-      console.log(`📦 Rollo flow - Detected type: ${detectedType}`);
-      state.rolloType = detectedType;
-
-      // If it's groundcover or monofilamento, redirect to those flows
-      if (detectedType === ROLLO_TYPES.GROUNDCOVER) {
-        console.log(`📦 Rollo flow - Redirecting to groundcover flow`);
-        await updateConversation(psid, {
-          productInterest: "groundcover",
-          lastIntent: "groundcover_inquiry",
-          productSpecs: { productType: "groundcover", updatedAt: new Date() }
-        });
-        return {
-          type: "text",
-          text: "¡Perfecto! El Groundcover (malla antimaleza) es ideal para cubrir el suelo.\n\n" +
-                "Lo manejamos en rollos de:\n• 2m x 100m\n• 4m x 100m\n\n" +
-                "¿Qué ancho necesitas?",
-          redirect: "groundcover"  // Signal to flow router
-        };
-      }
-
-      if (detectedType === ROLLO_TYPES.MONOFILAMENTO) {
-        console.log(`📦 Rollo flow - Redirecting to monofilamento flow`);
-        await updateConversation(psid, {
-          productInterest: "monofilamento",
-          lastIntent: "monofilamento_inquiry",
-          productSpecs: { productType: "monofilamento", updatedAt: new Date() }
-        });
-        return {
-          type: "text",
-          text: "¡Claro! El monofilamento es una malla más resistente.\n\n" +
-                "¿Qué porcentaje de sombra necesitas? Manejamos 35%, 50%, 70% y 80%.",
-          redirect: "monofilamento"
-        };
-      }
-    }
-  }
-
   // SECOND: Extract width — classifier entities first, regex fallback
   if (!state.width && entities.width) {
-    const normalized = await normalizeWidth(entities.width);
+    const normalized = await normalizeWidth(entities.width, state.rolloType);
     if (normalized) {
       state.width = normalized;
       console.log(`📦 Rollo flow - Using classifier entity: ${entities.width} → ${normalized}m`);
@@ -379,7 +441,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
         const match = userMessage.match(pattern);
         if (match) {
           const parsedWidth = parseFloat(match[1].replace(',', '.'));
-          const normalized = await normalizeWidth(parsedWidth);
+          const normalized = await normalizeWidth(parsedWidth, state.rolloType);
           if (normalized) {
             console.log(`📦 Rollo flow - Parsed width from message: ${parsedWidth} → ${normalized}m`);
             state.width = normalized;
@@ -508,10 +570,12 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
             return `• ${p.name}${size}${price}`;
           });
 
+          const adInterest = state.rolloType === ROLLO_TYPES.GROUNDCOVER ? 'groundcover'
+            : state.rolloType === ROLLO_TYPES.MONOFILAMENTO ? 'monofilamento' : 'rollo';
           await updateConversation(psid, {
             lastIntent: `roll_awaiting_width`,
             currentFlow: "rollo",
-            productInterest: "rollo",
+            productInterest: adInterest,
             productSpecs: {
               productType: "rollo",
               rolloType: state.rolloType,
@@ -538,10 +602,12 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   if (infoIntents.includes(intent) && !state.width) {
     response = await handleStart(sourceContext, state);
 
+    const catInterest = state.rolloType === ROLLO_TYPES.GROUNDCOVER ? 'groundcover'
+      : state.rolloType === ROLLO_TYPES.MONOFILAMENTO ? 'monofilamento' : 'rollo';
     await updateConversation(psid, {
       lastIntent: `roll_start`,
       currentFlow: "rollo",
-      productInterest: "rollo",
+      productInterest: catInterest,
       productSpecs: {
         productType: "rollo",
         rolloType: state.rolloType,
@@ -603,7 +669,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       break;
 
     case STAGES.AWAITING_PERCENTAGE:
-      response = handleAwaitingPercentage(intent, state, sourceContext);
+      response = await handleAwaitingPercentage(intent, state, sourceContext);
       break;
 
     case STAGES.AWAITING_QUANTITY:
@@ -623,13 +689,17 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   }
 
   // Save updated specs
+  // productInterest preserves original type for analytics (groundcover, monofilamento, or rollo)
+  const analyticsInterest = state.rolloType === ROLLO_TYPES.GROUNDCOVER ? 'groundcover'
+    : state.rolloType === ROLLO_TYPES.MONOFILAMENTO ? 'monofilamento'
+    : 'rollo';
   const updateData = {
     lastIntent: `roll_${stage}`,
     currentFlow: "rollo",
-    productInterest: "rollo",
+    productInterest: analyticsInterest,
     productSpecs: {
       productType: "rollo",
-      rolloType: state.rolloType,  // malla_sombra, groundcover, monofilamento
+      rolloType: state.rolloType,
       width: state.width,
       length: 100,
       percentage: state.percentage,
@@ -671,36 +741,45 @@ function handleAwaitingType(intent, state, sourceContext) {
 
 /**
  * Build full rollo catalog grouped by width with prices per percentage.
- * Optionally filter to a single width.
+ * Optionally filter to a single width. Adapts to rollo type.
  */
-async function buildRolloCatalog(filterWidth = null) {
-  const widths = await getAvailableWidths();
-  const products = await ProductFamily.find({
-    sellable: true,
-    active: true,
-    size: /\d+x100/i
-  }).select('name price size').sort({ price: 1 }).lean();
+async function buildRolloCatalog(rolloType = ROLLO_TYPES.MALLA_SOMBRA, filterWidth = null) {
+  const widths = await getAvailableWidths(rolloType);
+  const typeFilter = buildTypeFilter(rolloType);
+  const query = { sellable: true, active: true, ...typeFilter };
+  const products = await ProductFamily.find(query)
+    .select('name price size').sort({ price: 1 }).lean();
 
   if (products.length === 0) return null;
 
+  const hasPercentage = TYPE_DISPLAY[rolloType]?.hasPercentage;
   const targetWidths = filterWidth ? [filterWidth] : widths;
   const sections = [];
 
   for (const w of targetWidths) {
-    const sizeRegex = new RegExp(`${w}.*100`, 'i');
-    const lines = [];
-
-    // Find all products for this width and extract their percentages
+    const sizeRegex = new RegExp(`${w}`, 'i');
     const widthProducts = products.filter(p => sizeRegex.test(p.size || ''));
-    for (const p of widthProducts) {
-      const pctMatch = (p.name || '').match(/(\d+)\s*%/);
-      if (pctMatch && p.price) {
-        lines.push(`  • ${pctMatch[1]}% — ${formatMoney(p.price)}`);
-      }
-    }
 
-    if (lines.length > 0) {
-      sections.push(`📦 ${w}m x 100m:\n${lines.join('\n')}`);
+    if (hasPercentage) {
+      // Show percentage breakdown (malla sombra, monofilamento)
+      const lines = [];
+      for (const p of widthProducts) {
+        const pctMatch = (p.name || '').match(/(\d+)\s*%/);
+        if (pctMatch && p.price) {
+          lines.push(`  • ${pctMatch[1]}% — ${formatMoney(p.price)}`);
+        }
+      }
+      if (lines.length > 0) {
+        sections.push(`📦 ${w}m x 100m:\n${lines.join('\n')}`);
+      }
+    } else {
+      // No percentage (groundcover) — show single price per width
+      const p = widthProducts.find(pr => pr.price);
+      if (p) {
+        sections.push(`• ${w}m x 100m — ${formatMoney(p.price)}`);
+      } else if (widthProducts.length > 0) {
+        sections.push(`• ${w}m x 100m`);
+      }
     }
   }
 
@@ -712,35 +791,38 @@ async function buildRolloCatalog(filterWidth = null) {
  * Always shows full catalog of available sizes with prices.
  */
 async function handleStart(sourceContext, state = {}) {
+  const rolloType = state.rolloType || ROLLO_TYPES.MALLA_SOMBRA;
+  const typeInfo = TYPE_DISPLAY[rolloType] || TYPE_DISPLAY.malla_sombra;
+
   try {
     // If percentage already known, show prices for that percentage across widths
-    if (state.percentage) {
-      const catalog = await buildRolloCatalog();
-      if (catalog) {
-        // Filter catalog lines to only the known percentage
-        const widths = await getAvailableWidths();
-        const lines = [];
-        for (const w of widths) {
-          const products = await findMatchingProducts(w, state.percentage);
-          if (products.length > 0 && products[0].price) {
-            lines.push(`• ${w}m x 100m al ${state.percentage}% — ${formatMoney(products[0].price)}`);
-          }
+    if (state.percentage && typeInfo.hasPercentage) {
+      const widths = await getAvailableWidths(rolloType);
+      const lines = [];
+      for (const w of widths) {
+        const products = await findMatchingProducts(w, state.percentage, rolloType);
+        if (products.length > 0 && products[0].price) {
+          lines.push(`• ${w}m x 100m al ${state.percentage}% — ${formatMoney(products[0].price)}`);
         }
-        if (lines.length > 0) {
-          return {
-            type: "text",
-            text: `Rollos de malla sombra al ${state.percentage}%:\n\n${lines.join('\n')}\n\n¿Cuál te interesa?`
-          };
-        }
+      }
+      if (lines.length > 0) {
+        return {
+          type: "text",
+          text: `Rollos de ${typeInfo.name} al ${state.percentage}%:\n\n${lines.join('\n')}\n\n¿Cuál te interesa?`
+        };
       }
     }
 
     // Show full catalog
-    const catalog = await buildRolloCatalog();
+    const catalog = await buildRolloCatalog(rolloType);
     if (catalog) {
+      // Groundcover gets a tagline
+      const tagline = rolloType === ROLLO_TYPES.GROUNDCOVER
+        ? 'Ideal para control de hierbas en cultivos y jardines.\n\n'
+        : '';
       return {
         type: "text",
-        text: `Rollos de malla sombra disponibles:\n\n${catalog}\n\n¿Cuál te interesa?`
+        text: `¡Sí manejamos ${typeInfo.name}!\n\n${tagline}Rollos disponibles:\n\n${catalog}\n\n¿Cuál te interesa?`
       };
     }
   } catch (err) {
@@ -748,13 +830,19 @@ async function handleStart(sourceContext, state = {}) {
   }
 
   // Fallback without prices — still use DB data
-  const widths = await getAvailableWidths();
-  const percentages = await getAvailablePercentages();
+  const widths = await getAvailableWidths(rolloType);
   const widthList = widths.map(w => `${w}m`).join(', ');
-  const percentageList = percentages.join('%, ') + '%';
+  if (typeInfo.hasPercentage) {
+    const percentages = await getAvailablePercentages(rolloType);
+    const percentageList = percentages.join('%, ') + '%';
+    return {
+      type: "text",
+      text: `Manejamos rollos de ${typeInfo.name} de ${widthList} de ancho por 100m de largo, con porcentajes de sombra del ${percentageList}.\n\n¿Cuál te interesa?`
+    };
+  }
   return {
     type: "text",
-    text: `Manejamos rollos de malla sombra de ${widthList} de ancho por 100m de largo, con porcentajes de sombra del ${percentageList}.\n\n¿Cuál te interesa?`
+    text: `Manejamos rollos de ${typeInfo.name} de ${widthList} de ancho por 100m de largo.\n\n¿Cuál te interesa?`
   };
 }
 
@@ -762,25 +850,34 @@ async function handleStart(sourceContext, state = {}) {
  * Handle awaiting width stage — show full catalog so customer can pick
  */
 async function handleAwaitingWidth(intent, state, sourceContext) {
+  const rolloType = state.rolloType || ROLLO_TYPES.MALLA_SOMBRA;
+  const typeInfo = TYPE_DISPLAY[rolloType] || TYPE_DISPLAY.malla_sombra;
+
   try {
-    const catalog = await buildRolloCatalog();
+    const catalog = await buildRolloCatalog(rolloType);
     if (catalog) {
       return {
         type: "text",
-        text: `Rollos de malla sombra disponibles:\n\n${catalog}\n\n¿Cuál te interesa?`
+        text: `Rollos de ${typeInfo.name} disponibles:\n\n${catalog}\n\n¿Cuál te interesa?`
       };
     }
   } catch (err) {
     console.error("Error building rollo catalog:", err.message);
   }
 
-  const widths = await getAvailableWidths();
-  const percentages = await getAvailablePercentages();
+  const widths = await getAvailableWidths(rolloType);
   const widthList = widths.map(w => `${w}m`).join(', ');
-  const percentageList = percentages.join('%, ') + '%';
+  if (typeInfo.hasPercentage) {
+    const percentages = await getAvailablePercentages(rolloType);
+    const percentageList = percentages.join('%, ') + '%';
+    return {
+      type: "text",
+      text: `Manejamos rollos de ${typeInfo.name} de ${widthList} de ancho por 100m de largo, con porcentajes del ${percentageList}.\n\n¿Cuál te interesa?`
+    };
+  }
   return {
     type: "text",
-    text: `Manejamos rollos de ${widthList} de ancho por 100m de largo, con porcentajes del ${percentageList}.\n\n¿Cuál te interesa?`
+    text: `Manejamos rollos de ${typeInfo.name} de ${widthList} de ancho por 100m de largo.\n\n¿Cuál te interesa?`
   };
 }
 
@@ -788,23 +885,26 @@ async function handleAwaitingWidth(intent, state, sourceContext) {
  * Handle awaiting percentage stage — show all percentages for the selected width
  */
 async function handleAwaitingPercentage(intent, state, sourceContext) {
+  const rolloType = state.rolloType || ROLLO_TYPES.MALLA_SOMBRA;
+  const typeInfo = TYPE_DISPLAY[rolloType] || TYPE_DISPLAY.malla_sombra;
+
   try {
-    const catalog = await buildRolloCatalog(state.width);
+    const catalog = await buildRolloCatalog(rolloType, state.width);
     if (catalog) {
       return {
         type: "text",
-        text: `Rollo de ${state.width}m x 100m disponible en:\n\n${catalog}\n\n¿Cuál porcentaje te interesa?`
+        text: `Rollo de ${typeInfo.name} de ${state.width}m x 100m disponible en:\n\n${catalog}\n\n¿Cuál porcentaje te interesa?`
       };
     }
   } catch (err) {
     console.error("Error building rollo catalog:", err.message);
   }
 
-  const percentages = await getAvailablePercentages(state.width);
+  const percentages = await getAvailablePercentages(rolloType, state.width);
   const pctList = percentages.join('%, ') + '%';
   return {
     type: "text",
-    text: `Perfecto, rollo de ${state.width}m x 100m.\n\n` +
+    text: `Perfecto, rollo de ${typeInfo.name} de ${state.width}m x 100m.\n\n` +
           `Lo tenemos en ${pctList} de sombra.\n\n` +
           `¿Qué porcentaje necesitas?`
   };
@@ -814,13 +914,15 @@ async function handleAwaitingPercentage(intent, state, sourceContext) {
  * Handle awaiting quantity stage - show price + ask how many rolls
  */
 async function handleAwaitingQuantity(intent, state, sourceContext) {
-  let specsText = `rollo de ${state.width}m x 100m`;
+  const rolloType = state.rolloType || ROLLO_TYPES.MALLA_SOMBRA;
+  const typeInfo = TYPE_DISPLAY[rolloType] || TYPE_DISPLAY.malla_sombra;
+  let specsText = `rollo de ${typeInfo.name} de ${state.width}m x 100m`;
   if (state.percentage) {
     specsText += ` al ${state.percentage}%`;
   }
 
   // Look up product to show price
-  const products = await findMatchingProducts(state.width, state.percentage);
+  const products = await findMatchingProducts(state.width, state.percentage, rolloType);
   if (products.length > 0) {
     const product = products[0];
     if (product.price) {
@@ -847,12 +949,14 @@ async function handleAwaitingQuantity(intent, state, sourceContext) {
  * Otherwise → ask for zip code to quote shipping
  */
 async function handleAwaitingZip(intent, state, sourceContext, psid, convo) {
-  let specsText = `rollo de ${state.width}m x 100m`;
+  const rolloType = state.rolloType || ROLLO_TYPES.MALLA_SOMBRA;
+  const typeInfo = TYPE_DISPLAY[rolloType] || TYPE_DISPLAY.malla_sombra;
+  let specsText = `rollo de ${typeInfo.name} de ${state.width}m x 100m`;
   if (state.percentage) {
     specsText += ` al ${state.percentage}%`;
   }
 
-  const products = await findMatchingProducts(state.width, state.percentage);
+  const products = await findMatchingProducts(state.width, state.percentage, rolloType);
   const product = products[0];
 
   if (product) {
@@ -917,26 +1021,29 @@ async function handleAwaitingZip(intent, state, sourceContext, psid, convo) {
  * Handle complete - we have all specs + zip, hand off to human
  */
 async function handleComplete(intent, state, sourceContext, psid, convo) {
+  const rolloType = state.rolloType || ROLLO_TYPES.MALLA_SOMBRA;
+  const typeInfo = TYPE_DISPLAY[rolloType] || TYPE_DISPLAY.malla_sombra;
   const locationText = state.zipInfo
     ? `${state.zipInfo.city}, ${state.zipInfo.state}`
     : (state.zipCode || 'ubicación no especificada');
 
   // Build specs summary for handoff
-  let specsText = `rollo de ${state.width}m x 100m`;
+  let specsText = `rollo de ${typeInfo.name} de ${state.width}m x 100m`;
   if (state.percentage) {
     specsText += ` al ${state.percentage}%`;
   }
 
+  const handoffLabel = typeInfo.short.charAt(0).toUpperCase() + typeInfo.short.slice(1);
   await updateConversation(psid, {
     handoffRequested: true,
-    handoffReason: `Rollo: ${specsText} - ${locationText}`,
+    handoffReason: `${handoffLabel}: ${specsText} - ${locationText}`,
     handoffTimestamp: new Date(),
     state: "needs_human"
   });
 
   // Send push notification
   const { sendHandoffNotification } = require("../../services/pushNotifications");
-  sendHandoffNotification(psid, `Rollo: ${specsText} - ${locationText}`).catch(err => {
+  sendHandoffNotification(psid, `${handoffLabel}: ${specsText} - ${locationText}`).catch(err => {
     console.error("❌ Failed to send push notification:", err);
   });
 
@@ -953,8 +1060,11 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
     responseText += `\n\n${pickupMsg}`;
   }
 
-  const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
-  responseText += `\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`;
+  // Video link only for malla sombra
+  if (rolloType === ROLLO_TYPES.MALLA_SOMBRA) {
+    const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
+    responseText += `\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`;
+  }
 
   return {
     type: "text",
@@ -964,14 +1074,30 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
 
 /**
  * Check if this flow should handle the message
+ * Handles rollo, groundcover, and monofilamento products
  */
 function shouldHandle(classification, sourceContext, convo) {
   const { product } = classification;
 
+  // Rollo signals
   if (product === "rollo") return true;
   if (convo?.productSpecs?.productType === "rollo") return true;
   if (convo?.lastIntent?.startsWith("roll_")) return true;
   if (sourceContext?.ad?.product === "rollo") return true;
+
+  // Groundcover signals
+  if (product === "groundcover") return true;
+  if (convo?.productSpecs?.productType === "groundcover") return true;
+  if (convo?.productInterest === "groundcover") return true;
+  if (convo?.lastIntent?.startsWith("groundcover_")) return true;
+  if (sourceContext?.ad?.product === "groundcover") return true;
+
+  // Monofilamento signals
+  if (product === "monofilamento") return true;
+  if (convo?.productSpecs?.productType === "monofilamento") return true;
+  if (convo?.productInterest === "monofilamento") return true;
+  if (convo?.lastIntent?.startsWith("monofilamento_")) return true;
+  if (sourceContext?.ad?.product === "monofilamento") return true;
 
   return false;
 }

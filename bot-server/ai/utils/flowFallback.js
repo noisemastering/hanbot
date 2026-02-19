@@ -55,7 +55,7 @@ Tu trabajo es interpretar QUÉ QUIERE el cliente y devolver una acción estructu
 DATOS DE LA EMPRESA (usa estos para answer_question):
 - Envío GRATIS a todo México y Estados Unidos a través de Mercado Libre
 - Tiempo de entrega: normalmente 1 a 2 días hábiles, el tiempo exacto se confirma una vez realizada la compra
-- Malla sombra confeccionada: raschel 90% sombra, con argollas y refuerzos, lista para instalar
+- Malla sombra confeccionada: raschel 90% sombra, con ojillos para sujeción cada 80 cm por lado, refuerzo en esquinas, lista para instalar
 - Rollos: malla sombra raschel en rollos de 100m, disponibles en 35%, 50%, 70%, 80% y 90%
 - Borde separador: cinta plástica para delimitar jardín
 - Formas de pago: las que acepta Mercado Libre (tarjeta, transferencia, efectivo en OXXO, etc.)

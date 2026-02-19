@@ -52,7 +52,7 @@ PRODUCTO - MALLA SOMBRA CONFECCIONADA:
 - 90% de cobertura/sombra
 - Confeccionada para mayor durabilidad
 - Refuerzo en las esquinas para ofrecer una vida útil de hasta 5 años
-- Sujetadores y argollas en todos los lados, lista para instalar
+- Ojillos para sujeción cada 80 cm por lado, lista para instalar
 - Envío a domicilio incluido en el precio
 - Se vende por Mercado Libre
 
@@ -60,7 +60,7 @@ VARIANTES QUE SÍ FABRICAMOS:
 - Malla tipo cortina / cortinas de malla sombra
 - Malla triangular
 - Medidas personalizadas / a medida
-- Malla con ojillos en todos los lados
+- Malla con ojillos cada 80 cm por lado
 - Malla para cochera / estacionamiento / patio / jardín / terraza
 
 VARIANTES QUE NO FABRICAMOS:
@@ -118,7 +118,7 @@ ESCENARIOS ESPECIALES:
 - location_too_far: El cliente dice que estamos muy lejos o pregunta cómo puede adquirir desde lejos. Responde que enviamos a todo México y Estados Unidos. Si leadScore es bajo (deadbeat), responde breve y sin mucho entusiasmo.
 - color_not_available: El cliente pidió un color que no manejamos (requestedColor). Dile amablemente que ese color no lo tenemos y menciona los colores disponibles (availableColors). Si te doy dimensions, pregunta si le interesa en los colores que sí tenemos para esa medida.
 - durability_query: El cliente pregunta por la durabilidad o vida útil. Usa el lifespan que te doy (ej: 5 años). Menciona que es confeccionada para mayor durabilidad, resiste sol/viento/lluvia, y tiene protección UV. Mantén la respuesta breve.
-- product_description: El cliente pregunta qué contiene, qué incluye, de qué está hecha, o qué es la malla sombra. Describe el producto usando los datos de PRODUCTO arriba: malla raschel con 90% de sombra, confeccionada con refuerzo en las esquinas para hasta 5 años de vida útil, sujetadores y argollas en todos los lados lista para instalar. Pregunta qué medida necesitan.
+- product_description: El cliente pregunta qué contiene, qué incluye, de qué está hecha, o qué es la malla sombra. Describe el producto usando los datos de PRODUCTO arriba: malla raschel con 90% de sombra, confeccionada con refuerzo en las esquinas para hasta 5 años de vida útil, ojillos para sujeción cada 80 cm por lado, lista para instalar. Pregunta qué medida necesitan.
 - callback_request: El cliente pide que le llamen o quiere hablar por teléfono (ej: "me podría llamar", "pueden llamarme", "quiero hablar por teléfono"). Responde que con gusto un especialista le llamará. Si es fuera de horario (buenas noches), menciona que le contactarán el siguiente día hábil. Pide su número de teléfono si no lo ha dado.
 - messenger_call_request: El cliente quiere hacer una llamada por Messenger (ej: "Call me in Messenger", "llámame por Messenger", "te llamé", "no contestas", "llamada perdida"). Explica amablemente que no podemos recibir llamadas por Messenger. Si es horario de atención (lunes a viernes 9am-6pm), proporciona nuestros números: +52 442 595 7432 y +52 442 191 9091. También ofrece ayuda por chat o que un especialista le llame si deja su número.
 - variant_inquiry: El cliente pregunta si fabricamos alguna variante o producto relacionado (ej: "hacen cortinas?", "tienen lonas?", "instalan?"). Revisa las listas de VARIANTES QUE SÍ/NO FABRICAMOS:
@@ -135,7 +135,7 @@ CONCERNS (preocupaciones secundarias):
 Cuando el contexto incluya "concerns", el cliente tiene preocupaciones adicionales que debes abordar en tu respuesta:
 - color/colores: Menciona que manejamos la malla en beige y negro.
 - durability/weather_resistance: Menciona que la malla es confeccionada para mayor durabilidad, resiste sol, viento y lluvia.
-- reinforcement: Menciona el refuerzo en las esquinas y sujetadores/argollas en todos los lados.
+- reinforcement: Menciona el refuerzo en las esquinas y ojillos para sujeción cada 80 cm por lado.
 - price/precio: Incluye el precio si te lo doy.
 - features/características: Describe las características del producto.
 - installation: Menciona que viene lista para instalar.
@@ -206,7 +206,7 @@ async function generatePriceResponse({ dimensions, price, link, userExpression, 
       "90% de cobertura",
       "Confeccionada para mayor durabilidad",
       "Refuerzo en las esquinas para una vida útil de hasta 5 años",
-      "Sujetadores y argollas en todos los lados",
+      "Ojillos para sujeción cada 80 cm por lado",
       "Lista para instalar"
     ]
   };
@@ -373,7 +373,7 @@ async function generateBotResponse(intent, data = {}) {
         "90% de cobertura",
         "Confeccionada para mayor durabilidad",
         "Refuerzo en las esquinas para una vida útil de hasta 5 años",
-        "Sujetadores y argollas en todos los lados",
+        "Ojillos para sujeción cada 80 cm por lado",
         "Lista para instalar",
         "Envío incluido"
       ],

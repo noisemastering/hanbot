@@ -121,8 +121,8 @@ const FLOWS = {
   malla_sombra: mallaFlow,
   rollo: rolloFlow,
   borde_separador: bordeFlow,
-  groundcover: groundcoverFlow,
-  monofilamento: monofilamentoFlow,
+  groundcover: rolloFlow,       // unified: handled by rolloFlow
+  monofilamento: rolloFlow,     // unified: handled by rolloFlow
   lead_capture: leadCaptureFlow
 };
 
@@ -318,7 +318,7 @@ async function detectExplicitProductSwitch(userMessage, currentFlow, classificat
   // Map of explicit product keywords to flows
   const explicitProductPatterns = {
     'rollo': { pattern: /\b(rollo|rollos|100\s*m(etros)?)\b/i, flow: 'rollo' },
-    'borde_separador': { pattern: /\b(borde|separador|cinta\s*pl[aá]stica)\b/i, flow: 'borde_separador' },
+    'borde_separador': { pattern: /\b(bordes?|separador|cinta\s*pl[aá]stica)\b/i, flow: 'borde_separador' },
     'groundcover': { pattern: /\b(ground\s*cover|antimaleza|malla\s*(para\s*)?maleza)\b/i, flow: 'groundcover' },
     'monofilamento': { pattern: /\b(monofilamento)\b/i, flow: 'monofilamento' },
     'malla_sombra': { pattern: /\b(confeccionada|malla\s*sombra)\b/i, flow: 'malla_sombra' }
@@ -491,7 +491,7 @@ async function detectFlow(classification, convo, userMessage, sourceContext) {
       return 'rollo';
     }
   }
-  if (/\bborde\b/i.test(msg) || /\bcinta\s*pl[aá]stica\b/i.test(msg)) {
+  if (/\bbordes?\b/i.test(msg) || /\bcinta\s*pl[aá]stica\b/i.test(msg)) {
     return 'borde_separador';
   }
   if (/\b(ground\s*cover|antimaleza|malla\s*(para\s*)?maleza)\b/i.test(msg)) {

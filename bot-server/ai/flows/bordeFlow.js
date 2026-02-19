@@ -32,6 +32,45 @@ const STAGES = {
 };
 
 /**
+ * Borde width — only one width exists. Fetched from DB on first use, fallback 13cm.
+ */
+let bordeWidthCm = null;
+let bordeWidthCacheExpiry = 0;
+
+async function getBordeWidth() {
+  if (bordeWidthCm && Date.now() < bordeWidthCacheExpiry) return bordeWidthCm;
+
+  try {
+    // Check parent "Borde Separador" description for width
+    const parent = await ProductFamily.findOne({
+      name: /borde\s*separador/i,
+      sellable: { $ne: true }
+    }).select('description').lean();
+
+    const widthMatch = parent?.description?.match(/(\d+)\s*cm/i);
+    if (widthMatch) {
+      bordeWidthCm = parseInt(widthMatch[1]);
+    } else {
+      // Try from child product sizes (e.g. "13x18m" → 13)
+      const child = await ProductFamily.findOne({
+        name: /borde|separador/i,
+        sellable: true,
+        active: true,
+        size: /^\d+x\d+/i
+      }).select('size').lean();
+      const sizeMatch = child?.size?.match(/^(\d+)x/i);
+      bordeWidthCm = sizeMatch ? parseInt(sizeMatch[1]) : 13;
+    }
+
+    bordeWidthCacheExpiry = Date.now() + 5 * 60 * 1000;
+    return bordeWidthCm;
+  } catch (err) {
+    console.error("Error fetching borde width:", err.message);
+    return 13; // fallback
+  }
+}
+
+/**
  * Format money for Mexican pesos
  */
 function formatMoney(n) {
@@ -356,6 +395,26 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   // Get available lengths (filtered by ad if applicable)
   const availableLengths = await getAvailableLengths(sourceContext, convo);
 
+  // WIDTH QUESTIONS — borde only comes in one width
+  if (userMessage && /\b(ancho|anchura|grosor|grueso|cm|cent[ií]metros?|qu[eé]\s*(?:tan\s*)?(?:ancho|grueso))\b/i.test(userMessage)) {
+    const widthCm = await getBordeWidth();
+    const lengthList = availableLengths.map(l => `${l}m`).join(', ');
+
+    // If they're asking for a specific width we don't have
+    const requestedWidth = userMessage.match(/(\d+)\s*(?:cm|cent[ií]metros?)/i);
+    if (requestedWidth && parseInt(requestedWidth[1]) !== widthCm) {
+      return {
+        type: "text",
+        text: `Solo lo manejamos de ${widthCm}cm de ancho, que es la medida estándar.\n\nLo tenemos en rollos de ${lengthList}. ¿Cuál te interesa?`
+      };
+    }
+
+    return {
+      type: "text",
+      text: `Mide ${widthCm}cm de ancho. Lo tenemos en rollos de ${lengthList}. ¿Qué largo necesitas?`
+    };
+  }
+
   // FIRST: Check classifier entities
   if (!state.length && entities.borde_length && availableLengths.includes(entities.borde_length)) {
     state.length = entities.borde_length;
@@ -432,6 +491,8 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
  * Handle start - user just mentioned borde
  */
 async function handleStart(sourceContext, availableLengths, adProductIds = null) {
+  const widthCm = await getBordeWidth();
+
   // Try to show prices alongside lengths
   const products = await findMatchingProducts(null, adProductIds);
   const lengthsWithPrices = availableLengths.map(l => {
@@ -449,7 +510,7 @@ async function handleStart(sourceContext, availableLengths, adProductIds = null)
     return {
       type: "text",
       text: `¡Hola! Sí manejamos borde separador para jardín.\n\n` +
-            `Sirve para delimitar áreas de pasto, crear caminos y separar zonas.\n\n` +
+            `Sirve para delimitar áreas de pasto, crear caminos y separar zonas. Mide ${widthCm}cm de ancho.\n\n` +
             `${lengthsWithPrices.join('\n')}\n\n` +
             `¿Qué largo te interesa?`
     };
@@ -459,7 +520,7 @@ async function handleStart(sourceContext, availableLengths, adProductIds = null)
   return {
     type: "text",
     text: `¡Hola! Sí manejamos borde separador para jardín.\n\n` +
-          `Sirve para delimitar áreas de pasto, crear caminos y separar zonas.\n\n` +
+          `Sirve para delimitar áreas de pasto, crear caminos y separar zonas. Mide ${widthCm}cm de ancho.\n\n` +
           `Tenemos rollos de ${lengthList}.\n\n` +
           `¿Qué largo te interesa?`
   };
@@ -726,5 +787,7 @@ module.exports = {
   shouldHandle,
   STAGES,
   getFlowState,
-  determineStage
+  determineStage,
+  getBordeWidth,
+  getAvailableLengths
 };

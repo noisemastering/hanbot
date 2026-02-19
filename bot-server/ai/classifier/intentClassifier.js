@@ -396,7 +396,7 @@ function buildClassificationPrompt(sourceContext, conversationFlow, campaignCont
 PRODUCTS WE SELL:
 - malla_sombra: Pre-made shade mesh (confeccionada) in custom sizes. Standard sizes 2x2m to 6x10m available. Larger sizes require quote. User asking for "malla sombra" with dimensions = malla_sombra
 - rollo: Shade mesh rolls, 100m long, widths of 2.10m or 4.20m, various shade percentages (35%-90%)
-- borde_separador: Plastic garden edging, comes in 6m, 9m, 18m, or 54m lengths
+- borde_separador: Plastic garden edging, comes in various roll lengths (not 100m rolls)
 - groundcover: Anti-weed ground cover fabric (also called "antimaleza")
 - monofilamento: Monofilament shade mesh (agricultural use)
 ${catalogText ? '\n' + catalogText : ''}

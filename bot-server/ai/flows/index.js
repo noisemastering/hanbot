@@ -27,8 +27,8 @@ const FLOWS = [
   { name: "borde", flow: bordeFlow },
   { name: "rollo", flow: rolloFlow },
   { name: "malla", flow: mallaFlow },
-  { name: "groundcover", flow: groundcoverFlow },
-  { name: "monofilamento", flow: monofilamentoFlow },
+  { name: "groundcover", flow: rolloFlow },       // unified: handled by rolloFlow
+  { name: "monofilamento", flow: rolloFlow },     // unified: handled by rolloFlow
   { name: "general", flow: generalFlow }
 ];
 
