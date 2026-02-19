@@ -831,18 +831,18 @@ async function handleStart(sourceContext, state = {}) {
 
   // Fallback without prices — still use DB data
   const widths = await getAvailableWidths(rolloType);
-  const widthList = widths.map(w => `${w}m`).join(', ');
+  const widthBullets = widths.map(w => `• ${w}m x 100m`).join('\n');
   if (typeInfo.hasPercentage) {
     const percentages = await getAvailablePercentages(rolloType);
-    const percentageList = percentages.join('%, ') + '%';
+    const pctBullets = percentages.map(p => `• ${p}%`).join('\n');
     return {
       type: "text",
-      text: `Manejamos rollos de ${typeInfo.name} de ${widthList} de ancho por 100m de largo, con porcentajes de sombra del ${percentageList}.\n\n¿Cuál te interesa?`
+      text: `Manejamos rollos de ${typeInfo.name} en los siguientes anchos:\n\n${widthBullets}\n\nPorcentajes de sombra:\n${pctBullets}\n\n¿Cuál te interesa?`
     };
   }
   return {
     type: "text",
-    text: `Manejamos rollos de ${typeInfo.name} de ${widthList} de ancho por 100m de largo.\n\n¿Cuál te interesa?`
+    text: `Manejamos rollos de ${typeInfo.name} en:\n\n${widthBullets}\n\n¿Cuál te interesa?`
   };
 }
 
@@ -866,18 +866,18 @@ async function handleAwaitingWidth(intent, state, sourceContext) {
   }
 
   const widths = await getAvailableWidths(rolloType);
-  const widthList = widths.map(w => `${w}m`).join(', ');
+  const widthBullets = widths.map(w => `• ${w}m x 100m`).join('\n');
   if (typeInfo.hasPercentage) {
     const percentages = await getAvailablePercentages(rolloType);
-    const percentageList = percentages.join('%, ') + '%';
+    const pctBullets = percentages.map(p => `• ${p}%`).join('\n');
     return {
       type: "text",
-      text: `Manejamos rollos de ${typeInfo.name} de ${widthList} de ancho por 100m de largo, con porcentajes del ${percentageList}.\n\n¿Cuál te interesa?`
+      text: `Manejamos rollos de ${typeInfo.name} en los siguientes anchos:\n\n${widthBullets}\n\nPorcentajes de sombra:\n${pctBullets}\n\n¿Cuál te interesa?`
     };
   }
   return {
     type: "text",
-    text: `Manejamos rollos de ${typeInfo.name} de ${widthList} de ancho por 100m de largo.\n\n¿Cuál te interesa?`
+    text: `Manejamos rollos de ${typeInfo.name} en:\n\n${widthBullets}\n\n¿Cuál te interesa?`
   };
 }
 
@@ -901,12 +901,10 @@ async function handleAwaitingPercentage(intent, state, sourceContext) {
   }
 
   const percentages = await getAvailablePercentages(rolloType, state.width);
-  const pctList = percentages.join('%, ') + '%';
+  const pctBullets = percentages.map(p => `• ${p}%`).join('\n');
   return {
     type: "text",
-    text: `Perfecto, rollo de ${typeInfo.name} de ${state.width}m x 100m.\n\n` +
-          `Lo tenemos en ${pctList} de sombra.\n\n` +
-          `¿Qué porcentaje necesitas?`
+    text: `Perfecto, rollo de ${typeInfo.name} de ${state.width}m x 100m.\n\nLo tenemos en:\n${pctBullets}\n\n¿Qué porcentaje necesitas?`
   };
 }
 
