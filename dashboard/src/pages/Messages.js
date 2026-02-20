@@ -81,7 +81,7 @@ function Messages() {
       r.includes('repetición') ||
       r.includes('no pudo entender') ||
       r.includes('confundido por precio') ||
-      r.includes('precio') && r.includes('verificar');
+      (r.includes('precio') && r.includes('verificar'));
 
     if (isUrgent) {
       return {
@@ -99,7 +99,7 @@ function Messages() {
       r.includes('image') ||
       r.includes('proporcionó ubicación') ||
       r.includes('reporta producto agotado') ||
-      r.includes('producto agotado') && !r.includes('verificar') ||
+      (r.includes('producto agotado') && !r.includes('verificar')) ||
       r.includes('impermeab');
 
     if (isInfo) {
