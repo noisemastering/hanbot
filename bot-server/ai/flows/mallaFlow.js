@@ -894,7 +894,8 @@ async function getMallaDescription() {
     const products = await ProductFamily.find({
       sellable: true, active: true,
       size: { $regex: /^\d+\s*[xX×]\s*\d+/, $options: 'i' },
-      price: { $gt: 0 }
+      price: { $gt: 0 },
+      'dimensionUnits.width': { $ne: 'cm' }
     }).sort({ price: 1 }).lean();
 
     // Filter to confeccionada only (exclude rolls — any dimension >= 50m)
