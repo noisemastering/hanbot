@@ -411,6 +411,7 @@ ${flowContext}${sourceInfo}${campaignSection}
 ${dynamicIntentList}
 
 CLASSIFICATION INSTRUCTIONS:
+- IMPORTANT: If the message contains 2 or more DISTINCT topics that need SEPARATE answers (e.g., price+shipping, price+installation), ALWAYS classify as "multi_question" — even if one topic seems dominant. BUT specifying dimensions within a price query is just one question, not multi.
 - Match user messages to the most appropriate intent from the list above
 - Use keywords and descriptions to guide your classification
 - Return the intent key (e.g., "price_query", "greeting", etc.)
@@ -418,7 +419,10 @@ CLASSIFICATION INSTRUCTIONS:
 `;
   } else {
     prompt += `
-AVAILABLE INTENTS (choose the most specific one):
+IMPORTANT: If the message contains 2 or more DISTINCT topics that need SEPARATE answers (e.g., price+shipping, price+installation, specs+colors), ALWAYS classify as "multi_question" — even if one topic seems dominant. Let the multi-question handler break it down.
+BUT: specifying dimensions/size within a single request is NOT multi_question. "Cuánto cuesta la de 4x5?" is ONE question (price). "4x5 cuánto sale y hacen envíos?" is TWO (price + shipping).
+
+AVAILABLE INTENTS:
 
 [GREETINGS & SOCIAL]
 - greeting: "Hola", "Buenos días", "Buenas tardes"
@@ -473,7 +477,7 @@ AVAILABLE INTENTS (choose the most specific one):
 [CONVERSATION FLOW]
 - confirmation: "Sí", "Ok", "Esa", "Perfecto", "Dale", "Claro"
 - rejection: "No", "Otra", "No me interesa", "Diferente"
-- multi_question: Multiple questions in one message (price AND shipping, etc.)
+- multi_question: Message contains 2 or more DISTINCT topics that need SEPARATE answers. Examples: price+shipping, price+installation, availability+colors. ALWAYS classify as multi_question when the message asks about more than one topic, even if one seems dominant. "5x3 en cuanto sale y instalan?" = multi_question (price + installation). "precio y envío?" = multi_question (price + shipping). BUT "cuánto cuesta la de 4x5?" = price_query (one topic: price, with dimensions as context).
 - will_get_back: "Mañana te aviso", "Voy a medir", "Al rato te confirmo"
 - future_interest: "En un par de meses", "Más adelante", "Ahorita no pero después sí"
 - store_visit: "Los visito", "Voy a su tienda", "Puedo ir a ver?", "Quiero ir a verlas"
@@ -517,6 +521,19 @@ CRITICAL EXAMPLES:
 - "Lo voy a pensar" → intent: "purchase_deferral"
 - "De cuantos metros son las mallas sonbras" → intent: "catalog_request", product: "malla_sombra" (NOT location! "sonbras" is a misspelling of "sombras", NOT "Sonora")
 - "Son para sombra o también protejan de la lluvia?" → intent: "product_inquiry" (asking about product features, NOT location! "Son" = "Are they", NOT "Sonora")
+
+MULTI-QUESTION EXAMPLES (2+ distinct topics = ALWAYS multi_question):
+- "Mis medidas son 5x3 en cuanto sale y se instalan ustedes?" → intent: "multi_question" (price + installation = 2 distinct topics)
+- "Precio y hacen envíos?" → intent: "multi_question" (price + shipping = 2 topics)
+- "Tienen 4x5 y hacen envíos a Monterrey?" → intent: "multi_question" (availability + shipping = 2 topics)
+- "Cuánto cuesta y de qué colores hay?" → intent: "multi_question" (price + color = 2 topics)
+- "Quiero una 3x4, cuánto sale con envío a Guadalajara?" → intent: "multi_question" (price + shipping = 2 topics)
+- "Cuánto tarda en llegar y aceptan tarjeta?" → intent: "multi_question" (delivery time + payment = 2 topics)
+
+NOT multi_question (one topic with product details):
+- "Cuánto cuesta la malla de 4x5?" → intent: "price_query" (one topic: price, 4x5 is just the product spec)
+- "Precio malla 6x6" → intent: "price_query" (one topic: price)
+- "Tienen en 3x4?" → intent: "availability_query" (one topic: availability)
 `;
   }
 
