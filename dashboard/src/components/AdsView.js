@@ -11,6 +11,41 @@ function AdsView() {
   const [selectedAd, setSelectedAd] = useState(null);
   const [showAdModal, setShowAdModal] = useState(false);
   const [editingAd, setEditingAd] = useState(null);
+  const [sortBy, setSortBy] = useState('status'); // status, adSet, campaign, name
+  const [sortDir, setSortDir] = useState('asc');
+
+  const handleSort = (column) => {
+    if (sortBy === column) {
+      setSortDir(prev => prev === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(column);
+      setSortDir('asc');
+    }
+  };
+
+  const STATUS_ORDER = { ACTIVE: 0, PAUSED: 1, ARCHIVED: 2 };
+
+  const sortedAds = [...ads].sort((a, b) => {
+    const dir = sortDir === 'asc' ? 1 : -1;
+    let cmp = 0;
+    switch (sortBy) {
+      case 'status':
+        cmp = (STATUS_ORDER[a.status] ?? 3) - (STATUS_ORDER[b.status] ?? 3);
+        break;
+      case 'adSet':
+        cmp = (a.adSetId?.name || '').localeCompare(b.adSetId?.name || '');
+        break;
+      case 'campaign':
+        cmp = (a.adSetId?.campaignId?.name || '').localeCompare(b.adSetId?.campaignId?.name || '');
+        break;
+      case 'name':
+        cmp = (a.name || '').localeCompare(b.name || '');
+        break;
+      default:
+        cmp = 0;
+    }
+    return cmp * dir;
+  });
 
   useEffect(() => {
     fetchAds();
@@ -140,32 +175,39 @@ function AdsView() {
             <table className="w-full table-fixed">
               <thead className="bg-gray-900/50">
                 <tr>
-                  <th className="w-[40%] px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Nombre
-                  </th>
-                  <th className="w-[30%] px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Ad Set / Campaña
-                  </th>
-                  <th className="w-[15%] px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Estado
-                  </th>
-                  <th className="w-[15%] px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
+                  {[
+                    { key: 'name', label: 'Anuncio', width: 'w-[28%]', align: 'text-left' },
+                    { key: 'adSet', label: 'Ad Set', width: 'w-[20%]', align: 'text-left' },
+                    { key: 'campaign', label: 'Campaña', width: 'w-[20%]', align: 'text-left' },
+                    { key: 'status', label: 'Estado', width: 'w-[15%]', align: 'text-left' },
+                  ].map(col => (
+                    <th
+                      key={col.key}
+                      className={`${col.width} px-6 py-3 ${col.align} text-xs font-medium uppercase tracking-wider cursor-pointer select-none hover:text-white transition-colors ${sortBy === col.key ? 'text-white' : 'text-gray-400'}`}
+                      onClick={() => handleSort(col.key)}
+                    >
+                      {col.label} {sortBy === col.key ? (sortDir === 'asc' ? '▲' : '▼') : ''}
+                    </th>
+                  ))}
+                  <th className="w-[17%] px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
                     Acciones
                   </th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-700/50">
-                {ads.map((ad) => (
+                {sortedAds.map((ad) => (
                   <tr key={ad._id} className="hover:bg-gray-700/30 transition-colors">
                     <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-white">{ad.name}</div>
-                      <code className="text-xs text-purple-400 bg-purple-500/10 px-3 py-1.5 rounded mt-1 inline-block">
+                      <div className="text-sm font-medium text-white truncate">{ad.name}</div>
+                      <code className="text-xs text-purple-400 bg-purple-500/10 px-2 py-1 rounded mt-1 inline-block truncate max-w-full">
                         {ad.fbAdId}
                       </code>
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-300">
-                      <div>{ad.adSetId?.name || 'N/A'}</div>
-                      <div className="text-xs text-gray-500">{ad.adSetId?.campaignId?.name || ''}</div>
+                    <td className="px-6 py-4 text-sm text-gray-300 truncate">
+                      {ad.adSetId?.name || 'N/A'}
+                    </td>
+                    <td className="px-6 py-4 text-sm text-gray-300 truncate">
+                      {ad.adSetId?.campaignId?.name || '—'}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <select
