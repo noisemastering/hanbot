@@ -65,33 +65,60 @@ function Messages() {
     return `hace ${days}d`;
   };
 
-  // Helper function to determine handoff type and colors
+  // Helper function to determine handoff priority and colors
+  // Red = urgent (customer upset or bot broke), Yellow = action needed (quote/order), Green = informational
   const getHandoffStyle = (handoffReason) => {
-    // Sales opportunity handoffs (green/teal)
-    const isSalesOpportunity = handoffReason && (
-      handoffReason === 'human_sellable_product_order' ||
-      handoffReason.startsWith('Custom order') ||
-      handoffReason.includes('requiere cotización') ||
-      handoffReason.includes('pedido especial')
-    );
+    const r = (handoffReason || '').toLowerCase();
 
-    if (isSalesOpportunity) {
+    // RED — Urgent: customer upset, bot broke, or explicit human request
+    const isUrgent =
+      r.includes('frustrad') ||
+      r.includes('queja') ||
+      r.includes('complaint') ||
+      r.includes('solicitó hablar') ||
+      r.includes('requested human') ||
+      r.includes('agente') ||
+      r.includes('repetición') ||
+      r.includes('no pudo entender') ||
+      r.includes('confundido por precio') ||
+      r.includes('precio') && r.includes('verificar');
+
+    if (isUrgent) {
       return {
-        backgroundColor: '#0d3320',      // Dark green
-        borderColor: '#4caf50',          // Green
-        textColor: '#4caf50',
-        icon: '💰',
-        label: 'Oportunidad de Venta'
+        backgroundColor: '#4a1515',
+        borderColor: '#ff5252',
+        textColor: '#ff5252',
+        icon: '🚨',
+        label: 'Urgente'
       };
     }
 
-    // Error/escalation handoffs (red - default)
+    // GREEN — Informational: images, location, out of stock, low pressure
+    const isInfo =
+      r.includes('imagen') ||
+      r.includes('image') ||
+      r.includes('proporcionó ubicación') ||
+      r.includes('reporta producto agotado') ||
+      r.includes('producto agotado') && !r.includes('verificar') ||
+      r.includes('impermeab');
+
+    if (isInfo) {
+      return {
+        backgroundColor: '#0d3320',
+        borderColor: '#4caf50',
+        textColor: '#4caf50',
+        icon: 'ℹ️',
+        label: 'Informativo'
+      };
+    }
+
+    // YELLOW — Action needed: quotes, orders, wholesale, custom sizes (default)
     return {
-      backgroundColor: '#4a1515',        // Dark red
-      borderColor: '#ff5252',            // Red
-      textColor: '#ff5252',
-      icon: '🚨',
-      label: 'Necesita Ayuda'
+      backgroundColor: '#3d2900',
+      borderColor: '#ffb300',
+      textColor: '#ffb300',
+      icon: '💰',
+      label: 'Acción Requerida'
     };
   };
 
@@ -446,6 +473,7 @@ function Messages() {
               {pendingHandoffs.map((handoff) => {
                 const channelDisplay = getChannelDisplay(handoff.channel);
                 const intentDisplay = getIntentDisplay(handoff.purchaseIntent);
+                const handoffStyle = getHandoffStyle(handoff.handoffReason);
                 return (
                   <tr
                     key={handoff.psid}
@@ -457,8 +485,8 @@ function Messages() {
                     style={{
                       borderBottom: "1px solid #555",
                       cursor: "pointer",
-                      borderLeft: handoff.isAfterHours ? "4px solid #ff9800" : "4px solid transparent",
-                      backgroundColor: "transparent"
+                      borderLeft: `4px solid ${handoffStyle.borderColor}`,
+                      backgroundColor: handoffStyle.backgroundColor
                     }}
                   >
                     <td style={{ padding: "10px", textAlign: "center" }}>
@@ -517,8 +545,13 @@ function Messages() {
                         </span>
                       )}
                     </td>
-                    <td style={{ padding: "10px", color: "#e0e0e0", fontSize: "0.85rem", maxWidth: "200px", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                      {getMessageExcerpt(handoff.handoffReason, 40) || '—'}
+                    <td style={{ padding: "10px", fontSize: "0.85rem", maxWidth: "220px" }}>
+                      <div style={{ color: handoffStyle.textColor, fontWeight: "bold", fontSize: "0.8rem", marginBottom: "2px" }}>
+                        {handoffStyle.icon} {handoffStyle.label}
+                      </div>
+                      <div style={{ color: "#aaa", fontSize: "0.75rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        {getMessageExcerpt(handoff.handoffReason, 40) || '—'}
+                      </div>
                     </td>
                     <td style={{ padding: "10px", color: "#e0e0e0", fontSize: "0.85rem" }}>
                       {handoff.productInterest || handoff.currentFlow || '—'}
