@@ -1316,7 +1316,8 @@ app.post("/webhook", async (req, res) => {
 
                   // Send push notification to agents
                   const { sendHandoffNotification } = require("./services/pushNotifications");
-                  await sendHandoffNotification(senderPsid, "Usuario envió imagen que requiere atención humana");
+                  const imgConvo = await Conversation.findOne({ psid: senderPsid });
+                  await sendHandoffNotification(senderPsid, imgConvo, "Usuario envió imagen que requiere atención humana");
 
                   // Let user know an agent will help
                   const { getBusinessInfo } = require("./businessInfoManager");

@@ -168,7 +168,7 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
           unknownCount: 0
         });
 
-        sendHandoffNotification(psid, `Medida con decimales: ${requested.w}x${requested.h}m - cliente insiste en medida exacta`).catch(err => {
+        sendHandoffNotification(psid, convo, `Medida con decimales: ${requested.w}x${requested.h}m - cliente insiste en medida exacta`).catch(err => {
           console.error("❌ Failed to send push notification:", err);
         });
 

@@ -365,7 +365,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       });
 
       const { sendHandoffNotification } = require("../../services/pushNotifications");
-      sendHandoffNotification(psid, info.reason || 'Borde - cliente proporcionó ubicación').catch(err => {
+      sendHandoffNotification(psid, convo, info.reason || 'Borde - cliente proporcionó ubicación').catch(err => {
         console.error("❌ Failed to send push notification:", err);
       });
 
@@ -778,7 +778,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
 
   // Send push notification
   const { sendHandoffNotification } = require("../../services/pushNotifications");
-  sendHandoffNotification(psid, `Borde: ${specsText}`).catch(err => {
+  sendHandoffNotification(psid, convo, `Borde: ${specsText}`).catch(err => {
     console.error("❌ Failed to send push notification:", err);
   });
 

@@ -12,7 +12,7 @@ if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
 }
 
 // Send notification to all subscribed users
-async function sendHandoffNotification(psid, reason) {
+async function sendHandoffNotification(psid, convo, reason) {
   try {
     const subscriptions = await PushSubscription.find();
 

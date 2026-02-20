@@ -438,7 +438,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
         state: "needs_human"
       });
 
-      sendHandoffNotification(psid, info.reason || 'Malla sombra - cliente proporcionó ubicación').catch(err => {
+      sendHandoffNotification(psid, convo, info.reason || 'Malla sombra - cliente proporcionó ubicación').catch(err => {
         console.error("❌ Failed to send push notification:", err);
       });
 
@@ -488,7 +488,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       unknownCount: 0
     });
 
-    sendHandoffNotification(psid, handoffReason).catch(err => {
+    sendHandoffNotification(psid, convo, handoffReason).catch(err => {
       console.error("❌ Failed to send push notification:", err);
     });
 
@@ -1222,7 +1222,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
         unknownCount: 0
       });
 
-      sendHandoffNotification(psid, `Medida con decimales: ${width}x${height}m - cliente insiste en medida exacta`).catch(err => {
+      sendHandoffNotification(psid, convo, `Medida con decimales: ${width}x${height}m - cliente insiste en medida exacta`).catch(err => {
         console.error("❌ Failed to send push notification:", err);
       });
 
@@ -1302,7 +1302,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       unknownCount: 0
     });
 
-    sendHandoffNotification(psid, `Medida con decimales: ${width}x${height}m - requiere atención`).catch(err => {
+    sendHandoffNotification(psid, convo, `Medida con decimales: ${width}x${height}m - requiere atención`).catch(err => {
       console.error("❌ Failed to send push notification:", err);
     });
 
@@ -1340,7 +1340,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       unknownCount: 0
     });
 
-    sendHandoffNotification(psid, handoffReason).catch(err => {
+    sendHandoffNotification(psid, convo, handoffReason).catch(err => {
       console.error("❌ Failed to send push notification:", err);
     });
 
@@ -1460,7 +1460,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
         state: "needs_human"
       });
 
-      sendHandoffNotification(psid, `Malla ${width}x${height}m - producto sin link`).catch(err => {
+      sendHandoffNotification(psid, convo, `Malla ${width}x${height}m - producto sin link`).catch(err => {
         console.error("❌ Failed to send push notification:", err);
       });
 
@@ -1626,7 +1626,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
         state: "needs_human"
       });
 
-      sendHandoffNotification(psid, `Malla ${width}x${height}m (${requestedAreaSqM}m²) - área muy grande`).catch(err => {
+      sendHandoffNotification(psid, convo, `Malla ${width}x${height}m (${requestedAreaSqM}m²) - área muy grande`).catch(err => {
         console.error("❌ Failed to send push notification:", err);
       });
 
@@ -1676,7 +1676,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       state: "needs_human"
     });
 
-    sendHandoffNotification(psid, `Malla ${width}x${height}m - sin alternativas disponibles`).catch(err => {
+    sendHandoffNotification(psid, convo, `Malla ${width}x${height}m - sin alternativas disponibles`).catch(err => {
       console.error("❌ Failed to send push notification:", err);
     });
 

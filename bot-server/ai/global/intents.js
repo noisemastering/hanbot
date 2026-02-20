@@ -196,7 +196,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     });
 
     // Send push notification with collected info
-    sendHandoffNotification(psid, `Pedido especial: ${orderSize}\nUso: ${orderPurpose}\nCP: ${zipCode}`).catch(err => {
+    sendHandoffNotification(psid, convo, `Pedido especial: ${orderSize}\nUso: ${orderPurpose}\nCP: ${zipCode}`).catch(err => {
       console.error("❌ Failed to send push notification:", err);
     });
 
@@ -324,7 +324,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         unknownCount: 0
       });
 
-      sendHandoffNotification(psid, `Pedido especial: ${orderSize} - cliente quiere cotización específica`).catch(err => {
+      sendHandoffNotification(psid, convo, `Pedido especial: ${orderSize} - cliente quiere cotización específica`).catch(err => {
         console.error("❌ Failed to send push notification:", err);
       });
 
@@ -1733,7 +1733,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
           unknownCount: 0
         });
 
-        sendHandoffNotification(psid, `Medida con decimales: ${dimensions.width}x${dimensions.height}m - cliente insiste en medida exacta`).catch(err => {
+        sendHandoffNotification(psid, convo, `Medida con decimales: ${dimensions.width}x${dimensions.height}m - cliente insiste en medida exacta`).catch(err => {
           console.error("❌ Failed to send push notification:", err);
         });
 
@@ -2601,7 +2601,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
             requestedSize: requestedSizeStr
           });
 
-          sendHandoffNotification(psid, `Medida con decimales: ${dimensions.width}x${dimensions.height}m - cliente insiste en medida exacta`).catch(err => {
+          sendHandoffNotification(psid, convo, `Medida con decimales: ${dimensions.width}x${dimensions.height}m - cliente insiste en medida exacta`).catch(err => {
             console.error("❌ Failed to send push notification:", err);
           });
 

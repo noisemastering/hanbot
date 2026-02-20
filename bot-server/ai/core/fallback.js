@@ -331,7 +331,7 @@ async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME
     });
 
     // Send push notification to dashboard users
-    sendHandoffNotification(psid, "Cliente solicita fabricación a medida - necesita especialista").catch(err => {
+    sendHandoffNotification(psid, convo, "Cliente solicita fabricación a medida - necesita especialista").catch(err => {
       console.error("❌ Failed to send push notification:", err);
     });
 
@@ -418,7 +418,7 @@ async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME
 
     // Send push notification to dashboard users
     const notificationReason = `Bot no pudo ayudar después de ${newUnknownCount} mensaje(s) no entendido(s) ${inBusinessHours ? '(horario laboral)' : '(fuera de horario)'}`;
-    sendHandoffNotification(psid, notificationReason).catch(err => {
+    sendHandoffNotification(psid, convo, notificationReason).catch(err => {
       console.error("❌ Failed to send push notification:", err);
     });
 

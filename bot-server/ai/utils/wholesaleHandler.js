@@ -5,6 +5,7 @@ const Product = require("../../models/Product");
 const { updateConversation } = require("../../conversationManager");
 const { sendHandoffNotification } = require("../../services/pushNotifications");
 const { getHandoffTimingMessage } = require("./businessHours");
+const { getAncestors } = require("./productMatcher");
 
 /**
  * Check if a product is eligible for wholesale
@@ -102,30 +103,50 @@ async function handleWholesaleRequest(product, quantity, psid, convo) {
     return null; // Not a wholesale request
   }
 
-  // Build response message
-  const message = `¡Excelente! Para ${quantity} ${quantity > 1 ? 'piezas' : 'pieza'} de ${product.name} te paso con un especialista para darte precio de mayoreo. ${getHandoffTimingMessage()}`;
+  // Build dynamic product description from lineage
+  let productDesc = product.name;
+  try {
+    const ancestors = await getAncestors(product._id);
+    if (ancestors.length > 0) {
+      // Use gen 2 (product type) + leaf size, e.g. "Borde Separador de 54m"
+      const root = ancestors[ancestors.length - 1];
+      const gen2 = ancestors.length >= 2 ? ancestors[ancestors.length - 2] : null;
+      productDesc = gen2?.name || root?.name || product.name;
+    }
+  } catch (err) {
+    console.error("Error building wholesale product desc:", err.message);
+  }
+
+  const sizeText = product.size ? ` de ${product.size}` : '';
+  const fullDesc = `${productDesc}${sizeText}`;
+  const qtyLabel = quantity > 1 ? 'rollos' : 'rollo';
+
+  // Transparent handoff — don't mention specialist
+  const message = `¡Perfecto! En breve te tenemos la cotización para ${quantity} ${qtyLabel} de ${fullDesc}.` +
+    `\n\n📍 Estamos en Querétaro, pero realizamos envíos a toda la República. 📦✈️` +
+    `\n\n¿Me puedes proporcionar tu código postal para calcular el envío?`;
 
   // Update conversation for handoff
+  const handoffReason = `Mayoreo: ${quantity}x ${fullDesc}`;
   await updateConversation(psid, {
     handoffRequested: true,
-    handoffReason: `Mayoreo: ${quantity}x ${product.name}`,
+    handoffReason,
     handoffTimestamp: new Date(),
     state: "needs_human",
     wholesaleRequest: {
       productId: product._id,
-      productName: product.name,
+      productName: fullDesc,
       quantity,
       retailPrice: product.price
     }
   });
 
   // Send notification
-  const notificationMsg = `Pedido mayoreo: ${quantity}x ${product.name}`;
-  await sendHandoffNotification(psid, convo, notificationMsg).catch(err => {
+  await sendHandoffNotification(psid, convo, handoffReason).catch(err => {
     console.error("❌ Failed to send wholesale notification:", err);
   });
 
-  console.log(`📦 Wholesale request: ${quantity}x ${product.name} for ${psid}`);
+  console.log(`📦 Wholesale request: ${quantity}x ${fullDesc} for ${psid}`);
 
   return {
     type: "text",

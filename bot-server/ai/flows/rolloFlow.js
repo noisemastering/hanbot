@@ -252,6 +252,36 @@ function formatMoney(n) {
 const parseAndLookupZipCode = sharedParseAndLookupZipCode;
 
 /**
+ * Build a human-readable product description from the DB lineage.
+ * e.g. "un rollo de Malla Sombra Raschel Agrícola del 70% de cobertura, con medidas de 2m x 100m"
+ */
+async function buildProductDescription(product, state) {
+  try {
+    const ancestors = await getAncestors(product._id);
+    // ancestors: [immediate parent, grandparent, ..., root]
+    // Root (gen 1) has the product family name, gen 2 has the percentage
+    const root = ancestors.length > 0 ? ancestors[ancestors.length - 1] : null;
+    const productFamily = root?.name || TYPE_DISPLAY[state.rolloType]?.name || 'malla sombra';
+
+    let desc = `un rollo de ${productFamily}`;
+    if (state.percentage) {
+      desc += ` del ${state.percentage}% de cobertura`;
+    }
+    desc += `, con medidas de ${state.width}m x 100m`;
+
+    return desc;
+  } catch (err) {
+    console.error('Error building product description:', err.message);
+    // Fallback
+    const typeInfo = TYPE_DISPLAY[state.rolloType] || TYPE_DISPLAY.malla_sombra;
+    let desc = `un rollo de ${typeInfo.name}`;
+    if (state.percentage) desc += ` al ${state.percentage}%`;
+    desc += ` de ${state.width}m x 100m`;
+    return desc;
+  }
+}
+
+/**
  * Find matching sellable roll products for the given type
  */
 async function findMatchingProducts(width, percentage = null, rolloType = ROLLO_TYPES.MALLA_SOMBRA) {
@@ -914,30 +944,37 @@ async function handleAwaitingPercentage(intent, state, sourceContext) {
 async function handleAwaitingQuantity(intent, state, sourceContext) {
   const rolloType = state.rolloType || ROLLO_TYPES.MALLA_SOMBRA;
   const typeInfo = TYPE_DISPLAY[rolloType] || TYPE_DISPLAY.malla_sombra;
-  let specsText = `rollo de ${typeInfo.name} de ${state.width}m x 100m`;
-  if (state.percentage) {
-    specsText += ` al ${state.percentage}%`;
-  }
 
-  // Look up product to show price
+  // Look up product to build description dynamically
   const products = await findMatchingProducts(state.width, state.percentage, rolloType);
   if (products.length > 0) {
     const product = products[0];
+
+    // Build description from product lineage (root → leaf)
+    const specsDesc = await buildProductDescription(product, state);
+
     if (product.price) {
-      let priceMsg = `El ${specsText} tiene un precio de ${formatMoney(product.price)}`;
+      let priceMsg = `El precio de promoción es de ${formatMoney(product.price)} + IVA por ${specsDesc}.`;
+      priceMsg += `\n\n📍 Estamos en Querétaro, pero realizamos envíos a toda la República. 📦✈️`;
+      priceMsg += `\n\nPara cotizarte por favor indícanos cuántas unidades y tu código postal para calcular el envío.`;
 
-      if (product.wholesaleEnabled && product.wholesaleMinQty && product.wholesalePrice) {
-        priceMsg += ` (por mayoreo, ${product.wholesaleMinQty}+ rollos, a ${formatMoney(product.wholesalePrice)} c/u)`;
-      }
-
-      priceMsg += `. ¿Cuántos rollos necesitas?`;
       return { type: "text", text: priceMsg };
     }
+
+    return {
+      type: "text",
+      text: `Tenemos ${specsDesc}.\n\n📍 Estamos en Querétaro, pero realizamos envíos a toda la República. 📦✈️\n\nPara cotizarte por favor indícanos cuántas unidades y tu código postal para calcular el envío.`
+    };
   }
+
+  // Fallback when no product found in DB
+  let fallbackDesc = `un rollo de ${typeInfo.name}`;
+  if (state.percentage) fallbackDesc += ` al ${state.percentage}%`;
+  fallbackDesc += ` de ${state.width}m x 100m`;
 
   return {
     type: "text",
-    text: `Perfecto, ${specsText}. ¿Cuántos rollos necesitas?`
+    text: `Tenemos ${fallbackDesc}.\n\n📍 Estamos en Querétaro, pero realizamos envíos a toda la República. 📦✈️\n\nPara cotizarte por favor indícanos cuántas unidades y tu código postal para calcular el envío.`
   };
 }
 
@@ -1032,22 +1069,36 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
   }
 
   const handoffLabel = typeInfo.short.charAt(0).toUpperCase() + typeInfo.short.slice(1);
-  await updateConversation(psid, {
+  const qtyText = state.quantity > 1 ? `${state.quantity} rollos de ` : '';
+  const handoffReason = `${handoffLabel}: ${qtyText}${specsText} - ${locationText}`;
+
+  // Save wholesale info if applicable
+  const products = await findMatchingProducts(state.width, state.percentage, rolloType);
+  const product = products[0];
+  const updateData = {
     handoffRequested: true,
-    handoffReason: `${handoffLabel}: ${specsText} - ${locationText}`,
+    handoffReason,
     handoffTimestamp: new Date(),
     state: "needs_human"
-  });
+  };
+  if (product?.wholesaleEnabled && product?.wholesaleMinQty && state.quantity >= product.wholesaleMinQty) {
+    updateData.wholesaleRequest = {
+      productId: product._id,
+      productName: product.name,
+      quantity: state.quantity,
+      retailPrice: product.price
+    };
+  }
+  await updateConversation(psid, updateData);
 
   // Send push notification
   const { sendHandoffNotification } = require("../../services/pushNotifications");
-  sendHandoffNotification(psid, `${handoffLabel}: ${specsText} - ${locationText}`).catch(err => {
+  sendHandoffNotification(psid, convo, handoffReason).catch(err => {
     console.error("❌ Failed to send push notification:", err);
   });
 
-  let responseText = isBusinessHours()
-    ? `¡Perfecto! Un especialista te contactará pronto para cotizarte ${specsText}.`
-    : `¡Perfecto! Un especialista te contactará el siguiente día hábil para cotizarte ${specsText}.`;
+  // Transparent response — don't mention handoff to human
+  let responseText = `¡Perfecto! En breve te tenemos la cotización para ${qtyText}${specsText}.`;
   if (state.zipInfo) {
     responseText += `\n\n📍 Envío a ${state.zipInfo.city}, ${state.zipInfo.state}`;
   }
