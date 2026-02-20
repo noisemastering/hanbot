@@ -2281,6 +2281,25 @@ function App() {
               onDetails={(item) => {
                 setDetailsItem(item);
               }}
+              onUpdateCampaign={(id, updates) => {
+                setCampaigns(prev => prev.map(c => {
+                  if (c._id !== id) return c;
+                  const updated = { ...c, ...updates };
+                  // Cascade active → children status
+                  if (updates.active !== undefined && c.children) {
+                    const newStatus = updates.active ? 'ACTIVE' : 'PAUSED';
+                    updated.children = c.children.map(adSet => ({
+                      ...adSet,
+                      status: newStatus,
+                      children: adSet.children ? adSet.children.map(ad => ({
+                        ...ad,
+                        status: newStatus
+                      })) : []
+                    }));
+                  }
+                  return updated;
+                }));
+              }}
             />
           } />
 

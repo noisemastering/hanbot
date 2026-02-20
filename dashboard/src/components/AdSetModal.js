@@ -42,8 +42,20 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
   const [productFamilies, setProductFamilies] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const [currentCatalog, setCurrentCatalog] = useState(null);
+  const [existingCatalogs, setExistingCatalogs] = useState([]);
+  const [globalCatalog, setGlobalCatalog] = useState(null);
 
-  // Fetch product families tree on mount
+  const fetchExistingCatalogs = async () => {
+    try {
+      const response = await fetch(`${API_URL}/uploads/catalogs`);
+      const data = await response.json();
+      if (data.success) setExistingCatalogs(data.data || []);
+    } catch (error) {
+      console.error('Error fetching existing catalogs:', error);
+    }
+  };
+
+  // Fetch product families tree + existing catalogs + global catalog on mount
   useEffect(() => {
     const fetchProductFamilies = async () => {
       setProductsLoading(true);
@@ -59,7 +71,19 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
         setProductsLoading(false);
       }
     };
+    const fetchGlobalCatalog = async () => {
+      try {
+        const response = await fetch(`${API_URL}/uploads/catalog/global`);
+        const data = await response.json();
+        if (data.success) setGlobalCatalog(data.data?.catalog || null);
+      } catch (error) {
+        console.error('Error fetching global catalog:', error);
+      }
+    };
     fetchProductFamilies();
+    fetchExistingCatalogs();
+    fetchGlobalCatalog();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   useEffect(() => {
@@ -138,7 +162,7 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
 
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-      <div className="bg-gray-800/95 backdrop-blur-lg border border-gray-700/50 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
+      <div className="bg-gray-800/95 backdrop-blur-lg border border-gray-700/50 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between">
           <h2 className="text-xl font-bold text-white">
@@ -362,15 +386,37 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
 
             {/* Catalog Upload */}
             <div className="border-t border-gray-700 pt-4 mt-4">
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">Catálogo PDF</h3>
               {adSet?._id ? (
                 <CatalogUpload
                   entityType="adset"
                   entityId={adSet._id}
                   currentCatalog={currentCatalog}
-                  onUploadSuccess={(catalog) => setCurrentCatalog(catalog)}
+                  onUploadSuccess={(catalog) => { setCurrentCatalog(catalog); fetchExistingCatalogs(); }}
                   onDeleteSuccess={() => setCurrentCatalog(null)}
-                  inheritedFrom={!currentCatalog && adSet.campaignId?.catalog?.url ? `Campaña: ${adSet.campaignId?.name || 'Padre'}` : null}
+                  existingCatalogs={existingCatalogs}
+                  onSelectExisting={async (cat) => {
+                    try {
+                      const res = await fetch(`${API_URL}/uploads/catalog/adset/${adSet._id}`, {
+                        method: 'PUT',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ url: cat.url, name: cat.name })
+                      });
+                      const data = await res.json();
+                      if (data.success) setCurrentCatalog(data.data.catalog);
+                    } catch (err) { console.error('Error assigning catalog:', err); }
+                  }}
+                  inheritedFrom={(() => {
+                    if (currentCatalog) return null;
+                    if (adSet.campaignId?.catalog?.url) return `Campaña: ${adSet.campaignId?.name || 'Padre'}`;
+                    if (globalCatalog?.url) return 'Catálogo Global';
+                    return null;
+                  })()}
+                  inheritedCatalog={(() => {
+                    if (currentCatalog) return null;
+                    if (adSet.campaignId?.catalog?.url) return adSet.campaignId.catalog;
+                    if (globalCatalog?.url) return globalCatalog;
+                    return null;
+                  })()}
                 />
               ) : (
                 <div className="p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">

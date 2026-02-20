@@ -22,6 +22,7 @@ export default function CatalogUpload({
   onUploadSuccess,
   onDeleteSuccess,
   inheritedFrom = null,
+  inheritedCatalog = null,
   existingCatalogs = null,
   onSelectExisting = null
 }) {
@@ -156,6 +157,19 @@ export default function CatalogUpload({
     fileInputRef.current?.click();
   };
 
+  // Generate a first-page thumbnail from Cloudinary PDF URL
+  // Switches raw/upload → image/upload, adds page transform, changes ext to .jpg
+  const getThumbnailUrl = (pdfUrl) => {
+    if (!pdfUrl || !pdfUrl.includes('cloudinary.com')) return null;
+    try {
+      return pdfUrl
+        .replace('/raw/upload/', '/image/upload/pg_1,w_120,h_160,c_fill,f_jpg/')
+        .replace(/\.pdf$/i, '.jpg');
+    } catch {
+      return null;
+    }
+  };
+
   return (
     <div className="space-y-3">
       <label className="block text-sm font-medium text-gray-300">
@@ -199,30 +213,42 @@ export default function CatalogUpload({
 
       {/* Current catalog display */}
       {currentCatalog?.url ? (
-        <div className="flex items-center justify-between p-3 bg-gray-800/50 rounded-lg border border-gray-700">
-          <div className="flex items-center space-x-3">
-            <div className="p-2 bg-red-500/20 rounded-lg">
+        <div className="flex items-start gap-4 p-3 bg-gray-800/50 rounded-lg border border-gray-700">
+          {/* Thumbnail */}
+          {getThumbnailUrl(currentCatalog.url) ? (
+            <a href={currentCatalog.url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+              <img
+                src={getThumbnailUrl(currentCatalog.url)}
+                alt="Portada"
+                className="w-[60px] h-[80px] object-cover rounded border border-gray-600 bg-gray-900"
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+            </a>
+          ) : (
+            <div className="flex-shrink-0 p-2 bg-red-500/20 rounded-lg">
               <svg className="w-6 h-6 text-red-400" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
               </svg>
             </div>
-            <div>
-              <p className="text-sm text-white font-medium truncate max-w-[200px]">
-                {currentCatalog.name || 'Catálogo.pdf'}
+          )}
+          {/* Info */}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-white font-medium truncate">
+              {currentCatalog.name || 'Catálogo.pdf'}
+            </p>
+            {inheritedFrom && (
+              <p className="text-xs text-amber-400 mt-1">
+                Heredado de: {inheritedFrom}
               </p>
-              {inheritedFrom && (
-                <p className="text-xs text-amber-400">
-                  Heredado de: {inheritedFrom}
-                </p>
-              )}
-              {currentCatalog.uploadedAt && !inheritedFrom && (
-                <p className="text-xs text-gray-500">
-                  Subido: {new Date(currentCatalog.uploadedAt).toLocaleDateString()}
-                </p>
-              )}
-            </div>
+            )}
+            {currentCatalog.uploadedAt && !inheritedFrom && (
+              <p className="text-xs text-gray-500 mt-1">
+                Subido: {new Date(currentCatalog.uploadedAt).toLocaleDateString()}
+              </p>
+            )}
           </div>
-          <div className="flex items-center space-x-2">
+          {/* Actions */}
+          <div className="flex items-center space-x-1 flex-shrink-0">
             <a
               href={currentCatalog.url}
               target="_blank"
@@ -255,10 +281,45 @@ export default function CatalogUpload({
             )}
           </div>
         </div>
-      ) : inheritedFrom ? (
-        <p className="text-sm text-gray-500 italic">
-          Sin catálogo propio. Usando el heredado de: {inheritedFrom}
-        </p>
+      ) : inheritedFrom && inheritedCatalog?.url ? (
+        <div className="flex items-start gap-4 p-3 bg-amber-900/10 rounded-lg border border-amber-700/30">
+          {/* Thumbnail */}
+          {getThumbnailUrl(inheritedCatalog.url) ? (
+            <a href={inheritedCatalog.url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
+              <img
+                src={getThumbnailUrl(inheritedCatalog.url)}
+                alt="Portada"
+                className="w-[60px] h-[80px] object-cover rounded border border-gray-600 bg-gray-900"
+                onError={(e) => { e.target.style.display = 'none'; }}
+              />
+            </a>
+          ) : (
+            <div className="flex-shrink-0 p-2 bg-amber-500/20 rounded-lg">
+              <svg className="w-6 h-6 text-amber-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M4 4a2 2 0 012-2h4.586A2 2 0 0112 2.586L15.414 6A2 2 0 0116 7.414V16a2 2 0 01-2 2H6a2 2 0 01-2-2V4z" clipRule="evenodd" />
+              </svg>
+            </div>
+          )}
+          <div className="flex-1 min-w-0">
+            <p className="text-sm text-white font-medium truncate">
+              {inheritedCatalog.name || 'Catálogo.pdf'}
+            </p>
+            <p className="text-xs text-amber-400 mt-1">
+              Heredado de: {inheritedFrom}
+            </p>
+          </div>
+          <a
+            href={inheritedCatalog.url}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="flex-shrink-0 p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
+            title="Ver catálogo"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+          </a>
+        </div>
       ) : null}
 
       {/* Upload area */}

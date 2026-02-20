@@ -1,46 +1,48 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import AdSetModal from './AdSetModal';
+import AdModal from './AdModal';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
+const STATUS_STYLE = {
+  ACTIVE: "bg-green-500/10 border-green-500/30 text-green-300 hover:bg-green-500/20",
+  PAUSED: "bg-yellow-500/10 border-yellow-500/30 text-yellow-300 hover:bg-yellow-500/20",
+  ARCHIVED: "bg-gray-500/10 border-gray-500/30 text-gray-400 hover:bg-gray-500/20"
+};
+
 function AdSetsView() {
   const [adSets, setAdSets] = useState([]);
+  const [ads, setAds] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedAdSet, setSelectedAdSet] = useState(null);
   const [showAdSetModal, setShowAdSetModal] = useState(false);
   const [editingAdSet, setEditingAdSet] = useState(null);
+  const [showAdModal, setShowAdModal] = useState(false);
+  const [editingAd, setEditingAd] = useState(null);
+  const [expandedSets, setExpandedSets] = useState(new Set());
 
   useEffect(() => {
-    fetchAdSets();
-    fetchCampaigns();
+    fetchAll();
   }, []);
 
-  const fetchAdSets = async () => {
+
+  const fetchAll = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_URL}/adsets`);
-      const data = await res.json();
-      if (data.success) {
-        setAdSets(data.data || []);
-      }
+      const [setsRes, adsRes, campsRes] = await Promise.all([
+        fetch(`${API_URL}/adsets`).then(r => r.json()),
+        fetch(`${API_URL}/ads`).then(r => r.json()),
+        fetch(`${API_URL}/campaigns`).then(r => r.json())
+      ]);
+      if (setsRes.success) setAdSets(setsRes.data || []);
+      if (adsRes.success) setAds(adsRes.data || []);
+      if (campsRes.success) setCampaigns(campsRes.data || []);
     } catch (error) {
-      console.error("Error fetching ad sets:", error);
+      console.error("Error fetching data:", error);
     } finally {
       setLoading(false);
-    }
-  };
-
-  const fetchCampaigns = async () => {
-    try {
-      const res = await fetch(`${API_URL}/campaigns`);
-      const data = await res.json();
-      if (data.success) {
-        setCampaigns(data.data || []);
-      }
-    } catch (error) {
-      console.error("Error fetching campaigns:", error);
     }
   };
 
@@ -59,7 +61,7 @@ function AdSetsView() {
 
       const data = await res.json();
       if (data.success) {
-        await fetchAdSets();
+        await fetchAll();
         setShowAdSetModal(false);
         setEditingAdSet(null);
         toast.success(editingAdSet ? 'Ad Set actualizado correctamente' : 'Ad Set creado correctamente');
@@ -72,12 +74,97 @@ function AdSetsView() {
     }
   };
 
+  const handleSaveAd = async (adData) => {
+    try {
+      const url = editingAd
+        ? `${API_URL}/ads/${editingAd._id}`
+        : `${API_URL}/ads`;
+      const method = editingAd ? "PUT" : "POST";
+
+      const res = await fetch(url, {
+        method,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(adData)
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        await fetchAll();
+        setShowAdModal(false);
+        setEditingAd(null);
+        toast.success(editingAd ? 'Anuncio actualizado correctamente' : 'Anuncio creado correctamente');
+      } else {
+        toast.error("Error al guardar el anuncio: " + (data.error || "Error desconocido"));
+      }
+    } catch (error) {
+      console.error("Error saving ad:", error);
+      toast.error("Error al guardar el anuncio");
+    }
+  };
+
+  const handleAdStatusChange = async (adId, newStatus) => {
+    try {
+      const res = await fetch(`${API_URL}/ads/${adId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus })
+      });
+
+      const data = await res.json();
+      if (data.success) {
+        await fetchAll();
+        toast.success('Estado actualizado');
+      } else {
+        toast.error("Error al actualizar estado");
+      }
+    } catch (error) {
+      console.error("Error updating ad status:", error);
+      toast.error("Error al actualizar estado");
+    }
+  };
+
+  const toggleSet = (setId) => {
+    setExpandedSets(prev => {
+      const next = new Set(prev);
+      if (next.has(setId)) next.delete(setId);
+      else next.add(setId);
+      return next;
+    });
+  };
+
+  // Build ads lookup by adSetId
+  const adsBySet = {};
+  for (const ad of ads) {
+    const setId = ad.adSetId?._id || 'unassigned';
+    if (!adsBySet[setId]) adsBySet[setId] = [];
+    adsBySet[setId].push(ad);
+  }
+
+  // Group ad sets by campaign
+  const buildHierarchy = () => {
+    const campaignGroups = {};
+
+    for (const adSet of adSets) {
+      const campId = adSet.campaignId?._id || 'no-campaign';
+      const campName = adSet.campaignId?.name || 'Sin Campaña';
+
+      if (!campaignGroups[campId]) {
+        campaignGroups[campId] = { name: campName, adSets: [] };
+      }
+      campaignGroups[campId].adSets.push(adSet);
+    }
+
+    return campaignGroups;
+  };
+
+  const hierarchy = buildHierarchy();
+
   return (
     <div>
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold text-white">Ad Sets</h1>
-          <p className="text-gray-400 mt-2">Gestiona los conjuntos de anuncios de tus campañas</p>
+          <p className="text-gray-400 mt-2">Agrupados por campaña</p>
         </div>
         <button
           onClick={() => {
@@ -93,133 +180,175 @@ function AdSetsView() {
         </button>
       </div>
 
-      <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-700/50">
-          <h2 className="text-xl font-bold text-white">Lista de Ad Sets</h2>
+      {loading ? (
+        <div className="p-8 text-center">
+          <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-gray-400 mt-4">Cargando ad sets...</p>
         </div>
-
-        {loading ? (
-          <div className="p-8 text-center">
-            <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-gray-400 mt-4">Cargando ad sets...</p>
+      ) : adSets.length === 0 ? (
+        <div className="p-12 text-center bg-gray-800/50 border border-gray-700/50 rounded-xl">
+          <div className="w-16 h-16 mx-auto mb-4 bg-gray-700/50 rounded-full flex items-center justify-center">
+            <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
           </div>
-        ) : adSets.length === 0 ? (
-          <div className="p-12 text-center">
-            <div className="w-16 h-16 mx-auto mb-4 bg-gray-700/50 rounded-full flex items-center justify-center">
-              <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-              </svg>
+          <h3 className="text-lg font-semibold text-white mb-2">No hay ad sets</h3>
+          <p className="text-gray-400">Los ad sets se crearán automáticamente con las campañas</p>
+        </div>
+      ) : (
+        <div className="space-y-8">
+          {Object.entries(hierarchy).map(([campId, campaign]) => (
+            <div key={campId}>
+              {/* Campaign Header */}
+              <div className="flex items-center gap-3 mb-3">
+                <div className="w-2 h-2 rounded-full bg-blue-400"></div>
+                <h2 className="text-lg font-bold text-white">{campaign.name}</h2>
+                <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">
+                  {campaign.adSets.length} ad set{campaign.adSets.length !== 1 ? 's' : ''}
+                </span>
+              </div>
+
+              {/* Ad Sets under this campaign */}
+              <div className="space-y-3 ml-2">
+                {campaign.adSets.map((adSet) => {
+                  const isExpanded = expandedSets.has(adSet._id);
+                  const setAds = adsBySet[adSet._id] || [];
+                  const activeAds = setAds.filter(a => a.status === 'ACTIVE').length;
+
+                  return (
+                    <div key={adSet._id} className="bg-gray-800/50 border border-gray-700/50 rounded-lg overflow-hidden">
+                      {/* Ad Set Header */}
+                      <button
+                        onClick={() => toggleSet(adSet._id)}
+                        className="w-full flex items-center justify-between px-4 py-3 bg-gray-800/80 hover:bg-gray-700/50 transition-colors"
+                      >
+                        <div className="flex items-center gap-3">
+                          <svg
+                            className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                          >
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                          </svg>
+                          <span className="font-semibold text-white text-sm">{adSet.name}</span>
+                          <code className="text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded">
+                            {adSet.fbAdSetId}
+                          </code>
+                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+                            adSet.status === 'ACTIVE'
+                              ? "bg-green-500/20 text-green-300"
+                              : adSet.status === 'PAUSED'
+                                ? "bg-yellow-500/20 text-yellow-300"
+                                : "bg-gray-500/20 text-gray-400"
+                          }`}>
+                            {adSet.status === 'ACTIVE' ? 'Activo' : adSet.status === 'PAUSED' ? 'Pausado' : adSet.status}
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">
+                            {activeAds}/{setAds.length} anuncios activos
+                          </span>
+                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+                            <button
+                              onClick={() => setSelectedAdSet(adSet)}
+                              className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors"
+                              title="Ver Detalles"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => {
+                                setEditingAdSet(adSet);
+                                setShowAdSetModal(true);
+                              }}
+                              className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
+                              title="Editar"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                              </svg>
+                            </button>
+                          </div>
+                        </div>
+                      </button>
+
+                      {/* Ads Table */}
+                      {isExpanded && (
+                        <div className="overflow-x-auto">
+                          {setAds.length === 0 ? (
+                            <div className="px-4 py-6 text-center text-gray-500 text-sm">
+                              No hay anuncios en este ad set
+                            </div>
+                          ) : (
+                            <table className="w-full">
+                              <thead className="bg-gray-900/50">
+                                <tr>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">Anuncio</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase w-32">Estado</th>
+                                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-400 uppercase w-28">Acciones</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-gray-700/30">
+                                {setAds.map((ad) => (
+                                  <tr key={ad._id} className="hover:bg-gray-700/20 transition-colors">
+                                    <td className="px-4 py-3">
+                                      <div className="text-sm font-medium text-white">{ad.name}</div>
+                                      <code className="text-xs text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded mt-1 inline-block">
+                                        {ad.fbAdId}
+                                      </code>
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap">
+                                      <select
+                                        value={ad.status}
+                                        onChange={(e) => handleAdStatusChange(ad._id, e.target.value)}
+                                        className={`text-xs font-medium px-2.5 py-1.5 rounded-lg border-2 transition-colors cursor-pointer ${STATUS_STYLE[ad.status] || STATUS_STYLE.ARCHIVED}`}
+                                      >
+                                        <option value="ACTIVE">Activo</option>
+                                        <option value="PAUSED">Pausado</option>
+                                        <option value="ARCHIVED">Archivado</option>
+                                      </select>
+                                    </td>
+                                    <td className="px-4 py-3 whitespace-nowrap text-right">
+                                      <div className="flex items-center justify-end space-x-1">
+                                        <button
+                                          onClick={() => {
+                                            setEditingAd(ad);
+                                            setShowAdModal(true);
+                                          }}
+                                          className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
+                                          title="Editar"
+                                        >
+                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                          </svg>
+                                        </button>
+                                      </div>
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">No hay ad sets</h3>
-            <p className="text-gray-400">Los ad sets se crearán automáticamente con las campañas</p>
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full table-fixed">
-              <thead className="bg-gray-900/50">
-                <tr>
-                  <th className="w-[320px] px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Nombre
-                  </th>
-                  <th className="w-[280px] px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Campaña
-                  </th>
-                  <th className="w-[120px] px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Estado
-                  </th>
-                  <th className="w-[200px] px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Métricas
-                  </th>
-                  <th className="w-[150px] px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Acciones
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-700/50">
-                {adSets.map((adSet) => (
-                  <tr key={adSet._id} className="hover:bg-gray-700/30 transition-colors">
-                    <td className="px-6 py-4">
-                      <div className="text-sm font-medium text-white">{adSet.name}</div>
-                      <code className="text-xs text-blue-400 bg-blue-500/10 px-3 py-1.5 rounded mt-1 inline-block">
-                        {adSet.fbAdSetId}
-                      </code>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                      {adSet.campaignId?.name || 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        adSet.status === 'ACTIVE'
-                          ? "bg-green-500/20 text-green-300"
-                          : "bg-gray-500/20 text-gray-400"
-                      }`}>
-                        {adSet.status === 'ACTIVE' ? 'Activo' : adSet.status === 'PAUSED' ? 'Pausado' : adSet.status}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                      <div className="flex space-x-3 text-xs">
-                        <span title="Impresiones">
-                          <span className="text-gray-500">Imp:</span> {adSet.metrics?.impressions || 0}
-                        </span>
-                        <span title="Clicks">
-                          <span className="text-gray-500">Clk:</span> {adSet.metrics?.clicks || 0}
-                        </span>
-                        <span title="Conversiones">
-                          <span className="text-gray-500">Conv:</span> {adSet.metrics?.conversions || 0}
-                        </span>
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                      <div className="flex items-center justify-end space-x-2">
-                        <button
-                          onClick={() => setSelectedAdSet(adSet)}
-                          className="p-2 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors"
-                          title="Ver Detalles"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => {
-                            setEditingAdSet(adSet);
-                            setShowAdSetModal(true);
-                          }}
-                          className="p-2 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
-                          title="Editar"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                          </svg>
-                        </button>
-                        <button
-                          onClick={() => {/* TODO: implement delete */}}
-                          className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
-                          title="Eliminar"
-                        >
-                          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+          ))}
+        </div>
+      )}
 
-      {/* Details Modal */}
+      {/* Ad Set Details Modal */}
       {selectedAdSet && (
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-gray-800/95 backdrop-blur-lg border border-gray-700/50 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-            {/* Modal Header */}
             <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-white">
-                Detalles del Ad Set
-              </h2>
+              <h2 className="text-xl font-bold text-white">Detalles del Ad Set</h2>
               <button
                 onClick={() => setSelectedAdSet(null)}
                 className="p-2 rounded-lg text-gray-400 hover:bg-gray-700/50 hover:text-white transition-colors"
@@ -230,7 +359,6 @@ function AdSetsView() {
               </button>
             </div>
 
-            {/* Modal Body */}
             <div className="flex-1 overflow-y-auto p-6">
               <div className="space-y-6">
                 {/* Basic Information */}
@@ -316,81 +444,40 @@ function AdSetsView() {
                 )}
 
                 {/* Budget & Optimization */}
-                <div>
-                  <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
-                    Presupuesto y Optimización
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    {selectedAdSet.dailyBudget && (
-                      <div>
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Presupuesto Diario</p>
-                        <p className="text-sm text-white mt-1">${selectedAdSet.dailyBudget}</p>
-                      </div>
-                    )}
-                    {selectedAdSet.lifetimeBudget && (
-                      <div>
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Presupuesto Total</p>
-                        <p className="text-sm text-white mt-1">${selectedAdSet.lifetimeBudget}</p>
-                      </div>
-                    )}
-                    {selectedAdSet.optimizationGoal && (
-                      <div>
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Objetivo de Optimización</p>
-                        <p className="text-sm text-white mt-1">{selectedAdSet.optimizationGoal}</p>
-                      </div>
-                    )}
-                    {selectedAdSet.billingEvent && (
-                      <div>
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Evento de Facturación</p>
-                        <p className="text-sm text-white mt-1">{selectedAdSet.billingEvent}</p>
-                      </div>
-                    )}
-                    {selectedAdSet.bidAmount && (
-                      <div>
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Puja</p>
-                        <p className="text-sm text-white mt-1">${selectedAdSet.bidAmount}</p>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                {/* Placements */}
-                {selectedAdSet.placements && selectedAdSet.placements.length > 0 && (
+                {(selectedAdSet.dailyBudget || selectedAdSet.lifetimeBudget || selectedAdSet.optimizationGoal || selectedAdSet.billingEvent || selectedAdSet.bidAmount) && (
                   <div>
                     <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
-                      Ubicaciones de Anuncios
-                    </h3>
-                    <div className="flex flex-wrap gap-2">
-                      {selectedAdSet.placements.map((placement, idx) => (
-                        <span key={idx} className="bg-blue-500/10 text-blue-400 px-3 py-1.5 rounded text-sm">
-                          {placement}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                )}
-
-                {/* Schedule */}
-                {(selectedAdSet.startTime || selectedAdSet.endTime) && (
-                  <div>
-                    <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
-                      Programación
+                      Presupuesto y Optimización
                     </h3>
                     <div className="grid grid-cols-2 gap-4">
-                      {selectedAdSet.startTime && (
+                      {selectedAdSet.dailyBudget && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Inicio</p>
-                          <p className="text-sm text-white mt-1">
-                            {new Date(selectedAdSet.startTime).toLocaleString('es-MX')}
-                          </p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Presupuesto Diario</p>
+                          <p className="text-sm text-white mt-1">${selectedAdSet.dailyBudget}</p>
                         </div>
                       )}
-                      {selectedAdSet.endTime && (
+                      {selectedAdSet.lifetimeBudget && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Fin</p>
-                          <p className="text-sm text-white mt-1">
-                            {new Date(selectedAdSet.endTime).toLocaleString('es-MX')}
-                          </p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Presupuesto Total</p>
+                          <p className="text-sm text-white mt-1">${selectedAdSet.lifetimeBudget}</p>
+                        </div>
+                      )}
+                      {selectedAdSet.optimizationGoal && (
+                        <div>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Objetivo de Optimización</p>
+                          <p className="text-sm text-white mt-1">{selectedAdSet.optimizationGoal}</p>
+                        </div>
+                      )}
+                      {selectedAdSet.billingEvent && (
+                        <div>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Evento de Facturación</p>
+                          <p className="text-sm text-white mt-1">{selectedAdSet.billingEvent}</p>
+                        </div>
+                      )}
+                      {selectedAdSet.bidAmount && (
+                        <div>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">Puja</p>
+                          <p className="text-sm text-white mt-1">${selectedAdSet.bidAmount}</p>
                         </div>
                       )}
                     </div>
@@ -404,39 +491,29 @@ function AdSetsView() {
                       Métricas
                     </h3>
                     <div className="grid grid-cols-3 gap-4">
-                      <div className="bg-gray-900/50 p-3 rounded">
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Impresiones</p>
-                        <p className="text-2xl font-bold text-white mt-1">{selectedAdSet.metrics.impressions || 0}</p>
-                      </div>
-                      <div className="bg-gray-900/50 p-3 rounded">
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Clicks</p>
-                        <p className="text-2xl font-bold text-white mt-1">{selectedAdSet.metrics.clicks || 0}</p>
-                      </div>
-                      <div className="bg-gray-900/50 p-3 rounded">
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Conversiones</p>
-                        <p className="text-2xl font-bold text-white mt-1">{selectedAdSet.metrics.conversions || 0}</p>
-                      </div>
-                      <div className="bg-gray-900/50 p-3 rounded">
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Gasto</p>
-                        <p className="text-2xl font-bold text-white mt-1">${selectedAdSet.metrics.spend || 0}</p>
-                      </div>
-                      <div className="bg-gray-900/50 p-3 rounded">
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Alcance</p>
-                        <p className="text-2xl font-bold text-white mt-1">{selectedAdSet.metrics.reach || 0}</p>
-                      </div>
-                      {selectedAdSet.metrics.ctr !== undefined && (
-                        <div className="bg-gray-900/50 p-3 rounded">
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">CTR</p>
-                          <p className="text-2xl font-bold text-white mt-1">{selectedAdSet.metrics.ctr}%</p>
-                        </div>
-                      )}
+                      {[
+                        { key: 'impressions', label: 'Impresiones' },
+                        { key: 'clicks', label: 'Clicks' },
+                        { key: 'conversions', label: 'Conversiones' },
+                        { key: 'spend', label: 'Gasto', prefix: '$' },
+                        { key: 'reach', label: 'Alcance' },
+                        { key: 'ctr', label: 'CTR', suffix: '%' },
+                      ].map(m => {
+                        const val = selectedAdSet.metrics[m.key];
+                        if (val === undefined || val === null) return null;
+                        return (
+                          <div key={m.key} className="bg-gray-900/50 p-3 rounded">
+                            <p className="text-xs text-gray-500 uppercase tracking-wide">{m.label}</p>
+                            <p className="text-2xl font-bold text-white mt-1">{m.prefix || ''}{val}{m.suffix || ''}</p>
+                          </div>
+                        );
+                      })}
                     </div>
                   </div>
                 )}
               </div>
             </div>
 
-            {/* Modal Footer */}
             <div className="px-6 py-4 border-t border-gray-700/50 flex justify-end">
               <button
                 onClick={() => setSelectedAdSet(null)}
@@ -458,6 +535,19 @@ function AdSetsView() {
           onClose={() => {
             setShowAdSetModal(false);
             setEditingAdSet(null);
+          }}
+        />
+      )}
+
+      {/* Ad Modal */}
+      {showAdModal && (
+        <AdModal
+          ad={editingAd}
+          adSets={adSets}
+          onSave={handleSaveAd}
+          onClose={() => {
+            setShowAdModal(false);
+            setEditingAd(null);
           }}
         />
       )}

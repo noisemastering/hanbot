@@ -123,6 +123,17 @@ router.put("/:id", async (req, res) => {
       return res.status(404).json({ success: false, error: "Campaña no encontrada" });
     }
 
+    // Cascade active state to child ad sets and ads
+    if (req.body.active !== undefined) {
+      const newStatus = req.body.active ? 'ACTIVE' : 'PAUSED';
+      const adSets = await AdSet.find({ campaignId: req.params.id });
+      await AdSet.updateMany({ campaignId: req.params.id }, { status: newStatus });
+      if (adSets.length > 0) {
+        const adSetIds = adSets.map(s => s._id);
+        await Ad.updateMany({ adSetId: { $in: adSetIds } }, { status: newStatus });
+      }
+    }
+
     console.log('📝 Updated campaign conversationGoal:', campaign.conversationGoal);
     res.json({ success: true, data: campaign });
   } catch (err) {

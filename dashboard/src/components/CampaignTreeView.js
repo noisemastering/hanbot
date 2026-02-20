@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
+import toast from 'react-hot-toast';
+
+const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
 // Recursive component to render a single campaign/adset/ad node and its children
-function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, level = 0, expandedNodes, onToggleExpand }) {
+function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, onToggleActive, level = 0, expandedNodes, onToggleExpand, parentActive = true }) {
   const isExpanded = expandedNodes.has(item._id);
   const hasChildren = item.children && item.children.length > 0;
   const indentPixels = level * 32; // 32px per level
@@ -9,21 +12,8 @@ function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, level = 0
   // Determine item type (campaign, adset, or ad)
   const itemType = item.type || 'campaign';
 
-  // Status badge colors
-  const getStatusColor = (status) => {
-    switch (status?.toUpperCase()) {
-      case 'ACTIVE':
-        return 'bg-green-500/20 text-green-300';
-      case 'PAUSED':
-        return 'bg-yellow-500/20 text-yellow-300';
-      case 'ARCHIVED':
-        return 'bg-gray-500/20 text-gray-300';
-      case 'DELETED':
-        return 'bg-red-500/20 text-red-300';
-      default:
-        return 'bg-blue-500/20 text-blue-300';
-    }
-  };
+  // Effective active: campaigns use their own `active`, children inherit from parent
+  const effectiveActive = itemType === 'campaign' ? item.active !== false : parentActive;
 
   // Type badge colors
   const getTypeColor = (type) => {
@@ -87,10 +77,37 @@ function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, level = 0
                 {getTypeLabel(itemType)}
               </span>
 
-              {/* Status Badge */}
-              {item.status && (
-                <span className={`px-2 py-0.5 rounded text-xs font-medium ${getStatusColor(item.status)}`}>
-                  {item.status.toUpperCase()}
+              {/* Active Toggle (campaigns only) */}
+              {itemType === 'campaign' && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onToggleActive(item);
+                  }}
+                  className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
+                    item.active ? 'bg-green-500' : 'bg-gray-600'
+                  }`}
+                  title={item.active ? 'Desactivar campaña' : 'Activar campaña'}
+                >
+                  <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
+                    item.active ? 'translate-x-4.5' : 'translate-x-0.5'
+                  }`} style={{ transform: item.active ? 'translateX(17px)' : 'translateX(3px)' }} />
+                </button>
+              )}
+              {itemType === 'campaign' && (
+                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                  item.active ? 'bg-green-500/20 text-green-300' : 'bg-gray-500/20 text-gray-400'
+                }`}>
+                  {item.active ? 'Activa' : 'Inactiva'}
+                </span>
+              )}
+
+              {/* Active/Inactive Badge (for adsets and ads, inherited from campaign) */}
+              {itemType !== 'campaign' && (
+                <span className={`px-2 py-0.5 rounded text-xs font-medium ${
+                  effectiveActive ? 'bg-green-500/20 text-green-300' : 'bg-gray-500/20 text-gray-400'
+                }`}>
+                  {effectiveActive ? 'Activo' : 'Inactivo'}
                 </span>
               )}
 
@@ -220,9 +237,11 @@ function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, level = 0
               onDelete={onDelete}
               onAddChild={onAddChild}
               onDetails={onDetails}
+              onToggleActive={onToggleActive}
               level={level + 1}
               expandedNodes={expandedNodes}
               onToggleExpand={onToggleExpand}
+              parentActive={effectiveActive}
             />
           ))}
         </div>
@@ -239,7 +258,8 @@ function CampaignTreeView({
   onDelete,
   onAddChild,
   onDetails,
-  editingItem
+  editingItem,
+  onUpdateCampaign
 }) {
   // Manage expanded nodes state (Set of item IDs)
   // Start with all trees collapsed
@@ -286,6 +306,34 @@ function CampaignTreeView({
     });
   };
 
+  // Toggle campaign active state (optimistic)
+  const handleToggleActive = async (campaign) => {
+    const newActive = !campaign.active;
+    // Optimistic update
+    if (onUpdateCampaign) onUpdateCampaign(campaign._id, { active: newActive });
+
+    try {
+      const res = await fetch(`${API_URL}/campaigns/${campaign._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ active: newActive })
+      });
+      const data = await res.json();
+      if (data.success) {
+        toast.success(newActive ? 'Campaña activada' : 'Campaña desactivada');
+      } else {
+        // Revert on failure
+        if (onUpdateCampaign) onUpdateCampaign(campaign._id, { active: campaign.active });
+        toast.error('Error al cambiar estado');
+      }
+    } catch (err) {
+      // Revert on failure
+      if (onUpdateCampaign) onUpdateCampaign(campaign._id, { active: campaign.active });
+      console.error('Error toggling campaign:', err);
+      toast.error('Error al cambiar estado');
+    }
+  };
+
   // Wrap onAddChild to auto-expand the parent
   const handleAddChild = (item) => {
     // Expand the parent node
@@ -327,6 +375,27 @@ function CampaignTreeView({
   };
 
   const filteredCampaigns = filterCampaigns(campaigns || [], searchQuery);
+  const activeCampaigns = filteredCampaigns.filter(c => c.active);
+  const inactiveCampaigns = filteredCampaigns.filter(c => !c.active);
+
+  const renderNodeList = (list) => (
+    <div className="divide-y divide-gray-700/50">
+      {list.map((campaign) => (
+        <CampaignNode
+          key={campaign._id}
+          item={campaign}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onAddChild={handleAddChild}
+          onDetails={onDetails}
+          onToggleActive={handleToggleActive}
+          level={0}
+          expandedNodes={expandedNodes}
+          onToggleExpand={handleToggleExpand}
+        />
+      ))}
+    </div>
+  );
 
   return (
     <div>
@@ -334,7 +403,7 @@ function CampaignTreeView({
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold text-white">Campañas Publicitarias</h1>
-          <p className="text-gray-400 mt-2">Gestiona campañas, conjuntos de anuncios y anuncios en una vista de árbol jerárquico</p>
+          <p className="text-gray-400 mt-2">Gestiona campañas, conjuntos de anuncios y anuncios</p>
         </div>
         <button
           onClick={onAdd}
@@ -373,71 +442,74 @@ function CampaignTreeView({
         </div>
       </div>
 
-      {/* Campaign Tree */}
-      <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl overflow-hidden">
-        <div className="px-6 py-4 border-b border-gray-700/50">
-          <h2 className="text-xl font-bold text-white">Árbol de Campañas</h2>
-          <p className="text-sm text-gray-400 mt-1">
-            Vista de árbol expandible mostrando campañas, conjuntos de anuncios y anuncios individuales.
-            {searchQuery && <span className="ml-2 text-primary-400">({filteredCampaigns.length} resultados)</span>}
-          </p>
+      {loading ? (
+        <div className="p-8 text-center">
+          <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
+          <p className="text-gray-400 mt-4">Cargando campañas...</p>
         </div>
-
-        {loading ? (
-          <div className="p-8 text-center">
-            <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-gray-400 mt-4">Cargando campañas...</p>
+      ) : !filteredCampaigns || filteredCampaigns.length === 0 ? (
+        <div className="p-12 text-center bg-gray-800/50 border border-gray-700/50 rounded-xl">
+          <div className="w-16 h-16 mx-auto mb-4 bg-gray-700/50 rounded-full flex items-center justify-center">
+            <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              {searchQuery ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+              )}
+            </svg>
           </div>
-        ) : !filteredCampaigns || filteredCampaigns.length === 0 ? (
-          <div className="p-12 text-center">
-            <div className="w-16 h-16 mx-auto mb-4 bg-gray-700/50 rounded-full flex items-center justify-center">
-              <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                {searchQuery ? (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                ) : (
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
-                )}
+          <h3 className="text-lg font-semibold text-white mb-2">
+            {searchQuery ? 'No se encontraron resultados' : 'No se encontraron campañas'}
+          </h3>
+          <p className="text-gray-400 mb-6">
+            {searchQuery
+              ? `No hay campañas que coincidan con "${searchQuery}"`
+              : 'Comienza agregando tu primera campaña publicitaria'
+            }
+          </p>
+          {!searchQuery && (
+            <button
+              onClick={onAdd}
+              className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors inline-flex items-center space-x-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
+              <span>Agregar Campaña</span>
+            </button>
+          )}
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {/* Active Campaigns */}
+          {activeCampaigns.length > 0 && (
+            <div className="bg-gray-800/50 backdrop-blur-lg border border-green-500/20 rounded-xl overflow-hidden">
+              <div className="px-6 py-3 border-b border-gray-700/50 flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-green-400"></div>
+                <h2 className="text-lg font-bold text-white">Activas</h2>
+                <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">
+                  {activeCampaigns.length}
+                </span>
+              </div>
+              {renderNodeList(activeCampaigns)}
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">
-              {searchQuery ? 'No se encontraron resultados' : 'No se encontraron campañas'}
-            </h3>
-            <p className="text-gray-400 mb-6">
-              {searchQuery
-                ? `No hay campañas que coincidan con "${searchQuery}"`
-                : 'Comienza agregando tu primera campaña publicitaria'
-              }
-            </p>
-            {!searchQuery && (
-              <button
-                onClick={onAdd}
-                className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors inline-flex items-center space-x-2"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-                </svg>
-                <span>Agregar Campaña</span>
-              </button>
-            )}
-          </div>
-        ) : (
-          <div className="divide-y divide-gray-700/50">
-            {filteredCampaigns.map((campaign) => (
-              <CampaignNode
-                key={campaign._id}
-                item={campaign}
-                onEdit={onEdit}
-                onDelete={onDelete}
-                onAddChild={handleAddChild}
-                onDetails={onDetails}
-                level={0}
-                expandedNodes={expandedNodes}
-                onToggleExpand={handleToggleExpand}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+          )}
+
+          {/* Inactive Campaigns */}
+          {inactiveCampaigns.length > 0 && (
+            <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl overflow-hidden">
+              <div className="px-6 py-3 border-b border-gray-700/50 flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-gray-500"></div>
+                <h2 className="text-lg font-bold text-gray-400">Inactivas</h2>
+                <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">
+                  {inactiveCampaigns.length}
+                </span>
+              </div>
+              {renderNodeList(inactiveCampaigns)}
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
