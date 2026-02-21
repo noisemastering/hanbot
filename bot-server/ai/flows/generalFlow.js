@@ -230,7 +230,7 @@ async function handleMultiQuestion(entities, convo, psid) {
     'shipping_query': `📦 Enviamos a todo México y también a Estados Unidos. El envío está incluido en la mayoría de nuestros productos.`,
     'payment_query': isNonML
       ? `El pago se realiza al ordenar a través de transferencia o depósito bancario.`
-      : `Nuestra tienda en Mercado Libre acepta tarjeta de crédito/débito, efectivo en OXXO y tiendas de conveniencia, y Mercado Crédito. En nuestra tienda física aceptamos efectivo y tarjetas.`,
+      : `En pedidos por Mercado Libre, el pago se realiza al ordenar (tarjeta, efectivo en OXXO, meses sin intereses o Mercado Crédito). Es compra protegida: si no te llega, llega defectuoso o es diferente a lo solicitado, se te devuelve tu dinero. En nuestra tienda física aceptamos efectivo y tarjetas.`,
     'availability_query': `✅ Manejamos malla sombra confeccionada desde ${sizeRange.smallest} hasta ${sizeRange.largest}, lista para instalar.`,
     'delivery_time_query': `🚚 Normalmente de 3 a 5 días hábiles dependiendo de tu ubicación.`,
     'installation_query': `En Hanlob no contamos con servicio de instalación, pero nuestra malla sombra confeccionada es muy fácil de instalar. Para saber la medida te sugiero medir el área y restar un metro por lado, por ejemplo si tu área mide 4x5, la malla sombra que ocupas sería la de 3x4 metros.`,
@@ -310,7 +310,7 @@ async function handlePayment(entities, convo, psid) {
 
   return {
     type: "text",
-    text: "Nuestra tienda en Mercado Libre acepta tarjeta de crédito/débito, efectivo en OXXO y tiendas de conveniencia, y Mercado Crédito. En nuestra tienda física aceptamos efectivo y tarjetas."
+    text: "En pedidos por Mercado Libre, el pago se realiza al ordenar (tarjeta, efectivo en OXXO, meses sin intereses o Mercado Crédito). Es compra protegida: si no te llega, llega defectuoso o es diferente a lo solicitado, se te devuelve tu dinero. En nuestra tienda física aceptamos efectivo y tarjetas."
   };
 }
 

@@ -1190,7 +1190,7 @@ async function generateReply(userMessage, psid, referral = null) {
   // ====== PAY ON DELIVERY PRE-CHECK ======
   // Regex safety net: if user clearly asks about cash-on-delivery, force pay_on_delivery_query
   // This prevents misclassification as generic payment_query (which doesn't say NO)
-  const payOnDeliveryPattern = /\b(pago\s+(al\s+)?(recibir|entreg)|contra\s*entrega|contraentrega|cuando\s+llegue\s+pago|al\s+recibir\s+pago|se\s+paga\s+al\s+(recibir|entreg)|cobr[ao]\s+al\s+(recibir|entreg))\b/i;
+  const payOnDeliveryPattern = /\b(pago\s+(al\s+)?(recibir|entreg)|contra\s*entrega|contraentrega|cuando\s+llegue\s+pago|al\s+recibir|se\s+paga\s+al\s+(recibir|entreg)|cobr[ao]\s+al\s+(recibir|entreg))\b/i;
   if (payOnDeliveryPattern.test(userMessage)) {
     console.log(`💳 Pay-on-delivery question detected via regex, forcing explicit NO`);
     const logisticsHandlers = require("./handlers/logistics");
