@@ -1,6 +1,8 @@
 import React, { useState } from 'react';
+import { useTranslation } from '../i18n';
 
 function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
+  const { t, locale } = useTranslation();
   const [selectedCampaign, setSelectedCampaign] = useState(null);
 
   return (
@@ -8,8 +10,8 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
       {/* Header with Add Button */}
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-white">Campañas</h1>
-          <p className="text-gray-400 mt-2">Gestiona las campañas de Facebook/Instagram</p>
+          <h1 className="text-3xl font-bold text-white">{t('campaignsView.title')}</h1>
+          <p className="text-gray-400 mt-2">{t('campaignsView.subtitle')}</p>
         </div>
         <button
           onClick={onAdd}
@@ -18,20 +20,20 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          <span>Nueva Campaña</span>
+          <span>{t('campaignsView.newCampaign')}</span>
         </button>
       </div>
 
       {/* Campaigns Table */}
       <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl overflow-hidden">
         <div className="px-6 py-4 border-b border-gray-700/50">
-          <h2 className="text-xl font-bold text-white">Lista de Campañas</h2>
+          <h2 className="text-xl font-bold text-white">{t('campaignsView.campaignList')}</h2>
         </div>
 
         {loading ? (
           <div className="p-8 text-center">
             <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-            <p className="text-gray-400 mt-4">Cargando campañas...</p>
+            <p className="text-gray-400 mt-4">{t('campaignsView.loadingCampaigns')}</p>
           </div>
         ) : campaigns.length === 0 ? (
           <div className="p-12 text-center">
@@ -40,8 +42,8 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
               </svg>
             </div>
-            <h3 className="text-lg font-semibold text-white mb-2">No hay campañas</h3>
-            <p className="text-gray-400 mb-6">Comienza creando tu primera campaña</p>
+            <h3 className="text-lg font-semibold text-white mb-2">{t('campaignsView.noCampaigns')}</h3>
+            <p className="text-gray-400 mb-6">{t('campaignsView.startCreating')}</p>
             <button
               onClick={onAdd}
               className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors inline-flex items-center space-x-2"
@@ -49,7 +51,7 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              <span>Agregar Campaña</span>
+              <span>{t('campaignsView.addCampaign')}</span>
             </button>
           </div>
         ) : (
@@ -58,19 +60,19 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
               <thead className="bg-gray-900/50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Nombre
+                    {t('campaignsView.thName')}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Estado
+                    {t('campaignsView.thStatus')}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Métricas
+                    {t('campaignsView.thMetrics')}
                   </th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Fechas
+                    {t('campaignsView.thDates')}
                   </th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
-                    Acciones
+                    {t('campaignsView.thActions')}
                   </th>
                 </tr>
               </thead>
@@ -97,7 +99,7 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
                           ? "bg-green-500/20 text-green-300"
                           : "bg-gray-500/20 text-gray-400"
                       }`}>
-                        {campaign.active ? "Activa" : "Inactiva"}
+                        {campaign.active ? t('campaignsView.active') : t('campaignsView.inactive')}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
@@ -116,8 +118,8 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
                       {campaign.startDate && (
                         <div className="text-xs">
-                          {new Date(campaign.startDate).toLocaleDateString('es-MX', { month: 'short', day: 'numeric' })}
-                          {campaign.endDate && ` - ${new Date(campaign.endDate).toLocaleDateString('es-MX', { month: 'short', day: 'numeric' })}`}
+                          {new Date(campaign.startDate).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}
+                          {campaign.endDate && ` - ${new Date(campaign.endDate).toLocaleDateString(locale, { month: 'short', day: 'numeric' })}`}
                         </div>
                       )}
                     </td>
@@ -126,7 +128,7 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
                         <button
                           onClick={() => setSelectedCampaign(campaign)}
                           className="p-2 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors"
-                          title="Ver Detalles"
+                          title={t('campaignTree.viewDetails')}
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -135,7 +137,7 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
                         <button
                           onClick={() => onEdit(campaign)}
                           className="p-2 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
-                          title="Editar"
+                          title={t('common.edit')}
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -144,7 +146,7 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
                         <button
                           onClick={() => onDelete(campaign)}
                           className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
-                          title="Eliminar"
+                          title={t('common.delete')}
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -167,7 +169,7 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between">
               <h2 className="text-xl font-bold text-white">
-                Detalles de la Campaña
+                {t('campaignsView.detailsTitle')}
               </h2>
               <button
                 onClick={() => setSelectedCampaign(null)}
@@ -185,37 +187,37 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
                 {/* Basic Information */}
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
-                    Información Básica
+                    {t('campaignsView.basicInfo')}
                   </h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">Nombre</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">{t('common.name')}</p>
                       <p className="text-sm text-white mt-1">{selectedCampaign.name}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">Referencia</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">{t('campaignsView.reference')}</p>
                       <p className="text-sm text-white mt-1">
                         <code className="bg-primary-500/10 text-primary-400 px-2 py-1 rounded">{selectedCampaign.ref}</code>
                       </p>
                     </div>
                     {selectedCampaign.description && (
                       <div className="col-span-2">
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Descripción</p>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">{t('common.description')}</p>
                         <p className="text-sm text-gray-300 mt-1">{selectedCampaign.description}</p>
                       </div>
                     )}
                     <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">Estado</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">{t('common.status')}</p>
                       <p className="text-sm mt-1">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                           selectedCampaign.active ? "bg-green-500/20 text-green-300" : "bg-gray-500/20 text-gray-400"
                         }`}>
-                          {selectedCampaign.active ? "Activa" : "Inactiva"}
+                          {selectedCampaign.active ? t('campaignsView.active') : t('campaignsView.inactive')}
                         </span>
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">Status FB</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">{t('campaignsView.statusFb')}</p>
                       <p className="text-sm text-white mt-1">{selectedCampaign.status || 'N/A'}</p>
                     </div>
                   </div>
@@ -224,7 +226,7 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
                 {/* Facebook Configuration */}
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
-                    Configuración de Facebook
+                    {t('campaignsView.fbConfig')}
                   </h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
@@ -240,11 +242,11 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
                       <p className="text-sm text-white mt-1">{selectedCampaign.fbAdAccountId || 'N/A'}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">Objetivo</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">{t('campaignsView.objective')}</p>
                       <p className="text-sm text-white mt-1">{selectedCampaign.objective || 'N/A'}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">ID Interno</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">{t('campaignsView.internalId')}</p>
                       <p className="text-sm text-gray-400 mt-1">
                         <code className="text-xs">{selectedCampaign._id}</code>
                       </p>
@@ -256,18 +258,18 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
                 {(selectedCampaign.dailyBudget || selectedCampaign.lifetimeBudget) && (
                   <div>
                     <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
-                      Presupuesto
+                      {t('campaignsView.budget')}
                     </h3>
                     <div className="grid grid-cols-2 gap-4">
                       {selectedCampaign.dailyBudget && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Diario</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('campaignsView.daily')}</p>
                           <p className="text-sm text-white mt-1">${selectedCampaign.dailyBudget}</p>
                         </div>
                       )}
                       {selectedCampaign.lifetimeBudget && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Total</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('campaignsView.totalBudget')}</p>
                           <p className="text-sm text-white mt-1">${selectedCampaign.lifetimeBudget}</p>
                         </div>
                       )}
@@ -279,14 +281,14 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
                 {(selectedCampaign.startDate || selectedCampaign.endDate) && (
                   <div>
                     <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
-                      Fechas
+                      {t('campaignsView.dates')}
                     </h3>
                     <div className="grid grid-cols-2 gap-4">
                       {selectedCampaign.startDate && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Inicio</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('campaignsView.startDate')}</p>
                           <p className="text-sm text-white mt-1">
-                            {new Date(selectedCampaign.startDate).toLocaleDateString('es-MX', {
+                            {new Date(selectedCampaign.startDate).toLocaleDateString(locale, {
                               year: 'numeric',
                               month: 'long',
                               day: 'numeric'
@@ -296,9 +298,9 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
                       )}
                       {selectedCampaign.endDate && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Fin</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('campaignsView.endDate')}</p>
                           <p className="text-sm text-white mt-1">
-                            {new Date(selectedCampaign.endDate).toLocaleDateString('es-MX', {
+                            {new Date(selectedCampaign.endDate).toLocaleDateString(locale, {
                               year: 'numeric',
                               month: 'long',
                               day: 'numeric'
@@ -313,30 +315,30 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
                 {/* Bot Configuration */}
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
-                    Configuración del Bot
+                    {t('campaignsView.botConfig')}
                   </h3>
                   <div className="grid grid-cols-2 gap-4">
                     {selectedCampaign.defaultFlow && (
                       <div>
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Flujo Predeterminado</p>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">{t('campaignsView.defaultFlow')}</p>
                         <p className="text-sm text-white mt-1">{selectedCampaign.defaultFlow}</p>
                       </div>
                     )}
                     {selectedCampaign.conversionGoal && (
                       <div>
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Meta de Conversión</p>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">{t('campaignsView.conversionGoal')}</p>
                         <p className="text-sm text-white mt-1">{selectedCampaign.conversionGoal}</p>
                       </div>
                     )}
                     {selectedCampaign.productFocus && (
                       <div>
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Producto Focus</p>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">{t('campaignsView.productFocus')}</p>
                         <p className="text-sm text-white mt-1">{selectedCampaign.productFocus}</p>
                       </div>
                     )}
                     {selectedCampaign.initialMessage && (
                       <div className="col-span-2">
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Mensaje Inicial</p>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">{t('campaignsView.initialMessage')}</p>
                         <p className="text-sm text-gray-300 mt-1 bg-gray-900/50 p-3 rounded">
                           {selectedCampaign.initialMessage}
                         </p>
@@ -349,27 +351,27 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
                 {selectedCampaign.metrics && (
                   <div>
                     <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
-                      Métricas
+                      {t('campaignsView.metricsTitle')}
                     </h3>
                     <div className="grid grid-cols-3 gap-4">
                       <div className="bg-gray-900/50 p-3 rounded">
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Visitas</p>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">{t('campaignsView.visits')}</p>
                         <p className="text-2xl font-bold text-white mt-1">{selectedCampaign.metrics.visits || 0}</p>
                       </div>
                       <div className="bg-gray-900/50 p-3 rounded">
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Interacciones</p>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">{t('campaignsView.interactions')}</p>
                         <p className="text-2xl font-bold text-white mt-1">{selectedCampaign.metrics.interactions || 0}</p>
                       </div>
                       <div className="bg-gray-900/50 p-3 rounded">
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Clicks</p>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">{t('campaignsView.clicks')}</p>
                         <p className="text-2xl font-bold text-white mt-1">{selectedCampaign.metrics.clicks || 0}</p>
                       </div>
                       <div className="bg-gray-900/50 p-3 rounded">
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Leads</p>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">{t('campaignsView.leads')}</p>
                         <p className="text-2xl font-bold text-white mt-1">{selectedCampaign.metrics.leads || 0}</p>
                       </div>
                       <div className="bg-gray-900/50 p-3 rounded">
-                        <p className="text-xs text-gray-500 uppercase tracking-wide">Conversiones</p>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">{t('campaignsView.conversions')}</p>
                         <p className="text-2xl font-bold text-white mt-1">{selectedCampaign.metrics.conversions || 0}</p>
                       </div>
                     </div>
@@ -384,7 +386,7 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete }) {
                 onClick={() => setSelectedCampaign(null)}
                 className="px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
               >
-                Cerrar
+                {t('common.close')}
               </button>
             </div>
           </div>

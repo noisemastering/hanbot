@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../i18n';
 
 function ProductModal({ product, onSave, onClose }) {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     name: '',
     price: '',
@@ -54,7 +56,7 @@ function ProductModal({ product, onSave, onClose }) {
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between">
           <h2 className="text-xl font-bold text-white">
-            {product ? 'Editar Producto' : 'Nuevo Producto'}
+            {product ? t('productModal.editTitle') : t('productModal.newTitle')}
           </h2>
           <button
             onClick={onClose}
@@ -72,7 +74,7 @@ function ProductModal({ product, onSave, onClose }) {
             {/* Name */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Nombre *
+                {t('productModal.nameRequired')}
               </label>
               <input
                 type="text"
@@ -89,7 +91,7 @@ function ProductModal({ product, onSave, onClose }) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Tipo *
+                  {t('productModal.typeRequired')}
                 </label>
                 <select
                   name="type"
@@ -97,13 +99,13 @@ function ProductModal({ product, onSave, onClose }) {
                   onChange={handleChange}
                   className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
-                  <option value="confeccionada">Confeccionada</option>
-                  <option value="rollo">Rollo</option>
+                  <option value="confeccionada">{t('productModal.typeConfeccionada')}</option>
+                  <option value="rollo">{t('productModal.typeRollo')}</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Tamaño
+                  {t('productModal.size')}
                 </label>
                 <input
                   type="text"
@@ -119,7 +121,7 @@ function ProductModal({ product, onSave, onClose }) {
             {/* Price */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Precio
+                {t('productModal.price')}
               </label>
               <input
                 type="text"
@@ -135,7 +137,7 @@ function ProductModal({ product, onSave, onClose }) {
             <div className="border border-gray-700/50 rounded-lg p-4 space-y-4">
               <div className="flex items-center justify-between">
                 <label className="text-sm font-medium text-gray-300">
-                  Mayoreo habilitado
+                  {t('productModal.wholesaleEnabled')}
                 </label>
                 <label className="relative inline-flex items-center cursor-pointer">
                   <input
@@ -153,7 +155,7 @@ function ProductModal({ product, onSave, onClose }) {
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Cantidad mínima
+                      {t('productModal.wholesaleMinQty')}
                     </label>
                     <input
                       type="number"
@@ -167,7 +169,7 @@ function ProductModal({ product, onSave, onClose }) {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Precio mayoreo
+                      {t('productModal.wholesalePrice')}
                     </label>
                     <input
                       type="number"
@@ -186,7 +188,7 @@ function ProductModal({ product, onSave, onClose }) {
             {/* Mercado Libre Link */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Link de Mercado Libre
+                {t('productModal.mlLink')}
               </label>
               <input
                 type="url"
@@ -201,7 +203,7 @@ function ProductModal({ product, onSave, onClose }) {
             {/* Image URL */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                URL de Imagen
+                {t('productModal.imageUrl')}
               </label>
               <input
                 type="url"
@@ -216,7 +218,7 @@ function ProductModal({ product, onSave, onClose }) {
             {/* Description */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Descripción
+                {t('productModal.description')}
               </label>
               <textarea
                 name="description"
@@ -224,7 +226,7 @@ function ProductModal({ product, onSave, onClose }) {
                 onChange={handleChange}
                 rows={3}
                 className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                placeholder="Descripción del producto..."
+                placeholder={t('productModal.descriptionPlaceholder')}
               />
             </div>
           </div>
@@ -237,13 +239,13 @@ function ProductModal({ product, onSave, onClose }) {
             onClick={onClose}
             className="px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
           >
-            Cancelar
+            {t('productModal.cancel')}
           </button>
           <button
             onClick={handleSubmit}
             className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
           >
-            {product ? 'Actualizar' : 'Crear'} Producto
+            {product ? t('productModal.updateProduct') : t('productModal.createProduct')}
           </button>
         </div>
       </div>

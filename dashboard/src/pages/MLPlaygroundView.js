@@ -1,10 +1,12 @@
 // pages/MLPlaygroundView.js
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { useTranslation } from '../i18n';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
 function MLPlaygroundView() {
+  const { t } = useTranslation();
   const [status, setStatus] = useState(null);
   const [items, setItems] = useState([]);
   const [selectedItem, setSelectedItem] = useState(null);
@@ -37,7 +39,7 @@ function MLPlaygroundView() {
       addLog(data.connected ? 'success' : 'warning', 'Connection status checked', data);
     } catch (error) {
       addLog('error', 'Failed to check status', error.message);
-      toast.error('Error checking ML status');
+      toast.error(t('mlPlayground.errorStatus'));
     } finally {
       setLoading(prev => ({ ...prev, status: false }));
     }
@@ -59,7 +61,7 @@ function MLPlaygroundView() {
       }
     } catch (error) {
       addLog('error', 'Failed to fetch items', error.message);
-      toast.error('Error fetching items');
+      toast.error(t('mlPlayground.errorItems'));
     } finally {
       setLoading(prev => ({ ...prev, items: false }));
     }
@@ -84,7 +86,7 @@ function MLPlaygroundView() {
       }
     } catch (error) {
       addLog('error', `Failed to fetch ${itemId}`, error.message);
-      toast.error('Error fetching item details');
+      toast.error(t('mlPlayground.errorDetails'));
     } finally {
       setLoading(prev => ({ ...prev, details: false }));
     }
@@ -95,7 +97,7 @@ function MLPlaygroundView() {
 
     const price = parseFloat(newPrice);
     if (isNaN(price) || price <= 0) {
-      toast.error('Precio invalido');
+      toast.error(t('mlPlayground.invalidPrice'));
       return;
     }
 
@@ -113,7 +115,7 @@ function MLPlaygroundView() {
       const data = await res.json();
 
       if (data.success) {
-        toast.success(`Precio actualizado a $${price}`);
+        toast.success(t('mlPlayground.priceUpdated', { price }));
         addLog('success', `Price updated for ${selectedItem}`, { newPrice: price, response: data });
         // Refresh item details
         fetchItemDetails(selectedItem);
@@ -125,7 +127,7 @@ function MLPlaygroundView() {
       }
     } catch (error) {
       addLog('error', `Failed to update price`, error.message);
-      toast.error('Error updating price');
+      toast.error(t('mlPlayground.errorUpdatePrice'));
     } finally {
       setLoading(prev => ({ ...prev, update: false }));
     }
@@ -147,8 +149,8 @@ function MLPlaygroundView() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">ML API Playground</h2>
-          <p className="text-sm text-gray-400 mt-1">Prueba integraciones con Mercado Libre</p>
+          <h2 className="text-2xl font-bold text-white">{t('mlPlayground.pageTitle')}</h2>
+          <p className="text-sm text-gray-400 mt-1">{t('mlPlayground.pageSubtitle')}</p>
         </div>
       </div>
 
@@ -158,11 +160,11 @@ function MLPlaygroundView() {
           <div className="flex items-center space-x-4">
             <div className={`w-3 h-3 rounded-full ${status?.connected ? 'bg-green-500' : 'bg-red-500'}`}></div>
             <div>
-              <h3 className="text-white font-medium">Estado de Conexion</h3>
+              <h3 className="text-white font-medium">{t('mlPlayground.connectionStatus')}</h3>
               <p className="text-sm text-gray-400">
                 {status?.connected
-                  ? `Conectado como ${status.sellerNickname} (${status.sellerId})`
-                  : status?.message || 'No conectado'}
+                  ? t('mlPlayground.connectedAs', { nickname: status.sellerNickname, id: status.sellerId })
+                  : status?.message || t('mlPlayground.notConnected')}
               </p>
             </div>
           </div>
@@ -171,7 +173,7 @@ function MLPlaygroundView() {
             disabled={loading.status}
             className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors disabled:opacity-50"
           >
-            {loading.status ? 'Verificando...' : 'Verificar'}
+            {loading.status ? t('mlPlayground.verifying') : t('mlPlayground.verify')}
           </button>
         </div>
       </div>
@@ -180,13 +182,13 @@ function MLPlaygroundView() {
         {/* Items List */}
         <div className="bg-gray-800/50 rounded-lg border border-gray-700/50 p-4">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-lg font-semibold text-white">Items en ML</h3>
+            <h3 className="text-lg font-semibold text-white">{t('mlPlayground.itemsInML')}</h3>
             <button
               onClick={fetchItems}
               disabled={loading.items || !status?.connected}
               className="px-3 py-1.5 bg-primary-600 hover:bg-primary-700 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
             >
-              {loading.items ? 'Cargando...' : 'Cargar Items'}
+              {loading.items ? t('mlPlayground.loadingItems') : t('mlPlayground.loadItems')}
             </button>
           </div>
 
@@ -195,7 +197,7 @@ function MLPlaygroundView() {
               type="text"
               value={itemSearch}
               onChange={(e) => setItemSearch(e.target.value)}
-              placeholder="Buscar por titulo, ID o SKU..."
+              placeholder={t('mlPlayground.searchPlaceholder')}
               className="w-full px-3 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white text-sm placeholder-gray-400 mb-3"
             />
           )}
@@ -203,7 +205,7 @@ function MLPlaygroundView() {
           <div className="space-y-2 max-h-96 overflow-y-auto">
             {filteredItems.length === 0 ? (
               <p className="text-gray-400 text-sm text-center py-4">
-                {items.length === 0 ? 'Haz clic en "Cargar Items" para ver tus publicaciones' : 'No se encontraron items'}
+                {items.length === 0 ? t('mlPlayground.clickToLoad') : t('mlPlayground.noItemsFound')}
               </p>
             ) : (
               filteredItems.map((item) => (
@@ -242,7 +244,7 @@ function MLPlaygroundView() {
 
         {/* Item Details & Price Update */}
         <div className="bg-gray-800/50 rounded-lg border border-gray-700/50 p-4">
-          <h3 className="text-lg font-semibold text-white mb-4">Detalles del Item</h3>
+          <h3 className="text-lg font-semibold text-white mb-4">{t('mlPlayground.itemDetails')}</h3>
 
           {loading.details ? (
             <div className="flex items-center justify-center py-12">
@@ -263,39 +265,39 @@ function MLPlaygroundView() {
                     rel="noopener noreferrer"
                     className="text-sm text-primary-400 hover:underline"
                   >
-                    Ver en ML
+                    {t('mlPlayground.viewInML')}
                   </a>
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3 text-sm">
                 <div className="bg-gray-700/50 rounded p-2">
-                  <span className="text-gray-400">Precio actual:</span>
+                  <span className="text-gray-400">{t('mlPlayground.currentPrice')}</span>
                   <span className="text-green-400 font-medium ml-2">${itemDetails.item.price}</span>
                 </div>
                 {itemDetails.item.original_price && (
                   <div className="bg-gray-700/50 rounded p-2">
-                    <span className="text-gray-400">Precio original:</span>
+                    <span className="text-gray-400">{t('mlPlayground.originalPrice')}</span>
                     <span className="text-gray-300 ml-2">${itemDetails.item.original_price}</span>
                   </div>
                 )}
                 <div className="bg-gray-700/50 rounded p-2">
-                  <span className="text-gray-400">Estado:</span>
+                  <span className="text-gray-400">{t('mlPlayground.status')}</span>
                   <span className={`ml-2 ${itemDetails.item.status === 'active' ? 'text-green-400' : 'text-yellow-400'}`}>
                     {itemDetails.item.status}
                   </span>
                 </div>
                 <div className="bg-gray-700/50 rounded p-2">
-                  <span className="text-gray-400">Disponibles:</span>
+                  <span className="text-gray-400">{t('mlPlayground.available')}</span>
                   <span className="text-white ml-2">{itemDetails.item.available_quantity}</span>
                 </div>
                 <div className="bg-gray-700/50 rounded p-2">
-                  <span className="text-gray-400">Vendidos:</span>
+                  <span className="text-gray-400">{t('mlPlayground.sold')}</span>
                   <span className="text-white ml-2">{itemDetails.item.sold_quantity}</span>
                 </div>
                 {itemDetails.item.seller_custom_field && (
                   <div className="bg-gray-700/50 rounded p-2">
-                    <span className="text-gray-400">SKU:</span>
+                    <span className="text-gray-400">{t('mlPlayground.sku')}</span>
                     <span className="text-blue-400 ml-2">{itemDetails.item.seller_custom_field}</span>
                   </div>
                 )}
@@ -303,7 +305,7 @@ function MLPlaygroundView() {
 
               {/* Price Update Form */}
               <div className="border-t border-gray-700 pt-4 mt-4">
-                <h4 className="text-white font-medium mb-3">Actualizar Precio</h4>
+                <h4 className="text-white font-medium mb-3">{t('mlPlayground.updatePrice')}</h4>
                 <div className="flex space-x-3">
                   <div className="flex-1">
                     <div className="relative">
@@ -313,7 +315,7 @@ function MLPlaygroundView() {
                         value={newPrice}
                         onChange={(e) => setNewPrice(e.target.value)}
                         className="w-full pl-8 pr-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-primary-500"
-                        placeholder="Nuevo precio"
+                        placeholder={t('mlPlayground.newPricePlaceholder')}
                         min="1"
                         step="0.01"
                       />
@@ -324,17 +326,17 @@ function MLPlaygroundView() {
                     disabled={loading.update || !newPrice}
                     className="px-6 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {loading.update ? 'Actualizando...' : 'Actualizar'}
+                    {loading.update ? t('mlPlayground.updating') : t('mlPlayground.update')}
                   </button>
                 </div>
                 <p className="text-xs text-gray-500 mt-2">
-                  Nota: Si el item tiene promocion activa, el precio puede no actualizarse.
+                  {t('mlPlayground.priceNote')}
                 </p>
               </div>
             </div>
           ) : (
             <p className="text-gray-400 text-center py-12">
-              Selecciona un item para ver sus detalles
+              {t('mlPlayground.selectItem')}
             </p>
           )}
         </div>
@@ -343,17 +345,17 @@ function MLPlaygroundView() {
       {/* API Log */}
       <div className="bg-gray-800/50 rounded-lg border border-gray-700/50 p-4">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-lg font-semibold text-white">API Log</h3>
+          <h3 className="text-lg font-semibold text-white">{t('mlPlayground.apiLog')}</h3>
           <button
             onClick={() => setApiLog([])}
             className="text-sm text-gray-400 hover:text-white"
           >
-            Limpiar
+            {t('mlPlayground.clearLog')}
           </button>
         </div>
         <div className="space-y-2 max-h-48 overflow-y-auto font-mono text-xs">
           {apiLog.length === 0 ? (
-            <p className="text-gray-500">No hay actividad registrada</p>
+            <p className="text-gray-500">{t('mlPlayground.noActivity')}</p>
           ) : (
             apiLog.map((entry) => (
               <div

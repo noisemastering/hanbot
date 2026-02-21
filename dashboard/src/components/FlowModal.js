@@ -1,23 +1,25 @@
 // components/FlowModal.js
 import React, { useState, useEffect } from 'react';
-
-const INPUT_TYPES = [
-  { value: 'text', label: 'Texto libre' },
-  { value: 'options', label: 'Opciones' },
-  { value: 'number', label: 'Número' },
-  { value: 'phone', label: 'Teléfono' },
-  { value: 'email', label: 'Email' },
-  { value: 'confirm', label: 'Confirmación (Sí/No)' }
-];
-
-const COMPLETE_ACTIONS = [
-  { value: 'message', label: 'Enviar mensaje' },
-  { value: 'handoff', label: 'Transferir a humano' },
-  { value: 'flow', label: 'Iniciar otro flow' },
-  { value: 'intent', label: 'Disparar intent' }
-];
+import { useTranslation } from '../i18n';
 
 function FlowModal({ flow, intents, onClose, onSave }) {
+  const { t } = useTranslation();
+
+  const INPUT_TYPES = [
+    { value: 'text', label: t('flowModal.inputTypeText') },
+    { value: 'options', label: t('flowModal.inputTypeOptions') },
+    { value: 'number', label: t('flowModal.inputTypeNumber') },
+    { value: 'phone', label: t('flowModal.inputTypePhone') },
+    { value: 'email', label: t('flowModal.inputTypeEmail') },
+    { value: 'confirm', label: t('flowModal.inputTypeConfirm') }
+  ];
+
+  const COMPLETE_ACTIONS = [
+    { value: 'message', label: t('flowModal.actionMessage') },
+    { value: 'handoff', label: t('flowModal.actionHandoff') },
+    { value: 'flow', label: t('flowModal.actionFlow') },
+    { value: 'intent', label: t('flowModal.actionIntent') }
+  ];
   const [activeTab, setActiveTab] = useState('basic');
   const [formData, setFormData] = useState({
     key: '',
@@ -63,11 +65,11 @@ function FlowModal({ flow, intents, onClose, onSave }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (!formData.key || !formData.name) {
-      alert('Por favor completa la key y el nombre');
+      alert(t('flowModal.errorKeyName'));
       return;
     }
     if (formData.steps.length === 0) {
-      alert('El flow debe tener al menos un paso');
+      alert(t('flowModal.errorNoSteps'));
       return;
     }
     onSave(formData);
@@ -154,7 +156,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
         {/* Header */}
         <div className="bg-gray-800 border-b border-gray-700 px-6 py-4 flex items-center justify-between">
           <h3 className="text-xl font-semibold text-white">
-            {flow ? 'Editar Flow' : 'Nuevo Flow'}
+            {flow ? t('flowModal.edit') : t('flows.addFlow')}
           </h3>
           <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -176,7 +178,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                     : 'border-transparent text-gray-400 hover:text-white'
                 }`}
               >
-                {tab === 'basic' ? 'Básico' : tab === 'steps' ? `Pasos (${formData.steps.length})` : 'Al Completar'}
+                {tab === 'basic' ? t('flowModal.basicTab') : tab === 'steps' ? `${t('flowModal.stepsTab')} (${formData.steps.length})` : t('flowModal.completeTab')}
               </button>
             ))}
           </div>
@@ -191,7 +193,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                 {/* Key */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Key (identificador) *
+                    {t('flowModal.keyLabel')}
                   </label>
                   <input
                     type="text"
@@ -210,7 +212,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                 {/* Name */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Nombre *
+                    {t('flowModal.nameRequired')}
                   </label>
                   <input
                     type="text"
@@ -226,28 +228,28 @@ function FlowModal({ flow, intents, onClose, onSave }) {
               {/* Description */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Descripción
+                  {t('flowModal.description')}
                 </label>
                 <textarea
                   value={formData.description}
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-primary-500 resize-none"
                   rows="2"
-                  placeholder="Descripción del flujo"
+                  placeholder={t('flowModal.descriptionPlaceholder')}
                 />
               </div>
 
               {/* Trigger Intent */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Intent que dispara este flow
+                  {t('flowModal.triggerIntentLabel')}
                 </label>
                 <select
                   value={formData.triggerIntent}
                   onChange={(e) => setFormData({ ...formData, triggerIntent: e.target.value })}
                   className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-primary-500"
                 >
-                  <option value="">Ninguno (manual)</option>
+                  <option value="">{t('flowModal.noTrigger')}</option>
                   {intents.filter(i => i.handlerType === 'flow').map(intent => (
                     <option key={intent.key} value={intent.key}>
                       {intent.name} ({intent.key})
@@ -255,7 +257,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                   ))}
                 </select>
                 <p className="text-xs text-gray-500 mt-1">
-                  Solo se muestran intents con handlerType="flow"
+                  {t('flowModal.triggerNote')}
                 </p>
               </div>
 
@@ -263,7 +265,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                 {/* Timeout */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Timeout (minutos)
+                    {t('flowModal.timeout')}
                   </label>
                   <input
                     type="number"
@@ -285,7 +287,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                       className="sr-only peer"
                     />
                     <div className="relative w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-primary-600"></div>
-                    <span className="ml-3 text-sm text-gray-300">Flow activo</span>
+                    <span className="ml-3 text-sm text-gray-300">{t('flowModal.flowActive')}</span>
                   </label>
                 </div>
               </div>
@@ -297,13 +299,13 @@ function FlowModal({ flow, intents, onClose, onSave }) {
             <div className="space-y-4">
               {formData.steps.length === 0 ? (
                 <div className="text-center py-8 bg-gray-700/30 rounded-lg">
-                  <p className="text-gray-400 mb-4">No hay pasos definidos</p>
+                  <p className="text-gray-400 mb-4">{t('flowModal.noStepsDefined')}</p>
                   <button
                     type="button"
                     onClick={addStep}
                     className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
                   >
-                    Agregar primer paso
+                    {t('flowModal.addFirstStep')}
                   </button>
                 </div>
               ) : (
@@ -324,7 +326,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                           </span>
                           <div>
                             <span className="text-white font-medium">
-                              {step.message ? step.message.substring(0, 50) + (step.message.length > 50 ? '...' : '') : 'Paso sin mensaje'}
+                              {step.message ? step.message.substring(0, 50) + (step.message.length > 50 ? '...' : '') : t('flowModal.stepNoMessage')}
                             </span>
                             {step.collectAs && (
                               <span className="ml-2 text-xs text-gray-400">
@@ -377,7 +379,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                           {/* Message */}
                           <div className="pt-4">
                             <label className="block text-sm font-medium text-gray-300 mb-2">
-                              Mensaje del bot *
+                              {t('flowModal.botMessage')}
                             </label>
                             <textarea
                               value={step.message}
@@ -392,7 +394,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                             {/* Collect As */}
                             <div>
                               <label className="block text-sm font-medium text-gray-300 mb-2">
-                                Guardar respuesta como
+                                {t('flowModal.saveResponseAs')}
                               </label>
                               <input
                                 type="text"
@@ -408,7 +410,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                             {/* Input Type */}
                             <div>
                               <label className="block text-sm font-medium text-gray-300 mb-2">
-                                Tipo de respuesta
+                                {t('flowModal.responseType')}
                               </label>
                               <select
                                 value={step.inputType}
@@ -426,7 +428,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                           {step.inputType === 'options' && (
                             <div className="space-y-2">
                               <label className="block text-sm font-medium text-gray-300">
-                                Opciones
+                                {t('flowModal.options')}
                               </label>
                               {(step.options || []).map((opt, optIdx) => (
                                 <div key={optIdx} className="flex gap-2">
@@ -435,14 +437,14 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                                     value={opt.label}
                                     onChange={(e) => updateOption(step.stepId, optIdx, { label: e.target.value })}
                                     className="flex-1 px-3 py-1.5 bg-gray-600 border border-gray-500 rounded text-white text-sm placeholder-gray-400 focus:outline-none focus:border-primary-500"
-                                    placeholder="Etiqueta"
+                                    placeholder={t('flowModal.optionLabel')}
                                   />
                                   <input
                                     type="text"
                                     value={opt.value}
                                     onChange={(e) => updateOption(step.stepId, optIdx, { value: e.target.value })}
                                     className="w-32 px-3 py-1.5 bg-gray-600 border border-gray-500 rounded text-white text-sm placeholder-gray-400 focus:outline-none focus:border-primary-500"
-                                    placeholder="Valor"
+                                    placeholder={t('flowModal.optionValue')}
                                   />
                                   <button
                                     type="button"
@@ -460,7 +462,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                                 onClick={() => addOption(step.stepId)}
                                 className="text-sm text-primary-400 hover:text-primary-300"
                               >
-                                + Agregar opción
+                                {t('flowModal.addOption')}
                               </button>
                             </div>
                           )}
@@ -468,19 +470,19 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                           {/* Next Step */}
                           <div>
                             <label className="block text-sm font-medium text-gray-300 mb-2">
-                              Siguiente paso
+                              {t('flowModal.nextStep')}
                             </label>
                             <select
                               value={step.nextStep || ''}
                               onChange={(e) => updateStep(step.stepId, { nextStep: e.target.value })}
                               className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-primary-500"
                             >
-                              <option value="">{idx === formData.steps.length - 1 ? 'Completar flow' : 'Siguiente en orden'}</option>
+                              <option value="">{idx === formData.steps.length - 1 ? t('flowModal.completeFlow') : t('flowModal.nextInOrder')}</option>
                               {formData.steps
                                 .filter(s => s.stepId !== step.stepId)
                                 .map(s => (
                                   <option key={s.stepId} value={s.stepId}>
-                                    Paso {formData.steps.findIndex(x => x.stepId === s.stepId) + 1}: {s.message?.substring(0, 30)}...
+                                    {t('flowModal.stepPrefix')} {formData.steps.findIndex(x => x.stepId === s.stepId) + 1}: {s.message?.substring(0, 30)}...
                                   </option>
                                 ))}
                             </select>
@@ -496,7 +498,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                     onClick={addStep}
                     className="w-full py-3 border-2 border-dashed border-gray-600 rounded-lg text-gray-400 hover:text-white hover:border-gray-500 transition-colors"
                   >
-                    + Agregar paso
+                    {t('flowModal.addStepButton')}
                   </button>
                 </>
               )}
@@ -509,7 +511,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
               {/* Action */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Acción al completar
+                  {t('flowModal.completeAction')}
                 </label>
                 <select
                   value={formData.onComplete.action}
@@ -528,7 +530,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
               {/* Message */}
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Mensaje final
+                  {t('flowModal.finalMessage')}
                 </label>
                 <textarea
                   value={formData.onComplete.message || ''}
@@ -538,7 +540,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                   })}
                   className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-primary-500 resize-none"
                   rows="2"
-                  placeholder="Gracias por la información. Un asesor te contactará pronto."
+                  placeholder={t('flowModal.completionPlaceholder')}
                 />
               </div>
 
@@ -547,7 +549,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                 <>
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Razón del handoff
+                      {t('flowModal.handoffReason')}
                     </label>
                     <input
                       type="text"
@@ -557,7 +559,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                         onComplete: { ...formData.onComplete, handoffReason: e.target.value }
                       })}
                       className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-primary-500"
-                      placeholder="Interesado en ser distribuidor"
+                      placeholder={t('flowModal.handoffPlaceholder')}
                     />
                   </div>
 
@@ -565,7 +567,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                   {collectedVariables.length > 0 && (
                     <div>
                       <label className="block text-sm font-medium text-gray-300 mb-2">
-                        Variables a incluir en el handoff
+                        {t('flowModal.handoffVariables')}
                       </label>
                       <div className="space-y-2">
                         {collectedVariables.map(varName => (
@@ -598,7 +600,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
               {formData.onComplete.action === 'flow' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Siguiente flow
+                    {t('flowModal.nextFlowLabel')}
                   </label>
                   <input
                     type="text"
@@ -617,7 +619,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
               {formData.onComplete.action === 'intent' && (
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Intent a disparar
+                    {t('flowModal.triggerIntentSelect')}
                   </label>
                   <select
                     value={formData.onComplete.triggerIntent || ''}
@@ -627,7 +629,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                     })}
                     className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-primary-500"
                   >
-                    <option value="">Seleccionar intent</option>
+                    <option value="">{t('flowModal.selectIntent')}</option>
                     {intents.map(intent => (
                       <option key={intent.key} value={intent.key}>
                         {intent.name} ({intent.key})
@@ -647,13 +649,13 @@ function FlowModal({ flow, intents, onClose, onSave }) {
             onClick={onClose}
             className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
           >
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button
             onClick={handleSubmit}
             className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
           >
-            {flow ? 'Guardar Cambios' : 'Crear Flow'}
+            {flow ? t('flowModal.saveChanges') : t('flowModal.createFlow')}
           </button>
         </div>
       </div>

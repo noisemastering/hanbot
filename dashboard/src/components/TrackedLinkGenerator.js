@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from "react";
+import { useTranslation } from "../i18n";
 import API from "../api";
 
 function TrackedLinkGenerator({ psid, onClose }) {
+  const { t } = useTranslation();
   const [products, setProducts] = useState([]);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [searchTerm, setSearchTerm] = useState("");
@@ -24,7 +26,7 @@ function TrackedLinkGenerator({ psid, onClose }) {
         }
       } catch (err) {
         console.error("Error fetching products:", err);
-        setError("Error al cargar productos");
+        setError(t('trackedLink.errorLoad'));
       } finally {
         setLoading(false);
       }
@@ -32,6 +34,7 @@ function TrackedLinkGenerator({ psid, onClose }) {
 
     const debounce = setTimeout(fetchProducts, 300);
     return () => clearTimeout(debounce);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchTerm]);
 
   // Generate tracked link
@@ -52,11 +55,11 @@ function TrackedLinkGenerator({ psid, onClose }) {
         setTrackedLink(res.data.clickLog.trackedUrl);
         setCopied(false);
       } else {
-        setError(res.data.error || "Error al generar enlace");
+        setError(res.data.error || t('trackedLink.errorGenerate'));
       }
     } catch (err) {
       console.error("Error generating link:", err);
-      setError("Error al generar enlace");
+      setError(t('trackedLink.errorGenerate'));
     } finally {
       setGenerating(false);
     }
@@ -104,7 +107,7 @@ function TrackedLinkGenerator({ psid, onClose }) {
     >
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
         <h4 style={{ margin: 0, color: "white", fontSize: "1rem" }}>
-          🔗 Generar Enlace Rastreable
+          {t('trackedLink.generateTitle')}
         </h4>
         <button
           onClick={onClose}
@@ -123,7 +126,7 @@ function TrackedLinkGenerator({ psid, onClose }) {
       {/* Search Input */}
       <input
         type="text"
-        placeholder="Buscar producto..."
+        placeholder={t('trackedLink.searchProduct')}
         value={searchTerm}
         onChange={(e) => setSearchTerm(e.target.value)}
         style={{
@@ -150,11 +153,11 @@ function TrackedLinkGenerator({ psid, onClose }) {
       >
         {loading ? (
           <div style={{ padding: "1rem", color: "#888", textAlign: "center" }}>
-            Cargando...
+            {t('trackedLink.loadingProducts')}
           </div>
         ) : products.length === 0 ? (
           <div style={{ padding: "1rem", color: "#888", textAlign: "center" }}>
-            No hay productos
+            {t('trackedLink.noProducts')}
           </div>
         ) : (
           products.map((product) => (
@@ -256,7 +259,7 @@ function TrackedLinkGenerator({ psid, onClose }) {
             fontWeight: "bold"
           }}
         >
-          {generating ? "Generando..." : "Generar Enlace Rastreable"}
+          {generating ? t('trackedLink.generating') : t('trackedLink.generateBtn')}
         </button>
       )}
 
@@ -298,11 +301,11 @@ function TrackedLinkGenerator({ psid, onClose }) {
                 minWidth: "100px"
               }}
             >
-              {copied ? "✓ Copiado!" : "📋 Copiar"}
+              {copied ? t('trackedLink.copiedBtn') : t('trackedLink.copyBtn')}
             </button>
           </div>
           <div style={{ fontSize: "0.75rem", color: "#888", marginTop: "0.5rem" }}>
-            Pega este enlace en la conversacion con el cliente
+            {t('trackedLink.pasteHint')}
           </div>
         </div>
       )}

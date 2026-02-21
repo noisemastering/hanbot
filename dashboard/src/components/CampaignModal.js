@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../i18n';
 import ProductTreeSelector from './ProductTreeSelector';
 import CatalogUpload from './CatalogUpload';
 
@@ -154,6 +155,7 @@ function filterAvailableProducts(productTree) {
 }
 
 function CampaignModal({ campaign, onSave, onClose }) {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     // Basic Info
     ref: '',
@@ -291,7 +293,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
     e.preventDefault();
 
     if (!campaign && (!formData.ref || formData.ref.trim() === '')) {
-      alert('Por favor ingresa un valor para el campo "Ref"');
+      alert(t('campaignModal.refRequired'));
       return;
     }
 
@@ -403,13 +405,13 @@ function CampaignModal({ campaign, onSave, onClose }) {
 
 
   const tabs = [
-    { id: 'basic', label: 'Básico' },
-    { id: 'ad', label: 'Anuncio' },
-    { id: 'audience', label: 'Audiencia' },
-    { id: 'products', label: 'Productos' },
-    { id: 'guidelines', label: 'Guías IA' },
-    { id: 'catalog', label: 'Catálogo' },
-    { id: 'facebook', label: 'Facebook' }
+    { id: 'basic', label: t('campaignModal.tabBasic') },
+    { id: 'ad', label: t('campaignModal.tabAd') },
+    { id: 'audience', label: t('campaignModal.tabAudience') },
+    { id: 'products', label: t('campaignModal.tabProducts') },
+    { id: 'guidelines', label: t('campaignModal.tabGuidelines') },
+    { id: 'catalog', label: t('campaignModal.tabCatalog') },
+    { id: 'facebook', label: t('campaignModal.tabFacebook') }
   ];
 
   return (
@@ -418,7 +420,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between">
           <h2 className="text-xl font-bold text-white">
-            {campaign ? 'Editar Campaña' : 'Nueva Campaña'}
+            {campaign ? t('campaignModal.edit') : t('campaigns.addCampaign')}
           </h2>
           <button onClick={onClose} className="p-2 rounded-lg text-gray-400 hover:bg-gray-700/50 hover:text-white transition-colors">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -469,7 +471,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Referencia (Ref) *</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.refLabel')}</label>
                   <input
                     type="text"
                     name="ref"
@@ -478,12 +480,12 @@ function CampaignModal({ campaign, onSave, onClose }) {
                     required
                     disabled={!!campaign}
                     className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50"
-                    placeholder="malla_agricola_2025"
+                    placeholder={t('campaignModal.refPlaceholder')}
                   />
-                  <p className="text-xs text-gray-500 mt-1">URL: ?ref=valor</p>
+                  <p className="text-xs text-gray-500 mt-1">{t('campaignModal.refHint')}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Nombre *</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.nameRequired')}</label>
                   <input
                     type="text"
                     name="name"
@@ -491,13 +493,13 @@ function CampaignModal({ campaign, onSave, onClose }) {
                     onChange={handleChange}
                     required
                     className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    placeholder="Malla Sombra Agrícola"
+                    placeholder={t('campaignModal.namePlaceholderExample')}
                   />
                 </div>
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Descripción</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">{t('common.description')}</label>
                 <textarea
                   name="description"
                   value={formData.description}
@@ -509,7 +511,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Fuente de Tráfico</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.trafficSource')}</label>
                   <select
                     name="trafficSource"
                     value={formData.trafficSource}
@@ -522,7 +524,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Meta de Conversación</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.conversationGoal')}</label>
                   <select
                     name="conversationGoal"
                     value={formData.conversationGoal}
@@ -538,16 +540,16 @@ function CampaignModal({ campaign, onSave, onClose }) {
                   </p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Estado</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">{t('common.status')}</label>
                   <select
                     name="status"
                     value={formData.status}
                     onChange={handleChange}
                     className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
-                    <option value="ACTIVE">Activa</option>
-                    <option value="PAUSED">Pausada</option>
-                    <option value="ARCHIVED">Archivada</option>
+                    <option value="ACTIVE">{t('campaignModal.statusActive')}</option>
+                    <option value="PAUSED">{t('campaignModal.statusPaused')}</option>
+                    <option value="ARCHIVED">{t('campaignModal.statusArchived')}</option>
                   </select>
                 </div>
               </div>
@@ -562,11 +564,11 @@ function CampaignModal({ campaign, onSave, onClose }) {
                       onChange={handleChange}
                       className="w-5 h-5 rounded bg-gray-900/50 border-gray-700 text-primary-500"
                     />
-                    <span className="text-sm font-medium text-gray-300">Activa</span>
+                    <span className="text-sm font-medium text-gray-300">{t('campaignModal.activeCheckbox')}</span>
                   </label>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Fecha Inicio</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.startDateLabel')}</label>
                   <input
                     type="date"
                     name="startDate"
@@ -576,7 +578,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Fecha Fin</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.endDateLabel')}</label>
                   <input
                     type="date"
                     name="endDate"
@@ -588,14 +590,14 @@ function CampaignModal({ campaign, onSave, onClose }) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Mensaje Inicial</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.initialMessage')}</label>
                 <textarea
                   name="initialMessage"
                   value={formData.initialMessage}
                   onChange={handleChange}
                   rows={3}
                   className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white"
-                  placeholder="¡Hola! Vi que te interesa la malla sombra..."
+                  placeholder={t('campaignModal.initialMessagePlaceholder')}
                 />
               </div>
             </div>
@@ -605,13 +607,13 @@ function CampaignModal({ campaign, onSave, onClose }) {
           {activeTab === 'ad' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Ángulo del Anuncio</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.adAngle')}</label>
                 <select
                   value={formData.ad.angle}
                   onChange={(e) => handleNestedChange('ad', 'angle', e.target.value)}
                   className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white"
                 >
-                  <option value="">Seleccionar...</option>
+                  <option value="">{t('campaignModal.selectOption')}</option>
                   {AD_ANGLES.map(a => (
                     <option key={a.value} value={a.value}>{a.label} - {a.desc}</option>
                   ))}
@@ -619,20 +621,20 @@ function CampaignModal({ campaign, onSave, onClose }) {
               </div>
 
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Resumen del Anuncio</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.adSummary')}</label>
                 <textarea
                   value={formData.ad.summary}
                   onChange={(e) => handleNestedChange('ad', 'summary', e.target.value)}
                   rows={2}
                   className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white"
-                  placeholder="Protección solar para evitar quemaduras en cultivos"
+                  placeholder={t('campaignModal.adSummaryPlaceholder')}
                 />
-                <p className="text-xs text-gray-500 mt-1">Breve descripción del mensaje del anuncio</p>
+                <p className="text-xs text-gray-500 mt-1">{t('campaignModal.adSummaryHint')}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Call to Action (CTA)</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.ctaLabel')}</label>
                   <select
                     value={formData.ad.cta}
                     onChange={(e) => handleNestedChange('ad', 'cta', e.target.value)}
@@ -644,7 +646,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Oferta/Gancho</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.offerHook')}</label>
                   <select
                     value={formData.ad.offerHook}
                     onChange={(e) => handleNestedChange('ad', 'offerHook', e.target.value)}
@@ -664,20 +666,20 @@ function CampaignModal({ campaign, onSave, onClose }) {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Tipo de Audiencia</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.audienceType')}</label>
                   <select
                     value={formData.audience.type}
                     onChange={(e) => handleNestedChange('audience', 'type', e.target.value)}
                     className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white"
                   >
-                    <option value="">Seleccionar...</option>
+                    <option value="">{t('campaignModal.selectOption')}</option>
                     {AUDIENCE_TYPES.map(t => (
                       <option key={t.value} value={t.value}>{t.label}</option>
                     ))}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Nivel de Experiencia</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.experienceLevel')}</label>
                   <select
                     value={formData.audience.experienceLevel}
                     onChange={(e) => handleNestedChange('audience', 'experienceLevel', e.target.value)}
@@ -691,10 +693,9 @@ function CampaignModal({ campaign, onSave, onClose }) {
               </div>
 
               <div className="p-4 bg-gray-900/30 rounded-lg">
-                <h4 className="text-sm font-medium text-gray-300 mb-2">Nota sobre la audiencia</h4>
+                <h4 className="text-sm font-medium text-gray-300 mb-2">{t('campaignModal.audienceNoteTitle')}</h4>
                 <p className="text-xs text-gray-500">
-                  El tipo de audiencia ayuda al bot a ajustar el tono y las recomendaciones.
-                  Por ejemplo, un agricultor recibe información técnica mientras que un hogar recibe consejos prácticos.
+                  {t('campaignModal.audienceNoteText')}
                 </p>
               </div>
             </div>
@@ -704,8 +705,8 @@ function CampaignModal({ campaign, onSave, onClose }) {
           {activeTab === 'products' && (
             <div className="space-y-4">
               <div>
-                <h3 className="text-sm font-semibold text-gray-300 mb-3">Productos de la Campaña</h3>
-                <p className="text-xs text-gray-500 mb-4">Selecciona los productos disponibles en esta campaña</p>
+                <h3 className="text-sm font-semibold text-gray-300 mb-3">{t('campaignModal.productsTitle')}</h3>
+                <p className="text-xs text-gray-500 mb-4">{t('campaignModal.productsHint')}</p>
                 <ProductTreeSelector
                   selectedProducts={formData.productIds}
                   onToggle={handleProductToggle}
@@ -720,7 +721,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
           {activeTab === 'guidelines' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Tono de Respuesta</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.responseTone')}</label>
                 <select
                   value={formData.responseGuidelines.tone}
                   onChange={(e) => handleNestedChange('responseGuidelines', 'tone', e.target.value)}
@@ -734,7 +735,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
 
               {/* Must Not */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">El bot NO DEBE...</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.mustNot')}</label>
                 <div className="space-y-2 mb-2">
                   {formData.responseGuidelines.mustNot.map((rule, idx) => (
                     <div key={idx} className="flex items-center justify-between p-2 bg-red-900/20 border border-red-800/30 rounded">
@@ -753,20 +754,20 @@ function CampaignModal({ campaign, onSave, onClose }) {
                     onChange={(e) => setNewMustNot(e.target.value)}
                     className="flex-1 px-3 py-2 bg-gray-900/50 border border-gray-700 rounded text-white text-sm"
                   >
-                    <option value="">Seleccionar regla...</option>
+                    <option value="">{t('campaignModal.selectRule')}</option>
                     {MUST_NOT_OPTIONS.filter(opt => !formData.responseGuidelines.mustNot.includes(opt.value)).map(opt => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                   </select>
                   <button type="button" onClick={addMustNot} className="px-3 py-2 bg-red-600 text-white rounded text-sm hover:bg-red-700">
-                    Agregar
+                    {t('common.add')}
                   </button>
                 </div>
               </div>
 
               {/* Should Do */}
               <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">El bot DEBE...</label>
+                <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.shouldDo')}</label>
                 <div className="space-y-2 mb-2">
                   {formData.responseGuidelines.shouldDo.map((rule, idx) => (
                     <div key={idx} className="flex items-center justify-between p-2 bg-green-900/20 border border-green-800/30 rounded">
@@ -785,13 +786,13 @@ function CampaignModal({ campaign, onSave, onClose }) {
                     onChange={(e) => setNewShouldDo(e.target.value)}
                     className="flex-1 px-3 py-2 bg-gray-900/50 border border-gray-700 rounded text-white text-sm"
                   >
-                    <option value="">Seleccionar regla...</option>
+                    <option value="">{t('campaignModal.selectRule')}</option>
                     {SHOULD_DO_OPTIONS.filter(opt => !formData.responseGuidelines.shouldDo.includes(opt.value)).map(opt => (
                       <option key={opt.value} value={opt.value}>{opt.label}</option>
                     ))}
                   </select>
                   <button type="button" onClick={addShouldDo} className="px-3 py-2 bg-green-600 text-white rounded text-sm hover:bg-green-700">
-                    Agregar
+                    {t('common.add')}
                   </button>
                 </div>
               </div>
@@ -828,15 +829,14 @@ function CampaignModal({ campaign, onSave, onClose }) {
               ) : (
                 <div className="p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
                   <p className="text-amber-400 text-sm">
-                    Primero guarda la campaña para poder subir un catálogo.
+                    {t('campaignModal.catalogSaveFirst')}
                   </p>
                 </div>
               )}
               <div className="p-4 bg-gray-900/30 rounded-lg">
-                <h4 className="text-sm font-medium text-gray-300 mb-2">Nota sobre catálogos</h4>
+                <h4 className="text-sm font-medium text-gray-300 mb-2">{t('campaignModal.catalogNoteTitle')}</h4>
                 <p className="text-xs text-gray-500">
-                  El catálogo subido aquí estará disponible para todos los AdSets y Ads de esta campaña,
-                  a menos que se suba un catálogo específico a nivel de AdSet o Ad.
+                  {t('campaignModal.catalogNoteText')}
                 </p>
               </div>
             </div>
@@ -847,7 +847,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">FB Campaign ID</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.fbCampaignId')}</label>
                   <input
                     type="text"
                     name="fbCampaignId"
@@ -858,7 +858,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">FB Ad Account ID</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.fbAdAccountId')}</label>
                   <input
                     type="text"
                     name="fbAdAccountId"
@@ -871,21 +871,21 @@ function CampaignModal({ campaign, onSave, onClose }) {
               </div>
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Objetivo</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.objectiveLabel')}</label>
                   <select
                     name="objective"
                     value={formData.objective}
                     onChange={handleChange}
                     className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white"
                   >
-                    <option value="OUTCOME_TRAFFIC">Tráfico</option>
-                    <option value="OUTCOME_LEADS">Leads</option>
-                    <option value="OUTCOME_SALES">Ventas</option>
-                    <option value="OUTCOME_ENGAGEMENT">Engagement</option>
+                    <option value="OUTCOME_TRAFFIC">{t('campaignModal.objectiveTraffic')}</option>
+                    <option value="OUTCOME_LEADS">{t('campaignModal.objectiveLeads')}</option>
+                    <option value="OUTCOME_SALES">{t('campaignModal.objectiveSales')}</option>
+                    <option value="OUTCOME_ENGAGEMENT">{t('campaignModal.objectiveEngagement')}</option>
                   </select>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Presupuesto Diario ($)</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.dailyBudget')}</label>
                   <input
                     type="number"
                     name="dailyBudget"
@@ -895,7 +895,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Presupuesto Total ($)</label>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">{t('campaignModal.lifetimeBudget')}</label>
                   <input
                     type="number"
                     name="lifetimeBudget"
@@ -916,14 +916,14 @@ function CampaignModal({ campaign, onSave, onClose }) {
               onClick={onClose}
               className="px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
             >
-              Cancelar
+              {t('common.cancel')}
             </button>
             <button
               type="button"
               onClick={handleSubmit}
               className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
             >
-              {campaign ? 'Actualizar' : 'Crear'} Campaña
+              {campaign ? t('campaignModal.update') : t('common.create')} {t('common.campaign')}
             </button>
           </div>
         </form>

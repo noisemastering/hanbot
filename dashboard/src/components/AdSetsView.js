@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import AdSetModal from './AdSetModal';
 import AdModal from './AdModal';
+import { useTranslation } from '../i18n';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -12,6 +13,7 @@ const STATUS_STYLE = {
 };
 
 function AdSetsView() {
+  const { t } = useTranslation();
   const [adSets, setAdSets] = useState([]);
   const [ads, setAds] = useState([]);
   const [campaigns, setCampaigns] = useState([]);
@@ -64,13 +66,13 @@ function AdSetsView() {
         await fetchAll();
         setShowAdSetModal(false);
         setEditingAdSet(null);
-        toast.success(editingAdSet ? 'Ad Set actualizado correctamente' : 'Ad Set creado correctamente');
+        toast.success(editingAdSet ? t('adSets.updatedSuccess') : t('adSets.createdSuccess'));
       } else {
-        toast.error("Error al guardar el ad set: " + (data.error || "Error desconocido"));
+        toast.error(t('adSets.errorSaveDetail') + (data.error || t('ads.errorUnknown')));
       }
     } catch (error) {
       console.error("Error saving ad set:", error);
-      toast.error("Error al guardar el ad set");
+      toast.error(t('adSets.errorSave'));
     }
   };
 
@@ -92,13 +94,13 @@ function AdSetsView() {
         await fetchAll();
         setShowAdModal(false);
         setEditingAd(null);
-        toast.success(editingAd ? 'Anuncio actualizado correctamente' : 'Anuncio creado correctamente');
+        toast.success(editingAd ? t('adSets.adUpdatedSuccess') : t('adSets.adCreatedSuccess'));
       } else {
-        toast.error("Error al guardar el anuncio: " + (data.error || "Error desconocido"));
+        toast.error(t('adSets.adErrorSaveDetail') + (data.error || t('ads.errorUnknown')));
       }
     } catch (error) {
       console.error("Error saving ad:", error);
-      toast.error("Error al guardar el anuncio");
+      toast.error(t('adSets.adErrorSave'));
     }
   };
 
@@ -113,13 +115,13 @@ function AdSetsView() {
       const data = await res.json();
       if (data.success) {
         await fetchAll();
-        toast.success('Estado actualizado');
+        toast.success(t('adSets.statusUpdated'));
       } else {
-        toast.error("Error al actualizar estado");
+        toast.error(t('adSets.errorUpdateStatus'));
       }
     } catch (error) {
       console.error("Error updating ad status:", error);
-      toast.error("Error al actualizar estado");
+      toast.error(t('adSets.errorUpdateStatus'));
     }
   };
 
@@ -146,7 +148,7 @@ function AdSetsView() {
 
     for (const adSet of adSets) {
       const campId = adSet.campaignId?._id || 'no-campaign';
-      const campName = adSet.campaignId?.name || 'Sin Campaña';
+      const campName = adSet.campaignId?.name || t('adSets.noCampaign');
 
       if (!campaignGroups[campId]) {
         campaignGroups[campId] = { name: campName, adSets: [] };
@@ -163,8 +165,8 @@ function AdSetsView() {
     <div>
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-white">Ad Sets</h1>
-          <p className="text-gray-400 mt-2">Agrupados por campaña</p>
+          <h1 className="text-3xl font-bold text-white">{t('adSets.title')}</h1>
+          <p className="text-gray-400 mt-2">{t('adSets.groupedByCampaign')}</p>
         </div>
         <button
           onClick={() => {
@@ -176,14 +178,14 @@ function AdSetsView() {
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          <span>Nuevo Ad Set</span>
+          <span>{t('adSets.addAdSet')}</span>
         </button>
       </div>
 
       {loading ? (
         <div className="p-8 text-center">
           <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-gray-400 mt-4">Cargando ad sets...</p>
+          <p className="text-gray-400 mt-4">{t('adSets.loading')}</p>
         </div>
       ) : adSets.length === 0 ? (
         <div className="p-12 text-center bg-gray-800/50 border border-gray-700/50 rounded-xl">
@@ -192,8 +194,8 @@ function AdSetsView() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
             </svg>
           </div>
-          <h3 className="text-lg font-semibold text-white mb-2">No hay ad sets</h3>
-          <p className="text-gray-400">Los ad sets se crearán automáticamente con las campañas</p>
+          <h3 className="text-lg font-semibold text-white mb-2">{t('adSets.noAdSets')}</h3>
+          <p className="text-gray-400">{t('adSets.emptyDescription')}</p>
         </div>
       ) : (
         <div className="space-y-8">
@@ -242,18 +244,18 @@ function AdSetsView() {
                                 ? "bg-yellow-500/20 text-yellow-300"
                                 : "bg-gray-500/20 text-gray-400"
                           }`}>
-                            {adSet.status === 'ACTIVE' ? 'Activo' : adSet.status === 'PAUSED' ? 'Pausado' : adSet.status}
+                            {adSet.status === 'ACTIVE' ? t('adSets.statusActive') : adSet.status === 'PAUSED' ? t('adSets.statusPaused') : adSet.status}
                           </span>
                         </div>
                         <div className="flex items-center gap-3">
                           <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">
-                            {activeAds}/{setAds.length} anuncios activos
+                            {activeAds}/{setAds.length} {t('adSets.activeAds')}
                           </span>
                           <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                             <button
                               onClick={() => setSelectedAdSet(adSet)}
                               className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors"
-                              title="Ver Detalles"
+                              title={t('adSets.viewDetails')}
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -265,7 +267,7 @@ function AdSetsView() {
                                 setShowAdSetModal(true);
                               }}
                               className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
-                              title="Editar"
+                              title={t('common.edit')}
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -280,15 +282,15 @@ function AdSetsView() {
                         <div className="overflow-x-auto">
                           {setAds.length === 0 ? (
                             <div className="px-4 py-6 text-center text-gray-500 text-sm">
-                              No hay anuncios en este ad set
+                              {t('adSets.noAdsInSet')}
                             </div>
                           ) : (
                             <table className="w-full">
                               <thead className="bg-gray-900/50">
                                 <tr>
-                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">Anuncio</th>
-                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase w-32">Estado</th>
-                                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-400 uppercase w-28">Acciones</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">{t('common.ad')}</th>
+                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase w-32">{t('common.status')}</th>
+                                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-400 uppercase w-28">{t('common.actions')}</th>
                                 </tr>
                               </thead>
                               <tbody className="divide-y divide-gray-700/30">
@@ -306,9 +308,9 @@ function AdSetsView() {
                                         onChange={(e) => handleAdStatusChange(ad._id, e.target.value)}
                                         className={`text-xs font-medium px-2.5 py-1.5 rounded-lg border-2 transition-colors cursor-pointer ${STATUS_STYLE[ad.status] || STATUS_STYLE.ARCHIVED}`}
                                       >
-                                        <option value="ACTIVE">Activo</option>
-                                        <option value="PAUSED">Pausado</option>
-                                        <option value="ARCHIVED">Archivado</option>
+                                        <option value="ACTIVE">{t('ads.statusActive')}</option>
+                                        <option value="PAUSED">{t('ads.statusPaused')}</option>
+                                        <option value="ARCHIVED">{t('ads.statusArchived')}</option>
                                       </select>
                                     </td>
                                     <td className="px-4 py-3 whitespace-nowrap text-right">
@@ -319,7 +321,7 @@ function AdSetsView() {
                                             setShowAdModal(true);
                                           }}
                                           className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
-                                          title="Editar"
+                                          title={t('common.edit')}
                                         >
                                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -348,7 +350,7 @@ function AdSetsView() {
         <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-gray-800/95 backdrop-blur-lg border border-gray-700/50 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
             <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-white">Detalles del Ad Set</h2>
+              <h2 className="text-xl font-bold text-white">{t('adSets.adSetDetails')}</h2>
               <button
                 onClick={() => setSelectedAdSet(null)}
                 className="p-2 rounded-lg text-gray-400 hover:bg-gray-700/50 hover:text-white transition-colors"
@@ -364,11 +366,11 @@ function AdSetsView() {
                 {/* Basic Information */}
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
-                    Información Básica
+                    {t('adSets.basicInfo')}
                   </h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">Nombre</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">{t('common.name')}</p>
                       <p className="text-sm text-white mt-1">{selectedAdSet.name}</p>
                     </div>
                     <div>
@@ -378,7 +380,7 @@ function AdSetsView() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">Estado</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">{t('common.status')}</p>
                       <p className="text-sm mt-1">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                           selectedAdSet.status === 'ACTIVE' ? "bg-green-500/20 text-green-300" : "bg-gray-500/20 text-gray-400"
@@ -388,11 +390,11 @@ function AdSetsView() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">Campaña</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">{t('common.campaign')}</p>
                       <p className="text-sm text-white mt-1">{selectedAdSet.campaignId?.name || 'N/A'}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">ID Interno</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">{t('adSets.internalId')}</p>
                       <p className="text-sm text-gray-400 mt-1">
                         <code className="text-xs">{selectedAdSet._id}</code>
                       </p>
@@ -404,18 +406,18 @@ function AdSetsView() {
                 {selectedAdSet.targeting && (
                   <div>
                     <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
-                      Segmentación
+                      {t('adSets.targetingSection')}
                     </h3>
                     <div className="grid grid-cols-2 gap-4">
                       {selectedAdSet.targeting.locations && selectedAdSet.targeting.locations.length > 0 && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Ubicaciones</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('adSets.locations')}</p>
                           <p className="text-sm text-white mt-1">{selectedAdSet.targeting.locations.join(', ')}</p>
                         </div>
                       )}
                       {(selectedAdSet.targeting.ageMin || selectedAdSet.targeting.ageMax) && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Edad</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('adSets.age')}</p>
                           <p className="text-sm text-white mt-1">
                             {selectedAdSet.targeting.ageMin || 18} - {selectedAdSet.targeting.ageMax || 65}
                           </p>
@@ -423,13 +425,13 @@ function AdSetsView() {
                       )}
                       {selectedAdSet.targeting.gender && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Género</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('adSets.gender')}</p>
                           <p className="text-sm text-white mt-1">{selectedAdSet.targeting.gender}</p>
                         </div>
                       )}
                       {selectedAdSet.targeting.interests && selectedAdSet.targeting.interests.length > 0 && (
                         <div className="col-span-2">
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Intereses</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('adSets.interests')}</p>
                           <div className="flex flex-wrap gap-2 mt-1">
                             {selectedAdSet.targeting.interests.map((interest, idx) => (
                               <span key={idx} className="bg-purple-500/10 text-purple-400 px-2 py-1 rounded text-xs">
@@ -447,36 +449,36 @@ function AdSetsView() {
                 {(selectedAdSet.dailyBudget || selectedAdSet.lifetimeBudget || selectedAdSet.optimizationGoal || selectedAdSet.billingEvent || selectedAdSet.bidAmount) && (
                   <div>
                     <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
-                      Presupuesto y Optimización
+                      {t('adSets.budgetAndOptimization')}
                     </h3>
                     <div className="grid grid-cols-2 gap-4">
                       {selectedAdSet.dailyBudget && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Presupuesto Diario</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('adSets.dailyBudget')}</p>
                           <p className="text-sm text-white mt-1">${selectedAdSet.dailyBudget}</p>
                         </div>
                       )}
                       {selectedAdSet.lifetimeBudget && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Presupuesto Total</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('adSets.lifetimeBudget')}</p>
                           <p className="text-sm text-white mt-1">${selectedAdSet.lifetimeBudget}</p>
                         </div>
                       )}
                       {selectedAdSet.optimizationGoal && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Objetivo de Optimización</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('adSets.optimizationGoal')}</p>
                           <p className="text-sm text-white mt-1">{selectedAdSet.optimizationGoal}</p>
                         </div>
                       )}
                       {selectedAdSet.billingEvent && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Evento de Facturación</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('adSets.billingEvent')}</p>
                           <p className="text-sm text-white mt-1">{selectedAdSet.billingEvent}</p>
                         </div>
                       )}
                       {selectedAdSet.bidAmount && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Puja</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('adSets.bid')}</p>
                           <p className="text-sm text-white mt-1">${selectedAdSet.bidAmount}</p>
                         </div>
                       )}
@@ -488,16 +490,16 @@ function AdSetsView() {
                 {selectedAdSet.metrics && (
                   <div>
                     <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
-                      Métricas
+                      {t('adSets.metricsSection')}
                     </h3>
                     <div className="grid grid-cols-3 gap-4">
                       {[
-                        { key: 'impressions', label: 'Impresiones' },
-                        { key: 'clicks', label: 'Clicks' },
-                        { key: 'conversions', label: 'Conversiones' },
-                        { key: 'spend', label: 'Gasto', prefix: '$' },
-                        { key: 'reach', label: 'Alcance' },
-                        { key: 'ctr', label: 'CTR', suffix: '%' },
+                        { key: 'impressions', label: t('adSets.impressionsLabel') },
+                        { key: 'clicks', label: t('adSets.clicksLabel') },
+                        { key: 'conversions', label: t('adSets.conversionsLabel') },
+                        { key: 'spend', label: t('adSets.spendLabel'), prefix: '$' },
+                        { key: 'reach', label: t('adSets.reachLabel') },
+                        { key: 'ctr', label: t('adSets.ctrLabel'), suffix: '%' },
                       ].map(m => {
                         const val = selectedAdSet.metrics[m.key];
                         if (val === undefined || val === null) return null;
@@ -519,7 +521,7 @@ function AdSetsView() {
                 onClick={() => setSelectedAdSet(null)}
                 className="px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
               >
-                Cerrar
+                {t('common.close')}
               </button>
             </div>
           </div>

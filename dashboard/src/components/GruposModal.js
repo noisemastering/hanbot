@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../i18n';
 import api from '../api';
 import ProductTreeSelector from './ProductTreeSelector';
 
 function GruposModal({ grupo, onSave, onClose }) {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -107,11 +109,11 @@ function GruposModal({ grupo, onSave, onClose }) {
   };
 
   const typeOptions = [
-    { value: 'bundle', label: 'Paquete', description: 'Productos que van bien juntos' },
-    { value: 'complementary', label: 'Complementario', description: 'Productos que se complementan' },
-    { value: 'alternative', label: 'Alternativo', description: 'Alternativas para el mismo caso de uso' },
-    { value: 'seasonal', label: 'Estacional', description: 'Agrupaciones estacionales' },
-    { value: 'custom', label: 'Personalizado', description: 'Agrupación personalizada' }
+    { value: 'bundle', label: t('grupos.typeBundle'), description: t('gruposModal.typeBundleDesc') },
+    { value: 'complementary', label: t('grupos.typeComplementary'), description: t('gruposModal.typeComplementaryDesc') },
+    { value: 'alternative', label: t('grupos.typeAlternative'), description: t('gruposModal.typeAlternativeDesc') },
+    { value: 'seasonal', label: t('grupos.typeSeasonal'), description: t('gruposModal.typeSeasonalDesc') },
+    { value: 'custom', label: t('grupos.typeCustom'), description: t('gruposModal.typeCustomDesc') }
   ];
 
   return (
@@ -119,7 +121,7 @@ function GruposModal({ grupo, onSave, onClose }) {
       <div className="bg-gray-800/95 backdrop-blur-lg border border-gray-700/50 rounded-xl max-w-4xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between">
           <h2 className="text-xl font-bold text-white">
-            {grupo ? 'Editar Grupo' : 'Nuevo Grupo'}
+            {grupo ? t('gruposModal.editTitle') : t('gruposModal.newTitle')}
           </h2>
           <button
             onClick={onClose}
@@ -136,12 +138,12 @@ function GruposModal({ grupo, onSave, onClose }) {
             {/* Basic Info Section */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-white border-b border-gray-700/50 pb-2">
-                Información Básica
+                {t('gruposModal.basicInfo')}
               </h3>
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Nombre *
+                  {t('gruposModal.nameRequired')}
                 </label>
                 <input
                   type="text"
@@ -156,7 +158,7 @@ function GruposModal({ grupo, onSave, onClose }) {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Descripción
+                  {t('gruposModal.description')}
                 </label>
                 <textarea
                   name="description"
@@ -164,14 +166,14 @@ function GruposModal({ grupo, onSave, onClose }) {
                   onChange={handleChange}
                   rows={3}
                   className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="Descripción del grupo de productos..."
+                  placeholder={t('gruposModal.descriptionPlaceholder')}
                 />
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Tipo de Grupo *
+                    {t('gruposModal.groupType')}
                   </label>
                   <select
                     name="type"
@@ -192,7 +194,7 @@ function GruposModal({ grupo, onSave, onClose }) {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    URL de Imagen
+                    {t('gruposModal.imageUrl')}
                   </label>
                   <input
                     type="url"
@@ -209,13 +211,13 @@ function GruposModal({ grupo, onSave, onClose }) {
             {/* Priority and Discount Section */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-white border-b border-gray-700/50 pb-2">
-                Prioridad y Descuentos
+                {t('gruposModal.priorityAndDiscounts')}
               </h3>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Prioridad: {formData.priority}
+                    {t('gruposModal.priorityLabel', { value: formData.priority })}
                   </label>
                   <input
                     type="range"
@@ -227,14 +229,14 @@ function GruposModal({ grupo, onSave, onClose }) {
                     className="w-full"
                   />
                   <div className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>Baja (1)</span>
-                    <span>Alta (10)</span>
+                    <span>{t('gruposModal.priorityLow')}</span>
+                    <span>{t('gruposModal.priorityHigh')}</span>
                   </div>
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Descuento (%)
+                    {t('gruposModal.discount')}
                   </label>
                   <input
                     type="number"
@@ -247,7 +249,7 @@ function GruposModal({ grupo, onSave, onClose }) {
                     placeholder="0"
                   />
                   <p className="text-xs text-gray-500 mt-1">
-                    Descuento al comprar productos del grupo
+                    {t('gruposModal.discountHint')}
                   </p>
                 </div>
               </div>
@@ -262,7 +264,7 @@ function GruposModal({ grupo, onSave, onClose }) {
                   className="w-4 h-4 text-primary-500 bg-gray-900/50 border-gray-700 rounded focus:ring-primary-500"
                 />
                 <label htmlFor="available" className="text-sm font-medium text-gray-300">
-                  Grupo disponible
+                  {t('gruposModal.available')}
                 </label>
               </div>
             </div>
@@ -270,7 +272,7 @@ function GruposModal({ grupo, onSave, onClose }) {
             {/* Tags Section */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-white border-b border-gray-700/50 pb-2">
-                Etiquetas
+                {t('gruposModal.tags')}
               </h3>
 
               <div>
@@ -281,14 +283,14 @@ function GruposModal({ grupo, onSave, onClose }) {
                     onChange={(e) => setTagInput(e.target.value)}
                     onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), handleAddTag())}
                     className="flex-1 px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    placeholder="Agregar etiqueta..."
+                    placeholder={t('gruposModal.addTagPlaceholder')}
                   />
                   <button
                     type="button"
                     onClick={handleAddTag}
                     className="px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
                   >
-                    Agregar
+                    {t('gruposModal.addTag')}
                   </button>
                 </div>
 
@@ -314,7 +316,7 @@ function GruposModal({ grupo, onSave, onClose }) {
             {/* Products Selection */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-white border-b border-gray-700/50 pb-2">
-                Productos del Grupo
+                {t('gruposModal.groupProducts')}
               </h3>
 
               <ProductTreeSelector
@@ -325,14 +327,14 @@ function GruposModal({ grupo, onSave, onClose }) {
               />
 
               <p className="text-xs text-gray-500">
-                Selecciona los productos que pertenecen a este grupo. Puedes expandir las categorías para ver productos específicos.
+                {t('gruposModal.groupProductsHint')}
               </p>
             </div>
 
             {/* Suggested Products Selection */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-white border-b border-gray-700/50 pb-2">
-                Productos Sugeridos (Opcional)
+                {t('gruposModal.suggestedProducts')}
               </h3>
 
               <ProductTreeSelector
@@ -343,7 +345,7 @@ function GruposModal({ grupo, onSave, onClose }) {
               />
 
               <p className="text-xs text-gray-500">
-                Productos recomendados cuando se muestra este grupo. Puedes expandir las categorías para ver productos específicos.
+                {t('gruposModal.suggestedProductsHint')}
               </p>
             </div>
           </div>
@@ -355,13 +357,13 @@ function GruposModal({ grupo, onSave, onClose }) {
             onClick={onClose}
             className="px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
           >
-            Cancelar
+            {t('gruposModal.cancel')}
           </button>
           <button
             onClick={handleSubmit}
             className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
           >
-            {grupo ? 'Actualizar' : 'Crear'} Grupo
+            {grupo ? t('gruposModal.updateGrupo') : t('gruposModal.createGrupo')}
           </button>
         </div>
       </div>

@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { useTranslation } from '../i18n';
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://hanbot-production.up.railway.app';
 
@@ -26,6 +27,7 @@ export default function CatalogUpload({
   existingCatalogs = null,
   onSelectExisting = null
 }) {
+  const { t } = useTranslation();
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState(null);
@@ -37,13 +39,13 @@ export default function CatalogUpload({
 
     // Validate file type
     if (file.type !== 'application/pdf') {
-      setError('Solo se permiten archivos PDF');
+      setError(t('catalogUpload.onlyPdf'));
       return;
     }
 
     // Validate file size (10MB max)
     if (file.size > 10 * 1024 * 1024) {
-      setError('El archivo no puede ser mayor a 10MB');
+      setError(t('catalogUpload.maxSize'));
       return;
     }
 
@@ -93,7 +95,7 @@ export default function CatalogUpload({
   };
 
   const handleDelete = async () => {
-    if (!window.confirm('¿Eliminar este catálogo?')) return;
+    if (!window.confirm(t('catalogUpload.confirmDelete'))) return;
 
     setDeleting(true);
     setError(null);
@@ -173,7 +175,7 @@ export default function CatalogUpload({
   return (
     <div className="space-y-3">
       <label className="block text-sm font-medium text-gray-300">
-        Catálogo PDF
+        {t('catalogUpload.pdfLabel')}
       </label>
 
       {/* Existing catalog picker dropdown */}
@@ -190,7 +192,7 @@ export default function CatalogUpload({
             defaultValue=""
             className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500 text-sm"
           >
-            <option value="" disabled>Usar catálogo existente...</option>
+            <option value="" disabled>{t('catalogUpload.useExisting')}</option>
             {/* Group by entity type */}
             {['Familia', 'Campaña', 'AdSet', 'Ad'].map(group => {
               const items = existingCatalogs.filter(c => c.entityType === group);
@@ -207,7 +209,7 @@ export default function CatalogUpload({
               );
             })}
           </select>
-          <p className="text-xs text-gray-500 mt-1">o subir nuevo:</p>
+          <p className="text-xs text-gray-500 mt-1">{t('catalogUpload.orUploadNew')}</p>
         </div>
       )}
 
@@ -219,7 +221,7 @@ export default function CatalogUpload({
             <a href={currentCatalog.url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
               <img
                 src={getThumbnailUrl(currentCatalog.url)}
-                alt="Portada"
+                alt={t('catalogUpload.cover')}
                 className="w-[60px] h-[80px] object-cover rounded border border-gray-600 bg-gray-900"
                 onError={(e) => { e.target.style.display = 'none'; }}
               />
@@ -238,12 +240,12 @@ export default function CatalogUpload({
             </p>
             {inheritedFrom && (
               <p className="text-xs text-amber-400 mt-1">
-                Heredado de: {inheritedFrom}
+                {t('catalogUpload.inheritedFrom', { source: inheritedFrom })}
               </p>
             )}
             {currentCatalog.uploadedAt && !inheritedFrom && (
               <p className="text-xs text-gray-500 mt-1">
-                Subido: {new Date(currentCatalog.uploadedAt).toLocaleDateString()}
+                {t('catalogUpload.uploaded', { date: new Date(currentCatalog.uploadedAt).toLocaleDateString() })}
               </p>
             )}
           </div>
@@ -254,7 +256,7 @@ export default function CatalogUpload({
               target="_blank"
               rel="noopener noreferrer"
               className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
-              title="Ver catálogo"
+              title={t('catalogUpload.viewCatalog')}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -265,7 +267,7 @@ export default function CatalogUpload({
                 onClick={handleDelete}
                 disabled={deleting}
                 className="p-2 text-gray-400 hover:text-red-400 hover:bg-red-500/10 rounded-lg transition-colors disabled:opacity-50"
-                title="Eliminar catálogo"
+                title={t('catalogUpload.deleteCatalog')}
               >
                 {deleting ? (
                   <svg className="w-5 h-5 animate-spin" fill="none" viewBox="0 0 24 24">
@@ -288,7 +290,7 @@ export default function CatalogUpload({
             <a href={inheritedCatalog.url} target="_blank" rel="noopener noreferrer" className="flex-shrink-0">
               <img
                 src={getThumbnailUrl(inheritedCatalog.url)}
-                alt="Portada"
+                alt={t('catalogUpload.cover')}
                 className="w-[60px] h-[80px] object-cover rounded border border-gray-600 bg-gray-900"
                 onError={(e) => { e.target.style.display = 'none'; }}
               />
@@ -305,7 +307,7 @@ export default function CatalogUpload({
               {inheritedCatalog.name || 'Catálogo.pdf'}
             </p>
             <p className="text-xs text-amber-400 mt-1">
-              Heredado de: {inheritedFrom}
+              {t('catalogUpload.inheritedFrom', { source: inheritedFrom })}
             </p>
           </div>
           <a
@@ -313,7 +315,7 @@ export default function CatalogUpload({
             target="_blank"
             rel="noopener noreferrer"
             className="flex-shrink-0 p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded-lg transition-colors"
-            title="Ver catálogo"
+            title={t('catalogUpload.viewCatalog')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -353,7 +355,7 @@ export default function CatalogUpload({
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
               </svg>
-              <p className="text-sm text-gray-400">Subiendo catálogo...</p>
+              <p className="text-sm text-gray-400">{t('catalogUpload.uploadingCatalog')}</p>
             </div>
           ) : (
             <>
@@ -361,10 +363,10 @@ export default function CatalogUpload({
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
               </svg>
               <p className="text-sm text-gray-400">
-                {currentCatalog?.url ? 'Reemplazar catálogo' : 'Subir catálogo PDF'}
+                {currentCatalog?.url ? t('catalogUpload.replaceCatalog') : t('catalogUpload.uploadPdf')}
               </p>
               <p className="text-xs text-gray-500 mt-1">
-                Arrastra o haz clic para seleccionar (máx. 10MB)
+                {t('catalogUpload.dragOrClick')}
               </p>
             </>
           )}
@@ -392,7 +394,7 @@ export default function CatalogUpload({
             className="hidden"
           />
           <p className="text-xs text-amber-400">
-            Subir catálogo propio para sobrescribir el heredado
+            {t('catalogUpload.overrideInherited')}
           </p>
         </div>
       )}

@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../i18n';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
 function MLImporterView() {
+  const { t } = useTranslation();
   const [mlItems, setMlItems] = useState([]);
   const [sellableProducts, setSellableProducts] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -44,11 +46,11 @@ function MLImporterView() {
         setMlItems(data.items || []);
       } else {
         console.error('Error fetching ML items:', data.error);
-        alert('Error cargando ML: ' + data.error);
+        alert(t('mlImporter.errorLoading') + data.error);
       }
     } catch (error) {
       console.error('Error fetching ML items:', error);
-      alert('Error de conexión: ' + error.message);
+      alert(t('mlImporter.connectionError') + error.message);
     } finally {
       setLoadingML(false);
     }
@@ -177,11 +179,11 @@ function MLImporterView() {
         setSelectedMLItem(null);
         setProductSearch('');
       } else {
-        alert('Error al vincular: ' + data.error);
+        alert(t('mlImporter.errorLinking') + data.error);
       }
     } catch (error) {
       console.error('Error linking product:', error);
-      alert('Error al vincular producto');
+      alert(t('mlImporter.errorLinkingProduct'));
     } finally {
       setSaving(false);
     }
@@ -189,7 +191,7 @@ function MLImporterView() {
 
   // Unlink ML item from product
   const unlinkFromProduct = async (mlItem, product) => {
-    if (!window.confirm('¿Desvincular este producto de ML?')) return;
+    if (!window.confirm(t('mlImporter.unlinkConfirm'))) return;
 
     setSaving(true);
     try {
@@ -210,11 +212,11 @@ function MLImporterView() {
       if (data.success) {
         await fetchProducts();
       } else {
-        alert('Error al desvincular: ' + data.error);
+        alert(t('mlImporter.errorUnlinking') + data.error);
       }
     } catch (error) {
       console.error('Error unlinking product:', error);
-      alert('Error al desvincular producto');
+      alert(t('mlImporter.errorUnlinkingProduct'));
     } finally {
       setSaving(false);
     }
@@ -257,33 +259,33 @@ function MLImporterView() {
     <div className="p-6">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Importador ML</h1>
+        <h1 className="text-2xl font-bold text-white">{t('mlImporter.pageTitle')}</h1>
         <p className="text-gray-400 text-sm mt-1">
-          Vincula productos de Mercado Libre con tu inventario
+          {t('mlImporter.pageSubtitle')}
         </p>
       </div>
 
       {/* Stats & Controls */}
       <div className="mb-4 flex flex-wrap gap-4 items-center">
         <div className="flex items-center gap-2">
-          <span className="text-sm text-gray-400">Total ML:</span>
+          <span className="text-sm text-gray-400">{t('mlImporter.totalML')}</span>
           <span className="text-white font-medium">{mlItems.length}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-green-400">Vinculados:</span>
+          <span className="text-sm text-green-400">{t('mlImporter.linked')}</span>
           <span className="text-white font-medium">{linkedCount}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-amber-400">Sin vincular:</span>
+          <span className="text-sm text-amber-400">{t('mlImporter.unlinked')}</span>
           <span className="text-white font-medium">{unlinkedCount}</span>
         </div>
         <div className="flex items-center gap-2">
-          <span className="text-sm text-red-400">No disponible:</span>
+          <span className="text-sm text-red-400">{t('mlImporter.unavailable')}</span>
           <span className="text-white font-medium">{pausedCount}</span>
         </div>
         {manualInactiveCount > 0 && (
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">Inactivos:</span>
+            <span className="text-sm text-gray-500">{t('mlImporter.inactive')}</span>
             <span className="text-white font-medium">{manualInactiveCount}</span>
           </div>
         )}
@@ -296,7 +298,7 @@ function MLImporterView() {
           disabled={loadingML}
           className="px-4 py-2 bg-primary-500/20 text-primary-300 rounded-lg hover:bg-primary-500/30 transition-colors text-sm font-medium disabled:opacity-50"
         >
-          {loadingML ? 'Cargando...' : 'Actualizar ML'}
+          {loadingML ? t('common.loading') : t('mlImporter.updateML')}
         </button>
       </div>
 
@@ -305,7 +307,7 @@ function MLImporterView() {
         <div className="flex-1 min-w-64">
           <input
             type="text"
-            placeholder="Buscar en ML..."
+            placeholder={t('mlImporter.searchML')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500"
@@ -321,7 +323,7 @@ function MLImporterView() {
                 : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
             }`}
           >
-            Todos
+            {t('mlImporter.filterAll')}
           </button>
           <button
             onClick={() => setFilter('unlinked')}
@@ -331,7 +333,7 @@ function MLImporterView() {
                 : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
             }`}
           >
-            Sin vincular
+            {t('mlImporter.filterUnlinked')}
           </button>
           <button
             onClick={() => setFilter('linked')}
@@ -341,7 +343,7 @@ function MLImporterView() {
                 : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
             }`}
           >
-            Vinculados
+            {t('mlImporter.filterLinked')}
           </button>
           <button
             onClick={() => setFilter('inactive')}
@@ -351,7 +353,7 @@ function MLImporterView() {
                 : 'bg-gray-800 text-gray-400 hover:bg-gray-700'
             }`}
           >
-            Inactivos
+            {t('mlImporter.filterInactive')}
           </button>
         </div>
       </div>
@@ -361,14 +363,14 @@ function MLImporterView() {
         <div className="text-center py-12">
           <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
           <p className="text-gray-400 mt-4">
-            {loadingML ? 'Cargando productos de Mercado Libre... (esto puede tardar unos segundos)' : 'Cargando inventario...'}
+            {loadingML ? t('mlImporter.loadingML') : t('mlImporter.loadingInventory')}
           </p>
         </div>
       ) : (
         <div className="space-y-2">
           {filteredMLItems.length === 0 ? (
             <div className="text-center py-12 bg-gray-800/30 rounded-lg">
-              <p className="text-gray-400">No se encontraron productos</p>
+              <p className="text-gray-400">{t('mlImporter.noProductsFound')}</p>
             </div>
           ) : (
             filteredMLItems.map((item) => {
@@ -403,17 +405,17 @@ function MLImporterView() {
                       <h3 className={`font-medium truncate ${unavailable ? 'text-gray-500' : 'text-white'}`}>{item.title}</h3>
                       {paused && (
                         <span className="px-2 py-0.5 bg-red-500/20 text-red-400 text-xs font-medium rounded">
-                          No disponible
+                          {t('mlImporter.notAvailable')}
                         </span>
                       )}
                       {manualInactive && !paused && (
                         <span className="px-2 py-0.5 bg-gray-700 text-gray-400 text-xs font-medium rounded">
-                          Inactivo
+                          {t('mlImporter.inactiveLabel')}
                         </span>
                       )}
                       {linkedProduct && !unavailable && (
                         <span className="px-2 py-0.5 bg-green-500/20 text-green-400 text-xs font-medium rounded">
-                          Vinculado
+                          {t('mlImporter.linkedLabel')}
                         </span>
                       )}
                     </div>
@@ -432,12 +434,12 @@ function MLImporterView() {
                         rel="noopener noreferrer"
                         className="text-xs text-blue-400 hover:text-blue-300"
                       >
-                        Ver en ML →
+                        {t('mlImporter.viewInML')} →
                       </a>
                     </div>
                     {linkedProduct && !unavailable && (
                       <div className="mt-2 text-sm text-green-400">
-                        ✓ Vinculado a: <span className="text-white">{linkedProduct.fullName}</span>
+                        ✓ {t('mlImporter.linkedTo')} <span className="text-white">{linkedProduct.fullName}</span>
                       </div>
                     )}
                   </div>
@@ -445,13 +447,13 @@ function MLImporterView() {
                   {/* Actions */}
                   <div className="flex items-center gap-2">
                     {paused ? (
-                      <span className="text-xs text-gray-500 italic">Pausado en ML</span>
+                      <span className="text-xs text-gray-500 italic">{t('mlImporter.pausedInML')}</span>
                     ) : manualInactive ? (
                       <button
                         onClick={() => toggleInactive(item, false)}
                         className="px-3 py-1.5 bg-gray-700 text-gray-300 rounded hover:bg-gray-600 transition-colors text-sm"
                       >
-                        Reactivar
+                        {t('mlImporter.reactivate')}
                       </button>
                     ) : linkedProduct ? (
                       <>
@@ -460,14 +462,14 @@ function MLImporterView() {
                           disabled={saving}
                           className="px-3 py-1.5 bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 transition-colors text-sm"
                         >
-                          Desvincular
+                          {t('mlImporter.unlink')}
                         </button>
                         <button
                           onClick={() => toggleInactive(item, true)}
                           className="px-3 py-1.5 bg-gray-700 text-gray-400 rounded hover:bg-gray-600 transition-colors text-sm"
-                          title="Marcar como inactivo"
+                          title={t('mlImporter.deactivate')}
                         >
-                          Inactivar
+                          {t('mlImporter.deactivate')}
                         </button>
                       </>
                     ) : (
@@ -476,14 +478,14 @@ function MLImporterView() {
                           onClick={() => setSelectedMLItem(item)}
                           className="px-3 py-1.5 bg-primary-500 text-white rounded hover:bg-primary-600 transition-colors text-sm font-medium"
                         >
-                          Vincular
+                          {t('mlImporter.link')}
                         </button>
                         <button
                           onClick={() => toggleInactive(item, true)}
                           className="px-3 py-1.5 bg-gray-700 text-gray-400 rounded hover:bg-gray-600 transition-colors text-sm"
-                          title="Marcar como inactivo"
+                          title={t('mlImporter.deactivate')}
                         >
-                          Inactivar
+                          {t('mlImporter.deactivate')}
                         </button>
                       </>
                     )}
@@ -501,7 +503,7 @@ function MLImporterView() {
           <div className="bg-gray-800 rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
             {/* Modal Header */}
             <div className="p-4 border-b border-gray-700">
-              <h2 className="text-lg font-semibold text-white">Vincular producto ML</h2>
+              <h2 className="text-lg font-semibold text-white">{t('mlImporter.linkMLProduct')}</h2>
               <p className="text-sm text-gray-400 mt-1 truncate">{selectedMLItem.title}</p>
               <p className="text-yellow-400 font-medium">${selectedMLItem.price?.toLocaleString()}</p>
             </div>
@@ -510,7 +512,7 @@ function MLImporterView() {
             <div className="p-4 border-b border-gray-700">
               <input
                 type="text"
-                placeholder="Buscar producto en inventario..."
+                placeholder={t('mlImporter.searchInventory')}
                 value={productSearch}
                 onChange={(e) => setProductSearch(e.target.value)}
                 autoFocus
@@ -532,7 +534,7 @@ function MLImporterView() {
                       <p className="text-white">{product.name}</p>
                       <p className="text-xs text-gray-500">{product.path}</p>
                       {product.mlLink && (
-                        <p className="text-xs text-amber-400 mt-1">⚠ Ya tiene link ML</p>
+                        <p className="text-xs text-amber-400 mt-1">⚠ {t('mlImporter.alreadyHasML')}</p>
                       )}
                     </div>
                     <div className="text-right">
@@ -542,7 +544,7 @@ function MLImporterView() {
                 ))}
                 {filteredProducts.length > 50 && (
                   <p className="text-center text-gray-500 text-sm py-2">
-                    Mostrando 50 de {filteredProducts.length} resultados
+                    {t('mlImporter.showingOf', { shown: 50, total: filteredProducts.length })}
                   </p>
                 )}
               </div>
@@ -554,7 +556,7 @@ function MLImporterView() {
                 onClick={() => { setSelectedMLItem(null); setProductSearch(''); }}
                 className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
               >
-                Cancelar
+                {t('mlImporter.cancel')}
               </button>
             </div>
           </div>

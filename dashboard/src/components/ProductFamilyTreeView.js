@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import CatalogUpload from './CatalogUpload';
+import { useTranslation } from '../i18n';
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://hanbot-production.up.railway.app';
 
 // Recursive component to render a single product node and its children
 function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, onDetails, level = 0, expandedNodes, onToggleExpand, parentChain = [] }) {
+  const { t } = useTranslation();
   const isExpanded = expandedNodes.has(product._id);
   const hasChildren = product.children && product.children.length > 0;
   const indentPixels = level * 32; // 32px per level (equivalent to ml-8 = 2rem = 32px)
@@ -64,7 +66,7 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, 
             <button
               onClick={() => onDetails(product, parentChain)}
               className="flex items-center space-x-3 cursor-pointer hover:opacity-80 transition-opacity text-left"
-              title="Ver detalles"
+              title={t('familyTree.viewDetailsTooltip')}
             >
               <h3 className="text-sm font-semibold text-white hover:text-indigo-400 transition-colors">{product.name}</h3>
 
@@ -84,9 +86,9 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, 
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                   </svg>
-                  <span>Vendible</span>
+                  <span>{t('familyTree.sellable')}</span>
                   {product.requiresHumanAdvisor && (
-                    <svg className="w-3 h-3 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" title="Requiere asesor humano">
+                    <svg className="w-3 h-3 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24" title={t('familyTree.requiresAdvisor')}>
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
                     </svg>
                   )}
@@ -95,27 +97,27 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, 
 
               {/* Missing Link Warning */}
               {product.sellable && !product.requiresHumanAdvisor && (!product.onlineStoreLinks || product.onlineStoreLinks.length === 0) && (
-                <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded text-xs font-medium flex items-center space-x-1" title="Producto sin enlace a tienda online">
+                <span className="px-2 py-0.5 bg-yellow-500/20 text-yellow-400 rounded text-xs font-medium flex items-center space-x-1" title={t('familyTree.noLinkTooltip')}>
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
                   </svg>
-                  <span>Sin Link</span>
+                  <span>{t('familyTree.noLink')}</span>
                 </span>
               )}
 
               {/* Missing Dimensions Warning */}
               {product.sellable && hasMissingDimensions() && (
-                <span className="px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded text-xs font-medium flex items-center space-x-1" title="Producto con dimensiones faltantes o en cero">
+                <span className="px-2 py-0.5 bg-orange-500/20 text-orange-400 rounded text-xs font-medium flex items-center space-x-1" title={t('familyTree.noDimensionsTooltip')}>
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                   </svg>
                   <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3h.01M9 17h.01M9 14h.01M12 14h.01M15 11h.01M12 11h.01M9 11h.01M7 21h10a2 2 0 002-2V5a2 2 0 00-2-2H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                   </svg>
-                  <span>Sin Dimensiones</span>
+                  <span>{t('familyTree.noDimensions')}</span>
                 </span>
               )}
             </button>
@@ -129,7 +131,7 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, 
             {product.sellable && (
               <div className="flex items-center space-x-4 mt-2 text-xs">
                 {product.sku && <span className="text-gray-400">SKU: {product.sku}</span>}
-                {product.stock !== undefined && <span className="text-gray-400">Inventario: {product.stock}</span>}
+                {product.stock !== undefined && <span className="text-gray-400">{t('familyTree.inventory')} {product.stock}</span>}
               </div>
             )}
           </div>
@@ -145,7 +147,7 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, 
                 ? 'text-gray-600 cursor-not-allowed opacity-50'
                 : 'text-green-400 hover:bg-green-500/20'
             }`}
-            title={product.sellable ? "Los productos vendibles no pueden tener hijos" : "Agregar Hijo"}
+            title={product.sellable ? t('familyTree.noChildrenSellable') : t('familyTree.addChild')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -154,7 +156,7 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, 
           <button
             onClick={() => onCopy(product)}
             className="p-2 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors"
-            title="Copiar como Hermano"
+            title={t('familyTree.copySibling')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
@@ -168,7 +170,7 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, 
                 ? 'text-gray-600 cursor-not-allowed opacity-50'
                 : 'text-amber-400 hover:bg-amber-500/20'
             }`}
-            title={product.sellable ? "Los productos vendibles no pueden importar hijos" : "Importar Productos"}
+            title={product.sellable ? t('familyTree.noImportSellable') : t('familyTree.importProducts')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
@@ -177,7 +179,7 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, 
           <button
             onClick={() => onDetails(product, parentChain)}
             className="p-2 text-indigo-400 hover:bg-indigo-500/20 rounded-lg transition-colors"
-            title="Ver Detalles"
+            title={t('familyTree.viewDetails')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -186,7 +188,7 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, 
           <button
             onClick={() => onEdit(product)}
             className="p-2 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
-            title="Editar"
+            title={t('familyTree.edit')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />

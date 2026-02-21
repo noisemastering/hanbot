@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import AdModal from './AdModal';
+import { useTranslation } from '../i18n';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -11,6 +12,7 @@ const STATUS_STYLE = {
 };
 
 function AdsView() {
+  const { t, locale } = useTranslation();
   const [ads, setAds] = useState([]);
   const [adSets, setAdSets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -79,13 +81,13 @@ function AdsView() {
         await fetchAds();
         setShowAdModal(false);
         setEditingAd(null);
-        toast.success(editingAd ? 'Anuncio actualizado correctamente' : 'Anuncio creado correctamente');
+        toast.success(editingAd ? t('ads.updatedSuccess') : t('ads.createdSuccess'));
       } else {
-        toast.error("Error al guardar el anuncio: " + (data.error || "Error desconocido"));
+        toast.error(t('ads.errorSaveDetail') + (data.error || t('ads.errorUnknown')));
       }
     } catch (error) {
       console.error("Error saving ad:", error);
-      toast.error("Error al guardar el anuncio");
+      toast.error(t('ads.errorSave'));
     }
   };
 
@@ -100,13 +102,13 @@ function AdsView() {
       const data = await res.json();
       if (data.success) {
         await fetchAds();
-        toast.success('Estado actualizado correctamente');
+        toast.success(t('ads.statusUpdated'));
       } else {
-        toast.error("Error al actualizar estado: " + (data.error || "Error desconocido"));
+        toast.error(t('ads.errorUpdateStatusDetail') + (data.error || t('ads.errorUnknown')));
       }
     } catch (error) {
       console.error("Error updating status:", error);
-      toast.error("Error al actualizar estado");
+      toast.error(t('ads.errorUpdateStatus'));
     }
   };
 
@@ -125,9 +127,9 @@ function AdsView() {
 
     for (const ad of ads) {
       const campaignId = ad.adSetId?.campaignId?._id || 'no-campaign';
-      const campaignName = ad.adSetId?.campaignId?.name || 'Sin Campaña';
+      const campaignName = ad.adSetId?.campaignId?.name || t('ads.noCampaign');
       const adSetId = ad.adSetId?._id || 'no-adset';
-      const adSetName = ad.adSetId?.name || 'Sin Ad Set';
+      const adSetName = ad.adSetId?.name || t('ads.noAdSet');
 
       if (!campaigns[campaignId]) {
         campaigns[campaignId] = { name: campaignName, adSets: {} };
@@ -147,8 +149,8 @@ function AdsView() {
     <div>
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-white">Anuncios</h1>
-          <p className="text-gray-400 mt-2">Agrupados por campaña y ad set</p>
+          <h1 className="text-3xl font-bold text-white">{t('ads.title')}</h1>
+          <p className="text-gray-400 mt-2">{t('ads.groupedByCampaign')}</p>
         </div>
         <button
           onClick={() => {
@@ -160,14 +162,14 @@ function AdsView() {
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          <span>Nuevo Anuncio</span>
+          <span>{t('ads.addAd')}</span>
         </button>
       </div>
 
       {loading ? (
         <div className="p-8 text-center">
           <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-gray-400 mt-4">Cargando anuncios...</p>
+          <p className="text-gray-400 mt-4">{t('ads.loading')}</p>
         </div>
       ) : ads.length === 0 ? (
         <div className="p-12 text-center bg-gray-800/50 border border-gray-700/50 rounded-xl">
@@ -176,8 +178,8 @@ function AdsView() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
             </svg>
           </div>
-          <h3 className="text-lg font-semibold text-white mb-2">No hay anuncios</h3>
-          <p className="text-gray-400">Los anuncios se crearán automáticamente con las campañas</p>
+          <h3 className="text-lg font-semibold text-white mb-2">{t('ads.noAds')}</h3>
+          <p className="text-gray-400">{t('ads.emptyDescription')}</p>
         </div>
       ) : (
         <div className="space-y-8">
@@ -217,7 +219,7 @@ function AdsView() {
                           </svg>
                           <span className="font-semibold text-white text-sm">{adSet.name}</span>
                           <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">
-                            {activeCount}/{totalCount} activos
+                            {activeCount}/{totalCount} {t('ads.activeCount')}
                           </span>
                         </div>
                       </button>
@@ -228,9 +230,9 @@ function AdsView() {
                           <table className="w-full">
                             <thead className="bg-gray-900/50">
                               <tr>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">Anuncio</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase w-32">Estado</th>
-                                <th className="px-4 py-2 text-right text-xs font-medium text-gray-400 uppercase w-28">Acciones</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">{t('common.ad')}</th>
+                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase w-32">{t('common.status')}</th>
+                                <th className="px-4 py-2 text-right text-xs font-medium text-gray-400 uppercase w-28">{t('common.actions')}</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-700/30">
@@ -249,9 +251,9 @@ function AdsView() {
                                       onClick={(e) => e.stopPropagation()}
                                       className={`text-xs font-medium px-2.5 py-1.5 rounded-lg border-2 transition-colors cursor-pointer ${STATUS_STYLE[ad.status] || STATUS_STYLE.ARCHIVED}`}
                                     >
-                                      <option value="ACTIVE">Activo</option>
-                                      <option value="PAUSED">Pausado</option>
-                                      <option value="ARCHIVED">Archivado</option>
+                                      <option value="ACTIVE">{t('ads.statusActive')}</option>
+                                      <option value="PAUSED">{t('ads.statusPaused')}</option>
+                                      <option value="ARCHIVED">{t('ads.statusArchived')}</option>
                                     </select>
                                   </td>
                                   <td className="px-4 py-3 whitespace-nowrap text-right">
@@ -259,7 +261,7 @@ function AdsView() {
                                       <button
                                         onClick={() => setSelectedAd(ad)}
                                         className="p-1.5 text-green-400 hover:bg-green-500/20 rounded-lg transition-colors"
-                                        title="Ver Detalles"
+                                        title={t('ads.viewDetails')}
                                       >
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -271,7 +273,7 @@ function AdsView() {
                                           setShowAdModal(true);
                                         }}
                                         className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
-                                        title="Editar"
+                                        title={t('common.edit')}
                                       >
                                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -301,7 +303,7 @@ function AdsView() {
             {/* Modal Header */}
             <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between">
               <h2 className="text-xl font-bold text-white">
-                Detalles del Anuncio
+                {t('ads.adDetails')}
               </h2>
               <button
                 onClick={() => setSelectedAd(null)}
@@ -319,11 +321,11 @@ function AdsView() {
                 {/* Basic Information */}
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
-                    Información Básica
+                    {t('ads.basicInfo')}
                   </h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">Nombre</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">{t('common.name')}</p>
                       <p className="text-sm text-white mt-1">{selectedAd.name}</p>
                     </div>
                     <div>
@@ -333,7 +335,7 @@ function AdsView() {
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">Estado</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">{t('common.status')}</p>
                       <p className="text-sm mt-1">
                         <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                           selectedAd.status === 'ACTIVE' ? "bg-green-500/20 text-green-300" : "bg-gray-500/20 text-gray-400"
@@ -347,19 +349,19 @@ function AdsView() {
                       <p className="text-sm text-white mt-1">{selectedAd.adSetId?.name || 'N/A'}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">Campaña</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">{t('common.campaign')}</p>
                       <p className="text-sm text-white mt-1">{selectedAd.adSetId?.campaignId?.name || 'N/A'}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">Productos Asociados</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">{t('ads.associatedProducts')}</p>
                       <p className="text-sm text-white mt-1">
                         <span className="bg-blue-500/20 text-blue-300 px-2 py-1 rounded">
-                          {selectedAd.productIds?.length || 0} productos
+                          {selectedAd.productIds?.length || 0} {t('ads.productsCount')}
                         </span>
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">ID Interno</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">{t('ads.internalId')}</p>
                       <p className="text-sm text-gray-400 mt-1">
                         <code className="text-xs">{selectedAd._id}</code>
                       </p>
@@ -371,18 +373,18 @@ function AdsView() {
                 {selectedAd.creative && (
                   <div>
                     <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
-                      Creatividad
+                      {t('ads.creative')}
                     </h3>
                     <div className="space-y-4">
                       {selectedAd.creative.headline && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Título</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('ads.headline')}</p>
                           <p className="text-base text-white mt-1 font-medium">{selectedAd.creative.headline}</p>
                         </div>
                       )}
                       {selectedAd.creative.body && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Texto Principal</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('ads.mainText')}</p>
                           <p className="text-sm text-gray-300 mt-1 bg-gray-900/50 p-3 rounded">
                             {selectedAd.creative.body}
                           </p>
@@ -390,14 +392,14 @@ function AdsView() {
                       )}
                       {selectedAd.creative.description && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Descripción</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('common.description')}</p>
                           <p className="text-sm text-gray-300 mt-1">{selectedAd.creative.description}</p>
                         </div>
                       )}
                       <div className="grid grid-cols-2 gap-4">
                         {selectedAd.creative.callToAction && (
                           <div>
-                            <p className="text-xs text-gray-500 uppercase tracking-wide">Call to Action</p>
+                            <p className="text-xs text-gray-500 uppercase tracking-wide">{t('ads.callToAction')}</p>
                             <p className="text-sm text-white mt-1">
                               <span className="bg-green-500/10 text-green-400 px-2 py-1 rounded">
                                 {selectedAd.creative.callToAction}
@@ -407,7 +409,7 @@ function AdsView() {
                         )}
                         {selectedAd.creative.linkUrl && (
                           <div>
-                            <p className="text-xs text-gray-500 uppercase tracking-wide">URL de Destino</p>
+                            <p className="text-xs text-gray-500 uppercase tracking-wide">{t('ads.destinationUrl')}</p>
                             <a
                               href={selectedAd.creative.linkUrl}
                               target="_blank"
@@ -421,7 +423,7 @@ function AdsView() {
                       </div>
                       {selectedAd.creative.imageUrl && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Imagen</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('common.image')}</p>
                           <div className="mt-2">
                             <img
                               src={selectedAd.creative.imageUrl}
@@ -433,7 +435,7 @@ function AdsView() {
                       )}
                       {selectedAd.creative.videoUrl && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Video</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('ads.video')}</p>
                           <p className="text-sm text-blue-400 mt-1">{selectedAd.creative.videoUrl}</p>
                         </div>
                       )}
@@ -445,7 +447,7 @@ function AdsView() {
                 {selectedAd.tracking && (
                   <div>
                     <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
-                      Seguimiento
+                      {t('ads.trackingSection')}
                     </h3>
                     <div className="grid grid-cols-2 gap-4">
                       {['utmSource', 'utmMedium', 'utmCampaign', 'utmContent', 'utmTerm', 'fbPixelId'].map(key => (
@@ -465,50 +467,50 @@ function AdsView() {
                 {/* Bot Response Customization */}
                 <div>
                   <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
-                    Personalización del Bot
+                    {t('ads.botCustomization')}
                   </h3>
                   <div className="grid grid-cols-2 gap-4">
                     <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">Ángulo del Anuncio</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">{t('ads.adAngle')}</p>
                       <p className="text-sm text-white mt-1">
                         {selectedAd.adAngle ? (
                           <span className="bg-purple-500/20 text-purple-300 px-2 py-1 rounded">
                             {{
-                              'price_sensitive': 'Precio - Enfoque en valor/precio accesible',
-                              'quality_premium': 'Calidad Premium - Enfoque en durabilidad',
-                              'urgency_offer': 'Urgencia - Oferta por tiempo limitado',
-                              'problem_pain': 'Problema/Dolor - Solución al sol/calor',
-                              'bulk_b2b': 'Mayoreo/B2B - Enfoque en negocios',
-                              'diy_ease': 'Fácil Instalación - Hazlo tú mismo',
-                              'comparison_switching': 'Comparación - Mejor que alternativas'
+                              'price_sensitive': t('ads.anglePriceSensitive'),
+                              'quality_premium': t('ads.angleQualityPremium'),
+                              'urgency_offer': t('ads.angleUrgencyOffer'),
+                              'problem_pain': t('ads.angleProblemPain'),
+                              'bulk_b2b': t('ads.angleBulkB2b'),
+                              'diy_ease': t('ads.angleDiyEase'),
+                              'comparison_switching': t('ads.angleComparisonSwitching')
                             }[selectedAd.adAngle] || selectedAd.adAngle}
                           </span>
                         ) : (
-                          <span className="text-gray-500">No configurado</span>
+                          <span className="text-gray-500">{t('ads.notConfigured')}</span>
                         )}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">Tipo de Audiencia</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">{t('ads.audienceType')}</p>
                       <p className="text-sm text-white mt-1">
-                        {selectedAd.adIntent?.audienceType || <span className="text-gray-500">No configurado</span>}
+                        {selectedAd.adIntent?.audienceType || <span className="text-gray-500">{t('ads.notConfigured')}</span>}
                       </p>
                     </div>
                     <div>
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">Uso Principal</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">{t('ads.primaryUse')}</p>
                       <p className="text-sm text-white mt-1">
-                        {selectedAd.adIntent?.primaryUse || <span className="text-gray-500">No configurado</span>}
+                        {selectedAd.adIntent?.primaryUse || <span className="text-gray-500">{t('ads.notConfigured')}</span>}
                       </p>
                     </div>
                     <div className="col-span-2">
-                      <p className="text-xs text-gray-500 uppercase tracking-wide">Gancho de Oferta</p>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">{t('ads.offerHook')}</p>
                       <p className="text-sm mt-1">
                         {selectedAd.adIntent?.offerHook ? (
                           <span className="bg-green-500/20 text-green-300 px-3 py-2 rounded block">
                             {selectedAd.adIntent.offerHook}
                           </span>
                         ) : (
-                          <span className="text-gray-500">No configurado</span>
+                          <span className="text-gray-500">{t('ads.notConfigured')}</span>
                         )}
                       </p>
                     </div>
@@ -519,18 +521,18 @@ function AdsView() {
                 {selectedAd.metrics && (
                   <div>
                     <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
-                      Métricas
+                      {t('ads.metricsSection')}
                     </h3>
                     <div className="grid grid-cols-3 gap-4">
                       {[
-                        { key: 'impressions', label: 'Impresiones' },
-                        { key: 'clicks', label: 'Clicks' },
-                        { key: 'conversions', label: 'Conversiones' },
-                        { key: 'spend', label: 'Gasto', prefix: '$' },
-                        { key: 'reach', label: 'Alcance' },
-                        { key: 'ctr', label: 'CTR', suffix: '%' },
-                        { key: 'cpc', label: 'CPC', prefix: '$' },
-                        { key: 'cpm', label: 'CPM', prefix: '$' },
+                        { key: 'impressions', label: t('ads.impressionsLabel') },
+                        { key: 'clicks', label: t('ads.clicksLabel') },
+                        { key: 'conversions', label: t('ads.conversionsLabel') },
+                        { key: 'spend', label: t('ads.spendLabel'), prefix: '$' },
+                        { key: 'reach', label: t('ads.reachLabel') },
+                        { key: 'ctr', label: t('ads.ctrLabel'), suffix: '%' },
+                        { key: 'cpc', label: t('ads.cpcLabel'), prefix: '$' },
+                        { key: 'cpm', label: t('ads.cpmLabel'), prefix: '$' },
                       ].map(m => {
                         const val = selectedAd.metrics[m.key];
                         if (val === undefined || val === null) return null;
@@ -549,22 +551,22 @@ function AdsView() {
                 {(selectedAd.createdAt || selectedAd.updatedAt) && (
                   <div>
                     <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
-                      Información de Sistema
+                      {t('ads.systemInfo')}
                     </h3>
                     <div className="grid grid-cols-2 gap-4">
                       {selectedAd.createdAt && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Creado</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('ads.createdAt')}</p>
                           <p className="text-sm text-white mt-1">
-                            {new Date(selectedAd.createdAt).toLocaleString('es-MX')}
+                            {new Date(selectedAd.createdAt).toLocaleString(locale)}
                           </p>
                         </div>
                       )}
                       {selectedAd.updatedAt && (
                         <div>
-                          <p className="text-xs text-gray-500 uppercase tracking-wide">Actualizado</p>
+                          <p className="text-xs text-gray-500 uppercase tracking-wide">{t('ads.updatedAt')}</p>
                           <p className="text-sm text-white mt-1">
-                            {new Date(selectedAd.updatedAt).toLocaleString('es-MX')}
+                            {new Date(selectedAd.updatedAt).toLocaleString(locale)}
                           </p>
                         </div>
                       )}
@@ -580,7 +582,7 @@ function AdsView() {
                 onClick={() => setSelectedAd(null)}
                 className="px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
               >
-                Cerrar
+                {t('common.close')}
               </button>
             </div>
           </div>

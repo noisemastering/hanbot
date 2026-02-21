@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../i18n';
 import ProductTreeSelector from './ProductTreeSelector';
 import CatalogUpload from './CatalogUpload';
 
@@ -58,6 +59,7 @@ function getProductById(productTree, id) {
 }
 
 function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     name: '',
     fbAdId: '',
@@ -208,7 +210,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between">
           <h2 className="text-xl font-bold text-white">
-            {ad ? 'Editar Anuncio' : 'Nuevo Anuncio'}
+            {ad ? t('adModal.edit') : t('adModal.create')}
           </h2>
           <button
             onClick={onClose}
@@ -227,7 +229,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Nombre *
+                  {t('adModal.nameRequired')}
                 </label>
                 <input
                   type="text"
@@ -236,12 +238,12 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                   onChange={handleChange}
                   required
                   className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="Anuncio Principal"
+                  placeholder={t('adModal.namePlaceholder')}
                 />
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  FB Ad ID *
+                  {t('adModal.fbAdIdRequired')}
                 </label>
                 <input
                   type="text"
@@ -259,7 +261,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
             {/* AdSet Selection */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Ad Set *
+                {t('adModal.adSetRequired')}
               </label>
               <select
                 name="adSetId"
@@ -268,7 +270,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                 required
                 className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
-                <option value="">Selecciona un ad set</option>
+                <option value="">{t('adModal.selectAdSetOption')}</option>
                 {adSets.map(adSet => (
                   <option key={adSet._id} value={adSet._id}>
                     {adSet.name} - {adSet.campaignId?.name || ''}
@@ -280,7 +282,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
             {/* Status */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Estado
+                {t('common.status')}
               </label>
               <select
                 name="status"
@@ -288,20 +290,20 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                 onChange={handleChange}
                 className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
-                <option value="ACTIVE">Activo</option>
-                <option value="PAUSED">Pausado</option>
-                <option value="ARCHIVED">Archivado</option>
+                <option value="ACTIVE">{t('adModal.statusActive')}</option>
+                <option value="PAUSED">{t('adModal.statusPaused')}</option>
+                <option value="ARCHIVED">{t('adModal.statusArchived')}</option>
               </select>
             </div>
 
             {/* Creative Content */}
             <div className="border-t border-gray-700 pt-4 mt-4">
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">Contenido Creativo</h3>
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">{t('adModal.creativeContent')}</h3>
 
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Descripción
+                    {t('adModal.descriptionLabel')}
                   </label>
                   <input
                     type="text"
@@ -309,14 +311,14 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                     value={formData.description}
                     onChange={handleChange}
                     className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    placeholder="Envío gratis a todo México"
+                    placeholder={t('adModal.descriptionPlaceholder')}
                   />
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Call to Action
+                      {t('adModal.callToActionLabel')}
                     </label>
                     <select
                       name="callToAction"
@@ -324,17 +326,17 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                       onChange={handleChange}
                       className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                     >
-                      <option value="LEARN_MORE">Más información</option>
-                      <option value="SHOP_NOW">Comprar ahora</option>
-                      <option value="SIGN_UP">Registrarse</option>
-                      <option value="CONTACT_US">Contáctanos</option>
-                      <option value="GET_QUOTE">Solicitar cotización</option>
+                      <option value="LEARN_MORE">{t('adModal.ctaLearnMore')}</option>
+                      <option value="SHOP_NOW">{t('adModal.ctaShopNow')}</option>
+                      <option value="SIGN_UP">{t('adModal.ctaSignUp')}</option>
+                      <option value="CONTACT_US">{t('adModal.ctaContactUs')}</option>
+                      <option value="GET_QUOTE">{t('adModal.ctaGetQuote')}</option>
                     </select>
                   </div>
 
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      URL de Destino
+                      {t('adModal.destinationUrl')}
                     </label>
                     <input
                       type="url"
@@ -351,16 +353,16 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
 
             {/* Bot Response Customization */}
             <div className="border-t border-gray-700 pt-4 mt-4">
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">🤖 Personalización de Respuestas del Bot</h3>
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">{t('adModal.botCustomization')}</h3>
               <p className="text-xs text-gray-400 mb-4">
-                Estos campos ayudan al bot a personalizar sus respuestas según el contexto del anuncio.
+                {t('adModal.botCustomizationHint')}
               </p>
 
               <div className="space-y-4">
                 {/* Ad Angle */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Ángulo del Anuncio
+                    {t('adModal.adAngle')}
                   </label>
                   <select
                     name="adAngle"
@@ -368,7 +370,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                     onChange={handleChange}
                     className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
-                    <option value="">Sin ángulo específico</option>
+                    <option value="">{t('adModal.noAngle')}</option>
                     {AD_ANGLES.map(a => (
                       <option key={a.value} value={a.value}>{a.label} - {a.desc}</option>
                     ))}
@@ -379,7 +381,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                   {/* Primary Use */}
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Uso Principal
+                      {t('adModal.primaryUse')}
                     </label>
                     <input
                       type="text"
@@ -387,14 +389,14 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                       value={formData.primaryUse}
                       onChange={handleChange}
                       className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      placeholder="ej: protección solar agrícola, sombra para patio"
+                      placeholder={t('adModal.primaryUsePlaceholder')}
                     />
                   </div>
 
                   {/* Audience Type */}
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Tipo de Audiencia
+                      {t('adModal.audienceTypeLabel')}
                     </label>
                     <input
                       type="text"
@@ -402,7 +404,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                       value={formData.audienceType}
                       onChange={handleChange}
                       className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      placeholder="ej: agricultor/vivero, dueño de casa, negocio"
+                      placeholder={t('adModal.audienceTypePlaceholder')}
                     />
                   </div>
                 </div>
@@ -410,7 +412,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                 {/* Offer Hook */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    🎁 Gancho de Oferta
+                    {t('adModal.offerHookLabel')}
                   </label>
                   <input
                     type="text"
@@ -418,10 +420,10 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                     value={formData.offerHook}
                     onChange={handleChange}
                     className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                    placeholder="ej: envío gratis por tiempo limitado, 10% descuento esta semana"
+                    placeholder={t('adModal.offerHookPlaceholder')}
                   />
                   <p className="text-xs text-gray-400 mt-1">
-                    Este texto se agregará al final de las respuestas del bot cuando sea relevante.
+                    {t('adModal.offerHookHint')}
                   </p>
                 </div>
               </div>
@@ -429,7 +431,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
 
             {/* Products Selection */}
             <div className="border-t border-gray-700 pt-4 mt-4">
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">Productos Asociados</h3>
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">{t('adModal.associatedProducts')}</h3>
               {(() => {
                 const selectedAdSet = adSets.find(a => a._id === formData.adSetId);
                 // Get inherited products: from AdSet if it has them, otherwise from Campaign
@@ -451,14 +453,14 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                 );
               })()}
               <p className="text-xs text-gray-400 mt-2">
-                Nota: Deja vacío para usar los productos del AdSet o Campaña. Solo se guardarán los productos vendibles seleccionados.
+                {t('adModal.productsNote')}
               </p>
 
               {/* Main Product Selection */}
               {formData.productIds.length > 0 && (
                 <div className="mt-4 p-3 bg-gray-900/30 rounded-lg border border-gray-700/50">
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Producto Principal (para detección de interés)
+                    {t('adModal.mainProduct')}
                   </label>
                   <select
                     name="mainProductId"
@@ -466,7 +468,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                     onChange={handleChange}
                     className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                   >
-                    <option value="">Usar primer producto de la lista</option>
+                    <option value="">{t('adModal.useFirstProduct')}</option>
                     {formData.productIds.map(id => {
                       const product = getProductById(productFamilies, id);
                       return product ? (
@@ -477,7 +479,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                     })}
                   </select>
                   <p className="text-xs text-gray-400 mt-1">
-                    Este producto determina cómo el bot identifica el tipo de producto del anuncio.
+                    {t('adModal.mainProductHint')}
                   </p>
                 </div>
               )}
@@ -523,7 +525,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
               ) : (
                 <div className="p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
                   <p className="text-amber-400 text-sm">
-                    Primero guarda el Anuncio para poder subir un catálogo.
+                    {t('adModal.catalogSaveFirst')}
                   </p>
                 </div>
               )}
@@ -538,13 +540,13 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
             onClick={onClose}
             className="px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
           >
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button
             onClick={handleSubmit}
             className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
           >
-            {ad ? 'Actualizar' : 'Crear'} Anuncio
+            {ad ? t('adModal.updateAd') : t('common.create')} {t('common.ad')}
           </button>
         </div>
       </div>

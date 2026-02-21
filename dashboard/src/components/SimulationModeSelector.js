@@ -1,10 +1,12 @@
 // components/SimulationModeSelector.js
 // Allows super_admin to simulate viewing the dashboard as a different role/profile
 import React, { useState, useEffect, useRef } from 'react';
+import { useTranslation } from '../i18n';
 import { useAuth } from '../contexts/AuthContext';
 import API from '../api';
 
 const SimulationModeSelector = () => {
+  const { t } = useTranslation();
   const { user, simulationMode, startSimulation, stopSimulation } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [roles, setRoles] = useState([]);
@@ -105,14 +107,14 @@ const SimulationModeSelector = () => {
             ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50'
             : 'text-gray-400 hover:bg-gray-800/50 hover:text-white'
         }`}
-        title="Simular nivel de acceso"
+        title={t('simulationSelector.accessLevel')}
       >
         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
         </svg>
         <span className="hidden md:block text-sm">
-          {simulationMode ? `Vista: ${simulationMode.label}` : 'Ver como...'}
+          {simulationMode ? t('simulationSelector.viewLabel', { label: simulationMode.label }) : t('simulationSelector.viewAs')}
         </span>
         {simulationMode && (
           <span className="w-2 h-2 bg-amber-500 rounded-full animate-pulse"></span>
@@ -123,9 +125,9 @@ const SimulationModeSelector = () => {
       {isOpen && (
         <div className="absolute right-0 mt-2 w-72 bg-gray-800 border border-gray-700 rounded-lg shadow-xl z-50 overflow-hidden">
           <div className="p-3 border-b border-gray-700">
-            <h3 className="text-sm font-semibold text-white">Simular Nivel de Acceso</h3>
+            <h3 className="text-sm font-semibold text-white">{t('simulationSelector.dropdownTitle')}</h3>
             <p className="text-xs text-gray-400 mt-1">
-              Ve el dashboard como lo vería otro usuario
+              {t('simulationSelector.dropdownDesc')}
             </p>
           </div>
 
@@ -135,7 +137,7 @@ const SimulationModeSelector = () => {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"></path>
               </svg>
-              Cargando roles...
+              {t('simulationSelector.loadingRoles')}
             </div>
           ) : (
             <div className="max-h-80 overflow-y-auto">
@@ -148,7 +150,7 @@ const SimulationModeSelector = () => {
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
-                  <span>Salir de simulación</span>
+                  <span>{t('simulationSelector.exitSimulation')}</span>
                 </button>
               )}
 
@@ -170,17 +172,17 @@ const SimulationModeSelector = () => {
                         <div>
                           <span className="text-sm font-medium text-white">{role.label}</span>
                           {role.permissions?.includes('*') && (
-                            <span className="ml-2 text-xs text-amber-400">(Todos los permisos)</span>
+                            <span className="ml-2 text-xs text-amber-400">{t('simulationSelector.allPermissions')}</span>
                           )}
                         </div>
                         {isCurrentSimulation && (
-                          <span className="text-xs text-primary-400">Activo</span>
+                          <span className="text-xs text-primary-400">{t('simulationSelector.activeLabel')}</span>
                         )}
                       </div>
                       <p className="text-xs text-gray-400 mt-1">
                         {role.permissions?.includes('*')
-                          ? 'Acceso completo'
-                          : `${role.permissions?.length || 0} permisos`}
+                          ? t('simulationSelector.fullAccess')
+                          : t('simulationSelector.permissionsCount', { count: role.permissions?.length || 0 })}
                       </p>
                     </button>
 
@@ -201,11 +203,11 @@ const SimulationModeSelector = () => {
                               <div>
                                 <span className="text-sm text-gray-300">↳ {profile.label}</span>
                                 <span className="text-xs text-gray-500 ml-2">
-                                  (+{profile.permissions?.length || 0} permisos)
+                                  (+{t('simulationSelector.permissionsCount', { count: profile.permissions?.length || 0 })})
                                 </span>
                               </div>
                               {isProfileSimulation && (
-                                <span className="text-xs text-primary-400">Activo</span>
+                                <span className="text-xs text-primary-400">{t('simulationSelector.activeLabel')}</span>
                               )}
                             </button>
                           );
@@ -218,7 +220,7 @@ const SimulationModeSelector = () => {
 
               {roles.length === 0 && (
                 <div className="p-4 text-center text-gray-400 text-sm">
-                  No hay roles disponibles
+                  {t('simulationSelector.noRoles')}
                 </div>
               )}
             </div>

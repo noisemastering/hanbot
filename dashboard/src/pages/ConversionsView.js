@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import API from '../api';
+import { useTranslation } from '../i18n';
 import {
   ComposedChart,
   Bar,
@@ -28,6 +29,7 @@ function getTodayStr() {
 }
 
 function ConversionsView() {
+  const { t, locale } = useTranslation();
   const [stats, setStats] = useState(null);
   const [recentConversions, setRecentConversions] = useState([]);
   const [dailyClicks, setDailyClicks] = useState([]);
@@ -114,7 +116,7 @@ function ConversionsView() {
 
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return 'N/A';
-    return new Intl.NumberFormat('es-MX', {
+    return new Intl.NumberFormat(locale, {
       style: 'currency',
       currency: 'MXN'
     }).format(amount);
@@ -122,7 +124,7 @@ function ConversionsView() {
 
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
-    return new Date(dateString).toLocaleDateString('es-MX', {
+    return new Date(dateString).toLocaleDateString(locale, {
       month: 'short',
       day: 'numeric',
       hour: '2-digit',
@@ -140,7 +142,7 @@ function ConversionsView() {
   };
 
   const getConfidenceLabel = (confidence) => {
-    const labels = { high: 'alta', medium: 'media', low: 'baja' };
+    const labels = { high: t('conversions.high'), medium: t('conversions.medium'), low: t('conversions.low') };
     return labels[confidence] || confidence || 'N/A';
   };
 
@@ -159,7 +161,7 @@ function ConversionsView() {
       <div className="p-6 flex items-center justify-center min-h-screen">
         <div className="text-center">
           <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400"></div>
-          <p className="mt-4 text-gray-400">Cargando datos de conversiones...</p>
+          <p className="mt-4 text-gray-400">{t('conversions.loadingData')}</p>
         </div>
       </div>
     );
@@ -169,8 +171,8 @@ function ConversionsView() {
     <div className="p-6">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Conversiones Meta → Mercado Libre</h1>
-        <p className="text-gray-400 mt-1">Atribución de ventas desde Facebook Messenger</p>
+        <h1 className="text-2xl font-bold text-white">{t('conversions.pageTitle')}</h1>
+        <p className="text-gray-400 mt-1">{t('conversions.pageSubtitle')}</p>
       </div>
 
       {/* Error Alert */}
@@ -187,10 +189,10 @@ function ConversionsView() {
           <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-400">Conversiones</p>
+                <p className="text-sm text-gray-400">{t('conversions.conversions')}</p>
                 <p className="text-2xl font-bold text-green-400">{stats.conversions}</p>
                 <p className="text-xs text-gray-500 mt-1">
-                  {stats.conversionRate}% de clicks
+                  {t('conversions.ofClicks', { rate: stats.conversionRate })}
                 </p>
               </div>
               <div className="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center">
@@ -205,10 +207,10 @@ function ConversionsView() {
           <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-400">Ingresos Atribuidos a FB</p>
+                <p className="text-sm text-gray-400">{t('conversions.attributedRevenue')}</p>
                 <p className="text-2xl font-bold text-blue-400">{formatCurrency(stats.totalRevenue)}</p>
                 <p className="text-xs text-gray-500 mt-1">
-                  de {stats.conversions} pedidos correlacionados
+                  {t('conversions.correlatedOrders', { count: stats.conversions })}
                 </p>
               </div>
               <div className="w-12 h-12 bg-blue-500/20 rounded-full flex items-center justify-center">
@@ -223,9 +225,9 @@ function ConversionsView() {
           <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-400">Links Clickeados</p>
+                <p className="text-sm text-gray-400">{t('conversions.clickedLinks')}</p>
                 <p className="text-2xl font-bold text-white">{stats.clickedLinks}</p>
-                <p className="text-xs text-gray-500 mt-1">{stats.clickRate}% click rate</p>
+                <p className="text-xs text-gray-500 mt-1">{t('conversions.clickRate', { rate: stats.clickRate })}</p>
               </div>
               <div className="w-12 h-12 bg-purple-500/20 rounded-full flex items-center justify-center">
                 <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -238,16 +240,16 @@ function ConversionsView() {
           {/* Confidence Breakdown */}
           <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
             <div>
-              <p className="text-sm text-gray-400 mb-2">Confianza Atribución</p>
+              <p className="text-sm text-gray-400 mb-2">{t('conversions.attributionConfidence')}</p>
               <div className="flex gap-2">
                 <span className="px-2 py-1 rounded text-xs font-medium bg-green-500/20 text-green-300 border border-green-500/30">
-                  Alta: {stats.confidenceBreakdown?.high || 0}
+                  {t('conversions.high')}: {stats.confidenceBreakdown?.high || 0}
                 </span>
                 <span className="px-2 py-1 rounded text-xs font-medium bg-yellow-500/20 text-yellow-300 border border-yellow-500/30">
-                  Media: {stats.confidenceBreakdown?.medium || 0}
+                  {t('conversions.medium')}: {stats.confidenceBreakdown?.medium || 0}
                 </span>
                 <span className="px-2 py-1 rounded text-xs font-medium bg-red-500/20 text-red-300 border border-red-500/30">
-                  Baja: {stats.confidenceBreakdown?.low || 0}
+                  {t('conversions.low')}: {stats.confidenceBreakdown?.low || 0}
                 </span>
               </div>
             </div>
@@ -258,7 +260,7 @@ function ConversionsView() {
       {/* Daily Chart */}
       {chartData.length > 0 && (
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4 mb-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Clicks vs Conversiones por Día</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">{t('conversions.chartTitle')}</h2>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
@@ -285,7 +287,7 @@ function ConversionsView() {
                 <Legend wrapperStyle={{ color: '#9CA3AF' }} />
                 <Bar
                   dataKey="conversions"
-                  name="Conversiones"
+                  name={t('conversions.chartConversions')}
                   fill="#10B981"
                   fillOpacity={0.7}
                   radius={[4, 4, 0, 0]}
@@ -293,7 +295,7 @@ function ConversionsView() {
                 <Line
                   type="monotone"
                   dataKey="clicks"
-                  name="Clicks"
+                  name={t('conversions.chartClicks')}
                   stroke="#3B82F6"
                   strokeWidth={2}
                   dot={{ fill: '#3B82F6', strokeWidth: 2, r: 3 }}
@@ -306,11 +308,11 @@ function ConversionsView() {
 
       {/* Correlation Controls */}
       <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4 mb-6">
-        <h2 className="text-lg font-semibold text-white mb-4">Correlación</h2>
+        <h2 className="text-lg font-semibold text-white mb-4">{t('conversions.correlation')}</h2>
 
         <div className="flex flex-wrap gap-4 items-end mb-4">
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Desde</label>
+            <label className="block text-sm text-gray-400 mb-1">{t('conversions.from')}</label>
             <input
               type="date"
               value={dateFrom}
@@ -319,7 +321,7 @@ function ConversionsView() {
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Hasta</label>
+            <label className="block text-sm text-gray-400 mb-1">{t('conversions.to')}</label>
             <input
               type="date"
               value={dateTo}
@@ -328,7 +330,7 @@ function ConversionsView() {
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Ventana (hrs)</label>
+            <label className="block text-sm text-gray-400 mb-1">{t('conversions.windowHours')}</label>
             <input
               type="number"
               value={timeWindowHours}
@@ -339,7 +341,7 @@ function ConversionsView() {
             />
           </div>
           <div>
-            <label className="block text-sm text-gray-400 mb-1">Límite</label>
+            <label className="block text-sm text-gray-400 mb-1">{t('conversions.limit')}</label>
             <input
               type="number"
               value={orderLimit}
@@ -357,21 +359,21 @@ function ConversionsView() {
             disabled={loading}
             className="px-4 py-2 bg-gray-700/50 text-gray-300 rounded hover:bg-gray-600 border border-gray-600"
           >
-            {loading ? 'Cargando...' : 'Actualizar Stats'}
+            {loading ? t('common.loading') : t('conversions.updateStats')}
           </button>
           <button
             onClick={() => runCorrelation(true)}
             disabled={correlating}
             className="bg-gray-700/50 text-gray-300 px-4 py-2 rounded hover:bg-gray-600 disabled:opacity-50 border border-gray-600"
           >
-            {correlating ? 'Procesando...' : 'Vista Previa'}
+            {correlating ? t('conversions.processing') : t('conversions.preview')}
           </button>
           <button
             onClick={() => runCorrelation(false)}
             disabled={correlating}
             className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
           >
-            {correlating ? 'Procesando...' : 'Sincronizar Ahora'}
+            {correlating ? t('conversions.processing') : t('conversions.syncNow')}
           </button>
         </div>
 
@@ -379,23 +381,23 @@ function ConversionsView() {
         {correlationResult && (
           <div className={`mt-4 p-4 rounded ${correlationResult.dryRun ? 'bg-yellow-500/20 border border-yellow-500/30' : 'bg-green-500/20 border border-green-500/30'}`}>
             <h3 className="font-semibold mb-2 text-white">
-              {correlationResult.dryRun ? 'Vista Previa (sin guardar)' : 'Correlación Completada'}
+              {correlationResult.dryRun ? t('conversions.previewTitle') : t('conversions.correlationComplete')}
             </h3>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
               <div>
-                <span className="text-gray-400">Pedidos procesados:</span>
+                <span className="text-gray-400">{t('conversions.ordersProcessed')}</span>
                 <span className="ml-2 font-medium text-white">{correlationResult.ordersProcessed}</span>
               </div>
               <div>
-                <span className="text-gray-400">Con clicks:</span>
+                <span className="text-gray-400">{t('conversions.withClicks')}</span>
                 <span className="ml-2 font-medium text-white">{correlationResult.ordersWithClicks}</span>
               </div>
               <div>
-                <span className="text-gray-400">Clicks correlacionados:</span>
+                <span className="text-gray-400">{t('conversions.clicksCorrelated')}</span>
                 <span className="ml-2 font-medium text-green-400">{correlationResult.clicksCorrelated || correlationResult.correlations?.length || 0}</span>
               </div>
               <div>
-                <span className="text-gray-400">Tasa de match:</span>
+                <span className="text-gray-400">{t('conversions.matchRate')}</span>
                 <span className="ml-2 font-medium text-white">
                   {correlationResult.ordersProcessed > 0
                     ? ((correlationResult.ordersWithClicks / correlationResult.ordersProcessed) * 100).toFixed(1)
@@ -407,7 +409,7 @@ function ConversionsView() {
             {/* Show correlations if dry run */}
             {correlationResult.dryRun && correlationResult.correlations?.length > 0 && (
               <div className="mt-4">
-                <h4 className="text-sm font-medium text-gray-300 mb-2">Correlaciones encontradas:</h4>
+                <h4 className="text-sm font-medium text-gray-300 mb-2">{t('conversions.correlationsFound')}</h4>
                 <div className="space-y-2 max-h-48 overflow-y-auto">
                   {correlationResult.correlations.slice(0, 5).map((c, i) => (
                     <div key={i} className="text-xs bg-gray-800/50 p-2 rounded border border-gray-700">
@@ -431,7 +433,7 @@ function ConversionsView() {
       {/* Top Converters - Horizontal Cards */}
       {stats?.topConverters?.length > 0 && (
         <div className="mb-6">
-          <h2 className="text-lg font-semibold text-white mb-3">Top Compradores</h2>
+          <h2 className="text-lg font-semibold text-white mb-3">{t('conversions.topBuyers')}</h2>
           <div className="flex flex-wrap gap-3">
             {stats.topConverters.map((converter, i) => (
               <div key={converter.psid} className={`flex items-center gap-3 px-4 py-3 bg-gray-800/30 rounded-lg border ${
@@ -452,10 +454,10 @@ function ConversionsView() {
                   <p className="text-sm font-medium text-white">
                     {converter.firstName || converter.lastName
                       ? `${converter.firstName || ''} ${converter.lastName || ''}`.trim()
-                      : 'Usuario'}
+                      : t('conversions.userDefault')}
                   </p>
                   <p className="text-xs text-gray-500 font-mono">{converter.psid?.substring(0, 12)}...</p>
-                  <p className="text-xs text-gray-500">{converter.conversions} compra{converter.conversions !== 1 ? 's' : ''} · {formatCurrency(converter.totalSpent)}</p>
+                  <p className="text-xs text-gray-500">{converter.conversions !== 1 ? t('conversions.purchaseCountPlural', { count: converter.conversions }) : t('conversions.purchaseCount', { count: converter.conversions })} · {formatCurrency(converter.totalSpent)}</p>
                 </div>
               </div>
             ))}
@@ -466,9 +468,9 @@ function ConversionsView() {
       {/* Recent Conversions - Table */}
       <div className="bg-gray-800/30 rounded-lg border border-gray-700/50">
         <div className="px-4 py-3 border-b border-gray-700/50 flex justify-between items-center">
-          <h2 className="text-lg font-semibold text-white">Conversiones Recientes</h2>
+          <h2 className="text-lg font-semibold text-white">{t('conversions.recentConversions')}</h2>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-400">Mostrar:</span>
+            <span className="text-sm text-gray-400">{t('conversions.show')}</span>
             {[30, 50, 100].map((size) => (
               <button
                 key={size}
@@ -486,20 +488,20 @@ function ConversionsView() {
         </div>
         <div className="overflow-x-auto">
           {recentConversions.length === 0 ? (
-            <p className="text-gray-500 text-center py-8">No hay conversiones registradas</p>
+            <p className="text-gray-500 text-center py-8">{t('conversions.noConversionsRecorded')}</p>
           ) : (
             <>
               <table className="w-full">
                 <thead className="bg-gray-900/50">
                   <tr className="text-left text-xs text-gray-400 uppercase">
-                    <th className="px-4 py-3">Producto</th>
-                    <th className="px-4 py-3">Comprador</th>
-                    <th className="px-4 py-3">Ciudad</th>
-                    <th className="px-4 py-3">Click</th>
-                    <th className="px-4 py-3">Pedido</th>
-                    <th className="px-4 py-3">Método</th>
-                    <th className="px-4 py-3 text-right">Monto</th>
-                    <th className="px-4 py-3 text-center">Confianza</th>
+                    <th className="px-4 py-3">{t('conversions.colProduct')}</th>
+                    <th className="px-4 py-3">{t('conversions.colBuyer')}</th>
+                    <th className="px-4 py-3">{t('conversions.colCity')}</th>
+                    <th className="px-4 py-3">{t('conversions.colClick')}</th>
+                    <th className="px-4 py-3">{t('conversions.colOrder')}</th>
+                    <th className="px-4 py-3">{t('conversions.colMethod')}</th>
+                    <th className="px-4 py-3 text-right">{t('conversions.colAmount')}</th>
+                    <th className="px-4 py-3 text-center">{t('conversions.colConfidence')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700/50">
@@ -565,7 +567,7 @@ function ConversionsView() {
               {recentConversions.length > pageSize && (
                 <div className="px-4 py-3 border-t border-gray-700/50 flex items-center justify-between">
                   <p className="text-sm text-gray-400">
-                    Mostrando {((currentPage - 1) * pageSize) + 1} - {Math.min(currentPage * pageSize, recentConversions.length)} de {recentConversions.length}
+                    {t('conversions.showingRange', { from: ((currentPage - 1) * pageSize) + 1, to: Math.min(currentPage * pageSize, recentConversions.length), total: recentConversions.length })}
                   </p>
                   <div className="flex gap-2">
                     <button
@@ -573,17 +575,17 @@ function ConversionsView() {
                       disabled={currentPage === 1}
                       className="px-3 py-1 text-sm bg-gray-700/50 text-gray-300 rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Anterior
+                      {t('common.previous')}
                     </button>
                     <span className="px-3 py-1 text-sm text-gray-400">
-                      Página {currentPage} de {Math.ceil(recentConversions.length / pageSize)}
+                      {t('conversions.pageOf', { current: currentPage, total: Math.ceil(recentConversions.length / pageSize) })}
                     </span>
                     <button
                       onClick={() => setCurrentPage(p => Math.min(Math.ceil(recentConversions.length / pageSize), p + 1))}
                       disabled={currentPage >= Math.ceil(recentConversions.length / pageSize)}
                       className="px-3 py-1 text-sm bg-gray-700/50 text-gray-300 rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                      Siguiente
+                      {t('common.next')}
                     </button>
                   </div>
                 </div>
@@ -596,14 +598,14 @@ function ConversionsView() {
       {/* Attribution Funnel */}
       {stats && (
         <div className="mt-6 bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
-          <h2 className="text-lg font-semibold text-white mb-4">Funnel de Atribución</h2>
+          <h2 className="text-lg font-semibold text-white mb-4">{t('conversions.funnelTitle')}</h2>
           <div className="flex items-center justify-between">
             {/* Links Generated */}
             <div className="text-center flex-1">
               <div className="w-20 h-20 mx-auto bg-blue-500/20 rounded-full flex items-center justify-center mb-2">
                 <span className="text-xl font-bold text-blue-400">{stats.totalLinks}</span>
               </div>
-              <p className="text-sm text-gray-400">Links Generados</p>
+              <p className="text-sm text-gray-400">{t('conversions.linksGenerated')}</p>
             </div>
 
             <div className="text-gray-600 text-2xl">→</div>
@@ -613,7 +615,7 @@ function ConversionsView() {
               <div className="w-20 h-20 mx-auto bg-purple-500/20 rounded-full flex items-center justify-center mb-2">
                 <span className="text-xl font-bold text-purple-400">{stats.clickedLinks}</span>
               </div>
-              <p className="text-sm text-gray-400">Clicks</p>
+              <p className="text-sm text-gray-400">{t('conversions.clicks')}</p>
               <p className="text-xs text-gray-500">{stats.clickRate}%</p>
             </div>
 
@@ -624,7 +626,7 @@ function ConversionsView() {
               <div className="w-20 h-20 mx-auto bg-green-500/20 rounded-full flex items-center justify-center mb-2">
                 <span className="text-xl font-bold text-green-400">{stats.conversions}</span>
               </div>
-              <p className="text-sm text-gray-400">Conversiones</p>
+              <p className="text-sm text-gray-400">{t('conversions.funnelConversions')}</p>
               <p className="text-xs text-gray-500">{stats.conversionRate}%</p>
             </div>
 
@@ -635,8 +637,8 @@ function ConversionsView() {
               <div className="w-24 h-20 mx-auto bg-yellow-500/20 rounded-lg flex items-center justify-center mb-2">
                 <span className="text-lg font-bold text-yellow-400">{formatCurrency(stats.totalRevenue)}</span>
               </div>
-              <p className="text-sm text-gray-400">Ingresos FB</p>
-              <p className="text-xs text-gray-500">{stats.conversions} pedidos</p>
+              <p className="text-sm text-gray-400">{t('conversions.fbRevenue')}</p>
+              <p className="text-xs text-gray-500">{t('conversions.orders', { count: stats.conversions })}</p>
             </div>
           </div>
         </div>

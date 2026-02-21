@@ -73,7 +73,7 @@ export const AuthProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('Login error:', error);
-      return { success: false, error: 'Error al conectar con el servidor' };
+      return { success: false, error: 'auth.serverError' };
     }
   };
 

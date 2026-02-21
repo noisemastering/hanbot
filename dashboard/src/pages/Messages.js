@@ -1,8 +1,10 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import API from "../api";
 import TrackedLinkGenerator from "../components/TrackedLinkGenerator";
+import { useTranslation } from '../i18n';
 
 function Messages() {
+  const { t, locale } = useTranslation();
   const [quickActions, setQuickActions] = useState([]);
   const [filteredConversations, setFilteredConversations] = useState([]);
   const [conversationStatuses, setConversationStatuses] = useState({});
@@ -46,23 +48,23 @@ function Messages() {
   const getIntentDisplay = (intent) => {
     switch (intent) {
       case 'high':
-        return { emoji: '🟢', color: '#4caf50', label: 'Alta' };
+        return { emoji: '🟢', color: '#4caf50', label: t('messages.intentHigh') };
       case 'low':
-        return { emoji: '🔴', color: '#f44336', label: 'Baja' };
+        return { emoji: '🔴', color: '#f44336', label: t('messages.intentLow') };
       case 'medium':
       default:
-        return { emoji: '🔵', color: '#2196F3', label: 'Media' };
+        return { emoji: '🔵', color: '#2196F3', label: t('messages.intentMedium') };
     }
   };
 
   // Helper function to format wait time
   const formatWaitTime = (minutes) => {
     if (minutes == null) return '';
-    if (minutes < 60) return `hace ${minutes}min`;
+    if (minutes < 60) return t('messages.agoMinutes', { count: minutes });
     const hours = Math.floor(minutes / 60);
-    if (hours < 24) return `hace ${hours}h`;
+    if (hours < 24) return t('messages.agoHours', { count: hours });
     const days = Math.floor(hours / 24);
-    return `hace ${days}d`;
+    return t('messages.agoDays', { count: days });
   };
 
   // Helper function to determine handoff priority and colors
@@ -89,7 +91,7 @@ function Messages() {
         borderColor: '#ff5252',
         textColor: '#ff5252',
         icon: '🚨',
-        label: 'Urgente'
+        label: t('messages.handoffUrgent')
       };
     }
 
@@ -108,7 +110,7 @@ function Messages() {
         borderColor: '#4caf50',
         textColor: '#4caf50',
         icon: 'ℹ️',
-        label: 'Informativo'
+        label: t('messages.handoffInfo')
       };
     }
 
@@ -118,7 +120,7 @@ function Messages() {
       borderColor: '#ffb300',
       textColor: '#ffb300',
       icon: '💰',
-      label: 'Acción Requerida'
+      label: t('messages.handoffActionRequired')
     };
   };
 
@@ -285,7 +287,7 @@ function Messages() {
         [psid]: statusRes.data
       }));
 
-      alert(`✅ Control tomado del PSID: ${psid}\nEl bot dejará de responder.`);
+      alert(t('alert.takeoverSuccess', { psid }));
     } catch (err) {
       console.error("Error taking over:", err);
       alert(`❌ Error: ${err.response?.data?.error || err.message}`);
@@ -320,7 +322,7 @@ function Messages() {
         [psid]: statusRes.data
       }));
 
-      alert(`✅ Conversación liberada: ${psid}\nEl bot puede responder de nuevo.`);
+      alert(t('alert.releaseSuccess', { psid }));
     } catch (err) {
       console.error("Error releasing:", err);
       alert(`❌ Error: ${err.response?.data?.error || err.message}`);
@@ -359,7 +361,7 @@ function Messages() {
       }
     } catch (err) {
       console.error("Error sending reply:", err);
-      alert(`❌ Error enviando mensaje: ${err.response?.data?.error || err.message}`);
+      alert(`${t('messages.errorSending')}: ${err.response?.data?.error || err.message}`);
     } finally {
       setSendingReply(false);
     }
@@ -412,7 +414,7 @@ function Messages() {
           borderRadius: "50%",
           animation: "spin 0.8s linear infinite"
         }} />
-        <p style={{ color: "#888", fontSize: "1rem" }}>Cargando conversaciones...</p>
+        <p style={{ color: "#888", fontSize: "1rem" }}>{t('messages.loadingConversations')}</p>
         <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
       </div>
     );
@@ -437,7 +439,7 @@ function Messages() {
             opacity: refreshing ? 0.6 : 1
           }}
         >
-          {refreshing ? "🔄 Actualizando..." : "🔄 Actualizar"}
+          {refreshing ? `🔄 ${t('messages.refreshing')}` : `🔄 ${t('messages.refresh')}`}
         </button>
       </div>
 
@@ -453,20 +455,20 @@ function Messages() {
             alignItems: "center"
           }}>
             <h2 style={{ color: "#ffb300", margin: 0, fontSize: "1.3rem", fontWeight: "bold" }}>
-              Pendientes de Atención - {pendingHandoffs.length}
+              {t('messages.pendingAttention')} - {pendingHandoffs.length}
             </h2>
           </div>
           <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #555" }}>
             <thead>
               <tr style={{ backgroundColor: "#3d2900", color: "#ffb300" }}>
-                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Canal</th>
-                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Usuario</th>
-                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Esperando desde</th>
-                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Motivo</th>
-                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Producto</th>
-                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Ciudad</th>
-                <th style={{ padding: "10px", textAlign: "center", borderBottom: "2px solid #555" }}>Intención</th>
-                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Acción</th>
+                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.channel')}</th>
+                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.user')}</th>
+                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.waitingSince')}</th>
+                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.reason')}</th>
+                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.product')}</th>
+                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.city')}</th>
+                <th style={{ padding: "10px", textAlign: "center", borderBottom: "2px solid #555" }}>{t('messages.intent')}</th>
+                <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.action')}</th>
               </tr>
             </thead>
             <tbody>
@@ -511,7 +513,7 @@ function Messages() {
                           onClick={(e) => {
                             e.stopPropagation();
                             navigator.clipboard.writeText(handoff.psid.substring(3));
-                            alert('Número copiado: ' + handoff.psid.substring(3));
+                            alert(t('messages.numberCopied', { number: handoff.psid.substring(3) }));
                           }}
                           title="Click para copiar"
                         >
@@ -523,7 +525,7 @@ function Messages() {
                     </td>
                     <td style={{ padding: "10px", color: "#e0e0e0", fontSize: "0.85rem" }}>
                       <div>
-                        {handoff.handoffTimestamp ? new Date(handoff.handoffTimestamp).toLocaleString('es-MX', {
+                        {handoff.handoffTimestamp ? new Date(handoff.handoffTimestamp).toLocaleString(locale, {
                           month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit'
                         }) : '—'}
                       </div>
@@ -541,7 +543,7 @@ function Messages() {
                           fontSize: "0.65rem",
                           fontWeight: "bold"
                         }}>
-                          Fuera de horario
+                          {t('messages.afterHours')}
                         </span>
                       )}
                     </td>
@@ -583,7 +585,7 @@ function Messages() {
                           fontWeight: "bold"
                         }}
                       >
-                        {loading[handoff.psid] ? "..." : "Tomar"}
+                        {loading[handoff.psid] ? "..." : t('messages.take')}
                       </button>
                     </td>
                   </tr>
@@ -597,18 +599,18 @@ function Messages() {
       {/* SECTION 1: Recent Activity Table */}
       <div style={{ marginBottom: "2.5rem" }}>
         <h2 style={{ color: "white", marginBottom: "1rem", fontSize: "1.3rem", fontWeight: "bold" }}>
-          ⚡ Actividad Reciente - Últimas 10 Conversaciones
+          ⚡ {t('messages.recentActivity')}
         </h2>
         <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #555" }}>
           <thead>
             <tr style={{ backgroundColor: "#2a1a5e", color: "#bb86fc" }}>
-              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Canal</th>
-              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Usuario</th>
-              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Fecha</th>
-              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Último mensaje</th>
-              <th style={{ padding: "10px", textAlign: "center", borderBottom: "2px solid #555" }}>Intención</th>
-              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Vocero</th>
-              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>Acción</th>
+              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.channel')}</th>
+              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.user')}</th>
+              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.date')}</th>
+              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.lastMessageCol')}</th>
+              <th style={{ padding: "10px", textAlign: "center", borderBottom: "2px solid #555" }}>{t('messages.intent')}</th>
+              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.spokesperson')}</th>
+              <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.action')}</th>
             </tr>
           </thead>
           <tbody>
@@ -656,7 +658,7 @@ function Messages() {
                         onClick={(e) => {
                           e.stopPropagation();
                           navigator.clipboard.writeText(msg.psid.substring(3));
-                          alert('Número copiado: ' + msg.psid.substring(3));
+                          alert(t('messages.numberCopied', { number: msg.psid.substring(3) }));
                         }}
                         title="Click para copiar"
                       >
@@ -667,7 +669,7 @@ function Messages() {
                     )}
                   </td>
                   <td style={{ padding: "10px", color: "#e0e0e0", fontSize: "0.9rem" }}>
-                    {new Date(msg.lastMessageAt).toLocaleString('es-MX', {
+                    {new Date(msg.lastMessageAt).toLocaleString(locale, {
                       month: 'short',
                       day: 'numeric',
                       hour: '2-digit',
@@ -694,9 +696,9 @@ function Messages() {
                         )}
                       </div>
                     ) : isHumanActive ? (
-                      <span style={{ color: "#ff9800", fontSize: "0.9rem" }}>👨‍💼 Humano</span>
+                      <span style={{ color: "#ff9800", fontSize: "0.9rem" }}>👨‍💼 {t('messages.human')}</span>
                     ) : (
-                      <span style={{ color: "#4caf50", fontSize: "0.9rem" }}>🤖 Bot</span>
+                      <span style={{ color: "#4caf50", fontSize: "0.9rem" }}>🤖 {t('messages.bot')}</span>
                     )}
                   </td>
                   <td style={{ padding: "10px" }}>
@@ -719,7 +721,7 @@ function Messages() {
                             fontSize: "0.85rem"
                           }}
                         >
-                          {loading[msg.psid] ? "..." : "🤖 Liberar"}
+                          {loading[msg.psid] ? "..." : `🤖 ${t('messages.releaseBot')}`}
                         </button>
                       ) : (
                         <button
@@ -739,7 +741,7 @@ function Messages() {
                             fontSize: "0.85rem"
                           }}
                         >
-                          {loading[msg.psid] ? "..." : "👨‍💼 Tomar"}
+                          {loading[msg.psid] ? "..." : `👨‍💼 ${t('messages.takeOver')}`}
                         </button>
                       )}
                       <button
@@ -774,7 +776,7 @@ function Messages() {
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
           <h2 style={{ color: "white", margin: 0, fontSize: "1.3rem", fontWeight: "bold" }}>
-            💬 Todas las Conversaciones - {totalConversations} conversación{totalConversations !== 1 ? 'es' : ''}
+            💬 {t('messages.allConversations')} - {totalConversations !== 1 ? t('messages.conversationCountPlural', { count: totalConversations }) : t('messages.conversationCount', { count: totalConversations })}
           </h2>
           {conversationsNeedingHelp > 0 && (
             <div style={{
@@ -786,7 +788,7 @@ function Messages() {
               fontSize: "0.9rem",
               animation: "pulse 2s infinite"
             }}>
-              🚨 {conversationsNeedingHelp} conversación{conversationsNeedingHelp > 1 ? 'es' : ''} necesita{conversationsNeedingHelp === 1 ? '' : 'n'} ayuda
+              🚨 {conversationsNeedingHelp > 1 ? t('messages.needsHelpPlural', { count: conversationsNeedingHelp }) : t('messages.needsHelp', { count: conversationsNeedingHelp })}
             </div>
           )}
         </div>
@@ -799,11 +801,11 @@ function Messages() {
             flexWrap: "wrap"
           }}>
             {[
-              { key: 'today', label: 'Hoy' },
-              { key: 'yesterday', label: 'Ayer' },
-              { key: 'week', label: 'Últimos 7 días' },
-              { key: 'month', label: 'Últimos 30 días' },
-              { key: 'all', label: 'Todos' }
+              { key: 'today', label: t('messages.filterToday') },
+              { key: 'yesterday', label: t('messages.filterYesterday') },
+              { key: 'week', label: t('messages.filterWeek') },
+              { key: 'month', label: t('messages.filterMonth') },
+              { key: 'all', label: t('messages.filterAll') }
             ].map(({ key, label }) => (
               <button
                 key={key}
@@ -865,14 +867,14 @@ function Messages() {
           <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "1rem", border: "1px solid #555" }}>
           <thead>
             <tr style={{ backgroundColor: "#1b3a1b", color: "lightgreen" }}>
-              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Canal</th>
-              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Usuario</th>
-              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Fecha</th>
-              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Último mensaje</th>
-              <th style={{ padding: "8px", textAlign: "center", borderBottom: "2px solid #555" }}>Intención</th>
-              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Tipo</th>
-              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Vocero</th>
-              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>Acción</th>
+              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.channel')}</th>
+              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.user')}</th>
+              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.date')}</th>
+              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.lastMessageCol')}</th>
+              <th style={{ padding: "8px", textAlign: "center", borderBottom: "2px solid #555" }}>{t('messages.intent')}</th>
+              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.senderType')}</th>
+              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.spokesperson')}</th>
+              <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.action')}</th>
             </tr>
           </thead>
           <tbody>
@@ -920,7 +922,7 @@ function Messages() {
                         onClick={(e) => {
                           e.stopPropagation();
                           navigator.clipboard.writeText(msg.psid.substring(3));
-                          alert('Número copiado: ' + msg.psid.substring(3));
+                          alert(t('messages.numberCopied', { number: msg.psid.substring(3) }));
                         }}
                         title="Click para copiar"
                       >
@@ -954,9 +956,9 @@ function Messages() {
                         )}
                       </div>
                     ) : isHumanActive ? (
-                      <span style={{ color: "#ff9800" }}>👨‍💼 Humano</span>
+                      <span style={{ color: "#ff9800" }}>👨‍💼 {t('messages.human')}</span>
                     ) : (
-                      <span style={{ color: "#4caf50" }}>🤖 Bot</span>
+                      <span style={{ color: "#4caf50" }}>🤖 {t('messages.bot')}</span>
                     )}
                   </td>
                   <td style={{ padding: "8px" }}>
@@ -978,7 +980,7 @@ function Messages() {
                             opacity: loading[msg.psid] ? 0.6 : 1
                           }}
                         >
-                          {loading[msg.psid] ? "..." : "🤖 Liberar al Bot"}
+                          {loading[msg.psid] ? "..." : `🤖 ${t('messages.releaseToBot')}`}
                         </button>
                       ) : (
                         <button
@@ -997,7 +999,7 @@ function Messages() {
                             opacity: loading[msg.psid] ? 0.6 : 1
                           }}
                         >
-                          {loading[msg.psid] ? "..." : "👨‍💼 Tomar Control"}
+                          {loading[msg.psid] ? "..." : `👨‍💼 ${t('messages.takeControl')}`}
                         </button>
                       )}
                       <button
@@ -1051,10 +1053,10 @@ function Messages() {
                 fontSize: "0.9rem"
               }}
             >
-              Anterior
+              {t('messages.previous')}
             </button>
             <span style={{ color: "#ccc", fontSize: "0.9rem" }}>
-              Página {currentPage} de {totalPages} ({totalConversations} conversaciones)
+              {t('messages.page', { current: currentPage, total: totalPages, count: totalConversations })}
             </span>
             <button
               onClick={() => handlePageChange(currentPage + 1)}
@@ -1070,7 +1072,7 @@ function Messages() {
                 fontSize: "0.9rem"
               }}
             >
-              Siguiente
+              {t('messages.next')}
             </button>
           </div>
         )}
@@ -1135,7 +1137,7 @@ function Messages() {
                           onClick={(e) => {
                             e.stopPropagation();
                             navigator.clipboard.writeText(selectedPsid.substring(3));
-                            alert('Número copiado: ' + selectedPsid.substring(3));
+                            alert(t('messages.numberCopied', { number: selectedPsid.substring(3) }));
                           }}
                           style={{
                             marginLeft: '8px',
@@ -1147,9 +1149,9 @@ function Messages() {
                             borderRadius: '4px',
                             cursor: 'pointer'
                           }}
-                          title="Copiar número"
+                          title={t('messages.copyNumber')}
                         >
-                          📋 Copiar
+                          📋 {t('messages.copy')}
                         </button>
                         <a
                           href={`https://wa.me/${selectedPsid.substring(3)}`}
@@ -1165,18 +1167,18 @@ function Messages() {
                             borderRadius: '4px',
                             textDecoration: 'none'
                           }}
-                          title="Abrir en WhatsApp"
+                          title={t('messages.openWhatsApp')}
                         >
                           💬 WhatsApp
                         </a>
                       </>
                     ) : (
-                      <>Conversación - {selectedPsid.substring(0, 15)}...</>
+                      <>{t('messages.conversation')} - {selectedPsid.substring(0, 15)}...</>
                     )}
                   </h3>
                   {selectedChannel === 'whatsapp' && (
                     <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#888' }}>
-                      WhatsApp • Puedes llamar o enviar mensaje directo
+                      {t('messages.whatsappNote')}
                     </p>
                   )}
                 </div>
@@ -1211,7 +1213,7 @@ function Messages() {
                   }}
                 >
                   <div style={{ display: "flex", justifyContent: "space-between", marginBottom: "0.5rem", fontSize: "0.85rem", color: "#888" }}>
-                    <span>{msg.senderType === "bot" ? "🤖 Bot" : msg.senderType === "human" ? "👨‍💼 Agente" : "👤 Usuario"}</span>
+                    <span>{msg.senderType === "bot" ? `🤖 ${t('messages.bot')}` : msg.senderType === "human" ? `👨‍💼 ${t('messages.agent')}` : `👤 ${t('messages.user')}`}</span>
                     <span>{new Date(msg.timestamp).toLocaleString()}</span>
                   </div>
                   <p style={{ margin: 0, whiteSpace: "pre-wrap", color: "white" }}>{msg.text}</p>
@@ -1227,7 +1229,7 @@ function Messages() {
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
                   onKeyPress={(e) => e.key === 'Enter' && !sendingReply && handleSendReply()}
-                  placeholder={`Responder por ${getChannelDisplay(selectedChannel).label}...`}
+                  placeholder={t('messages.replyVia', { channel: getChannelDisplay(selectedChannel).label })}
                   style={{
                     flex: 1,
                     padding: "12px",
@@ -1253,7 +1255,7 @@ function Messages() {
                     fontWeight: "bold"
                   }}
                 >
-                  {sendingReply ? "..." : `Enviar ${getChannelDisplay(selectedChannel).icon}`}
+                  {sendingReply ? "..." : t('messages.sendChannel', { icon: getChannelDisplay(selectedChannel).icon })}
                 </button>
               </div>
             </div>
@@ -1261,7 +1263,7 @@ function Messages() {
             {/* Footer with handover controls */}
             <div style={{ padding: "1rem", borderTop: "1px solid #2a2a2a", display: "flex", gap: "0.5rem", justifyContent: "space-between", alignItems: "center" }}>
               <span style={{ fontSize: "0.9rem", color: "#888" }}>
-                Estado: {conversationStatuses[selectedPsid]?.humanActive ? "👨‍💼 Humano" : "🤖 Bot"}
+                {t('messages.status')}: {conversationStatuses[selectedPsid]?.humanActive ? `👨‍💼 ${t('messages.human')}` : `🤖 ${t('messages.bot')}`}
               </span>
               <div style={{ display: "flex", gap: "0.5rem" }}>
                 <button
@@ -1275,7 +1277,7 @@ function Messages() {
                     cursor: "pointer"
                   }}
                 >
-                  {showLinkGenerator ? "✕ Cerrar Enlace" : "🔗 Generar Enlace"}
+                  {showLinkGenerator ? `✕ ${t('messages.closeLink')}` : `🔗 ${t('messages.generateLink')}`}
                 </button>
                 {conversationStatuses[selectedPsid]?.humanActive ? (
                   <button
@@ -1291,7 +1293,7 @@ function Messages() {
                       opacity: loading[selectedPsid] ? 0.6 : 1
                     }}
                   >
-                    {loading[selectedPsid] ? "..." : "🤖 Liberar al Bot"}
+                    {loading[selectedPsid] ? "..." : `🤖 ${t('messages.releaseToBot')}`}
                   </button>
                 ) : (
                   <button
@@ -1307,7 +1309,7 @@ function Messages() {
                       opacity: loading[selectedPsid] ? 0.6 : 1
                     }}
                   >
-                    {loading[selectedPsid] ? "..." : "👨‍💼 Tomar Control"}
+                    {loading[selectedPsid] ? "..." : `👨‍💼 ${t('messages.takeControl')}`}
                   </button>
                 )}
                 <button
@@ -1325,7 +1327,7 @@ function Messages() {
                     cursor: "pointer"
                   }}
                 >
-                  Cerrar
+                  {t('messages.close')}
                 </button>
               </div>
             </div>

@@ -1,5 +1,6 @@
 // components/ApiHealthAlerts.js
 import React, { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from '../i18n';
 import { useAuth } from '../contexts/AuthContext';
 
 const API_URL = process.env.REACT_APP_API_URL || "https://hanbot-production.up.railway.app";
@@ -19,6 +20,7 @@ const SERVICE_ICONS = {
 };
 
 function ApiHealthAlerts() {
+  const { t, locale } = useTranslation();
   const { user } = useAuth();
   const [alerts, setAlerts] = useState([]);
   const [dismissed, setDismissed] = useState({});
@@ -82,17 +84,17 @@ function ApiHealthAlerts() {
             <span className="text-2xl">{SERVICE_ICONS[alert.service] || '⚠️'}</span>
             <div>
               <h4 className="text-red-400 font-semibold">
-                {SERVICE_NAMES[alert.service] || alert.service} - Error
+                {SERVICE_NAMES[alert.service] || alert.service} - {t('apiHealth.error')}
               </h4>
               <p className="text-gray-300 text-sm">
                 {alert.errorCode && <span className="text-red-300 font-mono mr-2">[{alert.errorCode}]</span>}
-                {alert.errorMessage || 'API error detected'}
+                {alert.errorMessage || t('apiHealth.apiErrorDetected')}
               </p>
               <div className="flex items-center space-x-4 mt-1 text-xs text-gray-400">
-                <span>Errores consecutivos: {alert.consecutiveErrors}</span>
-                <span>Errores en 24h: {alert.errorsLast24h}</span>
+                <span>{t('apiHealth.consecutiveErrors')} {alert.consecutiveErrors}</span>
+                <span>{t('apiHealth.errorsLast24h')} {alert.errorsLast24h}</span>
                 <span>
-                  Desde: {new Date(alert.since).toLocaleString('es-MX', {
+                  {t('apiHealth.since')} {new Date(alert.since).toLocaleString(locale, {
                     timeZone: 'America/Mexico_City',
                     hour: '2-digit',
                     minute: '2-digit',
@@ -106,7 +108,7 @@ function ApiHealthAlerts() {
           <button
             onClick={() => handleDismiss(alert.service)}
             className="text-gray-400 hover:text-white transition-colors p-1"
-            title="Ocultar alerta"
+            title={t('apiHealth.hideAlert')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

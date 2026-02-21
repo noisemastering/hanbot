@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../i18n';
 
 function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     campaignRef: '',
     name: '',
@@ -109,7 +111,7 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between">
           <h2 className="text-xl font-bold text-white">
-            {campaignProduct ? 'Editar Producto de Campaña' : 'Nuevo Producto de Campaña'}
+            {campaignProduct ? t('campaignProductModal.editTitle') : t('campaignProductModal.newTitle')}
           </h2>
           <button
             onClick={onClose}
@@ -128,7 +130,7 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Referencia de Campaña *
+                  {t('campaignProductModal.campaignRef')}
                 </label>
                 <select
                   name="campaignRef"
@@ -138,18 +140,18 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
                   disabled={!!campaignProduct}
                   className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                  <option value="">Seleccionar campaña...</option>
+                  <option value="">{t('campaignProductModal.selectCampaign')}</option>
                   {campaigns.map((campaign) => (
                     <option key={campaign._id} value={campaign.ref}>
                       {campaign.name} ({campaign.ref})
                     </option>
                   ))}
                 </select>
-                <p className="text-xs text-gray-500 mt-1">No se puede cambiar después de crear</p>
+                <p className="text-xs text-gray-500 mt-1">{t('campaignProductModal.cantChange')}</p>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Nombre del Producto *
+                  {t('campaignProductModal.productName')}
                 </label>
                 <input
                   type="text"
@@ -167,7 +169,7 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Nombre Corto
+                  {t('campaignProductModal.shortName')}
                 </label>
                 <input
                   type="text"
@@ -180,7 +182,7 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Sombra
+                  {t('campaignProductModal.shade')}
                 </label>
                 <input
                   type="text"
@@ -193,7 +195,7 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Color
+                  {t('campaignProductModal.color')}
                 </label>
                 <input
                   type="text"
@@ -209,7 +211,7 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
             {/* Features Section */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Características
+                {t('campaignProductModal.features')}
               </label>
               <div className="flex space-x-2 mb-3">
                 <input
@@ -225,7 +227,7 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
                   onClick={handleAddFeature}
                   className="px-4 py-2 bg-primary-500/20 text-primary-300 border border-primary-500/50 rounded-lg hover:bg-primary-500/30 transition-colors"
                 >
-                  Agregar
+                  {t('campaignProductModal.addFeature')}
                 </button>
               </div>
               <div className="space-y-2">
@@ -249,7 +251,7 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
             {/* Variants Section */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Variantes
+                {t('campaignProductModal.variants')}
               </label>
               <div className="bg-gray-900/30 border border-gray-700/50 rounded-lg p-4 mb-3">
                 <div className="grid grid-cols-2 gap-3 mb-3">
@@ -260,7 +262,7 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
                       value={newVariant.size}
                       onChange={handleVariantChange}
                       className="w-full px-3 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      placeholder="Tamaño (ej: 4x6m)"
+                      placeholder={t('campaignProductModal.sizePlaceholder')}
                     />
                   </div>
                   <div>
@@ -270,7 +272,7 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
                       value={newVariant.price}
                       onChange={handleVariantChange}
                       className="w-full px-3 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      placeholder="Precio"
+                      placeholder={t('campaignProductModal.pricePlaceholder')}
                     />
                   </div>
                 </div>
@@ -282,8 +284,8 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
                       onChange={handleVariantChange}
                       className="w-full px-3 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
                     >
-                      <option value="local">Local</option>
-                      <option value="mercadolibre">Mercado Libre</option>
+                      <option value="local">{t('campaignProductModal.sourceLocal')}</option>
+                      <option value="mercadolibre">{t('campaignProductModal.sourceML')}</option>
                     </select>
                   </div>
                   <div className="col-span-2">
@@ -293,7 +295,7 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
                       value={newVariant.permalink}
                       onChange={handleVariantChange}
                       className="w-full px-3 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
-                      placeholder="Link de compra"
+                      placeholder={t('campaignProductModal.linkPlaceholder')}
                     />
                   </div>
                 </div>
@@ -306,7 +308,7 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
                       onChange={handleVariantChange}
                       className="w-4 h-4 rounded bg-gray-900/50 border-gray-700 text-primary-500 focus:ring-2 focus:ring-primary-500"
                     />
-                    <span className="text-sm text-gray-300">En stock</span>
+                    <span className="text-sm text-gray-300">{t('campaignProductModal.inStock')}</span>
                   </label>
                 </div>
                 <button
@@ -314,7 +316,7 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
                   onClick={handleAddVariant}
                   className="w-full px-4 py-2 bg-primary-500/20 text-primary-300 border border-primary-500/50 rounded-lg hover:bg-primary-500/30 transition-colors text-sm"
                 >
-                  Agregar Variante
+                  {t('campaignProductModal.addVariant')}
                 </button>
               </div>
               <div className="space-y-2">
@@ -327,7 +329,7 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
                         <span className={`text-xs px-2 py-0.5 rounded-full ${
                           variant.stock ? 'bg-green-500/20 text-green-300' : 'bg-red-500/20 text-red-300'
                         }`}>
-                          {variant.stock ? 'En stock' : 'Sin stock'}
+                          {variant.stock ? t('campaignProductModal.inStock') : t('campaignProductModal.outOfStock')}
                         </span>
                         <span className="text-xs text-gray-500">{variant.source}</span>
                       </div>
@@ -352,7 +354,7 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
             {/* Fallback Message */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Mensaje Fallback
+                {t('campaignProductModal.fallbackMessage')}
               </label>
               <textarea
                 name="fallbackMessage"
@@ -374,7 +376,7 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
                   onChange={handleChange}
                   className="w-5 h-5 rounded bg-gray-900/50 border-gray-700 text-primary-500 focus:ring-2 focus:ring-primary-500"
                 />
-                <span className="text-sm font-medium text-gray-300">Sugerir alternativas cercanas</span>
+                <span className="text-sm font-medium text-gray-300">{t('campaignProductModal.suggestClosest')}</span>
               </label>
               <label className="flex items-center space-x-2 cursor-pointer">
                 <input
@@ -384,7 +386,7 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
                   onChange={handleChange}
                   className="w-5 h-5 rounded bg-gray-900/50 border-gray-700 text-primary-500 focus:ring-2 focus:ring-primary-500"
                 />
-                <span className="text-sm font-medium text-gray-300">Activo</span>
+                <span className="text-sm font-medium text-gray-300">{t('campaignProductModal.active')}</span>
               </label>
             </div>
           </div>
@@ -397,13 +399,13 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
             onClick={onClose}
             className="px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
           >
-            Cancelar
+            {t('campaignProductModal.cancel')}
           </button>
           <button
             onClick={handleSubmit}
             className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
           >
-            {campaignProduct ? 'Actualizar' : 'Crear'} Producto
+            {campaignProduct ? t('campaignProductModal.updateProduct') : t('campaignProductModal.createProduct')}
           </button>
         </div>
       </div>

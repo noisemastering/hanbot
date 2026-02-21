@@ -1,18 +1,21 @@
 // components/IntentCategoryModal.js
 import React, { useState, useEffect } from 'react';
-
-const COLOR_OPTIONS = [
-  { value: '#10b981', label: 'Verde' },
-  { value: '#3b82f6', label: 'Azul' },
-  { value: '#8b5cf6', label: 'Morado' },
-  { value: '#f59e0b', label: 'Naranja' },
-  { value: '#ef4444', label: 'Rojo' },
-  { value: '#6b7280', label: 'Gris' },
-  { value: '#ec4899', label: 'Rosa' },
-  { value: '#14b8a6', label: 'Teal' }
-];
+import { useTranslation } from '../i18n';
 
 function IntentCategoryModal({ category, onClose, onSave }) {
+  const { t } = useTranslation();
+
+  const COLOR_OPTIONS = [
+    { value: '#10b981', label: t('intentCategoryModal.colorGreen') },
+    { value: '#3b82f6', label: t('intentCategoryModal.colorBlue') },
+    { value: '#8b5cf6', label: t('intentCategoryModal.colorPurple') },
+    { value: '#f59e0b', label: t('intentCategoryModal.colorOrange') },
+    { value: '#ef4444', label: t('intentCategoryModal.colorRed') },
+    { value: '#6b7280', label: t('intentCategoryModal.colorGray') },
+    { value: '#ec4899', label: t('intentCategoryModal.colorPink') },
+    { value: '#14b8a6', label: t('intentCategoryModal.colorTeal') }
+  ];
+
   const [formData, setFormData] = useState({
     key: '',
     name: '',
@@ -39,12 +42,12 @@ function IntentCategoryModal({ category, onClose, onSave }) {
     e.preventDefault();
 
     if (!formData.key || !formData.name) {
-      alert('Por favor completa la key y el nombre');
+      alert(t('intentCategoryModal.alertKeyName'));
       return;
     }
 
     if (!/^[a-z][a-z0-9_]*$/.test(formData.key)) {
-      alert('La key solo puede contener letras minúsculas, números y guiones bajos');
+      alert(t('intentCategoryModal.alertKeyFormat'));
       return;
     }
 
@@ -57,7 +60,7 @@ function IntentCategoryModal({ category, onClose, onSave }) {
         {/* Header */}
         <div className="sticky top-0 bg-gray-800 border-b border-gray-700 px-6 py-4 flex items-center justify-between">
           <h3 className="text-xl font-semibold text-white">
-            {category ? 'Editar Categoría' : 'Nueva Categoría'}
+            {category ? t('intentCategoryModal.editTitle') : t('intentCategoryModal.newTitle')}
           </h3>
           <button
             onClick={onClose}
@@ -75,7 +78,7 @@ function IntentCategoryModal({ category, onClose, onSave }) {
             {/* Key */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Key (identificador) *
+                {t('intentCategoryModal.keyRequired')}
               </label>
               <input
                 type="text"
@@ -91,7 +94,7 @@ function IntentCategoryModal({ category, onClose, onSave }) {
             {/* Name */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Nombre *
+                {t('intentCategoryModal.nameRequired')}
               </label>
               <input
                 type="text"
@@ -107,21 +110,21 @@ function IntentCategoryModal({ category, onClose, onSave }) {
           {/* Description */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Descripción
+              {t('intentCategoryModal.descriptionLabel')}
             </label>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-primary-500 transition-colors resize-none"
               rows="2"
-              placeholder="Descripción de la categoría"
+              placeholder={t('intentCategoryModal.descriptionPlaceholder')}
             />
           </div>
 
           {/* Color */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-3">
-              Color
+              {t('intentCategoryModal.color')}
             </label>
             <div className="flex flex-wrap gap-2">
               {COLOR_OPTIONS.map(color => (
@@ -144,7 +147,7 @@ function IntentCategoryModal({ category, onClose, onSave }) {
           {/* Order */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Orden
+              {t('intentCategoryModal.order')}
             </label>
             <input
               type="number"
@@ -153,12 +156,12 @@ function IntentCategoryModal({ category, onClose, onSave }) {
               className="w-24 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-primary-500 transition-colors"
               min="0"
             />
-            <p className="text-xs text-gray-500 mt-1">Menor número = aparece primero</p>
+            <p className="text-xs text-gray-500 mt-1">{t('intentCategoryModal.orderHint')}</p>
           </div>
 
           {/* Preview */}
           <div className="p-4 bg-gray-700/30 rounded-lg">
-            <p className="text-sm text-gray-400 mb-2">Vista previa:</p>
+            <p className="text-sm text-gray-400 mb-2">{t('intentCategoryModal.preview')}</p>
             <div className="flex items-center space-x-2">
               <span
                 className="w-3 h-3 rounded-full"
@@ -178,13 +181,13 @@ function IntentCategoryModal({ category, onClose, onSave }) {
               onClick={onClose}
               className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
             >
-              Cancelar
+              {t('intentCategoryModal.cancel')}
             </button>
             <button
               type="submit"
               className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
             >
-              {category ? 'Guardar Cambios' : 'Crear Categoría'}
+              {category ? t('intentCategoryModal.saveChanges') : t('intentCategoryModal.createCategory')}
             </button>
           </div>
         </form>

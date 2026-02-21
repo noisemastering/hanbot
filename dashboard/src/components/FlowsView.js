@@ -1,11 +1,13 @@
 // components/FlowsView.js
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { useTranslation } from '../i18n';
 import FlowModal from './FlowModal';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
 function FlowsView() {
+  const { t } = useTranslation();
   const [flows, setFlows] = useState([]);
   const [intents, setIntents] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -17,6 +19,7 @@ function FlowsView() {
   useEffect(() => {
     fetchFlows();
     fetchIntents();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchFlows = async () => {
@@ -32,7 +35,7 @@ function FlowsView() {
       }
     } catch (error) {
       console.error('Error fetching flows:', error);
-      toast.error('Error al cargar flows');
+      toast.error(t('flows.errorLoad'));
     } finally {
       setLoading(false);
     }
@@ -96,21 +99,21 @@ function FlowsView() {
 
       const data = await res.json();
       if (data.success) {
-        toast.success(editingFlow ? 'Flow actualizado' : 'Flow creado');
+        toast.success(editingFlow ? t('flows.flowUpdated') : t('flows.flowCreated'));
         fetchFlows();
         setShowModal(false);
         setEditingFlow(null);
       } else {
-        toast.error(data.error || 'Error al guardar');
+        toast.error(data.error || t('flows.errorSave'));
       }
     } catch (error) {
       console.error('Error saving flow:', error);
-      toast.error('Error al guardar flow');
+      toast.error(t('flows.errorSaveFlow'));
     }
   };
 
   const handleDelete = async (flow) => {
-    if (window.confirm(`¿Eliminar el flow "${flow.name}"?`)) {
+    if (window.confirm(t('flows.confirmDelete', { name: flow.name }))) {
       try {
         const token = localStorage.getItem('token');
         const res = await fetch(`${API_URL}/flows/${flow._id}`, {
@@ -120,14 +123,14 @@ function FlowsView() {
 
         const data = await res.json();
         if (data.success) {
-          toast.success('Flow eliminado');
+          toast.success(t('flows.flowDeleted'));
           fetchFlows();
         } else {
-          toast.error(data.error || 'Error al eliminar');
+          toast.error(data.error || t('flows.errorDelete'));
         }
       } catch (error) {
         console.error('Error deleting flow:', error);
-        toast.error('Error al eliminar flow');
+        toast.error(t('flows.errorDeleteFlow'));
       }
     }
   };
@@ -142,9 +145,9 @@ function FlowsView() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white">Conversation Flows</h2>
+          <h2 className="text-2xl font-bold text-white">{t('flows.title')}</h2>
           <p className="text-gray-400 text-sm mt-1">
-            Define flujos de conversación paso a paso para recopilar información
+            {t('flows.subtitle')}
           </p>
         </div>
 
@@ -155,7 +158,7 @@ function FlowsView() {
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          Nuevo Flow
+          {t('flows.addFlow')}
         </button>
       </div>
 
@@ -166,7 +169,7 @@ function FlowsView() {
           <div className="relative">
             <input
               type="text"
-              placeholder="Buscar por nombre, key o intent..."
+              placeholder={t('flows.searchPlaceholderFull')}
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               className="w-full px-4 py-2 pl-10 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-primary-500"
@@ -188,9 +191,9 @@ function FlowsView() {
           onChange={(e) => setFilterActive(e.target.value)}
           className="px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-primary-500"
         >
-          <option value="all">Todos</option>
-          <option value="active">Activos</option>
-          <option value="inactive">Inactivos</option>
+          <option value="all">{t('flows.filterAll')}</option>
+          <option value="active">{t('flows.filterActive')}</option>
+          <option value="inactive">{t('flows.filterInactive')}</option>
         </select>
       </div>
 
@@ -198,19 +201,19 @@ function FlowsView() {
       {loading ? (
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-500 mx-auto"></div>
-          <p className="text-gray-400 mt-4">Cargando flows...</p>
+          <p className="text-gray-400 mt-4">{t('flows.loading')}</p>
         </div>
       ) : filteredFlows.length === 0 ? (
         <div className="text-center py-12 bg-gray-800 rounded-lg">
           <svg className="w-16 h-16 mx-auto text-gray-600 mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
           </svg>
-          <p className="text-gray-400">No hay flows que coincidan con tu búsqueda</p>
+          <p className="text-gray-400">{t('flows.noMatchingFlows')}</p>
           <button
             onClick={handleCreate}
             className="mt-4 px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
           >
-            Crear primer flow
+            {t('flows.createFirstFlow')}
           </button>
         </div>
       ) : (
@@ -230,7 +233,7 @@ function FlowsView() {
                       </h3>
                       {!flow.active && (
                         <span className="px-2 py-0.5 text-xs bg-gray-600 text-gray-300 rounded">
-                          Inactivo
+                          {t('flows.inactive')}
                         </span>
                       )}
                     </div>
@@ -242,7 +245,7 @@ function FlowsView() {
                     <button
                       onClick={() => handleEdit(flow)}
                       className="p-2 text-gray-400 hover:text-white hover:bg-gray-700 rounded transition-colors"
-                      title="Editar"
+                      title={t('flows.editButton')}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -251,7 +254,7 @@ function FlowsView() {
                     <button
                       onClick={() => handleDelete(flow)}
                       className="p-2 text-gray-400 hover:text-red-400 hover:bg-gray-700 rounded transition-colors"
-                      title="Eliminar"
+                      title={t('flows.deleteButton')}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -266,7 +269,7 @@ function FlowsView() {
                 {/* Trigger Intent */}
                 {flow.triggerIntent && (
                   <div className="flex items-center gap-2">
-                    <span className="text-gray-500 text-sm">Trigger:</span>
+                    <span className="text-gray-500 text-sm">{t('flows.triggerLabel')}</span>
                     <span className="px-2 py-1 bg-blue-500/20 text-blue-400 text-xs rounded-full">
                       {getIntentName(flow.triggerIntent)}
                     </span>
@@ -275,7 +278,7 @@ function FlowsView() {
 
                 {/* Steps */}
                 <div className="flex items-center gap-2">
-                  <span className="text-gray-500 text-sm">Pasos:</span>
+                  <span className="text-gray-500 text-sm">{t('flows.stepsLabel')}</span>
                   <div className="flex items-center gap-1">
                     {flow.steps?.slice(0, 5).map((step, idx) => (
                       <div
@@ -290,31 +293,31 @@ function FlowsView() {
                       <span className="text-xs text-gray-500">+{flow.steps.length - 5}</span>
                     )}
                     {(!flow.steps || flow.steps.length === 0) && (
-                      <span className="text-xs text-gray-500 italic">Sin pasos</span>
+                      <span className="text-xs text-gray-500 italic">{t('flows.noSteps')}</span>
                     )}
                   </div>
                 </div>
 
                 {/* On Complete */}
                 <div className="flex items-center gap-2">
-                  <span className="text-gray-500 text-sm">Al completar:</span>
+                  <span className="text-gray-500 text-sm">{t('flows.onComplete')}</span>
                   <span className={`text-xs px-2 py-1 rounded ${
                     flow.onComplete?.action === 'handoff' ? 'bg-orange-500/20 text-orange-400' :
                     flow.onComplete?.action === 'flow' ? 'bg-purple-500/20 text-purple-400' :
                     'bg-gray-600 text-gray-300'
                   }`}>
-                    {flow.onComplete?.action === 'handoff' ? 'Handoff' :
-                     flow.onComplete?.action === 'flow' ? 'Otro flow' :
-                     flow.onComplete?.action === 'intent' ? 'Intent' : 'Mensaje'}
+                    {flow.onComplete?.action === 'handoff' ? t('flows.onCompleteHandoff') :
+                     flow.onComplete?.action === 'flow' ? t('flows.onCompleteFlow') :
+                     flow.onComplete?.action === 'intent' ? t('flows.onCompleteIntent') : t('flows.onCompleteMessage')}
                   </span>
                 </div>
 
                 {/* Stats */}
                 <div className="flex items-center gap-4 pt-2 text-xs text-gray-500">
-                  <span title="Iniciados">{flow.startCount || 0} iniciados</span>
-                  <span title="Completados">{flow.completeCount || 0} completados</span>
+                  <span title={t('flows.started')}>{flow.startCount || 0} {t('flows.started')}</span>
+                  <span title={t('flows.completed')}>{flow.completeCount || 0} {t('flows.completed')}</span>
                   {flow.startCount > 0 && (
-                    <span title="Tasa de completado" className="text-green-400">
+                    <span title={t('flows.completed')} className="text-green-400">
                       {((flow.completeCount || 0) / flow.startCount * 100).toFixed(0)}%
                     </span>
                   )}

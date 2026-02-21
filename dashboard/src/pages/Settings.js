@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
+import { useTranslation } from "../i18n";
 
 function Settings() {
   const { user } = useAuth();
+  const { t, language, changeLanguage } = useTranslation();
   const [formData, setFormData] = useState({
     currentPassword: "",
     newPassword: "",
@@ -59,7 +61,7 @@ function Settings() {
       // Request notification permission
       const permission = await Notification.requestPermission();
       if (permission !== 'granted') {
-        setPushMessage({ type: "error", text: "Permiso de notificaciones denegado" });
+        setPushMessage({ type: "error", text: t('settings.pushDenied') });
         return;
       }
 
@@ -98,13 +100,13 @@ function Settings() {
 
       if (data.success) {
         setPushEnabled(true);
-        setPushMessage({ type: "success", text: "Notificaciones activadas" });
+        setPushMessage({ type: "success", text: t('settings.pushEnabled') });
       } else {
         throw new Error(data.error || "Failed to subscribe");
       }
     } catch (err) {
       console.error("Error subscribing to push:", err);
-      setPushMessage({ type: "error", text: "Error al activar notificaciones" });
+      setPushMessage({ type: "error", text: t('settings.pushErrorEnable') });
     } finally {
       setPushLoading(false);
     }
@@ -136,10 +138,10 @@ function Settings() {
       }
 
       setPushEnabled(false);
-      setPushMessage({ type: "success", text: "Notificaciones desactivadas" });
+      setPushMessage({ type: "success", text: t('settings.pushDisabled') });
     } catch (err) {
       console.error("Error unsubscribing from push:", err);
-      setPushMessage({ type: "error", text: "Error al desactivar notificaciones" });
+      setPushMessage({ type: "error", text: t('settings.pushErrorDisable') });
     } finally {
       setPushLoading(false);
     }
@@ -165,17 +167,17 @@ function Settings() {
 
     // Validation
     if (!formData.currentPassword || !formData.newPassword || !formData.confirmPassword) {
-      setMessage({ type: "error", text: "Todos los campos son requeridos" });
+      setMessage({ type: "error", text: t('settings.errorAllRequired') });
       return;
     }
 
     if (formData.newPassword.length < 6) {
-      setMessage({ type: "error", text: "La nueva contraseña debe tener al menos 6 caracteres" });
+      setMessage({ type: "error", text: t('settings.errorMinLength') });
       return;
     }
 
     if (formData.newPassword !== formData.confirmPassword) {
-      setMessage({ type: "error", text: "Las contraseñas no coinciden" });
+      setMessage({ type: "error", text: t('settings.errorMismatch') });
       return;
     }
 
@@ -198,14 +200,14 @@ function Settings() {
       const data = await response.json();
 
       if (data.success) {
-        setMessage({ type: "success", text: "Contraseña cambiada exitosamente" });
+        setMessage({ type: "success", text: t('settings.passwordChanged') });
         setFormData({ currentPassword: "", newPassword: "", confirmPassword: "" });
       } else {
-        setMessage({ type: "error", text: data.error || "Error al cambiar la contraseña" });
+        setMessage({ type: "error", text: data.error || t('settings.errorChangePassword') });
       }
     } catch (error) {
       console.error("Error changing password:", error);
-      setMessage({ type: "error", text: "Error al cambiar la contraseña" });
+      setMessage({ type: "error", text: t('settings.errorChangePassword') });
     } finally {
       setLoading(false);
     }
@@ -213,54 +215,82 @@ function Settings() {
 
   return (
     <div className="max-w-2xl">
-      <h2 className="text-2xl font-bold mb-6">⚙️ Configuración</h2>
+      <h2 className="text-2xl font-bold mb-6">{t('settings.title')}</h2>
 
       {/* User Info Section */}
       <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 mb-6">
-        <h3 className="text-lg font-semibold mb-4 text-gray-200">Información de Usuario</h3>
+        <h3 className="text-lg font-semibold mb-4 text-gray-200">{t('settings.userInfo')}</h3>
         <div className="space-y-3">
           <div className="flex justify-between py-2 border-b border-gray-700">
-            <span className="text-gray-400">Usuario:</span>
+            <span className="text-gray-400">{t('settings.usernameLabel')}</span>
             <span className="text-white font-medium">{user?.username}</span>
           </div>
           <div className="flex justify-between py-2 border-b border-gray-700">
-            <span className="text-gray-400">Nombre completo:</span>
+            <span className="text-gray-400">{t('settings.fullName')}</span>
             <span className="text-white">{user?.fullName || "—"}</span>
           </div>
           <div className="flex justify-between py-2 border-b border-gray-700">
-            <span className="text-gray-400">Email:</span>
+            <span className="text-gray-400">{t('settings.emailLabel')}</span>
             <span className="text-white">{user?.email || "—"}</span>
           </div>
           <div className="flex justify-between py-2 border-b border-gray-700">
-            <span className="text-gray-400">Rol:</span>
+            <span className="text-gray-400">{t('settings.roleLabel')}</span>
             <span className="text-white">{user?.roleLabel || user?.role}</span>
           </div>
           <div className="flex justify-between py-2">
-            <span className="text-gray-400">Perfil:</span>
+            <span className="text-gray-400">{t('settings.profileLabel')}</span>
             <span className="text-white">{user?.profileLabel || user?.profile || "—"}</span>
           </div>
         </div>
       </div>
 
+      {/* Language Section */}
+      <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 mb-6">
+        <h3 className="text-lg font-semibold mb-4 text-gray-200">{t('settings.language')}</h3>
+        <p className="text-gray-400 text-sm mb-4">{t('settings.languageDescription')}</p>
+        <div className="flex gap-3">
+          <button
+            onClick={() => changeLanguage('es')}
+            className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+              language === 'es'
+                ? 'bg-primary-600 text-white'
+                : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
+            }`}
+          >
+            Español
+          </button>
+          <button
+            onClick={() => changeLanguage('en')}
+            className={`px-6 py-3 rounded-lg font-medium transition-colors ${
+              language === 'en'
+                ? 'bg-primary-600 text-white'
+                : 'bg-gray-700/50 text-gray-300 hover:bg-gray-600/50'
+            }`}
+          >
+            English
+          </button>
+        </div>
+      </div>
+
       {/* Push Notifications Section */}
       <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 mb-6">
-        <h3 className="text-lg font-semibold mb-4 text-gray-200">Notificaciones Push</h3>
+        <h3 className="text-lg font-semibold mb-4 text-gray-200">{t('settings.pushNotifications')}</h3>
 
         {!pushSupported ? (
           <p className="text-gray-400">
-            Tu navegador no soporta notificaciones push.
+            {t('settings.pushNotSupported')}
           </p>
         ) : (
           <div className="space-y-4">
             <p className="text-gray-400 text-sm">
-              Recibe alertas cuando un cliente necesite ayuda humana, incluso cuando no estés en el dashboard.
+              {t('settings.pushDescription')}
             </p>
 
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <span className={`w-3 h-3 rounded-full ${pushEnabled ? 'bg-green-500' : 'bg-gray-500'}`}></span>
                 <span className="text-white">
-                  {pushEnabled ? 'Notificaciones activadas' : 'Notificaciones desactivadas'}
+                  {pushEnabled ? t('settings.pushEnabled') : t('settings.pushDisabled')}
                 </span>
               </div>
 
@@ -274,10 +304,10 @@ function Settings() {
                 }`}
               >
                 {pushLoading
-                  ? 'Procesando...'
+                  ? t('common.processing')
                   : pushEnabled
-                    ? 'Desactivar'
-                    : 'Activar'
+                    ? t('common.disable')
+                    : t('common.enable')
                 }
               </button>
             </div>
@@ -300,20 +330,20 @@ function Settings() {
 
       {/* Change Password Section */}
       <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6">
-        <h3 className="text-lg font-semibold mb-4 text-gray-200">Cambiar Contraseña</h3>
+        <h3 className="text-lg font-semibold mb-4 text-gray-200">{t('settings.changePassword')}</h3>
 
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* Current Password */}
           <div>
             <label className="block text-gray-300 text-sm font-medium mb-2">
-              Contraseña Actual
+              {t('settings.currentPassword')}
             </label>
             <input
               type="password"
               value={formData.currentPassword}
               onChange={(e) => setFormData({ ...formData, currentPassword: e.target.value })}
               className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="Ingresa tu contraseña actual"
+              placeholder={t('settings.currentPasswordPlaceholder')}
               disabled={loading}
             />
           </div>
@@ -321,14 +351,14 @@ function Settings() {
           {/* New Password */}
           <div>
             <label className="block text-gray-300 text-sm font-medium mb-2">
-              Nueva Contraseña
+              {t('settings.newPassword')}
             </label>
             <input
               type="password"
               value={formData.newPassword}
               onChange={(e) => setFormData({ ...formData, newPassword: e.target.value })}
               className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="Mínimo 6 caracteres"
+              placeholder={t('settings.newPasswordPlaceholder')}
               disabled={loading}
             />
           </div>
@@ -336,14 +366,14 @@ function Settings() {
           {/* Confirm Password */}
           <div>
             <label className="block text-gray-300 text-sm font-medium mb-2">
-              Confirmar Nueva Contraseña
+              {t('settings.confirmNewPassword')}
             </label>
             <input
               type="password"
               value={formData.confirmPassword}
               onChange={(e) => setFormData({ ...formData, confirmPassword: e.target.value })}
               className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder="Confirma tu nueva contraseña"
+              placeholder={t('settings.confirmPasswordPlaceholder')}
               disabled={loading}
             />
           </div>
@@ -367,7 +397,7 @@ function Settings() {
             disabled={loading}
             className="w-full bg-primary-600 hover:bg-primary-700 text-white font-medium py-2 px-4 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {loading ? "Cambiando contraseña..." : "Cambiar Contraseña"}
+            {loading ? t('settings.changingPassword') : t('settings.submitChangePassword')}
           </button>
         </form>
       </div>

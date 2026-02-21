@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
+import { useTranslation } from '../i18n';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -19,6 +20,7 @@ const ITEMS_PER_PAGE = 50;
 const ML_MAX_OFFSET = 10000; // ML API limit
 
 function OrdersView() {
+  const { t, locale } = useTranslation();
   const [orders, setOrders] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -61,7 +63,7 @@ function OrdersView() {
       const token = localStorage.getItem('token');
 
       if (!token) {
-        setError('No authentication token found. Please login.');
+        setError(t('orders.noAuthToken'));
         setLoading(false);
         return;
       }
@@ -242,7 +244,7 @@ function OrdersView() {
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     const date = new Date(dateString);
-    return date.toLocaleDateString('es-MX', {
+    return date.toLocaleDateString(locale, {
       year: 'numeric',
       month: 'short',
       day: 'numeric',
@@ -253,7 +255,7 @@ function OrdersView() {
 
   const formatCurrency = (amount) => {
     if (amount === null || amount === undefined) return 'N/A';
-    return new Intl.NumberFormat('es-MX', {
+    return new Intl.NumberFormat(locale, {
       style: 'currency',
       currency: 'MXN'
     }).format(amount);
@@ -275,7 +277,7 @@ function OrdersView() {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h2 className="text-2xl font-bold text-white">Pedidos de Mercado Libre</h2>
+        <h2 className="text-2xl font-bold text-white">{t('orders.title')}</h2>
         <p className="text-sm text-gray-400 mt-1">Seller {sellerId}</p>
       </div>
 
@@ -283,7 +285,7 @@ function OrdersView() {
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
         {/* Total Orders - from paging.total (already available from orders endpoint) */}
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
-          <div className="text-gray-400 text-sm">Pedidos del Periodo</div>
+          <div className="text-gray-400 text-sm">{t('orders.periodOrders')}</div>
           <div className="text-2xl font-bold text-white mt-1">
             {loading ? '...' : (paging.total || 0).toLocaleString()}
           </div>
@@ -294,38 +296,38 @@ function OrdersView() {
 
         {/* Total Revenue - from summary (fetches all pages) */}
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
-          <div className="text-gray-400 text-sm">Ingresos del Periodo</div>
+          <div className="text-gray-400 text-sm">{t('orders.periodRevenue')}</div>
           <div className="text-2xl font-bold text-green-400 mt-1">
             {summary.loading ? '...' : summary.error ? formatCurrency(metrics.totalRevenue) : formatCurrency(summary.totalRevenue)}
           </div>
           <div className="text-xs text-gray-500 mt-1">
-            {summary.loading ? 'Calculando total...' : summary.error ? 'De página actual' : `Total de ${(paging.total || 0).toLocaleString()} pedidos`}
+            {summary.loading ? t('orders.calculatingTotal') : summary.error ? t('orders.fromCurrentPage') : t('orders.totalFromOrders', { count: (paging.total || 0).toLocaleString() })}
           </div>
         </div>
 
         {/* Average Order Value */}
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
-          <div className="text-gray-400 text-sm">Ticket Promedio</div>
+          <div className="text-gray-400 text-sm">{t('orders.avgTicket')}</div>
           <div className="text-2xl font-bold text-white mt-1">
             {summary.loading ? '...' : summary.error ? formatCurrency(metrics.avgOrderValue) : formatCurrency(summary.avgOrderValue)}
           </div>
           <div className="text-xs text-gray-500 mt-1">
-            {summary.error ? 'De página actual' : 'Basado en total del periodo'}
+            {summary.error ? t('orders.fromCurrentPage') : t('orders.basedOnPeriod')}
           </div>
         </div>
 
         {/* Facebook Attribution */}
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
-          <div className="text-gray-400 text-sm">Atribución Facebook</div>
+          <div className="text-gray-400 text-sm">{t('orders.fbAttribution')}</div>
           {fbAttribution.loading || loading ? (
-            <div className="text-lg font-bold text-gray-500 mt-1">Cargando...</div>
+            <div className="text-lg font-bold text-gray-500 mt-1">{t('orders.loading')}</div>
           ) : (
             <>
               <div className="text-2xl font-bold text-blue-400 mt-1">
                 {paging.total > 0 ? ((fbAttribution.conversions / paging.total) * 100).toFixed(1) : 0}%
               </div>
               <div className="text-xs text-gray-500 mt-1">
-                {fbAttribution.conversions} de {(paging.total || 0).toLocaleString()} pedidos
+                {t('orders.ofOrders', { count: fbAttribution.conversions, total: (paging.total || 0).toLocaleString() })}
               </div>
             </>
           )}
@@ -336,40 +338,40 @@ function OrdersView() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
         {/* Top Product */}
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
-          <div className="text-gray-400 text-sm mb-2">Producto Más Vendido</div>
+          <div className="text-gray-400 text-sm mb-2">{t('orders.topProduct')}</div>
           {summary.loading ? (
-            <div className="text-gray-500">Calculando...</div>
+            <div className="text-gray-500">{t('orders.calculating')}</div>
           ) : summary.topProducts?.[0] ? (
             <div>
               <div className="text-white font-medium truncate" title={summary.topProducts[0].title}>
                 {summary.topProducts[0].title}
               </div>
               <div className="flex items-center gap-4 mt-2 text-sm">
-                <span className="text-yellow-400 font-bold">{summary.topProducts[0].quantity} unidades</span>
+                <span className="text-yellow-400 font-bold">{t('orders.units', { count: summary.topProducts[0].quantity })}</span>
                 <span className="text-green-400">{formatCurrency(summary.topProducts[0].revenue)}</span>
-                <span className="text-gray-500">{summary.topProducts[0].orders} pedidos</span>
+                <span className="text-gray-500">{t('orders.orderCount', { count: summary.topProducts[0].orders })}</span>
               </div>
             </div>
           ) : (
-            <div className="text-gray-500">Sin datos</div>
+            <div className="text-gray-500">{t('orders.noData')}</div>
           )}
         </div>
 
         {/* Top Buyer */}
         <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
-          <div className="text-gray-400 text-sm mb-2">Comprador Principal</div>
+          <div className="text-gray-400 text-sm mb-2">{t('orders.topBuyer')}</div>
           {summary.loading ? (
-            <div className="text-gray-500">Calculando...</div>
+            <div className="text-gray-500">{t('orders.calculating')}</div>
           ) : summary.topBuyers?.[0] ? (
             <div>
               <div className="text-white font-medium">{summary.topBuyers[0].nickname}</div>
               <div className="flex items-center gap-4 mt-2 text-sm">
-                <span className="text-purple-400 font-bold">{summary.topBuyers[0].orders} pedidos</span>
+                <span className="text-purple-400 font-bold">{t('orders.orderCount', { count: summary.topBuyers[0].orders })}</span>
                 <span className="text-green-400">{formatCurrency(summary.topBuyers[0].totalSpent)}</span>
               </div>
             </div>
           ) : (
-            <div className="text-gray-500">Sin datos</div>
+            <div className="text-gray-500">{t('orders.noData')}</div>
           )}
         </div>
       </div>
@@ -378,7 +380,7 @@ function OrdersView() {
       <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4 mb-6">
         <div className="flex flex-wrap gap-4 items-center">
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Seller ID</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">{t('orders.sellerId')}</label>
             <input
               type="text"
               value={sellerId}
@@ -387,7 +389,7 @@ function OrdersView() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Desde</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">{t('orders.dateFrom')}</label>
             <input
               type="date"
               value={dateFrom}
@@ -396,7 +398,7 @@ function OrdersView() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Hasta</label>
+            <label className="block text-sm font-medium text-gray-300 mb-1">{t('orders.dateTo')}</label>
             <input
               type="date"
               value={dateTo}
@@ -410,12 +412,12 @@ function OrdersView() {
               disabled={loading}
               className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg disabled:opacity-50 transition-colors"
             >
-              {loading ? 'Cargando...' : 'Buscar Pedidos'}
+              {loading ? t('orders.loading') : t('orders.searchOrders')}
             </button>
           </div>
           {!summary.loading && (
             <div className="text-gray-400 ml-auto">
-              Total: <span className="text-white font-semibold">{summary.totalOrders.toLocaleString()}</span> pedidos
+              {t('common.total')}: <span className="text-white font-semibold">{summary.totalOrders.toLocaleString()}</span> {t('orders.orderCount', { count: '' }).trim()}
               {summary.totalOrders > 0 && (
                 <span className="text-green-400 ml-2">({formatCurrency(summary.totalRevenue)})</span>
               )}
@@ -435,7 +437,7 @@ function OrdersView() {
       {loading && (
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500 mx-auto"></div>
-          <p className="mt-4 text-gray-400">Cargando pedidos...</p>
+          <p className="mt-4 text-gray-400">{t('orders.loadingOrders')}</p>
         </div>
       )}
 
@@ -443,8 +445,8 @@ function OrdersView() {
       {!loading && !error && orders.length === 0 && (
         <div className="text-center py-12 bg-gray-800/30 rounded-lg border border-gray-700/50">
           <div className="text-6xl mb-4">📦</div>
-          <h3 className="text-lg font-semibold text-white mb-2">No hay pedidos</h3>
-          <p className="text-gray-400">No se encontraron pedidos para este vendedor</p>
+          <h3 className="text-lg font-semibold text-white mb-2">{t('orders.noOrdersFound')}</h3>
+          <p className="text-gray-400">{t('orders.noOrdersDesc')}</p>
         </div>
       )}
 
@@ -455,19 +457,19 @@ function OrdersView() {
               <thead className="bg-gray-900/50">
                 <tr>
                   <th className="px-2 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider" style={{ width: '130px' }}>
-                    Pedido
+                    {t('orders.order')}
                   </th>
                   <th className="px-2 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider" style={{ width: '55px' }}>
-                    Estado
+                    {t('orders.status')}
                   </th>
                   <th className="px-2 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider" style={{ width: '90px' }}>
-                    Fecha
+                    {t('orders.date')}
                   </th>
                   <th className="px-2 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider" style={{ width: '100px' }}>
-                    Comprador
+                    {t('orders.buyer')}
                   </th>
                   <th className="px-2 py-2 text-left text-xs font-medium text-gray-400 uppercase tracking-wider" style={{ width: '35%' }}>
-                    Producto
+                    {t('orders.product')}
                   </th>
                   <th className="px-2 py-2 text-center text-xs font-medium text-gray-400 uppercase tracking-wider" style={{ width: '35px' }}>
                     #
@@ -495,7 +497,7 @@ function OrdersView() {
 
                   // Date format with year to verify
                   const shortDate = order.date_created
-                    ? new Date(order.date_created).toLocaleDateString('es-MX', { day: '2-digit', month: 'short', year: '2-digit' })
+                    ? new Date(order.date_created).toLocaleDateString(locale, { day: '2-digit', month: 'short', year: '2-digit' })
                     : 'N/A';
 
                   return (
@@ -523,7 +525,7 @@ function OrdersView() {
                           {firstItem?.item?.title || 'N/A'}
                         </p>
                         {order.order_items?.length > 1 && (
-                          <span className="text-xs text-cyan-400">+{order.order_items.length - 1} más</span>
+                          <span className="text-xs text-cyan-400">{t('orders.more', { count: order.order_items.length - 1 })}</span>
                         )}
                       </td>
                       <td className="px-2 py-2 text-center">
@@ -543,9 +545,9 @@ function OrdersView() {
           {paging.total > ITEMS_PER_PAGE && (
             <div className="flex items-center justify-between px-4 py-3 border-t border-gray-700/50">
               <div className="text-sm text-gray-400">
-                Mostrando {offset + 1} - {Math.min(offset + ITEMS_PER_PAGE, maxAccessibleItems)} de {paging.total.toLocaleString()} pedidos
+                {t('orders.showing', { from: offset + 1, to: Math.min(offset + ITEMS_PER_PAGE, maxAccessibleItems), total: paging.total.toLocaleString() })}
                 {paging.total > ML_MAX_OFFSET && (
-                  <span className="text-yellow-400 ml-2">(máx. {ML_MAX_OFFSET.toLocaleString()} accesibles)</span>
+                  <span className="text-yellow-400 ml-2">{t('orders.maxAccessible', { max: ML_MAX_OFFSET.toLocaleString() })}</span>
                 )}
               </div>
               <div className="flex items-center gap-2">
@@ -553,7 +555,7 @@ function OrdersView() {
                   onClick={goToFirstPage}
                   disabled={offset === 0 || loading}
                   className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  title="Primera página"
+                  title={t('orders.firstPage')}
                 >
                   ««
                 </button>
@@ -562,23 +564,23 @@ function OrdersView() {
                   disabled={offset === 0 || loading}
                   className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  Anterior
+                  {t('common.previous')}
                 </button>
                 <span className="px-3 py-1 text-white">
-                  Página {currentPage} de {totalAccessiblePages.toLocaleString()}
+                  {t('orders.pageOf', { current: currentPage, total: totalAccessiblePages.toLocaleString() })}
                 </span>
                 <button
                   onClick={goToNextPage}
                   disabled={offset + ITEMS_PER_PAGE >= maxAccessibleItems || loading}
                   className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
                 >
-                  Siguiente
+                  {t('common.next')}
                 </button>
                 <button
                   onClick={goToLastPage}
                   disabled={offset + ITEMS_PER_PAGE >= maxAccessibleItems || loading}
                   className="px-3 py-1 bg-gray-700 hover:bg-gray-600 text-white rounded disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                  title="Última página"
+                  title={t('orders.lastPage')}
                 >
                   »»
                 </button>

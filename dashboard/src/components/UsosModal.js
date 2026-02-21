@@ -1,8 +1,10 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../i18n';
 import api from '../api';
 import ProductTreeSelector from './ProductTreeSelector';
 
 function UsosModal({ uso, onSave, onClose }) {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -94,7 +96,7 @@ function UsosModal({ uso, onSave, onClose }) {
       <div className="bg-gray-800/95 backdrop-blur-lg border border-gray-700/50 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between">
           <h2 className="text-xl font-bold text-white">
-            {uso ? 'Editar Uso' : 'Nuevo Uso'}
+            {uso ? t('usosModal.editTitle') : t('usosModal.newTitle')}
           </h2>
           <button
             onClick={onClose}
@@ -111,12 +113,12 @@ function UsosModal({ uso, onSave, onClose }) {
             {/* Basic Info */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-white border-b border-gray-700/50 pb-2">
-                Información Básica
+                {t('usosModal.basicInfo')}
               </h3>
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Nombre *
+                  {t('usosModal.nameRequired')}
                 </label>
                 <input
                   type="text"
@@ -131,7 +133,7 @@ function UsosModal({ uso, onSave, onClose }) {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Descripción
+                  {t('usosModal.description')}
                 </label>
                 <textarea
                   name="description"
@@ -139,13 +141,13 @@ function UsosModal({ uso, onSave, onClose }) {
                   onChange={handleChange}
                   rows={3}
                   className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                  placeholder="Descripción del uso o aplicación del producto..."
+                  placeholder={t('usosModal.descriptionPlaceholder')}
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Palabras Clave
+                  {t('usosModal.keywords')}
                 </label>
                 <input
                   type="text"
@@ -156,14 +158,14 @@ function UsosModal({ uso, onSave, onClose }) {
                   placeholder="carro, cochera, estacionamiento, auto"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Separadas por coma. El bot detectará estas palabras para sugerir productos.
+                  {t('usosModal.keywordsHint')}
                 </p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    URL de Imagen
+                    {t('usosModal.imageUrl')}
                   </label>
                   <input
                     type="url"
@@ -177,7 +179,7 @@ function UsosModal({ uso, onSave, onClose }) {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Prioridad: {formData.priority}
+                    {t('usosModal.priorityLabel', { value: formData.priority })}
                   </label>
                   <input
                     type="range"
@@ -189,8 +191,8 @@ function UsosModal({ uso, onSave, onClose }) {
                     className="w-full"
                   />
                   <div className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>Baja (1)</span>
-                    <span>Alta (10)</span>
+                    <span>{t('usosModal.priorityLow')}</span>
+                    <span>{t('usosModal.priorityHigh')}</span>
                   </div>
                 </div>
               </div>
@@ -205,7 +207,7 @@ function UsosModal({ uso, onSave, onClose }) {
                   className="w-4 h-4 text-primary-500 bg-gray-900/50 border-gray-700 rounded focus:ring-primary-500"
                 />
                 <label htmlFor="available" className="text-sm font-medium text-gray-300">
-                  Uso disponible
+                  {t('usosModal.available')}
                 </label>
               </div>
             </div>
@@ -213,7 +215,7 @@ function UsosModal({ uso, onSave, onClose }) {
             {/* Products Selection */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-white border-b border-gray-700/50 pb-2">
-                Productos Asociados
+                {t('usosModal.associatedProducts')}
               </h3>
 
               <ProductTreeSelector
@@ -224,7 +226,7 @@ function UsosModal({ uso, onSave, onClose }) {
               />
 
               <p className="text-xs text-gray-500">
-                Selecciona los productos asociados con este uso. Puedes expandir las categorías para ver productos específicos.
+                {t('usosModal.productsHint')}
               </p>
             </div>
           </div>
@@ -236,13 +238,13 @@ function UsosModal({ uso, onSave, onClose }) {
             onClick={onClose}
             className="px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
           >
-            Cancelar
+            {t('usosModal.cancel')}
           </button>
           <button
             onClick={handleSubmit}
             className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
           >
-            {uso ? 'Actualizar' : 'Crear'} Uso
+            {uso ? t('usosModal.updateUso') : t('usosModal.createUso')}
           </button>
         </div>
       </div>

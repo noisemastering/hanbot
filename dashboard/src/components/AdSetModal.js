@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ProductTreeSelector from './ProductTreeSelector';
 import CatalogUpload from './CatalogUpload';
+import { useTranslation } from '../i18n';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -24,6 +25,7 @@ function collectSellableProductIds(productTree) {
 }
 
 function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     name: '',
     fbAdSetId: '',
@@ -166,7 +168,7 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
         {/* Modal Header */}
         <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between">
           <h2 className="text-xl font-bold text-white">
-            {adSet ? 'Editar Ad Set' : 'Nuevo Ad Set'}
+            {adSet ? t('adSetModal.edit') : t('adSets.addAdSet')}
           </h2>
           <button
             onClick={onClose}
@@ -185,7 +187,7 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Nombre *
+                  {t('adSetModal.name')} *
                 </label>
                 <input
                   type="text"
@@ -199,7 +201,7 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  FB AdSet ID *
+                  {t('adSetModal.fbAdSetId')} *
                 </label>
                 <input
                   type="text"
@@ -217,7 +219,7 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
             {/* Campaign Selection */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Campaña *
+                {t('adSetModal.campaign')} *
               </label>
               <select
                 name="campaignId"
@@ -226,7 +228,7 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
                 required
                 className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
-                <option value="">Selecciona una campaña</option>
+                <option value="">{t('adSetModal.selectCampaignOption')}</option>
                 {campaigns.map(campaign => (
                   <option key={campaign._id} value={campaign._id}>
                     {campaign.name}
@@ -239,7 +241,7 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Estado
+                  {t('adSetModal.status')}
                 </label>
                 <select
                   name="status"
@@ -247,14 +249,14 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
                   onChange={handleChange}
                   className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                 >
-                  <option value="ACTIVE">Activo</option>
-                  <option value="PAUSED">Pausado</option>
-                  <option value="ARCHIVED">Archivado</option>
+                  <option value="ACTIVE">{t('adSetModal.statusActive')}</option>
+                  <option value="PAUSED">{t('adSetModal.statusPaused')}</option>
+                  <option value="ARCHIVED">{t('adSetModal.statusArchived')}</option>
                 </select>
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Presupuesto Diario ($)
+                  {t('adSetModal.dailyBudget')}
                 </label>
                 <input
                   type="number"
@@ -269,11 +271,11 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
 
             {/* Targeting */}
             <div>
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">Segmentación</h3>
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">{t('adSetModal.targeting')}</h3>
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Ubicaciones (separadas por comas)
+                    {t('adSetModal.locations')}
                   </label>
                   <input
                     type="text"
@@ -287,7 +289,7 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
                 <div className="grid grid-cols-2 gap-2">
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Edad Mín
+                      {t('adSetModal.ageMin')}
                     </label>
                     <input
                       type="number"
@@ -299,7 +301,7 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Edad Máx
+                      {t('adSetModal.ageMax')}
                     </label>
                     <input
                       type="number"
@@ -317,7 +319,7 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Objetivo de Optimización
+                  {t('adSetModal.optimizationGoal')}
                 </label>
                 <select
                   name="optimizationGoal"
@@ -333,7 +335,7 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Evento de Facturación
+                  {t('adSetModal.billingEvent')}
                 </label>
                 <select
                   name="billingEvent"
@@ -350,7 +352,7 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
             {/* Placements */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Ubicaciones de Anuncios (separadas por comas)
+                {t('adSetModal.placements')}
               </label>
               <input
                 type="text"
@@ -364,7 +366,7 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
 
             {/* Products Selection */}
             <div className="border-t border-gray-700 pt-4 mt-4">
-              <h3 className="text-sm font-semibold text-gray-300 mb-3">Productos Asociados</h3>
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">{t('adSetModal.associatedProducts')}</h3>
               {(() => {
                 const selectedCampaign = campaigns.find(c => c._id === formData.campaignId);
                 const inheritedProductIds = selectedCampaign?.productIds?.map(p => p._id || p) || [];
@@ -380,7 +382,7 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
                 );
               })()}
               <p className="text-xs text-gray-400 mt-2">
-                Nota: Deja vacío para usar los productos de la campaña. Solo se guardarán los productos vendibles seleccionados.
+                {t('adSetModal.productsNote')}
               </p>
             </div>
 
@@ -421,7 +423,7 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
               ) : (
                 <div className="p-4 bg-amber-900/20 border border-amber-700/50 rounded-lg">
                   <p className="text-amber-400 text-sm">
-                    Primero guarda el Ad Set para poder subir un catálogo.
+                    {t('adSetModal.saveCatalogFirst')}
                   </p>
                 </div>
               )}
@@ -436,13 +438,13 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
             onClick={onClose}
             className="px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
           >
-            Cancelar
+            {t('common.cancel')}
           </button>
           <button
             onClick={handleSubmit}
             className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
           >
-            {adSet ? 'Actualizar' : 'Crear'} Ad Set
+            {adSet ? t('adSetModal.update') : t('common.create')} Ad Set
           </button>
         </div>
       </div>

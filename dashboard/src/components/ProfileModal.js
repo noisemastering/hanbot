@@ -1,5 +1,6 @@
 // components/ProfileModal.js
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../i18n';
 
 // Available sections for permissions
 const AVAILABLE_SECTIONS = [
@@ -18,6 +19,7 @@ const AVAILABLE_SECTIONS = [
 ];
 
 function ProfileModal({ profile, roles, onClose, onSave }) {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     name: '',
     label: '',
@@ -168,7 +170,7 @@ function ProfileModal({ profile, roles, onClose, onSave }) {
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-primary-500 transition-colors resize-none"
               rows="3"
-              placeholder="Descripción breve del perfil y sus responsabilidades"
+              placeholder={t('profileModal.descriptionPlaceholder')}
             />
           </div>
 

@@ -1,10 +1,11 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
+import { useTranslation } from '../i18n';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
 // Recursive component to render a single campaign/adset/ad node and its children
-function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, onToggleActive, level = 0, expandedNodes, onToggleExpand, parentActive = true }) {
+function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, onToggleActive, level = 0, expandedNodes, onToggleExpand, parentActive = true, t }) {
   const isExpanded = expandedNodes.has(item._id);
   const hasChildren = item.children && item.children.length > 0;
   const indentPixels = level * 32; // 32px per level
@@ -33,13 +34,13 @@ function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, onToggleA
   const getTypeLabel = (type) => {
     switch (type) {
       case 'campaign':
-        return 'Campaña';
+        return t('campaignTree.typeCampaign');
       case 'adset':
-        return 'Conjunto';
+        return t('campaignTree.typeAdSet');
       case 'ad':
-        return 'Anuncio';
+        return t('campaignTree.typeAd');
       default:
-        return 'Item';
+        return t('campaignTree.typeItem');
     }
   };
 
@@ -53,7 +54,7 @@ function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, onToggleA
             <button
               onClick={() => onToggleExpand(item._id)}
               className="p-1 text-gray-400 hover:text-white transition-colors"
-              title={isExpanded ? "Contraer" : "Expandir"}
+              title={isExpanded ? t('campaignTree.contract') : t('campaignTree.expandNode')}
             >
               <svg className={`w-5 h-5 transform transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
@@ -68,9 +69,9 @@ function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, onToggleA
             <button
               onClick={() => onDetails(item)}
               className="flex items-center space-x-3 cursor-pointer hover:opacity-80 transition-opacity text-left"
-              title="Ver detalles"
+              title={t('campaignTree.viewDetailsTooltip')}
             >
-              <h3 className="text-sm font-semibold text-white hover:text-indigo-400 transition-colors">{item.name || item.ref || 'Sin nombre'}</h3>
+              <h3 className="text-sm font-semibold text-white hover:text-indigo-400 transition-colors">{item.name || item.ref || t('campaignTree.noName')}</h3>
 
               {/* Type Badge */}
               <span className={`px-2 py-0.5 rounded text-xs font-medium ${getTypeColor(itemType)}`}>
@@ -87,7 +88,7 @@ function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, onToggleA
                   className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${
                     item.active ? 'bg-green-500' : 'bg-gray-600'
                   }`}
-                  title={item.active ? 'Desactivar campaña' : 'Activar campaña'}
+                  title={item.active ? t('campaignTree.deactivateCampaign') : t('campaignTree.activateCampaign')}
                 >
                   <span className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
                     item.active ? 'translate-x-4.5' : 'translate-x-0.5'
@@ -98,7 +99,7 @@ function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, onToggleA
                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                   item.active ? 'bg-green-500/20 text-green-300' : 'bg-gray-500/20 text-gray-400'
                 }`}>
-                  {item.active ? 'Activa' : 'Inactiva'}
+                  {item.active ? t('campaignTree.activeFem') : t('campaignTree.inactiveFem')}
                 </span>
               )}
 
@@ -107,7 +108,7 @@ function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, onToggleA
                 <span className={`px-2 py-0.5 rounded text-xs font-medium ${
                   effectiveActive ? 'bg-green-500/20 text-green-300' : 'bg-gray-500/20 text-gray-400'
                 }`}>
-                  {effectiveActive ? 'Activo' : 'Inactivo'}
+                  {effectiveActive ? t('common.active') : t('common.inactive')}
                 </span>
               )}
 
@@ -136,7 +137,7 @@ function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, onToggleA
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                     </svg>
-                    <span>{item.metrics.impressions.toLocaleString()} impresiones</span>
+                    <span>{item.metrics.impressions.toLocaleString()} {t('campaignTree.impressions')}</span>
                   </span>
                 )}
                 {item.metrics.clicks !== undefined && (
@@ -144,7 +145,7 @@ function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, onToggleA
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
                     </svg>
-                    <span>{item.metrics.clicks.toLocaleString()} clics</span>
+                    <span>{item.metrics.clicks.toLocaleString()} {t('campaignTree.clicks')}</span>
                   </span>
                 )}
                 {item.metrics.spend !== undefined && (
@@ -152,7 +153,7 @@ function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, onToggleA
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <span>${item.metrics.spend.toLocaleString()} gastado</span>
+                    <span>${item.metrics.spend.toLocaleString()} {t('campaignTree.spent')}</span>
                   </span>
                 )}
                 {item.metrics.conversions !== undefined && (
@@ -160,7 +161,7 @@ function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, onToggleA
                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <span>{item.metrics.conversions.toLocaleString()} conversiones</span>
+                    <span>{item.metrics.conversions.toLocaleString()} {t('campaignTree.conversionsLabel')}</span>
                   </span>
                 )}
               </div>
@@ -169,8 +170,8 @@ function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, onToggleA
             {/* Budget (for adsets) */}
             {item.budget && itemType === 'adset' && (
               <div className="flex items-center space-x-4 mt-2 text-xs text-gray-400">
-                {item.budget.daily && <span>Presupuesto diario: ${item.budget.daily}</span>}
-                {item.budget.lifetime && <span>Presupuesto total: ${item.budget.lifetime}</span>}
+                {item.budget.daily && <span>{t('campaignTree.dailyBudget')}: ${item.budget.daily}</span>}
+                {item.budget.lifetime && <span>{t('campaignTree.lifetimeBudget')}: ${item.budget.lifetime}</span>}
               </div>
             )}
           </div>
@@ -183,7 +184,7 @@ function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, onToggleA
             <button
               onClick={() => onAddChild(item)}
               className="p-2 text-green-400 hover:bg-green-500/20 rounded-lg transition-colors"
-              title={itemType === 'campaign' ? 'Agregar Conjunto de Anuncios' : 'Agregar Anuncio'}
+              title={itemType === 'campaign' ? t('campaignTree.addAdSetTooltip') : t('campaignTree.addAdTooltip')}
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -195,7 +196,7 @@ function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, onToggleA
           <button
             onClick={() => onDetails(item)}
             className="p-2 text-indigo-400 hover:bg-indigo-500/20 rounded-lg transition-colors"
-            title="Ver Detalles"
+            title={t('campaignTree.viewDetails')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -206,7 +207,7 @@ function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, onToggleA
           <button
             onClick={() => onEdit(item)}
             className="p-2 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
-            title="Editar"
+            title={t('common.edit')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -217,7 +218,7 @@ function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, onToggleA
           <button
             onClick={() => onDelete(item)}
             className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
-            title="Eliminar"
+            title={t('common.delete')}
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -242,6 +243,7 @@ function CampaignNode({ item, onEdit, onDelete, onAddChild, onDetails, onToggleA
               expandedNodes={expandedNodes}
               onToggleExpand={onToggleExpand}
               parentActive={effectiveActive}
+              t={t}
             />
           ))}
         </div>
@@ -261,6 +263,7 @@ function CampaignTreeView({
   editingItem,
   onUpdateCampaign
 }) {
+  const { t } = useTranslation();
   // Manage expanded nodes state (Set of item IDs)
   // Start with all trees collapsed
   const [expandedNodes, setExpandedNodes] = useState(new Set());
@@ -320,17 +323,17 @@ function CampaignTreeView({
       });
       const data = await res.json();
       if (data.success) {
-        toast.success(newActive ? 'Campaña activada' : 'Campaña desactivada');
+        toast.success(newActive ? t('campaignTree.campaignActivated') : t('campaignTree.campaignDeactivated'));
       } else {
         // Revert on failure
         if (onUpdateCampaign) onUpdateCampaign(campaign._id, { active: campaign.active });
-        toast.error('Error al cambiar estado');
+        toast.error(t('campaignTree.errorToggle'));
       }
     } catch (err) {
       // Revert on failure
       if (onUpdateCampaign) onUpdateCampaign(campaign._id, { active: campaign.active });
       console.error('Error toggling campaign:', err);
-      toast.error('Error al cambiar estado');
+      toast.error(t('campaignTree.errorToggle'));
     }
   };
 
@@ -392,6 +395,7 @@ function CampaignTreeView({
           level={0}
           expandedNodes={expandedNodes}
           onToggleExpand={handleToggleExpand}
+          t={t}
         />
       ))}
     </div>
@@ -402,8 +406,8 @@ function CampaignTreeView({
       {/* Header with Add Button */}
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-white">Campañas Publicitarias</h1>
-          <p className="text-gray-400 mt-2">Gestiona campañas, conjuntos de anuncios y anuncios</p>
+          <h1 className="text-3xl font-bold text-white">{t('campaignTree.mainTitle')}</h1>
+          <p className="text-gray-400 mt-2">{t('campaignTree.mainSubtitle')}</p>
         </div>
         <button
           onClick={onAdd}
@@ -412,7 +416,7 @@ function CampaignTreeView({
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          <span>Nueva Campaña</span>
+          <span>{t('campaignTree.newCampaign')}</span>
         </button>
       </div>
 
@@ -423,7 +427,7 @@ function CampaignTreeView({
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Buscar por ID, fbCampaignId, ref o nombre..."
+            placeholder={t('campaignTree.searchPlaceholderFull')}
             className="w-full px-4 py-3 pl-12 bg-gray-800/50 border border-gray-700/50 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
           />
           <svg className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -445,7 +449,7 @@ function CampaignTreeView({
       {loading ? (
         <div className="p-8 text-center">
           <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-gray-400 mt-4">Cargando campañas...</p>
+          <p className="text-gray-400 mt-4">{t('campaignTree.loading')}</p>
         </div>
       ) : !filteredCampaigns || filteredCampaigns.length === 0 ? (
         <div className="p-12 text-center bg-gray-800/50 border border-gray-700/50 rounded-xl">
@@ -459,12 +463,12 @@ function CampaignTreeView({
             </svg>
           </div>
           <h3 className="text-lg font-semibold text-white mb-2">
-            {searchQuery ? 'No se encontraron resultados' : 'No se encontraron campañas'}
+            {searchQuery ? t('campaignTree.noResults') : t('campaignTree.noCampaignsFound')}
           </h3>
           <p className="text-gray-400 mb-6">
             {searchQuery
-              ? `No hay campañas que coincidan con "${searchQuery}"`
-              : 'Comienza agregando tu primera campaña publicitaria'
+              ? t('campaignTree.noMatchQuery', { query: searchQuery })
+              : t('campaignTree.startAdding')
             }
           </p>
           {!searchQuery && (
@@ -475,7 +479,7 @@ function CampaignTreeView({
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              <span>Agregar Campaña</span>
+              <span>{t('campaignTree.addCampaignBtn')}</span>
             </button>
           )}
         </div>
@@ -486,7 +490,7 @@ function CampaignTreeView({
             <div className="bg-gray-800/50 backdrop-blur-lg border border-green-500/20 rounded-xl overflow-hidden">
               <div className="px-6 py-3 border-b border-gray-700/50 flex items-center gap-3">
                 <div className="w-2 h-2 rounded-full bg-green-400"></div>
-                <h2 className="text-lg font-bold text-white">Activas</h2>
+                <h2 className="text-lg font-bold text-white">{t('campaignTree.activeCampaigns')}</h2>
                 <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">
                   {activeCampaigns.length}
                 </span>
@@ -500,7 +504,7 @@ function CampaignTreeView({
             <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl overflow-hidden">
               <div className="px-6 py-3 border-b border-gray-700/50 flex items-center gap-3">
                 <div className="w-2 h-2 rounded-full bg-gray-500"></div>
-                <h2 className="text-lg font-bold text-gray-400">Inactivas</h2>
+                <h2 className="text-lg font-bold text-gray-400">{t('campaignTree.inactiveCampaigns')}</h2>
                 <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">
                   {inactiveCampaigns.length}
                 </span>

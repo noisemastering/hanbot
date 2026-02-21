@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../i18n';
 
 function MasterCatalogModal({ subfamily, onSave, onClose }) {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -73,7 +75,7 @@ function MasterCatalogModal({ subfamily, onSave, onClose }) {
                 onChange={handleChange}
                 rows={3}
                 className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                placeholder="Descripción de la subfamilia de productos..."
+                placeholder={t('masterCatalogModal.descriptionPlaceholder')}
               />
             </div>
 

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../i18n';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -344,6 +345,7 @@ function groupProducts(flatProducts) {
 }
 
 function InventarioView() {
+  const { t } = useTranslation();
   const [productTree, setProductTree] = useState([]);
   const [loading, setLoading] = useState(true);
   const [selectedItems, setSelectedItems] = useState(new Set());
@@ -414,7 +416,7 @@ function InventarioView() {
       if (!data.success) {
         // Revert on error
         fetchProductTree();
-        alert('Error al actualizar: ' + data.error);
+        alert(t('inventory.errorUpdateProduct') + data.error);
       }
     } catch (error) {
       console.error('Error updating product:', error);
@@ -423,11 +425,11 @@ function InventarioView() {
 
   const handleBulkUpdate = async () => {
     if (selectedItems.size === 0) {
-      alert('Selecciona al menos un producto');
+      alert(t('inventory.selectAtLeast'));
       return;
     }
     if (!bulkOperation) {
-      alert('Selecciona una operación');
+      alert(t('inventory.selectOperation'));
       return;
     }
 
@@ -441,7 +443,7 @@ function InventarioView() {
     } else if (bulkOperation === 'desactivar') {
       updateData = { active: false };
     } else {
-      alert('Ingresa un valor válido');
+      alert(t('inventory.enterValidValue'));
       return;
     }
 
@@ -474,12 +476,12 @@ function InventarioView() {
       const hasError = results.some(r => !r.ok);
       if (hasError) {
         fetchProductTree();
-        alert('Algunos productos no se pudieron actualizar');
+        alert(t('inventory.someUpdatesFailed'));
       }
     } catch (error) {
       console.error('Error in bulk update:', error);
       fetchProductTree();
-      alert('Error al actualizar');
+      alert(t('inventory.errorUpdating'));
     }
   };
 
@@ -602,11 +604,11 @@ function InventarioView() {
         setMlImportProduct(null);
         setMlSearchTerm('');
       } else {
-        alert('Error al vincular: ' + data.error);
+        alert(t('inventory.errorLinking') + data.error);
       }
     } catch (error) {
       console.error('Error linking ML item:', error);
-      alert('Error al vincular producto');
+      alert(t('inventory.errorLinkingProduct'));
     } finally {
       setMlLinking(false);
     }
@@ -631,11 +633,11 @@ function InventarioView() {
         // Refresh product tree to show updated mlPrice values
         fetchProductTree();
       } else {
-        alert('Error al sincronizar precios: ' + data.error);
+        alert(t('inventory.errorSyncPrices') + data.error);
       }
     } catch (error) {
       console.error('Error syncing ML prices:', error);
-      alert('Error al sincronizar precios de ML');
+      alert(t('inventory.errorSyncPricesML'));
     } finally {
       setMlSyncing(false);
     }
@@ -647,11 +649,11 @@ function InventarioView() {
     const productsToDeactivate = flatProducts.filter(p => p.priceIsInherited || !p.inheritedPrice || p.inheritedPrice <= 0);
 
     if (productsToDeactivate.length === 0) {
-      alert('No hay productos con precios sin confirmar');
+      alert(t('inventory.noUnconfirmed'));
       return;
     }
 
-    if (!window.confirm(`¿Desactivar ${productsToDeactivate.length} productos sin precio confirmado?`)) {
+    if (!window.confirm(t('inventory.deactivateConfirm', { count: productsToDeactivate.length }))) {
       return;
     }
 
@@ -679,7 +681,7 @@ function InventarioView() {
     } catch (error) {
       console.error('Error deactivating products:', error);
       fetchProductTree();
-      alert('Error al desactivar productos');
+      alert(t('inventory.errorDeactivating'));
     }
   };
 
@@ -707,9 +709,9 @@ function InventarioView() {
     <div className="p-6">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">Inventario</h1>
+        <h1 className="text-2xl font-bold text-white">{t('inventory.title')}</h1>
         <p className="text-gray-400 text-sm mt-1">
-          {totalProducts} productos vendibles
+          {t('inventory.sellableProducts', { count: totalProducts })}
         </p>
       </div>
 
@@ -719,7 +721,7 @@ function InventarioView() {
         <div className="flex-1 min-w-64">
           <input
             type="text"
-            placeholder="Buscar por nombre, medida o color..."
+            placeholder={t('inventory.searchPlaceholderFull')}
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="w-full px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500"
@@ -731,21 +733,21 @@ function InventarioView() {
           onClick={syncMLPrices}
           disabled={mlSyncing}
           className="px-4 py-2 bg-yellow-500/20 border border-yellow-500/50 text-yellow-300 rounded-lg hover:bg-yellow-500/30 transition-colors text-sm font-medium disabled:opacity-50 flex items-center gap-2"
-          title="Sincronizar precios desde Mercado Libre"
+          title={t('inventory.syncML')}
         >
           {mlSyncing ? (
             <>
               <div className="w-4 h-4 border-2 border-yellow-300 border-t-transparent rounded-full animate-spin"></div>
-              Sincronizando...
+              {t('inventory.syncing')}
             </>
           ) : (
-            'Sync ML'
+            t('inventory.syncML')
           )}
         </button>
         {mlSyncResult && (
           <span className="text-xs text-gray-400">
-            {mlSyncResult.synced} sincronizados
-            {mlSyncResult.errors > 0 && <span className="text-red-400">, {mlSyncResult.errors} errores</span>}
+            {t('inventory.synced', { count: mlSyncResult.synced })}
+            {mlSyncResult.errors > 0 && <span className="text-red-400">, {t('inventory.errors', { count: mlSyncResult.errors })}</span>}
           </span>
         )}
 
@@ -753,33 +755,33 @@ function InventarioView() {
         <button
           onClick={deactivateUnconfirmedPrices}
           className="px-4 py-2 bg-amber-500/20 border border-amber-500/50 text-amber-300 rounded-lg hover:bg-amber-500/30 transition-colors text-sm font-medium"
-          title="Desactivar productos con precios heredados (amarillo)"
+          title={t('inventory.deactivateUnpriced')}
         >
-          Desactivar sin precio
+          {t('inventory.deactivateUnpriced')}
         </button>
 
         {/* Bulk Operations */}
         {selectedItems.size > 0 && (
           <div className="flex items-center gap-2 px-4 py-2 bg-primary-500/10 border border-primary-500/30 rounded-lg">
             <span className="text-sm text-primary-300 font-medium">
-              {selectedItems.size} seleccionados
+              {t('inventory.selected', { count: selectedItems.size })}
             </span>
             <select
               value={bulkOperation}
               onChange={(e) => { setBulkOperation(e.target.value); setBulkValue(''); }}
               className="px-2 py-1 bg-gray-900 border border-gray-700 rounded text-white text-sm"
             >
-              <option value="">Operación...</option>
-              <option value="precio">Precio</option>
-              <option value="stock">Stock</option>
-              <option value="activar">Activar</option>
-              <option value="desactivar">Desactivar</option>
+              <option value="">{t('inventory.operation')}</option>
+              <option value="precio">{t('inventory.opPrice')}</option>
+              <option value="stock">{t('inventory.opStock')}</option>
+              <option value="activar">{t('inventory.opActivate')}</option>
+              <option value="desactivar">{t('inventory.opDeactivate')}</option>
             </select>
             {(bulkOperation === 'precio' || bulkOperation === 'stock') && (
               <input
                 type="number"
                 step={bulkOperation === 'precio' ? '0.01' : '1'}
-                placeholder={bulkOperation === 'precio' ? 'Precio' : 'Stock'}
+                placeholder={bulkOperation === 'precio' ? t('inventory.opPrice') : t('inventory.opStock')}
                 value={bulkValue}
                 onChange={(e) => setBulkValue(e.target.value)}
                 className="px-2 py-1 bg-gray-900 border border-gray-700 rounded text-white text-sm w-24"
@@ -789,7 +791,7 @@ function InventarioView() {
               onClick={handleBulkUpdate}
               className="px-3 py-1 bg-primary-500 text-white rounded hover:bg-primary-600 text-sm font-medium"
             >
-              Aplicar
+              {t('inventory.apply')}
             </button>
           </div>
         )}
@@ -799,11 +801,11 @@ function InventarioView() {
       {loading ? (
         <div className="text-center py-12">
           <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-          <p className="text-gray-400 mt-4">Cargando inventario...</p>
+          <p className="text-gray-400 mt-4">{t('inventory.loadingInventory')}</p>
         </div>
       ) : Object.keys(filteredGroups).length === 0 ? (
         <div className="text-center py-12 bg-gray-800/30 rounded-lg">
-          <p className="text-gray-400">No se encontraron productos</p>
+          <p className="text-gray-400">{t('inventory.noProductsFound')}</p>
         </div>
       ) : (
         <div className="space-y-4">
@@ -831,7 +833,7 @@ function InventarioView() {
                     </svg>
                     <span className="font-semibold text-white">{group.name}</span>
                     <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">
-                      {group.products.length} productos
+                      {t('inventory.productsCount', { count: group.products.length })}
                     </span>
                   </div>
                 </button>
@@ -851,14 +853,14 @@ function InventarioView() {
                               className="rounded border-gray-600 text-primary-500"
                             />
                           </th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase">Producto</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-24">Medida</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-20">Color</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-20">Stock</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-28">Precio</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-20">Min Qty</th>
-                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-28">Mayoreo</th>
-                          <th className="px-3 py-2 text-center text-xs font-medium text-gray-400 uppercase w-20">Activo</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase">{t('inventory.colProduct')}</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-24">{t('inventory.colSize')}</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-20">{t('inventory.colColor')}</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-20">{t('inventory.colStock')}</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-28">{t('inventory.colPrice')}</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-20">{t('inventory.colMinQty')}</th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-28">{t('inventory.colWholesale')}</th>
+                          <th className="px-3 py-2 text-center text-xs font-medium text-gray-400 uppercase w-20">{t('inventory.colActive')}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-gray-700/30">
@@ -909,7 +911,7 @@ function InventarioView() {
                                           <button
                                             onClick={() => openMLImportModal(product)}
                                             className="inline-flex items-center p-0.5 text-gray-500 hover:text-yellow-400 transition-colors"
-                                            title="Cambiar enlace ML"
+                                            title={t('inventory.changeMLLink')}
                                           >
                                             <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
@@ -920,7 +922,7 @@ function InventarioView() {
                                         <button
                                           onClick={() => openMLImportModal(product)}
                                           className="inline-flex items-center px-1.5 py-0.5 bg-gray-600/50 hover:bg-yellow-500/30 text-gray-400 hover:text-yellow-400 text-xs font-medium rounded transition-colors"
-                                          title="Importar desde ML"
+                                          title={t('inventory.importML')}
                                         >
                                           +ML
                                         </button>
@@ -956,7 +958,7 @@ function InventarioView() {
                                   <button
                                     onClick={() => handleUpdateProduct(product._id, 'price', product.inheritedPrice)}
                                     className="p-1 text-amber-400 hover:text-green-400 border border-amber-400/50 hover:border-green-400 hover:bg-green-500/20 rounded transition-colors"
-                                    title="Confirmar precio"
+                                    title={t('inventory.confirmPrice')}
                                   >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -1031,9 +1033,9 @@ function InventarioView() {
           <div className="bg-gray-800 rounded-xl w-full max-w-2xl max-h-[80vh] flex flex-col">
             {/* Modal Header */}
             <div className="p-4 border-b border-gray-700">
-              <h2 className="text-lg font-semibold text-white">Importar desde Mercado Libre</h2>
+              <h2 className="text-lg font-semibold text-white">{t('inventory.importFromML')}</h2>
               <p className="text-sm text-gray-400 mt-1">
-                Vinculando: <span className="text-white">{mlImportProduct.name}</span>
+                {t('inventory.linking')} <span className="text-white">{mlImportProduct.name}</span>
               </p>
             </div>
 
@@ -1041,7 +1043,7 @@ function InventarioView() {
             <div className="p-4 border-b border-gray-700">
               <input
                 type="text"
-                placeholder="Escribe al menos 3 caracteres para buscar..."
+                placeholder={t('inventory.searchMinChars')}
                 value={mlSearchTerm}
                 onChange={(e) => handleMLSearchChange(e.target.value)}
                 autoFocus
@@ -1053,12 +1055,12 @@ function InventarioView() {
             <div className="flex-1 overflow-y-auto p-4">
               {mlSearchTerm.length < 3 ? (
                 <div className="text-center py-8">
-                  <p className="text-gray-500">Escribe al menos 3 caracteres para buscar productos en ML</p>
+                  <p className="text-gray-500">{t('inventory.searchMinCharsML')}</p>
                 </div>
               ) : mlItemsLoading ? (
                 <div className="text-center py-8">
                   <div className="inline-block w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-                  <p className="text-gray-400 mt-2">Buscando...</p>
+                  <p className="text-gray-400 mt-2">{t('inventory.searching')}</p>
                 </div>
               ) : (
                 <div className="space-y-2">
@@ -1085,25 +1087,25 @@ function InventarioView() {
                           rel="noopener noreferrer"
                           className="px-2 py-1 text-xs text-blue-400 hover:text-blue-300 hover:bg-blue-500/20 rounded transition-colors"
                         >
-                          Ver
+                          {t('inventory.view')}
                         </a>
                         <button
                           onClick={() => linkMLToProduct(item)}
                           disabled={mlLinking}
                           className="px-3 py-1 bg-primary-500 text-white text-sm rounded hover:bg-primary-600 transition-colors disabled:opacity-50"
                         >
-                          Vincular
+                          {t('inventory.linkML')}
                         </button>
                       </div>
                     </div>
                   ))}
                   {mlItems.length > 30 && (
                     <p className="text-center text-gray-500 text-sm py-2">
-                      Mostrando 30 de {mlItems.length} resultados
+                      {t('inventory.showingOf', { shown: 30, total: mlItems.length })}
                     </p>
                   )}
                   {mlItems.length === 0 && !mlItemsLoading && mlSearchTerm.length >= 3 && (
-                    <p className="text-center text-gray-500 py-4">No se encontraron productos</p>
+                    <p className="text-center text-gray-500 py-4">{t('inventory.noMLProducts')}</p>
                   )}
                 </div>
               )}
@@ -1115,7 +1117,7 @@ function InventarioView() {
                 onClick={() => { setMlImportProduct(null); setMlSearchTerm(''); }}
                 className="w-full px-4 py-2 bg-gray-700 text-white rounded-lg hover:bg-gray-600 transition-colors"
               >
-                Cancelar
+                {t('inventory.cancel')}
               </button>
             </div>
           </div>

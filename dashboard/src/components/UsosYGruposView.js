@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from '../i18n';
 import UsosView from './UsosView';
 import GruposView from './GruposView';
 
@@ -16,15 +17,16 @@ function UsosYGruposView({
   onEditGrupo,
   onDeleteGrupo
 }) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('usos');
 
   return (
     <div>
       {/* Page Header */}
       <div className="mb-8">
-        <h1 className="text-3xl font-bold text-white">Usos y Grupos</h1>
+        <h1 className="text-3xl font-bold text-white">{t('nav.usosGrupos')}</h1>
         <p className="text-gray-400 mt-2">
-          Gestiona usos y agrupaciones de productos para mejorar recomendaciones y organización
+          {t('usosGrupos.subtitle')}
         </p>
       </div>
 
@@ -40,7 +42,7 @@ function UsosYGruposView({
                   : 'text-gray-400 hover:text-gray-300'
               }`}
             >
-              Usos
+              {t('usosGrupos.usosTabLabel')}
               {activeTab === 'usos' && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-500"></div>
               )}
@@ -53,7 +55,7 @@ function UsosYGruposView({
                   : 'text-gray-400 hover:text-gray-300'
               }`}
             >
-              Grupos
+              {t('usosGrupos.gruposTabLabel')}
               {activeTab === 'grupos' && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-primary-500"></div>
               )}

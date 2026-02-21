@@ -1,4 +1,5 @@
 import React from 'react';
+import { useTranslation } from '../i18n';
 
 function CampaignProductsView({
   campaignProducts,
@@ -7,13 +8,15 @@ function CampaignProductsView({
   onEdit,
   onDelete
 }) {
+  const { t } = useTranslation();
+
   return (
     <div>
       {/* Header with Add Button */}
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-white">Productos de Campaña</h1>
-          <p className="text-gray-400 mt-2">Gestiona los productos asociados a cada campaña</p>
+          <h1 className="text-3xl font-bold text-white">{t('campaignProducts.title')}</h1>
+          <p className="text-gray-400 mt-2">{t('campaignProducts.subtitle')}</p>
         </div>
         <button
           onClick={onAdd}
@@ -22,7 +25,7 @@ function CampaignProductsView({
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          <span>Nuevo Producto de Campaña</span>
+          <span>{t('campaignProducts.newProduct')}</span>
         </button>
       </div>
 

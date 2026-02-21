@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useTranslation } from '../i18n';
 
 // Helper function to collect all descendant IDs recursively
 function collectAllDescendantIds(product) {
@@ -155,6 +156,7 @@ function ProductTreeNode({ product, selectedProducts, inheritedProducts = [], on
 }
 
 function ProductTreeSelector({ selectedProducts, inheritedProducts = [], inheritedFrom = null, onToggle, products, loading }) {
+  const { t } = useTranslation();
   const [searchTerm, setSearchTerm] = useState('');
   const [expandAll, setExpandAll] = useState(false);
 
@@ -192,7 +194,7 @@ function ProductTreeSelector({ selectedProducts, inheritedProducts = [], inherit
             type="text"
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            placeholder="Buscar productos..."
+            placeholder={t('productTreeSelector.searchProducts')}
             className="w-full pl-9 pr-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
           />
           <svg

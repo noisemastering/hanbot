@@ -56,6 +56,7 @@ import PuntosDeVentaView from "./pages/PuntosDeVentaView";
 import OrdersView from "./pages/OrdersView";
 import PuntoDeVentaModal from "./components/PuntoDeVentaModal";
 import { useAuth } from "./contexts/AuthContext";
+import { useTranslation } from "./i18n";
 // AuthProvider and ProtectedRoute used in index.js
 import UsersView from "./components/UsersView";
 import RolesView from "./components/RolesView";
@@ -93,7 +94,7 @@ const menuItems = [
   // Stand-alone items
   {
     id: "overview",
-    label: "Panel General",
+    labelKey: "menu.overview",
     path: "/",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" />
@@ -101,7 +102,7 @@ const menuItems = [
   },
   {
     id: "conversations",
-    label: "Conversaciones",
+    labelKey: "menu.conversations",
     path: "/conversations",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
@@ -111,7 +112,7 @@ const menuItems = [
   // Expandable sections
   {
     id: "estadisticas",
-    label: "Estadísticas",
+    labelKey: "menu.statistics",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
     ),
@@ -119,7 +120,7 @@ const menuItems = [
     children: [
       {
         id: "analytics",
-        label: "Analíticas",
+        labelKey: "menu.analytics",
         path: "/analytics",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
@@ -127,7 +128,7 @@ const menuItems = [
       },
       {
         id: "click-logs",
-        label: "Clicks",
+        labelKey: "menu.clicks",
         path: "/click-logs",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
@@ -135,7 +136,7 @@ const menuItems = [
       },
       {
         id: "conversions",
-        label: "Conversiones",
+        labelKey: "menu.conversions",
         path: "/conversions",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -145,7 +146,7 @@ const menuItems = [
   },
   {
     id: "catalogo",
-    label: "Catálogo",
+    labelKey: "menu.catalog",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
     ),
@@ -153,7 +154,7 @@ const menuItems = [
     children: [
       {
         id: "familias",
-        label: "Familias",
+        labelKey: "menu.families",
         path: "/familias",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -161,7 +162,7 @@ const menuItems = [
       },
       {
         id: "usos-grupos",
-        label: "Usos y Grupos",
+        labelKey: "menu.usosGrupos",
         path: "/usos-grupos",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -169,7 +170,7 @@ const menuItems = [
       },
       {
         id: "inventario",
-        label: "Inventario",
+        labelKey: "menu.inventory",
         path: "/inventario",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
@@ -177,7 +178,7 @@ const menuItems = [
       },
       {
         id: "pos",
-        label: "Puntos de Venta",
+        labelKey: "menu.pos",
         path: "/pos",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
@@ -187,7 +188,7 @@ const menuItems = [
   },
   {
     id: "campanas",
-    label: "Campañas",
+    labelKey: "menu.campaigns",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
     ),
@@ -195,7 +196,7 @@ const menuItems = [
     children: [
       {
         id: "campaigns",
-        label: "Campañas",
+        labelKey: "menu.campaignsSub",
         path: "/campaigns",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
@@ -203,7 +204,7 @@ const menuItems = [
       },
       {
         id: "adsets",
-        label: "Ad Sets",
+        labelKey: "menu.adSets",
         path: "/adsets",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
@@ -211,7 +212,7 @@ const menuItems = [
       },
       {
         id: "ads",
-        label: "Anuncios",
+        labelKey: "menu.ads",
         path: "/ads",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
@@ -221,7 +222,7 @@ const menuItems = [
   },
   {
     id: "usuarios",
-    label: "Usuarios",
+    labelKey: "menu.users",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
     ),
@@ -229,7 +230,7 @@ const menuItems = [
     children: [
       {
         id: "users",
-        label: "Usuarios",
+        labelKey: "menu.usersSub",
         path: "/users",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
@@ -237,7 +238,7 @@ const menuItems = [
       },
       {
         id: "roles",
-        label: "Roles",
+        labelKey: "menu.roles",
         path: "/roles",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
@@ -245,7 +246,7 @@ const menuItems = [
       },
       {
         id: "profiles",
-        label: "Perfiles",
+        labelKey: "menu.profiles",
         path: "/profiles",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V8a2 2 0 00-2-2h-5m-4 0V5a2 2 0 114 0v1m-4 0a2 2 0 104 0m-5 8a2 2 0 100-4 2 2 0 000 4zm0 0c1.306 0 2.417.835 2.83 2M9 14a3.001 3.001 0 00-2.83 2M15 11h3m-3 4h2" />
@@ -255,7 +256,7 @@ const menuItems = [
   },
   {
     id: "mercadolibre",
-    label: "Mercado Libre",
+    labelKey: "menu.mercadoLibre",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
     ),
@@ -263,7 +264,7 @@ const menuItems = [
     children: [
       {
         id: "ml-orders",
-        label: "Pedidos",
+        labelKey: "menu.orders",
         path: "/ml-orders",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
@@ -271,7 +272,7 @@ const menuItems = [
       },
       {
         id: "ml-importer",
-        label: "Importador",
+        labelKey: "menu.importer",
         path: "/ml-importer",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
@@ -281,7 +282,7 @@ const menuItems = [
   },
   {
     id: "bot",
-    label: "Bot",
+    labelKey: "menu.bot",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
     ),
@@ -289,7 +290,7 @@ const menuItems = [
     children: [
       {
         id: "intents",
-        label: "Intents",
+        labelKey: "menu.intents",
         path: "/intents",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
@@ -297,7 +298,7 @@ const menuItems = [
       },
       {
         id: "flows",
-        label: "Flows",
+        labelKey: "menu.flows",
         path: "/flows",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
@@ -308,7 +309,7 @@ const menuItems = [
   // Playground section - superadmin only (experimental features)
   {
     id: "playground",
-    label: "Playground",
+    labelKey: "menu.playground",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.387-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" />
     ),
@@ -316,7 +317,7 @@ const menuItems = [
     children: [
       {
         id: "playground-ml",
-        label: "Mercado Libre",
+        labelKey: "menu.playgroundML",
         path: "/playground/mercado-libre",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
@@ -326,7 +327,7 @@ const menuItems = [
   },
   {
     id: "settings",
-    label: "Configuración",
+    labelKey: "menu.settings",
     path: "/settings",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
@@ -338,6 +339,7 @@ function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const { user, loading: authLoading, canAccess, canManageUsers, logout, simulationMode, stopSimulation } = useAuth();
+  const { t, locale, language, changeLanguage } = useTranslation();
   const updateAvailable = useNewVersionCheck();
 
   // All useState hooks must be called BEFORE any early returns
@@ -485,7 +487,7 @@ function App() {
       }
     } catch (error) {
       console.error("Error deleting product:", error);
-      alert("Error al eliminar el producto");
+      alert(t('alert.errorDeleteProduct'));
     }
   };
 
@@ -514,7 +516,7 @@ function App() {
       }
     } catch (error) {
       console.error("Error saving product:", error);
-      alert("Error al guardar el producto");
+      alert(t('alert.errorSaveProduct'));
     }
   };
 
@@ -595,7 +597,7 @@ function App() {
       }
     } catch (error) {
       console.error("Error deleting campaign:", error);
-      alert("Error al eliminar la campaña");
+      alert(t('alert.errorDeleteCampaign'));
     }
   };
 
@@ -670,7 +672,7 @@ function App() {
       }
     } catch (error) {
       console.error("Error saving adset:", error);
-      alert("Error al guardar el conjunto de anuncios: " + (error.response?.data?.error || error.message));
+      alert(t('alert.errorSaveAdSet') + ": " + (error.response?.data?.error || error.message));
     }
   };
 
@@ -686,7 +688,7 @@ function App() {
       }
     } catch (error) {
       console.error("Error deleting adset:", error);
-      alert("Error al eliminar el conjunto de anuncios");
+      alert(t('alert.errorDeleteAdSet'));
     }
   };
 
@@ -709,7 +711,7 @@ function App() {
       }
     } catch (error) {
       console.error("Error saving ad:", error);
-      alert("Error al guardar el anuncio: " + (error.response?.data?.error || error.message));
+      alert(t('alert.errorSaveAd') + ": " + (error.response?.data?.error || error.message));
     }
   };
 
@@ -724,7 +726,7 @@ function App() {
       }
     } catch (error) {
       console.error("Error deleting ad:", error);
-      alert("Error al eliminar el anuncio");
+      alert(t('alert.errorDeleteAd'));
     }
   };
 
@@ -770,7 +772,7 @@ function App() {
       }
     } catch (error) {
       console.error("Error deleting campaign product:", error);
-      alert("Error al eliminar el producto de campaña");
+      alert(t('alert.errorDeleteCampaignProduct'));
     }
   };
 
@@ -799,7 +801,7 @@ function App() {
       }
     } catch (error) {
       console.error("Error saving campaign product:", error);
-      alert("Error al guardar el producto de campaña");
+      alert(t('alert.errorSaveCampaignProduct'));
     }
   };
 
@@ -830,7 +832,7 @@ function App() {
       }
     } catch (error) {
       console.error("Error deleting subfamily:", error);
-      alert("Error al eliminar la entrada del catálogo maestro");
+      alert(t('alert.errorDeleteCatalog'));
     }
   };
 
@@ -859,7 +861,7 @@ function App() {
       }
     } catch (error) {
       console.error("Error saving subfamily:", error);
-      alert("Error al guardar la entrada del catálogo maestro");
+      alert(t('alert.errorSaveCatalog'));
     }
   };
 
@@ -880,7 +882,7 @@ function App() {
 
   const handleDeleteUso = async (uso) => {
     const confirmed = window.confirm(
-      `¿Estás seguro de eliminar el uso "${uso.name}"?\n\nEsta acción no se puede deshacer.`
+      t('alert.confirmDeleteUso', { name: uso.name })
     );
 
     if (!confirmed) return;
@@ -895,7 +897,7 @@ function App() {
       }
     } catch (error) {
       console.error("Error deleting uso:", error);
-      alert("Error al eliminar el uso");
+      alert(t('alert.errorDeleteUso'));
     }
   };
 
@@ -924,7 +926,7 @@ function App() {
       }
     } catch (error) {
       console.error("Error saving uso:", error);
-      alert("Error al guardar el uso");
+      alert(t('alert.errorSaveUso'));
     }
   };
 
@@ -945,7 +947,7 @@ function App() {
 
   const handleDeleteGrupo = async (grupo) => {
     const confirmed = window.confirm(
-      `¿Estás seguro de eliminar el grupo "${grupo.name}"?\n\nEsta acción no se puede deshacer.`
+      t('alert.confirmDeleteGrupo', { name: grupo.name })
     );
 
     if (!confirmed) return;
@@ -960,7 +962,7 @@ function App() {
       }
     } catch (error) {
       console.error("Error deleting grupo:", error);
-      alert("Error al eliminar el grupo");
+      alert(t('alert.errorDeleteGrupo'));
     }
   };
 
@@ -989,7 +991,7 @@ function App() {
       }
     } catch (error) {
       console.error("Error saving grupo:", error);
-      alert("Error al guardar el grupo");
+      alert(t('alert.errorSaveGrupo'));
     }
   };
 
@@ -1011,7 +1013,7 @@ function App() {
 
   const handleDeletePuntoDeVenta = async (pos) => {
     const confirmed = window.confirm(
-      `¿Estás seguro de eliminar el punto de venta "${pos.name}"?\n\nEsta acción no se puede deshacer.`
+      t('alert.confirmDeletePOS', { name: pos.name })
     );
 
     if (!confirmed) return;
@@ -1026,7 +1028,7 @@ function App() {
       }
     } catch (error) {
       console.error("Error deleting point of sale:", error);
-      alert("Error al eliminar el punto de venta");
+      alert(t('alert.errorDeletePOS'));
     }
   };
 
@@ -1055,7 +1057,7 @@ function App() {
       }
     } catch (error) {
       console.error("Error saving point of sale:", error);
-      alert("Error al guardar el punto de venta");
+      alert(t('alert.errorSavePOS'));
     }
   };
 
@@ -1109,7 +1111,7 @@ function App() {
   const handleDeleteProductFamily = async (productId) => {
     if (!productId) {
       console.error("Cannot delete product family: ID is undefined or null");
-      alert("Error: No se puede eliminar el producto porque el ID no es válido");
+      alert(t('alert.errorDeleteProductFamily'));
       setDeleteConfirmProductFamily(null);
       return;
     }
@@ -1156,11 +1158,11 @@ function App() {
         setShowCopyModal(false);
         setProductToCopy(null);
       } else {
-        alert('Error al copiar producto: ' + data.error);
+        alert(t('alert.errorCopyProduct') + ': ' + data.error);
       }
     } catch (error) {
       console.error('Error copying product:', error);
-      alert('Error al copiar producto');
+      alert(t('alert.errorCopyProduct'));
     }
   };
 
@@ -1185,7 +1187,7 @@ function App() {
       });
 
       await fetchConversationStatus(psid);
-      alert(`Control tomado del PSID: ${psid.slice(0, 16)}...\nEl bot dejara de responder.`);
+      alert(t('alert.takeoverSuccess', { psid: psid.slice(0, 16) }));
     } catch (err) {
       console.error("Error taking over:", err);
       alert(`Error: ${err.response?.data?.error || err.message}`);
@@ -1200,7 +1202,7 @@ function App() {
       await API.post(`/api/conversation/${psid}/release`);
 
       await fetchConversationStatus(psid);
-      alert(`Conversacion liberada: ${psid.slice(0, 16)}...\nEl bot puede responder de nuevo.`);
+      alert(t('alert.releaseSuccess', { psid: psid.slice(0, 16) }));
     } catch (err) {
       console.error("Error releasing:", err);
       alert(`Error: ${err.response?.data?.error || err.message}`);
@@ -1293,7 +1295,7 @@ function App() {
       <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-16 w-16 border-t-2 border-b-2 border-primary-500 mx-auto"></div>
-          <p className="mt-4 text-gray-400">Cargando...</p>
+          <p className="mt-4 text-gray-400">{t('app.loadingAuth')}</p>
         </div>
       </div>
     );
@@ -1427,7 +1429,7 @@ function App() {
     recentMessages.forEach((m) => {
       const date = new Date(m.timestamp);
       // Format as "Nov 12, 10:00"
-      const hourKey = date.toLocaleString('es-MX', {
+      const hourKey = date.toLocaleString(locale, {
         month: 'short',
         day: 'numeric',
         hour: '2-digit',
@@ -1481,12 +1483,12 @@ function App() {
       {/* New version banner */}
       {updateAvailable && (
         <div className="fixed top-0 inset-x-0 z-[100] flex items-center justify-center gap-3 bg-blue-600 text-white text-sm py-2 px-4 shadow-lg">
-          <span>Hay una nueva versión del dashboard disponible.</span>
+          <span>{t('app.updateAvailable')}</span>
           <button
             onClick={() => window.location.reload()}
             className="bg-white text-blue-700 font-semibold px-3 py-0.5 rounded hover:bg-blue-50 transition-colors"
           >
-            Actualizar
+            {t('app.updateButton')}
           </button>
         </div>
       )}
@@ -1531,7 +1533,7 @@ function App() {
                         <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           {item.icon}
                         </svg>
-                        <span className="font-medium">{item.label}</span>
+                        <span className="font-medium">{t(item.labelKey)}</span>
                       </div>
                       <svg
                         className={`w-4 h-4 transition-transform ${isExpanded ? 'rotate-180' : ''}`}
@@ -1561,7 +1563,7 @@ function App() {
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               {child.icon}
                             </svg>
-                            <span className="font-medium">{child.label}</span>
+                            <span className="font-medium">{t(child.labelKey)}</span>
                           </NavLink>
                         ))}
                       </div>
@@ -1586,7 +1588,7 @@ function App() {
                   <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     {item.icon}
                   </svg>
-                  <span className="font-medium">{item.label}</span>
+                  <span className="font-medium">{t(item.labelKey)}</span>
                 </NavLink>
               );
             })}
@@ -1617,14 +1619,14 @@ function App() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
                 </svg>
-                <span>Cerrar Sesión</span>
+                <span>{t('app.logout')}</span>
               </button>
             </div>
 
             {/* Live Indicator */}
             <div className="flex items-center space-x-2 bg-primary-500/10 px-3 py-2 rounded-lg">
               <div className="w-2 h-2 bg-primary-500 rounded-full animate-pulse"></div>
-              <span className="text-sm font-medium text-primary-400">En Vivo</span>
+              <span className="text-sm font-medium text-primary-400">{t('app.live')}</span>
             </div>
           </div>
         </div>
@@ -1648,9 +1650,9 @@ function App() {
                 </button>
                 <div>
                   <h1 className="text-xl font-bold text-white">
-                    {menuItems.find(item => item.path === location.pathname)?.label || "Panel General"}
+                    {(() => { const mi = menuItems.find(item => item.path === location.pathname); return mi ? t(mi.labelKey) : t('menu.overview'); })()}
                   </h1>
-                  <p className="text-sm text-gray-400">Monitorea tu chatbot en tiempo real</p>
+                  <p className="text-sm text-gray-400">{t('app.subtitle')}</p>
                 </div>
               </div>
 
@@ -1658,6 +1660,15 @@ function App() {
               <div className="flex items-center space-x-2">
                 {/* Simulation Mode Selector (super_admin only) */}
                 <SimulationModeSelector />
+
+                {/* Language Toggle */}
+                <button
+                  onClick={() => changeLanguage(language === 'es' ? 'en' : 'es')}
+                  className="px-2 py-1 rounded-lg text-xs font-bold text-gray-400 hover:bg-gray-800/50 hover:text-white transition-colors border border-gray-700/50"
+                  title={language === 'es' ? 'Switch to English' : 'Cambiar a Español'}
+                >
+                  {language === 'es' ? 'EN' : 'ES'}
+                </button>
 
                 {/* Notifications */}
                 <button className="p-2 rounded-lg text-gray-400 hover:bg-gray-800/50 hover:text-white transition-colors relative">
@@ -1679,7 +1690,7 @@ function App() {
                   <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-700 rounded-full flex items-center justify-center">
                     <span className="text-white text-sm font-bold">A</span>
                   </div>
-                  <span className="hidden sm:block text-sm font-medium text-white">Administrador</span>
+                  <span className="hidden sm:block text-sm font-medium text-white">{t('app.admin')}</span>
                 </button>
               </div>
             </div>
@@ -1697,10 +1708,10 @@ function App() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
                 </svg>
                 <span className="text-sm text-amber-200">
-                  <strong>Modo Simulación:</strong> Viendo como <span className="font-semibold text-amber-100">{simulationMode.label}</span>
+                  <strong>{t('simulation.title')}</strong> {t('simulation.viewingAs')} <span className="font-semibold text-amber-100">{simulationMode.label}</span>
                 </span>
                 <span className="text-xs text-amber-400/70">
-                  ({simulationMode.permissions?.includes('*') ? 'Todos los permisos' : `${simulationMode.permissions?.length || 0} permisos`})
+                  ({simulationMode.permissions?.includes('*') ? t('simulation.allPermissions') : t('simulation.permissionsCount', { count: simulationMode.permissions?.length || 0 })})
                 </span>
               </div>
               <button
@@ -1710,7 +1721,7 @@ function App() {
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                 </svg>
-                <span>Salir</span>
+                <span>{t('simulation.exit')}</span>
               </button>
             </div>
           </div>
@@ -1738,10 +1749,10 @@ function App() {
         {/* Today's Stats Header */}
         <div className="mb-6">
           <h2 className="text-2xl font-bold text-white mb-2">
-            📊 Estadísticas de Hoy
+            {t('overview.todayStats')}
           </h2>
           <p className="text-sm text-gray-400">
-            {new Date().toLocaleDateString('es-MX', {
+            {new Date().toLocaleDateString(locale, {
               weekday: 'long',
               year: 'numeric',
               month: 'long',
@@ -1763,7 +1774,7 @@ function App() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-400 mb-1">Mensajes Totales</p>
+                <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.totalMessages')}</p>
                 <h3 className="text-3xl font-bold text-white">{totalMessages}</h3>
               </div>
               <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center">
@@ -1785,7 +1796,7 @@ function App() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-400 mb-1">Usuarios Únicos</p>
+                <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.uniqueUsers')}</p>
                 <h3 className="text-3xl font-bold text-white">{totalUsers}</h3>
               </div>
               <div className="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center">
@@ -1806,7 +1817,7 @@ function App() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-400 mb-1">Tasa de Respuesta</p>
+                <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.responseRate')}</p>
                 <h3 className="text-3xl font-bold text-white">{botResponseRate}%</h3>
               </div>
               <div className="w-12 h-12 bg-primary-500/20 rounded-lg flex items-center justify-center">
@@ -1827,7 +1838,7 @@ function App() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-400 mb-1">Sin Responder</p>
+                <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.unanswered')}</p>
                 <h3 className="text-3xl font-bold text-white">{unanswered}</h3>
               </div>
               <div className="w-12 h-12 bg-amber-500/20 rounded-lg flex items-center justify-center">
@@ -1847,7 +1858,7 @@ function App() {
           >
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-gray-400 mb-1">Campañas Activas</p>
+                <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.activeCampaigns')}</p>
                 <h3 className="text-3xl font-bold text-white">{activeCampaigns}</h3>
               </div>
               <div className="w-12 h-12 bg-green-500/20 rounded-lg flex items-center justify-center">
@@ -1863,9 +1874,9 @@ function App() {
             <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 backdrop-blur-lg border border-purple-500/20 rounded-xl p-6 text-left w-full">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-sm font-medium text-gray-400 mb-1">Región más activa</p>
+                  <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.topRegion')}</p>
                   <h3 className="text-2xl font-bold text-white">{topRegion.state}</h3>
-                  <p className="text-sm text-purple-400">{topRegion.conversations} conversaciones</p>
+                  <p className="text-sm text-purple-400">{topRegion.conversations} {t('overview.conversations')}</p>
                 </div>
                 <div className="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center">
                   <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -1884,7 +1895,7 @@ function App() {
             <svg className="w-5 h-5 text-primary-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
             </svg>
-            Resumen de Actividad (Últimas 12 horas)
+            {t('overview.activitySummary')}
           </h2>
           <ResponsiveContainer width="100%" height={450}>
             <BarChart data={getChartData(messages)} barSize={40} barGap={-15}>
@@ -1899,8 +1910,8 @@ function App() {
                   color: '#fff'
                 }}
               />
-              <Bar dataKey="answered" fill="#22c55e" fillOpacity={0.85} radius={[8, 8, 0, 0]} name="Respondidos" />
-              <Bar dataKey="received" fill="#3b82f6" fillOpacity={0.95} radius={[8, 8, 0, 0]} name="Recibidos" />
+              <Bar dataKey="answered" fill="#22c55e" fillOpacity={0.85} radius={[8, 8, 0, 0]} name={t('overview.answered')} />
+              <Bar dataKey="received" fill="#3b82f6" fillOpacity={0.95} radius={[8, 8, 0, 0]} name={t('overview.received')} />
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -1915,7 +1926,7 @@ function App() {
                 : "bg-gray-800/50 text-gray-400 hover:bg-gray-700/50"
             }`}
           >
-            Todos los Mensajes
+            {t('overview.allMessages')}
           </button>
           <button
             onClick={() => setFilter("user")}
@@ -1925,7 +1936,7 @@ function App() {
                 : "bg-gray-800/50 text-gray-400 hover:bg-gray-700/50"
             }`}
           >
-            Solo Usuarios
+            {t('overview.usersOnly')}
           </button>
           <button
             onClick={() => setFilter("bot")}
@@ -1935,19 +1946,19 @@ function App() {
                 : "bg-gray-800/50 text-gray-400 hover:bg-gray-700/50"
             }`}
           >
-            Solo Bot
+            {t('overview.botOnly')}
           </button>
         </div>
 
         {/* Messages Table */}
         <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-700/50">
-            <h2 className="text-xl font-bold text-white">Conversaciones Recientes - Últimas 10</h2>
+            <h2 className="text-xl font-bold text-white">{t('overview.recentConversations')}</h2>
           </div>
           {loading ? (
             <div className="p-8 text-center">
               <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-              <p className="text-gray-400 mt-4">Cargando mensajes...</p>
+              <p className="text-gray-400 mt-4">{t('overview.loadingMessages')}</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -1955,16 +1966,16 @@ function App() {
                 <thead className="bg-gray-900/50">
                   <tr>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      Fecha y Hora
+                      {t('overview.dateTime')}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      Tipo
+                      {t('common.type')}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      ID de Usuario
+                      {t('overview.userId')}
                     </th>
                     <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      Mensaje
+                      {t('overview.message')}
                     </th>
                   </tr>
                 </thead>
@@ -1976,7 +1987,7 @@ function App() {
                       className="hover:bg-gray-700/30 transition-colors cursor-pointer"
                     >
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {new Date(msg.timestamp).toLocaleString()}
+                        {new Date(msg.timestamp).toLocaleString(locale)}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <span
@@ -2015,13 +2026,13 @@ function App() {
             {/* Category: Mensajes del día */}
             {canAccess('stats_messages') && (
               <div className="space-y-4">
-                <h2 className="text-xl font-semibold text-white">Mensajes del día</h2>
+                <h2 className="text-xl font-semibold text-white">{t('analytics.dailyMessages')}</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   {/* Total Messages */}
                   <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 backdrop-blur-lg border border-blue-500/20 rounded-xl p-6">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-gray-400 mb-1">Mensajes Totales</p>
+                        <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.totalMessages')}</p>
                         <h3 className="text-3xl font-bold text-white">{totalMessages}</h3>
                       </div>
                       <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center">
@@ -2036,7 +2047,7 @@ function App() {
                   <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 backdrop-blur-lg border border-purple-500/20 rounded-xl p-6">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-gray-400 mb-1">Usuarios Únicos</p>
+                        <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.uniqueUsers')}</p>
                         <h3 className="text-3xl font-bold text-white">{totalUsers}</h3>
                       </div>
                       <div className="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center">
@@ -2051,7 +2062,7 @@ function App() {
                   <div className="bg-gradient-to-br from-primary-500/10 to-primary-600/5 backdrop-blur-lg border border-primary-500/20 rounded-xl p-6">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-gray-400 mb-1">Tasa de Respuesta</p>
+                        <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.responseRate')}</p>
                         <h3 className="text-3xl font-bold text-white">{botResponseRate}%</h3>
                       </div>
                       <div className="w-12 h-12 bg-primary-500/20 rounded-lg flex items-center justify-center">
@@ -2066,7 +2077,7 @@ function App() {
                   <div className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 backdrop-blur-lg border border-amber-500/20 rounded-xl p-6">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-gray-400 mb-1">Sin Responder</p>
+                        <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.unanswered')}</p>
                         <h3 className="text-3xl font-bold text-white">{unanswered}</h3>
                       </div>
                       <div className="w-12 h-12 bg-amber-500/20 rounded-lg flex items-center justify-center">
@@ -2082,9 +2093,9 @@ function App() {
                     <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 backdrop-blur-lg border border-purple-500/20 rounded-xl p-6">
                       <div className="flex items-center justify-between">
                         <div>
-                          <p className="text-sm font-medium text-gray-400 mb-1">Región más activa</p>
+                          <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.topRegion')}</p>
                           <h3 className="text-2xl font-bold text-white">{topRegion.state}</h3>
-                          <p className="text-sm text-purple-400">{topRegion.conversations} conversaciones</p>
+                          <p className="text-sm text-purple-400">{topRegion.conversations} {t('overview.conversations')}</p>
                         </div>
                         <div className="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center">
                           <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2107,13 +2118,13 @@ function App() {
             {/* Category: Campañas activas */}
             {canAccess('stats_campaigns') && (
               <div className="space-y-4">
-                <h2 className="text-xl font-semibold text-white">Campañas activas</h2>
+                <h2 className="text-xl font-semibold text-white">{t('analytics.activeCampaigns')}</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   {/* Active Campaigns */}
                   <Link to="/campaigns" className="bg-gradient-to-br from-emerald-500/10 to-emerald-600/5 backdrop-blur-lg border border-emerald-500/20 rounded-xl p-6 hover:border-emerald-500/40 transition-colors cursor-pointer">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-gray-400 mb-1">Campañas Activas</p>
+                        <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.activeCampaigns')}</p>
                         <h3 className="text-3xl font-bold text-white">{activeCampaigns}</h3>
                       </div>
                       <div className="w-12 h-12 bg-emerald-500/20 rounded-lg flex items-center justify-center">
@@ -2129,9 +2140,9 @@ function App() {
                   <Link to="/campaigns" className="bg-gradient-to-br from-rose-500/10 to-rose-600/5 backdrop-blur-lg border border-rose-500/20 rounded-xl p-6 hover:border-rose-500/40 transition-colors cursor-pointer">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-gray-400 mb-1">Anuncio con más clics</p>
+                        <p className="text-sm font-medium text-gray-400 mb-1">{t('analytics.mostClickedAd')}</p>
                         <h3 className="text-lg font-bold text-white truncate max-w-[150px]">{bestAd?.name || '-'}</h3>
-                        <p className="text-sm text-rose-400">{bestAd?.clicks || 0} clics</p>
+                        <p className="text-sm text-rose-400">{bestAd?.clicks || 0} {t('analytics.clicks')}</p>
                       </div>
                       <div className="w-12 h-12 bg-rose-500/20 rounded-lg flex items-center justify-center">
                         <svg className="w-6 h-6 text-rose-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2145,7 +2156,7 @@ function App() {
                   <Link to="/click-logs" className="bg-gradient-to-br from-teal-500/10 to-teal-600/5 backdrop-blur-lg border border-teal-500/20 rounded-xl p-6 hover:border-teal-500/40 transition-colors cursor-pointer">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-gray-400 mb-1">Tasa de clics (CTR)</p>
+                        <p className="text-sm font-medium text-gray-400 mb-1">{t('analytics.ctr')}</p>
                         <h3 className="text-3xl font-bold text-white">{adMetrics.ctr}%</h3>
                         <p className="text-sm text-teal-400">{adMetrics.totalClicks.toLocaleString()} / {adMetrics.totalImpressions.toLocaleString()}</p>
                       </div>
@@ -2169,15 +2180,15 @@ function App() {
             {/* Category: Ventas */}
             {canAccess('stats_campaigns') && (
               <div className="space-y-4">
-                <h2 className="text-xl font-semibold text-white">Ventas</h2>
+                <h2 className="text-xl font-semibold text-white">{t('analytics.sales')}</h2>
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
                   {/* Best Conversion Rate Ad */}
                   <Link to="/conversions" className="bg-gradient-to-br from-yellow-500/10 to-yellow-600/5 backdrop-blur-lg border border-yellow-500/20 rounded-xl p-6 hover:border-yellow-500/40 transition-colors cursor-pointer">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-gray-400 mb-1">Mejor tasa de conversión</p>
+                        <p className="text-sm font-medium text-gray-400 mb-1">{t('analytics.bestConversionRate')}</p>
                         <h3 className="text-lg font-bold text-white truncate max-w-[150px]">{bestRateAd?.name || '-'}</h3>
-                        <p className="text-sm text-yellow-400">{bestRateAd?.conversionRate || 0}% ({bestRateAd?.conversions || 0} ventas)</p>
+                        <p className="text-sm text-yellow-400">{bestRateAd?.conversionRate || 0}% ({bestRateAd?.conversions || 0} {t('analytics.salesCount')})</p>
                       </div>
                       <div className="w-12 h-12 bg-yellow-500/20 rounded-lg flex items-center justify-center">
                         <svg className="w-6 h-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2191,9 +2202,9 @@ function App() {
                   <Link to="/click-logs" className="bg-gradient-to-br from-green-500/10 to-green-600/5 backdrop-blur-lg border border-green-500/20 rounded-xl p-6 hover:border-green-500/40 transition-colors cursor-pointer">
                     <div className="flex items-center justify-between">
                       <div>
-                        <p className="text-sm font-medium text-gray-400 mb-1">Producto más vendido</p>
+                        <p className="text-sm font-medium text-gray-400 mb-1">{t('analytics.bestSellingProduct')}</p>
                         <h3 className="text-lg font-bold text-white truncate max-w-[150px]">{topProduct?._id || '-'}</h3>
-                        <p className="text-sm text-green-400">{topProduct?.conversions || 0} ventas</p>
+                        <p className="text-sm text-green-400">{topProduct?.conversions || 0} {t('analytics.salesCount')}</p>
                       </div>
                       <div className="w-12 h-12 bg-green-500/20 rounded-lg flex items-center justify-center">
                         <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -2454,25 +2465,25 @@ function App() {
                   </svg>
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Eliminar Producto</h3>
-                  <p className="text-sm text-gray-400">Esta acción no se puede deshacer</p>
+                  <h3 className="text-lg font-bold text-white">{t('delete.deleteProduct')}</h3>
+                  <p className="text-sm text-gray-400">{t('delete.cannotUndo')}</p>
                 </div>
               </div>
               <p className="text-gray-300 mb-6">
-                ¿Estás seguro de que deseas eliminar <span className="font-semibold text-white">{deleteConfirmProduct.name}</span>?
+                {t('delete.confirmDelete')} <span className="font-semibold text-white">{deleteConfirmProduct.name}</span>?
               </p>
               <div className="flex space-x-2">
                 <button
                   onClick={() => setDeleteConfirmProduct(null)}
                   className="flex-1 px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
                 >
-                  Cancelar
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={() => handleDeleteProduct(deleteConfirmProduct._id)}
                   className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
                 >
-                  Eliminar
+                  {t('common.delete')}
                 </button>
               </div>
             </div>
@@ -2502,25 +2513,25 @@ function App() {
                   </svg>
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Eliminar Campaña</h3>
-                  <p className="text-sm text-gray-400">Esta acción no se puede deshacer</p>
+                  <h3 className="text-lg font-bold text-white">{t('delete.deleteCampaign')}</h3>
+                  <p className="text-sm text-gray-400">{t('delete.cannotUndo')}</p>
                 </div>
               </div>
               <p className="text-gray-300 mb-6">
-                ¿Estás seguro de que deseas eliminar la campaña <span className="font-semibold text-white">{deleteConfirmCampaign.name}</span>?
+                {t('delete.confirmDelete')} <span className="font-semibold text-white">{deleteConfirmCampaign.name}</span>?
               </p>
               <div className="flex space-x-2">
                 <button
                   onClick={() => setDeleteConfirmCampaign(null)}
                   className="flex-1 px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
                 >
-                  Cancelar
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={() => handleDeleteCampaign(deleteConfirmCampaign._id)}
                   className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
                 >
-                  Eliminar
+                  {t('common.delete')}
                 </button>
               </div>
             </div>
@@ -2576,25 +2587,25 @@ function App() {
                   </svg>
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Confirmar Eliminación</h3>
-                  <p className="text-sm text-gray-400">Esta acción no se puede deshacer</p>
+                  <h3 className="text-lg font-bold text-white">{t('delete.title')}</h3>
+                  <p className="text-sm text-gray-400">{t('delete.cannotUndo')}</p>
                 </div>
               </div>
               <p className="text-gray-300 mb-6">
-                ¿Estás seguro de que deseas eliminar "{deleteConfirmItem.name || 'este elemento'}"?
+                {t('delete.confirmDelete')} "{deleteConfirmItem.name || t('delete.thisElement')}"?
               </p>
               <div className="flex space-x-2">
                 <button
                   onClick={() => setDeleteConfirmItem(null)}
                   className="flex-1 px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
                 >
-                  Cancelar
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={() => handleDeleteItem(deleteConfirmItem)}
                   className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
                 >
-                  Eliminar
+                  {t('common.delete')}
                 </button>
               </div>
             </div>
@@ -2625,25 +2636,25 @@ function App() {
                   </svg>
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Eliminar Producto de Campaña</h3>
-                  <p className="text-sm text-gray-400">Esta acción no se puede deshacer</p>
+                  <h3 className="text-lg font-bold text-white">{t('delete.deleteCampaignProduct')}</h3>
+                  <p className="text-sm text-gray-400">{t('delete.cannotUndo')}</p>
                 </div>
               </div>
               <p className="text-gray-300 mb-6">
-                ¿Estás seguro de que deseas eliminar el producto <span className="font-semibold text-white">{deleteConfirmCampaignProduct.name}</span>?
+                {t('delete.confirmDelete')} <span className="font-semibold text-white">{deleteConfirmCampaignProduct.name}</span>?
               </p>
               <div className="flex space-x-2">
                 <button
                   onClick={() => setDeleteConfirmCampaignProduct(null)}
                   className="flex-1 px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
                 >
-                  Cancelar
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={() => handleDeleteCampaignProduct(deleteConfirmCampaignProduct._id)}
                   className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
                 >
-                  Eliminar
+                  {t('common.delete')}
                 </button>
               </div>
             </div>
@@ -2701,28 +2712,28 @@ function App() {
                 </div>
                 <div>
                   <h3 className="text-lg font-bold text-white">
-                    Eliminar {deleteConfirmItem.type === 'campaign' ? 'Campaña' : deleteConfirmItem.type === 'adset' ? 'Ad Set' : 'Anuncio'}
+                    {t('common.delete')} {deleteConfirmItem.type === 'campaign' ? t('delete.campaignLabel') : deleteConfirmItem.type === 'adset' ? t('delete.adSetLabel') : t('delete.adLabel')}
                   </h3>
-                  <p className="text-sm text-gray-400">Esta acción no se puede deshacer</p>
+                  <p className="text-sm text-gray-400">{t('delete.cannotUndo')}</p>
                 </div>
               </div>
               <p className="text-gray-300 mb-6">
-                ¿Estás seguro de que deseas eliminar <span className="font-semibold text-white">{deleteConfirmItem.name}</span>?
-                {deleteConfirmItem.type === 'campaign' && ' Esto también eliminará todos los ad sets y anuncios asociados.'}
-                {deleteConfirmItem.type === 'adset' && ' Esto también eliminará todos los anuncios asociados.'}
+                {t('delete.confirmDelete')} <span className="font-semibold text-white">{deleteConfirmItem.name}</span>?
+                {deleteConfirmItem.type === 'campaign' && ` ${t('delete.cascadeCampaign')}`}
+                {deleteConfirmItem.type === 'adset' && ` ${t('delete.cascadeAdSet')}`}
               </p>
               <div className="flex space-x-2">
                 <button
                   onClick={() => setDeleteConfirmItem(null)}
                   className="flex-1 px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
                 >
-                  Cancelar
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={() => handleDeleteItem(deleteConfirmItem)}
                   className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
                 >
-                  Eliminar
+                  {t('common.delete')}
                 </button>
               </div>
             </div>
@@ -2845,25 +2856,25 @@ function App() {
                   </svg>
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Eliminar Familia de Productos</h3>
-                  <p className="text-sm text-gray-400">Esta acción no se puede deshacer</p>
+                  <h3 className="text-lg font-bold text-white">{t('delete.deleteProductFamily')}</h3>
+                  <p className="text-sm text-gray-400">{t('delete.cannotUndo')}</p>
                 </div>
               </div>
               <p className="text-gray-300 mb-6">
-                ¿Estás seguro de que deseas eliminar <span className="font-semibold text-white">{deleteConfirmProductFamily.name}</span>? Esto también eliminará todos sus hijos.
+                {t('delete.confirmDelete')} <span className="font-semibold text-white">{deleteConfirmProductFamily.name}</span>? {t('delete.cascadeChildren')}
               </p>
               <div className="flex space-x-2">
                 <button
                   onClick={() => setDeleteConfirmProductFamily(null)}
                   className="flex-1 px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
                 >
-                  Cancelar
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={() => handleDeleteProductFamily(deleteConfirmProductFamily._id)}
                   className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
                 >
-                  Eliminar
+                  {t('common.delete')}
                 </button>
               </div>
             </div>
@@ -2881,25 +2892,25 @@ function App() {
                   </svg>
                 </div>
                 <div>
-                  <h3 className="text-lg font-bold text-white">Eliminar Entrada del Catálogo</h3>
-                  <p className="text-sm text-gray-400">Esta acción no se puede deshacer</p>
+                  <h3 className="text-lg font-bold text-white">{t('delete.deleteCatalogEntry')}</h3>
+                  <p className="text-sm text-gray-400">{t('delete.cannotUndo')}</p>
                 </div>
               </div>
               <p className="text-gray-300 mb-6">
-                ¿Estás seguro de que deseas eliminar la entrada <span className="font-semibold text-white">{deleteConfirmSubfamily.name}</span> del catálogo maestro?
+                {t('delete.confirmDelete')} <span className="font-semibold text-white">{deleteConfirmSubfamily.name}</span>?
               </p>
               <div className="flex space-x-2">
                 <button
                   onClick={() => setDeleteConfirmSubfamily(null)}
                   className="flex-1 px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
                 >
-                  Cancelar
+                  {t('common.cancel')}
                 </button>
                 <button
                   onClick={() => handleDeleteSubfamily(deleteConfirmSubfamily._id)}
                   className="flex-1 px-4 py-2 bg-red-500 text-white rounded-lg hover:bg-red-600 transition-colors"
                 >
-                  Eliminar
+                  {t('common.delete')}
                 </button>
               </div>
             </div>
@@ -2919,7 +2930,7 @@ function App() {
               {/* Modal Header */}
               <div className="flex justify-between items-center p-4 border-b border-gray-700">
                 <h2 className="text-xl font-bold text-white">
-                  Detalle de Conversacion
+                  {t('overview.conversationDetail')}
                 </h2>
                 <button
                   onClick={() => setSelectedConversation(null)}
@@ -2942,10 +2953,10 @@ function App() {
                   >
                     <div className="flex justify-between items-start mb-1">
                       <span className="text-xs font-semibold uppercase">
-                        {msg.senderType === "bot" ? "🤖 Bot" : "👤 Usuario"}
+                        {msg.senderType === "bot" ? t('overview.bot') : t('overview.userLabel')}
                       </span>
                       <span className="text-xs text-gray-400">
-                        {new Date(msg.timestamp).toLocaleString()}
+                        {new Date(msg.timestamp).toLocaleString(locale)}
                       </span>
                     </div>
                     <p className="whitespace-pre-wrap">{msg.text}</p>

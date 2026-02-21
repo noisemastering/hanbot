@@ -1,23 +1,25 @@
 // components/RoleModal.js
 import React, { useState, useEffect } from 'react';
-
-// Available sections for permissions
-const AVAILABLE_SECTIONS = [
-  { value: '*', label: 'Todos los permisos (*)' },
-  { value: 'conversations', label: 'Conversaciones' },
-  { value: 'campaigns', label: 'Campañas' },
-  { value: 'adsets', label: 'Conjuntos de Anuncios' },
-  { value: 'ads', label: 'Anuncios' },
-  { value: 'products', label: 'Productos' },
-  { value: 'analytics', label: 'Analíticas' },
-  { value: 'families', label: 'Familias' },
-  { value: 'master-catalog', label: 'Catálogo Maestro' },
-  { value: 'usos', label: 'Usos' },
-  { value: 'inventario', label: 'Inventario' },
-  { value: 'users', label: 'Usuarios' }
-];
+import { useTranslation } from '../i18n';
 
 function RoleModal({ role, onClose, onSave }) {
+  const { t } = useTranslation();
+
+  // Available sections for permissions
+  const AVAILABLE_SECTIONS = [
+    { value: '*', label: t('permissions.allPermissions') },
+    { value: 'conversations', label: t('permissions.conversations') },
+    { value: 'campaigns', label: t('permissions.campaigns') },
+    { value: 'adsets', label: t('permissions.adsets') },
+    { value: 'ads', label: t('permissions.ads') },
+    { value: 'products', label: t('permissions.products') },
+    { value: 'analytics', label: t('permissions.analytics') },
+    { value: 'families', label: t('permissions.families') },
+    { value: 'master-catalog', label: t('permissions.masterCatalog') },
+    { value: 'usos', label: t('permissions.usos') },
+    { value: 'inventario', label: t('permissions.inventario') },
+    { value: 'users', label: t('permissions.users') }
+  ];
   const [formData, setFormData] = useState({
     name: '',
     label: '',
@@ -45,13 +47,13 @@ function RoleModal({ role, onClose, onSave }) {
 
     // Validate required fields
     if (!formData.name || !formData.label) {
-      alert('Por favor completa el nombre y la etiqueta');
+      alert(t('roleModal.errorNameLabel'));
       return;
     }
 
     // Validate name format (lowercase, no spaces)
     if (!/^[a-z_]+$/.test(formData.name)) {
-      alert('El nombre solo puede contener letras minúsculas y guiones bajos');
+      alert(t('roleModal.errorNameFormat'));
       return;
     }
 
@@ -74,7 +76,7 @@ function RoleModal({ role, onClose, onSave }) {
         {/* Header */}
         <div className="sticky top-0 bg-gray-800 border-b border-gray-700 px-6 py-4 flex items-center justify-between">
           <h3 className="text-xl font-semibold text-white">
-            {role ? 'Editar Rol' : 'Nuevo Rol'}
+            {role ? t('roleModal.edit') : t('roleModal.create')}
           </h3>
           <button
             onClick={onClose}
@@ -92,7 +94,7 @@ function RoleModal({ role, onClose, onSave }) {
             {/* Name */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Nombre (identificador) *
+                {t('roleModal.nameIdentifier')}
               </label>
               <input
                 type="text"
@@ -103,20 +105,20 @@ function RoleModal({ role, onClose, onSave }) {
                 disabled={role?.isSystem} // Can't change name of system roles
                 required
               />
-              <p className="text-xs text-gray-500 mt-1">Solo letras minúsculas y guiones bajos</p>
+              <p className="text-xs text-gray-500 mt-1">{t('roleModal.nameHelp')}</p>
             </div>
 
             {/* Label */}
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Etiqueta (visualización) *
+                {t('roleModal.labelDisplay')}
               </label>
               <input
                 type="text"
                 value={formData.label}
                 onChange={(e) => setFormData({ ...formData, label: e.target.value })}
                 className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-primary-500 transition-colors"
-                placeholder="Administrador de Campañas"
+                placeholder={t('roleModal.labelPlaceholder')}
                 required
               />
             </div>
@@ -125,21 +127,21 @@ function RoleModal({ role, onClose, onSave }) {
           {/* Description */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Descripción
+              {t('roleModal.description')}
             </label>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-primary-500 transition-colors resize-none"
               rows="3"
-              placeholder="Descripción breve del rol y sus responsabilidades"
+              placeholder={t('roleModal.description')}
             />
           </div>
 
           {/* Permissions */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-3">
-              Permisos
+              {t('roleModal.permissions')}
             </label>
             <div className="grid grid-cols-2 gap-2">
               {AVAILABLE_SECTIONS.map(section => (
@@ -173,9 +175,9 @@ function RoleModal({ role, onClose, onSave }) {
               className="w-5 h-5 text-primary-600 bg-gray-700 border-gray-600 rounded focus:ring-primary-500 focus:ring-2"
             />
             <label htmlFor="allowsProfiles" className="text-sm text-gray-300 cursor-pointer">
-              <span className="font-medium">Permite perfiles</span>
+              <span className="font-medium">{t('roleModal.allowsProfiles')}</span>
               <p className="text-xs text-gray-500 mt-0.5">
-                Los usuarios con este rol podrán tener perfiles específicos
+                {t('roleModal.allowsProfilesHelp')}
               </p>
             </label>
           </div>
@@ -190,9 +192,9 @@ function RoleModal({ role, onClose, onSave }) {
               className="w-5 h-5 text-primary-600 bg-gray-700 border-gray-600 rounded focus:ring-primary-500 focus:ring-2"
             />
             <label htmlFor="active" className="text-sm text-gray-300 cursor-pointer">
-              <span className="font-medium">Rol activo</span>
+              <span className="font-medium">{t('roleModal.roleActive')}</span>
               <p className="text-xs text-gray-500 mt-0.5">
-                Los roles inactivos no se pueden asignar a nuevos usuarios
+                {t('roleModal.roleActiveHelp')}
               </p>
             </label>
           </div>
@@ -205,9 +207,9 @@ function RoleModal({ role, onClose, onSave }) {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
                 <div>
-                  <p className="text-sm font-medium text-yellow-500">Rol del Sistema</p>
+                  <p className="text-sm font-medium text-yellow-500">{t('roleModal.systemRole')}</p>
                   <p className="text-xs text-yellow-500/80 mt-1">
-                    Este es un rol del sistema. El nombre no puede ser modificado.
+                    {t('roleModal.systemRoleHelp')}
                   </p>
                 </div>
               </div>
@@ -221,13 +223,13 @@ function RoleModal({ role, onClose, onSave }) {
               onClick={onClose}
               className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
             >
-              Cancelar
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
               className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
             >
-              {role ? 'Guardar Cambios' : 'Crear Rol'}
+              {role ? t('roleModal.saveChanges') : t('roleModal.createRole')}
             </button>
           </div>
         </form>

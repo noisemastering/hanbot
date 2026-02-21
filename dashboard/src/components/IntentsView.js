@@ -1,20 +1,22 @@
 // components/IntentsView.js
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../i18n';
 import toast from 'react-hot-toast';
 import IntentModal from './IntentModal';
 import IntentCategoryModal from './IntentCategoryModal';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
-// Handler type labels
-const HANDLER_LABELS = {
-  auto_response: 'Respuesta automática',
-  flow: 'Flujo',
-  human_handoff: 'Transferir a humano',
-  ai_generate: 'IA genera respuesta'
+// Handler type label keys for i18n
+const HANDLER_LABEL_KEYS = {
+  auto_response: 'intentsView.handlerAutoResponse',
+  flow: 'intentsView.handlerFlow',
+  human_handoff: 'intentsView.handlerHumanHandoff',
+  ai_generate: 'intentsView.handlerAiGenerate'
 };
 
 function IntentsView() {
+  const { t } = useTranslation();
   const [intents, setIntents] = useState([]);
   const [categories, setCategories] = useState([]);
   const [flows, setFlows] = useState([]);
@@ -32,6 +34,7 @@ function IntentsView() {
     fetchIntents();
     fetchCategories();
     fetchFlows();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchIntents = async () => {
@@ -49,7 +52,7 @@ function IntentsView() {
       }
     } catch (error) {
       console.error('Error fetching intents:', error);
-      toast.error('Error al cargar intents');
+      toast.error(t('intentsView.errorLoadIntents'));
     } finally {
       setLoading(false);
     }
@@ -156,18 +159,18 @@ function IntentsView() {
         await fetchIntents();
         setShowIntentModal(false);
         setEditingIntent(null);
-        toast.success(editingIntent ? 'Intent actualizado correctamente' : 'Intent creado correctamente');
+        toast.success(editingIntent ? t('intentsView.intentUpdated') : t('intentsView.intentCreated'));
       } else {
-        toast.error(data.error || 'Error al guardar intent');
+        toast.error(data.error || t('intentsView.errorSaveIntent'));
       }
     } catch (error) {
       console.error('Error saving intent:', error);
-      toast.error('Error al guardar intent');
+      toast.error(t('intentsView.errorSaveIntent'));
     }
   };
 
   const handleDeleteIntent = async (intentId) => {
-    if (!window.confirm('¿Estás seguro de eliminar este intent?')) {
+    if (!window.confirm(t('intentsView.confirmDeleteIntent'))) {
       return;
     }
 
@@ -183,13 +186,13 @@ function IntentsView() {
       const data = await res.json();
       if (data.success) {
         await fetchIntents();
-        toast.success('Intent eliminado correctamente');
+        toast.success(t('intentsView.intentDeleted'));
       } else {
-        toast.error(data.error || 'Error al eliminar intent');
+        toast.error(data.error || t('intentsView.errorDeleteIntent'));
       }
     } catch (error) {
       console.error('Error deleting intent:', error);
-      toast.error('Error al eliminar intent');
+      toast.error(t('intentsView.errorDeleteIntent'));
     }
   };
 
@@ -208,13 +211,13 @@ function IntentsView() {
       const data = await res.json();
       if (data.success) {
         await fetchIntents();
-        toast.success(`Intent ${data.data.active ? 'activado' : 'desactivado'}`);
+        toast.success(data.data.active ? t('intentsView.intentActivated') : t('intentsView.intentDeactivated'));
       } else {
-        toast.error(data.error || 'Error al cambiar estado');
+        toast.error(data.error || t('intentsView.errorToggle'));
       }
     } catch (error) {
       console.error('Error toggling intent:', error);
-      toast.error('Error al cambiar estado');
+      toast.error(t('intentsView.errorToggle'));
     }
   };
 
@@ -240,18 +243,18 @@ function IntentsView() {
         await fetchCategories();
         setShowCategoryModal(false);
         setEditingCategory(null);
-        toast.success(editingCategory ? 'Categoría actualizada' : 'Categoría creada');
+        toast.success(editingCategory ? t('intentsView.categoryUpdated') : t('intentsView.categoryCreated'));
       } else {
-        toast.error(data.error || 'Error al guardar categoría');
+        toast.error(data.error || t('intentsView.errorSaveCategory'));
       }
     } catch (error) {
       console.error('Error saving category:', error);
-      toast.error('Error al guardar categoría');
+      toast.error(t('intentsView.errorSaveCategory'));
     }
   };
 
   const handleDeleteCategory = async (categoryId) => {
-    if (!window.confirm('¿Estás seguro de eliminar esta categoría?')) {
+    if (!window.confirm(t('intentsView.confirmDeleteCategory'))) {
       return;
     }
 
@@ -267,13 +270,13 @@ function IntentsView() {
       const data = await res.json();
       if (data.success) {
         await fetchCategories();
-        toast.success('Categoría eliminada');
+        toast.success(t('intentsView.categoryDeleted'));
       } else {
-        toast.error(data.error || 'Error al eliminar categoría');
+        toast.error(data.error || t('intentsView.errorDeleteCategory'));
       }
     } catch (error) {
       console.error('Error deleting category:', error);
-      toast.error('Error al eliminar categoría');
+      toast.error(t('intentsView.errorDeleteCategory'));
     }
   };
 
@@ -310,8 +313,8 @@ function IntentsView() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white">Gestión de Intents</h2>
-          <p className="text-sm text-gray-400 mt-1">Configura las intenciones que el bot puede detectar</p>
+          <h2 className="text-2xl font-bold text-white">{t('intentsView.title')}</h2>
+          <p className="text-sm text-gray-400 mt-1">{t('intentsView.subtitle')}</p>
         </div>
         <div className="flex gap-2">
           {activeTab === 'categories' && (
@@ -325,7 +328,7 @@ function IntentsView() {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              <span>Nueva Categoría</span>
+              <span>{t('intentsView.newCategory')}</span>
             </button>
           )}
           {activeTab === 'intents' && (
@@ -339,7 +342,7 @@ function IntentsView() {
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
               </svg>
-              <span>Nuevo Intent</span>
+              <span>{t('intentsView.newIntent')}</span>
             </button>
           )}
         </div>
@@ -356,7 +359,7 @@ function IntentsView() {
                 : 'border-transparent text-gray-400 hover:text-white'
             }`}
           >
-            Intents ({intents.length})
+            {t('intentsView.intentsTab')} ({intents.length})
           </button>
           <button
             onClick={() => setActiveTab('categories')}
@@ -366,7 +369,7 @@ function IntentsView() {
                 : 'border-transparent text-gray-400 hover:text-white'
             }`}
           >
-            Categorías ({categories.length})
+            {t('intentsView.categoriesTab')} ({categories.length})
           </button>
         </div>
       </div>
@@ -385,7 +388,7 @@ function IntentsView() {
                   type="text"
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  placeholder="Buscar por nombre, key o keywords..."
+                  placeholder={t('intentsView.searchPlaceholder')}
                   className="w-full pl-10 pr-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-primary-500"
                 />
               </div>
@@ -397,7 +400,7 @@ function IntentsView() {
               onChange={(e) => setCategoryFilter(e.target.value)}
               className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-primary-500"
             >
-              <option value="all">Todas las categorías</option>
+              <option value="all">{t('intentsView.allCategories')}</option>
               {categories.map(cat => (
                 <option key={cat.key} value={cat.key}>{cat.name}</option>
               ))}
@@ -409,9 +412,9 @@ function IntentsView() {
               onChange={(e) => setStatusFilter(e.target.value)}
               className="px-4 py-2 bg-gray-800 border border-gray-700 rounded-lg text-white focus:outline-none focus:border-primary-500"
             >
-              <option value="all">Todos los estados</option>
-              <option value="active">Activos</option>
-              <option value="inactive">Inactivos</option>
+              <option value="all">{t('intentsView.allStatuses')}</option>
+              <option value="active">{t('intentsView.statusActive')}</option>
+              <option value="inactive">{t('intentsView.statusInactive')}</option>
             </select>
           </div>
 
@@ -419,21 +422,21 @@ function IntentsView() {
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700/50">
               <div className="text-2xl font-bold text-white">{intents.length}</div>
-              <div className="text-sm text-gray-400">Total Intents</div>
+              <div className="text-sm text-gray-400">{t('intentsView.totalIntents')}</div>
             </div>
             <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700/50">
               <div className="text-2xl font-bold text-green-400">{intents.filter(i => i.active).length}</div>
-              <div className="text-sm text-gray-400">Activos</div>
+              <div className="text-sm text-gray-400">{t('intentsView.active')}</div>
             </div>
             <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700/50">
               <div className="text-2xl font-bold text-blue-400">{categories.length}</div>
-              <div className="text-sm text-gray-400">Categorías</div>
+              <div className="text-sm text-gray-400">{t('intentsView.categories')}</div>
             </div>
             <div className="bg-gray-800/50 rounded-lg p-4 border border-gray-700/50">
               <div className="text-2xl font-bold text-purple-400">
                 {intents.reduce((sum, i) => sum + (i.hitCount || 0), 0)}
               </div>
-              <div className="text-sm text-gray-400">Hits Totales</div>
+              <div className="text-sm text-gray-400">{t('intentsView.totalHits')}</div>
             </div>
           </div>
 
@@ -441,18 +444,18 @@ function IntentsView() {
       {loading ? (
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500 mx-auto"></div>
-          <p className="mt-4 text-gray-400">Cargando intents...</p>
+          <p className="mt-4 text-gray-400">{t('intentsView.loadingIntents')}</p>
         </div>
       ) : filteredIntents.length === 0 ? (
         <div className="text-center py-12 bg-gray-800/30 rounded-lg border border-gray-700/50">
           <div className="text-6xl mb-4">🧠</div>
           <h3 className="text-lg font-semibold text-white mb-2">
-            {intents.length === 0 ? 'No hay intents' : 'Sin resultados'}
+            {intents.length === 0 ? t('intentsView.noIntents') : t('intentsView.noResults')}
           </h3>
           <p className="text-gray-400">
             {intents.length === 0
-              ? 'Crea el primer intent del sistema'
-              : 'Intenta con otros filtros de búsqueda'}
+              ? t('intentsView.createFirst')
+              : t('intentsView.tryOtherFilters')}
           </p>
         </div>
       ) : (
@@ -486,7 +489,7 @@ function IntentsView() {
                               ? 'bg-green-500/20 text-green-300 border border-green-500/30'
                               : 'bg-red-500/20 text-red-300 border border-red-500/30'
                           }`}>
-                            {intent.active ? 'Activo' : 'Inactivo'}
+                            {intent.active ? t('common.active') : t('common.inactive')}
                           </span>
                         </div>
 
@@ -504,16 +507,16 @@ function IntentsView() {
                             </span>
                           ))}
                           {intent.keywords && intent.keywords.length > 5 && (
-                            <span className="text-xs text-gray-500">+{intent.keywords.length - 5} más</span>
+                            <span className="text-xs text-gray-500">{t('intentsView.more', { count: intent.keywords.length - 5 })}</span>
                           )}
                         </div>
 
                         <div className="flex items-center space-x-4 text-xs text-gray-500">
-                          <span>Prioridad: {intent.priority}</span>
-                          <span>Handler: {HANDLER_LABELS[intent.handlerType] || intent.handlerType}</span>
-                          <span>Hits: {intent.hitCount || 0}</span>
+                          <span>{t('intentsView.priorityLabel', { value: intent.priority })}</span>
+                          <span>{t('intentsView.handlerLabel', { value: t(HANDLER_LABEL_KEYS[intent.handlerType]) || intent.handlerType })}</span>
+                          <span>{t('intentsView.hitsLabel', { value: intent.hitCount || 0 })}</span>
                           {intent.lastTriggered && (
-                            <span>Último: {new Date(intent.lastTriggered).toLocaleDateString()}</span>
+                            <span>{t('intentsView.lastLabel', { value: new Date(intent.lastTriggered).toLocaleDateString() })}</span>
                           )}
                         </div>
                       </div>
@@ -526,7 +529,7 @@ function IntentsView() {
                               ? 'text-yellow-400 hover:bg-yellow-500/20'
                               : 'text-green-400 hover:bg-green-500/20'
                           }`}
-                          title={intent.active ? 'Desactivar' : 'Activar'}
+                          title={intent.active ? t('common.disable') : t('common.enable')}
                         >
                           {intent.active ? (
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -544,7 +547,7 @@ function IntentsView() {
                             setShowIntentModal(true);
                           }}
                           className="p-2 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
-                          title="Editar"
+                          title={t('common.edit')}
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -553,7 +556,7 @@ function IntentsView() {
                         <button
                           onClick={() => handleDeleteIntent(intent._id)}
                           className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
-                          title="Eliminar"
+                          title={t('common.delete')}
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -577,8 +580,8 @@ function IntentsView() {
           {categories.length === 0 ? (
             <div className="text-center py-12 bg-gray-800/30 rounded-lg border border-gray-700/50">
               <div className="text-6xl mb-4">📁</div>
-              <h3 className="text-lg font-semibold text-white mb-2">No hay categorías</h3>
-              <p className="text-gray-400">Crea la primera categoría</p>
+              <h3 className="text-lg font-semibold text-white mb-2">{t('intentsView.noCategories')}</h3>
+              <p className="text-gray-400">{t('intentsView.createFirstCategory')}</p>
             </div>
           ) : (
             <div className="grid gap-3">
@@ -605,7 +608,7 @@ function IntentsView() {
                           {category.description && (
                             <p className="text-sm text-gray-400 mt-1">{category.description}</p>
                           )}
-                          <p className="text-xs text-gray-500 mt-1">{intentCount} intents</p>
+                          <p className="text-xs text-gray-500 mt-1">{t('intentsView.intentsCount', { count: intentCount })}</p>
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
@@ -615,7 +618,7 @@ function IntentsView() {
                             setShowCategoryModal(true);
                           }}
                           className="p-2 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
-                          title="Editar"
+                          title={t('common.edit')}
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -624,7 +627,7 @@ function IntentsView() {
                         <button
                           onClick={() => handleDeleteCategory(category._id)}
                           className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
-                          title="Eliminar"
+                          title={t('common.delete')}
                         >
                           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />

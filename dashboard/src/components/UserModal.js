@@ -1,10 +1,12 @@
 // components/UserModal.js
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../i18n';
 import { useAuth } from '../contexts/AuthContext';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
 function UserModal({ user, onClose, onSave }) {
+  const { t } = useTranslation();
   const { user: currentUser } = useAuth();
   const [roles, setRoles] = useState([]);
   const [profiles, setProfiles] = useState([]);
@@ -106,13 +108,13 @@ function UserModal({ user, onClose, onSave }) {
 
     // Validate required fields
     if (!formData.username || !formData.email || !formData.firstName || !formData.lastName) {
-      alert('Por favor completa todos los campos requeridos');
+      alert(t('userModal.alertRequired'));
       return;
     }
 
     // Validate password for new users
     if (!user && !formData.password) {
-      alert('La contraseña es requerida para nuevos usuarios');
+      alert(t('userModal.alertPasswordRequired'));
       return;
     }
 
@@ -121,7 +123,7 @@ function UserModal({ user, onClose, onSave }) {
     if (selectedRole?.allowsProfiles) {
       const roleProfiles = getProfilesForRole(formData.role);
       if (roleProfiles.length > 0 && !formData.profile) {
-        alert('El perfil es requerido para este rol');
+        alert(t('userModal.alertProfileRequired'));
         return;
       }
     }
@@ -148,7 +150,7 @@ function UserModal({ user, onClose, onSave }) {
         {/* Header */}
         <div className="sticky top-0 bg-gray-800 border-b border-gray-700 px-6 py-4 flex items-center justify-between">
           <h3 className="text-xl font-semibold text-white">
-            {user ? 'Editar Usuario' : 'Nuevo Usuario'}
+            {user ? t('userModal.editTitle') : t('userModal.newTitle')}
           </h3>
           <button
             onClick={onClose}
@@ -166,7 +168,7 @@ function UserModal({ user, onClose, onSave }) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Nombre *
+                {t('userModal.firstNameRequired')}
               </label>
               <input
                 type="text"
@@ -180,7 +182,7 @@ function UserModal({ user, onClose, onSave }) {
 
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Apellido *
+                {t('userModal.lastNameRequired')}
               </label>
               <input
                 type="text"
@@ -196,7 +198,7 @@ function UserModal({ user, onClose, onSave }) {
           {/* Account Info */}
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Usuario *
+              {t('userModal.usernameRequired')}
             </label>
             <input
               type="text"
@@ -208,13 +210,13 @@ function UserModal({ user, onClose, onSave }) {
               disabled={!!user} // Can't change username after creation
             />
             {user && (
-              <p className="mt-1 text-xs text-gray-500">El nombre de usuario no se puede cambiar</p>
+              <p className="mt-1 text-xs text-gray-500">{t('userModal.usernameCannotChange')}</p>
             )}
           </div>
 
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Email *
+              {t('userModal.emailRequired')}
             </label>
             <input
               type="email"
@@ -228,18 +230,18 @@ function UserModal({ user, onClose, onSave }) {
 
           <div>
             <label className="block text-sm font-medium text-gray-300 mb-2">
-              Contraseña {!user && '*'}
+              {t('userModal.passwordLabel')} {!user && '*'}
             </label>
             <input
               type="password"
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500"
-              placeholder={user ? "Dejar en blanco para no cambiar" : "Contraseña"}
+              placeholder={user ? t('userModal.passwordPlaceholderEdit') : "Contraseña"}
               required={!user}
             />
             {user && (
-              <p className="mt-1 text-xs text-gray-500">Dejar en blanco para mantener la contraseña actual</p>
+              <p className="mt-1 text-xs text-gray-500">{t('userModal.passwordEditHint')}</p>
             )}
           </div>
 
@@ -247,11 +249,11 @@ function UserModal({ user, onClose, onSave }) {
           <div className="grid grid-cols-2 gap-4">
             <div>
               <label className="block text-sm font-medium text-gray-300 mb-2">
-                Rol *
+                {t('userModal.roleRequired')}
               </label>
               {loadingRoles ? (
                 <div className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-gray-400">
-                  Cargando roles...
+                  {t('userModal.loadingRoles')}
                 </div>
               ) : (
                 <select
@@ -300,7 +302,7 @@ function UserModal({ user, onClose, onSave }) {
               return (
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Perfil *
+                    {t('userModal.profileRequired')}
                   </label>
                   <select
                     value={formData.profile || ''}
@@ -329,7 +331,7 @@ function UserModal({ user, onClose, onSave }) {
               className="w-4 h-4 text-primary-600 bg-gray-900 border-gray-700 rounded focus:ring-primary-500"
             />
             <label htmlFor="active" className="ml-2 text-sm text-gray-300">
-              Usuario activo
+              {t('userModal.activeCheckbox')}
             </label>
           </div>
 
@@ -340,13 +342,13 @@ function UserModal({ user, onClose, onSave }) {
               onClick={onClose}
               className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
             >
-              Cancelar
+              {t('userModal.cancel')}
             </button>
             <button
               type="submit"
               className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
             >
-              {user ? 'Actualizar' : 'Crear'} Usuario
+              {user ? t('userModal.updateUser') : t('userModal.createUser')}
             </button>
           </div>
         </form>

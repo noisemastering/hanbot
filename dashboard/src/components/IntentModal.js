@@ -1,5 +1,6 @@
 // components/IntentModal.js
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../i18n';
 
 // Handler types
 const HANDLER_TYPES = [
@@ -10,6 +11,7 @@ const HANDLER_TYPES = [
 ];
 
 function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
+  const { t } = useTranslation();
   const [activeTab, setActiveTab] = useState('basic');
   const [formData, setFormData] = useState({
     key: '',
@@ -53,13 +55,13 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
 
     // Validate required fields
     if (!formData.key || !formData.name) {
-      alert('Por favor completa la key y el nombre');
+      alert(t('intentModal.validationRequired'));
       return;
     }
 
     // Validate key format (lowercase, underscores)
     if (!/^[a-z][a-z0-9_]*$/.test(formData.key)) {
-      alert('La key solo puede contener letras minúsculas, números y guiones bajos, y debe comenzar con letra');
+      alert(t('intentModal.validationKeyFormat'));
       return;
     }
 
@@ -96,7 +98,7 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
         }));
         setPatternInput('');
       } catch (e) {
-        alert('Patrón regex inválido: ' + e.message);
+        alert(t('intentModal.invalidRegex') + e.message);
       }
     }
   };
@@ -109,10 +111,10 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
   };
 
   const tabs = [
-    { id: 'basic', label: 'Básico' },
-    { id: 'classification', label: 'Clasificación' },
-    { id: 'response', label: 'Respuesta' },
-    ...(intent ? [{ id: 'stats', label: 'Estadísticas' }] : [])
+    { id: 'basic', label: t('intentModal.tabBasic') },
+    { id: 'classification', label: t('intentModal.tabClassification') },
+    { id: 'response', label: t('intentModal.tabResponse') },
+    ...(intent ? [{ id: 'stats', label: t('intentModal.tabStats') }] : [])
   ];
 
   return (
@@ -121,7 +123,7 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
         {/* Header */}
         <div className="bg-gray-800 border-b border-gray-700 px-6 py-4 flex items-center justify-between shrink-0">
           <h3 className="text-xl font-semibold text-white">
-            {intent ? 'Editar Intent' : 'Nuevo Intent'}
+            {intent ? t('intentModal.edit') : t('intentModal.create')}
           </h3>
           <button
             onClick={onClose}
@@ -162,31 +164,31 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
                   {/* Key */}
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Key (identificador) *
+                      {t('intentModal.keyLabel')}
                     </label>
                     <input
                       type="text"
                       value={formData.key}
                       onChange={(e) => setFormData({ ...formData, key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '_') })}
                       className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-primary-500 transition-colors"
-                      placeholder="price_query"
+                      placeholder={t('intentModal.keyPlaceholder')}
                       disabled={!!intent} // Can't change key of existing intent
                       required
                     />
-                    <p className="text-xs text-gray-500 mt-1">Identificador único (minúsculas y _)</p>
+                    <p className="text-xs text-gray-500 mt-1">{t('intentModal.keyHint')}</p>
                   </div>
 
                   {/* Name */}
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Nombre *
+                      {t('intentModal.nameRequired')}
                     </label>
                     <input
                       type="text"
                       value={formData.name}
                       onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                       className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-primary-500 transition-colors"
-                      placeholder="Consulta de precio"
+                      placeholder={t('intentModal.namePlaceholder')}
                       required
                     />
                   </div>
@@ -195,21 +197,21 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
                 {/* Description */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Descripción
+                    {t('common.description')}
                   </label>
                   <textarea
                     value={formData.description}
                     onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                     className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-primary-500 transition-colors resize-none"
                     rows="3"
-                    placeholder="Describe cuándo se activa este intent (usado por la IA para clasificar)"
+                    placeholder={t('intentModal.descPlaceholder')}
                   />
                 </div>
 
                 {/* Category */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Categoría
+                    {t('intents.category')}
                   </label>
                   <select
                     value={formData.category}
@@ -232,9 +234,9 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
                     className="w-5 h-5 text-primary-600 bg-gray-700 border-gray-600 rounded focus:ring-primary-500 focus:ring-2"
                   />
                   <label htmlFor="active" className="text-sm text-gray-300 cursor-pointer">
-                    <span className="font-medium">Intent activo</span>
+                    <span className="font-medium">{t('intentModal.intentActive')}</span>
                     <p className="text-xs text-gray-500 mt-0.5">
-                      Solo los intents activos son usados por el clasificador
+                      {t('intentModal.intentActiveHint')}
                     </p>
                   </label>
                 </div>
@@ -247,7 +249,7 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
                 {/* Priority */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Prioridad: {formData.priority}
+                    {t('intentModal.priorityLabel', { value: formData.priority })}
                   </label>
                   <input
                     type="range"
@@ -258,18 +260,18 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
                     className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-primary-500"
                   />
                   <div className="flex justify-between text-xs text-gray-500 mt-1">
-                    <span>1 (Baja)</span>
-                    <span>10 (Alta)</span>
+                    <span>{t('intentModal.priorityLow')}</span>
+                    <span>{t('intentModal.priorityHigh')}</span>
                   </div>
                   <p className="text-xs text-gray-500 mt-2">
-                    Mayor prioridad = se considera primero cuando múltiples intents pueden coincidir
+                    {t('intentModal.priorityHint')}
                   </p>
                 </div>
 
                 {/* Keywords */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Palabras clave
+                    {t('intentModal.keywordsLabel')}
                   </label>
                   <div className="flex space-x-2 mb-2">
                     <input
@@ -278,14 +280,14 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
                       onChange={(e) => setKeywordInput(e.target.value)}
                       onKeyPress={(e) => e.key === 'Enter' && (e.preventDefault(), addKeyword())}
                       className="flex-1 px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-primary-500 transition-colors"
-                      placeholder="Escribe una palabra clave y presiona Enter"
+                      placeholder={t('intentModal.keywordPlaceholder')}
                     />
                     <button
                       type="button"
                       onClick={addKeyword}
                       className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
                     >
-                      Agregar
+                      {t('common.add')}
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -309,7 +311,7 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
                   </div>
                   {formData.keywords.length === 0 && (
                     <p className="text-xs text-gray-500 mt-2">
-                      Las palabras clave ayudan al clasificador a detectar este intent
+                      {t('intentModal.keywordsHint')}
                     </p>
                   )}
                 </div>
@@ -317,7 +319,7 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
                 {/* Patterns (Advanced) */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Patrones Regex (Avanzado)
+                    {t('intentModal.regexPatterns')}
                   </label>
                   <div className="flex space-x-2 mb-2">
                     <input
@@ -333,7 +335,7 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
                       onClick={addPattern}
                       className="px-4 py-2 bg-gray-600 hover:bg-gray-500 text-white rounded-lg transition-colors"
                     >
-                      Agregar
+                      {t('common.add')}
                     </button>
                   </div>
                   <div className="flex flex-wrap gap-2">
@@ -357,7 +359,7 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
                   </div>
                   {formData.patterns.length === 0 && (
                     <p className="text-xs text-gray-500 mt-2">
-                      Patrones regex opcionales para detección rápida sin IA
+                      {t('intentModal.regexHint')}
                     </p>
                   )}
                 </div>
@@ -370,7 +372,7 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
                 {/* Handler Type */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-3">
-                    Tipo de respuesta
+                    {t('intentModal.responseType')}
                   </label>
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     {HANDLER_TYPES.map(handler => (
@@ -403,14 +405,14 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
                 {formData.handlerType === 'flow' && (
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
-                      Flujo a ejecutar
+                      {t('intentModal.flowToExecute')}
                     </label>
                     <select
                       value={formData.linkedFlowId}
                       onChange={(e) => setFormData({ ...formData, linkedFlowId: e.target.value })}
                       className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-primary-500 transition-colors"
                     >
-                      <option value="">-- Selecciona un flujo --</option>
+                      <option value="">{t('intentModal.selectFlow')}</option>
                       {flows.filter(f => f.active).map(flow => (
                         <option key={flow._id} value={flow._id}>
                           {flow.name} ({flow.key})
@@ -419,12 +421,12 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
                     </select>
                     {flows.length === 0 && (
                       <p className="text-xs text-yellow-500 mt-2">
-                        No hay flujos creados. Ve a la sección Flows para crear uno.
+                        {t('intentModal.noFlows')}
                       </p>
                     )}
                     {formData.linkedFlowId && (
                       <p className="text-xs text-green-500 mt-2">
-                        Este intent iniciará el flujo seleccionado cuando sea detectado.
+                        {t('intentModal.flowLinked')}
                       </p>
                     )}
                   </div>
@@ -433,21 +435,21 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
                 {/* Response Template */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
-                    Template de respuesta
+                    {t('intentModal.responseTemplate')}
                   </label>
                   <textarea
                     value={formData.responseTemplate}
                     onChange={(e) => setFormData({ ...formData, responseTemplate: e.target.value })}
                     className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-primary-500 transition-colors resize-none"
                     rows="4"
-                    placeholder="Respuesta predeterminada cuando se detecta este intent (usado por auto_response)"
+                    placeholder={t('intentModal.responseTemplatePlaceholder')}
                   />
                   <p className="text-xs text-gray-500 mt-1">
                     {formData.handlerType === 'auto_response'
-                      ? 'Esta respuesta se enviará automáticamente cuando se detecte el intent'
+                      ? t('intentModal.responseAutoHint')
                       : formData.handlerType === 'flow'
-                      ? 'Opcional: mensaje de bienvenida antes de iniciar el flujo'
-                      : 'Opcional: puede usarse como contexto para la IA'}
+                      ? t('intentModal.responseFlowHint')
+                      : t('intentModal.responseAiHint')}
                   </p>
                 </div>
               </>
@@ -459,25 +461,25 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                   <div className="bg-gray-700/30 rounded-lg p-4 border border-gray-600">
                     <div className="text-3xl font-bold text-white">{intent.hitCount || 0}</div>
-                    <div className="text-sm text-gray-400 mt-1">Veces detectado</div>
+                    <div className="text-sm text-gray-400 mt-1">{t('intentModal.timesDetected')}</div>
                   </div>
                   <div className="bg-gray-700/30 rounded-lg p-4 border border-gray-600">
                     <div className="text-lg font-medium text-white">
                       {intent.lastTriggered
                         ? new Date(intent.lastTriggered).toLocaleString()
-                        : 'Nunca'}
+                        : t('intentModal.never')}
                     </div>
-                    <div className="text-sm text-gray-400 mt-1">Última detección</div>
+                    <div className="text-sm text-gray-400 mt-1">{t('intentModal.lastDetection')}</div>
                   </div>
                 </div>
 
                 <div className="bg-gray-700/30 rounded-lg p-4 border border-gray-600">
-                  <div className="text-sm text-gray-400 mb-2">Creado</div>
+                  <div className="text-sm text-gray-400 mb-2">{t('intentModal.created')}</div>
                   <div className="text-white">{new Date(intent.createdAt).toLocaleString()}</div>
                 </div>
 
                 <div className="bg-gray-700/30 rounded-lg p-4 border border-gray-600">
-                  <div className="text-sm text-gray-400 mb-2">Última modificación</div>
+                  <div className="text-sm text-gray-400 mb-2">{t('intentModal.lastModified')}</div>
                   <div className="text-white">{new Date(intent.updatedAt).toLocaleString()}</div>
                 </div>
               </>
@@ -491,13 +493,13 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
               onClick={onClose}
               className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
             >
-              Cancelar
+              {t('common.cancel')}
             </button>
             <button
               type="submit"
               className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors"
             >
-              {intent ? 'Guardar Cambios' : 'Crear Intent'}
+              {intent ? t('intentModal.saveChanges') : t('intentModal.createIntent')}
             </button>
           </div>
         </form>

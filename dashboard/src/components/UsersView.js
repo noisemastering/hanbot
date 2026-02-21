@@ -1,5 +1,6 @@
 // components/UsersView.js
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../i18n';
 import toast from 'react-hot-toast';
 import UserModal from './UserModal';
 import { useAuth } from '../contexts/AuthContext';
@@ -7,6 +8,7 @@ import { useAuth } from '../contexts/AuthContext';
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
 function UsersView() {
+  const { t, locale } = useTranslation();
   const { user: currentUser } = useAuth();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -15,6 +17,7 @@ function UsersView() {
 
   useEffect(() => {
     fetchUsers();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const fetchUsers = async () => {
@@ -32,7 +35,7 @@ function UsersView() {
       }
     } catch (error) {
       console.error('Error fetching users:', error);
-      toast.error('Error al cargar usuarios');
+      toast.error(t('users.errorLoad'));
     } finally {
       setLoading(false);
     }
@@ -59,18 +62,18 @@ function UsersView() {
         await fetchUsers();
         setShowUserModal(false);
         setEditingUser(null);
-        toast.success(editingUser ? 'Usuario actualizado correctamente' : 'Usuario creado correctamente');
+        toast.success(editingUser ? t('users.updatedSuccess') : t('users.createdSuccess'));
       } else {
-        toast.error(data.error || 'Error al guardar usuario');
+        toast.error(data.error || t('users.errorSave'));
       }
     } catch (error) {
       console.error('Error saving user:', error);
-      toast.error('Error al guardar usuario');
+      toast.error(t('users.errorSave'));
     }
   };
 
   const handleDeleteUser = async (userId) => {
-    if (!window.confirm('¿Estás seguro de eliminar este usuario?')) {
+    if (!window.confirm(t('users.confirmDelete'))) {
       return;
     }
 
@@ -86,13 +89,13 @@ function UsersView() {
       const data = await res.json();
       if (data.success) {
         await fetchUsers();
-        toast.success('Usuario eliminado correctamente');
+        toast.success(t('users.deletedSuccess'));
       } else {
-        toast.error(data.error || 'Error al eliminar usuario');
+        toast.error(data.error || t('users.errorDelete'));
       }
     } catch (error) {
       console.error('Error deleting user:', error);
-      toast.error('Error al eliminar usuario');
+      toast.error(t('users.errorDelete'));
     }
   };
 
@@ -114,7 +117,7 @@ function UsersView() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h2 className="text-2xl font-bold text-white">Usuarios del Dashboard</h2>
+        <h2 className="text-2xl font-bold text-white">{t('users.dashboardTitle')}</h2>
         <button
           onClick={() => {
             setEditingUser(null);
@@ -125,20 +128,20 @@ function UsersView() {
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
           </svg>
-          <span>Nuevo Usuario</span>
+          <span>{t('users.newUser')}</span>
         </button>
       </div>
 
       {loading ? (
         <div className="text-center py-12">
           <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-primary-500 mx-auto"></div>
-          <p className="mt-4 text-gray-400">Cargando usuarios...</p>
+          <p className="mt-4 text-gray-400">{t('users.loadingUsers')}</p>
         </div>
       ) : users.length === 0 ? (
         <div className="text-center py-12 bg-gray-800/30 rounded-lg border border-gray-700/50">
           <div className="text-6xl mb-4">👥</div>
-          <h3 className="text-lg font-semibold text-white mb-2">No hay usuarios</h3>
-          <p className="text-gray-400">Crea el primer usuario del sistema</p>
+          <h3 className="text-lg font-semibold text-white mb-2">{t('common.noUsers')}</h3>
+          <p className="text-gray-400">{t('users.noUsersDesc')}</p>
         </div>
       ) : (
         <div className="overflow-x-auto">
@@ -146,22 +149,22 @@ function UsersView() {
             <thead className="bg-gray-900/50">
               <tr>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Usuario
+                  {t('users.thUser')}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Rol
+                  {t('users.thRole')}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Perfil
+                  {t('users.thProfile')}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Estado
+                  {t('users.thStatus')}
                 </th>
                 <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Último acceso
+                  {t('users.thLastAccess')}
                 </th>
                 <th className="px-6 py-3 text-right text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  Acciones
+                  {t('users.thActions')}
                 </th>
               </tr>
             </thead>
@@ -189,11 +192,11 @@ function UsersView() {
                         ? 'bg-green-500/20 text-green-300 border border-green-500/30'
                         : 'bg-red-500/20 text-red-300 border border-red-500/30'
                     }`}>
-                      {user.active ? 'Activo' : 'Inactivo'}
+                      {user.active ? t('users.activeStatus') : t('users.inactiveStatus')}
                     </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400">
-                    {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString('es-MX') : 'Nunca'}
+                    {user.lastLogin ? new Date(user.lastLogin).toLocaleDateString(locale) : t('users.never')}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <div className="flex items-center justify-end space-x-2">
@@ -207,7 +210,7 @@ function UsersView() {
                               setShowUserModal(true);
                             }}
                             className="p-2 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
-                            title="Editar"
+                            title={t('users.editTooltip')}
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
@@ -216,7 +219,7 @@ function UsersView() {
                           <button
                             onClick={() => handleDeleteUser(user._id)}
                             className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
-                            title="Eliminar"
+                            title={t('users.deleteTooltip')}
                           >
                             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -225,7 +228,7 @@ function UsersView() {
                         </>
                       )}
                       {(currentUser?.role === 'admin' && (user.role === 'super_admin' || user.role === 'admin')) && (
-                        <span className="text-xs text-gray-500 italic">Sin permisos</span>
+                        <span className="text-xs text-gray-500 italic">{t('users.noPermissions')}</span>
                       )}
                     </div>
                   </td>

@@ -1,6 +1,8 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../i18n';
 
 function PuntoDeVentaModal({ puntoDeVenta, onSave, onClose }) {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     name: '',
     defaultUrl: '',
@@ -39,7 +41,7 @@ function PuntoDeVentaModal({ puntoDeVenta, onSave, onClose }) {
       <div className="bg-gray-800/95 backdrop-blur-lg border border-gray-700/50 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
         <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between">
           <h2 className="text-xl font-bold text-white">
-            {puntoDeVenta ? 'Editar Punto de Venta' : 'Nuevo Punto de Venta'}
+            {puntoDeVenta ? t('posModal.editTitle') : t('posModal.newTitle')}
           </h2>
           <button
             onClick={onClose}
@@ -56,12 +58,12 @@ function PuntoDeVentaModal({ puntoDeVenta, onSave, onClose }) {
             {/* Basic Info */}
             <div className="space-y-4">
               <h3 className="text-lg font-semibold text-white border-b border-gray-700/50 pb-2">
-                Información del Punto de Venta
+                {t('posModal.infoTitle')}
               </h3>
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Nombre *
+                  {t('posModal.nameRequired')}
                 </label>
                 <input
                   type="text"
@@ -76,7 +78,7 @@ function PuntoDeVentaModal({ puntoDeVenta, onSave, onClose }) {
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  URL Base
+                  {t('posModal.baseUrl')}
                 </label>
                 <input
                   type="url"
@@ -86,12 +88,12 @@ function PuntoDeVentaModal({ puntoDeVenta, onSave, onClose }) {
                   className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="https://ejemplo.com/"
                 />
-                <p className="text-xs text-gray-500 mt-1">URL base opcional que se usará por defecto (ej: https://mercadolibre.com.mx/)</p>
+                <p className="text-xs text-gray-500 mt-1">{t('posModal.baseUrlHint')}</p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Icono / Emoji
+                  {t('posModal.icon')}
                 </label>
                 <input
                   type="text"
@@ -101,12 +103,12 @@ function PuntoDeVentaModal({ puntoDeVenta, onSave, onClose }) {
                   className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                   placeholder="🛒"
                 />
-                <p className="text-xs text-gray-500 mt-1">Emoji o URL de imagen que representa la tienda</p>
+                <p className="text-xs text-gray-500 mt-1">{t('posModal.iconHint')}</p>
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-gray-300 mb-2">
-                  Descripción
+                  {t('posModal.description')}
                 </label>
                 <textarea
                   name="description"
@@ -114,7 +116,7 @@ function PuntoDeVentaModal({ puntoDeVenta, onSave, onClose }) {
                   onChange={handleChange}
                   rows={3}
                   className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
-                  placeholder="Descripción breve del punto de venta"
+                  placeholder={t('posModal.descriptionPlaceholder')}
                 />
               </div>
 
@@ -128,7 +130,7 @@ function PuntoDeVentaModal({ puntoDeVenta, onSave, onClose }) {
                   className="w-4 h-4 text-primary-500 bg-gray-900/50 border-gray-700 rounded focus:ring-primary-500 focus:ring-2"
                 />
                 <label htmlFor="active" className="text-sm font-medium text-gray-300">
-                  Activo (mostrar en dropdowns)
+                  {t('posModal.activeCheckbox')}
                 </label>
               </div>
             </div>
@@ -141,13 +143,13 @@ function PuntoDeVentaModal({ puntoDeVenta, onSave, onClose }) {
               onClick={onClose}
               className="px-6 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
             >
-              Cancelar
+              {t('posModal.cancel')}
             </button>
             <button
               type="submit"
               className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors"
             >
-              {puntoDeVenta ? 'Guardar Cambios' : 'Crear Punto de Venta'}
+              {puntoDeVenta ? t('posModal.saveChanges') : t('posModal.createPOS')}
             </button>
           </div>
         </form>

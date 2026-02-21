@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../i18n';
 import API from '../api';
 import CatalogUpload from './CatalogUpload';
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://hanbot-production.up.railway.app';
 
 function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParentId }) {
+  const { t } = useTranslation();
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -635,7 +637,7 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                 onChange={handleChange}
                 rows={3}
                 className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                placeholder="Especificaciones técnicas del producto (medidas, materiales, características, etc.)..."
+                placeholder={t('familyModal.specificationsPlaceholder')}
               />
             </div>
 
@@ -819,7 +821,7 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                                   });
                                 }}
                                 className="p-0.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors"
-                                title="Limpiar valor de dimensión"
+                                title={t('familyModal.clearDimension')}
                               >
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1122,7 +1124,7 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                                     });
                                   }}
                                   className="p-0.5 text-red-400 hover:text-red-300 hover:bg-red-500/10 rounded transition-colors"
-                                  title="Limpiar valor de dimensión"
+                                  title={t('familyModal.clearDimension')}
                                 >
                                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -1240,7 +1242,7 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                               target="_blank"
                               rel="noopener noreferrer"
                               className="p-1.5 bg-primary-500/20 text-primary-400 hover:bg-primary-500/30 rounded transition-colors flex-shrink-0"
-                              title="Abrir enlace en nueva pestaña"
+                              title={t('familyModal.openLink')}
                             >
                               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -1393,7 +1395,7 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Buscar por nombre, tamaño o descripción..."
+                placeholder={t('familyModal.searchPlaceholder')}
                 className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
               />
             </div>

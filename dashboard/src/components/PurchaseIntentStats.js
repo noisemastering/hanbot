@@ -1,30 +1,33 @@
 // components/PurchaseIntentStats.js
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from '../i18n';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
-const INTENT_CONFIG = {
-  high: {
-    emoji: '🟢',
-    label: 'Alta',
-    color: 'green',
-    description: 'Listos para comprar'
-  },
-  medium: {
-    emoji: '🟡',
-    label: 'Media',
-    color: 'yellow',
-    description: 'Explorando opciones'
-  },
-  low: {
-    emoji: '🔴',
-    label: 'Baja',
-    color: 'red',
-    description: 'Curiosos / Competencia'
-  }
-};
-
 function PurchaseIntentStats() {
+  const { t, locale } = useTranslation();
+
+  const INTENT_CONFIG = {
+    high: {
+      emoji: '🟢',
+      label: t('purchaseIntent.high'),
+      color: 'green',
+      description: t('purchaseIntent.highDesc')
+    },
+    medium: {
+      emoji: '🟡',
+      label: t('purchaseIntent.medium'),
+      color: 'yellow',
+      description: t('purchaseIntent.mediumDesc')
+    },
+    low: {
+      emoji: '🔴',
+      label: t('purchaseIntent.low'),
+      color: 'red',
+      description: t('purchaseIntent.lowDesc')
+    }
+  };
+
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(true);
   const [selectedIntent, setSelectedIntent] = useState(null);
@@ -96,13 +99,13 @@ function PurchaseIntentStats() {
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-white flex items-center space-x-2">
           <span>🎯</span>
-          <span>Intención de Compra</span>
+          <span>{t('purchaseIntent.titleLabel')}</span>
         </h3>
         <button
           onClick={fetchStats}
           className="text-sm text-gray-400 hover:text-white transition-colors"
         >
-          Actualizar
+          {t('purchaseIntent.refresh')}
         </button>
       </div>
 
@@ -136,7 +139,7 @@ function PurchaseIntentStats() {
 
       {/* Total */}
       <div className="text-center text-sm text-gray-500 mb-4">
-        Total con score: {stats.total} conversaciones
+        {t('purchaseIntent.totalWithScore', { count: stats.total })}
       </div>
 
       {/* Leads List */}
@@ -144,14 +147,14 @@ function PurchaseIntentStats() {
         <div className="mt-4 border-t border-gray-700 pt-4">
           <h4 className="text-sm font-medium text-gray-300 mb-3 flex items-center space-x-2">
             <span>{INTENT_CONFIG[selectedIntent].emoji}</span>
-            <span>Leads {INTENT_CONFIG[selectedIntent].label} Intención</span>
+            <span>{t('purchaseIntent.leadsLabel', { label: INTENT_CONFIG[selectedIntent].label })}</span>
             <span className="text-gray-500">({INTENT_CONFIG[selectedIntent].description})</span>
           </h4>
 
           {loadingLeads ? (
-            <div className="text-center py-4 text-gray-400">Cargando...</div>
+            <div className="text-center py-4 text-gray-400">{t('purchaseIntent.loadingLeads')}</div>
           ) : leads.length === 0 ? (
-            <div className="text-center py-4 text-gray-500">No hay conversaciones con esta intención</div>
+            <div className="text-center py-4 text-gray-500">{t('purchaseIntent.noConversations')}</div>
           ) : (
             <div className="space-y-2 max-h-64 overflow-y-auto">
               {leads.map((lead) => (
@@ -175,7 +178,7 @@ function PurchaseIntentStats() {
                     )}
                   </div>
                   <div className="text-xs text-gray-500">
-                    {lead.updatedAt && new Date(lead.updatedAt).toLocaleDateString('es-MX', {
+                    {lead.updatedAt && new Date(lead.updatedAt).toLocaleDateString(locale, {
                       day: 'numeric',
                       month: 'short'
                     })}
