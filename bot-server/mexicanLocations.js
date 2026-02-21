@@ -55,6 +55,7 @@ const MAJOR_CITIES = [
 // Common abbreviations and variations
 const LOCATION_VARIATIONS = {
   'cdmx': 'Ciudad de México',
+  'cdm': 'Ciudad de México',
   'df': 'Ciudad de México',
   'edomex': 'Estado de México',
   'edo mex': 'Estado de México',

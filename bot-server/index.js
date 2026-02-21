@@ -684,6 +684,11 @@ app.get("/api/conversation/:psid/status", async (req, res) => {
   }
 });
 
+// GET /health - Simple health check endpoint
+app.get("/health", (req, res) => {
+  res.status(200).json({ status: "ok", timestamp: Date.now() });
+});
+
 // GET /r/:clickId - Click tracking redirect
 app.get("/r/:clickId", async (req, res) => {
   try {
@@ -1780,6 +1785,12 @@ setTimeout(() => {
   runSilenceFollowUpJob();
   setInterval(runSilenceFollowUpJob, 60 * 1000);
 }, 90000);
+
+// Health check - monitors tracking domain, emails alert on SSL/DNS/HTTP failure
+setTimeout(() => {
+  const { startHealthCheck } = require('./jobs/healthCheck');
+  startHealthCheck();
+}, 30000);
 
 server.listen(PORT, () => {
   console.log(`🚀 Server is running on http://localhost:${PORT}`);

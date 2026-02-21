@@ -1168,21 +1168,17 @@ async function generateReply(userMessage, psid, referral = null) {
   // ====== END PHONE NUMBER DETECTION ======
 
   // ====== LINK NOT WORKING DETECTION ======
-  // "No abre", "no habre", "no funciona el link", "no me abre", "no carga"
-  // When user says a link doesn't work, re-share it instead of misclassifying as disinterest
-  const linkNotWorkingPattern = /\b(no\s+(me\s+)?(abr[eé]|habre|carga|funciona|jala|sirve|deja)|link.*(roto|malo|error)|no\s+puedo\s+abrir)\b/i;
+  // "No abre", "no habre", "no funciona el link", "no me abre", "no carga", "no puedo entrar"
+  // When user says a link doesn't work, re-share the ORIGINAL ML URL directly
+  // (the tracking redirect itself might be the problem, so bypass it)
+  const linkNotWorkingPattern = /\b(no\s+(me\s+)?(abr[eé]|habre|carga|funciona|jala|sirve|deja|abre)|link.*(roto|malo|error)|no\s+puedo\s+(abrir|entrar|acceder|ver\s+el\s+link)|no\s+(entr[oa]|abr[oeéi])\s+(al|el|en)\s+(link|enlace))\b/i;
   if (linkNotWorkingPattern.test(userMessage) && (convo?.lastSharedProductLink || convo?.lastProductLink)) {
-    console.log(`🔗 Link not working detected, re-sharing link`);
-    const linkToShare = convo.lastSharedProductLink || convo.lastProductLink;
-    const trackedLink = await generateClickLink(psid, linkToShare, {
-      productName: 'Re-share',
-      city: convo?.city,
-      stateMx: convo?.stateMx
-    });
+    console.log(`🔗 Link not working detected, sharing original ML URL directly`);
+    const originalUrl = convo.lastSharedProductLink || convo.lastProductLink;
     await updateConversation(psid, { lastIntent: "link_reshared", unknownCount: 0 });
     return {
       type: "text",
-      text: `Aquí te lo comparto de nuevo:\n\n${trackedLink}`
+      text: `¡Disculpa! Aquí te comparto el enlace directo:\n\n${originalUrl}`
     };
   }
   // ====== END LINK NOT WORKING DETECTION ======
@@ -1239,7 +1235,13 @@ async function generateReply(userMessage, psid, referral = null) {
     "price_confusion", "store_link_request", "custom_modification"
   ]);
 
-  const shouldDispatch = !convo?.pendingHandoff || INFORMATIONAL_INTENTS.has(classification?.intent);
+  // Skip dispatcher when confidence is low — a wrong intent routed to a handler gives bad answers
+  const isLowConfidence = classification.confidence < 0.4 || classification.intent === 'unclear';
+  if (isLowConfidence) {
+    console.log(`🤔 Low confidence (${classification.confidence}) / unclear — skipping dispatcher, will try flow manager then AI fallback`);
+  }
+
+  const shouldDispatch = !isLowConfidence && (!convo?.pendingHandoff || INFORMATIONAL_INTENTS.has(classification?.intent));
 
   if (shouldDispatch) {
     const dispatcherResponse = await dispatchToHandler(classification, {
@@ -1252,7 +1254,7 @@ async function generateReply(userMessage, psid, referral = null) {
       console.log(`✅ Intent handled by dispatcher (${dispatcherResponse.handledBy})`);
       return await checkForRepetition(dispatcherResponse, psid, convo);
     }
-  } else {
+  } else if (!isLowConfidence) {
     console.log(`⏭️ Skipping dispatcher - pendingHandoff active, letting flow handle zip/city response`);
   }
   // ====== END INTENT DISPATCHER ======
@@ -1286,29 +1288,20 @@ async function generateReply(userMessage, psid, referral = null) {
     }
   }
 
-  // ====== FINAL FALLBACK ======
+  // ====== FINAL FALLBACK — AI-POWERED ======
   if (!response) {
-    const unhandledCount = (convo.unhandledCount || 0) + 1;
-    await updateConversation(psid, { unhandledCount });
+    console.log(`🔴 No handler matched, escalating to AI fallback: "${userMessage}"`);
+    try {
+      response = await handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME);
+    } catch (fbErr) {
+      console.error(`❌ handleFallback error:`, fbErr.message);
+    }
 
-    console.log(`🔴 Unhandled message (count: ${unhandledCount}): "${userMessage}"`);
-
-    if (unhandledCount >= 3) {
-      await updateConversation(psid, {
-        handoffRequested: true,
-        handoffReason: "Multiple unhandled messages",
-        handoffTimestamp: new Date(),
-        state: "needs_human"
-      });
-
+    // If AI fallback also failed, use static last resort
+    if (!response) {
       response = {
         type: "text",
         text: `Déjame comunicarte con un especialista que pueda ayudarte mejor.\n\n${getHandoffTimingMessage()}`
-      };
-    } else {
-      response = {
-        type: "text",
-        text: "¿Qué producto te interesa?\n\n• Malla sombra confeccionada\n• Rollos de malla sombra\n• Borde separador para jardín"
       };
     }
   }

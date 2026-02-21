@@ -1783,10 +1783,14 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
               unknownCount: 0
             });
 
+            const sizeExplanation = (dimensions && dimensions.convertedFromFeet)
+              ? `📏 Tu medida de ${dimensions.originalFeetStr} equivale a aproximadamente ${dimensions.width}x${dimensions.height} metros.\n\nLa medida más cercana que manejamos es ${flooredW}x${flooredH}m:`
+              : `Te ofrecemos ${flooredW}x${flooredH} ya que es necesario considerar un tamaño menor para dar espacio a los tensores o soga sujetadora.`;
+
             return {
               type: "text",
               text: `Sí, nuestra malla confeccionada viene con argollas reforzadas en todo el perímetro, lista para instalar.\n\n` +
-                    `Te ofrecemos ${flooredW}x${flooredH} ya que es necesario considerar un tamaño menor para dar espacio a los tensores o soga sujetadora.\n\n` +
+                    `${sizeExplanation}\n\n` +
                     `$${product.price}\n🛒 Cómprala aquí:\n${trackedLink}`
             };
           }
@@ -2653,9 +2657,13 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
                 unknownCount: 0
               });
 
+              const feetExplanation = (dimensions && dimensions.convertedFromFeet)
+                ? `📏 Tu medida de ${dimensions.originalFeetStr} equivale a aproximadamente ${dimensions.width}x${dimensions.height} metros.\n\nLa medida más cercana que manejamos es ${flooredW}x${flooredH}m:`
+                : `Te ofrecemos ${flooredW}x${flooredH} ya que es necesario considerar un tamaño menor para dar espacio a los tensores o soga sujetadora.`;
+
               return {
                 type: "text",
-                text: `Te ofrecemos ${flooredW}x${flooredH} ya que es necesario considerar un tamaño menor para dar espacio a los tensores o soga sujetadora.\n\n` +
+                text: `${feetExplanation}\n\n` +
                       `$${product.price}\n🛒 Cómprala aquí:\n${trackedLink}`
               };
             }

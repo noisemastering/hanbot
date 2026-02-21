@@ -183,7 +183,36 @@ const testEmailConfig = async () => {
   }
 };
 
+/**
+ * Send a plain alert email (for system health notifications)
+ * @param {string} to - Recipient email
+ * @param {string} subject - Email subject
+ * @param {string} body - Plain text body
+ */
+const sendAlertEmail = async (to, subject, body) => {
+  const transport = getTransporter();
+  if (!transport) {
+    console.error("❌ Cannot send alert email: Email service not configured");
+    return;
+  }
+
+  const fromEmail = process.env.SMTP_FROM || process.env.SMTP_USER;
+
+  try {
+    await transport.sendMail({
+      from: `"Hanlob Alert" <${fromEmail}>`,
+      to,
+      subject,
+      text: body
+    });
+    console.log(`📧 Alert email sent to ${to}: ${subject}`);
+  } catch (error) {
+    console.error(`❌ Failed to send alert email:`, error.message);
+  }
+};
+
 module.exports = {
   sendPasswordResetEmail,
-  testEmailConfig
+  testEmailConfig,
+  sendAlertEmail
 };

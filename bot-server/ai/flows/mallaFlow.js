@@ -701,6 +701,10 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
         state.width = dims.width;
         state.height = dims.height;
         state.userExpressedSize = dims.userExpressed;
+        if (dims.convertedFromFeet) {
+          state.convertedFromFeet = true;
+          state.originalFeetStr = dims.originalFeetStr;
+        }
       }
     }
   }
@@ -713,6 +717,10 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       state.width = dimsFromMessage.width;
       state.height = dimsFromMessage.height;
       state.userExpressedSize = dimsFromMessage.userExpressed;
+      if (dimsFromMessage.convertedFromFeet) {
+        state.convertedFromFeet = true;
+        state.originalFeetStr = dimsFromMessage.originalFeetStr;
+      }
     }
   }
 
@@ -1244,7 +1252,7 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
  * Handle complete - we have dimensions
  */
 async function handleComplete(intent, state, sourceContext, psid, convo, userMessage = '') {
-  const { width, height, percentage, color, quantity, userExpressedSize, concerns } = state;
+  const { width, height, percentage, color, quantity, userExpressedSize, concerns, convertedFromFeet, originalFeetStr } = state;
 
   // Parse zip code from message if provided
   const zipInfo = await parseAndLookupZipCode(userMessage);
@@ -1340,9 +1348,17 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
             unknownCount: 0
           });
 
+          // Build explanation — different for feet conversion vs. fractional meters
+          let explanation;
+          if (convertedFromFeet) {
+            explanation = `📏 Tu medida de ${originalFeetStr} equivale a aproximadamente ${width}x${height} metros.\n\nLa medida más cercana que manejamos es ${flooredW}x${flooredH}m:`;
+          } else {
+            explanation = `Te ofrecemos ${flooredW}x${flooredH} ya que es necesario considerar un tamaño menor para dar espacio a los tensores o soga sujetadora.`;
+          }
+
           return {
             type: "text",
-            text: `Te ofrecemos ${flooredW}x${flooredH} ya que es necesario considerar un tamaño menor para dar espacio a los tensores o soga sujetadora.\n\n${salesPitch}\n🛒 Cómprala aquí:\n${trackedLink}`
+            text: `${explanation}\n\n${salesPitch}\n🛒 Cómprala aquí:\n${trackedLink}`
           };
         }
       }

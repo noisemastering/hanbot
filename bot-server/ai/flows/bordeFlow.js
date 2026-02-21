@@ -86,13 +86,11 @@ function hasMLLink(product) {
 }
 
 /**
- * Format price with shipping indicator
+ * Format price (borde shipping is NOT included in price)
  */
 function formatPriceWithShipping(product) {
   if (!product?.price) return '';
-  return hasMLLink(product)
-    ? `${formatMoney(product.price)} con envío incluido`
-    : `${formatMoney(product.price)} + envío`;
+  return formatMoney(product.price);
 }
 
 /**
@@ -512,8 +510,6 @@ async function handleStart(sourceContext, availableLengths, adProductIds = null)
 
   // Try to show prices alongside lengths
   const products = await findMatchingProducts(null, adProductIds);
-  const anyHasML = products.some(p => hasMLLink(p));
-  const shippingNote = anyHasML ? 'Precio con envío incluido a todo México.' : 'Precio + envío.';
   const lengthsWithPrices = availableLengths.map(l => {
     const product = products.find(p => {
       const text = `${p.name || ''} ${p.size || ''}`;
@@ -531,7 +527,6 @@ async function handleStart(sourceContext, availableLengths, adProductIds = null)
       text: `¡Hola! Sí manejamos borde separador para jardín.\n\n` +
             `Sirve para delimitar áreas de pasto, crear caminos y separar zonas. Mide ${widthCm}cm de ancho.\n\n` +
             `${lengthsWithPrices.join('\n')}\n\n` +
-            `${shippingNote}\n\n` +
             `¿Qué largo te interesa?`
     };
   }
@@ -562,8 +557,7 @@ async function handleAwaitingLength(intent, state, sourceContext, availableLengt
     const recommended = sorted.find(l => l >= perimeter) || sorted[sorted.length - 1];
     const products = await findMatchingProducts(recommended, adProductIds);
     const product = products[0];
-    const shipping = product ? (hasMLLink(product) ? ' con envío incluido' : ' + envío') : '';
-    const priceText = product?.price ? ` por ${formatMoney(product.price)}${shipping}` : '';
+    const priceText = product?.price ? ` por ${formatMoney(product.price)}` : '';
 
     return {
       type: "text",
@@ -574,8 +568,6 @@ async function handleAwaitingLength(intent, state, sourceContext, availableLengt
 
   // Build length list with prices if available
   const products = await findMatchingProducts(null, adProductIds);
-  const anyHasML = products.some(p => hasMLLink(p));
-  const shippingNote = anyHasML ? 'Precio con envío incluido a todo México.' : 'Precio + envío.';
   const lengthsWithPrices = availableLengths.map(l => {
     const product = products.find(p => {
       const text = `${p.name || ''} ${p.size || ''}`;
@@ -591,7 +583,6 @@ async function handleAwaitingLength(intent, state, sourceContext, availableLengt
       type: "text",
       text: `¡Claro! Manejamos borde separador en las siguientes presentaciones:\n\n` +
             `${lengthsWithPrices.join('\n')}\n\n` +
-            `${shippingNote}\n\n` +
             `¿Qué largo necesitas?`
     };
   }
@@ -648,8 +639,7 @@ async function handleAwaitingQuantity(intent, state, sourceContext, adProductIds
 
   if (product) {
     const displayName = await getProductDisplayName(product, 'short');
-    const shipping = hasMLLink(product) ? ' con envío incluido' : ' + envío';
-    const priceText = product.price ? ` en ${formatMoney(product.price)}${shipping}` : '';
+    const priceText = product.price ? ` en ${formatMoney(product.price)}` : '';
     return {
       type: "text",
       text: `Tenemos ${displayName}${priceText}. ¿Cuántos rollos necesitas?`

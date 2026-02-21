@@ -265,7 +265,7 @@ INSTRUCCIONES CRÍTICAS:
     const aiReply = response.choices?.[0]?.message?.content || '';
 
     // Check if AI couldn't understand
-    if (aiReply.includes('MENSAJE_NO_ENTENDIDO') || aiReply.includes('no tengo información') || aiReply.length < 20) {
+    if (aiReply.includes('MENSAJE_NO_ENTENDIDO') || aiReply.includes('no tengo información')) {
       return { text: aiReply, isGeneric: true };
     }
 

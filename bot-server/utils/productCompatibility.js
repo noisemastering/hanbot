@@ -58,13 +58,18 @@ function convertProductsToCampaignProduct(products, campaign = null) {
       price = product.price;
     }
 
+    // Get preferred online store link (ProductFamily uses onlineStoreLinks, not mLink)
+    const preferredLink = product.onlineStoreLinks?.find(l => l.isPreferred)?.url ||
+                         product.onlineStoreLinks?.[0]?.url ||
+                         product.mLink || '';
+
     return {
       size: product.size || 'N/A',
       price: price,
       stock: true, // Assume in stock if listed
-      source: product.mLink ? 'mercadolibre' : 'local',
-      permalink: product.mLink || '',
-      imageUrl: product.imageUrl || ''
+      source: preferredLink ? 'mercadolibre' : 'local',
+      permalink: preferredLink,
+      imageUrl: product.imageUrl || product.thumbnail || ''
     };
   }).filter(variant => variant.size !== 'N/A'); // Filter out products without size
 

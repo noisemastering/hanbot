@@ -12,7 +12,13 @@ const { generateBotResponse } = require("../responseGenerator");
 function parseSize(str) {
   const result = parseConfeccionadaDimensions(str);
   if (!result) return null;
-  return { w: result.width, h: result.height, area: result.area };
+  return {
+    w: result.width,
+    h: result.height,
+    area: result.area,
+    convertedFromFeet: result.convertedFromFeet || false,
+    originalFeetStr: result.originalFeetStr || null
+  };
 }
 
 function normalizeVariants(variants = []) {
@@ -196,9 +202,17 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
           unknownCount: 0
         });
 
+        // Build explanation — different for feet conversion vs. fractional meters
+        let explanation;
+        if (requested.convertedFromFeet) {
+          explanation = `📏 Tu medida de ${requested.originalFeetStr} equivale a aproximadamente ${requested.w}x${requested.h} metros.\n\nLa medida más cercana que manejamos es ${flooredW}x${flooredH}m:`;
+        } else {
+          explanation = `Te ofrecemos ${flooredW}x${flooredH} ya que es necesario considerar un tamaño menor para dar espacio a los tensores o soga sujetadora.`;
+        }
+
         return {
           type: "text",
-          text: `Te ofrecemos ${flooredW}x${flooredH} ya que es necesario considerar un tamaño menor para dar espacio a los tensores o soga sujetadora.\n\n${line}`
+          text: `${explanation}\n\n${line}`
         };
       }
       // If no floored variant found, fall through to normal size matching below
