@@ -170,7 +170,19 @@ const conversationSchema = new mongoose.Schema({
   lastFractionalSize: { type: String, default: null },
 
   // Location from zip code lookup
-  zipCode: { type: String, default: null }
+  zipCode: { type: String, default: null },
+
+  // Previous session snapshot (for returning user context on ad-click re-entry)
+  previousSession: {
+    productInterest: { type: String, default: null },
+    requestedSize: { type: String, default: null },
+    productSpecs: { type: mongoose.Schema.Types.Mixed, default: null },
+    currentFlow: { type: String, default: null },
+    lastIntent: { type: String, default: null },
+    handoffRequested: { type: Boolean, default: null },
+    handoffResolved: { type: Boolean, default: null },
+    savedAt: { type: Date, default: null }
+  }
 }, {
   strict: false  // Allow ad-hoc fields — codebase uses $set with dynamic fields throughout
 });

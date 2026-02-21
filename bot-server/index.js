@@ -948,6 +948,29 @@ app.post("/webhook", async (req, res) => {
         console.log("  Ad ID:", referral.ad_id);
         console.log("  Campaign ID:", referral.campaign_id);
 
+        // Before the ad-click reset, snapshot the previous session for returning users
+        const convo = await getConversation(senderPsid);
+        const hoursSinceLast = convo?.lastMessageAt
+          ? (Date.now() - new Date(convo.lastMessageAt).getTime()) / (1000 * 60 * 60)
+          : 999;
+        const isRecentReturn = hoursSinceLast <= 24 && convo?.greeted;
+
+        if (isRecentReturn) {
+          await updateConversation(senderPsid, {
+            previousSession: {
+              productInterest: convo.productInterest,
+              requestedSize: convo.requestedSize,
+              productSpecs: convo.productSpecs,
+              currentFlow: convo.currentFlow,
+              lastIntent: convo.lastIntent,
+              handoffRequested: convo.handoffRequested,
+              handoffResolved: convo.handoffResolved,
+              savedAt: new Date()
+            }
+          });
+          console.log(`🔄 Saved previous session snapshot for returning user ${senderPsid} (${hoursSinceLast.toFixed(1)}h since last message)`);
+        }
+
         // Guardamos datos de campaña en la conversación (sin tocar tu modelo User)
         // Also reset state to active — user re-engaged by clicking an ad,
         // so any previous needs_human / human_active state is stale
@@ -1047,6 +1070,40 @@ app.post("/webhook", async (req, res) => {
           }
         }
 
+        // Override greeting for recent returning users
+        if (isRecentReturn && convo?.userName) {
+          const prevProduct = convo.previousSession?.productInterest || convo.productInterest;
+          const productNames = {
+            malla_sombra: 'malla sombra',
+            malla_sombra_raschel: 'malla sombra',
+            malla_sombra_raschel_agricola: 'malla sombra agrícola',
+            borde_separador: 'borde separador',
+            rollo: 'rollos',
+            ground_cover: 'ground cover',
+            groundcover: 'ground cover',
+            monofilamento: 'malla monofilamento',
+            antigranizo: 'malla antigranizo',
+            antiafido: 'malla antiáfido',
+            cinta_rompevientos: 'cinta rompevientos',
+            cinta_rigida: 'cinta rígida',
+            herrajes: 'herrajes',
+            sujetadores: 'sujetadores'
+          };
+          const prevName = productNames[prevProduct];
+          const newName = productNames[adProductInterest];
+
+          if (prevName && adProductInterest && adProductInterest !== prevProduct) {
+            adGreeting = `¡Hola de nuevo, ${convo.userName}! Veo que ahora te interesa ${newName || 'otro producto'}. La vez pasada platicamos sobre ${prevName}. ¿En qué te puedo ayudar?`;
+            console.log(`👋 Warm greeting (different product): ${prevProduct} → ${adProductInterest}`);
+          } else if (prevName && adProductInterest) {
+            adGreeting = `¡Hola de nuevo, ${convo.userName}! ¿Sigues interesado en ${prevName}? ¿En qué más te ayudo?`;
+            console.log(`👋 Warm greeting (same product): ${adProductInterest}`);
+          } else {
+            adGreeting = `¡Hola de nuevo, ${convo.userName}! ¿En qué te puedo ayudar?`;
+            console.log(`👋 Warm greeting (generic, no product match)`);
+          }
+        }
+
         // Set product interest and send greeting
         if (adProductInterest) {
           await updateConversation(senderPsid, { productInterest: adProductInterest, currentFlow: adProductInterest, greeted: true, lastGreetTime: Date.now() });
@@ -1056,9 +1113,10 @@ app.post("/webhook", async (req, res) => {
           // Ad click but couldn't determine product - generic greeting
           console.log(`⚠️ Could not determine product for ad_id: ${referral.ad_id}`);
           await updateConversation(senderPsid, { greeted: true, lastGreetTime: Date.now() });
-          await callSendAPI(senderPsid, {
-            text: "👋 ¡Hola! Gracias por contactarnos. ¿En qué producto te puedo ayudar?",
-          });
+          const genericGreeting = (isRecentReturn && convo?.userName)
+            ? `¡Hola de nuevo, ${convo.userName}! ¿En qué te puedo ayudar?`
+            : "👋 ¡Hola! Gracias por contactarnos. ¿En qué producto te puedo ayudar?";
+          await callSendAPI(senderPsid, { text: genericGreeting });
           adGreetingSent = true;
         }
         } // close isDuplicateReferral else

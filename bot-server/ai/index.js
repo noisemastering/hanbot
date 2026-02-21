@@ -768,6 +768,17 @@ async function generateReply(userMessage, psid, referral = null) {
   }
   // ====== END RESET STALE NEEDS_HUMAN CONVERSATIONS ======
 
+  // ====== CLEAR STALE PREVIOUS SESSION ======
+  if (convo.previousSession?.savedAt) {
+    const sessionAge = (Date.now() - new Date(convo.previousSession.savedAt).getTime()) / (1000 * 60 * 60);
+    if (sessionAge > 48) {
+      console.log(`🧹 Clearing stale previousSession (${sessionAge.toFixed(1)}h old)`);
+      await updateConversation(psid, { previousSession: null });
+      convo.previousSession = null;
+    }
+  }
+  // ====== END CLEAR STALE PREVIOUS SESSION ======
+
   // ====== CHECK NEEDS_HUMAN STATE ======
   // If conversation still needs human (active handoff, not a closed convo), stay mostly silent
   if (convo.state === "needs_human") {
