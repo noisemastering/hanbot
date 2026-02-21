@@ -45,6 +45,7 @@ router.get("/", async (req, res) => {
       campaignId,
       adSetId,
       adId,
+      correlationMethod,
       startDate,
       endDate
     } = req.query;
@@ -58,6 +59,7 @@ router.get("/", async (req, res) => {
     if (campaignId) filter.campaignId = campaignId;
     if (adSetId) filter.adSetId = adSetId;
     if (adId) filter.adId = adId;
+    if (correlationMethod) filter.correlationMethod = correlationMethod;
 
     // Date range filter
     if (startDate || endDate) {

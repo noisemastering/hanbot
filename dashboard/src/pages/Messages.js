@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import API from "../api";
 import TrackedLinkGenerator from "../components/TrackedLinkGenerator";
+import ManualSaleForm from "../components/ManualSaleForm";
 import { useTranslation } from '../i18n';
 
 function Messages() {
@@ -15,6 +16,7 @@ function Messages() {
   const [dateFilter, setDateFilter] = useState('today');
   const [refreshing, setRefreshing] = useState(false);
   const [showLinkGenerator, setShowLinkGenerator] = useState(false);
+  const [showSaleForm, setShowSaleForm] = useState(false);
   const [replyText, setReplyText] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
   const [pendingHandoffs, setPendingHandoffs] = useState([]);
@@ -1085,6 +1087,7 @@ function Messages() {
             setSelectedPsid(null);
             setSelectedChannel(null);
             setShowLinkGenerator(false);
+            setShowSaleForm(false);
           }}
           style={{
             position: "fixed",
@@ -1267,7 +1270,7 @@ function Messages() {
               </span>
               <div style={{ display: "flex", gap: "0.5rem" }}>
                 <button
-                  onClick={() => setShowLinkGenerator(!showLinkGenerator)}
+                  onClick={() => { setShowLinkGenerator(!showLinkGenerator); setShowSaleForm(false); }}
                   style={{
                     padding: "8px 16px",
                     backgroundColor: showLinkGenerator ? "#2196f3" : "#1976d2",
@@ -1278,6 +1281,19 @@ function Messages() {
                   }}
                 >
                   {showLinkGenerator ? `✕ ${t('messages.closeLink')}` : `🔗 ${t('messages.generateLink')}`}
+                </button>
+                <button
+                  onClick={() => { setShowSaleForm(!showSaleForm); setShowLinkGenerator(false); }}
+                  style={{
+                    padding: "8px 16px",
+                    backgroundColor: showSaleForm ? "#4caf50" : "#388e3c",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "8px",
+                    cursor: "pointer"
+                  }}
+                >
+                  {showSaleForm ? `✕ ${t('messages.closeSale')}` : `💲 ${t('messages.registerSale')}`}
                 </button>
                 {conversationStatuses[selectedPsid]?.humanActive ? (
                   <button
@@ -1317,6 +1333,7 @@ function Messages() {
                     setSelectedPsid(null);
                     setSelectedChannel(null);
                     setShowLinkGenerator(false);
+                    setShowSaleForm(false);
                   }}
                   style={{
                     padding: "8px 16px",
@@ -1338,6 +1355,16 @@ function Messages() {
                 <TrackedLinkGenerator
                   psid={selectedPsid}
                   onClose={() => setShowLinkGenerator(false)}
+                />
+              </div>
+            )}
+
+            {/* Manual Sale Form */}
+            {showSaleForm && (
+              <div style={{ padding: "0 1rem 1rem 1rem" }}>
+                <ManualSaleForm
+                  psid={selectedPsid}
+                  onClose={() => setShowSaleForm(false)}
                 />
               </div>
             )}

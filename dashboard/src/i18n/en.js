@@ -2794,6 +2794,12 @@ const en = {
   "trackedLink.pasteHint": "Paste this link in the conversation with the customer",
   "trackedLink.errorLoad": "Error loading products",
   "trackedLink.errorGenerate": "Error generating link",
+  "trackedLink.modeProduct": "Pick Product",
+  "trackedLink.modeCustom": "Custom URL",
+  "trackedLink.customUrlPlaceholder": "https://articulo.mercadolibre.com.mx/...",
+  "trackedLink.customNamePlaceholder": "Product name (optional)",
+  "trackedLink.customNameHint": "Optional — helps identify this link in reports",
+  "trackedLink.customDefault": "Custom link",
 
   // ── userModal ──
   "userModal.editTitle": "Edit User",
@@ -2924,6 +2930,41 @@ const en = {
   "usosModal.productsHint": "Select products associated with this use. You can expand categories to see specific products.",
   "usosModal.updateUso": "Update Use",
   "usosModal.createUso": "Create Use",
+
+  // ── Menu: Manual Sales ──
+  "menu.manualSales": "Manual Sales",
+
+  // ── Messages: Register Sale button ──
+  "messages.registerSale": "Register Sale",
+  "messages.closeSale": "Close Sale",
+
+  // ── Manual Sale Form ──
+  "manualSale.title": "Register Sale",
+  "manualSale.product": "Product",
+  "manualSale.productPlaceholder": "Product name...",
+  "manualSale.amount": "Sale Amount",
+  "manualSale.notes": "Notes (optional)",
+  "manualSale.notesPlaceholder": "Additional details about this sale...",
+  "manualSale.register": "Register Sale",
+  "manualSale.registering": "Registering...",
+  "manualSale.success": "Sale registered!",
+  "manualSale.error": "Error registering sale",
+
+  // ── Manual Sales View ──
+  "manualSales.title": "Manual Sales",
+  "manualSales.totalSales": "Total Sales",
+  "manualSales.totalRevenue": "Total Revenue",
+  "manualSales.thisMonth": "This Month",
+  "manualSales.from": "From:",
+  "manualSales.to": "To:",
+  "manualSales.clearFilter": "Clear",
+  "manualSales.noSales": "No manual sales registered",
+  "manualSales.colDate": "Date",
+  "manualSales.colCustomer": "Customer",
+  "manualSales.colProduct": "Product",
+  "manualSales.colAmount": "Amount",
+  "manualSales.colCampaign": "Campaign",
+  "manualSales.colNotes": "Notes",
 };
 
 export default en;

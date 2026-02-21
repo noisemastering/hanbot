@@ -110,7 +110,9 @@ const clickLogSchema = new mongoose.Schema(
       // Shipping address (from ML shipments API)
       shippingCity: String,
       shippingState: String,
-      shippingZipCode: String
+      shippingZipCode: String,
+      // Manual sale notes
+      manualNotes: String
     },
 
     // Metadata

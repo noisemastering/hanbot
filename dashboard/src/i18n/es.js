@@ -2332,6 +2332,12 @@ const es = {
   "trackedLink.pasteHint": "Pega este enlace en la conversacion con el cliente",
   "trackedLink.errorLoad": "Error al cargar productos",
   "trackedLink.errorGenerate": "Error al generar enlace",
+  "trackedLink.modeProduct": "Elegir Producto",
+  "trackedLink.modeCustom": "URL Personalizada",
+  "trackedLink.customUrlPlaceholder": "https://articulo.mercadolibre.com.mx/...",
+  "trackedLink.customNamePlaceholder": "Nombre del producto (opcional)",
+  "trackedLink.customNameHint": "Opcional — ayuda a identificar este enlace en reportes",
+  "trackedLink.customDefault": "Enlace personalizado",
 
   // ── API Health Alerts (extended) ─────────────────────────
   "apiHealth.error": "Error",
@@ -2413,6 +2419,41 @@ const es = {
   // ── Flows View (edit/delete button titles) ─────────────────
   "flows.editButton": "Editar",
   "flows.deleteButton": "Eliminar",
+
+  // ── Menu: Ventas Manuales ──
+  "menu.manualSales": "Ventas Manuales",
+
+  // ── Messages: Registrar Venta botón ──
+  "messages.registerSale": "Registrar Venta",
+  "messages.closeSale": "Cerrar Venta",
+
+  // ── Manual Sale Form ──
+  "manualSale.title": "Registrar Venta",
+  "manualSale.product": "Producto",
+  "manualSale.productPlaceholder": "Nombre del producto...",
+  "manualSale.amount": "Monto de Venta",
+  "manualSale.notes": "Notas (opcional)",
+  "manualSale.notesPlaceholder": "Detalles adicionales de esta venta...",
+  "manualSale.register": "Registrar Venta",
+  "manualSale.registering": "Registrando...",
+  "manualSale.success": "¡Venta registrada!",
+  "manualSale.error": "Error al registrar venta",
+
+  // ── Manual Sales View ──
+  "manualSales.title": "Ventas Manuales",
+  "manualSales.totalSales": "Total de Ventas",
+  "manualSales.totalRevenue": "Ingresos Totales",
+  "manualSales.thisMonth": "Este Mes",
+  "manualSales.from": "Desde:",
+  "manualSales.to": "Hasta:",
+  "manualSales.clearFilter": "Limpiar",
+  "manualSales.noSales": "No hay ventas manuales registradas",
+  "manualSales.colDate": "Fecha",
+  "manualSales.colCustomer": "Cliente",
+  "manualSales.colProduct": "Producto",
+  "manualSales.colAmount": "Monto",
+  "manualSales.colCampaign": "Campaña",
+  "manualSales.colNotes": "Notas",
 };
 
 export default es;

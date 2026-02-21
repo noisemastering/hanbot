@@ -539,4 +539,73 @@ router.get('/purchase-intent/:psid', async (req, res) => {
   }
 });
 
+// POST /conversations/:psid/register-sale - Register a manual sale for ROI tracking
+router.post('/:psid/register-sale', async (req, res) => {
+  try {
+    const { psid } = req.params;
+    const { productName, totalAmount, notes, orderId } = req.body;
+
+    if (!productName || !totalAmount) {
+      return res.status(400).json({
+        success: false,
+        error: 'Product name and total amount are required'
+      });
+    }
+
+    // Get conversation context
+    const conversation = await Conversation.findOne({ psid }).lean();
+
+    // Generate synthetic clickId
+    const { randomUUID } = require('crypto');
+    const clickId = `manual-${randomUUID().slice(0, 8)}`;
+
+    const ClickLog = require('../models/ClickLog');
+
+    const clickLog = new ClickLog({
+      clickId,
+      psid,
+      originalUrl: 'manual-sale',
+      productName,
+      campaignId: conversation?.adId ? conversation.campaignId : null,
+      adSetId: conversation?.adSetId || null,
+      adId: conversation?.adId || null,
+      userName: conversation?.userName || null,
+      city: conversation?.city || null,
+      stateMx: conversation?.stateMx || null,
+      clicked: true,
+      clickedAt: new Date(),
+      converted: true,
+      convertedAt: new Date(),
+      correlationMethod: 'manual',
+      correlationConfidence: 'high',
+      conversionData: {
+        totalAmount: parseFloat(totalAmount),
+        paidAmount: parseFloat(totalAmount),
+        itemTitle: productName,
+        orderId: orderId || clickId,
+        orderDate: new Date(),
+        manualNotes: notes || null
+      }
+    });
+
+    await clickLog.save();
+
+    console.log(`💰 Manual sale registered: $${totalAmount} - ${productName} for ${psid}`);
+
+    res.json({
+      success: true,
+      clickLog: {
+        clickId,
+        productName,
+        totalAmount: parseFloat(totalAmount),
+        psid,
+        userName: conversation?.userName
+      }
+    });
+  } catch (error) {
+    console.error('Error registering manual sale:', error);
+    res.status(500).json({ success: false, error: 'Failed to register sale' });
+  }
+});
+
 module.exports = router;
