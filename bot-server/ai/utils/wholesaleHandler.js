@@ -3,8 +3,7 @@
 
 const Product = require("../../models/Product");
 const { updateConversation } = require("../../conversationManager");
-const { sendHandoffNotification } = require("../../services/pushNotifications");
-const { getHandoffTimingMessage } = require("./businessHours");
+const { executeHandoff } = require("./executeHandoff");
 const { getAncestors } = require("./productMatcher");
 
 /**
@@ -126,31 +125,27 @@ async function handleWholesaleRequest(product, quantity, psid, convo) {
     `\n\n📍 Estamos en Querétaro, pero realizamos envíos a toda la República. 📦✈️` +
     `\n\n¿Me puedes proporcionar tu código postal para calcular el envío?`;
 
-  // Update conversation for handoff
   const handoffReason = `Mayoreo: ${quantity}x ${fullDesc}`;
-  await updateConversation(psid, {
-    handoffRequested: true,
-    handoffReason,
-    handoffTimestamp: new Date(),
-    state: "needs_human",
-    wholesaleRequest: {
-      productId: product._id,
-      productName: fullDesc,
-      quantity,
-      retailPrice: product.price
+  console.log(`📦 Wholesale request: ${quantity}x ${fullDesc} for ${psid}`);
+
+  const result = await executeHandoff(psid, convo, '', {
+    reason: handoffReason,
+    responsePrefix: message,
+    skipChecklist: true,
+    timingStyle: 'none',
+    includeQueretaro: false,
+    extraState: {
+      wholesaleRequest: {
+        productId: product._id,
+        productName: fullDesc,
+        quantity,
+        retailPrice: product.price
+      }
     }
   });
 
-  // Send notification
-  await sendHandoffNotification(psid, convo, handoffReason).catch(err => {
-    console.error("❌ Failed to send wholesale notification:", err);
-  });
-
-  console.log(`📦 Wholesale request: ${quantity}x ${fullDesc} for ${psid}`);
-
   return {
-    type: "text",
-    text: message,
+    ...result,
     handledBy: "wholesale_handoff",
     isWholesale: true
   };

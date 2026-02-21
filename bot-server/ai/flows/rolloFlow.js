@@ -7,8 +7,7 @@ const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
 const ZipCode = require("../../models/ZipCode");
 const { INTENTS } = require("../classifier");
-const { isBusinessHours } = require("../utils/businessHours");
-const { parseAndLookupZipCode: sharedParseAndLookupZipCode, checkZipBeforeHandoff, handlePendingZipResponse, isQueretaroLocation, getQueretaroPickupMessage } = require("../utils/preHandoffCheck");
+const { parseAndLookupZipCode: sharedParseAndLookupZipCode } = require("../utils/preHandoffCheck");
 
 // AI fallback for flow dead-ends
 const { resolveWithAI } = require("../utils/flowFallback");
@@ -386,32 +385,9 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   // ====== PENDING ZIP CODE RESPONSE ======
   if (convo?.pendingHandoff) {
-    const zipResult = await handlePendingZipResponse(psid, convo, userMessage);
-    if (zipResult.proceed) {
-      const info = convo.pendingHandoffInfo || {};
-      await updateConversation(psid, {
-        handoffRequested: true,
-        handoffReason: info.reason || 'Rollo handoff',
-        handoffTimestamp: new Date(),
-        state: "needs_human"
-      });
-
-      const locationAck = zipResult.zipInfo
-        ? `Perfecto, ${zipResult.zipInfo.city || 'ubicación registrada'}. `
-        : '';
-      const timingMsg = isBusinessHours()
-        ? "Un especialista te contactará pronto."
-        : "Un especialista te contactará el siguiente día hábil.";
-
-      let responseText = `${locationAck}${info.specsText || ''}${timingMsg}`;
-
-      if (isQueretaroLocation(zipResult.zipInfo, convo)) {
-        const pickupMsg = await getQueretaroPickupMessage();
-        responseText += `\n\n${pickupMsg}`;
-      }
-
-      return { type: "text", text: responseText };
-    }
+    const { resumePendingHandoff } = require('../utils/executeHandoff');
+    const pendingResult = await resumePendingHandoff(psid, convo, userMessage);
+    if (pendingResult) return pendingResult;
   }
 
   let state = getFlowState(convo);
@@ -497,6 +473,18 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       if (pct >= 10 && pct <= 100) {
         console.log(`📦 Rollo flow - Parsed percentage from message: ${pct}%`);
         state.percentage = pct;
+      }
+    }
+
+    // When awaiting percentage, accept bare numbers (e.g., "50", "35", "90")
+    if (!state.percentage && convo?.lastIntent === 'roll_awaiting_percentage') {
+      const bareMatch = userMessage.trim().match(/^(\d{2,3})$/);
+      if (bareMatch) {
+        const pct = parseInt(bareMatch[1]);
+        if (pct >= 10 && pct <= 100) {
+          console.log(`📦 Rollo flow - Bare number accepted as percentage (awaiting): ${pct}%`);
+          state.percentage = pct;
+        }
       }
     }
 
@@ -1075,50 +1063,32 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
   // Save wholesale info if applicable
   const products = await findMatchingProducts(state.width, state.percentage, rolloType);
   const product = products[0];
-  const updateData = {
-    handoffRequested: true,
-    handoffReason,
-    handoffTimestamp: new Date(),
-    state: "needs_human"
-  };
+  const extraState = {};
   if (product?.wholesaleEnabled && product?.wholesaleMinQty && state.quantity >= product.wholesaleMinQty) {
-    updateData.wholesaleRequest = {
+    extraState.wholesaleRequest = {
       productId: product._id,
       productName: product.name,
       quantity: state.quantity,
       retailPrice: product.price
     };
   }
-  await updateConversation(psid, updateData);
 
-  // Send push notification
-  const { sendHandoffNotification } = require("../../services/pushNotifications");
-  sendHandoffNotification(psid, convo, handoffReason).catch(err => {
-    console.error("❌ Failed to send push notification:", err);
-  });
-
-  // Transparent response — don't mention handoff to human
-  let responseText = `¡Perfecto! En breve te tenemos la cotización para ${qtyText}${specsText}.`;
+  // Build transparent response — don't mention handoff to human
+  let responsePrefix = `¡Perfecto! En breve te tenemos la cotización para ${qtyText}${specsText}.`;
   if (state.zipInfo) {
-    responseText += `\n\n📍 Envío a ${state.zipInfo.city}, ${state.zipInfo.state}`;
+    responsePrefix += `\n\n📍 Envío a ${state.zipInfo.city}, ${state.zipInfo.state}`;
   }
 
-  // Queretaro pickup option
-  if (isQueretaroLocation(state.zipInfo, convo)) {
-    const pickupMsg = await getQueretaroPickupMessage();
-    responseText += `\n\n${pickupMsg}`;
-  }
-
-  // Video link only for malla sombra
-  if (rolloType === ROLLO_TYPES.MALLA_SOMBRA) {
-    const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
-    responseText += `\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`;
-  }
-
-  return {
-    type: "text",
-    text: responseText
-  };
+  const { executeHandoff } = require('../utils/executeHandoff');
+  return await executeHandoff(psid, convo, userMessage, {
+    reason: handoffReason,
+    responsePrefix,
+    skipChecklist: true,
+    timingStyle: 'none',
+    extraState: Object.keys(extraState).length > 0 ? extraState : null,
+    includeQueretaro: true,
+    includeVideo: rolloType === ROLLO_TYPES.MALLA_SOMBRA
+  });
 }
 
 /**

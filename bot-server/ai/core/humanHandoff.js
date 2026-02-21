@@ -2,6 +2,7 @@
 const { getBusinessInfo } = require("../../businessInfoManager");
 const { updateConversation } = require("../../conversationManager");
 const { isBusinessHours } = require("../utils/businessHours");
+const { executeHandoff } = require("../utils/executeHandoff");
 
 /**
  * Detects if user explicitly wants to talk to a human agent
@@ -34,17 +35,6 @@ function isHumanHandoffRequest(cleanMsg) {
  */
 async function handleHumanHandoff(userMessage, psid, convo, reason = "explicit") {
   const businessInfo = await getBusinessInfo();
-
-  // Update conversation state to mark handoff request
-  await updateConversation(psid, {
-    state: "needs_human",
-    lastIntent: "human_handoff",
-    handoffRequested: true,
-    handoffReason: reason,
-    handoffTimestamp: new Date(),
-    unknownCount: 0,
-    clarificationCount: 0
-  });
 
   console.log(`🤝 Human handoff requested by ${psid} - Reason: ${reason}`);
 
@@ -84,21 +74,20 @@ async function handleHumanHandoff(userMessage, psid, convo, reason = "explicit")
     ? responses[reason][Math.floor(Math.random() * responses[reason].length)]
     : responses.explicit[0];
 
-  // Include video link if conversation was about malla sombra
-  const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
   const isMallaContext = convo?.productInterest === 'malla_sombra' ||
     convo?.currentFlow === 'malla_sombra' ||
     convo?.currentFlow === 'rollo' ||
     convo?.poiRootId;
 
-  const videoSuffix = isMallaContext
-    ? `\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
-    : '';
-
-  return {
-    type: "text",
-    text: responseText + videoSuffix
-  };
+  return await executeHandoff(psid, convo, userMessage, {
+    reason,
+    responsePrefix: responseText,
+    lastIntent: 'human_handoff',
+    skipChecklist: true,
+    timingStyle: 'none',
+    includeVideo: isMallaContext,
+    extraState: { clarificationCount: 0 }
+  });
 }
 
 /**

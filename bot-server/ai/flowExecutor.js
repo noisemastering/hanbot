@@ -3,9 +3,8 @@
 
 const Flow = require("../models/Flow");
 const { updateConversation } = require("../conversationManager");
-const { sendHandoffNotification } = require("../services/pushNotifications");
 const { parseDimensions } = require("./utils/sizeParser");
-const { isBusinessHours } = require("./utils/businessHours");
+const { executeHandoff } = require("./utils/executeHandoff");
 
 // Dynamic action handlers
 const customSizeActions = require("./flows/customSizeActions");
@@ -173,17 +172,15 @@ async function startFlow(flowKey, psid, convo, triggerMessage = null) {
       if (dynamicResult) {
         // Handle special actions from dynamic result
         if (dynamicResult.action === 'handoff') {
-          await updateConversation(psid, {
-            activeFlow: null,
-            handoffRequested: true,
-            handoffReason: dynamicResult.handoffReason || `Flow: ${flow.name}`,
-            handoffTimestamp: new Date(),
-            state: "needs_human"
+          await updateConversation(psid, { activeFlow: null });
+          const handoffRes = await executeHandoff(psid, convo, '', {
+            reason: dynamicResult.handoffReason || `Flow: ${flow.name}`,
+            responsePrefix: dynamicResult.message,
+            skipChecklist: true,
+            timingStyle: 'none'
           });
-          await sendHandoffNotification(psid, convo, dynamicResult.handoffReason);
           return {
-            type: "text",
-            text: dynamicResult.message,
+            ...handoffRes,
             handledBy: `flow_${flow.key}_handoff`
           };
         }
@@ -322,18 +319,16 @@ async function processFlowStep(userMessage, psid, convo) {
       if (dynamicResult) {
         // Handle special actions from dynamic result
         if (dynamicResult.action === 'handoff') {
-          await updateConversation(psid, {
-            activeFlow: null,
-            handoffRequested: true,
-            handoffReason: dynamicResult.handoffReason || `Flow: ${flow.name}`,
-            handoffTimestamp: new Date(),
-            state: "needs_human",
-            flowCollectedData: updatedData
+          await updateConversation(psid, { activeFlow: null });
+          const handoffRes2 = await executeHandoff(psid, convo, userMessage, {
+            reason: dynamicResult.handoffReason || `Flow: ${flow.name}`,
+            responsePrefix: dynamicResult.message,
+            skipChecklist: true,
+            timingStyle: 'none',
+            extraState: { flowCollectedData: updatedData }
           });
-          await sendHandoffNotification(psid, convo, dynamicResult.handoffReason);
           return {
-            type: "text",
-            text: dynamicResult.message,
+            ...handoffRes2,
             handledBy: `flow_${flow.key}_handoff`
           };
         }
@@ -418,7 +413,7 @@ async function completeFlow(flow, collectedData, psid, convo) {
   await clearFlowState(psid);
 
   switch (onComplete.action) {
-    case 'handoff':
+    case 'handoff': {
       // Prepare handoff data
       const handoffData = {};
       if (onComplete.includeVariables && onComplete.includeVariables.length > 0) {
@@ -437,23 +432,19 @@ async function completeFlow(flow, collectedData, psid, convo) {
         .map(([key, val]) => `${key}: ${val}`)
         .join('\n');
 
-      await updateConversation(psid, {
-        handoffRequested: true,
-        handoffReason: onComplete.handoffReason || `Flow: ${flow.name}`,
-        handoffTimestamp: new Date(),
-        state: "needs_human",
-        flowCollectedData: collectedData,
-        handoffNotes: handoffNotes
+      const completeHandoff = await executeHandoff(psid, convo, '', {
+        reason: onComplete.handoffReason || `Flow: ${flow.name}`,
+        responsePrefix: onComplete.message || '',
+        skipChecklist: true,
+        timingStyle: onComplete.message ? 'none' : 'elaborate',
+        notificationText: `Flow completado: ${flow.name}\n${handoffNotes}`,
+        extraState: { flowCollectedData: collectedData, handoffNotes }
       });
-
-      // Send notification
-      await sendHandoffNotification(psid, convo, `Flow completado: ${flow.name}\n${handoffNotes}`);
-
       return {
-        type: "text",
-        text: onComplete.message || (isBusinessHours() ? "Un especialista te contactará pronto." : "Un especialista te contactará el siguiente día hábil en horario de atención (lunes a viernes 9am-6pm)."),
+        ...completeHandoff,
         handledBy: `flow_${flow.key}_complete_handoff`
       };
+    }
 
     case 'flow':
       // Chain to another flow

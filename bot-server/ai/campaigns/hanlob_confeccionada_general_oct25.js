@@ -3,7 +3,7 @@ const { updateConversation } = require("../../conversationManager");
 const { getCampaignProductFromConversation } = require("../../utils/productCompatibility");
 const { generateClickLink } = require("../../tracking");
 const { getAvailableSizes } = require("../../measureHandler");
-const { sendHandoffNotification } = require("../../services/pushNotifications");
+const { executeHandoff } = require("../utils/executeHandoff");
 const { parseConfeccionadaDimensions } = require("../utils/dimensionParsers");
 const { generateBotResponse } = require("../responseGenerator");
 
@@ -165,23 +165,16 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
       if (isInsisting) {
         console.log(`📏 Campaign: customer insists on ${fractionalKey}m, handing off`);
 
-        await updateConversation(psid, {
-          lastIntent: "fractional_meters_handoff",
-          handoffRequested: true,
-          handoffReason: `Medida con decimales: ${requested.w}x${requested.h}m (insiste en medida exacta)`,
-          handoffTimestamp: new Date(),
-          state: "needs_human",
-          unknownCount: 0
-        });
-
-        sendHandoffNotification(psid, convo, `Medida con decimales: ${requested.w}x${requested.h}m - cliente insiste en medida exacta`).catch(err => {
-          console.error("❌ Failed to send push notification:", err);
-        });
-
         const response = await generateBotResponse("specialist_handoff", {
           dimensions: `${requested.w}x${requested.h}m`
         });
-        return { type: "text", text: response };
+        return await executeHandoff(psid, convo, msg, {
+          reason: `Medida con decimales: ${requested.w}x${requested.h}m (insiste en medida exacta)`,
+          responsePrefix: response,
+          lastIntent: 'fractional_meters_handoff',
+          timingStyle: 'none',
+          notificationText: `Medida con decimales: ${requested.w}x${requested.h}m - cliente insiste en medida exacta`
+        });
       }
 
       // First time - only floor the fractional dimension(s), keep whole-number dimensions as-is

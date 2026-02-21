@@ -6,8 +6,6 @@ const { updateConversation } = require("../../conversationManager");
 const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
 const { INTENTS } = require("../classifier");
-const { isBusinessHours } = require("../utils/businessHours");
-const { checkZipBeforeHandoff, handlePendingZipResponse, isQueretaroLocation, getQueretaroPickupMessage } = require("../utils/preHandoffCheck");
 
 // AI fallback for flow dead-ends
 const { resolveWithAI } = require("../utils/flowFallback");
@@ -352,38 +350,9 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   // ====== PENDING ZIP CODE RESPONSE ======
   if (convo?.pendingHandoff) {
-    const zipResult = await handlePendingZipResponse(psid, convo, userMessage);
-    if (zipResult.proceed) {
-      const info = convo.pendingHandoffInfo || {};
-      await updateConversation(psid, {
-        handoffRequested: true,
-        handoffReason: info.reason || 'Borde separador handoff',
-        handoffTimestamp: new Date(),
-        state: "needs_human"
-      });
-
-      const { sendHandoffNotification } = require("../../services/pushNotifications");
-      sendHandoffNotification(psid, convo, info.reason || 'Borde - cliente proporcionó ubicación').catch(err => {
-        console.error("❌ Failed to send push notification:", err);
-      });
-
-      const locationAck = zipResult.zipInfo
-        ? `Perfecto, ${zipResult.zipInfo.city || 'ubicación registrada'}. `
-        : '';
-      const timingMsg = isBusinessHours()
-        ? "Un especialista te contactará pronto."
-        : "Un especialista te contactará el siguiente día hábil.";
-
-      let responseText = `${locationAck}${info.specsText || ''}${timingMsg}`;
-
-      // Queretaro pickup option
-      if (isQueretaroLocation(zipResult.zipInfo, convo)) {
-        const pickupMsg = await getQueretaroPickupMessage();
-        responseText += `\n\n${pickupMsg}`;
-      }
-
-      return { type: "text", text: responseText };
-    }
+    const { resumePendingHandoff } = require('../utils/executeHandoff');
+    const pendingResult = await resumePendingHandoff(psid, convo, userMessage);
+    if (pendingResult) return pendingResult;
   }
 
   let state = getFlowState(convo);
@@ -753,33 +722,13 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
   // No product found or no price — hand off with full specs
   const specsText = `${quantity} rollo${quantity > 1 ? 's' : ''} de borde de ${length}m`;
 
-  const zipCheck = await checkZipBeforeHandoff(psid, convo, userMessage, {
+  const { executeHandoff } = require('../utils/executeHandoff');
+  return await executeHandoff(psid, convo, userMessage, {
     reason: `Borde: ${specsText}`,
-    specsText: `${specsText}. `
+    responsePrefix: `${specsText}.\n\n`,
+    specsText: `${specsText}. `,
+    timingStyle: 'elaborate'
   });
-  if (zipCheck) return zipCheck;
-
-  await updateConversation(psid, {
-    handoffRequested: true,
-    handoffReason: `Borde: ${specsText}`,
-    handoffTimestamp: new Date(),
-    state: "needs_human"
-  });
-
-  // Send push notification
-  const { sendHandoffNotification } = require("../../services/pushNotifications");
-  sendHandoffNotification(psid, convo, `Borde: ${specsText}`).catch(err => {
-    console.error("❌ Failed to send push notification:", err);
-  });
-
-  return {
-    type: "text",
-    text: `${specsText}.\n\n` +
-          (isBusinessHours()
-            ? `Un especialista te contactará pronto con el precio.\n\n`
-            : `Un especialista te contactará el siguiente día hábil con el precio.\n\n`) +
-          `¿Necesitas algo más?`
-  };
 }
 
 /**

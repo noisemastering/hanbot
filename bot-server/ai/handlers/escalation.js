@@ -2,10 +2,10 @@
 // Handlers for escalation intents: frustration, human request, complaints
 
 const { updateConversation } = require("../../conversationManager");
-const { sendHandoffNotification } = require("../../services/pushNotifications");
 const { getBusinessInfo } = require("../../businessInfoManager");
 const { generateBotResponse } = require("../responseGenerator");
 const { isBusinessHours } = require("../utils/businessHours");
+const { executeHandoff } = require("../utils/executeHandoff");
 
 const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
 
@@ -62,51 +62,39 @@ async function handleFrustration({ psid, convo, userMessage }) {
   }
 
   // No context - hand off to human
-  await updateConversation(psid, {
-    handoffRequested: true,
-    handoffReason: "User frustrated - no context to recover",
-    handoffTimestamp: new Date(),
-    state: "needs_human"
-  });
-
-  await sendHandoffNotification(psid, convo, `Cliente frustrado: "${userMessage.substring(0, 100)}"`);
-
   const response = await generateBotResponse("frustration_handoff", {
     needsHuman: true,
     isAfterHours: !inBusinessHours,
     convo
   });
 
-  const videoSuffix = isMallaContext(convo)
-    ? `\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
-    : '';
-
-  return { type: "text", text: response + videoSuffix };
+  return await executeHandoff(psid, convo, userMessage, {
+    reason: `User frustrated - no context to recover`,
+    responsePrefix: response,
+    skipChecklist: true,
+    timingStyle: 'none',
+    includeVideo: isMallaContext(convo),
+    notificationText: `Cliente frustrado: "${userMessage.substring(0, 100)}"`
+  });
 }
 
 /**
  * Handle human request - "Quiero hablar con alguien", "Un agente"
  */
-async function handleHumanRequest({ psid, convo }) {
+async function handleHumanRequest({ psid, convo, userMessage }) {
   const inBusinessHours = isBusinessHours();
-
-  await updateConversation(psid, {
-    handoffRequested: true,
-    handoffReason: "User requested human agent",
-    handoffTimestamp: new Date(),
-    state: "needs_human",
-    lastIntent: "human_request"
-  });
-
-  await sendHandoffNotification(psid, convo, "Cliente solicitó hablar con un agente");
 
   const response = await generateBotResponse("human_request", { isAfterHours: !inBusinessHours, convo });
 
-  const videoSuffix = isMallaContext(convo)
-    ? `\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
-    : '';
-
-  return { type: "text", text: response + videoSuffix };
+  return await executeHandoff(psid, convo, userMessage || '', {
+    reason: 'User requested human agent',
+    responsePrefix: response,
+    lastIntent: 'human_request',
+    skipChecklist: true,
+    timingStyle: 'none',
+    includeVideo: isMallaContext(convo),
+    notificationText: 'Cliente solicitó hablar con un agente'
+  });
 }
 
 /**
@@ -115,23 +103,17 @@ async function handleHumanRequest({ psid, convo }) {
 async function handleComplaint({ psid, convo, userMessage }) {
   const inBusinessHours = isBusinessHours();
 
-  await updateConversation(psid, {
-    handoffRequested: true,
-    handoffReason: `Complaint: ${userMessage.substring(0, 100)}`,
-    handoffTimestamp: new Date(),
-    state: "needs_human",
-    lastIntent: "complaint"
-  });
-
-  await sendHandoffNotification(psid, convo, `Queja de cliente: "${userMessage.substring(0, 100)}"`);
-
   const response = await generateBotResponse("complaint", { isAfterHours: !inBusinessHours, convo });
 
-  const videoSuffix = isMallaContext(convo)
-    ? `\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
-    : '';
-
-  return { type: "text", text: response + videoSuffix };
+  return await executeHandoff(psid, convo, userMessage, {
+    reason: `Complaint: ${userMessage.substring(0, 100)}`,
+    responsePrefix: response,
+    lastIntent: 'complaint',
+    skipChecklist: true,
+    timingStyle: 'none',
+    includeVideo: isMallaContext(convo),
+    notificationText: `Queja de cliente: "${userMessage.substring(0, 100)}"`
+  });
 }
 
 /**
@@ -165,15 +147,6 @@ async function handleOutOfStock({ psid, convo, userMessage }) {
 
   // If they mentioned a specific size
   if (convo?.requestedSize) {
-    await updateConversation(psid, {
-      handoffRequested: true,
-      handoffReason: `Product out of stock: ${convo.requestedSize}`,
-      handoffTimestamp: new Date(),
-      state: "needs_human"
-    });
-
-    await sendHandoffNotification(psid, convo, `Producto agotado: ${convo.requestedSize}`);
-
     const response = await generateBotResponse("out_of_stock", {
       requestedSize: convo.requestedSize,
       phone: businessInfo?.phones?.[0] || '442 352 1646',
@@ -183,7 +156,13 @@ async function handleOutOfStock({ psid, convo, userMessage }) {
       convo
     });
 
-    return { type: "text", text: response };
+    return await executeHandoff(psid, convo, userMessage, {
+      reason: `Product out of stock: ${convo.requestedSize}`,
+      responsePrefix: response,
+      skipChecklist: true,
+      timingStyle: 'none',
+      notificationText: `Producto agotado: ${convo.requestedSize}`
+    });
   }
 
   const response = await generateBotResponse("out_of_stock", {
@@ -201,23 +180,19 @@ async function handleOutOfStock({ psid, convo, userMessage }) {
 async function handleCustomModification({ psid, convo, userMessage }) {
   const inBusinessHours = isBusinessHours();
 
-  await updateConversation(psid, {
-    handoffRequested: true,
-    handoffReason: `Custom modification: ${userMessage.substring(0, 150)}`,
-    handoffTimestamp: new Date(),
-    state: "needs_human",
-    lastIntent: "custom_modification"
-  });
-
-  await sendHandoffNotification(psid, convo, `Solicitud especial: "${userMessage.substring(0, 120)}"`);
-
   const response = await generateBotResponse("custom_modification", {
     userMessage,
     isAfterHours: !inBusinessHours,
     convo
   });
 
-  return { type: "text", text: response };
+  return await executeHandoff(psid, convo, userMessage, {
+    reason: `Custom modification: ${userMessage.substring(0, 150)}`,
+    responsePrefix: response,
+    lastIntent: 'custom_modification',
+    timingStyle: 'none',
+    notificationText: `Solicitud especial: "${userMessage.substring(0, 120)}"`
+  });
 }
 
 module.exports = {

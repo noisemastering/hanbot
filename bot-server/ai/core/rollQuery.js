@@ -6,7 +6,7 @@ const { updateConversation } = require("../../conversationManager");
 const ProductFamily = require("../../models/ProductFamily");
 const { enrichProductWithContext, formatProductForBot, getProductDisplayName } = require("../utils/productEnricher");
 const { getMissingSpecs: getMissingSpecsFromExtractor, isMultiItemOrder, extractMultipleItems, formatMultipleItems } = require("../utils/specExtractor");
-const { isBusinessHours, getHandoffTimingMessage } = require("../utils/businessHours");
+const { executeHandoff } = require("../utils/executeHandoff");
 
 /**
  * Extract product specs from a user message
@@ -288,18 +288,11 @@ async function handleRollQuery(userMessage, psid, convo) {
 
     if (isConfeccionadaContext && isLinearMetersRequest) {
       console.log("📏 Linear meters request in confeccionada context - handing off to human");
-      await updateConversation(psid, {
-        lastIntent: "confeccionada_custom_size",
-        handoffRequested: true,
-        handoffReason: "Linear meters request for confeccionada",
-        handoffTimestamp: new Date(),
-        state: "needs_human"
+      return await executeHandoff(psid, convo, userMessage, {
+        reason: 'Linear meters request for confeccionada',
+        responsePrefix: 'Las mallas confeccionadas las manejamos en medidas estándar. Para medidas especiales o por metro lineal, un especialista te puede cotizar.\n\n',
+        lastIntent: 'confeccionada_custom_size'
       });
-
-      return {
-        type: "text",
-        text: `Las mallas confeccionadas las manejamos en medidas estándar. Para medidas especiales o por metro lineal, un especialista te puede cotizar.\n\n${getHandoffTimingMessage()}`
-      };
     }
 
     console.log("🎯 Roll query detected, checking conversation state...");
@@ -335,19 +328,13 @@ async function handleRollQuery(userMessage, psid, convo) {
 
         // All items complete - confirm and hand off
         const formatted = formatMultipleItems(items);
-        await updateConversation(psid, {
-          lastIntent: "multi_roll_quote_ready",
-          productInterest: "rollo",
-          multiItemOrder: items,
-          handoffRequested: true,
-          handoffReason: `Multi-roll order: ${items.length} items`,
-          state: "needs_human"
+        return await executeHandoff(psid, convo, userMessage, {
+          reason: `Multi-roll order: ${items.length} items`,
+          responsePrefix: `✅ Perfecto, tu pedido:\n\n${formatted}\n\n`,
+          lastIntent: 'multi_roll_quote_ready',
+          timingStyle: 'elaborate',
+          extraState: { productInterest: 'rollo', multiItemOrder: items }
         });
-
-        return {
-          type: "text",
-          text: `✅ Perfecto, tu pedido:\n\n${formatted}\n\n${isBusinessHours() ? 'Un especialista te contactará pronto para confirmar precio, disponibilidad y coordinar el envío.' : 'Un especialista te contactará el siguiente día hábil para confirmar precio, disponibilidad y coordinar el envío.'}`
-        };
       }
     }
 
@@ -423,21 +410,12 @@ async function handleRollQuery(userMessage, psid, convo) {
         response += `\n👤 Cliente: ${mergedSpecs.customerName}`;
       }
 
-      response += isBusinessHours()
-        ? `\n\nUn especialista te contactará pronto para confirmar precio y disponibilidad. `
-        : `\n\nUn especialista te contactará el siguiente día hábil para confirmar precio y disponibilidad. `;
-      response += `¿Necesitas algo más?`;
-
-      // Mark for human handoff
-      await updateConversation(psid, {
-        lastIntent: "roll_quote_ready",
-        handoffRequested: true,
-        handoffReason: `Roll quote: ${quantity}x ${width}m x 100m @ ${percentage}%${color ? ' ' + color : ''}`,
-        handoffTimestamp: new Date(),
-        state: "needs_human"
+      return await executeHandoff(psid, convo, userMessage, {
+        reason: `Roll quote: ${quantity}x ${width}m x 100m @ ${percentage}%${color ? ' ' + color : ''}`,
+        responsePrefix: response,
+        lastIntent: 'roll_quote_ready',
+        timingStyle: 'elaborate'
       });
-
-      return { type: "text", text: response };
     }
 
     // ============================================================

@@ -46,14 +46,6 @@ const { resolveWithAI } = require("../utils/flowFallback");
 // Location detection
 const { detectMexicanLocation, detectZipCode } = require("../../mexicanLocations");
 
-// Push notifications for handoffs
-const { sendHandoffNotification } = require("../../services/pushNotifications");
-
-// Business hours check
-const { isBusinessHours, getNextBusinessTimeStr, getHandoffTimingMessage } = require("../utils/businessHours");
-
-// Pre-handoff zip code collection
-const { checkZipBeforeHandoff, handlePendingZipResponse } = require("../utils/preHandoffCheck");
 
 // NOTE: Global intents are now handled by the Intent Dispatcher (ai/intentDispatcher.js)
 // which runs BEFORE flows. This delegation is being phased out.
@@ -428,33 +420,9 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   // ====== PENDING ZIP CODE RESPONSE ======
   // If we asked for zip/city before handoff, process the response
   if (convo?.pendingHandoff) {
-    const zipResult = await handlePendingZipResponse(psid, convo, userMessage);
-    if (zipResult.proceed) {
-      const info = convo.pendingHandoffInfo || {};
-      // Now complete the handoff that was pending
-      await updateConversation(psid, {
-        handoffRequested: true,
-        handoffReason: info.reason || 'Malla sombra handoff',
-        handoffTimestamp: new Date(),
-        state: "needs_human"
-      });
-
-      sendHandoffNotification(psid, convo, info.reason || 'Malla sombra - cliente proporcionó ubicación').catch(err => {
-        console.error("❌ Failed to send push notification:", err);
-      });
-
-      const locationAck = zipResult.zipInfo
-        ? `Perfecto, ${zipResult.zipInfo.city || 'ubicación registrada'}. `
-        : '';
-      const timingMsg = isBusinessHours()
-        ? "Un especialista te contactará pronto."
-        : `Un especialista te contactará ${getNextBusinessTimeStr()}.`;
-
-      return {
-        type: "text",
-        text: `${locationAck}${info.specsText || ''}${timingMsg}`
-      };
-    }
+    const { resumePendingHandoff } = require('../utils/executeHandoff');
+    const pendingResult = await resumePendingHandoff(psid, convo, userMessage);
+    if (pendingResult) return pendingResult;
   }
 
   // Get current state
@@ -469,39 +437,18 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   if (nonStandardShade) {
     const handoffReason = `Malla sombra: porcentaje no estándar (no 90%) — "${userMessage}"`;
-
     console.log(`🚨 Malla flow - Immediate handoff: ${handoffReason}`);
 
-    // Check for zip code before handoff
-    const zipCheck = await checkZipBeforeHandoff(psid, convo, userMessage, {
+    const { executeHandoff } = require('../utils/executeHandoff');
+    return await executeHandoff(psid, convo, userMessage, {
       reason: handoffReason,
-      specsText: `Esa solicitud requiere atención personalizada. `
+      responsePrefix: 'Esa solicitud requiere atención personalizada. ',
+      specsText: 'Esa solicitud requiere atención personalizada. ',
+      lastIntent: 'malla_specialist_handoff',
+      extraState: { productInterest: "malla_sombra" },
+      timingStyle: 'elaborate',
+      includeVideo: true
     });
-    if (zipCheck) return zipCheck;
-
-    await updateConversation(psid, {
-      lastIntent: "malla_specialist_handoff",
-      handoffRequested: true,
-      handoffReason,
-      handoffTimestamp: new Date(),
-      state: "needs_human",
-      productInterest: "malla_sombra",
-      unknownCount: 0
-    });
-
-    sendHandoffNotification(psid, convo, handoffReason).catch(err => {
-      console.error("❌ Failed to send push notification:", err);
-    });
-
-    const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
-    const timingMsg = isBusinessHours()
-      ? "Un especialista te contactará pronto para darte la mejor opción."
-      : "Un especialista te contactará el siguiente día hábil en horario de atención (lunes a viernes 9am-6pm).";
-
-    return {
-      type: "text",
-      text: `Esa solicitud requiere atención personalizada. ${timingMsg}\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
-    };
   }
 
   // CHECK FOR PHOTO/IMAGE REQUEST WITH COLOR
@@ -664,26 +611,13 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       }
 
       // No alternatives available - hand off
-      const zipCheck2 = await checkZipBeforeHandoff(psid, convo, userMessage, {
+      const { executeHandoff: execHandoff2 } = require('../utils/executeHandoff');
+      return await execHandoff2(psid, convo, userMessage, {
         reason: `Sin alternativas para ${convo.requestedSize}`,
-        specsText: `Déjame comunicarte con un especialista para buscar opciones para tu medida. `
+        responsePrefix: 'Déjame comunicarte con un especialista para buscar opciones para tu medida. ',
+        specsText: 'Déjame comunicarte con un especialista para buscar opciones para tu medida. ',
+        timingStyle: 'elaborate'
       });
-      if (zipCheck2) return zipCheck2;
-
-      await updateConversation(psid, {
-        handoffRequested: true,
-        handoffReason: `Sin alternativas para ${convo.requestedSize}`,
-        handoffTimestamp: new Date(),
-        state: "needs_human"
-      });
-
-      const timingMsg = isBusinessHours()
-        ? "Un especialista te contactará pronto."
-        : "Un especialista te contactará el siguiente día hábil en horario de atención (lunes a viernes 9am-6pm).";
-      return {
-        type: "text",
-        text: `Déjame comunicarte con un especialista para buscar opciones para tu medida. ${timingMsg}`
-      };
     }
   }
 
@@ -998,26 +932,20 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
   if (userMessage && distributorPattern.test(userMessage)) {
     console.log(`🏪 Distributor/wholesale question detected in malla flow`);
     const info = await getBusinessInfo();
-    await updateConversation(psid, {
-      lastIntent: "reseller_inquiry",
-      handoffRequested: true,
-      handoffReason: `Consulta de distribuidores/mayoreo: "${userMessage}"`,
-      handoffTimestamp: new Date(),
-      state: "needs_human",
-      unknownCount: 0
-    });
 
-    sendHandoffNotification(psid, convo, `Consulta de distribuidores: "${userMessage}"`).catch(err => {
-      console.error("❌ Failed to send push notification:", err);
-    });
-
-    return {
-      type: "text",
-      text: "Somos fabricantes de malla sombra y buscamos distribuidores.\n\n" +
+    const { executeHandoff } = require('../utils/executeHandoff');
+    return await executeHandoff(psid, convo, userMessage, {
+      reason: `Consulta de distribuidores/mayoreo: "${userMessage}"`,
+      responsePrefix: "Somos fabricantes de malla sombra y buscamos distribuidores.\n\n" +
             "Para cotizaciones de mayoreo, comunícate con nuestro equipo:\n\n" +
             `📞 ${info?.phones?.join(" / ") || "442 595 7432"}\n` +
-            `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`
-    };
+            `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`,
+      lastIntent: 'reseller_inquiry',
+      notificationText: `Consulta de distribuidores: "${userMessage}"`,
+      skipChecklist: true,
+      timingStyle: 'none',
+      includeQueretaro: false
+    });
   }
 
   // Check if user is frustrated about repeating info ("ya te dije", "ya te di las medidas")
@@ -1277,31 +1205,21 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     if (isInsisting) {
       console.log(`📏 Customer insists on ${fractionalKey}m, handing off`);
 
-      const zipCheck3 = await checkZipBeforeHandoff(psid, convo, userMessage, {
-        reason: `Medida con decimales: ${width}x${height}m (insiste en medida exacta)`,
-        specsText: `Malla de ${width}x${height}m. `
-      });
-      if (zipCheck3) return zipCheck3;
-
-      await updateConversation(psid, {
-        lastIntent: "fractional_meters_handoff",
-        handoffRequested: true,
-        handoffReason: `Medida con decimales: ${width}x${height}m (insiste en medida exacta)`,
-        handoffTimestamp: new Date(),
-        state: "needs_human",
-        unknownCount: 0
-      });
-
-      sendHandoffNotification(psid, convo, `Medida con decimales: ${width}x${height}m - cliente insiste en medida exacta`).catch(err => {
-        console.error("❌ Failed to send push notification:", err);
-      });
-
-      const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
-      const response = await generateBotResponse("specialist_handoff", {
+      const aiResponse = await generateBotResponse("specialist_handoff", {
         dimensions: `${width}x${height}m`,
-        videoLink: VIDEO_LINK
+        videoLink: "https://youtube.com/shorts/XLGydjdE7mY"
       });
-      return { type: "text", text: response };
+
+      const { executeHandoff: execHandoff3 } = require('../utils/executeHandoff');
+      return await execHandoff3(psid, convo, userMessage, {
+        reason: `Medida con decimales: ${width}x${height}m (insiste en medida exacta)`,
+        responsePrefix: aiResponse,
+        specsText: `Malla de ${width}x${height}m. `,
+        lastIntent: 'fractional_meters_handoff',
+        notificationText: `Medida con decimales: ${width}x${height}m - cliente insiste en medida exacta`,
+        timingStyle: 'none',
+        includeQueretaro: false
+      });
     }
 
     // First time - only floor the fractional dimension(s), keep whole-number dimensions as-is
@@ -1367,31 +1285,21 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     }
 
     // No standard size found - hand off directly
-    const zipCheck4 = await checkZipBeforeHandoff(psid, convo, userMessage, {
-      reason: `Medida con decimales: ${width}x${height}m`,
-      specsText: `Malla de ${width}x${height}m. `
-    });
-    if (zipCheck4) return zipCheck4;
-
-    await updateConversation(psid, {
-      lastIntent: "fractional_meters_handoff",
-      handoffRequested: true,
-      handoffReason: `Medida con decimales: ${width}x${height}m`,
-      handoffTimestamp: new Date(),
-      state: "needs_human",
-      unknownCount: 0
-    });
-
-    sendHandoffNotification(psid, convo, `Medida con decimales: ${width}x${height}m - requiere atención`).catch(err => {
-      console.error("❌ Failed to send push notification:", err);
-    });
-
-    const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
-    const response = await generateBotResponse("specialist_handoff", {
+    const aiResponse4 = await generateBotResponse("specialist_handoff", {
       dimensions: `${width}x${height}m`,
-      videoLink: VIDEO_LINK
+      videoLink: "https://youtube.com/shorts/XLGydjdE7mY"
     });
-    return { type: "text", text: response };
+
+    const { executeHandoff: execHandoff4 } = require('../utils/executeHandoff');
+    return await execHandoff4(psid, convo, userMessage, {
+      reason: `Medida con decimales: ${width}x${height}m`,
+      responsePrefix: aiResponse4,
+      specsText: `Malla de ${width}x${height}m. `,
+      lastIntent: 'fractional_meters_handoff',
+      notificationText: `Medida con decimales: ${width}x${height}m - requiere atención`,
+      timingStyle: 'none',
+      includeQueretaro: false
+    });
   }
 
   // Check if this is a custom order (both sides >= 8m)
@@ -1404,31 +1312,15 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
 
     const handoffReason = `Medida grande: ${width}x${height}m (ambos lados ≥8m)`;
 
-    const zipCheck5 = await checkZipBeforeHandoff(psid, convo, userMessage, {
+    const { executeHandoff: execHandoff5 } = require('../utils/executeHandoff');
+    return await execHandoff5(psid, convo, userMessage, {
       reason: handoffReason,
-      specsText: `Malla de ${width}x${height}m. `
+      responsePrefix: 'Permíteme contactarte con un especialista para cotizarte esa medida. ',
+      specsText: `Malla de ${width}x${height}m. `,
+      lastIntent: 'custom_order_handoff',
+      extraState: { customOrderSize: `${width}x${height}m` },
+      timingStyle: 'none'
     });
-    if (zipCheck5) return zipCheck5;
-
-    await updateConversation(psid, {
-      lastIntent: "custom_order_handoff",
-      handoffRequested: true,
-      handoffReason,
-      handoffTimestamp: new Date(),
-      state: "needs_human",
-      customOrderSize: `${width}x${height}m`,
-      unknownCount: 0
-    });
-
-    sendHandoffNotification(psid, convo, handoffReason).catch(err => {
-      console.error("❌ Failed to send push notification:", err);
-    });
-
-    const msg = isBusinessHours()
-      ? `Permíteme contactarte con un especialista para cotizarte esa medida.`
-      : `Un especialista se comunicará contigo ${getNextBusinessTimeStr()} para cotizarte esa medida.`;
-
-    return { type: "text", text: msg };
   }
 
   // ====== POI TREE CHECK ======
@@ -1527,31 +1419,15 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       // No link available - hand off to human with video
       console.log(`⚠️ Product ${product.name} has no online store link`);
 
-      const zipCheck6 = await checkZipBeforeHandoff(psid, convo, userMessage, {
+      const { executeHandoff: execHandoff6 } = require('../utils/executeHandoff');
+      return await execHandoff6(psid, convo, userMessage, {
         reason: `Malla ${width}x${height}m - no link available`,
-        specsText: `Malla de ${width}x${height}m. `
+        responsePrefix: `¡Tenemos la ${displayName}! `,
+        specsText: `Malla de ${width}x${height}m. `,
+        notificationText: `Malla ${width}x${height}m - producto sin link`,
+        timingStyle: 'elaborate',
+        includeVideo: true
       });
-      if (zipCheck6) return zipCheck6;
-
-      await updateConversation(psid, {
-        handoffRequested: true,
-        handoffReason: `Malla ${width}x${height}m - no link available`,
-        handoffTimestamp: new Date(),
-        state: "needs_human"
-      });
-
-      sendHandoffNotification(psid, convo, `Malla ${width}x${height}m - producto sin link`).catch(err => {
-        console.error("❌ Failed to send push notification:", err);
-      });
-
-      const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
-      const contactTiming = isBusinessHours()
-        ? "Un especialista te contactará pronto con el precio y link de compra."
-        : "Un especialista te contactará el siguiente día hábil con el precio y link de compra.";
-      return {
-        type: "text",
-        text: `¡Tenemos la ${displayName}! ${contactTiming}\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
-      };
     }
 
     const trackedLink = await generateClickLink(psid, productUrl, {
@@ -1693,32 +1569,15 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
 
     if (piecesNeeded >= 3) {
       // Very large area - hand off for custom order
-      const zipCheck7 = await checkZipBeforeHandoff(psid, convo, userMessage, {
+      const { executeHandoff: execHandoff7 } = require('../utils/executeHandoff');
+      return await execHandoff7(psid, convo, userMessage, {
         reason: `Área grande: ${width}x${height}m (${requestedAreaSqM}m²) - requiere cotización especial`,
-        specsText: `Malla de ${width}x${height}m. `
+        responsePrefix: `Para cubrir ${width}x${height}m (${requestedAreaSqM}m²) necesitarías múltiples piezas o un pedido especial.\n\n`,
+        specsText: `Malla de ${width}x${height}m. `,
+        notificationText: `Malla ${width}x${height}m (${requestedAreaSqM}m²) - área muy grande`,
+        timingStyle: 'elaborate',
+        includeVideo: true
       });
-      if (zipCheck7) return zipCheck7;
-
-      await updateConversation(psid, {
-        handoffRequested: true,
-        handoffReason: `Área grande: ${width}x${height}m (${requestedAreaSqM}m²) - requiere cotización especial`,
-        handoffTimestamp: new Date(),
-        state: "needs_human"
-      });
-
-      sendHandoffNotification(psid, convo, `Malla ${width}x${height}m (${requestedAreaSqM}m²) - área muy grande`).catch(err => {
-        console.error("❌ Failed to send push notification:", err);
-      });
-
-      const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
-      const specialistTiming = isBusinessHours()
-        ? "Déjame comunicarte con un especialista para cotizarte la mejor opción."
-        : "Un especialista te contactará el siguiente día hábil en horario de atención (lunes a viernes 9am-6pm) para cotizarte la mejor opción.";
-      response = `Para cubrir ${width}x${height}m (${requestedAreaSqM}m²) necesitarías múltiples piezas o un pedido especial.\n\n`;
-      response += `${specialistTiming}\n\n`;
-      response += `📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`;
-
-      return { type: "text", text: response };
     } else if (piecesNeeded === 2) {
       // Could cover with 2 pieces - suggest this option
       const totalPrice = largest.product.price * 2;
@@ -1743,29 +1602,15 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
 
   if (!nearestCover && !largest) {
     // No alternatives found - hand off with video
-    const zipCheck8 = await checkZipBeforeHandoff(psid, convo, userMessage, {
+    const { executeHandoff: execHandoff8 } = require('../utils/executeHandoff');
+    return await execHandoff8(psid, convo, userMessage, {
       reason: `Malla quote request: ${width}x${height}m - no alternatives found`,
-      specsText: `Malla de ${width}x${height}m. `
+      responsePrefix: `La medida ${width}x${height}m requiere cotización especial.\n\n`,
+      specsText: `Malla de ${width}x${height}m. `,
+      notificationText: `Malla ${width}x${height}m - sin alternativas disponibles`,
+      timingStyle: 'elaborate',
+      includeVideo: true
     });
-    if (zipCheck8) return zipCheck8;
-
-    await updateConversation(psid, {
-      handoffRequested: true,
-      handoffReason: `Malla quote request: ${width}x${height}m - no alternatives found`,
-      handoffTimestamp: new Date(),
-      state: "needs_human"
-    });
-
-    sendHandoffNotification(psid, convo, `Malla ${width}x${height}m - sin alternativas disponibles`).catch(err => {
-      console.error("❌ Failed to send push notification:", err);
-    });
-
-    const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
-    const priceTiming = isBusinessHours()
-      ? "Un especialista te contactará pronto con el precio."
-      : "Un especialista te contactará el siguiente día hábil con el precio.";
-    response = `La medida ${width}x${height}m requiere cotización especial.\n\n`;
-    response += `${priceTiming}\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`;
   }
 
   return {

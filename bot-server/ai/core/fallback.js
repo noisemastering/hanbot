@@ -1,7 +1,6 @@
 // ai/core/fallback.js
 const { getBusinessInfo } = require("../../businessInfoManager");
 const { updateConversation } = require("../../conversationManager");
-const { sendHandoffNotification } = require("../../services/pushNotifications");
 const { getAngleMessaging } = require("../utils/adContextHelper");
 const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
@@ -322,34 +321,17 @@ async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME
   if (customManufacturingFrustration) {
     console.log(`🏭 Custom manufacturing frustration detected, handing off to specialist`);
 
-    await updateConversation(psid, {
-      unknownCount: 0,
-      handoffRequested: true,
-      handoffReason: "Customer requesting custom manufacturing - needs specialist",
-      handoffTimestamp: new Date(),
-      state: "needs_human",
-      lastIntent: "custom_manufacturing_request"
+    const { executeHandoff } = require('../utils/executeHandoff');
+    return await executeHandoff(psid, convo, userMessage, {
+      reason: 'Customer requesting custom manufacturing - needs specialist',
+      responsePrefix: `Tienes toda la razón, somos fabricantes y SÍ podemos hacer mallas a la medida que necesites.\n\n` +
+        `Voy a transferir tu caso con un especialista que te dará una cotización personalizada. `,
+      specsText: 'Fabricación a medida. ',
+      lastIntent: 'custom_manufacturing_request',
+      notificationText: 'Cliente solicita fabricación a medida - necesita especialista',
+      timingStyle: 'elaborate',
+      followUp: `📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\nhttps://youtube.com/shorts/XLGydjdE7mY`
     });
-
-    // Send push notification to dashboard users
-    sendHandoffNotification(psid, convo, "Cliente solicita fabricación a medida - necesita especialista").catch(err => {
-      console.error("❌ Failed to send push notification:", err);
-    });
-
-    const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
-    const customTiming = isBusinessHours()
-      ? "Un especialista te contactará pronto."
-      : "Un especialista te contactará el siguiente día hábil en horario de atención (lunes a viernes 9am-6pm).";
-    return {
-      type: "text",
-      text:
-        `Tienes toda la razón, somos fabricantes y SÍ podemos hacer mallas a la medida que necesites.\n\n` +
-        `Voy a transferir tu caso con un especialista que te dará una cotización personalizada. ` +
-        `${customTiming}\n\n` +
-        `📞 ${businessInfo.phones.join(" / ")}\n` +
-        `🕓 ${businessInfo.hours}`,
-      followUp: `📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
-    };
   }
 
   // 📜 Get recent conversation history (last 4 messages for context)
@@ -402,47 +384,25 @@ async function handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME
 
   // Flag conversation for human help when bot is struggling
   if (newUnknownCount >= handoffThreshold) {
-    const info = await getBusinessInfo();
-
-    // Mark conversation as needing human intervention
-    const handoffContext = inBusinessHours
-      ? "during business hours"
-      : "after hours/weekend";
-
-    await updateConversation(psid, {
-      unknownCount: 0,
-      handoffRequested: true,
-      handoffReason: `Bot unable to help after ${newUnknownCount} unknown message(s) ${handoffContext}`,
-      handoffTimestamp: new Date(),
-      state: "needs_human"
-    });
-
-    // Send push notification to dashboard users
+    const handoffContext = inBusinessHours ? "during business hours" : "after hours/weekend";
+    const handoffReason = `Bot unable to help after ${newUnknownCount} unknown message(s) ${handoffContext}`;
     const notificationReason = `Bot no pudo ayudar después de ${newUnknownCount} mensaje(s) no entendido(s) ${inBusinessHours ? '(horario laboral)' : '(fuera de horario)'}`;
-    sendHandoffNotification(psid, convo, notificationReason).catch(err => {
-      console.error("❌ Failed to send push notification:", err);
-    });
 
-    // WhatsApp link for direct contact
+    const info = await getBusinessInfo();
     const whatsappLink = "https://wa.me/524425957432";
-    const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
+    const contactBlock = info
+      ? `💬 WhatsApp: ${whatsappLink}\n\n📞 ${info.phones.join(" / ")}\n🕓 ${info.hours}`
+      : `💬 WhatsApp: ${whatsappLink}`;
 
-    if (!info) {
-      return {
-        type: "text",
-        text: `Déjame conectarte con un especialista que pueda ayudarte mejor 😊\n\n💬 WhatsApp: ${whatsappLink}`,
-        followUp: `📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
-      };
-    }
-
-    return {
-      type: "text",
-      text:
-        `Déjame conectarte con un especialista que pueda ayudarte mejor 😊\n\n` +
-        `💬 WhatsApp: ${whatsappLink}\n\n` +
-        `📞 ${info.phones.join(" / ")}\n🕓 ${info.hours}`,
-      followUp: `📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
-    };
+    const { executeHandoff } = require('../utils/executeHandoff');
+    return await executeHandoff(psid, convo, userMessage, {
+      reason: handoffReason,
+      responsePrefix: `Déjame conectarte con un especialista que pueda ayudarte mejor 😊\n\n${contactBlock}\n\n`,
+      notificationText: notificationReason,
+      lastIntent: 'fallback_handoff',
+      timingStyle: 'none',
+      includeVideo: true
+    });
   }
 
   // Before reaching handoff threshold, use simple clarification message

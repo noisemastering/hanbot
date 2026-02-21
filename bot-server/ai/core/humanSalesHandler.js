@@ -6,6 +6,7 @@ const ProductFamily = require("../../models/ProductFamily");
 const ZipCode = require("../../models/ZipCode");
 const { parseDimensions } = require("../../measureHandler");
 const { isBusinessHours } = require("../utils/businessHours");
+const { executeHandoff } = require("../utils/executeHandoff");
 
 /**
  * Detects if user mentioned a human-sellable product
@@ -637,27 +638,24 @@ async function handleMoreItemsResponse(msg, psid, convo) {
     orderSummary += `\n📍 Código Postal: ${zipcode}\n`;
     orderSummary += `\n⏰ ${new Date().toLocaleString('es-MX')}\n`;
 
-    // Clear sales state
-    await updateConversation(psid, {
-      humanSalesState: null,
-      humanSalesCart: [],
-      humanSalesZipcode: null,
-      humanSalesNeighborhood: null,
-      humanSalesPendingNeighborhoods: [],
-      humanSalesCurrentProduct: null,
-      handoffRequested: true,
-      handoffReason: 'human_sellable_product_order',
-      handoffTimestamp: new Date(),
-      state: 'needs_human'
-    });
-
-    // TODO: Send notification to human advisor (Slack/Email/Dashboard)
     console.log("📧 ORDER SUMMARY:", orderSummary);
 
-    return {
-      type: "text",
-      text: `¡Perfecto! He registrado tu pedido. ${isBusinessHours() ? 'Un especialista te contactará pronto' : 'Un especialista te contactará el siguiente día hábil'} para confirmar disponibilidad y calcular el costo de envío a tu código postal.\n\n${orderSummary}\n\n¿Hay algo más en lo que pueda ayudarte?`
-    };
+    return await executeHandoff(psid, '', '', {
+      reason: 'human_sellable_product_order',
+      responsePrefix: `¡Perfecto! He registrado tu pedido. `,
+      skipChecklist: true,
+      timingStyle: 'elaborate',
+      includeQueretaro: false,
+      notificationText: `Pedido producto humano: ${cart.map(i => `${i.quantity}x ${i.productName}`).join(', ')}`,
+      extraState: {
+        humanSalesState: null,
+        humanSalesCart: [],
+        humanSalesZipcode: null,
+        humanSalesNeighborhood: null,
+        humanSalesPendingNeighborhoods: [],
+        humanSalesCurrentProduct: null
+      }
+    });
   }
 
   // Unclear response

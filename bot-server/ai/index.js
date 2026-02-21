@@ -1288,6 +1288,13 @@ async function generateReply(userMessage, psid, referral = null) {
     }
   }
 
+  // ====== CATCH-ALL PENDING HANDOFF (zip response from fallback-triggered handoffs) ======
+  if (!response && convo?.pendingHandoff) {
+    const { resumePendingHandoff } = require('./utils/executeHandoff');
+    const pendingResult = await resumePendingHandoff(psid, convo, userMessage);
+    if (pendingResult) response = pendingResult;
+  }
+
   // ====== FINAL FALLBACK — AI-POWERED ======
   if (!response) {
     console.log(`🔴 No handler matched, escalating to AI fallback: "${userMessage}"`);
@@ -1299,10 +1306,12 @@ async function generateReply(userMessage, psid, referral = null) {
 
     // If AI fallback also failed, use static last resort
     if (!response) {
-      response = {
-        type: "text",
-        text: `Déjame comunicarte con un especialista que pueda ayudarte mejor.\n\n${getHandoffTimingMessage()}`
-      };
+      const { executeHandoff } = require('./utils/executeHandoff');
+      response = await executeHandoff(psid, convo, userMessage, {
+        reason: 'Static fallback handoff',
+        responsePrefix: 'Déjame comunicarte con un especialista que pueda ayudarte mejor.\n\n',
+        lastIntent: 'fallback_handoff'
+      });
     }
   }
 

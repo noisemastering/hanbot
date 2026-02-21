@@ -20,22 +20,14 @@ async function handleStoreLinkRequest({ psid, convo }) {
                          convo?.productSpecs?.productType === 'rollo';
 
   if (isRolloContext) {
-    const { isBusinessHours } = require("../utils/businessHours");
-    await updateConversation(psid, {
-      lastIntent: "rollo_ml_inquiry",
-      handoffRequested: true,
-      handoffReason: "Rollo inquiry asking about ML - needs quote",
-      handoffTimestamp: new Date(),
-      state: "needs_human"
+    const { executeHandoff } = require("../utils/executeHandoff");
+    return await executeHandoff(psid, convo, '', {
+      reason: 'Rollo inquiry asking about ML - needs quote',
+      responsePrefix: 'Los rollos de malla sombra se cotizan directamente con nuestro equipo de ventas.\n\n',
+      lastIntent: 'rollo_ml_inquiry',
+      timingStyle: 'elaborate',
+      includeQueretaro: false
     });
-
-    return {
-      type: "text",
-      text: "Los rollos de malla sombra se cotizan directamente con nuestro equipo de ventas.\n\n" +
-            (isBusinessHours()
-              ? "Un asesor te contactará en breve para ayudarte con tu cotización."
-              : "Un asesor te contactará el siguiente día hábil para ayudarte con tu cotización.")
-    };
   }
 
   const trackedLink = await generateClickLink(psid, STORE_URL, {

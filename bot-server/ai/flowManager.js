@@ -9,8 +9,7 @@ const { INTENTS, PRODUCTS } = require("./classifier");
 const { analyzeUseCaseFit, generateSuggestionMessage } = require("./utils/usoCaseMatcher");
 const ProductFamily = require("../models/ProductFamily");
 const { generateClickLink } = require("../tracking");
-const { sendHandoffNotification } = require("../services/pushNotifications");
-const { getHandoffTimingMessage } = require("./utils/businessHours");
+const { executeHandoff } = require("./utils/executeHandoff");
 const { analyzeProductSwitch } = require("./utils/productSwitchAnalyzer");
 const { matchDimensionToFlow, checkDimensionOwnership } = require("./utils/inventoryMatcher");
 const Ad = require("../models/Ad");
@@ -616,22 +615,17 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
       const productName = productNames[convo.pendingWholesaleRetailChoice] || 'producto';
 
       console.log(`🏭 Wholesale choice confirmed, handing off to specialist`);
-      await updateConversation(psid, {
-        pendingWholesaleRetailChoice: null,
-        handoffRequested: true,
-        handoffReason: `Mayoreo: ${productName}`,
-        handoffTimestamp: new Date(),
-        state: "needs_human"
-      });
-
-      await sendHandoffNotification(psid, convo, `Cliente quiere ${productName} al mayoreo`).catch(err =>
-        console.error("Error sending wholesale handoff notification:", err.message)
-      );
+      await updateConversation(psid, { pendingWholesaleRetailChoice: null });
 
       console.log(`🎯 ===== END FLOW MANAGER (wholesale handoff) =====\n`);
+      const handoffResult = await executeHandoff(psid, convo, userMessage, {
+        reason: `Mayoreo: ${productName}`,
+        responsePrefix: `¡Claro! Para ${productName} al mayoreo te comunico con un especialista que te dará los mejores precios. `,
+        skipChecklist: true,
+        notificationText: `Cliente quiere ${productName} al mayoreo`
+      });
       return {
-        type: "text",
-        text: `¡Claro! Para ${productName} al mayoreo te comunico con un especialista que te dará los mejores precios. ${getHandoffTimingMessage()}`,
+        ...handoffResult,
         handledBy: "flow:wholesale_handoff",
         purchaseIntent: 'high'
       };
@@ -712,21 +706,18 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
 
             await updateConversation(psid, {
               pendingFlowChange: null,
-              pendingUseCaseProducts: null,
-              handoffRequested: true,
-              handoffReason: `Mayoreo: ${productName}`,
-              handoffTimestamp: new Date(),
-              state: "needs_human"
+              pendingUseCaseProducts: null
             });
 
-            await sendHandoffNotification(psid, convo, `Cliente quiere ${productName} (solo mayoreo disponible)`).catch(err =>
-              console.error("Error sending wholesale handoff notification:", err.message)
-            );
-
             console.log(`🎯 ===== END FLOW MANAGER (wholesale-only handoff) =====\n`);
+            const wholesaleResult = await executeHandoff(psid, convo, userMessage, {
+              reason: `Mayoreo: ${productName}`,
+              responsePrefix: `Para ${productName} te comunico con un especialista. `,
+              skipChecklist: true,
+              notificationText: `Cliente quiere ${productName} (solo mayoreo disponible)`
+            });
             return {
-              type: "text",
-              text: `Para ${productName} te comunico con un especialista. ${getHandoffTimingMessage()}`,
+              ...wholesaleResult,
               handledBy: "flow:wholesale_handoff",
               purchaseIntent: 'high'
             };
