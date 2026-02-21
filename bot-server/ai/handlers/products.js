@@ -127,7 +127,7 @@ async function handleLargestProduct({ psid, convo }) {
             convo
           });
 
-          return { type: "text", text: response };
+          return { type: "text", text: trackedLink ? `${response}\n\n${trackedLink}` : response };
         }
       }
     } catch (err) {
@@ -298,7 +298,10 @@ async function handleProductInquiry({ entities, psid, convo, userMessage }) {
           ? `\n\nSolo la manejamos en ${AVAILABLE_COLORS.join(' y ')}.`
           : '';
 
-        return { type: "text", text: response + colorNote };
+        // Append purchase link after AI response
+        const linkSuffix = trackedLink ? `\n\n${trackedLink}` : '';
+
+        return { type: "text", text: response + colorNote + linkSuffix };
       }
 
       // Product not found - find closest alternative

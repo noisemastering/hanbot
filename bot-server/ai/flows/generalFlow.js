@@ -4,7 +4,7 @@
 
 const { updateConversation } = require("../../conversationManager");
 const { INTENTS } = require("../classifier");
-const { getAvailableSizes, getMallaSizeRange } = require("../../measureHandler");
+const { getAvailableSizes, getMallaSizeRange, parseDimensions } = require("../../measureHandler");
 const { isBusinessHours } = require("../utils/businessHours");
 
 /**
@@ -200,6 +200,13 @@ async function handleLocation(convo, psid) {
  * Combines responses for multiple intents in one message
  */
 async function handleMultiQuestion(entities, convo, psid) {
+  // If the message contains dimensions, skip multi-question and let the product flow handle it
+  // This prevents "Perfecto, anotado + Los precios dependen de la medida" when user already gave dimensions
+  if (entities.width && entities.height) {
+    console.log(`📏 Multi-question has dimensions (${entities.width}x${entities.height}), deferring to product flow`);
+    return null;
+  }
+
   await updateConversation(psid, { lastIntent: "multi_question" });
 
   const subIntents = entities.subIntents || [];

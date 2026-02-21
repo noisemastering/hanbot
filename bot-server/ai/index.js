@@ -461,16 +461,21 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
       }
 
       // luego flujo dinámico de campaña
-      try {
-        const flowModule = require(`./campaigns/${campaign.ref}`);
-        const handlerName = Object.keys(flowModule)[0];
-        const flowHandler = flowModule[handlerName];
+      // Skip campaign flow if pendingHandoff — let the product flow handle zip/city response
+      if (!convo?.pendingHandoff) {
+        try {
+          const flowModule = require(`./campaigns/${campaign.ref}`);
+          const handlerName = Object.keys(flowModule)[0];
+          const flowHandler = flowModule[handlerName];
 
-        if (typeof flowHandler === "function") {
-          return await flowHandler(cleanMsg, psid, convo, campaign);
+          if (typeof flowHandler === "function") {
+            return await flowHandler(cleanMsg, psid, convo, campaign);
+          }
+        } catch (err) {
+          console.warn(`⚠️ No se encontró flujo dinámico para la campaña:`, err.message);
         }
-      } catch (err) {
-        console.warn(`⚠️ No se encontró flujo dinámico para la campaña:`, err.message);
+      } else {
+        console.log(`⏭️ Skipping campaign flow - pendingHandoff active, letting product flow handle zip/city response`);
       }
     }
 
@@ -1161,6 +1166,38 @@ async function generateReply(userMessage, psid, referral = null) {
     };
   }
   // ====== END PHONE NUMBER DETECTION ======
+
+  // ====== LINK NOT WORKING DETECTION ======
+  // "No abre", "no habre", "no funciona el link", "no me abre", "no carga"
+  // When user says a link doesn't work, re-share it instead of misclassifying as disinterest
+  const linkNotWorkingPattern = /\b(no\s+(me\s+)?(abr[eé]|habre|carga|funciona|jala|sirve|deja)|link.*(roto|malo|error)|no\s+puedo\s+abrir)\b/i;
+  if (linkNotWorkingPattern.test(userMessage) && (convo?.lastSharedProductLink || convo?.lastProductLink)) {
+    console.log(`🔗 Link not working detected, re-sharing link`);
+    const linkToShare = convo.lastSharedProductLink || convo.lastProductLink;
+    const trackedLink = await generateClickLink(psid, linkToShare, {
+      productName: 'Re-share',
+      city: convo?.city,
+      stateMx: convo?.stateMx
+    });
+    await updateConversation(psid, { lastIntent: "link_reshared", unknownCount: 0 });
+    return {
+      type: "text",
+      text: `Aquí te lo comparto de nuevo:\n\n${trackedLink}`
+    };
+  }
+  // ====== END LINK NOT WORKING DETECTION ======
+
+  // ====== PAY ON DELIVERY PRE-CHECK ======
+  // Regex safety net: if user clearly asks about cash-on-delivery, force pay_on_delivery_query
+  // This prevents misclassification as generic payment_query (which doesn't say NO)
+  const payOnDeliveryPattern = /\b(pago\s+(al\s+)?(recibir|entreg)|contra\s*entrega|contraentrega|cuando\s+llegue\s+pago|al\s+recibir\s+pago|se\s+paga\s+al\s+(recibir|entreg)|cobr[ao]\s+al\s+(recibir|entreg))\b/i;
+  if (payOnDeliveryPattern.test(userMessage)) {
+    console.log(`💳 Pay-on-delivery question detected via regex, forcing explicit NO`);
+    const logisticsHandlers = require("./handlers/logistics");
+    const podResponse = await logisticsHandlers.handlePayOnDelivery({ psid, convo });
+    if (podResponse) return podResponse;
+  }
+  // ====== END PAY ON DELIVERY PRE-CHECK ======
 
   // ====== INTENT DB HANDLING ======
   // Check if intent has a DB-configured response (auto_response, human_handoff, or ai_generate guidance)

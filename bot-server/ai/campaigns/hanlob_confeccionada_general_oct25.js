@@ -178,9 +178,11 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
         return { type: "text", text: response };
       }
 
-      // First time - floor and offer standard size
-      const flooredW = Math.floor(Math.min(requested.w, requested.h));
-      const flooredH = Math.floor(Math.max(requested.w, requested.h));
+      // First time - only floor the fractional dimension(s), keep whole-number dimensions as-is
+      const minD = Math.min(requested.w, requested.h);
+      const maxD = Math.max(requested.w, requested.h);
+      const flooredW = (minD % 1 !== 0) ? Math.floor(minD) : minD;
+      const flooredH = (maxD % 1 !== 0) ? Math.floor(maxD) : maxD;
       console.log(`📏 Campaign: fractional ${requested.w}x${requested.h}m → offering ${flooredW}x${flooredH}m`);
 
       const flooredReq = { w: flooredW, h: flooredH, area: flooredW * flooredH };

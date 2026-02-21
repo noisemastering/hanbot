@@ -1126,7 +1126,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   // 💰 SIMPLE PRICE QUERY - "Precio!", "Precio?", "Precio", "Costo"
   // This is a standalone intent - user is asking for pricing without specifying product
   // Route based on their existing product interest, or ask what they need
-  const isSimplePriceQuery = /^precio[s]?[!?]*$/i.test(msg.trim()) || /^costo[s]?[!?]*$/i.test(msg.trim());
+  const isSimplePriceQuery = /^[¿?]?precio[s]?[!?¿]*$/i.test(msg.trim()) || /^[¿?]?costo[s]?[!?¿]*$/i.test(msg.trim());
 
   if (isSimplePriceQuery) {
     console.log("💰 Simple price intent detected:", msg);
@@ -1743,9 +1743,11 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         };
       }
 
-      // First time - floor and offer standard size
-      const flooredW = Math.floor(Math.min(dimensions.width, dimensions.height));
-      const flooredH = Math.floor(Math.max(dimensions.width, dimensions.height));
+      // First time - only floor the fractional dimension(s), keep whole-number dimensions as-is
+      const minDim = Math.min(dimensions.width, dimensions.height);
+      const maxDim = Math.max(dimensions.width, dimensions.height);
+      const flooredW = (minDim % 1 !== 0) ? Math.floor(minDim) : minDim;
+      const flooredH = (maxDim % 1 !== 0) ? Math.floor(maxDim) : maxDim;
       console.log(`🔘📏 Argollas + fractional ${dimensions.width}x${dimensions.height}m → offering ${flooredW}x${flooredH}m`);
 
       try {
@@ -2611,9 +2613,11 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
           };
         }
 
-        // First time - floor and offer standard size
-        const flooredW = Math.floor(Math.min(dimensions.width, dimensions.height));
-        const flooredH = Math.floor(Math.max(dimensions.width, dimensions.height));
+        // First time - only floor the fractional dimension(s), keep whole-number dimensions as-is
+        const minDim2 = Math.min(dimensions.width, dimensions.height);
+        const maxDim2 = Math.max(dimensions.width, dimensions.height);
+        const flooredW = (minDim2 % 1 !== 0) ? Math.floor(minDim2) : minDim2;
+        const flooredH = (maxDim2 % 1 !== 0) ? Math.floor(maxDim2) : maxDim2;
         console.log(`📏 Fractional ${dimensions.width}x${dimensions.height}m → offering ${flooredW}x${flooredH}m`);
 
         try {

@@ -3,6 +3,7 @@
 // Uses existing product utilities for search and tree climbing
 
 const { updateConversation } = require("../../conversationManager");
+const { getBusinessInfo } = require("../../businessInfoManager");
 const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
 const { INTENTS } = require("../classifier");
@@ -950,6 +951,67 @@ async function handleStart(sourceContext, convo) {
  * Handle awaiting dimensions stage
  */
 async function handleAwaitingDimensions(intent, state, sourceContext, userMessage = '', convo = null, psid = null) {
+  // Check if user is asking about max/min size (e.g., "de cuantos metros es de ancha maximo")
+  const maxSizePattern = /\b(m[aá]xim[oa]|m[aá]s\s+(grande|anch[oa]|larg[oa])|cu[aá]nto\s+de\s+anch|metros\s+.*\s+m[aá]xim|anch[oa]\s+m[aá]xim|larg[oa]\s+m[aá]xim)\b/i;
+  if (userMessage && maxSizePattern.test(userMessage)) {
+    console.log(`📏 Max size question detected in awaiting_dimensions: "${userMessage}"`);
+    const availableSizes = await getAvailableSizes(convo);
+    if (availableSizes.length > 0) {
+      const sorted = [...availableSizes].sort((a, b) => (b.width || 0) * (b.height || 0) - (a.width || 0) * (a.height || 0));
+      const largest = sorted[0];
+      // Find max width (the smaller dimension across all products)
+      const maxWidth = Math.max(...availableSizes.map(s => Math.min(s.width || 0, s.height || 0)));
+      const maxLength = Math.max(...availableSizes.map(s => Math.max(s.width || 0, s.height || 0)));
+      await updateConversation(psid, { lastIntent: "max_size_answered", unknownCount: 0 });
+      return {
+        type: "text",
+        text: `La malla más ancha que manejamos es de ${maxWidth} metros, y de largo hasta ${maxLength} metros.\n\nLa medida más grande disponible es ${largest.sizeStr} a $${largest.price}.\n\n¿Te interesa esa u otra medida?`
+      };
+    }
+  }
+
+  // Check if user is asking about price per meter (not a standard confeccionada query)
+  const perMeterPattern = /\b(cu[aá]nto|precio|vale|cuesta)\s+(?:el\s+)?metro\b/i;
+  if (userMessage && perMeterPattern.test(userMessage)) {
+    console.log(`📏 Price-per-meter question detected in malla flow`);
+    await updateConversation(psid, { lastIntent: "price_by_meter", unknownCount: 0 });
+    return {
+      type: "text",
+      text: "No vendemos por metro, sino por medidas específicas ya confeccionadas (2x2m, 3x4m, 4x6m, etc.).\n\n" +
+            "Si necesitas comprar malla en rollo completo (por metro), vendemos rollos de:\n" +
+            "• 4.20m x 100m\n" +
+            "• 2.10m x 100m\n\n" +
+            "¿Qué te interesa: una medida específica confeccionada o un rollo completo?"
+    };
+  }
+
+  // Check if user is asking about wholesale/distributor
+  const distributorPattern = /\b(distribuid|mayorist|revend|mayoreo|distribuc|publicidad.*distribui)\b/i;
+  if (userMessage && distributorPattern.test(userMessage)) {
+    console.log(`🏪 Distributor/wholesale question detected in malla flow`);
+    const info = await getBusinessInfo();
+    await updateConversation(psid, {
+      lastIntent: "reseller_inquiry",
+      handoffRequested: true,
+      handoffReason: `Consulta de distribuidores/mayoreo: "${userMessage}"`,
+      handoffTimestamp: new Date(),
+      state: "needs_human",
+      unknownCount: 0
+    });
+
+    sendHandoffNotification(psid, convo, `Consulta de distribuidores: "${userMessage}"`).catch(err => {
+      console.error("❌ Failed to send push notification:", err);
+    });
+
+    return {
+      type: "text",
+      text: "Somos fabricantes de malla sombra y buscamos distribuidores.\n\n" +
+            "Para cotizaciones de mayoreo, comunícate con nuestro equipo:\n\n" +
+            `📞 ${info?.phones?.join(" / ") || "442 595 7432"}\n` +
+            `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`
+    };
+  }
+
   // Check if user is frustrated about repeating info ("ya te dije", "ya te di las medidas")
   const alreadyToldPattern = /\b(ya\s+te\s+di(je)?|ya\s+lo\s+di(je)?|ya\s+mencion[eé]|te\s+dije|las?\s+medidas?\s+ya)\b/i;
   if (userMessage && alreadyToldPattern.test(userMessage)) {
@@ -1234,9 +1296,11 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       return { type: "text", text: response };
     }
 
-    // First time - floor and offer standard size
-    const flooredW = Math.floor(Math.min(width, height));
-    const flooredH = Math.floor(Math.max(width, height));
+    // First time - only floor the fractional dimension(s), keep whole-number dimensions as-is
+    const minDim = Math.min(width, height);
+    const maxDim = Math.max(width, height);
+    const flooredW = (minDim % 1 !== 0) ? Math.floor(minDim) : minDim;
+    const flooredH = (maxDim % 1 !== 0) ? Math.floor(maxDim) : maxDim;
     console.log(`📏 Fractional size ${width}x${height}m → offering ${flooredW}x${flooredH}m`);
 
     try {
