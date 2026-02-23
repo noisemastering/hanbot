@@ -503,11 +503,12 @@ AVAILABLE INTENTS:
 PRODUCT CLASSIFICATION RULES:
 1. "malla sombra" + dimensions (e.g., "malla 10x10") → product: "malla_sombra", intent: "product_inquiry"
 2. "malla sombra" without "rollo" or "100 metros" → product: "malla_sombra" (confeccionada)
-3. "rollo" or "100 metros" mentioned → product: "rollo"
-4. Borde lengths (6, 9, 18, 54 meters) → product: "borde_separador"
+3. Borde lengths (6, 9, 18, 54 meters) even with word "rollo" → product: "borde_separador" (borde separador comes in rolls of 6m, 9m, 18m, 54m)
+4. "rollo" or "100 metros" mentioned (WITHOUT borde lengths) → product: "rollo"
 5. "antimaleza" or "ground cover" → product: "groundcover"
 6. "monofilamento" → product: "monofilamento"
 7. If campaign context specifies products, prefer those
+8. IMPORTANT: "rollo de 18 metros" = borde_separador (NOT rollo). Real rollos are 100m long.
 
 CRITICAL EXAMPLES:
 - "Qué colores tienen en existencia?" → intent: "color_query" (NOT location_query!)
