@@ -192,15 +192,16 @@ async function checkForRepetition(response, psid, convo) {
     return response;
   }
 
-  // Normalize for comparison (remove emojis, extra spaces, lowercase)
+  // Normalize for comparison (remove emojis, URLs, extra spaces, lowercase)
   const normalizeText = (text) => {
     if (!text) return '';
     return text
       .replace(/[\u{1F300}-\u{1F9FF}]/gu, '') // Remove emojis
+      .replace(/https?:\/\/\S+/g, '[LINK]')    // Normalize URLs so different tracked links still match
       .replace(/\s+/g, ' ')
       .trim()
       .toLowerCase()
-      .substring(0, 200); // Compare first 200 chars
+      .substring(0, 300); // Compare first 300 chars
   };
 
   const currentNormalized = normalizeText(response.text);

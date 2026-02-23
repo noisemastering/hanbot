@@ -432,6 +432,35 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   console.log(`🌐 Malla flow - Intent: ${intent}, Entities:`, entities);
   console.log(`🌐 Malla flow - User message: "${userMessage}"`);
 
+  // ====== DUPLICATE QUOTE DETECTION ======
+  // If user asks a simple price question and we already shared a quote for this size,
+  // confirm the previous quote instead of generating a full new one
+  if (convo?.lastSharedProductId && convo?.lastSharedProductLink && state.width && state.height) {
+    const hasNewDimensions = (entities.width && entities.height) || parseDimensions(userMessage);
+    const isSimplePriceAsk = !hasNewDimensions && (
+      intent === 'price_query' ||
+      /^¿?\s*(precio|presio|costo|cu[aá]nto\s*(cuesta|sale|es|vale)?)\s*[?!.]*$/i.test(userMessage.trim())
+    );
+
+    if (isSimplePriceAsk) {
+      try {
+        const lastProduct = await ProductFamily.findById(convo.lastSharedProductId).lean();
+        if (lastProduct && lastProduct.price) {
+          const sizeDisplay = `${Math.min(state.width, state.height)}x${Math.max(state.width, state.height)}`;
+          console.log(`🔁 Duplicate quote detection: confirming ${sizeDisplay}m at $${lastProduct.price}`);
+          await updateConversation(psid, { lastIntent: "price_reconfirmed", unknownCount: 0 });
+          return {
+            type: "text",
+            text: `Sí, la de ${sizeDisplay}m está a $${lastProduct.price.toLocaleString()} con envío incluido.\n\nAquí te paso el link:\n${convo.lastSharedProductLink}`
+          };
+        }
+      } catch (err) {
+        console.error("⚠️ Duplicate quote check error:", err.message);
+      }
+    }
+  }
+  // ====== END DUPLICATE QUOTE DETECTION ======
+
   // ====== IMMEDIATE HANDOFF: non-90% shade percentage ======
   const nonStandardShade = /\b(al\s*)?(35|50|70|80)\s*(%|porciento|por\s*ciento)\b/i.test(userMessage);
 
