@@ -79,6 +79,9 @@ const handlers = {
   [INTENTS.STORE_VISIT]: conversationHandlers.handleStoreVisit,
   [INTENTS.PURCHASE_DEFERRAL]: conversationHandlers.handlePurchaseDeferral,
   [INTENTS.LOCATION_TOO_FAR]: conversationHandlers.handleLocationTooFar,
+
+  // ===== OFF TOPIC =====
+  [INTENTS.OFF_TOPIC]: escalationHandlers.handleOffTopic,
 };
 
 /**

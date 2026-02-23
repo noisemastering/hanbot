@@ -497,7 +497,7 @@ AVAILABLE INTENTS:
 - phone_request: "Teléfono?", "Número para llamar?", "WhatsApp?"
 
 [OTHER]
-- off_topic: Unrelated to products (weather, politics, jokes)
+- off_topic: Unrelated to products (weather, politics, jokes, job inquiries like "vacante", "empleo", "busco trabajo")
 - unclear: Can't determine intent
 
 PRODUCT CLASSIFICATION RULES:
@@ -879,6 +879,11 @@ function quickClassify(message, dbIntents = null) {
   // Simple price query — must be the ENTIRE message (includes common misspelling "presio")
   if (/^(precio|presio|precios?|costos?)[\s!?.]*$/i.test(msg)) {
     return { intent: INTENTS.PRICE_QUERY, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
+  }
+
+  // Job/employment inquiries — not a customer, hand off immediately
+  if (/\b(vacante|empleo|trabajo|contratando|contratan|solicito\s+empleo|ayudante\s+general|busco\s+trabajo|plaza|puesto\s+de\s+trabajo|curr[ií]cul[ou]m|cv)\b/i.test(msg)) {
+    return { intent: INTENTS.OFF_TOPIC, product: PRODUCTS.UNKNOWN, entities: { reason: 'job_inquiry' }, confidence: 0.95 };
   }
 
   // ===== EVERYTHING ELSE → AI =====

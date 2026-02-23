@@ -195,11 +195,42 @@ async function handleCustomModification({ psid, convo, userMessage }) {
   });
 }
 
+/**
+ * Handle off-topic messages — job inquiries, unrelated questions, etc.
+ * These are not customers. Hand off to human immediately.
+ */
+async function handleOffTopic({ psid, convo, userMessage, entities }) {
+  const isJobInquiry = entities?.reason === 'job_inquiry' ||
+    /\b(vacante|empleo|trabajo|contratando|contratan|ayudante|busco\s+trabajo|plaza|curr[ií]cul[ou]m|cv)\b/i.test(userMessage);
+
+  if (isJobInquiry) {
+    return await executeHandoff(psid, convo, userMessage, {
+      reason: `Job inquiry: "${userMessage.substring(0, 100)}"`,
+      responsePrefix: 'Gracias por tu interés. Te comunico con el equipo para que puedan orientarte.',
+      lastIntent: 'job_inquiry_handoff',
+      skipChecklist: true,
+      timingStyle: 'none',
+      notificationText: `Consulta de empleo: "${userMessage.substring(0, 100)}"`
+    });
+  }
+
+  // Generic off-topic — brief response, no handoff
+  return await executeHandoff(psid, convo, userMessage, {
+    reason: `Off-topic: "${userMessage.substring(0, 100)}"`,
+    responsePrefix: 'Nosotros nos dedicamos a la venta de mallas sombra. Te comunico con alguien que pueda orientarte.',
+    lastIntent: 'off_topic_handoff',
+    skipChecklist: true,
+    timingStyle: 'none',
+    notificationText: `Mensaje fuera de tema: "${userMessage.substring(0, 100)}"`
+  });
+}
+
 module.exports = {
   handleFrustration,
   handleHumanRequest,
   handleComplaint,
   handlePriceConfusion,
   handleOutOfStock,
-  handleCustomModification
+  handleCustomModification,
+  handleOffTopic
 };
