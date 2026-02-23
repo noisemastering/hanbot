@@ -886,6 +886,12 @@ function quickClassify(message, dbIntents = null) {
     return { intent: INTENTS.OFF_TOPIC, product: PRODUCTS.UNKNOWN, entities: { reason: 'job_inquiry' }, confidence: 0.95 };
   }
 
+  // Deferral / "I'll measure later" — user is NOT asking a question, they're stepping away
+  // "Voy a checar las medidas", "Voy a medir", "Déjame medir", "Necesito medir", "Voy medir"
+  if (/\b(voy\s+a?\s*(medir|checar|ver|revisar|pensar)|d[eé]jame\s+(medir|checar|pensar|ver)|necesito\s+medir|lo\s+(pienso|checo|veo)|ahorita\s+no|por\s+ahora|despu[eé]s\s+te\s+(aviso|digo|confirmo)|ma[ñn]ana\s+te\s+(aviso|digo|confirmo)|al\s+rato\s+te)\b/i.test(msg)) {
+    return { intent: INTENTS.WILL_GET_BACK, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
+  }
+
   // ===== EVERYTHING ELSE → AI =====
   // If regex can't match the full message, let the AI classifier handle it.
   // AI is better at understanding compound messages, typos, and context.
