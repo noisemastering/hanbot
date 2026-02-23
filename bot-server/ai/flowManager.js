@@ -430,38 +430,9 @@ async function detectFlow(classification, convo, userMessage, sourceContext) {
     return FLOW_REF_MAP[adFlowRef];
   }
 
-  // 4. CLASSIFICATION PRODUCT: Explicit product detected in message
-  // BUT: If classifier says "rollo" and message has borde-specific lengths (6/9/18/54m),
-  // this is a borde separador (which comes in meter rolls), not a 100m malla sombra roll.
-  if (classification.product && classification.product !== PRODUCTS.UNKNOWN) {
-    let effectiveProduct = classification.product;
-
-    // Override: "rollo" + borde length → borde_separador
-    if (effectiveProduct === PRODUCTS.ROLLO && /\b(6|9|18|54)\s*(m|metros?|mts?)\b/i.test(msg) && !/\b100\s*(m|metros?)\b/i.test(msg)) {
-      console.log(`🔄 Classification override: "rollo" + borde length detected → borde_separador`);
-      effectiveProduct = PRODUCTS.BORDE_SEPARADOR;
-    }
-
-    // Override: classifier disagrees with ad context for borde
-    if (effectiveProduct === PRODUCTS.ROLLO && convo?.productInterest === 'borde_separador') {
-      console.log(`🔄 Classification override: classifier said "rollo" but ad context is borde_separador`);
-      effectiveProduct = PRODUCTS.BORDE_SEPARADOR;
-    }
-
-    const flowMap = {
-      [PRODUCTS.MALLA_SOMBRA]: 'malla_sombra',
-      [PRODUCTS.ROLLO]: 'rollo',
-      [PRODUCTS.BORDE_SEPARADOR]: 'borde_separador',
-      [PRODUCTS.GROUNDCOVER]: 'groundcover',
-      [PRODUCTS.MONOFILAMENTO]: 'monofilamento'
-    };
-
-    if (flowMap[effectiveProduct]) {
-      return flowMap[effectiveProduct];
-    }
-  }
-
-  // 5. PRODUCT INTEREST: From conversation context (ads, previous context)
+  // 4. PRODUCT INTEREST: From conversation context (ads, previous context)
+  // This takes priority over the classifier because keywords like "rollo" are
+  // contextual — in borde flow it means borde roll, in rollo flow it means malla roll.
   if (convo?.productInterest) {
     const pi = convo.productInterest.toLowerCase();
 
@@ -482,6 +453,21 @@ async function detectFlow(classification, convo, userMessage, sourceContext) {
     }
   }
 
+  // 5. CLASSIFICATION PRODUCT: Explicit product detected in message
+  if (classification.product && classification.product !== PRODUCTS.UNKNOWN) {
+    const flowMap = {
+      [PRODUCTS.MALLA_SOMBRA]: 'malla_sombra',
+      [PRODUCTS.ROLLO]: 'rollo',
+      [PRODUCTS.BORDE_SEPARADOR]: 'borde_separador',
+      [PRODUCTS.GROUNDCOVER]: 'groundcover',
+      [PRODUCTS.MONOFILAMENTO]: 'monofilamento'
+    };
+
+    if (flowMap[classification.product]) {
+      return flowMap[classification.product];
+    }
+  }
+
   // 6. KEYWORD DETECTION
   // "malla" alone (without rollo/maleza/monofilamento qualifier) → malla sombra confeccionada
   if (/\b(malla\s*sombra|confeccionada)\b/i.test(msg) && !/rollo/i.test(msg)) {
@@ -491,10 +477,6 @@ async function detectFlow(classification, convo, userMessage, sourceContext) {
     return 'malla_sombra';
   }
   if (/\brollo\b/i.test(msg) || /\b100\s*m(etros?)?\b/i.test(msg)) {
-    // "rollo de 18 metros" = borde separador, not a 100m malla roll
-    if (/\b(6|9|18|54)\s*(m|metros?|mts?)\b/i.test(msg) && !/\b100\s*(m|metros?)\b/i.test(msg)) {
-      return 'borde_separador';
-    }
     return 'rollo';
   }
   // "malla" + shade percentage (35/50/70/80/90%) → rollo (rolls come in percentages)
