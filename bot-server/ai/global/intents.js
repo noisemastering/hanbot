@@ -1272,28 +1272,40 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   // Instead of dumping a huge list, ask for specific dimensions
   // NOTE: "precios y medidas" is handled by EXPLICIT LIST REQUEST below to show the full list
   // IMPORTANT: Skip if user already provided dimensions (e.g., "cotización de 4x16")
+  // IMPORTANT: If user came from a specific ad (has productInterest), show the full list instead
   const hasDimensionsInMessage = parseDimensions(msg);
+  let catalogRequestWithProductContext = false;
   if (!hasDimensionsInMessage && (
-      /\b(pongan?|den|muestren?|env[ií]en?|pasame?|pasen?|listado?)\s+(de\s+)?(precios?|medidas?|opciones?|tama[ñn]os?|colores?)\b/i.test(msg) ||
+      /\b(pongan?|den|muestren?|env[ií]en?|pasame?|pasen?|lista(do)?)\s+(de\s+)?(precios?|medidas?|opciones?|tama[ñn]os?|colores?)\b/i.test(msg) ||
       /\b(hacer\s+presupuesto|cotizaci[oó]n|cotizar)\b/i.test(msg) ||
       /\b(opciones?\s+disponibles?)\b/i.test(msg) ||
       /\b(medidas?\s+est[aá]ndares?)\b/i.test(msg))) {
 
-    await updateConversation(psid, { lastIntent: "catalog_request" });
+    // If user came from a specific ad/product context, show the full product list
+    // instead of asking for dimensions — they already know what they want
+    if (convo.productInterest || convo.currentFlow) {
+      console.log(`📋 Catalog request with product context (${convo.productInterest || convo.currentFlow}) — showing full list`);
+      catalogRequestWithProductContext = true;
+      // Fall through to the EXPLICIT LIST REQUEST handler below
+    } else {
+      await updateConversation(psid, { lastIntent: "catalog_request" });
 
-    // Don't dump entire product list - ask for dimensions instead
-    const catRange = await getMallaSizeRange(convo);
-    return {
-      type: "text",
-      text: `Tenemos mallas sombra beige en varias medidas, desde ${catRange.smallest} hasta ${catRange.largest}, y también rollos de 100m.\n\n` +
-            "Para darte el precio exacto, ¿qué medida necesitas para tu proyecto? 📐"
-    };
+      // Don't dump entire product list - ask for dimensions instead
+      const catRange = await getMallaSizeRange(convo);
+      return {
+        type: "text",
+        text: `Tenemos mallas sombra beige en varias medidas, desde ${catRange.smallest} hasta ${catRange.largest}, y también rollos de 100m.\n\n` +
+              "Para darte el precio exacto, ¿qué medida necesitas para tu proyecto? 📐"
+      };
+    }
   }
 
   // 📋 EXPLICIT LIST REQUEST - "dígame las medidas", "muéstreme las opciones", "ver la lista"
   // User is explicitly asking to see all sizes with prices
   // Also catches: "qué medidas tienen", "que tamaños manejan", "cuánto cuesta y que medidas tienen", "precios y medidas"
-  if (/\b(d[ií]game|mu[eé]str[ea]me|ens[eé][ñn]ame|ver|quiero\s+ver|dame)\s+(l[oa]s\s+)?(medidas|opciones|lista|precios|tama[ñn]os)/i.test(msg) ||
+  // Also fires when CATALOG REQUEST falls through due to product context (ad-specific)
+  if (catalogRequestWithProductContext || // Fall-through from CATALOG REQUEST with ad context
+      /\b(d[ií]game|mu[eé]str[ea]me|ens[eé][ñn]ame|ver|quiero\s+ver|dame)\s+(l[oa]s\s+)?(medidas|opciones|lista|precios|tama[ñn]os)/i.test(msg) ||
       /\b(todas?\s+las?\s+medidas?|todas?\s+las?\s+opciones?|lista\s+completa|ver\s+(la\s+)?lista)\b/i.test(msg) ||
       /\b(usted\s+d[ií]game|dime\s+t[uú]|d[ií]ganme)\b/i.test(msg) ||
       /\b(s[ií].*mu[eé]str[ea]me|s[ií].*ver\s+la\s+lista|s[ií].*las\s+opciones)\b/i.test(msg) ||
@@ -1304,11 +1316,19 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
     await updateConversation(psid, { lastIntent: "show_all_sizes_requested", unknownCount: 0 });
 
-    // Fetch all available sizes
+    // Fetch available sizes (filtered by ad/campaign products if available)
     const availableSizes = await getAvailableSizes(convo);
 
     if (availableSizes.length > 0) {
-      let response = "📐 Estas son nuestras medidas confeccionadas con precio:\n\n";
+      // Product-aware header based on conversation context
+      const productType = convo.productInterest || convo.currentFlow;
+      const PRODUCT_HEADERS = {
+        'groundcover': '📐 Estas son nuestras medidas de *Ground Cover (malla antimaleza)* con precio:',
+        'monofilamento': '📐 Estas son nuestras medidas de *malla monofilamento* con precio:',
+        'rollo': '📐 Estas son nuestras medidas de *rollos de malla* con precio:',
+        'borde_separador': '📐 Estas son nuestras medidas de *borde separador* con precio:'
+      };
+      let response = (PRODUCT_HEADERS[productType] || "📐 Estas son nuestras medidas confeccionadas con precio:") + "\n\n";
 
       // Show all sizes up to 20
       const sizesFormatted = availableSizes.slice(0, 20).map(s => `• ${s.sizeStr} - $${s.price}`);
@@ -1318,7 +1338,12 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         response += `\n\n... y ${availableSizes.length - 20} medidas más en nuestra tienda.`;
       }
 
-      response += "\n\nTambién manejamos rollos de 4.20x100m y 2.10x100m.\n\n";
+      // Only mention rollos if not already in a specific non-malla-sombra flow
+      if (!productType || productType === 'malla_sombra') {
+        response += "\n\nTambién manejamos rollos de 4.20x100m y 2.10x100m.\n\n";
+      } else {
+        response += "\n\n";
+      }
       response += "¿Cuál te interesa?";
 
       return { type: "text", text: addOfferHookIfRelevant(response, convo) };
