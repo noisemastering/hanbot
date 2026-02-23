@@ -52,8 +52,9 @@ async function generateClickLink(psid, originalUrl, options = {}) {
 
   await clickLog.save();
 
-  // Use environment variable for base URL, fallback to localhost
-  const baseUrl = process.env.BASE_URL || 'http://localhost:3000';
+  // TEMPORARY: Use Railway direct URL while hanlob.com.mx DNS (infinitweb) is down
+  // TODO: revert to process.env.BASE_URL once DNS is restored
+  const baseUrl = 'https://hanbot-production.up.railway.app';
   return `${baseUrl}/r/${clickId}`;
 }
 
