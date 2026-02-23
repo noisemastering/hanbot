@@ -902,6 +902,78 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
+  // 📞 CALLBACK REQUEST - User wants to be called or prefers a phone conversation
+  // "me parece prudente una llamada", "prefiero por teléfono", "pueden llamarme", "quiero hablar por teléfono"
+  // This triggers an immediate handoff so a human agent can call them
+  if (/\b(llamada\s+telef[oó]nica|prefiero\s+(una\s+)?llamada|prudente\s+una\s+llamada|quiero\s+(una\s+)?llamada)\b/i.test(msg) ||
+      /\b(hablar\s+por\s+tel[eé]fono|comunicar(me|nos)?\s+por\s+tel[eé]fono|platicar\s+por\s+tel[eé]fono)\b/i.test(msg) ||
+      /\b(pueden\s+llamar(me)?|podr[ií]an\s+llamar(me)?|me\s+llaman|que\s+me\s+llam(e|en))\b/i.test(msg) ||
+      /\b(ll[aá]m[ae]me|ll[aá]menme|una\s+llamada\s+para)\b/i.test(msg)) {
+
+    console.log("📞 User requesting a phone call / callback — triggering handoff");
+
+    const info = await getBusinessInfo();
+    const timing = getHandoffTimingMessage();
+
+    await updateConversation(psid, {
+      lastIntent: "callback_request",
+      handoffRequested: true,
+      handoffReason: `Cliente solicita llamada telefónica: "${msg.substring(0, 80)}"`,
+      handoffTimestamp: new Date(),
+      state: "needs_human",
+      unknownCount: 0
+    });
+
+    sendHandoffNotification(psid, convo, `Solicita llamada telefónica: "${msg.substring(0, 60)}"`).catch(err => {
+      console.error("❌ Failed to send push notification:", err);
+    });
+
+    return {
+      type: "text",
+      text: `¡Con gusto! ${timing}\n\n` +
+            `📞 ${info?.phones?.[0] || "442 352 1646"}\n` +
+            `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}\n\n` +
+            `Si prefieres, también puedes llamarnos directamente a ese número.`
+    };
+  }
+
+  // 🏪 RESELLER / "PARA VENDER" - User wants to resell our products
+  // "para vender sería", "para reventa", "para mi negocio", "para mi tienda", "para mi ferretería"
+  // Immediate handoff — wholesale clients need human attention
+  if (/\bpara\s+(vender|revender|reventa|mi\s+(negocio|tienda|local|ferreter[ií]a|comercio))\b/i.test(msg) ||
+      /\b(quiero\s+vender|soy\s+(vendedor|comerciante)|tengo\s+(un\s+)?(negocio|tienda|ferreter[ií]a|local))\b/i.test(msg) ||
+      /\b(ser\s+distribuid|hacerme\s+distribuid|quiero\s+distribui|busco\s+proveed)\b/i.test(msg)) {
+
+    console.log("🏪 Reseller/wholesale intent detected — triggering handoff");
+
+    const info = await getBusinessInfo();
+    const timing = getHandoffTimingMessage();
+
+    await updateConversation(psid, {
+      lastIntent: "reseller_inquiry",
+      productInterest: convo.productInterest || "wholesale",
+      isWholesaleInquiry: true,
+      handoffRequested: true,
+      handoffReason: `Cliente quiere revender/distribuir: "${msg.substring(0, 80)}"`,
+      handoffTimestamp: new Date(),
+      state: "needs_human",
+      unknownCount: 0
+    });
+
+    sendHandoffNotification(psid, convo, `Consulta de distribuidor/reventa: "${msg.substring(0, 60)}"`).catch(err => {
+      console.error("❌ Failed to send push notification:", err);
+    });
+
+    return {
+      type: "text",
+      text: `¡Excelente! Somos fabricantes y trabajamos con distribuidores en todo México.\n\n` +
+            `${timing}\n\n` +
+            `📞 ${info?.phones?.[0] || "442 352 1646"}\n` +
+            `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}\n\n` +
+            `También puedes contactarnos directo por WhatsApp: https://wa.me/524423521646`
+    };
+  }
+
   // 📞 PHONE NUMBER REQUEST - "tienes teléfono?", "número para llamar", "me pueden llamar"
   // Simple contact info request - just give them the phone!
   if (/\b(tel[eé]fono|n[uú]mero|llamar|contacto|whatsapp|celular)\b/i.test(msg) &&
