@@ -97,6 +97,22 @@ async function dispatch(classification, context) {
 
   console.log(`🎯 Intent Dispatcher: ${intent} (confidence: ${confidence})`);
 
+  // When conversation is in a specific product flow (not default/malla_sombra),
+  // let product-related intents fall through to the flow manager so they use
+  // the correct flow's DB queries (e.g. bordeFlow queries borde products)
+  const PRODUCT_INTENTS_FOR_FLOWS = new Set([
+    INTENTS.CATALOG_REQUEST,
+    INTENTS.LARGEST_PRODUCT,
+    INTENTS.SMALLEST_PRODUCT,
+    INTENTS.DURABILITY_QUERY,
+  ]);
+  const currentFlow = convo?.currentFlow;
+  const flowSpecificProducts = ['borde_separador', 'rollo', 'groundcover', 'monofilamento'];
+  if (PRODUCT_INTENTS_FOR_FLOWS.has(intent) && flowSpecificProducts.includes(currentFlow)) {
+    console.log(`📋 Skipping dispatcher for "${intent}" — conversation in ${currentFlow} flow, passing to flow manager`);
+    return null;
+  }
+
   // Get handler for this intent
   const handler = handlers[intent];
 
