@@ -540,9 +540,12 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
       console.log("✅ Mensaje entendido, contador de clarificación reiniciado");
     }
 
-    // 📎 MULTI-QUESTION: skip single-intent handlers and go straight to AI splitter
-    if (classification.intent === INTENTS.MULTI_QUESTION) {
-      console.log(`📎 Multi-question detected, skipping single-intent handlers`);
+    // 📎 MULTI-QUESTION: only use splitter when there's NO product flow context
+    // When a flow is active (from ad, product interest, etc.), let the flow handle everything
+    const hasFlowContext = (convo.currentFlow && convo.currentFlow !== 'default') ||
+                           convo.adFlowRef || convo.productInterest || convo.adProductIds?.length;
+    if (classification.intent === INTENTS.MULTI_QUESTION && !hasFlowContext) {
+      console.log(`📎 Multi-question detected (no flow context), using AI splitter`);
       const { handleMultiQuestion } = require("./utils/multiQuestionHandler");
       const mqResponse = await handleMultiQuestion(
         userMessage, psid, convo, sourceContext, campaign, campaignContext
@@ -550,8 +553,9 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
       if (mqResponse) {
         return await checkForRepetition(mqResponse, psid, convo);
       }
-      // If splitter returned null (single question after all), continue normal pipeline
       console.log(`📎 Multi-question splitter returned null, continuing normal pipeline`);
+    } else if (classification.intent === INTENTS.MULTI_QUESTION && hasFlowContext) {
+      console.log(`📎 Multi-question detected but flow context exists (${convo.currentFlow || convo.adFlowRef || convo.productInterest}), letting flow handle it`);
     }
 
     // 🤖 AI-POWERED INTENT CLASSIFICATION
@@ -1035,18 +1039,23 @@ async function generateReply(userMessage, psid, referral = null) {
   }
   // Set currentFlow from ad context so the ad's flow governs the whole conversation
   if (!convo.currentFlow || convo.currentFlow === 'default') {
-    const adFlowMap = {
-      'malla_sombra': 'malla_sombra',
-      'rollo': 'rollo',
-      'borde_separador': 'borde_separador',
-      'groundcover': 'groundcover',
-      'monofilamento': 'monofilamento'
-    };
-    const adFlow = adFlowMap[sourceContext?.ad?.product];
+    const adProduct = sourceContext?.ad?.product || '';
+    let adFlow = null;
+    if (adProduct.startsWith('malla_sombra') || adProduct === 'confeccionada') {
+      adFlow = 'malla_sombra';
+    } else if (adProduct.startsWith('rollo')) {
+      adFlow = 'rollo';
+    } else if (adProduct.startsWith('borde')) {
+      adFlow = 'borde_separador';
+    } else if (adProduct.startsWith('ground') || adProduct === 'groundcover') {
+      adFlow = 'groundcover';
+    } else if (adProduct.startsWith('mono')) {
+      adFlow = 'monofilamento';
+    }
     if (adFlow) {
       await updateConversation(psid, { currentFlow: adFlow });
       convo.currentFlow = adFlow;
-      console.log(`🎯 currentFlow set from ad product: ${adFlow}`);
+      console.log(`🎯 currentFlow set from ad product: ${adProduct} → ${adFlow}`);
     }
   }
   // ====== END LAYER 0 ======
@@ -1219,7 +1228,10 @@ async function generateReply(userMessage, psid, referral = null) {
   // ====== END INTENT DB HANDLING ======
 
   // ====== MULTI-QUESTION HANDLER ======
-  if (classification.intent === INTENTS.MULTI_QUESTION) {
+  // Only use multi-question splitter when there's no product flow context
+  const hasFlowContextLate = (convo.currentFlow && convo.currentFlow !== 'default') ||
+                             convo.adFlowRef || convo.productInterest || convo.adProductIds?.length;
+  if (classification.intent === INTENTS.MULTI_QUESTION && !hasFlowContextLate) {
     const { handleMultiQuestion } = require("./utils/multiQuestionHandler");
     const mqResponse = await handleMultiQuestion(
       userMessage, psid, convo, sourceContext, campaign, campaignContext
