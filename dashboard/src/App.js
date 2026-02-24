@@ -346,13 +346,13 @@ function App() {
   // All useState hooks must be called BEFORE any early returns
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filter, setFilter] = useState("all");
+  const [filter, _setFilter] = useState("all"); // eslint-disable-line no-unused-vars
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [expandedSections, setExpandedSections] = useState({}); // Track expanded menu sections
   const [selectedConversation, setSelectedConversation] = useState(null);
   const [conversationStatuses, setConversationStatuses] = useState({});
   const [handoverLoading, setHandoverLoading] = useState({});
-  const [conversationFilter, setConversationFilter] = useState(null);
+  const [conversationFilter, _setConversationFilter] = useState(null); // eslint-disable-line no-unused-vars
 
   // Products state
   const [products, setProducts] = useState([]);
