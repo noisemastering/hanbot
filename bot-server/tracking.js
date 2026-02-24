@@ -52,9 +52,7 @@ async function generateClickLink(psid, originalUrl, options = {}) {
 
   await clickLog.save();
 
-  // TEMPORARY: Use Railway direct URL while hanlob.com.mx DNS (infinitweb) is down
-  // TODO: revert to process.env.BASE_URL once DNS is restored
-  const baseUrl = 'https://hanbot-production.up.railway.app';
+  const baseUrl = process.env.BASE_URL || 'https://agente.hanlob.com.mx';
   return `${baseUrl}/r/${clickId}`;
 }
 

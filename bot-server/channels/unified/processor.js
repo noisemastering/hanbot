@@ -18,6 +18,32 @@ const {
 // Import channel-specific send functions
 const { sendTextMessage: sendWhatsAppText } = require('../whatsapp/api');
 
+// Regex to match raw Mercado Libre URLs that the AI sometimes generates
+const RAW_ML_URL_REGEX = /https?:\/\/(?:www\.)?(?:tienda\.)?mercadolibre\.com\.mx\/[^\s)]+/g;
+
+/**
+ * Replace raw Mercado Libre URLs in text with tracked click links.
+ * The AI is told not to include URLs, but sometimes ignores this.
+ */
+async function replaceRawUrlsWithTracked(text, psid) {
+  const rawUrls = text.match(RAW_ML_URL_REGEX);
+  if (!rawUrls) return text;
+
+  let result = text;
+  for (const rawUrl of rawUrls) {
+    try {
+      const trackedLink = await generateClickLink(psid, rawUrl, {
+        productName: 'AI-generated link (sanitized)'
+      });
+      result = result.replace(rawUrl, trackedLink);
+      console.log(`🔗 Replaced raw ML URL with tracked link: ${rawUrl.substring(0, 60)}...`);
+    } catch (err) {
+      console.error(`❌ Error replacing raw URL: ${err.message}`);
+    }
+  }
+  return result;
+}
+
 /**
  * Save message to database and emit via Socket.IO
  */
@@ -246,6 +272,9 @@ async function processMessage(normalizedMessage, io = null) {
     }
 
     if (aiResponse && aiResponse.text) {
+      // 11b. Replace any raw ML URLs with tracked links
+      aiResponse.text = await replaceRawUrlsWithTracked(aiResponse.text, unifiedId);
+
       console.log(`💬 AI response: "${aiResponse.text.substring(0, 100)}..."`);
 
       // 12. Send response via appropriate channel

@@ -24,8 +24,8 @@ async function appendProductLinkIfAvailable(responseText, convo, psid) {
 
   if (!width || !height) return responseText;
 
-  // Don't append if response already has a link
-  if (responseText.includes('mercadolibre.com') || responseText.includes('agente.hanlob.com')) {
+  // Don't append if response already has a tracked link
+  if (responseText.includes('agente.hanlob.com') || responseText.includes('/r/')) {
     return responseText;
   }
 

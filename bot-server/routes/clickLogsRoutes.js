@@ -435,7 +435,7 @@ router.post("/generate", async (req, res) => {
     await clickLog.save();
 
     // Generate the tracked URL
-    const baseUrl = process.env.BASE_URL || 'https://hanbot-production.up.railway.app';
+    const baseUrl = process.env.BASE_URL || 'https://agente.hanlob.com.mx';
     const trackedUrl = `${baseUrl}/r/${clickId}`;
 
     console.log(`🔗 Generated tracked link for agent: ${trackedUrl} -> ${originalUrl}`);
