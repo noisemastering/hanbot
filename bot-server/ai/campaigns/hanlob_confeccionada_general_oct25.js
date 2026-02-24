@@ -332,7 +332,7 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
 
   // 7) Product specs / FAQ questions — let the dispatcher handle these properly
   // (eyelets, installation, color, warranty, material, rain, etc.)
-  if (/\b(ojillo|ojillos|argolla|argollas|ojito|ojitos|instala|garant|color|beige|negro|material|impermeable|lluvia|agua|refuerz|porcentaje|vida\s*[uú]til|dur[ao]|c[oó]mo\s+se|para\s+colgar|para\s+amarrar)\b/i.test(clean)) {
+  if (/\b(ojillo|ojillos|argolla|argollas|ojito|ojitos|instala|garant|color|beige|negro|material|impermeable|lluvia|agua|refuerz|porcentaje|vida\s*[uú]til|dur[ao]|c[oó]mo\s+se|para\s+colgar|para\s+amarrar|factura[nr]?|RFC|fiscal)\b/i.test(clean)) {
     console.log("🔧 Specs/FAQ question detected in campaign, deferring to dispatcher");
     return null;
   }
