@@ -603,11 +603,14 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   }
 
   // CHECK FOR "SHOW ALTERNATIVES" CONFIRMATION
-  // When bot asked "¿Te muestro las alternativas?" and user says "sí", "cuáles", "muéstrame", etc.
+  // When bot asked "¿Te muestro las alternativas?" and user says "sí", "muéstrame", "mándame opciones", etc.
   if (convo?.lastIntent === "awaiting_alternatives_confirmation") {
-    const wantsToSeeAlternatives = /\b(s[ií]|cu[aá]les|mu[eé]str|ver|dale|claro|ok|va|por\s*favor|ens[eé][ñn]|d[ií]me|ser[ií]an)\b/i.test(userMessage);
+    const wantsToSeeAlternatives = /\b(s[ií]|cu[aá]les|ver|dale|claro|ok|va|por\s*favor|d[ií]me|ser[ií]an|opcio|mand|maneja|tienes?|tienen|aber)\b|mu[eé]str|ens[eé][ñn]|a\s*ver/i.test(userMessage);
+    const explicitNo = /\b(no\b|nel|nah|nop|negativo|mejor\s*no|dejalo|d[eé]jalo|ya\s*no)/i.test(userMessage);
+    // If no dimensions in the message and not a clear "no", assume they want to see options
+    const hasDimensions = entities?.width && entities?.height;
 
-    if (wantsToSeeAlternatives) {
+    if (wantsToSeeAlternatives || (!explicitNo && !hasDimensions)) {
       console.log(`🌐 Malla flow - User wants to see alternatives for ${convo.requestedSize}`);
 
       // Get available sizes and show them
@@ -1085,6 +1088,10 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
       response: "tiene protección UV"
     },
     {
+      pattern: /\b(lluvia|lluvias|llueve|agua|impermeable|impermeabiliza|mojarse|mojar|repele|repelente)\b/i,
+      response: "no es impermeable — es un tejido permeable que deja pasar el agua. Su función es dar sombra y protección UV, no proteger de la lluvia"
+    },
+    {
       pattern: /\b(ojillos?|ojales?|arillos?|argollas?)\b/i,
       response: (msg) => {
         const word = /ojillo/i.test(msg) ? 'ojillos' : /ojale/i.test(msg) ? 'ojales' : /arillo/i.test(msg) ? 'arillos' : 'argollas';
@@ -1376,17 +1383,43 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
         };
       }
 
-      // No sellable products found - offer to show alternatives
+      // No sellable products in POI tree - fetch broader alternatives and show them directly
+      const tempConvo = { ...convo, requestedSize: `${width}x${height}`, productSpecs: { ...convo?.productSpecs, width, height } };
+      const altSizes = await getAvailableSizes(tempConvo);
+
+      if (altSizes.length > 0) {
+        const reqArea = width * height;
+        const sorted = altSizes
+          .map(s => ({ ...s, area: s.width * s.height }))
+          .sort((a, b) => Math.abs(a.area - reqArea) - Math.abs(b.area - reqArea));
+        const options = sorted.slice(0, 4);
+        const optionsList = options.map(o => `• ${o.sizeStr} → $${o.price}`).join('\n');
+
+        await updateConversation(psid, {
+          lastIntent: "alternatives_shown",
+          requestedSize: `${width}x${height}`,
+          productSpecs: { ...convo?.productSpecs, width, height, updatedAt: new Date() }
+        });
+
+        return {
+          type: "text",
+          text: `No tenemos malla de ${width}x${height}m, pero las medidas más cercanas que manejamos son:\n\n${optionsList}\n\n¿Te interesa alguna?`
+        };
+      }
+
+      // No alternatives at all - hand off to human
       await updateConversation(psid, {
         lastIntent: "awaiting_alternatives_confirmation",
         requestedSize: `${width}x${height}`,
         productSpecs: { ...convo?.productSpecs, width, height, updatedAt: new Date() }
       });
 
-      return {
-        type: "text",
-        text: getNotAvailableResponse(`${width}x${height}m`, convo.poiRootName || 'Malla Sombra')
-      };
+      const { executeHandoff: execHandoff3 } = require('../utils/executeHandoff');
+      return await execHandoff3(psid, convo, userMessage, {
+        reason: `Sin alternativas para ${width}x${height}m`,
+        responsePrefix: `No tenemos malla de ${width}x${height}m en nuestra línea estándar. Déjame comunicarte con un especialista para buscar opciones. `,
+        timingStyle: 'elaborate'
+      });
     }
   }
   // ====== END POI TREE CHECK ======
