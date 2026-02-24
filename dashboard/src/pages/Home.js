@@ -141,6 +141,7 @@ function Home() {
       { label: t("home.funnelConversions"), value: conversionStats.conversions || 0, color: COLORS.green },
       { label: t("home.funnelRevenue"), value: formatCurrency(conversionStats.totalRevenue), color: COLORS.amber, isRevenue: true },
     ];
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversionStats, t, locale]);
 
   if (loading) {
