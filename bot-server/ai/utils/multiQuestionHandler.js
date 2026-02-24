@@ -83,15 +83,14 @@ Responde ÚNICAMENTE con JSON:
  */
 async function getAnswerForSegment(segment, psid, convo, sourceContext, campaign) {
   try {
-    // 1. If price_query or size_specification with dimensions, look up actual product
-    if (segment.intent === "price_query" || segment.intent === "size_specification") {
+    // 1. Price with dimensions — direct product lookup (fast path)
+    if ((segment.intent === "price_query" || segment.intent === "size_specification")) {
       const dimMatch = segment.question.match(/(\d+(?:[.,]\d+)?)\s*[xX×*]\s*(\d+(?:[.,]\d+)?)/);
       if (dimMatch) {
         const d1 = parseFloat(dimMatch[1].replace(',', '.'));
         const d2 = parseFloat(dimMatch[2].replace(',', '.'));
         const w = Math.min(Math.floor(d1), Math.floor(d2));
         const h = Math.max(Math.floor(d1), Math.floor(d2));
-
         const answer = await lookupProductPrice(w, h, psid, convo);
         if (answer) {
           console.log(`  ✅ Segment "${segment.intent}" answered with product lookup for ${w}x${h}`);
@@ -100,37 +99,42 @@ async function getAnswerForSegment(segment, psid, convo, sourceContext, campaign
       }
     }
 
-    // 2. Try intent dispatcher (covers location, shipping, payment, catalog, etc.)
-    const classification = {
-      intent: segment.intent,
-      entities: {},
-      confidence: 0.9
-    };
-
+    // 2. Try intent dispatcher (handles logistics, social, escalation, purchase, specs intents)
+    const classification = { intent: segment.intent, entities: {}, confidence: 0.9 };
     const dispatchResult = await dispatch(classification, {
-      psid,
-      convo,
-      userMessage: segment.question
+      psid, convo, userMessage: segment.question
     });
-
-    if (dispatchResult && dispatchResult.text) {
+    if (dispatchResult?.text) {
       console.log(`  ✅ Segment "${segment.intent}" answered by dispatcher`);
       return dispatchResult.text;
     }
 
-    // 3. Product-specific intents — if in a product flow, get product description
-    if (segment.intent === "product_inquiry" || segment.intent === "price_query") {
-      const currentFlow = convo?.currentFlow || convo?.productInterest;
-
-      if (currentFlow === "malla_sombra") {
-        const { getMallaDescription } = require("../flows/mallaFlow");
-        const desc = await getMallaDescription();
-        console.log(`  ✅ Segment "${segment.intent}" answered by getMallaDescription`);
-        return desc;
+    // 3. Route to the active product flow (mallaFlow, rolloFlow, bordeFlow, etc.)
+    const FLOWS = {
+      malla_sombra: require('../flows/mallaFlow'),
+      rollo: require('../flows/rolloFlow'),
+      borde_separador: require('../flows/bordeFlow'),
+      groundcover: require('../flows/rolloFlow'),
+      monofilamento: require('../flows/rolloFlow'),
+    };
+    const activeFlow = convo?.currentFlow || convo?.productInterest;
+    const flow = FLOWS[activeFlow];
+    if (flow?.handle) {
+      const flowResult = await flow.handle(classification, sourceContext, convo, psid, campaign, segment.question);
+      if (flowResult?.text) {
+        console.log(`  ✅ Segment "${segment.intent}" answered by ${activeFlow} flow`);
+        return flowResult.text;
       }
     }
 
-    // 4. No handler found — return null, combiner will handle gracefully
+    // 4. Try generalFlow as last resort (handles greeting, shipping, payment, location, etc.)
+    const generalFlow = require('../flows/generalFlow');
+    const generalResult = await generalFlow.handle(classification, sourceContext, convo, psid, campaign, segment.question);
+    if (generalResult?.text) {
+      console.log(`  ✅ Segment "${segment.intent}" answered by generalFlow`);
+      return generalResult.text;
+    }
+
     console.log(`  ⚠️ Segment "${segment.intent}" has no handler, returning null`);
     return null;
   } catch (error) {
@@ -185,60 +189,14 @@ async function lookupProductPrice(w, h, psid, convo) {
 }
 
 /**
- * Combine multiple segment answers into a single natural response using AI.
- *
- * @param {string} userMessage - Original user message
- * @param {Array} segmentAnswers - Array of { question, answer } pairs
- * @param {object} convo - Conversation state
- * @returns {string} Combined response text
+ * Combine multiple segment answers into a single response.
+ * Simple concatenation — flow handlers already produce well-formatted responses.
  */
-async function combineAnswers(userMessage, segmentAnswers, convo) {
-  try {
-    const answeredSegments = segmentAnswers
-      .map((s, i) => {
-        if (s.answer) {
-          return `Pregunta ${i + 1}: "${s.question}"\nRespuesta: ${s.answer}`;
-        }
-        return `Pregunta ${i + 1}: "${s.question}"\nRespuesta: (sin respuesta disponible)`;
-      })
-      .join("\n\n");
-
-    const response = await openai.chat.completions.create({
-      model: process.env.AI_MODEL || "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: `Eres una vendedora de malla sombra en México. Combina las respuestas en un solo mensaje BREVE.
-
-REGLAS:
-- Máximo 1 oración corta por pregunta — como un mensaje de WhatsApp, no un correo
-- Responde TODAS las preguntas pero sin rodeos ni frases de relleno
-- NO uses "¡Hola!", "Me alegra", "Te cuento que", "Con gusto" ni frases decorativas
-- NO repitas información que ya se dijo en la conversación
-- NO uses listas con viñetas — escribe de forma conversacional
-- Si hay link de compra, inclúyelo tal cual sin agregar texto extra
-- NO inventes información que no esté en las respuestas proporcionadas`
-        },
-        {
-          role: "user",
-          content: `Mensaje original del cliente: "${userMessage}"\n\n${answeredSegments}`
-        }
-      ],
-      temperature: 0.4,
-      max_tokens: 250
-    });
-
-    const combined = response.choices[0].message.content;
-    console.log(`📎 combineAnswers: combined ${segmentAnswers.length} answers into one response`);
-    return combined;
-  } catch (error) {
-    console.error("❌ Error in combineAnswers:", error.message);
-    // Fallback: join non-null answers with double newline
-    return segmentAnswers
-      .filter(s => s.answer)
-      .map(s => s.answer)
-      .join("\n\n");
-  }
+function combineAnswers(segmentAnswers) {
+  return segmentAnswers
+    .filter(s => s.answer)
+    .map(s => s.answer)
+    .join('\n\n');
 }
 
 /**
@@ -277,8 +235,8 @@ async function handleMultiQuestion(userMessage, psid, convo, sourceContext, camp
     return null;
   }
 
-  // 4. Combine answers into a single natural response
-  const combinedResponse = await combineAnswers(userMessage, segmentAnswers, convo);
+  // 4. Simple concatenation — handlers already produce good responses
+  const combinedResponse = combineAnswers(segmentAnswers);
 
   // 5. Update conversation
   const { updateConversation } = require("../../conversationManager");

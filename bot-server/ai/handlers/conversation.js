@@ -77,6 +77,28 @@ async function handleConfirmation({ psid, convo, userMessage }) {
     return null;
   }
 
+  // Customer confirming after receiving a price quote — re-share the product link
+  if (convo?.lastIntent?.endsWith('_complete') && convo?.lastSharedProductLink) {
+    const { generateClickLink } = require("../../tracking");
+    await updateConversation(psid, { lastIntent: "confirmation", unknownCount: 0 });
+    try {
+      const trackedLink = await generateClickLink(psid, convo.lastSharedProductLink, {
+        reason: 'post_quote_confirmation',
+        productId: convo.lastSharedProductId,
+        userName: convo?.userName
+      });
+      return {
+        type: "text",
+        text: `Aquí está tu link de compra:\n\n${trackedLink}`
+      };
+    } catch (e) {
+      return {
+        type: "text",
+        text: `Aquí está tu link de compra:\n\n${convo.lastSharedProductLink}`
+      };
+    }
+  }
+
   // Defer to flow manager when user is in an active product flow
   // e.g., borde_start, borde_awaiting_length — user saying "sí" should continue the flow
   const activeProductFlows = ['borde', 'malla', 'rollo', 'groundcover', 'monofilamento'];
@@ -86,51 +108,6 @@ async function handleConfirmation({ psid, convo, userMessage }) {
   }
 
   await updateConversation(psid, { lastIntent: "confirmation", unknownCount: 0 });
-
-  // Check if this is purchase intent ("me interesa", "lo quiero") after a price quote
-  const isPurchaseIntent = /\b(m[eé]?\s*interesa|lo\s*quiero|la\s*quiero)\b/i.test(userMessage);
-  const hadPriceQuote = convo?.lastIntent?.includes('quoted') || convo?.requestedSize;
-
-  if (isPurchaseIntent && hadPriceQuote) {
-    // User is interested in buying - re-share the purchase link
-    const { generateClickLink } = require("../../tracking");
-    const ProductFamily = require("../../models/ProductFamily");
-
-    // Try to find the product they were quoted
-    let link = convo?.lastProductLink;
-    let size = convo?.requestedSize;
-
-    if (!link && size) {
-      // Try to regenerate the link
-      const [w, h] = size.split('x').map(Number);
-      if (w && h) {
-        const sizeRegex = new RegExp(`^\\s*(${w}\\s*m?\\s*[xX×]\\s*${h}|${h}\\s*m?\\s*[xX×]\\s*${w})\\s*m?\\s*$`, 'i');
-        const product = await ProductFamily.findOne({
-          sellable: true,
-          active: true,
-          size: sizeRegex
-        }).lean();
-
-        if (product) {
-          const preferredLink = product.onlineStoreLinks?.find(l => l.isPreferred)?.url ||
-                               product.onlineStoreLinks?.[0]?.url;
-          if (preferredLink) {
-            link = await generateClickLink(psid, preferredLink, {
-              productName: product.name,
-              productId: product._id
-            });
-          }
-        }
-      }
-    }
-
-    if (link) {
-      return {
-        type: "text",
-        text: `¡Perfecto! Aquí está el link para que puedas realizar tu compra:\n\n${link}\n\nSi tienes alguna duda, aquí estoy para ayudarte.`
-      };
-    }
-  }
 
   // Check if we should ask for location stats (after they acknowledged receiving a link)
   const { askLocationStatsQuestion } = require("../utils/locationStats");
