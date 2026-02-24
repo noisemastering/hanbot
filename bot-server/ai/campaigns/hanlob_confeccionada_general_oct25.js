@@ -330,7 +330,14 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
         };
     }
 
-  // 7) Fallback específico de campaña - show price range instead of generic message
+  // 7) Product specs / FAQ questions — let the dispatcher handle these properly
+  // (eyelets, installation, color, warranty, material, rain, etc.)
+  if (/\b(ojillo|ojillos|argolla|argollas|ojito|ojitos|instala|garant|color|beige|negro|material|impermeable|lluvia|agua|refuerz|porcentaje|vida\s*[uú]til|dur[ao]|c[oó]mo\s+se|para\s+colgar|para\s+amarrar)\b/i.test(clean)) {
+    console.log("🔧 Specs/FAQ question detected in campaign, deferring to dispatcher");
+    return null;
+  }
+
+  // 8) Fallback específico de campaña - show price range instead of generic message
   // Check if we'd be repeating the fallback - ask a different question instead
   if (convo.lastIntent === "campaign_fallback") {
     await updateConversation(psid, { lastIntent: "campaign_fallback_retry" });
