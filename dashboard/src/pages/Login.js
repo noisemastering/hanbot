@@ -26,7 +26,7 @@ function Login() {
 
     if (result.success) {
       toast.success(t('login.welcome'));
-      navigate('/');
+      navigate(result.user?.landingPage || '/');
     } else {
       toast.error(result.error || t('login.errorGeneric'));
     }

@@ -36,7 +36,7 @@ async function seedRolesAndProfiles() {
         name: "super_user",
         label: "Super Usuario",
         description: "Usuario avanzado con acceso completo según su perfil.",
-        permissions: ["conversations", "campaigns", "adsets", "ads", "products", "analytics", "families", "master-catalog", "usos"],
+        permissions: ["conversations", "campaigns", "adsets", "ads", "products", "analytics", "families", "master-catalog", "usos", "overview"],
         allowsProfiles: true,
         isSystem: true
       },
@@ -82,7 +82,8 @@ async function seedRolesAndProfiles() {
         label: "Contabilidad",
         description: "Perfil de contabilidad con acceso completo a análisis y datos.",
         role: createdRoles.super_user._id,
-        permissions: ["conversations", "campaigns", "adsets", "ads", "products", "analytics", "families", "master-catalog", "usos"],
+        permissions: ["conversations", "campaigns", "adsets", "ads", "products", "analytics", "families", "master-catalog", "usos", "overview"],
+        landingPage: "/",
         isSystem: true
       },
       {
@@ -90,7 +91,8 @@ async function seedRolesAndProfiles() {
         label: "Ventas",
         description: "Perfil de ventas con acceso completo a campañas y productos.",
         role: createdRoles.super_user._id,
-        permissions: ["conversations", "campaigns", "adsets", "ads", "products", "analytics", "families", "master-catalog", "usos"],
+        permissions: ["conversations", "campaigns", "adsets", "ads", "products", "analytics", "families", "master-catalog", "usos", "overview"],
+        landingPage: "/",
         isSystem: true
       },
       // User Profiles
@@ -100,6 +102,7 @@ async function seedRolesAndProfiles() {
         description: "Gestión de conversaciones, campañas y productos.",
         role: createdRoles.user._id,
         permissions: ["conversations", "campaigns", "adsets", "ads", "products"],
+        landingPage: "/conversations",
         isSystem: true
       },
       {
@@ -108,6 +111,7 @@ async function seedRolesAndProfiles() {
         description: "Acceso solo a conversaciones.",
         role: createdRoles.user._id,
         permissions: ["conversations"],
+        landingPage: "/conversations",
         isSystem: true
       }
     ];

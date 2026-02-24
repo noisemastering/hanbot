@@ -11,19 +11,10 @@
  */
 
 import React, { useEffect, useState } from "react";
-import { Routes, Route, NavLink, Link, useLocation, useNavigate } from "react-router-dom";
+import { Routes, Route, NavLink, Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import io from "socket.io-client";
 import { Toaster } from 'react-hot-toast';
 import API from "./api";
-import {
-  ResponsiveContainer,
-  BarChart,
-  CartesianGrid,
-  XAxis,
-  YAxis,
-  Tooltip,
-  Bar
-} from "recharts";
 import ProductModal from "./components/ProductModal";
 import ProductsView from "./components/ProductsView";
 import CampaignModal from "./components/CampaignModal";
@@ -46,6 +37,7 @@ import CopyProductModal from "./components/CopyProductModal";
 import ProductDetailsModal from "./components/ProductDetailsModal";
 import ProductFamilyModal from "./components/ProductFamilyModal";
 import ImportProductsModal from "./components/ImportProductsModal";
+import Home from "./pages/Home";
 import Messages from "./pages/Messages";
 import Login from "./pages/Login";
 import ForgotPassword from "./pages/ForgotPassword";
@@ -347,7 +339,7 @@ const menuItems = [
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, loading: authLoading, canAccess, canManageUsers, logout, simulationMode, stopSimulation } = useAuth();
+  const { user, loading: authLoading, canAccess, canManageUsers, getLandingPage, logout, simulationMode, stopSimulation } = useAuth();
   const { t, locale, language, changeLanguage } = useTranslation();
   const updateAvailable = useNewVersionCheck();
 
@@ -1292,9 +1284,9 @@ function App() {
     return <Login />;
   }
 
-  // If on login page but authenticated, redirect to home
+  // If on login page but authenticated, redirect to landing page
   if (!authLoading && user && location.pathname === '/login') {
-    navigate('/');
+    navigate(getLandingPage());
     return null;
   }
 
@@ -1424,44 +1416,6 @@ function App() {
       .filter((msg) => msg.psid === psid)
       .sort((a, b) => new Date(a.timestamp) - new Date(b.timestamp));
   };
-
-  function getChartData(messages) {
-    // Filter messages to last 12 hours
-    const now = new Date();
-    const last12Hours = new Date(now.getTime() - 12 * 60 * 60 * 1000);
-
-    const recentMessages = messages.filter(m => new Date(m.timestamp) >= last12Hours);
-
-    // Group by hour with both received and answered counts
-    const hourlyData = {};
-
-    recentMessages.forEach((m) => {
-      const date = new Date(m.timestamp);
-      // Format as "Nov 12, 10:00"
-      const hourKey = date.toLocaleString(locale, {
-        month: 'short',
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit',
-        timeZone: 'America/Mexico_City'
-      });
-
-      if (!hourlyData[hourKey]) {
-        hourlyData[hourKey] = { date: hourKey, received: 0, answered: 0, timestamp: date.getTime() };
-      }
-
-      // Count user messages as "received", answered user messages as "answered"
-      if (m.senderType === 'user') {
-        hourlyData[hourKey].received += 1;
-        if (m.answered === true) {
-          hourlyData[hourKey].answered += 1;
-        }
-      }
-    });
-
-    // Convert to array and sort by timestamp
-    return Object.values(hourlyData).sort((a, b) => a.timestamp - b.timestamp);
-  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
@@ -1753,278 +1707,7 @@ function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* Overview Route */}
-          <Route path="/" element={
-          <>
-        {/* Today's Stats Header */}
-        <div className="mb-6">
-          <h2 className="text-2xl font-bold text-white mb-2">
-            {t('overview.todayStats')}
-          </h2>
-          <p className="text-sm text-gray-400">
-            {new Date().toLocaleDateString(locale, {
-              weekday: 'long',
-              year: 'numeric',
-              month: 'long',
-              day: 'numeric',
-              timeZone: 'America/Mexico_City'
-            })}
-          </p>
-        </div>
-
-        {/* Stats Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-6 mb-8">
-          {/* Total Messages */}
-          <button
-            onClick={() => {
-              setFilter("all");
-              setConversationFilter(null);
-            }}
-            className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 backdrop-blur-lg border border-blue-500/20 rounded-xl p-6 hover:from-blue-500/20 hover:to-blue-600/10 transition-all cursor-pointer text-left w-full"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.totalMessages')}</p>
-                <h3 className="text-3xl font-bold text-white">{totalMessages}</h3>
-              </div>
-              <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" />
-                </svg>
-              </div>
-            </div>
-          </button>
-
-          {/* Unique Users */}
-          <button
-            onClick={() => {
-              navigate("/users");
-              setFilter("all");
-              setConversationFilter(null);
-            }}
-            className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 backdrop-blur-lg border border-purple-500/20 rounded-xl p-6 hover:from-purple-500/20 hover:to-purple-600/10 transition-all cursor-pointer text-left w-full"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.uniqueUsers')}</p>
-                <h3 className="text-3xl font-bold text-white">{totalUsers}</h3>
-              </div>
-              <div className="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-                </svg>
-              </div>
-            </div>
-          </button>
-
-          {/* Response Rate */}
-          <button
-            onClick={() => {
-              setFilter("bot");
-              setConversationFilter(null);
-            }}
-            className="bg-gradient-to-br from-primary-500/10 to-primary-600/5 backdrop-blur-lg border border-primary-500/20 rounded-xl p-6 hover:from-primary-500/20 hover:to-primary-600/10 transition-all cursor-pointer text-left w-full"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.responseRate')}</p>
-                <h3 className="text-3xl font-bold text-white">{botResponseRate}%</h3>
-              </div>
-              <div className="w-12 h-12 bg-primary-500/20 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-primary-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                </svg>
-              </div>
-            </div>
-          </button>
-
-          {/* Unanswered */}
-          <button
-            onClick={() => {
-              setFilter("user");
-              setConversationFilter(null);
-            }}
-            className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 backdrop-blur-lg border border-amber-500/20 rounded-xl p-6 hover:from-amber-500/20 hover:to-amber-600/10 transition-all cursor-pointer text-left w-full"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.unanswered')}</p>
-                <h3 className="text-3xl font-bold text-white">{unanswered}</h3>
-              </div>
-              <div className="w-12 h-12 bg-amber-500/20 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              </div>
-            </div>
-          </button>
-
-          {/* Active Campaigns */}
-          <button
-            onClick={() => {
-              navigate("/campaigns");
-            }}
-            className="bg-gradient-to-br from-green-500/10 to-green-600/5 backdrop-blur-lg border border-green-500/20 rounded-xl p-6 hover:from-green-500/20 hover:to-green-600/10 transition-all cursor-pointer text-left w-full"
-          >
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.activeCampaigns')}</p>
-                <h3 className="text-3xl font-bold text-white">{activeCampaigns}</h3>
-              </div>
-              <div className="w-12 h-12 bg-green-500/20 rounded-lg flex items-center justify-center">
-                <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
-                </svg>
-              </div>
-            </div>
-          </button>
-
-          {/* Top Region */}
-          {topRegion && (
-            <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 backdrop-blur-lg border border-purple-500/20 rounded-xl p-6 text-left w-full">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.topRegion')}</p>
-                  <h3 className="text-2xl font-bold text-white">{topRegion.state}</h3>
-                  <p className="text-sm text-purple-400">{topRegion.conversations} {t('overview.conversations')}</p>
-                </div>
-                <div className="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center">
-                  <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                  </svg>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Activity Chart */}
-        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6 mb-8">
-          <h2 className="text-xl font-bold text-white mb-6 flex items-center">
-            <svg className="w-5 h-5 text-primary-400 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
-            </svg>
-            {t('overview.activitySummary')}
-          </h2>
-          <ResponsiveContainer width="100%" height={450}>
-            <BarChart data={getChartData(messages)} barSize={40} barGap={-15}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis dataKey="date" stroke="#9CA3AF" angle={-45} textAnchor="end" height={80} fontSize={10} />
-              <YAxis stroke="#9CA3AF" />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#1F2937',
-                  border: '1px solid #374151',
-                  borderRadius: '8px',
-                  color: '#fff'
-                }}
-              />
-              <Bar dataKey="answered" fill="#22c55e" fillOpacity={0.85} radius={[8, 8, 0, 0]} name={t('overview.answered')} />
-              <Bar dataKey="received" fill="#3b82f6" fillOpacity={0.95} radius={[8, 8, 0, 0]} name={t('overview.received')} />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* Filters */}
-        <div className="flex items-center space-x-2 mb-6">
-          <button
-            onClick={() => setFilter("all")}
-            className={`px-4 py-2 rounded-lg font-medium transition-all ${
-              filter === "all"
-                ? "bg-primary-500 text-white"
-                : "bg-gray-800/50 text-gray-400 hover:bg-gray-700/50"
-            }`}
-          >
-            {t('overview.allMessages')}
-          </button>
-          <button
-            onClick={() => setFilter("user")}
-            className={`px-4 py-2 rounded-lg font-medium transition-all ${
-              filter === "user"
-                ? "bg-blue-500 text-white"
-                : "bg-gray-800/50 text-gray-400 hover:bg-gray-700/50"
-            }`}
-          >
-            {t('overview.usersOnly')}
-          </button>
-          <button
-            onClick={() => setFilter("bot")}
-            className={`px-4 py-2 rounded-lg font-medium transition-all ${
-              filter === "bot"
-                ? "bg-purple-500 text-white"
-                : "bg-gray-800/50 text-gray-400 hover:bg-gray-700/50"
-            }`}
-          >
-            {t('overview.botOnly')}
-          </button>
-        </div>
-
-        {/* Messages Table */}
-        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-700/50">
-            <h2 className="text-xl font-bold text-white">{t('overview.recentConversations')}</h2>
-          </div>
-          {loading ? (
-            <div className="p-8 text-center">
-              <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
-              <p className="text-gray-400 mt-4">{t('overview.loadingMessages')}</p>
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-900/50">
-                  <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      {t('overview.dateTime')}
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      {t('common.type')}
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      {t('overview.userId')}
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                      {t('overview.message')}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-700/50">
-                  {filteredMessages.map((msg) => (
-                    <tr
-                      key={msg._id}
-                      onClick={() => setSelectedConversation(msg.psid)}
-                      className="hover:bg-gray-700/30 transition-colors cursor-pointer"
-                    >
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-300">
-                        {new Date(msg.timestamp).toLocaleString(locale)}
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap">
-                        <span
-                          className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                            msg.senderType === "bot"
-                              ? "bg-purple-500/20 text-purple-300"
-                              : "bg-blue-500/20 text-blue-300"
-                          }`}
-                        >
-                          {msg.senderType}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-400 font-mono">
-                        {msg.psid.slice(0, 12)}...
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-300 max-w-md truncate">
-                        {msg.text}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
-
-          </>
-          } />
+          <Route path="/" element={canAccess('overview') ? <Home /> : <Navigate to={getLandingPage()} replace />} />
 
           {/* Conversaciones Route */}
           <Route path="/conversations" element={<Messages />} />

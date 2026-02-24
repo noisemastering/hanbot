@@ -40,6 +40,9 @@ const profileSchema = new mongoose.Schema(
       default: []
     },
 
+    // Default landing page for users with this profile
+    landingPage: { type: String, default: null, trim: true },
+
     // System profiles cannot be deleted
     isSystem: {
       type: Boolean,

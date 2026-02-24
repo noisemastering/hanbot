@@ -232,6 +232,15 @@ function ProfilesView() {
                             </div>
                           </div>
 
+                          {profile.landingPage && (
+                            <div className="flex items-center space-x-2">
+                              <span className="text-xs text-gray-500 font-medium min-w-[100px]">Landing:</span>
+                              <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-mono bg-gray-700/50 text-gray-300 border border-gray-600/50">
+                                {profile.landingPage}
+                              </span>
+                            </div>
+                          )}
+
                           {profile.createdBy?.username && (
                             <div className="flex items-center space-x-2">
                               <span className="text-xs text-gray-500 font-medium min-w-[100px]">Creado por:</span>

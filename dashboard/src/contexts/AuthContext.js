@@ -67,7 +67,7 @@ export const AuthProvider = ({ children }) => {
         localStorage.setItem('token', data.token);
         setToken(data.token);
         setUser(data.user);
-        return { success: true };
+        return { success: true, user: data.user };
       } else {
         return { success: false, error: data.error };
       }
@@ -177,6 +177,14 @@ export const AuthProvider = ({ children }) => {
     return false;
   };
 
+  // Get the appropriate landing page for the current user
+  const getLandingPage = () => {
+    if (!user) return '/login';
+    if (simulationMode) return '/';
+    if (user.role === 'super_admin' || user.role === 'admin') return '/';
+    return user.landingPage || '/';
+  };
+
   // Check if user can manage users (only super_admin and admin)
   const canManageUsers = () => {
     if (!user) return false;
@@ -197,6 +205,7 @@ export const AuthProvider = ({ children }) => {
     logout,
     canAccess,
     canManageUsers,
+    getLandingPage,
     isAuthenticated: !!user,
     // Simulation mode (super_admin only)
     simulationMode,

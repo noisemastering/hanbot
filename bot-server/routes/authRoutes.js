@@ -73,6 +73,14 @@ router.post("/login", async (req, res) => {
     console.log(`👤 User info: ${user.fullName} - Role: ${user.role}, Profile: ${user.profile || 'none'}`);
     console.log(`📋 Permissions:`, permissions);
 
+    // Resolve profile landing page
+    let landingPage = '/';
+    if (user.profile) {
+      const Profile = require('../models/Profile');
+      const profileDoc = await Profile.findOne({ name: user.profile, active: true });
+      if (profileDoc?.landingPage) landingPage = profileDoc.landingPage;
+    }
+
     // Send response
     res.json({
       success: true,
@@ -88,7 +96,8 @@ router.post("/login", async (req, res) => {
         roleLabel: await user.getRoleLabel(),
         profile: user.profile,
         profileLabel: await user.getProfileLabel(),
-        permissions: permissions
+        permissions: permissions,
+        landingPage
       }
     });
   } catch (error) {
@@ -131,6 +140,14 @@ router.get("/me", async (req, res) => {
     // Get user permissions
     const permissions = await user.getAllPermissions();
 
+    // Resolve profile landing page
+    let landingPage = '/';
+    if (user.profile) {
+      const Profile = require('../models/Profile');
+      const profileDoc = await Profile.findOne({ name: user.profile, active: true });
+      if (profileDoc?.landingPage) landingPage = profileDoc.landingPage;
+    }
+
     // Send user data
     res.json({
       success: true,
@@ -145,7 +162,8 @@ router.get("/me", async (req, res) => {
         roleLabel: await user.getRoleLabel(),
         profile: user.profile,
         profileLabel: await user.getProfileLabel(),
-        permissions: permissions
+        permissions: permissions,
+        landingPage
       }
     });
   } catch (error) {

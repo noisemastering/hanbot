@@ -2651,6 +2651,9 @@ const en = {
   "profileModal.createProfile": "Create Profile",
   "profileModal.errorFields": "Please fill in the name, label and select a role",
   "profileModal.errorNameFormat": "Name can only contain lowercase letters and underscores",
+  "profileModal.landingPage": "Landing Page",
+  "profileModal.landingPageDefault": "Default (home /)",
+  "profileModal.landingPageHelp": "Page users with this profile see after logging in. Only routes they have permission to access are shown.",
 
   // ── profiles ──
   "profiles.newProfile": "New Profile",
@@ -2677,6 +2680,7 @@ const en = {
   "profiles.allPermissions": "All (*)",
   "profiles.noPermissions": "No permissions",
   "profiles.createdByLabel": "Created by:",
+  "profiles.landingPage": "Landing:",
   "profiles.updatedSuccess": "Profile updated successfully",
 
   // ── purchaseIntent ──
@@ -2965,6 +2969,46 @@ const en = {
   "manualSales.colAmount": "Amount",
   "manualSales.colCampaign": "Campaign",
   "manualSales.colNotes": "Notes",
+
+  // ── Home / Executive Dashboard ─────────────────────────
+  "home.pageTitle": "Executive Dashboard",
+  "home.totalRevenue": "Total Revenue",
+  "home.totalConversions": "Total Conversions",
+  "home.activeConversations": "Active Conversations",
+  "home.conversionRate": "Conversion Rate",
+  "home.revenueOverTime": "Revenue Over Time",
+  "home.clicks": "Clicks",
+  "home.conversions": "Conversions",
+  "home.linksGenerated": "Links Generated",
+  "home.topProducts": "Top Products",
+  "home.byRevenue": "by revenue",
+  "home.salesFunnel": "Sales Funnel",
+  "home.funnelLinks": "Links",
+  "home.funnelClicks": "Clicks",
+  "home.funnelConversions": "Conversions",
+  "home.funnelRevenue": "Revenue",
+  "home.geoDistribution": "Geographic Distribution",
+  "home.byConversations": "by conversations",
+  "home.confidenceBreakdown": "Attribution Confidence",
+  "home.high": "High",
+  "home.medium": "Medium",
+  "home.low": "Low",
+  "home.adPerformance": "Ad Performance",
+  "home.adName": "Ad Name",
+  "home.adClicks": "Clicks",
+  "home.adConversions": "Conversions",
+  "home.convRate": "Conv Rate",
+  "home.last7d": "7d",
+  "home.last30d": "30d",
+  "home.last90d": "90d",
+  "home.noData": "No data available",
+  "home.loadingDashboard": "Loading dashboard...",
+  "home.conversations": "conversations",
+  "home.cities": "cities",
+
+  // ── Conversions (additional charts) ────────────────────
+  "conversions.confidenceChart": "Attribution Confidence",
+  "conversions.topProductsChart": "Top Products by Revenue",
 };
 
 export default en;

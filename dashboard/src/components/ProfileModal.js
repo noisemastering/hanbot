@@ -5,6 +5,7 @@ import { useTranslation } from '../i18n';
 // Available sections for permissions
 const AVAILABLE_SECTIONS = [
   { value: '*', label: 'Todos los permisos (*)' },
+  { value: 'overview', label: 'Panel Ejecutivo' },
   { value: 'conversations', label: 'Conversaciones' },
   { value: 'campaigns', label: 'Campañas' },
   { value: 'adsets', label: 'Conjuntos de Anuncios' },
@@ -18,6 +19,35 @@ const AVAILABLE_SECTIONS = [
   { value: 'users', label: 'Usuarios' }
 ];
 
+// Map routes to the permission required to access them
+const ROUTE_PERMISSION_MAP = {
+  '/': 'overview',
+  '/conversations': 'conversations',
+  '/campaigns': 'campaigns',
+  '/adsets': 'adsets',
+  '/ads': 'ads',
+  '/products': 'products',
+  '/analytics': 'analytics',
+  '/families': 'families',
+  '/master-catalog': 'master-catalog',
+  '/usos': 'usos',
+  '/inventario': 'inventario',
+};
+
+const LANDING_PAGE_OPTIONS = [
+  { value: '/', label: 'Panel Ejecutivo (/)' },
+  { value: '/conversations', label: 'Conversaciones (/conversations)' },
+  { value: '/campaigns', label: 'Campañas (/campaigns)' },
+  { value: '/adsets', label: 'Conjuntos de Anuncios (/adsets)' },
+  { value: '/ads', label: 'Anuncios (/ads)' },
+  { value: '/products', label: 'Productos (/products)' },
+  { value: '/analytics', label: 'Analíticas (/analytics)' },
+  { value: '/families', label: 'Familias (/families)' },
+  { value: '/master-catalog', label: 'Catálogo Maestro (/master-catalog)' },
+  { value: '/usos', label: 'Usos (/usos)' },
+  { value: '/inventario', label: 'Inventario (/inventario)' },
+];
+
 function ProfileModal({ profile, roles, onClose, onSave }) {
   const { t } = useTranslation();
   const [formData, setFormData] = useState({
@@ -26,6 +56,7 @@ function ProfileModal({ profile, roles, onClose, onSave }) {
     description: '',
     role: '',
     permissions: [],
+    landingPage: '',
     active: true
   });
 
@@ -37,6 +68,7 @@ function ProfileModal({ profile, roles, onClose, onSave }) {
         description: profile.description || '',
         role: profile.role?._id || '',
         permissions: profile.permissions || [],
+        landingPage: profile.landingPage || '',
         active: profile.active !== undefined ? profile.active : true
       });
     }
@@ -73,7 +105,16 @@ function ProfileModal({ profile, roles, onClose, onSave }) {
         ? prev.permissions.filter(p => p !== permission)
         : [...prev.permissions, permission];
 
-      return { ...prev, permissions: newPermissions };
+      // Auto-clear landing page if its required permission was removed
+      let newLandingPage = prev.landingPage;
+      if (newLandingPage) {
+        const requiredPerm = ROUTE_PERMISSION_MAP[newLandingPage];
+        if (requiredPerm && !newPermissions.includes(requiredPerm) && !newPermissions.includes('*')) {
+          newLandingPage = '';
+        }
+      }
+
+      return { ...prev, permissions: newPermissions, landingPage: newLandingPage };
     });
   };
 
@@ -199,6 +240,30 @@ function ProfileModal({ profile, roles, onClose, onSave }) {
                 </label>
               ))}
             </div>
+          </div>
+
+          {/* Landing Page */}
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-2">
+              {t('profileModal.landingPage')}
+            </label>
+            <select
+              value={formData.landingPage}
+              onChange={(e) => setFormData({ ...formData, landingPage: e.target.value })}
+              className="w-full px-4 py-2 bg-gray-700 border border-gray-600 rounded-lg text-white focus:outline-none focus:border-primary-500 transition-colors"
+            >
+              <option value="">{t('profileModal.landingPageDefault')}</option>
+              {LANDING_PAGE_OPTIONS.filter(opt => {
+                const requiredPerm = ROUTE_PERMISSION_MAP[opt.value];
+                if (!requiredPerm) return true;
+                return formData.permissions.includes(requiredPerm) || formData.permissions.includes('*');
+              }).map(opt => (
+                <option key={opt.value} value={opt.value}>{opt.label}</option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-500 mt-1">
+              {t('profileModal.landingPageHelp')}
+            </p>
           </div>
 
           {/* Active */}

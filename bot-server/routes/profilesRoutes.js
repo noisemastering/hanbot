@@ -120,7 +120,7 @@ router.get("/:id", async (req, res) => {
 // POST /profiles - Create a new profile
 router.post("/", async (req, res) => {
   try {
-    const { name, label, description, role, permissions } = req.body;
+    const { name, label, description, role, permissions, landingPage } = req.body;
 
     // Validate required fields
     if (!name || !label || !role) {
@@ -162,6 +162,7 @@ router.post("/", async (req, res) => {
       description: description || "",
       role,
       permissions: permissions || [],
+      landingPage: landingPage || null,
       isSystem: false,
       createdBy: req.user._id
     });
@@ -188,7 +189,7 @@ router.post("/", async (req, res) => {
 router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const { label, description, permissions, active } = req.body;
+    const { label, description, permissions, active, landingPage } = req.body;
 
     const profile = await Profile.findById(id).populate("role");
     if (!profile) {
@@ -220,6 +221,7 @@ router.put("/:id", async (req, res) => {
     if (label) profile.label = label;
     if (description !== undefined) profile.description = description;
     if (permissions) profile.permissions = permissions;
+    if (landingPage !== undefined) profile.landingPage = landingPage;
     if (typeof active === "boolean") profile.active = active;
 
     await profile.save();

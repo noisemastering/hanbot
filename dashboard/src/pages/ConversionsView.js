@@ -6,6 +6,10 @@ import {
   ComposedChart,
   Bar,
   Line,
+  BarChart,
+  PieChart,
+  Pie,
+  Cell,
   XAxis,
   YAxis,
   CartesianGrid,
@@ -37,6 +41,7 @@ function ConversionsView() {
   const [correlating, setCorrelating] = useState(false);
   const [error, setError] = useState(null);
   const [correlationResult, setCorrelationResult] = useState(null);
+  const [topProducts, setTopProducts] = useState([]);
 
   // Date filters
   const [dateFrom, setDateFrom] = useState(getStartOfMonthStr());
@@ -62,16 +67,18 @@ function ConversionsView() {
       if (dateFromISO) params.append('dateFrom', dateFromISO);
       if (dateToISO) params.append('dateTo', dateToISO);
 
-      const [statsRes, conversionsRes, clicksRes] = await Promise.all([
+      const [statsRes, conversionsRes, clicksRes, productsRes] = await Promise.all([
         axios.get(`${API_URL}/analytics/conversions?${params.toString()}`),
         axios.get(`${API_URL}/analytics/conversions/recent?limit=500`), // Fetch more for pagination
-        API.get(`/click-logs/daily?startDate=${dateFrom}&endDate=${dateTo}`)
+        API.get(`/click-logs/daily?startDate=${dateFrom}&endDate=${dateTo}`),
+        API.get('/analytics/top-products')
       ]);
 
       setStats(statsRes.data.stats);
       setRecentConversions(conversionsRes.data.conversions || []);
       // API returns chartData with: { date, dateLabel, links, clicks, conversions }
       setDailyClicks(clicksRes.data?.chartData || []);
+      setTopProducts((productsRes.data?.allProducts || []).slice(0, 5));
     } catch (err) {
       console.error('Error fetching conversion data:', err);
       setError(err.message);
@@ -305,6 +312,81 @@ function ConversionsView() {
           </div>
         </div>
       )}
+
+      {/* Confidence Donut + Top Products */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        {/* Confidence Donut */}
+        {stats?.confidenceBreakdown && (
+          <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
+            <h2 className="text-lg font-semibold text-white mb-4">{t('conversions.confidenceChart')}</h2>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={[
+                      { name: t('conversions.high'), value: stats.confidenceBreakdown.high || 0, key: 'high' },
+                      { name: t('conversions.medium'), value: stats.confidenceBreakdown.medium || 0, key: 'medium' },
+                      { name: t('conversions.low'), value: stats.confidenceBreakdown.low || 0, key: 'low' },
+                    ].filter(d => d.value > 0)}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={55}
+                    outerRadius={85}
+                    paddingAngle={4}
+                    dataKey="value"
+                    label={({ name, value }) => `${name}: ${value}`}
+                  >
+                    <Cell fill="#10B981" stroke="transparent" />
+                    <Cell fill="#F59E0B" stroke="transparent" />
+                    <Cell fill="#EF4444" stroke="transparent" />
+                  </Pie>
+                  <Tooltip contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6' }} />
+                  <Legend wrapperStyle={{ color: '#9CA3AF' }} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {/* Top Products Bar Chart */}
+        {topProducts.length > 0 && (
+          <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
+            <h2 className="text-lg font-semibold text-white mb-4">{t('conversions.topProductsChart')}</h2>
+            <div className="h-64">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={topProducts.map(p => ({
+                    name: p._id?.length > 20 ? p._id.substring(0, 20) + '...' : p._id,
+                    revenue: p.totalRevenue || 0,
+                  }))}
+                  layout="vertical"
+                  margin={{ top: 0, right: 20, bottom: 0, left: 10 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis
+                    type="number"
+                    tick={{ fill: '#9CA3AF', fontSize: 11 }}
+                    axisLine={{ stroke: '#374151' }}
+                    tickFormatter={(v) => new Intl.NumberFormat(locale, { style: 'currency', currency: 'MXN', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v)}
+                  />
+                  <YAxis
+                    type="category"
+                    dataKey="name"
+                    tick={{ fill: '#9CA3AF', fontSize: 11 }}
+                    axisLine={{ stroke: '#374151' }}
+                    width={120}
+                  />
+                  <Tooltip
+                    contentStyle={{ backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6' }}
+                    formatter={(v) => new Intl.NumberFormat(locale, { style: 'currency', currency: 'MXN', minimumFractionDigits: 0, maximumFractionDigits: 0 }).format(v)}
+                  />
+                  <Bar dataKey="revenue" fill="#10B981" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+      </div>
 
       {/* Correlation Controls */}
       <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4 mb-6">
