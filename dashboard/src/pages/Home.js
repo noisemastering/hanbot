@@ -5,7 +5,6 @@ import {
   ComposedChart,
   Bar,
   Line,
-  BarChart,
   PieChart,
   Pie,
   Cell,
@@ -31,6 +30,9 @@ const CONFIDENCE_COLORS = {
   medium: COLORS.amber,
   low: COLORS.red,
 };
+
+const PRODUCT_COLORS = ["#10B981", "#34D399", "#6EE7B7", "#A7F3D0", "#065F46"];
+const REGION_COLORS = ["#06B6D4", "#22D3EE", "#67E8F9", "#A5F3FC", "#0E7490"];
 
 const tooltipStyle = {
   backgroundColor: "#1F2937",
@@ -297,34 +299,34 @@ function Home() {
           {topProducts.length > 0 ? (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={topProducts.map((p) => ({
-                    name: p._id?.length > 20 ? p._id.substring(0, 20) + "..." : p._id,
-                    revenue: p.totalRevenue || 0,
-                  }))}
-                  layout="vertical"
-                  margin={{ top: 0, right: 20, bottom: 0, left: 10 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis
-                    type="number"
-                    tick={{ fill: "#9CA3AF", fontSize: 11 }}
-                    axisLine={{ stroke: "#374151" }}
-                    tickFormatter={(v) => formatCurrency(v)}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="name"
-                    tick={{ fill: "#9CA3AF", fontSize: 11 }}
-                    axisLine={{ stroke: "#374151" }}
-                    width={120}
-                  />
+                <PieChart>
+                  <Pie
+                    data={topProducts.map((p) => ({
+                      name: p._id?.length > 20 ? p._id.substring(0, 20) + "..." : p._id,
+                      value: p.totalRevenue || 0,
+                    }))}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={4}
+                    dataKey="value"
+                    label={({ name, value }) => `${name}: ${formatCurrency(value)}`}
+                  >
+                    {topProducts.map((_, i) => (
+                      <Cell
+                        key={i}
+                        fill={PRODUCT_COLORS[i % PRODUCT_COLORS.length]}
+                        stroke="transparent"
+                      />
+                    ))}
+                  </Pie>
                   <Tooltip
                     contentStyle={tooltipStyle}
                     formatter={(v) => formatCurrency(v)}
                   />
-                  <Bar dataKey="revenue" fill={COLORS.green} radius={[0, 4, 4, 0]} />
-                </BarChart>
+                  <Legend wrapperStyle={{ color: "#9CA3AF" }} />
+                </PieChart>
               </ResponsiveContainer>
             </div>
           ) : (
@@ -374,31 +376,31 @@ function Home() {
           {topRegions.length > 0 ? (
             <div className="h-64">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={topRegions.map((r) => ({
-                    state: r.state,
-                    conversations: r.conversations || 0,
-                  }))}
-                  layout="vertical"
-                  margin={{ top: 0, right: 20, bottom: 0, left: 10 }}
-                >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis
-                    type="number"
-                    tick={{ fill: "#9CA3AF", fontSize: 11 }}
-                    axisLine={{ stroke: "#374151" }}
-                    allowDecimals={false}
-                  />
-                  <YAxis
-                    type="category"
-                    dataKey="state"
-                    tick={{ fill: "#9CA3AF", fontSize: 11 }}
-                    axisLine={{ stroke: "#374151" }}
-                    width={120}
-                  />
+                <PieChart>
+                  <Pie
+                    data={topRegions.map((r) => ({
+                      name: r.state,
+                      value: r.conversations || 0,
+                    }))}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={90}
+                    paddingAngle={4}
+                    dataKey="value"
+                    label={({ name, value }) => `${name}: ${value}`}
+                  >
+                    {topRegions.map((_, i) => (
+                      <Cell
+                        key={i}
+                        fill={REGION_COLORS[i % REGION_COLORS.length]}
+                        stroke="transparent"
+                      />
+                    ))}
+                  </Pie>
                   <Tooltip contentStyle={tooltipStyle} />
-                  <Bar dataKey="conversations" fill={COLORS.cyan} radius={[0, 4, 4, 0]} />
-                </BarChart>
+                  <Legend wrapperStyle={{ color: "#9CA3AF" }} />
+                </PieChart>
               </ResponsiveContainer>
             </div>
           ) : (
