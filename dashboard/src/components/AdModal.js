@@ -63,6 +63,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
   const [formData, setFormData] = useState({
     name: '',
     fbAdId: '',
+    postId: '',
     adSetId: parentAdSetId || '',
     status: 'ACTIVE',
     description: '',
@@ -129,6 +130,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
       setFormData({
         name: ad.name || '',
         fbAdId: ad.fbAdId || '',
+        postId: ad.postId || '',
         adSetId: ad.adSetId?._id || ad.adSetId || '',
         status: ad.status || 'ACTIVE',
         description: ad.creative?.description || '',
@@ -156,6 +158,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
     const payload = {
       name: formData.name,
       fbAdId: formData.fbAdId,
+      postId: formData.postId || null,
       adSetId: formData.adSetId,
       status: formData.status,
       productIds: sellableProductIds, // Only save sellable products
@@ -256,6 +259,24 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                   placeholder="120232182338600686"
                 />
               </div>
+            </div>
+
+            {/* Post ID for comment-initiated conversations */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Post ID
+              </label>
+              <input
+                type="text"
+                name="postId"
+                value={formData.postId}
+                onChange={handleChange}
+                className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                placeholder="pfbid02abc123..."
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                ID del post de Facebook asociado a este anuncio (para conversaciones desde comentarios)
+              </p>
             </div>
 
             {/* AdSet Selection */}

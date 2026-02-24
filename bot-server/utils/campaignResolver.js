@@ -105,6 +105,31 @@ async function resolveByCampaignId(fbCampaignId) {
 }
 
 /**
+ * Resolve effective settings for a conversation based on Post ID
+ * Looks up the Ad by postId, then cascades through Campaign → AdSet → Ad
+ *
+ * @param {string} postId - Facebook Post ID
+ * @returns {object} Merged settings object
+ */
+async function resolveByPostId(postId) {
+  try {
+    const ad = await Ad.findOne({ postId }).lean();
+    if (!ad) return null;
+
+    const adSet = await AdSet.findById(ad.adSetId).lean();
+    if (!adSet) return null;
+
+    const campaign = await Campaign.findById(adSet.campaignId).lean();
+    if (!campaign) return null;
+
+    return mergeSettings(campaign, adSet, ad);
+  } catch (error) {
+    console.error('Error resolving campaign by Post ID:', error);
+    return null;
+  }
+}
+
+/**
  * Resolve by campaign ref (e.g., "malla_agricola_rollo_2025")
  */
 async function resolveByCampaignRef(ref) {
@@ -272,7 +297,7 @@ function mergeSettings(campaign, adSet, ad) {
 /**
  * Main resolver - tries Ad ID, then AdSet ID, then Campaign ID
  */
-async function resolve({ fbAdId, fbAdSetId, fbCampaignId, campaignRef }) {
+async function resolve({ fbAdId, fbAdSetId, fbCampaignId, campaignRef, postId }) {
   if (fbAdId) {
     const result = await resolveByAdId(fbAdId);
     if (result) return result;
@@ -293,6 +318,11 @@ async function resolve({ fbAdId, fbAdSetId, fbCampaignId, campaignRef }) {
     if (result) return result;
   }
 
+  if (postId) {
+    const result = await resolveByPostId(postId);
+    if (result) return result;
+  }
+
   return null;
 }
 
@@ -302,5 +332,6 @@ module.exports = {
   resolveByAdSetId,
   resolveByCampaignId,
   resolveByCampaignRef,
+  resolveByPostId,
   mergeSettings
 };

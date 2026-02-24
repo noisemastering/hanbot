@@ -13,6 +13,9 @@ const adSchema = new mongoose.Schema(
     // Facebook Ad ID
     fbAdId: { type: String, required: true, unique: true },
 
+    // Facebook Post ID (for comment-initiated conversations)
+    postId: { type: String, sparse: true },
+
     // Basic info
     name: { type: String, required: true },
     status: {

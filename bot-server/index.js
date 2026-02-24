@@ -1232,7 +1232,28 @@ app.post("/webhook", async (req, res) => {
               if (postMapping?.productInterest) {
                 inferredProduct = postMapping.productInterest;
                 console.log(`   📍 Found post mapping: ${inferredProduct}`);
-              } else {
+              }
+
+              // Try Ad lookup by postId (campaign inheritance chain)
+              let resolvedFromAd = null;
+              if (!inferredProduct && postId) {
+                const { resolveByPostId } = require('./utils/campaignResolver');
+                const { getProductInterest } = require('./ai/utils/productEnricher');
+                const ProductFamily = require('./models/ProductFamily');
+
+                const resolvedSettings = await resolveByPostId(postId);
+                if (resolvedSettings && resolvedSettings.productIds && resolvedSettings.productIds.length > 0) {
+                  const productId = resolvedSettings.mainProductId || resolvedSettings.productIds[0];
+                  const product = await ProductFamily.findById(productId).lean();
+                  if (product) {
+                    inferredProduct = await getProductInterest(product);
+                    resolvedFromAd = resolvedSettings;
+                    console.log(`   📍 Resolved from Ad postId: ${inferredProduct} (campaign: ${resolvedSettings.campaignName})`);
+                  }
+                }
+              }
+
+              if (!inferredProduct) {
                 // Fallback: infer from comment text keywords
                 const commentLower = (commentContext.commentText || '').toLowerCase();
                 if (/malla.*sombra|rollo|raschel|sombra|metro/i.test(commentLower)) {
@@ -1245,14 +1266,23 @@ app.post("/webhook", async (req, res) => {
               }
 
               // Update conversation with inferred context
-              await updateConversation(senderPsid, {
+              const updateData = {
                 productInterest: inferredProduct,
                 source: {
                   type: 'comment',
                   postId: commentContext.postId,
                   commentId: commentContext.commentId
                 }
-              });
+              };
+
+              // If resolved from Ad, store campaign context for full inheritance downstream
+              if (resolvedFromAd) {
+                updateData.adId = resolvedFromAd.fbAdId;
+                updateData.campaignId = resolvedFromAd.campaignId;
+                if (resolvedFromAd.flowRef) updateData.currentFlow = resolvedFromAd.flowRef;
+              }
+
+              await updateConversation(senderPsid, updateData);
 
               // Link the PSID back to comment context for future reference
               await CommentContext.updateOne(
