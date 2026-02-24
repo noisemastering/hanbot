@@ -1044,38 +1044,12 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     }
   }
 
-  // 🌧️ RAIN/WATERPROOF QUESTIONS - Clarify malla sombra is NOT waterproof
-  // First check if "agua" appears in a location context (e.g., "Agua Prieta")
-  const hasWaterKeyword = /\b(lluvia|lluvias|llueve|agua|mojarse|mojar|impermeable|impermeabiliza|protege\s+de(l)?\s+(agua|lluvia)|cubre\s+de(l)?\s+(agua|lluvia)|sirve\s+(para|contra)\s+(la\s+)?(lluvia|agua)|tapa\s+(la\s+)?(lluvia|agua)|repele|repelente)\b/i.test(msg);
-  const isLocationContext = /\b(vivo\s+en|soy\s+de|estoy\s+en|est[aá]\s+en|ubicad[oa]\s+en|me\s+encuentro\s+en|mando\s+a|env[ií]o\s+a|entregar?\s+en)\b/i.test(msg);
-  const detectedLocation = await detectLocationEnhanced(msg);
-
-  if (hasWaterKeyword && !isLocationContext && !detectedLocation &&
-      !/\b(antimaleza|ground\s*cover|gran\s*cover|maleza|hierba)\b/i.test(msg)) {
-
-    // Check if we'd be repeating the same response - escalate to human instead
-    if (convo.lastIntent === "rain_waterproof_question") {
-      console.log("🔄 Would repeat waterproof response, escalating to human");
-      await updateConversation(psid, { lastIntent: "human_handoff", state: "needs_human" });
-      await sendHandoffNotification(psid, convo, "Cliente necesita atención - posible malentendido sobre impermeabilidad");
-      return {
-        type: "text",
-        text: "Parece que hay algo que no estoy entendiendo bien. Déjame contactar a un especialista para que te ayude mejor.\n\n" +
-              getHandoffTimingMessage()
-      };
-    }
-
-    await updateConversation(psid, { lastIntent: "rain_waterproof_question" });
-
-    return {
-      type: "text",
-      text: "No, la malla sombra no tiene propiedades impermeables. Es un tejido permeable que permite el paso del agua y el aire.\n\n" +
-            "Su función principal es reducir la intensidad del sol ☀️ y proporcionar sombra, no proteger de la lluvia.\n\n" +
-            "Si necesitas protección contra lluvia, te recomendaría buscar una lona impermeable o un toldo. ¿Te puedo ayudar con algo más sobre la malla sombra?"
-    };
-  }
+  // 🌧️ Rain/waterproof questions are handled by product flows (mallaFlow featureChecks).
+  // Global intents should NOT handle product-feature questions.
 
   // 📍 LOCATION MENTION - User is saying where they are from/live
+  const isLocationContext = /\b(vivo\s+en|soy\s+de|estoy\s+en|est[aá]\s+en|ubicad[oa]\s+en|me\s+encuentro\s+en|mando\s+a|env[ií]o\s+a|entregar?\s+en)\b/i.test(msg);
+  const detectedLocation = await detectLocationEnhanced(msg);
   // Handle "vivo en X", "soy de X", "estoy en X" to acknowledge and continue
   if (isLocationContext && detectedLocation) {
     console.log("📍 User mentioned their location:", detectedLocation.normalized);

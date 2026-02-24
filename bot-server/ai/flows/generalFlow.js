@@ -68,7 +68,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       return handleRejection(convo, psid);
 
     case INTENTS.MULTI_QUESTION:
-      return handleMultiQuestion(entities, convo, psid);
+      return handleMultiQuestion(entities, convo, psid, userMessage);
 
     case "opt_out":
       return handleOptOut(convo, psid);
@@ -199,7 +199,7 @@ async function handleLocation(convo, psid) {
  * Handle multi-question (e.g., "precio y ubicación")
  * Combines responses for multiple intents in one message
  */
-async function handleMultiQuestion(entities, convo, psid) {
+async function handleMultiQuestion(entities, convo, psid, userMessage = '') {
   // If the message contains dimensions, skip multi-question and let the product flow handle it
   // This prevents "Perfecto, anotado + Los precios dependen de la medida" when user already gave dimensions
   if (entities.width && entities.height) {
@@ -238,10 +238,18 @@ async function handleMultiQuestion(entities, convo, psid) {
   };
 
   // Special handling for pay-on-delivery question
-  if (entities.payOnDelivery) {
+  // Detect from entity flag OR directly from message text — payment upfront must ALWAYS be clarified
+  const payOnDeliveryDetected = entities.payOnDelivery ||
+    /\b(pago\s+(al\s+)?(recibir|entregar?)|contra\s*entrega|contraentrega|cuando\s+llegue\s+pago|al\s+recibir|la\s+pago\s+al\s+entregar|cobr[ao]\s+al\s+(recibir|entregar?))\b/i.test(userMessage || '');
+
+  if (payOnDeliveryDetected) {
     intentResponses['payment_query'] = isNonML
-      ? `No manejamos pago contra entrega. El pago se realiza al ordenar a través de transferencia o depósito bancario.`
-      : `No manejamos pago contra entrega. Los artículos comprados a través de nuestra tienda en Mercado Libre requieren el pago al ordenar, pero son compra segura: si no recibes tu pedido, se te devuelve tu dinero.`;
+      ? `No manejamos pago contra entrega. El pago es por adelantado a través de transferencia o depósito bancario.`
+      : `No manejamos pago contra entrega, pero tu compra está protegida por Mercado Libre: el pago se hace al ordenar y si no recibes o llega diferente, se te devuelve tu dinero.`;
+    // Ensure payment_query is in subIntents so the response actually gets included
+    if (!subIntents.includes('payment_query')) {
+      subIntents.push('payment_query');
+    }
   }
 
   // Build combined response

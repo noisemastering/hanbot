@@ -1103,28 +1103,42 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
   const matchedFeatures = featureChecks.filter(f => f.pattern.test(userMessage));
 
   if (matchedFeatures.length > 0) {
-    // Capitalize first response, join with ", "
-    const responses = matchedFeatures.map(f => typeof f.response === 'function' ? f.response(userMessage) : f.response);
-    responses[0] = responses[0].charAt(0).toUpperCase() + responses[0].slice(1);
-    const combined = responses.length > 1
-      ? responses.slice(0, -1).join(', ') + ' y ' + responses[responses.length - 1]
-      : responses[0];
+    // COMPLETENESS CHECK: Only return regex response if ALL significant keywords were covered.
+    // Strip matched keywords from message and check if unmatched product-related keywords remain.
+    let remaining = userMessage;
+    for (const f of matchedFeatures) {
+      remaining = remaining.replace(f.pattern, '');
+    }
+    // Broad set of product-feature keywords that signal unanswered topics
+    const unmatchedTopics = /\b(lluvia|lluvias|agua|impermeable|mojarse|sol|uv|rayos|ojillos?|ojales?|refuerz|porcentaje|sombra|color|beige|negro|instala|garant[ií]a|dur[ao]|vida\s*[uú]til|material|grosor|peso|medida|resiste|aguanta|viento|clima|intemperie)\b/i;
+    const hasUnmatchedTopics = unmatchedTopics.test(remaining);
 
-    // Check if we already have dimensions - don't ask again
-    const alreadyHasDimensions = state.width && state.height;
-    const alreadyShownProduct = convo?.lastIntent === 'malla_complete' && convo?.productSpecs?.width;
+    if (!hasUnmatchedTopics) {
+      // All keywords covered — safe to return regex response
+      const responses = matchedFeatures.map(f => typeof f.response === 'function' ? f.response(userMessage) : f.response);
+      responses[0] = responses[0].charAt(0).toUpperCase() + responses[0].slice(1);
+      const combined = responses.length > 1
+        ? responses.slice(0, -1).join(', ') + ' y ' + responses[responses.length - 1]
+        : responses[0];
 
-    let followUp = "";
-    if (!alreadyHasDimensions && !alreadyShownProduct) {
-      followUp = "\n\n¿Qué medida necesitas?";
-    } else {
-      followUp = "\n\n¿Necesitas algo más?";
+      const alreadyHasDimensions = state.width && state.height;
+      const alreadyShownProduct = convo?.lastIntent === 'malla_complete' && convo?.productSpecs?.width;
+
+      let followUp = "";
+      if (!alreadyHasDimensions && !alreadyShownProduct) {
+        followUp = "\n\n¿Qué medida necesitas?";
+      } else {
+        followUp = "\n\n¿Necesitas algo más?";
+      }
+
+      return {
+        type: "text",
+        text: `Sí, ${combined}.${followUp}`
+      };
     }
 
-    return {
-      type: "text",
-      text: `Sí, ${combined}.${followUp}`
-    };
+    // Unmatched keywords remain — fall through to AI for a complete answer
+    console.log(`⚠️ Feature regex matched partially but unmatched topics remain in: "${remaining.trim()}" — deferring to AI`);
   }
 
   // Check if user mentioned an object they want to cover (carro, cochera, patio, etc.)

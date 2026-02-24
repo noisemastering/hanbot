@@ -1198,8 +1198,10 @@ async function generateReply(userMessage, psid, referral = null) {
   // ====== PAY ON DELIVERY PRE-CHECK ======
   // Regex safety net: if user clearly asks about cash-on-delivery, force pay_on_delivery_query
   // This prevents misclassification as generic payment_query (which doesn't say NO)
-  const payOnDeliveryPattern = /\b(pago\s+(al\s+)?(recibir|entreg)|contra\s*entrega|contraentrega|cuando\s+llegue\s+pago|al\s+recibir|se\s+paga\s+al\s+(recibir|entreg)|cobr[ao]\s+al\s+(recibir|entreg))\b/i;
-  if (payOnDeliveryPattern.test(userMessage)) {
+  const payOnDeliveryPattern = /\b(pago\s+(al\s+)?(recibir|entregar?)|contra\s*entrega|contraentrega|cuando\s+llegue\s+pago|al\s+recibir|la\s+pago\s+al\s+entregar|se\s+paga\s+al\s+(recibir|entregar?)|cobr[ao]\s+al\s+(recibir|entregar?))\b/i;
+  if (payOnDeliveryPattern.test(userMessage) && classification.intent !== INTENTS.MULTI_QUESTION) {
+    // For multi-question messages, let the multi-question handler combine contra-entrega
+    // with other responses (e.g., confirmation + payment). Only intercept single-intent messages.
     console.log(`💳 Pay-on-delivery question detected via regex, forcing explicit NO`);
     const logisticsHandlers = require("./handlers/logistics");
     const podResponse = await logisticsHandlers.handlePayOnDelivery({ psid, convo });
@@ -1326,6 +1328,29 @@ async function generateReply(userMessage, psid, referral = null) {
       });
     }
   }
+
+  // ====== PAY-ON-DELIVERY POST-CHECK ======
+  // If user mentioned contra-entrega but the response doesn't address it, append clarification.
+  // This is a safety net that covers ALL paths (active flow, multi-question, dispatcher, etc.)
+  if (response && response.text && payOnDeliveryPattern.test(userMessage)) {
+    if (!/contra\s*entrega|no manejamos.*(pago|contra)|pago.*(adelantado|al\s+ordenar)/i.test(response.text)) {
+      const isNonML = convo?.currentFlow === 'rollo' ||
+        convo?.currentFlow === 'groundcover' ||
+        convo?.currentFlow === 'monofilamento' ||
+        convo?.productInterest === 'rollo' ||
+        convo?.productInterest === 'groundcover' ||
+        convo?.productInterest === 'monofilamento' ||
+        convo?.isWholesaleInquiry;
+
+      const contraEntregaNote = isNonML
+        ? 'Sobre el pago: no manejamos contra entrega. El pago es por adelantado a través de transferencia o depósito bancario.'
+        : 'Sobre el pago: no manejamos contra entrega, pero tu compra está protegida por Mercado Libre — el pago se hace al ordenar y si no recibes o llega diferente, se te devuelve tu dinero.';
+
+      response.text += '\n\n' + contraEntregaNote;
+      console.log(`💳 Post-check: appended contra-entrega clarification to response`);
+    }
+  }
+  // ====== END PAY-ON-DELIVERY POST-CHECK ======
 
   // ====== LOCATION STATS QUESTION ======
   // Append "de qué ciudad nos escribes?" if we're sending an ML link
