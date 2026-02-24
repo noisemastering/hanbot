@@ -91,9 +91,10 @@ async function handleLocation({ psid, userMessage, convo }) {
   });
 
   // Ensure the actual Google Maps URL is present — AI sometimes replaces it with a placeholder
-  if (response && !response.includes(MAPS_URL)) {
-    response = response.replace(/\[(?:Link|Enlace)\s*(?:de\s*)?Google\s*Maps\]/gi, MAPS_URL);
-    // If still missing (AI used different placeholder), append it
+  if (response) {
+    // Remove any bracketed placeholder like [Link de ubicación], [Enlace Google Maps], etc.
+    response = response.replace(/\[(?:Link|Enlace)[^\]]*\]/gi, '').replace(/\n{3,}/g, '\n\n').trim();
+    // If URL got lost, append it
     if (!response.includes(MAPS_URL)) {
       response += `\n\n${MAPS_URL}`;
     }
