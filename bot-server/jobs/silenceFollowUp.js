@@ -5,10 +5,26 @@ const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 const { generateClickLink } = require('../tracking');
 const axios = require('axios');
-const { sendTextMessage: sendWhatsAppText } = require('../channels/whatsapp/api');
+const { sendTextMessage: sendWhatsAppText, sendWhatsAppMessage } = require('../channels/whatsapp/api');
+const { sendCatalog } = require('../utils/sendCatalog');
+const { getCatalogUrl } = require('../ai/flowManager');
 
 const STORE_URL = 'https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob';
 const FOLLOW_UP_DELAY_MS = 10 * 60 * 1000; // 10 minutes
+
+/** Flows considered wholesale — prefer catalog + pitch over ML store link */
+const WHOLESALE_FLOWS = ['rollo', 'groundcover', 'monofilamento'];
+
+const WHOLESALE_MESSAGE = `Recuerda que somos fabricantes y buscamos revendedores para ayudarlos a expandir sus negocios con un producto de la más alta calidad 100% hecho en México.
+
+🔹 Beneficios para revendedores:
+✔ Descuento por mayoreo para maximizar tu ganancia.
+✔ Variedad de medidas y colores para diferentes usos.
+✔ Entrega rápida y atención personalizada.
+
+Si quieres ampliar tu catálogo con un producto rentable, contáctanos hoy mismo para recibir tu cotización especial. ¡Hagamos negocios juntos!
+
+Te comparto nuestra lista de precios.`;
 
 /**
  * Schedule a silence follow-up if needed.
@@ -110,25 +126,48 @@ async function runSilenceFollowUpJob() {
           }
         }
 
-        // Generate tracked store link
-        const trackedLink = await generateClickLink(convo.psid, STORE_URL, {
-          productName: 'Tienda ML (follow-up)'
-        });
-
-        const followUpText =
-          `Por si te interesa echar un vistazo, te comparto nuestra tienda en Mercado Libre con envío gratis a todo México:\n\n${trackedLink}`;
-
-        // Determine channel and send
+        // Determine channel
         const channel = convo.channel || (convo.psid.startsWith('wa:') ? 'whatsapp' : 'facebook');
+        let followUpText;
 
-        if (channel === 'whatsapp') {
-          // Extract phone number from unified ID (wa:521234567890 → 521234567890)
-          const phone = convo.psid.replace('wa:', '');
-          await sendWhatsAppText(phone, followUpText);
+        if (WHOLESALE_FLOWS.includes(convo.currentFlow)) {
+          // --- Wholesale follow-up: pitch + catalog PDF ---
+          followUpText = WHOLESALE_MESSAGE;
+          const catalogUrl = await getCatalogUrl(convo);
+
+          if (channel === 'whatsapp') {
+            const phone = convo.psid.replace('wa:', '');
+            await sendWhatsAppText(phone, followUpText);
+            if (catalogUrl) {
+              await sendWhatsAppMessage(phone, {
+                type: 'document',
+                document: { link: catalogUrl, filename: 'Lista_Precios_Hanlob.pdf' }
+              });
+            }
+          } else {
+            const fbPsid = convo.psid.startsWith('fb:') ? convo.psid.replace('fb:', '') : convo.psid;
+            if (catalogUrl) {
+              await sendCatalog(fbPsid, catalogUrl, followUpText);
+            } else {
+              await sendMessengerMessage(fbPsid, followUpText);
+            }
+          }
         } else {
-          // Facebook — extract PSID from unified ID (fb:123456 → 123456) or use raw
-          const fbPsid = convo.psid.startsWith('fb:') ? convo.psid.replace('fb:', '') : convo.psid;
-          await sendMessengerMessage(fbPsid, followUpText);
+          // --- Default follow-up: ML store link ---
+          const trackedLink = await generateClickLink(convo.psid, STORE_URL, {
+            productName: 'Tienda ML (follow-up)'
+          });
+
+          followUpText =
+            `Por si te interesa echar un vistazo, te comparto nuestra tienda en Mercado Libre con envío gratis a todo México:\n\n${trackedLink}`;
+
+          if (channel === 'whatsapp') {
+            const phone = convo.psid.replace('wa:', '');
+            await sendWhatsAppText(phone, followUpText);
+          } else {
+            const fbPsid = convo.psid.startsWith('fb:') ? convo.psid.replace('fb:', '') : convo.psid;
+            await sendMessengerMessage(fbPsid, followUpText);
+          }
         }
 
         // Save as bot message
@@ -146,7 +185,7 @@ async function runSilenceFollowUpJob() {
           }
         });
 
-        console.log(`✅ Silence follow-up sent to ${convo.psid}`);
+        console.log(`✅ Silence follow-up sent to ${convo.psid} (${WHOLESALE_FLOWS.includes(convo.currentFlow) ? 'wholesale' : 'store link'})`);
       } catch (err) {
         console.error(`❌ Error sending silence follow-up to ${convo.psid}:`, err.message);
         // Clear the timer so we don't retry endlessly on a broken conversation
