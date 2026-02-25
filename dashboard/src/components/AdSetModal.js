@@ -37,6 +37,10 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
     locations: 'Mexico',
     ageMin: '25',
     ageMax: '60',
+    genders: '',
+    interests: '',
+    behaviors: '',
+    customAudiences: '',
     placements: 'facebook_feed,instagram_feed',
     productIds: []
   });
@@ -101,6 +105,10 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
         locations: adSet.targeting?.locations?.join(', ') || 'Mexico',
         ageMin: adSet.targeting?.ageMin || '25',
         ageMax: adSet.targeting?.ageMax || '60',
+        genders: adSet.targeting?.genders?.join(', ') || '',
+        interests: adSet.targeting?.interests?.join(', ') || '',
+        behaviors: adSet.targeting?.behaviors?.join(', ') || '',
+        customAudiences: adSet.targeting?.customAudiences?.join(', ') || '',
         placements: adSet.placements?.join(',') || 'facebook_feed,instagram_feed',
         productIds: adSet.productIds?.map(p => p._id || p) || []
       });
@@ -127,7 +135,11 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
       targeting: {
         locations: formData.locations.split(',').map(l => l.trim()),
         ageMin: parseInt(formData.ageMin),
-        ageMax: parseInt(formData.ageMax)
+        ageMax: parseInt(formData.ageMax),
+        genders: formData.genders.split(',').map(g => g.trim()).filter(Boolean),
+        interests: formData.interests.split(',').map(i => i.trim()).filter(Boolean),
+        behaviors: formData.behaviors.split(',').map(b => b.trim()).filter(Boolean),
+        customAudiences: formData.customAudiences.split(',').map(c => c.trim()).filter(Boolean)
       },
       placements: formData.placements.split(',').map(p => p.trim())
     };
@@ -312,6 +324,66 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
                     />
                   </div>
                 </div>
+              </div>
+
+              {/* Genders */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  {t('adSetModal.genders')}
+                </label>
+                <input
+                  type="text"
+                  name="genders"
+                  value={formData.genders}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder={t('adSetModal.gendersPlaceholder')}
+                />
+              </div>
+
+              {/* Interests */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  {t('adSetModal.interests')}
+                </label>
+                <input
+                  type="text"
+                  name="interests"
+                  value={formData.interests}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder={t('adSetModal.interestsPlaceholder')}
+                />
+              </div>
+
+              {/* Behaviors */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  {t('adSetModal.behaviors')}
+                </label>
+                <input
+                  type="text"
+                  name="behaviors"
+                  value={formData.behaviors}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder={t('adSetModal.behaviorsPlaceholder')}
+                />
+              </div>
+
+              {/* Custom Audiences */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  {t('adSetModal.customAudiences')}
+                </label>
+                <input
+                  type="text"
+                  name="customAudiences"
+                  value={formData.customAudiences}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  placeholder={t('adSetModal.customAudiencesPlaceholder')}
+                />
               </div>
             </div>
 

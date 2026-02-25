@@ -75,7 +75,18 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
     adAngle: '',
     primaryUse: '',
     audienceType: '',
-    offerHook: ''
+    offerHook: '',
+    // Creative extras
+    headline: '',
+    body: '',
+    imageUrl: '',
+    videoUrl: '',
+    // UTM tracking
+    utmSource: '',
+    utmMedium: '',
+    utmCampaign: '',
+    utmContent: '',
+    utmTerm: ''
   });
 
   const [productFamilies, setProductFamilies] = useState([]);
@@ -142,7 +153,18 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
         adAngle: ad.adAngle || '',
         primaryUse: ad.adIntent?.primaryUse || '',
         audienceType: ad.adIntent?.audienceType || '',
-        offerHook: ad.adIntent?.offerHook || ''
+        offerHook: ad.adIntent?.offerHook || '',
+        // Creative extras
+        headline: ad.creative?.headline || '',
+        body: ad.creative?.body || '',
+        imageUrl: ad.creative?.imageUrl || '',
+        videoUrl: ad.creative?.videoUrl || '',
+        // UTM tracking
+        utmSource: ad.tracking?.utmSource || '',
+        utmMedium: ad.tracking?.utmMedium || '',
+        utmCampaign: ad.tracking?.utmCampaign || '',
+        utmContent: ad.tracking?.utmContent || '',
+        utmTerm: ad.tracking?.utmTerm || ''
       });
       setCurrentCatalog(ad.catalog || null);
     }
@@ -166,7 +188,11 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
       creative: {
         description: formData.description,
         callToAction: formData.callToAction,
-        linkUrl: formData.linkUrl
+        linkUrl: formData.linkUrl,
+        headline: formData.headline,
+        body: formData.body,
+        imageUrl: formData.imageUrl,
+        videoUrl: formData.videoUrl
       },
       // Ad Intent - for tailoring bot responses
       adAngle: formData.adAngle || null,
@@ -174,6 +200,13 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
         primaryUse: formData.primaryUse || null,
         audienceType: formData.audienceType || null,
         offerHook: formData.offerHook || null
+      },
+      tracking: {
+        utmSource: formData.utmSource || null,
+        utmMedium: formData.utmMedium || null,
+        utmCampaign: formData.utmCampaign || null,
+        utmContent: formData.utmContent || null,
+        utmTerm: formData.utmTerm || null
       }
     };
 
@@ -322,6 +355,37 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
               <h3 className="text-sm font-semibold text-gray-300 mb-3">{t('adModal.creativeContent')}</h3>
 
               <div className="space-y-4">
+                {/* Headline */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    {t('adModal.headline')}
+                  </label>
+                  <input
+                    type="text"
+                    name="headline"
+                    value={formData.headline}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder={t('adModal.headlinePlaceholder')}
+                  />
+                </div>
+
+                {/* Body */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    {t('adModal.body')}
+                  </label>
+                  <textarea
+                    name="body"
+                    value={formData.body}
+                    onChange={handleChange}
+                    rows={3}
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder={t('adModal.bodyPlaceholder')}
+                  />
+                </div>
+
+                {/* Description */}
                 <div>
                   <label className="block text-sm font-medium text-gray-300 mb-2">
                     {t('adModal.descriptionLabel')}
@@ -334,6 +398,36 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                     className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                     placeholder={t('adModal.descriptionPlaceholder')}
                   />
+                </div>
+
+                {/* Image URL & Video URL */}
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      {t('adModal.imageUrl')}
+                    </label>
+                    <input
+                      type="text"
+                      name="imageUrl"
+                      value={formData.imageUrl}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      placeholder={t('adModal.imageUrlPlaceholder')}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      {t('adModal.videoUrl')}
+                    </label>
+                    <input
+                      type="text"
+                      name="videoUrl"
+                      value={formData.videoUrl}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                      placeholder="https://..."
+                    />
+                  </div>
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -504,6 +598,69 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                   </p>
                 </div>
               )}
+            </div>
+
+            {/* Tracking (UTMs) */}
+            <div className="border-t border-gray-700 pt-4 mt-4">
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">{t('adModal.tracking')}</h3>
+              <p className="text-xs text-gray-400 mb-3">{t('adModal.trackingHint')}</p>
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">{t('adModal.utmSource')}</label>
+                  <input
+                    type="text"
+                    name="utmSource"
+                    value={formData.utmSource}
+                    onChange={handleChange}
+                    className="w-full px-3 py-1.5 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="facebook"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">{t('adModal.utmMedium')}</label>
+                  <input
+                    type="text"
+                    name="utmMedium"
+                    value={formData.utmMedium}
+                    onChange={handleChange}
+                    className="w-full px-3 py-1.5 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="cpc"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">{t('adModal.utmCampaign')}</label>
+                  <input
+                    type="text"
+                    name="utmCampaign"
+                    value={formData.utmCampaign}
+                    onChange={handleChange}
+                    className="w-full px-3 py-1.5 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="spring_sale"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">{t('adModal.utmContent')}</label>
+                  <input
+                    type="text"
+                    name="utmContent"
+                    value={formData.utmContent}
+                    onChange={handleChange}
+                    className="w-full px-3 py-1.5 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="banner_v2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-gray-400 mb-1">{t('adModal.utmTerm')}</label>
+                  <input
+                    type="text"
+                    name="utmTerm"
+                    value={formData.utmTerm}
+                    onChange={handleChange}
+                    className="w-full px-3 py-1.5 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="malla_sombra"
+                  />
+                </div>
+              </div>
             </div>
 
             {/* Catalog Upload */}

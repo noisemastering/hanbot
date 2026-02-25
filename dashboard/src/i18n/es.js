@@ -990,6 +990,8 @@ const es = {
   "messages.closeLink": "Cerrar Enlace",
   "messages.generateLink": "Generar Enlace",
   "messages.close": "Cerrar",
+  "messages.copyStoreLink": "Copiar link de tienda ML con PSID",
+  "messages.storeLinkCopied": "Link de tienda con PSID copiado",
   "messages.agent": "Agente",
   "messages.numberCopied": "Número copiado: {{number}}",
   "messages.copy": "Copiar",
@@ -1340,6 +1342,14 @@ const es = {
   "adModal.mainProductHint": "Este producto determina cómo el bot identifica el tipo de producto del anuncio.",
   "adModal.catalogSaveFirst": "Primero guarda el Anuncio para poder subir un catálogo.",
   "adModal.updateAd": "Actualizar",
+  "adModal.videoUrl": "URL de Video",
+  "adModal.tracking": "Tracking (UTMs)",
+  "adModal.trackingHint": "Parámetros UTM para rastreo de campañas",
+  "adModal.utmSource": "utm_source",
+  "adModal.utmMedium": "utm_medium",
+  "adModal.utmCampaign": "utm_campaign",
+  "adModal.utmContent": "utm_content",
+  "adModal.utmTerm": "utm_term",
 
   // ── IntentModal extras ─────────────────────────────────
   "intentModal.handlerAiGenerate": "IA genera respuesta",
@@ -1607,6 +1617,14 @@ const es = {
   "adSetModal.productsNote": "Nota: Deja vacío para usar los productos de la campaña. Solo se guardarán los productos vendibles seleccionados.",
   "adSetModal.saveCatalogFirst": "Primero guarda el Ad Set para poder subir un catálogo.",
   "adSetModal.update": "Actualizar",
+  "adSetModal.genders": "Géneros",
+  "adSetModal.gendersPlaceholder": "Hombres, Mujeres o todos",
+  "adSetModal.interests": "Intereses",
+  "adSetModal.interestsPlaceholder": "Agricultura, Jardinería, Construcción",
+  "adSetModal.behaviors": "Comportamientos",
+  "adSetModal.behaviorsPlaceholder": "Compradores frecuentes",
+  "adSetModal.customAudiences": "Audiencias Personalizadas",
+  "adSetModal.customAudiencesPlaceholder": "Lookalike MX 1%, Retargeting 30d",
 
   // ── Ad Sets View (extended) ────────────────────────────
   "adSets.groupedByCampaign": "Agrupados por campaña",

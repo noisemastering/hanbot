@@ -1026,6 +1026,8 @@ const en = {
   "messages.closeLink": "Close Link",
   "messages.generateLink": "Generate Link",
   "messages.close": "Close",
+  "messages.copyStoreLink": "Copy ML store link with PSID",
+  "messages.storeLinkCopied": "Store link with PSID copied",
   "messages.agent": "Agent",
   "messages.numberCopied": "Number copied: {{number}}",
   "messages.copy": "Copy",
@@ -1322,6 +1324,14 @@ const en = {
   "adModal.statusPaused": "Paused",
   "adModal.updateAd": "Update Ad",
   "adModal.useFirstProduct": "Use first product",
+  "adModal.videoUrl": "Video URL",
+  "adModal.tracking": "Tracking (UTMs)",
+  "adModal.trackingHint": "UTM parameters for campaign tracking",
+  "adModal.utmSource": "utm_source",
+  "adModal.utmMedium": "utm_medium",
+  "adModal.utmCampaign": "utm_campaign",
+  "adModal.utmContent": "utm_content",
+  "adModal.utmTerm": "utm_term",
 
   // ── adSetModal ──
   "adSetModal.ageMax": "Max Age",
@@ -1340,6 +1350,14 @@ const en = {
   "adSetModal.statusArchived": "Archived",
   "adSetModal.statusPaused": "Paused",
   "adSetModal.update": "Update Ad Set",
+  "adSetModal.genders": "Genders",
+  "adSetModal.gendersPlaceholder": "Men, Women or all",
+  "adSetModal.interests": "Interests",
+  "adSetModal.interestsPlaceholder": "Agriculture, Gardening, Construction",
+  "adSetModal.behaviors": "Behaviors",
+  "adSetModal.behaviorsPlaceholder": "Frequent buyers",
+  "adSetModal.customAudiences": "Custom Audiences",
+  "adSetModal.customAudiencesPlaceholder": "Lookalike MX 1%, Retargeting 30d",
 
   // ── adSets ──
   "adSets.subtitle": "Grouped by campaign",

@@ -1270,6 +1270,25 @@ function Messages() {
               </span>
               <div style={{ display: "flex", gap: "0.5rem" }}>
                 <button
+                  onClick={() => {
+                    const storeUrl = `https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob?psid=${encodeURIComponent(selectedPsid)}#from=share_eshop`;
+                    navigator.clipboard.writeText(storeUrl);
+                    alert(t('messages.storeLinkCopied'));
+                  }}
+                  style={{
+                    padding: "8px 16px",
+                    backgroundColor: "#FFE600",
+                    color: "#333",
+                    border: "none",
+                    borderRadius: "8px",
+                    cursor: "pointer",
+                    fontWeight: "bold"
+                  }}
+                  title={t('messages.copyStoreLink')}
+                >
+                  🏪 ML
+                </button>
+                <button
                   onClick={() => { setShowLinkGenerator(!showLinkGenerator); setShowSaleForm(false); }}
                   style={{
                     padding: "8px 16px",
