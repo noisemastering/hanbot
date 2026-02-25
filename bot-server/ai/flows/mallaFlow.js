@@ -1406,6 +1406,24 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
         const sorted = altSizes
           .map(s => ({ ...s, area: s.width * s.height }))
           .sort((a, b) => Math.abs(a.area - reqArea) - Math.abs(b.area - reqArea));
+
+        // If the closest alternative differs by more than 2m², hand off to human
+        const closestAreaDiff = Math.abs(sorted[0].area - reqArea);
+        if (closestAreaDiff > 2) {
+          const { executeHandoff: execHandoffAreaGap } = require('../utils/executeHandoff');
+          await updateConversation(psid, {
+            requestedSize: `${width}x${height}`,
+            productSpecs: { ...convo?.productSpecs, width, height, updatedAt: new Date() }
+          });
+          return await execHandoffAreaGap(psid, convo, userMessage, {
+            reason: `Medida ${width}x${height}m (${reqArea}m²) - sin alternativa cercana (más cercana: ${sorted[0].sizeStr} = ${sorted[0].area}m²)`,
+            responsePrefix: `No tenemos malla de ${width}x${height}m y nuestras medidas estándar no se acercan a esa área. Déjame comunicarte con un especialista para buscar opciones. `,
+            specsText: `Malla de ${width}x${height}m. `,
+            notificationText: `Malla ${width}x${height}m (${reqArea}m²) - alternativa más cercana: ${sorted[0].sizeStr} (${sorted[0].area}m²)`,
+            timingStyle: 'elaborate'
+          });
+        }
+
         const options = sorted.slice(0, 4);
         const optionsList = options.map(o => `• ${o.sizeStr} → $${o.price}`).join('\n');
 
@@ -1630,6 +1648,26 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
   // Build response with alternatives
   let response = `La medida ${width}x${height}m no la manejamos en nuestro catálogo estándar.\n\n`;
   let recommendedSize = null;
+
+  // Check if the closest alternative (by area) is within 2m² of the requested area
+  // If not, no standard size is close enough — hand off to human
+  const closestByArea = parsedAlternatives
+    .sort((a, b) => Math.abs(a.area - requestedArea) - Math.abs(b.area - requestedArea))[0];
+  if (closestByArea && Math.abs(closestByArea.area - requestedArea) > 2) {
+    const { executeHandoff: execHandoffAreaGap2 } = require('../utils/executeHandoff');
+    await updateConversation(psid, {
+      lastUnavailableSize: `${width}x${height}`,
+      requestedSize: `${width}x${height}`,
+      productSpecs: { ...convo?.productSpecs, width, height, updatedAt: new Date() }
+    });
+    return await execHandoffAreaGap2(psid, convo, userMessage, {
+      reason: `Medida ${width}x${height}m (${requestedArea}m²) - sin alternativa cercana (más cercana: ${closestByArea.product.size} = ${closestByArea.area}m²)`,
+      responsePrefix: `No tenemos malla de ${width}x${height}m y nuestras medidas estándar no se acercan a esa área. Déjame comunicarte con un especialista para buscar opciones. `,
+      specsText: `Malla de ${width}x${height}m. `,
+      notificationText: `Malla ${width}x${height}m (${requestedArea}m²) - alternativa más cercana: ${closestByArea.product.size} (${closestByArea.area}m²)`,
+      timingStyle: 'elaborate'
+    });
+  }
 
   if (nearestCover) {
     // There's a single piece that could cover

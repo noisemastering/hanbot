@@ -1204,6 +1204,20 @@ async function generateReply(userMessage, psid, referral = null) {
   }
   // ====== END LINK NOT WORKING DETECTION ======
 
+  // ====== TRUST / SCAM CONCERN PRE-CHECK ======
+  // When a customer expresses fear of being scammed, reassure with ML buyer protection
+  const trustConcernPattern = /\b(estaf\w*|me\s+robaron|fraude|timo|enga[ñn]\w*|desconfian\w*|no\s+conf[ií]\w*|conf[ií]ar|conf[ií]able|miedo|me\s+da\s+pendiente|es\s+segur[oa]|ser[áa]\s+segur[oa]|le\s+pienso|le\s+pienzo)\b/i;
+  if (trustConcernPattern.test(userMessage)) {
+    console.log(`🛡️ Trust/scam concern detected, reassuring with ML buyer protection`);
+    const { updateConversation } = require("../conversationManager");
+    await updateConversation(psid, { lastIntent: "trust_concern_addressed" });
+    return {
+      type: "text",
+      text: "Entiendo tu preocupación, y es muy válida. La compra se realiza por Mercado Libre, así que cuentas con su programa de *compra protegida*: si el producto no te llega, llega defectuoso o es diferente a lo que pediste, te devuelven tu dinero.\n\nAdemás somos fabricantes con más de 5 años vendiendo en Mercado Libre. ¿Te gustaría ver el producto?"
+    };
+  }
+  // ====== END TRUST / SCAM CONCERN PRE-CHECK ======
+
   // ====== PAY ON DELIVERY PRE-CHECK ======
   // Regex safety net: if user clearly asks about cash-on-delivery, force pay_on_delivery_query
   // This prevents misclassification as generic payment_query (which doesn't say NO)
