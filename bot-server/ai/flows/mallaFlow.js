@@ -1054,6 +1054,15 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
     return await handleProductInfo(userMessage, convo);
   }
 
+  // Price per square meter — answer with base price explanation
+  if (/\b(metro\s*\.?\s*cuadrado|m2|m²)\b/i.test(userMessage) &&
+      /\b(precio|cu[aá]nto|costo|vale|cuesta|a\s*c[oó]mo|como)\b/i.test(userMessage)) {
+    return {
+      type: "text",
+      text: "El precio base del metro cuadrado es de 30 pesos pero varía dependiendo de la dimensión, entre más grande es, más baja el precio por metro cuadrado.\n\n¿Qué medida te interesa?"
+    };
+  }
+
   // If they're asking about prices without dimensions
   if (intent === INTENTS.PRICE_QUERY) {
     // Send full product description with price range

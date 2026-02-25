@@ -1113,13 +1113,21 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     };
   }
 
-  // 📐 PRICE PER SQUARE METER - "precio por metro cuadrado", "cuánto el m2"
+  // 📐 PRICE PER SQUARE METER - "precio por metro cuadrado", "cuánto el m2", "a como metro cuadrado"
   // We don't sell by m², prices depend on specific dimensions
-  if (/\b(precio|cu[aá]nto|costo|vale)\s+(por|el|del?)\s*(metro\s*cuadrado|m2|m²)\b/i.test(msg) ||
-      /\b(metro\s*cuadrado|m2|m²)\s+(cu[aá]nto|precio|cuesta|vale)\b/i.test(msg)) {
+  if (/\b(precio|cu[aá]nto|costo|vale|a\s*c[oó]mo|como)\s+(por|el|del?)?\s*(metro\s*\.?\s*cuadrado|m2|m²)\b/i.test(msg) ||
+      /\b(metro\s*\.?\s*cuadrado|m2|m²)\s+(cu[aá]nto|precio|cuesta|vale)\b/i.test(msg)) {
 
     console.log("📐 Price per m² question detected");
     await updateConversation(psid, { lastIntent: "price_per_sqm" });
+
+    // In confeccionada flow, give the specific base price answer
+    if (convo?.currentFlow === 'malla_sombra') {
+      return {
+        type: "text",
+        text: "El precio base del metro cuadrado es de 30 pesos pero varía dependiendo de la dimensión, entre más grande es, más baja el precio por metro cuadrado.\n\n¿Qué medida te interesa?"
+      };
+    }
 
     return {
       type: "text",
