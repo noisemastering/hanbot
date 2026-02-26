@@ -665,7 +665,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
           await updateConversation(psid, { lastIntent: 'roll_complete', unknownCount: 0, lastQuotedProducts: null });
           return {
             type: "text",
-            text: `¡Perfecto! Aquí tienes el link de compra:\n\n• ${prod.displayText} — ${formatMoney(prod.price)}\n  🛒 ${trackedLink}\n\nEl envío va incluido.`
+            text: `¡Perfecto! Aquí tienes el link de compra:\n\n• ${prod.displayText} — ${formatMoney(prod.price)}\n  🛒 ${trackedLink}\n\nEl envío está incluido.`
           };
         }
       }

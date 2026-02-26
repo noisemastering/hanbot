@@ -319,7 +319,7 @@ async function generateReply(userMessage, psid, referral = null) {
       // Add note about shipping being included
       let response = sizeResponse.text;
       if (!response.includes('envío')) {
-        response += '\n\nEl envío está incluido en el precio 📦';
+        response += '\n\nEl envío está incluido 📦';
       }
 
       return { type: "text", text: response };

@@ -407,7 +407,7 @@ async function handleQuoteSelection(aiAction, lastQuotedProducts, psid, convo) {
 
   return {
     type: "text",
-    text: `${intro}\n\n${responseParts.join('\n\n')}\n\nEl envío va incluido en el precio.`
+    text: `${intro}\n\n${responseParts.join('\n\n')}\n\nEl envío está incluido.`
   };
 }
 
@@ -899,7 +899,7 @@ async function getMallaDescription() {
   }
 
   return `Nuestra malla sombra raschel confeccionada con 90% de cobertura y protección UV.\n\n` +
-    `Viene con refuerzo en las esquinas para una vida útil de hasta 5 años, y con ojillos para sujeción cada 80 cm por lado, lista para instalar. El envío a domicilio va incluido en el precio.\n\n` +
+    `Viene con refuerzo en las esquinas para una vida útil de hasta 5 años, y con ojillos para sujeción cada 80 cm por lado, lista para instalar. El envío está incluido.\n\n` +
     `Manejamos medidas desde ${sizeMin} hasta ${sizeMax}, con precios desde ${formatMoney(priceMin)} hasta ${formatMoney(priceMax)}.\n\n` +
     `¿Qué medida te interesa?`;
 }

@@ -578,7 +578,7 @@ async function handleAwaitingLength(intent, state, sourceContext, availableLengt
           await updateConversation(psid, { lastIntent: 'borde_complete', unknownCount: 0, lastQuotedProducts: null });
           return {
             type: "text",
-            text: `¡Perfecto! Aquí tienes el link de compra:\n\n• ${prod.displayText} — ${formatMoney(prod.price)}\n  🛒 ${trackedLink}\n\nEl envío va incluido.`
+            text: `¡Perfecto! Aquí tienes el link de compra:\n\n• ${prod.displayText} — ${formatMoney(prod.price)}\n  🛒 ${trackedLink}\n\nEl envío está incluido.`
           };
         }
       }

@@ -53,7 +53,7 @@ El bot acaba de mostrar productos o hacer una pregunta, y el cliente respondió 
 Tu trabajo es interpretar QUÉ QUIERE el cliente y devolver una acción estructurada en JSON.
 
 DATOS DE LA EMPRESA (usa estos para answer_question):
-- Envío a todo México y Estados Unidos a través de Mercado Libre, incluido en el precio
+- Envío a todo México y Estados Unidos a través de Mercado Libre, el envío está incluido
 - Tiempo de entrega: normalmente 1 a 2 días hábiles, el tiempo exacto se confirma una vez realizada la compra
 - Malla sombra confeccionada: raschel 90% sombra, con ojillos para sujeción cada 80 cm por lado, refuerzo en esquinas, lista para instalar
 - Rollos: malla sombra raschel en rollos de 100m, disponibles en 35%, 50%, 70%, 80% y 90%

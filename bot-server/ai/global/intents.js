@@ -1675,7 +1675,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     return {
       type: "text",
       text: `${prefix}¡Te lo enviamos a domicilio! 🚚\n\n` +
-            `Enviamos a todo México por Mercado Libre con envío incluido en el precio.\n\n` +
+            `Enviamos a todo México por Mercado Libre, el envío está incluido.\n\n` +
             `También puedes recoger en nuestra bodega en Querétaro si lo prefieres:\n` +
             `📍 ${businessInfo.address}\n` +
             `🕓 ${businessInfo.hours}\n\n` +
@@ -2020,7 +2020,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
     const shippingText = isNonMLShipping
       ? "El envío se cotiza por separado dependiendo de tu ubicación. ¿Me compartes tu código postal para cotizarte?"
-      : "¡Sí! El envío a domicilio va incluido en el precio a través de Mercado Libre. 🚚";
+      : "¡Sí! El envío está incluido a través de Mercado Libre. 🚚";
 
     return {
       type: "text",
@@ -2308,7 +2308,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         if (convo.requestedSize && (convo.lastIntent === "specific_measure" || convo.lastIntent === "specific_measure_price_given")) {
           return {
             type: "text",
-            text: `¡Sí! Enviamos a ${capitalizedCity} a través de Mercado Libre, el envío va incluido en el precio 📦🚚`
+            text: `¡Sí! Enviamos a ${capitalizedCity} a través de Mercado Libre, el envío está incluido 📦🚚`
           };
         }
 
