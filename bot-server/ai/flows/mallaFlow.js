@@ -638,7 +638,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
         return {
           type: "text",
-          text: `Las medidas más cercanas que tenemos son:\n\n${optionsList}\n\n¿Te interesa alguna de estas?`
+          text: `No manejamos esa medida de línea, te ofrecemos estas opciones cercanas:\n\n${optionsList}\n\n¿Te interesa alguna o prefieres una fabricación a la medida?`
         };
       }
 
@@ -1444,7 +1444,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
 
         return {
           type: "text",
-          text: `No tenemos malla de ${width}x${height}m, pero las medidas más cercanas que manejamos son:\n\n${optionsList}\n\n¿Te interesa alguna?`
+          text: `No manejamos esa medida de línea, te ofrecemos estas opciones cercanas:\n\n${optionsList}\n\n¿Te interesa alguna o prefieres una fabricación a la medida?`
         };
       }
 

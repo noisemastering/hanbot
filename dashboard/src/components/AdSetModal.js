@@ -313,9 +313,24 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
                   </option>
                 ))}
               </select>
-              <p className="text-xs text-gray-500 mt-1">
-                Fuerza un flujo de conversacion para los anuncios de este ad set
-              </p>
+              {/* Inherited flow hint */}
+              {!formData.flowRef && (() => {
+                const selectedCampaign = campaigns.find(c => c._id === formData.campaignId);
+                const campaignFlow = selectedCampaign?.flowRef;
+                if (campaignFlow) {
+                  const flowName = flows.find(f => f.key === campaignFlow)?.name || campaignFlow;
+                  return (
+                    <p className="text-xs text-blue-400 mt-1">
+                      Heredado de Campaña ({selectedCampaign.name}): {flowName}
+                    </p>
+                  );
+                }
+                return (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Fuerza un flujo de conversacion para los anuncios de este ad set
+                  </p>
+                );
+              })()}
             </div>
 
             {/* Targeting */}

@@ -4,6 +4,17 @@ const router = express.Router();
 const mongoose = require("mongoose");
 const Ad = require("../models/Ad");
 const AdSet = require("../models/AdSet");
+const Campaign = require("../models/Campaign");
+
+// Check flowRef exists in hierarchy: Ad → AdSet → Campaign
+async function validateFlowRefHierarchy(flowRef, adSetId) {
+  if (flowRef) return true;
+  const adSet = await AdSet.findById(adSetId).populate("campaignId", "flowRef");
+  if (!adSet) return false;
+  if (adSet.flowRef) return true;
+  if (adSet.campaignId?.flowRef) return true;
+  return false;
+}
 
 // Get all ads (optionally filter by adSet)
 router.get("/", async (req, res) => {
@@ -14,10 +25,10 @@ router.get("/", async (req, res) => {
     const ads = await Ad.find(filter)
       .populate({
         path: "adSetId",
-        select: "name fbAdSetId catalog productIds",
+        select: "name fbAdSetId catalog productIds flowRef",
         populate: {
           path: "campaignId",
-          select: "name ref catalog"
+          select: "name ref catalog flowRef"
         }
       })
       .populate("productIds", "name description sellable")
@@ -35,10 +46,10 @@ router.get("/:id", async (req, res) => {
     const ad = await Ad.findById(req.params.id)
       .populate({
         path: "adSetId",
-        select: "name fbAdSetId catalog productIds",
+        select: "name fbAdSetId catalog productIds flowRef",
         populate: {
           path: "campaignId",
-          select: "name ref catalog"
+          select: "name ref catalog flowRef"
         }
       })
       .populate("productIds", "name description sellable");
@@ -74,6 +85,17 @@ router.post("/", async (req, res) => {
       return res.status(404).json({ success: false, error: "AdSet no encontrado" });
     }
 
+    // Validate flowRef hierarchy for ACTIVE ads
+    if (req.body.status === 'ACTIVE') {
+      const hasFlow = await validateFlowRefHierarchy(req.body.flowRef, req.body.adSetId);
+      if (!hasFlow) {
+        return res.status(400).json({
+          success: false,
+          error: "Un anuncio activo necesita un flujo asignado en algún nivel (anuncio, ad set o campaña)"
+        });
+      }
+    }
+
     // Convert product IDs to ObjectId type
     if (req.body.productIds && Array.isArray(req.body.productIds)) {
       req.body.productIds = req.body.productIds.map(id => new mongoose.Types.ObjectId(id));
@@ -97,6 +119,20 @@ router.put("/:id", async (req, res) => {
       adIntent: req.body.adIntent
     });
 
+    // Validate flowRef hierarchy for ACTIVE ads
+    if (req.body.status === 'ACTIVE') {
+      const adSetId = req.body.adSetId || (await Ad.findById(req.params.id, 'adSetId'))?.adSetId;
+      if (adSetId) {
+        const hasFlow = await validateFlowRefHierarchy(req.body.flowRef, adSetId);
+        if (!hasFlow) {
+          return res.status(400).json({
+            success: false,
+            error: "Un anuncio activo necesita un flujo asignado en algún nivel (anuncio, ad set o campaña)"
+          });
+        }
+      }
+    }
+
     // Convert product IDs to ObjectId type
     if (req.body.productIds && Array.isArray(req.body.productIds)) {
       req.body.productIds = req.body.productIds.map(id => new mongoose.Types.ObjectId(id));
@@ -108,10 +144,10 @@ router.put("/:id", async (req, res) => {
       { new: true, runValidators: true }
     ).populate({
       path: "adSetId",
-      select: "name fbAdSetId catalog productIds",
+      select: "name fbAdSetId catalog productIds flowRef",
       populate: {
         path: "campaignId",
-        select: "name ref catalog"
+        select: "name ref catalog flowRef"
       }
     }).populate("productIds", "name description sellable");
 

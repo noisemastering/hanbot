@@ -86,10 +86,13 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
     utmMedium: '',
     utmCampaign: '',
     utmContent: '',
-    utmTerm: ''
+    utmTerm: '',
+    // Bot flow
+    flowRef: ''
   });
 
   const [productFamilies, setProductFamilies] = useState([]);
+  const [flows, setFlows] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const [currentCatalog, setCurrentCatalog] = useState(null);
   const [existingCatalogs, setExistingCatalogs] = useState([]);
@@ -130,9 +133,19 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
         console.error('Error fetching global catalog:', error);
       }
     };
+    const fetchFlows = async () => {
+      try {
+        const response = await fetch(`${API_URL}/flows?active=true`);
+        const data = await response.json();
+        if (data.success) setFlows(data.data);
+      } catch (error) {
+        console.error('Error fetching flows:', error);
+      }
+    };
     fetchProductFamilies();
     fetchExistingCatalogs();
     fetchGlobalCatalog();
+    fetchFlows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -164,7 +177,8 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
         utmMedium: ad.tracking?.utmMedium || '',
         utmCampaign: ad.tracking?.utmCampaign || '',
         utmContent: ad.tracking?.utmContent || '',
-        utmTerm: ad.tracking?.utmTerm || ''
+        utmTerm: ad.tracking?.utmTerm || '',
+        flowRef: ad.flowRef || ''
       });
       setCurrentCatalog(ad.catalog || null);
     }
@@ -207,7 +221,8 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
         utmCampaign: formData.utmCampaign || null,
         utmContent: formData.utmContent || null,
         utmTerm: formData.utmTerm || null
-      }
+      },
+      flowRef: formData.flowRef || null
     };
 
     onSave(payload);
@@ -348,6 +363,53 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                 <option value="PAUSED">{t('adModal.statusPaused')}</option>
                 <option value="ARCHIVED">{t('adModal.statusArchived')}</option>
               </select>
+            </div>
+
+            {/* Bot Flow */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Flujo del bot
+              </label>
+              <select
+                name="flowRef"
+                value={formData.flowRef}
+                onChange={handleChange}
+                className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Automatico (detectar por producto)</option>
+                {flows.map(flow => (
+                  <option key={flow.key} value={flow.key}>
+                    {flow.name}
+                  </option>
+                ))}
+              </select>
+              {/* Inherited flow hint */}
+              {!formData.flowRef && (() => {
+                const selectedAdSet = adSets.find(a => a._id === formData.adSetId);
+                const adSetFlow = selectedAdSet?.flowRef;
+                const campaignFlow = selectedAdSet?.campaignId?.flowRef;
+                if (adSetFlow) {
+                  const flowName = flows.find(f => f.key === adSetFlow)?.name || adSetFlow;
+                  return (
+                    <p className="text-xs text-blue-400 mt-1">
+                      Heredado de AdSet ({selectedAdSet.name}): {flowName}
+                    </p>
+                  );
+                }
+                if (campaignFlow) {
+                  const flowName = flows.find(f => f.key === campaignFlow)?.name || campaignFlow;
+                  return (
+                    <p className="text-xs text-blue-400 mt-1">
+                      Heredado de Campaña ({selectedAdSet?.campaignId?.name}): {flowName}
+                    </p>
+                  );
+                }
+                return (
+                  <p className="text-xs text-gray-500 mt-1">
+                    Fuerza un flujo de conversacion para este anuncio
+                  </p>
+                );
+              })()}
             </div>
 
             {/* Creative Content */}

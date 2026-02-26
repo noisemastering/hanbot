@@ -205,10 +205,14 @@ function CampaignModal({ campaign, onSave, onClose }) {
     lifetimeBudget: '',
 
     // Product IDs from catalog
-    productIds: []
+    productIds: [],
+
+    // Bot flow
+    flowRef: ''
   });
 
   const [productFamilies, setProductFamilies] = useState([]);
+  const [flows, setFlows] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const [activeTab, setActiveTab] = useState('basic');
   const [currentCatalog, setCurrentCatalog] = useState(null);
@@ -238,7 +242,17 @@ function CampaignModal({ campaign, onSave, onClose }) {
         setProductsLoading(false);
       }
     };
+    const fetchFlows = async () => {
+      try {
+        const response = await fetch(`${API_URL}/flows?active=true`);
+        const data = await response.json();
+        if (data.success) setFlows(data.data);
+      } catch (error) {
+        console.error('Error fetching flows:', error);
+      }
+    };
     fetchProductFamilies();
+    fetchFlows();
   }, []);
 
   useEffect(() => {
@@ -283,7 +297,9 @@ function CampaignModal({ campaign, onSave, onClose }) {
         dailyBudget: campaign.dailyBudget || '',
         lifetimeBudget: campaign.lifetimeBudget || '',
 
-        productIds: campaign.productIds?.map(p => p._id || p) || []
+        productIds: campaign.productIds?.map(p => p._id || p) || [],
+
+        flowRef: campaign.flowRef || ''
       });
       setCurrentCatalog(campaign.catalog || null);
     }
@@ -302,7 +318,8 @@ function CampaignModal({ campaign, onSave, onClose }) {
 
     const dataToSave = {
       ...formData,
-      productIds: sellableProductIds
+      productIds: sellableProductIds,
+      flowRef: formData.flowRef || null
     };
 
     if (campaign) {
@@ -552,6 +569,27 @@ function CampaignModal({ campaign, onSave, onClose }) {
                     <option value="ARCHIVED">{t('campaignModal.statusArchived')}</option>
                   </select>
                 </div>
+              </div>
+
+              {/* Bot Flow */}
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">Flujo del bot</label>
+                <select
+                  name="flowRef"
+                  value={formData.flowRef}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="">Automatico (detectar por producto)</option>
+                  {flows.map(flow => (
+                    <option key={flow.key} value={flow.key}>
+                      {flow.name}
+                    </option>
+                  ))}
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  Fuerza un flujo de conversacion para todos los anuncios de esta campaña
+                </p>
               </div>
 
               <div className="grid grid-cols-3 gap-4">
