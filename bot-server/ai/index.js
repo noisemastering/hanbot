@@ -234,12 +234,12 @@ async function checkForRepetition(response, psid, convo) {
         if (linkMatch) {
           return {
             type: "text",
-            text: `¡Claro! Te paso nuevamente el link de la ${size}m a $${price} con envío gratis:\n\n${linkMatch[1]}`
+            text: `¡Claro! Te paso nuevamente el link de la ${size}m a $${price} con envío incluido:\n\n${linkMatch[1]}`
           };
         } else {
           return {
             type: "text",
-            text: `Sí, es la misma medida: ${size}m a $${price} con envío gratis.\n\n¿Te paso el link para que puedas comprarlo?`
+            text: `Sí, es la misma medida: ${size}m a $${price} con envío incluido.\n\n¿Te paso el link para que puedas comprarlo?`
           };
         }
       }

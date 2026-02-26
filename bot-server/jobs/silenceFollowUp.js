@@ -159,7 +159,7 @@ async function runSilenceFollowUpJob() {
           });
 
           followUpText =
-            `Por si te interesa echar un vistazo, te comparto nuestra tienda en Mercado Libre con envío gratis a todo México:\n\n${trackedLink}`;
+            `Por si te interesa echar un vistazo, te comparto nuestra tienda en Mercado Libre con envío incluido a todo México:\n\n${trackedLink}`;
 
           if (channel === 'whatsapp') {
             const phone = convo.psid.replace('wa:', '');

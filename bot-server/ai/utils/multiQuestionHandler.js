@@ -181,7 +181,7 @@ async function lookupProductPrice(w, h, psid, convo) {
       }
     }
 
-    return `Malla de ${w}x${h}m: ${price} con envío gratis${linkText}`;
+    return `Malla de ${w}x${h}m: ${price} con envío incluido${linkText}`;
   } catch (err) {
     console.error(`❌ Error looking up product ${w}x${h}:`, err.message);
     return null;

@@ -628,7 +628,7 @@ async function buildProductSalesPitch(product) {
       productType: isMallaSombra ? (isTriangular ? 'triangular' : 'rectangular') : 'other',
       description: parts[0],
       sellingPoints,
-      shippingInfo: 'envío gratis a toda la república',
+      shippingInfo: 'envío incluido en el precio a toda la república',
       percentage,
       isReforzada,
       sizeText

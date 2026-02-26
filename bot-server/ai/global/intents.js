@@ -2020,7 +2020,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
     const shippingText = isNonMLShipping
       ? "El envío se cotiza por separado dependiendo de tu ubicación. ¿Me compartes tu código postal para cotizarte?"
-      : "¡Sí! El envío está incluido en el precio o se calcula automáticamente en Mercado Libre dependiendo de tu ubicación.\n\nEn la mayoría de los casos el envío es gratis. 🚚";
+      : "¡Sí! El envío a domicilio va incluido en el precio a través de Mercado Libre. 🚚";
 
     return {
       type: "text",
@@ -2308,7 +2308,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         if (convo.requestedSize && (convo.lastIntent === "specific_measure" || convo.lastIntent === "specific_measure_price_given")) {
           return {
             type: "text",
-            text: `¡Sí! Enviamos a ${capitalizedCity} a través de Mercado Libre, el envío es gratis 📦🚚`
+            text: `¡Sí! Enviamos a ${capitalizedCity} a través de Mercado Libre, el envío va incluido en el precio 📦🚚`
           };
         }
 
