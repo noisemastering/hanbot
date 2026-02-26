@@ -58,6 +58,13 @@ const flowSchema = new mongoose.Schema({
   name: { type: String, required: true },
   description: { type: String },
 
+  // Type classification (retail, wholesale, lead_capture)
+  type: {
+    type: String,
+    enum: ['retail', 'wholesale', 'lead_capture'],
+    default: 'retail'
+  },
+
   // Trigger
   triggerIntent: { type: String },  // Intent key that triggers this flow
 
@@ -103,8 +110,7 @@ const flowSchema = new mongoose.Schema({
   abandonCount: { type: Number, default: 0 }
 }, { timestamps: true });
 
-// Indexes
-flowSchema.index({ key: 1 });
+// Indexes (key already indexed via unique: true)
 flowSchema.index({ triggerIntent: 1 });
 flowSchema.index({ active: 1 });
 

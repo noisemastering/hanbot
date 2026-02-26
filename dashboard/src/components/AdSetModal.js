@@ -42,11 +42,13 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
     behaviors: '',
     customAudiences: '',
     placements: 'facebook_feed,instagram_feed',
-    productIds: []
+    productIds: [],
+    flowRef: ''
   });
 
   const [productFamilies, setProductFamilies] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
+  const [flows, setFlows] = useState([]);
   const [currentCatalog, setCurrentCatalog] = useState(null);
   const [existingCatalogs, setExistingCatalogs] = useState([]);
   const [globalCatalog, setGlobalCatalog] = useState(null);
@@ -86,9 +88,19 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
         console.error('Error fetching global catalog:', error);
       }
     };
+    const fetchFlows = async () => {
+      try {
+        const response = await fetch(`${API_URL}/flows?active=true`);
+        const data = await response.json();
+        if (data.success) setFlows(data.data);
+      } catch (error) {
+        console.error('Error fetching flows:', error);
+      }
+    };
     fetchProductFamilies();
     fetchExistingCatalogs();
     fetchGlobalCatalog();
+    fetchFlows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -110,7 +122,8 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
         behaviors: adSet.targeting?.behaviors?.join(', ') || '',
         customAudiences: adSet.targeting?.customAudiences?.join(', ') || '',
         placements: adSet.placements?.join(',') || 'facebook_feed,instagram_feed',
-        productIds: adSet.productIds?.map(p => p._id || p) || []
+        productIds: adSet.productIds?.map(p => p._id || p) || [],
+        flowRef: adSet.flowRef || ''
       });
       setCurrentCatalog(adSet.catalog || null);
     }
@@ -132,6 +145,7 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
       billingEvent: formData.billingEvent,
       dailyBudget: formData.dailyBudget ? parseFloat(formData.dailyBudget) : undefined,
       productIds: sellableProductIds, // Only save sellable products
+      flowRef: formData.flowRef || null,
       targeting: {
         locations: formData.locations.split(',').map(l => l.trim()),
         ageMin: parseInt(formData.ageMin),
@@ -279,6 +293,29 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
                   placeholder="50"
                 />
               </div>
+            </div>
+
+            {/* Bot Flow */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Flujo del bot
+              </label>
+              <select
+                name="flowRef"
+                value={formData.flowRef}
+                onChange={handleChange}
+                className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Automatico (detectar por producto)</option>
+                {flows.map(flow => (
+                  <option key={flow.key} value={flow.key}>
+                    {flow.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Fuerza un flujo de conversacion para los anuncios de este ad set
+              </p>
             </div>
 
             {/* Targeting */}
