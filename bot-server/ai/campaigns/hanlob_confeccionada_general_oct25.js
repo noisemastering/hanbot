@@ -304,7 +304,7 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     await updateConversation(psid, { lastIntent: "pay_on_delivery_answered" });
     return {
       type: "text",
-      text: "En pedidos por Mercado Libre, el pago se realiza al ordenar, pero no te preocupes: es compra protegida. Si no te llega, llega defectuoso o es diferente a lo solicitado, se te devuelve tu dinero."
+      text: "No manejamos pago contra entrega. El pago es 100% por adelantado al momento de ordenar en Mercado Libre. Tu compra está protegida: si no te llega, llega defectuoso o es diferente a lo solicitado, se te devuelve tu dinero."
     };
   }
 
@@ -315,7 +315,7 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     return {
       type: "text",
       text: `¡Sí! La compra es por Mercado Libre 💚\n\n` +
-            `El pago se realiza al ordenar (tarjeta, efectivo en OXXO, o meses sin intereses). Es compra protegida: si no te llega o llega diferente, se te devuelve tu dinero.\n\n` +
+            `El pago es 100% por adelantado al momento de ordenar (tarjeta, efectivo en OXXO, o meses sin intereses). Tu compra está protegida: si no te llega o llega diferente, se te devuelve tu dinero.\n\n` +
             `¿Qué medida necesitas? Te paso el link directo al producto 😊`
     };
   }

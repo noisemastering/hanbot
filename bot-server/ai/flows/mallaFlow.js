@@ -1355,12 +1355,21 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
         };
       }
 
+      // Pay on delivery — crystal clear NO
+      if (/\b(contra\s*entrega|pag[oa]\s+(al\s+)?(recibir|entreg)|cuando\s+(me\s+)?lleg|al\s+recibir|cobr[ao]\s+al)\b/i.test(msg)) {
+        await updateConversation(psid, { lastIntent: 'pay_on_delivery_query', unknownCount: 0 });
+        return {
+          type: "text",
+          text: "No manejamos pago contra entrega. El pago es 100% por adelantado al momento de ordenar en Mercado Libre. Tu compra está protegida: si no te llega o llega diferente, se te devuelve tu dinero."
+        };
+      }
+
       // Payment questions
       if (/\b(pag[oa]|tarjeta|efectivo|transfer|meses|oxxo|dep[oó]sito|forma\s+de\s+pago|m[eé]todo\s+de\s+pago)\b/i.test(msg)) {
         await updateConversation(psid, { lastIntent: 'payment_question', unknownCount: 0 });
         return {
           type: "text",
-          text: "El pago se realiza a través de Mercado Libre al momento de hacer tu pedido. Aceptan tarjeta, efectivo en OXXO, transferencia, y hasta meses sin intereses.\n\n¿Te puedo ayudar con algo más?"
+          text: "En compras a través de Mercado Libre el pago es 100% por adelantado al momento de ordenar (tarjeta, efectivo en OXXO, o meses sin intereses). Tu compra está protegida: si no te llega o llega diferente, se te devuelve tu dinero."
         };
       }
     }

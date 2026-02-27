@@ -176,7 +176,7 @@ async function handlePayment(convo, psid) {
   if (isWholesale) {
     response = "En nuestra tienda física aceptamos efectivo y tarjetas, en envíos aceptamos transferencia bancaria.";
   } else {
-    response = "En pedidos por Mercado Libre, el pago se realiza al ordenar (tarjeta, efectivo en OXXO, meses sin intereses o Mercado Crédito). Es compra protegida: si no te llega, llega defectuoso o es diferente a lo solicitado, se te devuelve tu dinero. En nuestra tienda física aceptamos efectivo y tarjetas.";
+    response = "En compras a través de Mercado Libre el pago es 100% por adelantado al momento de ordenar (tarjeta, efectivo en OXXO, o meses sin intereses). Tu compra está protegida: si no te llega, llega defectuoso o es diferente a lo solicitado, se te devuelve tu dinero.";
   }
 
   return { type: "text", text: response };

@@ -1369,8 +1369,8 @@ async function generateReply(userMessage, psid, referral = null) {
         convo?.isWholesaleInquiry;
 
       const contraEntregaNote = isNonML
-        ? 'Sobre el pago: no manejamos contra entrega. El pago es por adelantado a través de transferencia o depósito bancario.'
-        : 'Sobre el pago: no manejamos contra entrega, pero tu compra está protegida por Mercado Libre — el pago se hace al ordenar y si no recibes o llega diferente, se te devuelve tu dinero.';
+        ? 'Sobre el pago: no manejamos contra entrega. El pago es 100% por adelantado a través de transferencia o depósito bancario.'
+        : 'Sobre el pago: no manejamos contra entrega. El pago es 100% por adelantado al momento de ordenar en Mercado Libre. Tu compra está protegida: si no te llega o llega diferente, se te devuelve tu dinero.';
 
       response.text += '\n\n' + contraEntregaNote;
       console.log(`💳 Post-check: appended contra-entrega clarification to response`);

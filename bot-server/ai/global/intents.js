@@ -1978,7 +1978,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       convo?.isWholesaleInquiry;
 
     const paymentText = isNonML
-      ? "💳 El pago se realiza al ordenar a través de transferencia o depósito bancario."
+      ? "💳 El pago es 100% por adelantado a través de transferencia o depósito bancario."
       : "💳 El pago se realiza 100% POR ADELANTADO en Mercado Libre al momento de hacer tu pedido (no se paga al recibir).\n\n" +
         "Aceptamos todas las formas de pago de Mercado Libre: tarjetas, efectivo, meses sin intereses.";
 
