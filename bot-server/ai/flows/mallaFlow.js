@@ -1266,6 +1266,55 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
 async function handleComplete(intent, state, sourceContext, psid, convo, userMessage = '') {
   const { width, height, percentage, color, quantity, userExpressedSize, concerns, convertedFromFeet, originalFeetStr } = state;
 
+  // ====== GENERAL QUESTIONS GUARD ======
+  // If the customer is asking a general question (not about dimensions/pricing),
+  // answer it instead of re-quoting the same product.
+  if (userMessage && convo?.lastSharedProductId) {
+    const msg = userMessage.toLowerCase();
+
+    // Does the message contain new dimensions or price-related keywords?
+    const hasNewDimensions = parseDimensions(userMessage);
+    const isPriceRelated = /\b(precio|presio|costo|cu[aá]nto|vale|cuesta|cotiza|descuento|oferta|mayoreo)\b/i.test(msg);
+    const isConfirmation = /\b(s[ií]|ok|va|dale|lo quiero|la quiero|compro|llev[oa]|perfecto|esa|ese|mand[ae])\b/i.test(msg);
+    const isNewSize = /\b(\d+\s*[xX×]\s*\d+|\d+\s*por\s*\d+)\b/.test(msg);
+
+    // If the message has NO dimension/price/confirmation intent, check for general questions
+    if (!hasNewDimensions && !isPriceRelated && !isConfirmation && !isNewSize) {
+      // Ordering process questions
+      if (/\b(pedido|orden|compra)\s+(se\s+)?(hace|realiza|es)\s+(por|en|a\s+trav[eé]s)/i.test(msg) ||
+          /\b(por\s+(este\s+medio|aqu[ií]|mensaj|chat|facebook|messenger|inbox))\s*(se\s+)?(compra|pide|ordena|hace|realiza)?\b/i.test(msg) ||
+          /\b(c[oó]mo|d[oó]nde)\s+(compro|pido|ordeno|hago\s+(el\s+)?pedido)\b/i.test(msg) ||
+          /\b(se\s+puede|puedo)\s+(comprar|pedir|ordenar)\s+(por|en)\s*(aqu[ií]|este\s+medio|chat|messenger)\b/i.test(msg)) {
+        await updateConversation(psid, { lastIntent: 'purchase_process', unknownCount: 0 });
+        const link = convo.lastSharedProductLink;
+        return {
+          type: "text",
+          text: link
+            ? `La compra se realiza a través de Mercado Libre, por el enlace que te compartí:\n${link}\n\nAhí puedes pagar con tarjeta, efectivo, o meses sin intereses. El envío está incluido.`
+            : `La compra se realiza a través de nuestra tienda en Mercado Libre. Puedes pagar con tarjeta, efectivo, o meses sin intereses. El envío está incluido.`
+        };
+      }
+
+      // Shipping / delivery questions
+      if (/\b(entreg|env[ií]|llega|domicilio|paqueter[ií]a|mensajer[ií]a|recib[oi]|tarda|demora|d[ií]as\s+h[aá]biles)\b/i.test(msg)) {
+        await updateConversation(psid, { lastIntent: 'shipping_question', unknownCount: 0 });
+        return {
+          type: "text",
+          text: "Sí, enviamos a todo México. El envío está incluido y tarda entre 3-5 días hábiles. Se realiza a través de Mercado Libre.\n\n¿Necesitas algo más?"
+        };
+      }
+
+      // Payment questions
+      if (/\b(pag[oa]|tarjeta|efectivo|transfer|meses|oxxo|dep[oó]sito|forma\s+de\s+pago|m[eé]todo\s+de\s+pago)\b/i.test(msg)) {
+        await updateConversation(psid, { lastIntent: 'payment_question', unknownCount: 0 });
+        return {
+          type: "text",
+          text: "El pago se realiza a través de Mercado Libre al momento de hacer tu pedido. Aceptan tarjeta, efectivo en OXXO, transferencia, y hasta meses sin intereses.\n\n¿Te puedo ayudar con algo más?"
+        };
+      }
+    }
+  }
+
   // Parse zip code from message if provided
   const zipInfo = await parseAndLookupZipCode(userMessage);
   if (zipInfo) {
