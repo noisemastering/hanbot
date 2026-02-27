@@ -905,6 +905,26 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     });
   }
 
+  // ====== ROLL-SIZE DETECTION (any stage) ======
+  // If any dimension > 12m, this is a roll request, not confeccionada.
+  // Confeccionada goes up to ~7x10m. Rolls are 3x100, 4x50, etc.
+  if (state.width && state.height && Math.max(state.width, state.height) > 12) {
+    const rollSize = `${Math.min(state.width, state.height)}x${Math.max(state.width, state.height)}`;
+    console.log(`📦 Roll-size detected in malla flow: ${rollSize}m — handing off`);
+
+    const { executeHandoff } = require('../utils/executeHandoff');
+    return await executeHandoff(psid, convo, userMessage, {
+      reason: `Rollo de malla sombra: ${rollSize}m (no confeccionada)`,
+      responsePrefix: `La medida ${rollSize}m es un rollo de malla sombra. Para cotización de rollos te comunico con un especialista. `,
+      specsText: `Rollo de ${rollSize}m. `,
+      lastIntent: 'roll_handoff',
+      notificationText: `Rollo ${rollSize}m desde flujo confeccionada`,
+      extraState: { productInterest: 'rollo_malla_sombra' },
+      timingStyle: 'elaborate',
+      includeVideo: true
+    });
+  }
+
   // ====== PRODUCT FEATURE QUESTIONS (any stage) ======
   // Answer product questions regardless of whether dimensions are already known
   const featureResponse = checkProductFeatureQuestions(userMessage, state, convo);
