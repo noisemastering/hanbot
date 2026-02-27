@@ -126,12 +126,14 @@ async function handlePendingZipResponse(psid, convo, userMessage) {
     return { proceed: true, zipInfo: { city: locationDetected.normalized || locationDetected.location, state: locationDetected.state } };
   }
 
-  // Couldn't parse — don't trap the customer in a loop, just proceed with handoff
+  // Couldn't parse location — customer is probably asking something else.
+  // Clear pendingHandoff so we don't loop, but DON'T proceed with handoff.
+  // Let the flow handle the message normally; zip ask will recur on next handoff.
   await updateConversation(psid, {
     pendingHandoff: false,
     pendingHandoffInfo: null
   });
-  return { proceed: true, zipInfo: null };
+  return { proceed: false };
 }
 
 /**

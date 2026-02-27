@@ -412,6 +412,100 @@ async function handleQuoteSelection(aiAction, lastQuotedProducts, psid, convo) {
 }
 
 /**
+ * Check if user is asking about product features.
+ * Returns a response if all feature topics are covered, null otherwise (defer to AI).
+ */
+function checkProductFeatureQuestions(userMessage, state, convo) {
+  if (!userMessage) return null;
+
+  const featureChecks = [
+    {
+      pattern: /\b(es\s+)?raschel\b/i,
+      response: "sí, es malla raschel de alta densidad (HDPE)"
+    },
+    {
+      pattern: /\b(90|noventa)\s*%?(?!\s*(m|metro|x|\d))/i,
+      response: "sí, manejamos 90% de sombra"
+    },
+    {
+      pattern: /\b(80|ochenta|70|setenta|50|cincuenta|35|treinta\s*y\s*cinco)\s*%?(?!\s*(m|metro|x|\d))/i,
+      response: "la confeccionada es 90% de sombra; para otros porcentajes tenemos raschel agrícola"
+    },
+    {
+      pattern: /\b(porcentaje|nivel\s*de\s*sombra)\b/i,
+      response: "la confeccionada es 90% de sombra"
+    },
+    {
+      pattern: /\b(beige|caf[eé])\b/i,
+      response: "el color disponible es beige"
+    },
+    {
+      pattern: /\b(uv|rayos|sol)\b/i,
+      response: "sí, tiene protección UV"
+    },
+    {
+      pattern: /\b(lluvia|lluvias|llueve|agua|impermeable|impermeabiliza|mojarse|mojar|repele|repelente)\b/i,
+      response: "no es impermeable — es un tejido permeable que deja pasar el agua; su función es dar sombra y protección UV"
+    },
+    {
+      pattern: /\b(ojillos?|ojales?|arillos?|argollas?)\b/i,
+      response: (msg) => {
+        const word = /ojillo/i.test(msg) ? 'ojillos' : /ojale/i.test(msg) ? 'ojales' : /arillo/i.test(msg) ? 'arillos' : 'argollas';
+        return `sí, viene con ${word} para sujeción cada 80 cm por lado`;
+      }
+    },
+    {
+      pattern: /\b(quitar\s*y\s*poner|poner\s*y\s*quitar|quita(r|ble)|desmontable|remov(er|ible)|retir(ar|able)|temporal)\b/i,
+      response: "sí, se puede quitar y poner — viene con ojillos que permiten instalarla y retirarla fácilmente"
+    },
+    {
+      pattern: /\b(t[eé]cnico|especialista|profesional|quien\s+(la\s+)?(instale|coloque|ponga)|f[aá]cil\s+de\s+instalar|dif[ií]cil\s+de\s+instalar)\b/i,
+      response: "no necesita técnico — se instala con lazo o cable por los ojillos"
+    },
+    {
+      pattern: /\b(garant[ií]a)\b/i,
+      response: "tiene una vida útil de hasta 5 años"
+    },
+    {
+      pattern: /\b(dur[ao]|vida\s*[uú]til|cu[aá]nto\s*(dura|aguanta|resiste))\b/i,
+      response: "tiene una vida útil de hasta 5 años"
+    },
+  ];
+
+  const matchedFeatures = featureChecks.filter(f => f.pattern.test(userMessage));
+  if (matchedFeatures.length === 0) return null;
+
+  // Completeness check: only return if ALL significant topics are covered
+  let remaining = userMessage;
+  for (const f of matchedFeatures) {
+    remaining = remaining.replace(f.pattern, '');
+  }
+  const unmatchedTopics = /\b(lluvia|lluvias|agua|impermeable|mojarse|sol|uv|rayos|ojillos?|ojales?|refuerz|porcentaje|sombra|color|beige|negro|instala|garant[ií]a|dur[ao]|vida\s*[uú]til|material|grosor|peso|medida|resiste|aguanta|viento|clima|intemperie|t[eé]cnico|especialista|quitar|poner|desmonta|remov|retir)\b/i;
+
+  if (unmatchedTopics.test(remaining)) {
+    console.log(`⚠️ Feature regex matched partially but unmatched topics remain in: "${remaining.trim()}" — deferring to AI`);
+    return null;
+  }
+
+  const responses = matchedFeatures.map(f => typeof f.response === 'function' ? f.response(userMessage) : f.response);
+
+  const alreadyHasDimensions = state.width && state.height;
+  const alreadyShownProduct = convo?.lastIntent === 'malla_complete' && convo?.productSpecs?.width;
+  const followUp = (!alreadyHasDimensions && !alreadyShownProduct)
+    ? "\n\n¿Qué medida necesitas?"
+    : "\n\n¿Necesitas algo más?";
+
+  if (responses.length === 1) {
+    const text = responses[0].charAt(0).toUpperCase() + responses[0].slice(1);
+    return { type: "text", text: `${text}.${followUp}` };
+  }
+
+  // Multiple answers — bullet list
+  const bulletList = responses.map(r => `• ${r.charAt(0).toUpperCase() + r.slice(1)}`).join('\n');
+  return { type: "text", text: `Te contesto:\n\n${bulletList}${followUp}` };
+}
+
+/**
  * Handle malla flow
  */
 async function handle(classification, sourceContext, convo, psid, campaign = null, userMessage = '') {
@@ -784,6 +878,14 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     return await handleProductInfo(userMessage, convo);
   }
 
+  // ====== PRODUCT FEATURE QUESTIONS (any stage) ======
+  // Answer product questions regardless of whether dimensions are already known
+  const featureResponse = checkProductFeatureQuestions(userMessage, state, convo);
+  if (featureResponse) {
+    await updateConversation(psid, { lastIntent: 'malla_feature_answer', unknownCount: 0 });
+    return featureResponse;
+  }
+
   // Determine current stage
   const stage = determineStage(state);
 
@@ -1069,86 +1171,9 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
     return await handleProductInfo(userMessage, convo);
   }
 
-  // Check if user is asking about product features (material, percentage, color, UV)
-  // Collect all matching features to give a combined response
-  const featureChecks = [
-    {
-      pattern: /\b(es\s+)?raschel\b/i,
-      response: "es malla raschel de alta densidad (HDPE)"
-    },
-    {
-      pattern: /\b(90|noventa)\s*%?(?!\s*(m|metro|x|\d))/i,
-      response: "sí manejamos 90% de sombra"
-    },
-    {
-      pattern: /\b(80|ochenta|70|setenta|50|cincuenta|35|treinta\s*y\s*cinco)\s*%?(?!\s*(m|metro|x|\d))/i,
-      response: "la malla confeccionada es 90% de sombra. Para otros porcentajes tenemos malla raschel para uso agrícola"
-    },
-    {
-      pattern: /\b(porcentaje|nivel\s*de\s*sombra)\b/i,
-      response: "la malla confeccionada es 90% de sombra"
-    },
-    {
-      pattern: /\b(beige|caf[eé])\b/i,
-      response: "el color es beige"
-    },
-    {
-      pattern: /\b(uv|rayos|sol)\b/i,
-      response: "tiene protección UV"
-    },
-    {
-      pattern: /\b(lluvia|lluvias|llueve|agua|impermeable|impermeabiliza|mojarse|mojar|repele|repelente)\b/i,
-      response: "no es impermeable — es un tejido permeable que deja pasar el agua. Su función es dar sombra y protección UV, no proteger de la lluvia"
-    },
-    {
-      pattern: /\b(ojillos?|ojales?|arillos?|argollas?)\b/i,
-      response: (msg) => {
-        const word = /ojillo/i.test(msg) ? 'ojillos' : /ojale/i.test(msg) ? 'ojales' : /arillo/i.test(msg) ? 'arillos' : 'argollas';
-        return `viene con ${word} para sujeción cada 80 cm por lado, lista para instalar`;
-      }
-    }
-  ];
-
-  const matchedFeatures = featureChecks.filter(f => f.pattern.test(userMessage));
-
-  if (matchedFeatures.length > 0) {
-    // COMPLETENESS CHECK: Only return regex response if ALL significant keywords were covered.
-    // Strip matched keywords from message and check if unmatched product-related keywords remain.
-    let remaining = userMessage;
-    for (const f of matchedFeatures) {
-      remaining = remaining.replace(f.pattern, '');
-    }
-    // Broad set of product-feature keywords that signal unanswered topics
-    const unmatchedTopics = /\b(lluvia|lluvias|agua|impermeable|mojarse|sol|uv|rayos|ojillos?|ojales?|refuerz|porcentaje|sombra|color|beige|negro|instala|garant[ií]a|dur[ao]|vida\s*[uú]til|material|grosor|peso|medida|resiste|aguanta|viento|clima|intemperie)\b/i;
-    const hasUnmatchedTopics = unmatchedTopics.test(remaining);
-
-    if (!hasUnmatchedTopics) {
-      // All keywords covered — safe to return regex response
-      const responses = matchedFeatures.map(f => typeof f.response === 'function' ? f.response(userMessage) : f.response);
-      responses[0] = responses[0].charAt(0).toUpperCase() + responses[0].slice(1);
-      const combined = responses.length > 1
-        ? responses.slice(0, -1).join(', ') + ' y ' + responses[responses.length - 1]
-        : responses[0];
-
-      const alreadyHasDimensions = state.width && state.height;
-      const alreadyShownProduct = convo?.lastIntent === 'malla_complete' && convo?.productSpecs?.width;
-
-      let followUp = "";
-      if (!alreadyHasDimensions && !alreadyShownProduct) {
-        followUp = "\n\n¿Qué medida necesitas?";
-      } else {
-        followUp = "\n\n¿Necesitas algo más?";
-      }
-
-      return {
-        type: "text",
-        text: `Sí, ${combined}.${followUp}`
-      };
-    }
-
-    // Unmatched keywords remain — fall through to AI for a complete answer
-    console.log(`⚠️ Feature regex matched partially but unmatched topics remain in: "${remaining.trim()}" — deferring to AI`);
-  }
+  // Check for product feature questions (shared handler — also runs in handle() for COMPLETE stage)
+  const featureResponse = checkProductFeatureQuestions(userMessage, state, convo);
+  if (featureResponse) return featureResponse;
 
   // Check if user mentioned an object they want to cover (carro, cochera, patio, etc.)
   // Skip if user is referring to Hanlob's store (su tienda, la tienda, visito en la tienda)
