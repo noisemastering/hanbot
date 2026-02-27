@@ -24,6 +24,7 @@ function AdSetsView() {
   const [showAdModal, setShowAdModal] = useState(false);
   const [editingAd, setEditingAd] = useState(null);
   const [expandedSets, setExpandedSets] = useState(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetchAll();
@@ -161,6 +162,31 @@ function AdSetsView() {
 
   const hierarchy = buildHierarchy();
 
+  // Filter hierarchy by search query
+  const filteredHierarchy = (() => {
+    if (!searchQuery.trim()) return hierarchy;
+    const q = searchQuery.toLowerCase().trim();
+    const result = {};
+
+    for (const [campId, campaign] of Object.entries(hierarchy)) {
+      const matchingAdSets = campaign.adSets.filter(adSet =>
+        adSet.name?.toLowerCase().includes(q) ||
+        adSet.fbAdSetId?.toLowerCase().includes(q) ||
+        campaign.name?.toLowerCase().includes(q) ||
+        (adsBySet[adSet._id] || []).some(ad =>
+          ad.name?.toLowerCase().includes(q) ||
+          ad.fbAdId?.toLowerCase().includes(q)
+        )
+      );
+
+      if (matchingAdSets.length > 0) {
+        result[campId] = { ...campaign, adSets: matchingAdSets };
+      }
+    }
+
+    return result;
+  })();
+
   return (
     <div>
       <div className="flex justify-between items-center mb-8">
@@ -182,24 +208,58 @@ function AdSetsView() {
         </button>
       </div>
 
+      {/* Search Box */}
+      <div className="mb-6">
+        <div className="relative">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Buscar por nombre, FB AdSet ID, campaña o anuncio..."
+            className="w-full px-4 py-3 pl-12 bg-gray-800/50 border border-gray-700/50 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          />
+          <svg className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-white"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+
       {loading ? (
         <div className="p-8 text-center">
           <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
           <p className="text-gray-400 mt-4">{t('adSets.loading')}</p>
         </div>
-      ) : adSets.length === 0 ? (
+      ) : Object.keys(filteredHierarchy).length === 0 ? (
         <div className="p-12 text-center bg-gray-800/50 border border-gray-700/50 rounded-xl">
           <div className="w-16 h-16 mx-auto mb-4 bg-gray-700/50 rounded-full flex items-center justify-center">
             <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              {searchQuery ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+              )}
             </svg>
           </div>
-          <h3 className="text-lg font-semibold text-white mb-2">{t('adSets.noAdSets')}</h3>
-          <p className="text-gray-400">{t('adSets.emptyDescription')}</p>
+          <h3 className="text-lg font-semibold text-white mb-2">
+            {searchQuery ? 'Sin resultados' : t('adSets.noAdSets')}
+          </h3>
+          <p className="text-gray-400">
+            {searchQuery ? `No se encontraron ad sets para "${searchQuery}"` : t('adSets.emptyDescription')}
+          </p>
         </div>
       ) : (
         <div className="space-y-8">
-          {Object.entries(hierarchy).map(([campId, campaign]) => (
+          {Object.entries(filteredHierarchy).map(([campId, campaign]) => (
             <div key={campId}>
               {/* Campaign Header */}
               <div className="flex items-center gap-3 mb-3">

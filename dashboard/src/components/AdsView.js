@@ -19,21 +19,12 @@ function AdsView() {
   const [selectedAd, setSelectedAd] = useState(null);
   const [showAdModal, setShowAdModal] = useState(false);
   const [editingAd, setEditingAd] = useState(null);
-  const [expandedSets, setExpandedSets] = useState(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
 
   useEffect(() => {
     fetchAds();
     fetchAdSets();
   }, []);
-
-  // Auto-expand all ad sets on first load
-  useEffect(() => {
-    if (ads.length > 0 && expandedSets.size === 0) {
-      const allSetIds = new Set(ads.map(a => a.adSetId?._id || 'unassigned').filter(Boolean));
-      setExpandedSets(allSetIds);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ads]);
 
   const fetchAds = async () => {
     setLoading(true);
@@ -112,45 +103,26 @@ function AdsView() {
     }
   };
 
-  const toggleSet = (setId) => {
-    setExpandedSets(prev => {
-      const next = new Set(prev);
-      if (next.has(setId)) next.delete(setId);
-      else next.add(setId);
-      return next;
-    });
-  };
-
-  // Group ads: Campaign → Ad Set → Ads
-  const buildHierarchy = () => {
-    const campaigns = {};
-
-    for (const ad of ads) {
-      const campaignId = ad.adSetId?.campaignId?._id || 'no-campaign';
-      const campaignName = ad.adSetId?.campaignId?.name || t('ads.noCampaign');
-      const adSetId = ad.adSetId?._id || 'no-adset';
-      const adSetName = ad.adSetId?.name || t('ads.noAdSet');
-
-      if (!campaigns[campaignId]) {
-        campaigns[campaignId] = { name: campaignName, adSets: {} };
-      }
-      if (!campaigns[campaignId].adSets[adSetId]) {
-        campaigns[campaignId].adSets[adSetId] = { name: adSetName, ads: [] };
-      }
-      campaigns[campaignId].adSets[adSetId].ads.push(ad);
-    }
-
-    return campaigns;
-  };
-
-  const hierarchy = buildHierarchy();
+  // Filter ads by search query
+  const filteredAds = (() => {
+    if (!searchQuery.trim()) return ads;
+    const q = searchQuery.toLowerCase().trim();
+    return ads.filter(ad =>
+      ad.name?.toLowerCase().includes(q) ||
+      ad.fbAdId?.toLowerCase().includes(q) ||
+      ad.postId?.toLowerCase().includes(q) ||
+      ad.adSetId?.name?.toLowerCase().includes(q) ||
+      ad.adSetId?.fbAdSetId?.toLowerCase().includes(q) ||
+      ad.adSetId?.campaignId?.name?.toLowerCase().includes(q)
+    );
+  })();
 
   return (
     <div>
-      <div className="flex justify-between items-center mb-8">
+      <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-3xl font-bold text-white">{t('ads.title')}</h1>
-          <p className="text-gray-400 mt-2">{t('ads.groupedByCampaign')}</p>
+          <p className="text-gray-400 mt-2">{ads.length} anuncios en total</p>
         </div>
         <button
           onClick={() => {
@@ -166,133 +138,124 @@ function AdsView() {
         </button>
       </div>
 
+      {/* Search Box */}
+      <div className="mb-6">
+        <div className="relative">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Buscar por nombre, FB Ad ID, Post ID, ad set o campaña..."
+            className="w-full px-4 py-3 pl-12 bg-gray-800/50 border border-gray-700/50 rounded-xl text-white placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:border-transparent"
+          />
+          <svg className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-4 top-1/2 transform -translate-y-1/2 text-gray-500 hover:text-white"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+
       {loading ? (
         <div className="p-8 text-center">
           <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
           <p className="text-gray-400 mt-4">{t('ads.loading')}</p>
         </div>
-      ) : ads.length === 0 ? (
+      ) : filteredAds.length === 0 ? (
         <div className="p-12 text-center bg-gray-800/50 border border-gray-700/50 rounded-xl">
           <div className="w-16 h-16 mx-auto mb-4 bg-gray-700/50 rounded-full flex items-center justify-center">
             <svg className="w-8 h-8 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+              {searchQuery ? (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+              ) : (
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+              )}
             </svg>
           </div>
-          <h3 className="text-lg font-semibold text-white mb-2">{t('ads.noAds')}</h3>
-          <p className="text-gray-400">{t('ads.emptyDescription')}</p>
+          <h3 className="text-lg font-semibold text-white mb-2">
+            {searchQuery ? 'Sin resultados' : t('ads.noAds')}
+          </h3>
+          <p className="text-gray-400">
+            {searchQuery ? `No se encontraron anuncios para "${searchQuery}"` : t('ads.emptyDescription')}
+          </p>
         </div>
       ) : (
-        <div className="space-y-8">
-          {Object.entries(hierarchy).map(([campaignId, campaign]) => (
-            <div key={campaignId}>
-              {/* Campaign Header */}
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-2 h-2 rounded-full bg-blue-400"></div>
-                <h2 className="text-lg font-bold text-white">{campaign.name}</h2>
-                <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">
-                  {Object.keys(campaign.adSets).length} ad sets
-                </span>
-              </div>
-
-              {/* Ad Sets */}
-              <div className="space-y-3 ml-2">
-                {Object.entries(campaign.adSets).map(([adSetId, adSet]) => {
-                  const isExpanded = expandedSets.has(adSetId);
-                  const activeCount = adSet.ads.filter(a => a.status === 'ACTIVE').length;
-                  const totalCount = adSet.ads.length;
-
-                  return (
-                    <div key={adSetId} className="bg-gray-800/50 border border-gray-700/50 rounded-lg overflow-hidden">
-                      {/* Ad Set Header */}
-                      <button
-                        onClick={() => toggleSet(adSetId)}
-                        className="w-full flex items-center justify-between px-4 py-3 bg-gray-800/80 hover:bg-gray-700/50 transition-colors"
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-900/50">
+                <tr>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('common.ad')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Ad Set</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('common.campaign')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase w-32">{t('common.status')}</th>
+                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase w-28">{t('common.actions')}</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-700/30">
+                {filteredAds.map((ad) => (
+                  <tr key={ad._id} className="hover:bg-gray-700/20 transition-colors">
+                    <td className="px-4 py-3">
+                      <div className="text-sm font-medium text-white">{ad.name}</div>
+                      <code className="text-xs text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded mt-1 inline-block">
+                        {ad.fbAdId}
+                      </code>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-sm text-gray-300">{ad.adSetId?.name || '-'}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className="text-sm text-gray-300">{ad.adSetId?.campaignId?.name || '-'}</span>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap">
+                      <select
+                        value={ad.status}
+                        onChange={(e) => handleStatusChange(ad._id, e.target.value)}
+                        className={`text-xs font-medium px-2.5 py-1.5 rounded-lg border-2 transition-colors cursor-pointer ${STATUS_STYLE[ad.status] || STATUS_STYLE.ARCHIVED}`}
                       >
-                        <div className="flex items-center gap-3">
-                          <svg
-                            className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        <option value="ACTIVE">{t('ads.statusActive')}</option>
+                        <option value="PAUSED">{t('ads.statusPaused')}</option>
+                        <option value="ARCHIVED">{t('ads.statusArchived')}</option>
+                      </select>
+                    </td>
+                    <td className="px-4 py-3 whitespace-nowrap text-right">
+                      <div className="flex items-center justify-end space-x-1">
+                        <button
+                          onClick={() => setSelectedAd(ad)}
+                          className="p-1.5 text-green-400 hover:bg-green-500/20 rounded-lg transition-colors"
+                          title={t('ads.viewDetails')}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                           </svg>
-                          <span className="font-semibold text-white text-sm">{adSet.name}</span>
-                          <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">
-                            {activeCount}/{totalCount} {t('ads.activeCount')}
-                          </span>
-                        </div>
-                      </button>
-
-                      {/* Ads Table */}
-                      {isExpanded && (
-                        <div className="overflow-x-auto">
-                          <table className="w-full">
-                            <thead className="bg-gray-900/50">
-                              <tr>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">{t('common.ad')}</th>
-                                <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase w-32">{t('common.status')}</th>
-                                <th className="px-4 py-2 text-right text-xs font-medium text-gray-400 uppercase w-28">{t('common.actions')}</th>
-                              </tr>
-                            </thead>
-                            <tbody className="divide-y divide-gray-700/30">
-                              {adSet.ads.map((ad) => (
-                                <tr key={ad._id} className="hover:bg-gray-700/20 transition-colors">
-                                  <td className="px-4 py-3">
-                                    <div className="text-sm font-medium text-white">{ad.name}</div>
-                                    <code className="text-xs text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded mt-1 inline-block">
-                                      {ad.fbAdId}
-                                    </code>
-                                  </td>
-                                  <td className="px-4 py-3 whitespace-nowrap">
-                                    <select
-                                      value={ad.status}
-                                      onChange={(e) => handleStatusChange(ad._id, e.target.value)}
-                                      onClick={(e) => e.stopPropagation()}
-                                      className={`text-xs font-medium px-2.5 py-1.5 rounded-lg border-2 transition-colors cursor-pointer ${STATUS_STYLE[ad.status] || STATUS_STYLE.ARCHIVED}`}
-                                    >
-                                      <option value="ACTIVE">{t('ads.statusActive')}</option>
-                                      <option value="PAUSED">{t('ads.statusPaused')}</option>
-                                      <option value="ARCHIVED">{t('ads.statusArchived')}</option>
-                                    </select>
-                                  </td>
-                                  <td className="px-4 py-3 whitespace-nowrap text-right">
-                                    <div className="flex items-center justify-end space-x-1">
-                                      <button
-                                        onClick={() => setSelectedAd(ad)}
-                                        className="p-1.5 text-green-400 hover:bg-green-500/20 rounded-lg transition-colors"
-                                        title={t('ads.viewDetails')}
-                                      >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                        </svg>
-                                      </button>
-                                      <button
-                                        onClick={() => {
-                                          setEditingAd(ad);
-                                          setShowAdModal(true);
-                                        }}
-                                        className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
-                                        title={t('common.edit')}
-                                      >
-                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                        </svg>
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      )}
-                    </div>
-                  );
-                })}
-              </div>
-            </div>
-          ))}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setEditingAd(ad);
+                            setShowAdModal(true);
+                          }}
+                          className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
+                          title={t('common.edit')}
+                        >
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </div>
       )}
 
