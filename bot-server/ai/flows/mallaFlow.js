@@ -429,7 +429,7 @@ function checkProductFeatureQuestions(userMessage, state, convo) {
     },
     {
       pattern: /\b(80|ochenta|70|setenta|50|cincuenta|35|treinta\s*y\s*cinco)\s*%?(?!\s*(m|metro|x|\d))/i,
-      response: "la confeccionada es 90% de sombra; para otros porcentajes tenemos raschel agrícola"
+      response: "la malla confeccionada solo la manejamos en 90% de sombra; para otros porcentajes la manejamos en rollo de 100m de largo"
     },
     {
       pattern: /\b(porcentaje|nivel\s*de\s*sombra)\b/i,
@@ -559,14 +559,14 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   const nonStandardShade = /\b(al\s*)?(35|50|70|80)\s*(%|porciento|por\s*ciento)\b/i.test(userMessage);
 
   if (nonStandardShade) {
-    const handoffReason = `Malla sombra: porcentaje no estándar (no 90%) — "${userMessage}"`;
-    console.log(`🚨 Malla flow - Immediate handoff: ${handoffReason}`);
+    const shadeMatch = userMessage.match(/\b(35|50|70|80)\s*(%|porciento|por\s*ciento)/i);
+    const requestedShade = shadeMatch ? shadeMatch[1] : '';
+    console.log(`🚨 Malla flow - Non-90% shade (${requestedShade}%) detected: "${userMessage}"`);
 
     const { executeHandoff } = require('../utils/executeHandoff');
     return await executeHandoff(psid, convo, userMessage, {
-      reason: handoffReason,
-      responsePrefix: 'Esa solicitud requiere atención personalizada. ',
-      specsText: 'Esa solicitud requiere atención personalizada. ',
+      reason: `Malla sombra: porcentaje no estándar (${requestedShade}%, no 90%) — "${userMessage}"`,
+      responsePrefix: `La malla confeccionada solo la manejamos en 90% de sombra, no tenemos en ${requestedShade}%. Para malla al ${requestedShade}% la manejamos en rollo de 100m de largo.`,
       lastIntent: 'malla_specialist_handoff',
       extraState: { productInterest: "malla_sombra" },
       timingStyle: 'elaborate',

@@ -157,6 +157,36 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     await updateConversation(psid, { lastIntent: "intro" });
   }
 
+  // 1b) Non-90% shade percentage — confeccionada is ONLY 90%
+  const shadeMatch = clean.match(/\b(al\s*)?(35|50|70|80)\s*(%|porciento|por\s*ciento)/i);
+  if (shadeMatch) {
+    const requestedShade = shadeMatch[2];
+    const dimInMsg = parseSize(clean);
+
+    // If they also mentioned dimensions, offer the 90% product in that size
+    if (dimInMsg) {
+      const match = findExactVariant(variants, dimInMsg);
+      if (match) {
+        const line = await variantLine(match, true, psid, convo);
+        await updateConversation(psid, { lastIntent: "shade_clarified", unknownCount: 0 });
+        return {
+          type: "text",
+          text: `La malla confeccionada solo la manejamos en 90% de sombra, no tenemos en ${requestedShade}%.\n\n` +
+                `En tu medida de ${dimInMsg.w}x${dimInMsg.h}m tenemos:\n${line}\n\n` +
+                `Para malla al ${requestedShade}% la manejamos en rollo de 100m de largo. ¿Te interesa la confeccionada de 90% o prefieres que te cotice el rollo?`
+        };
+      }
+    }
+
+    await updateConversation(psid, { lastIntent: "shade_clarified", unknownCount: 0 });
+    return {
+      type: "text",
+      text: `La malla confeccionada solo la manejamos en 90% de sombra, no tenemos en ${requestedShade}%.\n\n` +
+            `Para malla al ${requestedShade}% la manejamos en rollo de 100m de largo.\n\n` +
+            `¿Te interesa la confeccionada de 90% o prefieres información sobre rollos?`
+    };
+  }
+
   // 2) Detección de medida FIRST (6x5, 4 x 3, 3.5x7, 3 metros x 1.70, etc.)
   // This must come BEFORE generic price check so "precio de 3x4" handles the dimension
   const requested = parseSize(clean);
