@@ -85,6 +85,36 @@ async function routeToFlow(classification, sourceContext, convo, psid, userMessa
     }
   }
 
+  // PRIORITY: Reseller / distributor intent — immediate handoff (works for ALL flows)
+  if (userMessage && (
+    /\b(para\s+vender|incursionar.*vender|quiero\s+vender|empezar\s+a\s+vender|vender\s+en\s+mi)\b/i.test(userMessage) ||
+    /\b(ser\s+distribuid|hacerme\s+distribuid|quiero\s+distribui|busco\s+proveed)\b/i.test(userMessage) ||
+    /\b(paquetes?.*para\s+vend|para\s+mi\s+(negocio|tienda|local|ferreter[ií]a|comercio))\b/i.test(userMessage) ||
+    /\b(quiero\s+distribui|soy\s+(vendedor|comerciante)|tengo\s+(un\s+)?(negocio|tienda|ferreter[ií]a|local))\b/i.test(userMessage)
+  )) {
+    console.log(`🏪 Reseller/distributor intent detected in dispatcher — handoff`);
+    const { getBusinessInfo } = require("../../businessInfoManager");
+    const { executeHandoff } = require("../utils/executeHandoff");
+    const { updateConversation } = require("../../conversationManager");
+    const info = await getBusinessInfo();
+
+    await updateConversation(psid, { isWholesaleInquiry: true });
+
+    const handoffResponse = await executeHandoff(psid, convo, userMessage, {
+      reason: `Cliente quiere revender/distribuir: "${userMessage.substring(0, 80)}"`,
+      responsePrefix: "¡Excelente! Somos fabricantes y trabajamos con distribuidores en todo México.\n\n" +
+            "Un especialista te contactará para darte información sobre paquetes y precios de mayoreo.\n\n" +
+            `📞 ${info?.phones?.[0] || "442 352 1646"}\n` +
+            `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`,
+      lastIntent: 'reseller_inquiry',
+      notificationText: `Cliente quiere revender: "${userMessage.substring(0, 60)}"`,
+      timingStyle: 'none',
+      includeQueretaro: false
+    });
+
+    return { ...handoffResponse, handledBy: "dispatcher_reseller" };
+  }
+
   // PRIORITY: Check generalFlow FIRST for location/shipping/payment queries
   // These should always be handled by generalFlow regardless of product context
   if (generalFlow.shouldHandle(classification, sourceContext, convo, userMessage)) {

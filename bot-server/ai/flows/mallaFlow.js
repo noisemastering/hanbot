@@ -878,6 +878,33 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     return await handleProductInfo(userMessage, convo);
   }
 
+  // ====== RESELLER / DISTRIBUTOR INTENT (any stage) ======
+  // "para vender", "incursionar para vender", "quiero revender", "ser distribuidor", etc.
+  if (userMessage && (
+    /\b(para\s+vender|incursionar.*vender|quiero\s+vender|empezar\s+a\s+vender|vender\s+en\s+mi)\b/i.test(userMessage) ||
+    /\b(distribuid|mayorist|revend|mayoreo|distribuc|ser\s+distribuid|hacerme\s+distribuid|busco\s+proveed)\b/i.test(userMessage) ||
+    /\b(paquetes?.*para\s+vend|para\s+mi\s+(negocio|tienda|local|ferreter[ií]a|comercio))\b/i.test(userMessage) ||
+    /\b(quiero\s+distribui|soy\s+(vendedor|comerciante)|tengo\s+(un\s+)?(negocio|tienda|ferreter[ií]a|local))\b/i.test(userMessage)
+  )) {
+    console.log(`🏪 Reseller/distributor intent detected in malla flow (any stage)`);
+    const { getBusinessInfo } = require("../../businessInfoManager");
+    const info = await getBusinessInfo();
+
+    const { executeHandoff } = require('../utils/executeHandoff');
+    return await executeHandoff(psid, convo, userMessage, {
+      reason: `Cliente quiere revender/distribuir: "${userMessage.substring(0, 80)}"`,
+      responsePrefix: "¡Excelente! Somos fabricantes y trabajamos con distribuidores en todo México.\n\n" +
+            "Un especialista te contactará para darte información sobre paquetes y precios de mayoreo.\n\n" +
+            `📞 ${info?.phones?.[0] || "442 352 1646"}\n` +
+            `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`,
+      lastIntent: 'reseller_inquiry',
+      notificationText: `Cliente quiere revender: "${userMessage.substring(0, 60)}"`,
+      extraState: { isWholesaleInquiry: true, productInterest: convo?.productInterest || "wholesale" },
+      timingStyle: 'none',
+      includeQueretaro: false
+    });
+  }
+
   // ====== PRODUCT FEATURE QUESTIONS (any stage) ======
   // Answer product questions regardless of whether dimensions are already known
   const featureResponse = checkProductFeatureQuestions(userMessage, state, convo);
