@@ -20,6 +20,7 @@ function AdsView() {
   const [showAdModal, setShowAdModal] = useState(false);
   const [editingAd, setEditingAd] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedIds, setSelectedIds] = useState(new Set());
 
   useEffect(() => {
     fetchAds();
@@ -69,7 +70,21 @@ function AdsView() {
       const data = await res.json();
 
       if (data.success) {
-        await fetchAds();
+        if (editingAd) {
+          // Update locally — re-fetch to get populated fields
+          const freshRes = await fetch(`${API_URL}/ads/${editingAd._id}`);
+          const freshData = await freshRes.json();
+          if (freshData.success) {
+            setAds(prev => prev.map(a => a._id === editingAd._id ? freshData.data : a));
+          }
+        } else {
+          // New ad — fetch it with populated fields
+          const freshRes = await fetch(`${API_URL}/ads/${data.data._id}`);
+          const freshData = await freshRes.json();
+          if (freshData.success) {
+            setAds(prev => [freshData.data, ...prev]);
+          }
+        }
         setShowAdModal(false);
         setEditingAd(null);
         toast.success(editingAd ? t('ads.updatedSuccess') : t('ads.createdSuccess'));
@@ -88,7 +103,8 @@ function AdsView() {
       const res = await fetch(`${API_URL}/ads/${ad._id}`, { method: "DELETE" });
       const data = await res.json();
       if (data.success) {
-        await fetchAds();
+        setAds(prev => prev.filter(a => a._id !== ad._id));
+        setSelectedIds(prev => { const next = new Set(prev); next.delete(ad._id); return next; });
         toast.success('Anuncio eliminado');
       } else {
         toast.error('Error: ' + (data.error || 'desconocido'));
@@ -109,7 +125,7 @@ function AdsView() {
 
       const data = await res.json();
       if (data.success) {
-        await fetchAds();
+        setAds(prev => prev.map(a => a._id === adId ? { ...a, status: newStatus } : a));
         toast.success(t('ads.statusUpdated'));
       } else {
         toast.error(t('ads.errorUpdateStatusDetail') + (data.error || t('ads.errorUnknown')));
@@ -117,6 +133,69 @@ function AdsView() {
     } catch (error) {
       console.error("Error updating status:", error);
       toast.error(t('ads.errorUpdateStatus'));
+    }
+  };
+
+  // Bulk actions
+  const handleBulkStatus = async (newStatus) => {
+    const ids = [...selectedIds];
+    const label = { ACTIVE: 'Activo', PAUSED: 'Pausado', ARCHIVED: 'Archivado' }[newStatus];
+    let successCount = 0;
+
+    await Promise.all(ids.map(async (id) => {
+      try {
+        const res = await fetch(`${API_URL}/ads/${id}`, {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ status: newStatus })
+        });
+        const data = await res.json();
+        if (data.success) successCount++;
+      } catch (e) { /* skip */ }
+    }));
+
+    if (successCount > 0) {
+      setAds(prev => prev.map(a => ids.includes(a._id) ? { ...a, status: newStatus } : a));
+      toast.success(`${successCount} anuncios → ${label}`);
+    }
+    setSelectedIds(new Set());
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = [...selectedIds];
+    if (!window.confirm(`¿Eliminar ${ids.length} anuncio${ids.length > 1 ? 's' : ''}?`)) return;
+    let successCount = 0;
+
+    await Promise.all(ids.map(async (id) => {
+      try {
+        const res = await fetch(`${API_URL}/ads/${id}`, { method: "DELETE" });
+        const data = await res.json();
+        if (data.success) successCount++;
+      } catch (e) { /* skip */ }
+    }));
+
+    if (successCount > 0) {
+      setAds(prev => prev.filter(a => !ids.includes(a._id)));
+      toast.success(`${successCount} anuncio${successCount > 1 ? 's' : ''} eliminado${successCount > 1 ? 's' : ''}`);
+    }
+    setSelectedIds(new Set());
+  };
+
+  // Selection helpers
+  const toggleSelect = (id) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleSelectAll = () => {
+    if (selectedIds.size === filteredAds.length) {
+      setSelectedIds(new Set());
+    } else {
+      setSelectedIds(new Set(filteredAds.map(a => a._id)));
     }
   };
 
@@ -133,6 +212,8 @@ function AdsView() {
       ad.adSetId?.campaignId?.name?.toLowerCase().includes(q)
     );
   })();
+
+  const allSelected = filteredAds.length > 0 && selectedIds.size === filteredAds.length;
 
   return (
     <div>
@@ -181,6 +262,49 @@ function AdsView() {
         </div>
       </div>
 
+      {/* Bulk Actions Bar */}
+      {selectedIds.size > 0 && (
+        <div className="mb-4 p-3 bg-primary-500/10 border border-primary-500/30 rounded-xl flex items-center justify-between">
+          <span className="text-sm text-primary-300 font-medium">
+            {selectedIds.size} seleccionado{selectedIds.size > 1 ? 's' : ''}
+          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleBulkStatus('ACTIVE')}
+              className="px-3 py-1.5 text-xs font-medium bg-green-500/20 text-green-300 border border-green-500/30 rounded-lg hover:bg-green-500/30 transition-colors"
+            >
+              Activar
+            </button>
+            <button
+              onClick={() => handleBulkStatus('PAUSED')}
+              className="px-3 py-1.5 text-xs font-medium bg-yellow-500/20 text-yellow-300 border border-yellow-500/30 rounded-lg hover:bg-yellow-500/30 transition-colors"
+            >
+              Pausar
+            </button>
+            <button
+              onClick={() => handleBulkStatus('ARCHIVED')}
+              className="px-3 py-1.5 text-xs font-medium bg-gray-500/20 text-gray-300 border border-gray-500/30 rounded-lg hover:bg-gray-500/30 transition-colors"
+            >
+              Archivar
+            </button>
+            <div className="w-px h-6 bg-gray-700 mx-1"></div>
+            <button
+              onClick={handleBulkDelete}
+              className="px-3 py-1.5 text-xs font-medium bg-red-500/20 text-red-300 border border-red-500/30 rounded-lg hover:bg-red-500/30 transition-colors"
+            >
+              Eliminar
+            </button>
+            <div className="w-px h-6 bg-gray-700 mx-1"></div>
+            <button
+              onClick={() => setSelectedIds(new Set())}
+              className="px-3 py-1.5 text-xs font-medium text-gray-400 hover:text-white transition-colors"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
       {loading ? (
         <div className="p-8 text-center">
           <div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin"></div>
@@ -210,6 +334,14 @@ function AdsView() {
             <table className="w-full">
               <thead className="bg-gray-900/50">
                 <tr>
+                  <th className="px-4 py-3 text-left w-10">
+                    <input
+                      type="checkbox"
+                      checked={allSelected}
+                      onChange={toggleSelectAll}
+                      className="w-4 h-4 rounded bg-gray-900/50 border-gray-600 text-primary-500 focus:ring-primary-500 cursor-pointer"
+                    />
+                  </th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('common.ad')}</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Ad Set</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('common.campaign')}</th>
@@ -219,7 +351,15 @@ function AdsView() {
               </thead>
               <tbody className="divide-y divide-gray-700/30">
                 {filteredAds.map((ad) => (
-                  <tr key={ad._id} className="hover:bg-gray-700/20 transition-colors">
+                  <tr key={ad._id} className={`hover:bg-gray-700/20 transition-colors ${selectedIds.has(ad._id) ? 'bg-primary-500/5' : ''}`}>
+                    <td className="px-4 py-3">
+                      <input
+                        type="checkbox"
+                        checked={selectedIds.has(ad._id)}
+                        onChange={() => toggleSelect(ad._id)}
+                        className="w-4 h-4 rounded bg-gray-900/50 border-gray-600 text-primary-500 focus:ring-primary-500 cursor-pointer"
+                      />
+                    </td>
                     <td className="px-4 py-3">
                       <div className="text-sm font-medium text-white">{ad.name}</div>
                       <code className="text-xs text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded mt-1 inline-block">
