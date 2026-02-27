@@ -11,7 +11,7 @@ router.get("/", async (req, res) => {
     const filter = campaignId ? { campaignId } : {};
 
     const adSets = await AdSet.find(filter)
-      .populate("campaignId", "name ref catalog flowRef")
+      .populate("campaignId", "name ref catalog flowRef audience ad conversationGoal")
       .populate("productIds", "name size price familyId")
       .sort({ createdAt: -1 });
 
@@ -25,7 +25,7 @@ router.get("/", async (req, res) => {
 router.get("/:id", async (req, res) => {
   try {
     const adSet = await AdSet.findById(req.params.id)
-      .populate("campaignId", "name ref catalog flowRef")
+      .populate("campaignId", "name ref catalog flowRef audience ad conversationGoal")
       .populate("productIds", "name size price familyId");
 
     if (!adSet) {
@@ -75,7 +75,7 @@ router.put("/:id", async (req, res) => {
       req.params.id,
       req.body,
       { new: true, runValidators: true }
-    ).populate("campaignId", "name ref catalog flowRef")
+    ).populate("campaignId", "name ref catalog flowRef audience ad conversationGoal")
      .populate("productIds", "name size price familyId");
 
     if (!adSet) {

@@ -5,6 +5,21 @@ import CatalogUpload from './CatalogUpload';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
+const AUDIENCE_TYPES = [
+  { value: 'homeowner', label: 'Hogar/Jardín' },
+  { value: 'farmer', label: 'Agricultor' },
+  { value: 'greenhouse', label: 'Invernadero/Vivero' },
+  { value: 'business', label: 'Negocio' },
+  { value: 'contractor', label: 'Instalador/Contratista' },
+  { value: 'reseller', label: 'Revendedor' }
+];
+
+const EXPERIENCE_LEVELS = [
+  { value: 'beginner', label: 'Principiante' },
+  { value: 'practical', label: 'Práctico' },
+  { value: 'expert', label: 'Experto' }
+];
+
 // Ad angles - same as CampaignModal for consistency
 const AD_ANGLES = [
   { value: 'problem_pain', label: '☀️ Problema/Dolor', desc: 'Resuelve un problema del cliente' },
@@ -71,10 +86,13 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
     linkUrl: '',
     productIds: [],
     mainProductId: '', // Main product for determining productInterest
+    // Audience override
+    audienceType: '',
+    experienceLevel: '',
     // Ad Intent - for tailoring bot responses
     adAngle: '',
     primaryUse: '',
-    audienceType: '',
+    adIntentAudienceType: '',
     offerHook: '',
     // Creative extras
     headline: '',
@@ -162,10 +180,13 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
         linkUrl: ad.creative?.linkUrl || '',
         productIds: ad.productIds?.map(p => p._id || p) || [],
         mainProductId: ad.mainProductId?._id || ad.mainProductId || '',
+        // Audience override
+        audienceType: ad.audience?.type || '',
+        experienceLevel: ad.audience?.experienceLevel || '',
         // Ad Intent fields
         adAngle: ad.adAngle || '',
         primaryUse: ad.adIntent?.primaryUse || '',
-        audienceType: ad.adIntent?.audienceType || '',
+        adIntentAudienceType: ad.adIntent?.audienceType || '',
         offerHook: ad.adIntent?.offerHook || '',
         // Creative extras
         headline: ad.creative?.headline || '',
@@ -208,11 +229,16 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
         imageUrl: formData.imageUrl,
         videoUrl: formData.videoUrl
       },
+      // Audience override
+      audience: {
+        type: formData.audienceType || null,
+        experienceLevel: formData.experienceLevel || null
+      },
       // Ad Intent - for tailoring bot responses
       adAngle: formData.adAngle || null,
       adIntent: {
         primaryUse: formData.primaryUse || null,
-        audienceType: formData.audienceType || null,
+        audienceType: formData.adIntentAudienceType || null,
         offerHook: formData.offerHook || null
       },
       tracking: {
@@ -412,6 +438,89 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
               })()}
             </div>
 
+            {/* Audiencia */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">Audiencia</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Tipo de audiencia
+                  </label>
+                  <select
+                    name="audienceType"
+                    value={formData.audienceType}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Sin especificar</option>
+                    {AUDIENCE_TYPES.map(a => (
+                      <option key={a.value} value={a.value}>{a.label}</option>
+                    ))}
+                  </select>
+                  {!formData.audienceType && (() => {
+                    const selectedAdSet = adSets.find(a => a._id === formData.adSetId);
+                    const adSetAudience = selectedAdSet?.audience?.type;
+                    const campaignAudience = selectedAdSet?.campaignId?.audience?.type;
+                    if (adSetAudience) {
+                      const label = AUDIENCE_TYPES.find(a => a.value === adSetAudience)?.label || adSetAudience;
+                      return (
+                        <p className="text-xs text-blue-400 mt-1">
+                          Heredado de AdSet ({selectedAdSet.name}): {label}
+                        </p>
+                      );
+                    }
+                    if (campaignAudience) {
+                      const label = AUDIENCE_TYPES.find(a => a.value === campaignAudience)?.label || campaignAudience;
+                      return (
+                        <p className="text-xs text-blue-400 mt-1">
+                          Heredado de Campaña ({selectedAdSet?.campaignId?.name}): {label}
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Nivel de experiencia
+                  </label>
+                  <select
+                    name="experienceLevel"
+                    value={formData.experienceLevel}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Sin especificar</option>
+                    {EXPERIENCE_LEVELS.map(l => (
+                      <option key={l.value} value={l.value}>{l.label}</option>
+                    ))}
+                  </select>
+                  {!formData.experienceLevel && (() => {
+                    const selectedAdSet = adSets.find(a => a._id === formData.adSetId);
+                    const adSetExp = selectedAdSet?.audience?.experienceLevel;
+                    const campaignExp = selectedAdSet?.campaignId?.audience?.experienceLevel;
+                    if (adSetExp) {
+                      const label = EXPERIENCE_LEVELS.find(l => l.value === adSetExp)?.label || adSetExp;
+                      return (
+                        <p className="text-xs text-blue-400 mt-1">
+                          Heredado de AdSet ({selectedAdSet.name}): {label}
+                        </p>
+                      );
+                    }
+                    if (campaignExp) {
+                      const label = EXPERIENCE_LEVELS.find(l => l.value === campaignExp)?.label || campaignExp;
+                      return (
+                        <p className="text-xs text-blue-400 mt-1">
+                          Heredado de Campaña ({selectedAdSet?.campaignId?.name}): {label}
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+              </div>
+            </div>
+
             {/* Creative Content */}
             <div className="border-t border-gray-700 pt-4 mt-4">
               <h3 className="text-sm font-semibold text-gray-300 mb-3">{t('adModal.creativeContent')}</h3>
@@ -552,6 +661,28 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                       <option key={a.value} value={a.value}>{a.label} - {a.desc}</option>
                     ))}
                   </select>
+                  {!formData.adAngle && (() => {
+                    const selectedAdSet = adSets.find(a => a._id === formData.adSetId);
+                    const adSetAngle = selectedAdSet?.adContext?.angle;
+                    const campaignAngle = selectedAdSet?.campaignId?.ad?.angle;
+                    if (adSetAngle) {
+                      const label = AD_ANGLES.find(a => a.value === adSetAngle)?.label || adSetAngle;
+                      return (
+                        <p className="text-xs text-blue-400 mt-1">
+                          Heredado de AdSet ({selectedAdSet.name}): {label}
+                        </p>
+                      );
+                    }
+                    if (campaignAngle) {
+                      const label = AD_ANGLES.find(a => a.value === campaignAngle)?.label || campaignAngle;
+                      return (
+                        <p className="text-xs text-blue-400 mt-1">
+                          Heredado de Campaña ({selectedAdSet?.campaignId?.name}): {label}
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
@@ -570,15 +701,15 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                     />
                   </div>
 
-                  {/* Audience Type */}
+                  {/* Audience Type (ad intent - free text) */}
                   <div>
                     <label className="block text-sm font-medium text-gray-300 mb-2">
                       {t('adModal.audienceTypeLabel')}
                     </label>
                     <input
                       type="text"
-                      name="audienceType"
-                      value={formData.audienceType}
+                      name="adIntentAudienceType"
+                      value={formData.adIntentAudienceType}
                       onChange={handleChange}
                       className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                       placeholder={t('adModal.audienceTypePlaceholder')}

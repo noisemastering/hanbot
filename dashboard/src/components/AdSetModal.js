@@ -5,6 +5,63 @@ import { useTranslation } from '../i18n';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
+const AUDIENCE_TYPES = [
+  { value: 'homeowner', label: 'Hogar/Jardín' },
+  { value: 'farmer', label: 'Agricultor' },
+  { value: 'greenhouse', label: 'Invernadero/Vivero' },
+  { value: 'business', label: 'Negocio' },
+  { value: 'contractor', label: 'Instalador/Contratista' },
+  { value: 'reseller', label: 'Revendedor' }
+];
+
+const EXPERIENCE_LEVELS = [
+  { value: 'beginner', label: 'Principiante' },
+  { value: 'practical', label: 'Práctico' },
+  { value: 'expert', label: 'Experto' }
+];
+
+const AD_ANGLES = [
+  { value: 'problem_pain', label: '☀️ Problema/Dolor', desc: 'Resuelve un problema del cliente' },
+  { value: 'price_value', label: '💰 Precio/Valor', desc: 'Enfocado en precio accesible' },
+  { value: 'quality', label: '⭐ Calidad', desc: 'Enfocado en calidad/durabilidad' },
+  { value: 'urgency', label: '⏰ Urgencia', desc: 'Oferta por tiempo limitado' },
+  { value: 'social_proof', label: '👥 Prueba Social', desc: 'Testimonios y casos de éxito' },
+  { value: 'convenience', label: '🚚 Conveniencia', desc: 'Facilidad de compra o envío' },
+  { value: 'bulk_b2b', label: '🏢 Mayoreo/B2B', desc: 'Enfoque en negocios y distribuidores' },
+  { value: 'diy_ease', label: '🔧 Fácil Instalación', desc: 'Hazlo tú mismo, fácil de usar' },
+  { value: 'comparison', label: '🔄 Comparación', desc: 'Mejor que las alternativas' }
+];
+
+const CTA_OPTIONS = [
+  { value: '', label: 'Sin CTA' },
+  { value: 'SEND_MESSAGE', label: 'Enviar mensaje' },
+  { value: 'GET_QUOTE', label: 'Cotizar ahora' },
+  { value: 'LEARN_MORE', label: 'Más información' },
+  { value: 'SHOP_NOW', label: 'Comprar ahora' },
+  { value: 'GET_OFFER', label: 'Obtener oferta' },
+  { value: 'CONTACT_US', label: 'Contáctanos' },
+  { value: 'ORDER_NOW', label: 'Ordenar ahora' },
+  { value: 'SIGN_UP', label: 'Registrarse' }
+];
+
+const OFFER_HOOK_OPTIONS = [
+  { value: '', label: 'Sin oferta' },
+  { value: 'envio_gratis', label: 'Envío gratis (productos seleccionados)' },
+  { value: 'entrega_24_48', label: 'Entrega en 24-48 hrs (productos seleccionados)' },
+  { value: 'envio_mex_usa', label: 'Envío a todo México y Estados Unidos' },
+  { value: 'precio_mayoreo', label: 'Precio de mayoreo' },
+  { value: 'precio_fabrica', label: 'Precio especial de Fábrica' },
+  { value: 'precio_mayoristas', label: 'Precio especial a mayoristas' },
+  { value: 'descuento_50', label: '50% descuento' },
+  { value: 'descuento_temporada', label: '10% descuento por temporada' },
+  { value: 'meses_sin_intereses', label: 'Hasta 12 meses sin intereses' },
+  { value: 'pago_seguro', label: 'Pago seguro' },
+  { value: 'variedad_medidas', label: 'Variedad de medidas' },
+  { value: 'asesoria', label: 'Asesoría profesional' },
+  { value: 'resenas_favorables', label: 'Reseñas favorables de miles de clientes' },
+  { value: 'oferta_limitada', label: 'Oferta por tiempo limitado' }
+];
+
 // Helper function to collect only sellable product IDs from tree
 function collectSellableProductIds(productTree) {
   let sellableIds = [];
@@ -43,7 +100,13 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
     customAudiences: '',
     placements: 'facebook_feed,instagram_feed',
     productIds: [],
-    flowRef: ''
+    flowRef: '',
+    audienceType: '',
+    experienceLevel: '',
+    adAngle: '',
+    adSummary: '',
+    adCta: '',
+    adOfferHook: ''
   });
 
   const [productFamilies, setProductFamilies] = useState([]);
@@ -123,7 +186,13 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
         customAudiences: adSet.targeting?.customAudiences?.join(', ') || '',
         placements: adSet.placements?.join(',') || 'facebook_feed,instagram_feed',
         productIds: adSet.productIds?.map(p => p._id || p) || [],
-        flowRef: adSet.flowRef || ''
+        flowRef: adSet.flowRef || '',
+        audienceType: adSet.audience?.type || '',
+        experienceLevel: adSet.audience?.experienceLevel || '',
+        adAngle: adSet.adContext?.angle || '',
+        adSummary: adSet.adContext?.summary || '',
+        adCta: adSet.adContext?.cta || '',
+        adOfferHook: adSet.adContext?.offerHook || ''
       });
       setCurrentCatalog(adSet.catalog || null);
     }
@@ -146,6 +215,16 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
       dailyBudget: formData.dailyBudget ? parseFloat(formData.dailyBudget) : undefined,
       productIds: sellableProductIds, // Only save sellable products
       flowRef: formData.flowRef || null,
+      audience: {
+        type: formData.audienceType || null,
+        experienceLevel: formData.experienceLevel || null
+      },
+      adContext: {
+        angle: formData.adAngle || null,
+        summary: formData.adSummary || null,
+        cta: formData.adCta || null,
+        offerHook: formData.adOfferHook || null
+      },
       targeting: {
         locations: formData.locations.split(',').map(l => l.trim()),
         ageMin: parseInt(formData.ageMin),
@@ -331,6 +410,192 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
                   </p>
                 );
               })()}
+            </div>
+
+            {/* Audiencia */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">Audiencia</h3>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Tipo de audiencia
+                  </label>
+                  <select
+                    name="audienceType"
+                    value={formData.audienceType}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Sin especificar</option>
+                    {AUDIENCE_TYPES.map(a => (
+                      <option key={a.value} value={a.value}>{a.label}</option>
+                    ))}
+                  </select>
+                  {!formData.audienceType && (() => {
+                    const selectedCampaign = campaigns.find(c => c._id === formData.campaignId);
+                    const campaignAudienceType = selectedCampaign?.audience?.type;
+                    if (campaignAudienceType) {
+                      const label = AUDIENCE_TYPES.find(a => a.value === campaignAudienceType)?.label || campaignAudienceType;
+                      return (
+                        <p className="text-xs text-blue-400 mt-1">
+                          Heredado de Campaña ({selectedCampaign.name}): {label}
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Nivel de experiencia
+                  </label>
+                  <select
+                    name="experienceLevel"
+                    value={formData.experienceLevel}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Sin especificar</option>
+                    {EXPERIENCE_LEVELS.map(l => (
+                      <option key={l.value} value={l.value}>{l.label}</option>
+                    ))}
+                  </select>
+                  {!formData.experienceLevel && (() => {
+                    const selectedCampaign = campaigns.find(c => c._id === formData.campaignId);
+                    const campaignExpLevel = selectedCampaign?.audience?.experienceLevel;
+                    if (campaignExpLevel) {
+                      const label = EXPERIENCE_LEVELS.find(l => l.value === campaignExpLevel)?.label || campaignExpLevel;
+                      return (
+                        <p className="text-xs text-blue-400 mt-1">
+                          Heredado de Campaña ({selectedCampaign.name}): {label}
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+              </div>
+            </div>
+
+            {/* Contexto del Anuncio */}
+            <div>
+              <h3 className="text-sm font-semibold text-gray-300 mb-3">Contexto del Anuncio</h3>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Angulo del anuncio
+                  </label>
+                  <select
+                    name="adAngle"
+                    value={formData.adAngle}
+                    onChange={handleChange}
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                  >
+                    <option value="">Sin especificar</option>
+                    {AD_ANGLES.map(a => (
+                      <option key={a.value} value={a.value}>{a.label} - {a.desc}</option>
+                    ))}
+                  </select>
+                  {!formData.adAngle && (() => {
+                    const selectedCampaign = campaigns.find(c => c._id === formData.campaignId);
+                    const campaignAngle = selectedCampaign?.ad?.angle;
+                    if (campaignAngle) {
+                      const label = AD_ANGLES.find(a => a.value === campaignAngle)?.label || campaignAngle;
+                      return (
+                        <p className="text-xs text-blue-400 mt-1">
+                          Heredado de Campaña ({selectedCampaign.name}): {label}
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium text-gray-300 mb-2">
+                    Resumen del anuncio
+                  </label>
+                  <textarea
+                    name="adSummary"
+                    value={formData.adSummary}
+                    onChange={handleChange}
+                    rows={2}
+                    className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    placeholder="Ej: Malla sombra al mejor precio con envío gratis"
+                  />
+                  {!formData.adSummary && (() => {
+                    const selectedCampaign = campaigns.find(c => c._id === formData.campaignId);
+                    const campaignSummary = selectedCampaign?.ad?.summary;
+                    if (campaignSummary) {
+                      return (
+                        <p className="text-xs text-blue-400 mt-1">
+                          Heredado de Campaña ({selectedCampaign.name}): {campaignSummary}
+                        </p>
+                      );
+                    }
+                    return null;
+                  })()}
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      CTA
+                    </label>
+                    <select
+                      name="adCta"
+                      value={formData.adCta}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      {CTA_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                    {!formData.adCta && (() => {
+                      const selectedCampaign = campaigns.find(c => c._id === formData.campaignId);
+                      const campaignCta = selectedCampaign?.ad?.cta;
+                      if (campaignCta) {
+                        const label = CTA_OPTIONS.find(o => o.value === campaignCta)?.label || campaignCta;
+                        return (
+                          <p className="text-xs text-blue-400 mt-1">
+                            Heredado de Campaña ({selectedCampaign.name}): {label}
+                          </p>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-300 mb-2">
+                      Oferta / Hook
+                    </label>
+                    <select
+                      name="adOfferHook"
+                      value={formData.adOfferHook}
+                      onChange={handleChange}
+                      className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                    >
+                      {OFFER_HOOK_OPTIONS.map(opt => (
+                        <option key={opt.value} value={opt.value}>{opt.label}</option>
+                      ))}
+                    </select>
+                    {!formData.adOfferHook && (() => {
+                      const selectedCampaign = campaigns.find(c => c._id === formData.campaignId);
+                      const campaignHook = selectedCampaign?.ad?.offerHook;
+                      if (campaignHook) {
+                        const label = OFFER_HOOK_OPTIONS.find(o => o.value === campaignHook)?.label || campaignHook;
+                        return (
+                          <p className="text-xs text-blue-400 mt-1">
+                            Heredado de Campaña ({selectedCampaign.name}): {label}
+                          </p>
+                        );
+                      }
+                      return null;
+                    })()}
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Targeting */}

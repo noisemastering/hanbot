@@ -25,10 +25,10 @@ router.get("/", async (req, res) => {
     const ads = await Ad.find(filter)
       .populate({
         path: "adSetId",
-        select: "name fbAdSetId catalog productIds flowRef",
+        select: "name fbAdSetId catalog productIds flowRef audience adContext conversationGoal",
         populate: {
           path: "campaignId",
-          select: "name ref catalog flowRef"
+          select: "name ref catalog flowRef audience ad conversationGoal"
         }
       })
       .populate("productIds", "name description sellable")
@@ -46,10 +46,10 @@ router.get("/:id", async (req, res) => {
     const ad = await Ad.findById(req.params.id)
       .populate({
         path: "adSetId",
-        select: "name fbAdSetId catalog productIds flowRef",
+        select: "name fbAdSetId catalog productIds flowRef audience adContext conversationGoal",
         populate: {
           path: "campaignId",
-          select: "name ref catalog flowRef"
+          select: "name ref catalog flowRef audience ad conversationGoal"
         }
       })
       .populate("productIds", "name description sellable");
@@ -144,10 +144,10 @@ router.put("/:id", async (req, res) => {
       { new: true, runValidators: true }
     ).populate({
       path: "adSetId",
-      select: "name fbAdSetId catalog productIds flowRef",
+      select: "name fbAdSetId catalog productIds flowRef audience adContext conversationGoal",
       populate: {
         path: "campaignId",
-        select: "name ref catalog flowRef"
+        select: "name ref catalog flowRef audience ad conversationGoal"
       }
     }).populate("productIds", "name description sellable");
 
