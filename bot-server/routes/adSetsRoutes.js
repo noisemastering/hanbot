@@ -4,11 +4,20 @@ const router = express.Router();
 const AdSet = require("../models/AdSet");
 const Campaign = require("../models/Campaign");
 
-// Get all ad sets (optionally filter by campaign)
+// Get all ad sets (optionally filter by campaign and/or search)
 router.get("/", async (req, res) => {
   try {
-    const { campaignId } = req.query;
+    const { campaignId, search } = req.query;
     const filter = campaignId ? { campaignId } : {};
+
+    if (search && search.trim()) {
+      const regex = new RegExp(search.trim(), "i");
+      filter.$or = [
+        { name: regex },
+        { fbAdSetId: regex },
+        { _id: search.match(/^[0-9a-fA-F]{24}$/) ? search : undefined }
+      ].filter(c => !Object.values(c).includes(undefined));
+    }
 
     const adSets = await AdSet.find(filter)
       .populate("campaignId", "name ref catalog flowRef audience ad conversationGoal")

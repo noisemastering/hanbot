@@ -16,11 +16,21 @@ async function validateFlowRefHierarchy(flowRef, adSetId) {
   return false;
 }
 
-// Get all ads (optionally filter by adSet)
+// Get all ads (optionally filter by adSet and/or search)
 router.get("/", async (req, res) => {
   try {
-    const { adSetId } = req.query;
+    const { adSetId, search } = req.query;
     const filter = adSetId ? { adSetId } : {};
+
+    if (search && search.trim()) {
+      const regex = new RegExp(search.trim(), "i");
+      filter.$or = [
+        { name: regex },
+        { fbAdId: regex },
+        { postId: regex },
+        { _id: search.match(/^[0-9a-fA-F]{24}$/) ? search : undefined }
+      ].filter(c => !Object.values(c).includes(undefined));
+    }
 
     const ads = await Ad.find(filter)
       .populate({
