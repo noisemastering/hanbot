@@ -90,6 +90,9 @@ router.get("/adset/:adSetId", async (req, res) => {
 router.post("/", async (req, res) => {
   try {
     // Verify ad set exists
+    if (!req.body.adSetId) {
+      return res.status(400).json({ success: false, error: "Debes seleccionar un Ad Set" });
+    }
     const adSet = await AdSet.findById(req.body.adSetId);
     if (!adSet) {
       return res.status(404).json({ success: false, error: "AdSet no encontrado" });
