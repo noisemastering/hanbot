@@ -142,12 +142,19 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
 
   const variants = normalizeVariants(product.variants || []);
 
-  // 1) Entrada a campaña
+  // 1) Entrada a campaña — only greet if user didn't ask something specific
   if (convo.lastIntent === "campaign_entry" || convo.lastIntent === null) {
+    const hasQuestion = /\b(precio|cu[aá]nto|cuesta|vale|costo|medida|tamaño|dimensi|metro|env[ií]o|entrega|impermeable|instala|garant|durabilidad|color|pago|compra|d[oó]nde|ubicaci[oó]n)\b/i.test(clean);
+    const hasDimensions = parseSize(clean);
+
+    if (!hasQuestion && !hasDimensions) {
+      await updateConversation(psid, { lastIntent: "intro" });
+      const intro = campaign.initialMessage ||
+        "👋 ¡Hola! Bienvenido a Hanlob 🌿. ¿Deseas ver precios o medidas de nuestra malla sombra beige confeccionada?";
+      return { type: "text", text: intro };
+    }
+    // User asked something — update intent and fall through to handlers
     await updateConversation(psid, { lastIntent: "intro" });
-    const intro = campaign.initialMessage ||
-      "👋 ¡Hola! Bienvenido a Hanlob 🌿. ¿Deseas ver precios o medidas de nuestra malla sombra beige confeccionada?";
-    return { type: "text", text: intro };
   }
 
   // 2) Detección de medida FIRST (6x5, 4 x 3, 3.5x7, 3 metros x 1.70, etc.)
@@ -273,6 +280,16 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
         `Tenemos estas medidas disponibles:\n` +
         `${compactList}\n\n` +
         `¿Cuál te interesa? Mándame la medida y te paso el enlace para comprar 😊`
+    };
+  }
+
+  // 4b) Price per meter / m² — answer with base price
+  if (/\b(precio|cu[aá]nto|vale|cuesta|costo|a\s*c[oó]mo)\s+(por|el|del?)?\s*(metro|m2|m²)\b/i.test(clean) ||
+      /\b(metro\s*\.?\s*(cuadrado)?|m2|m²)\s+(cu[aá]nto|precio|cuesta|vale)\b/i.test(clean)) {
+    await updateConversation(psid, { lastIntent: "price_per_meter" });
+    return {
+      type: "text",
+      text: "El precio base del metro cuadrado es de 30 pesos pero varía dependiendo de la dimensión, entre más grande es, más baja el precio por metro cuadrado.\n\n¿Qué medida te interesa?"
     };
   }
 
