@@ -1328,17 +1328,21 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     // If the message has NO dimension/price/confirmation intent, check for general questions
     if (!hasNewDimensions && !isPriceRelated && !isConfirmation && !isNewSize) {
       // Ordering process questions
+      const MAPS_URL = 'https://maps.app.goo.gl/WJbhpMqfUPYPSMdA7';
       if (/\b(pedido|orden|compra)\s+(se\s+)?(hace|realiza|es)\s+(por|en|a\s+trav[eé]s)/i.test(msg) ||
           /\b(por\s+(este\s+medio|aqu[ií]|mensaj|chat|facebook|messenger|inbox))\s*(se\s+)?(compra|pide|ordena|hace|realiza)?\b/i.test(msg) ||
           /\b(c[oó]mo|d[oó]nde)\s+(compro|pido|ordeno|hago\s+(el\s+)?pedido)\b/i.test(msg) ||
-          /\b(se\s+puede|puedo)\s+(comprar|pedir|ordenar)\s+(por|en)\s*(aqu[ií]|este\s+medio|chat|messenger)\b/i.test(msg)) {
+          /\b(se\s+puede|puedo)\s+(comprar|pedir|ordenar)\s+(por|en)\s*(aqu[ií]|este\s+medio|chat|messenger)\b/i.test(msg) ||
+          /\b(pedir|comprar|ordenar)\s+(por|en|a\s+trav[eé]s\s+de)\s*(mercado|ml)\b/i.test(msg) ||
+          /\b(por\s+mercado|en\s+mercado|mercado\s+(libre|pago))\b/i.test(msg) ||
+          /\btengo\s+que\s+pedir\b/i.test(msg)) {
         await updateConversation(psid, { lastIntent: 'purchase_process', unknownCount: 0 });
         const link = convo.lastSharedProductLink;
         return {
           type: "text",
           text: link
-            ? `La compra se realiza a través de Mercado Libre, por el enlace que te compartí:\n${link}\n\nAhí puedes pagar con tarjeta, efectivo, o meses sin intereses. El envío está incluido.`
-            : `La compra se realiza a través de nuestra tienda en Mercado Libre. Puedes pagar con tarjeta, efectivo, o meses sin intereses. El envío está incluido.`
+            ? `Puedes comprarla en Mercado Libre a través del enlace que te compartí:\n${link}\n\nO si prefieres, puedes visitarnos en nuestra tienda física:\n${MAPS_URL}`
+            : `Puedes comprarla en nuestra tienda de Mercado Libre, o visitarnos en nuestra tienda física:\n${MAPS_URL}`
         };
       }
 
