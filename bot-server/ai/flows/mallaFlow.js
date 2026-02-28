@@ -1620,6 +1620,18 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       console.log(`🔁 Same product detected (${product._id}), confirming instead of re-quoting`);
       const sizeDisplay = userExpressedSize || `${width}x${height}`;
       await updateConversation(psid, { lastIntent: "size_confirmed", unknownCount: 0 });
+
+      // Wholesale context — don't use retail language
+      if (convo?.isWholesaleInquiry) {
+        const { executeHandoff } = require('../utils/executeHandoff');
+        return await executeHandoff(psid, convo, userMessage, {
+          reason: `Mayoreo: cliente confirma ${sizeDisplay}m a $${product.price} — cotizar precio de mayoreo`,
+          responsePrefix: `Perfecto, ${sizeDisplay} metros. Para precio de mayoreo un especialista te dará la cotización.`,
+          lastIntent: 'wholesale_handoff',
+          timingStyle: 'elaborate'
+        });
+      }
+
       return {
         type: "text",
         text: `Es correcto, ${sizeDisplay} metros a $${product.price} con envío incluido. Puedes realizar tu compra en el enlace que te compartí.`
@@ -1646,6 +1658,19 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
           return wholesaleResponse;
         }
       }
+    }
+
+    // Wholesale context — hand off for wholesale pricing instead of retail quote
+    if (convo?.isWholesaleInquiry) {
+      const sizeDisplay = userExpressedSize || `${width}x${height}`;
+      console.log(`🏪 Wholesale inquiry — handing off ${sizeDisplay}m for wholesale pricing`);
+      const { executeHandoff: execHandoffW } = require('../utils/executeHandoff');
+      return await execHandoffW(psid, convo, userMessage, {
+        reason: `Mayoreo: cliente pregunta por ${sizeDisplay}m — cotizar precio de mayoreo`,
+        responsePrefix: `¡Tenemos la medida ${sizeDisplay}m! Para precio de mayoreo un especialista te dará la cotización.`,
+        lastIntent: 'wholesale_handoff',
+        timingStyle: 'elaborate'
+      });
     }
 
     // Get the preferred link from onlineStoreLinks

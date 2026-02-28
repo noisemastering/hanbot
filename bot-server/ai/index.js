@@ -1107,6 +1107,17 @@ async function generateReply(userMessage, psid, referral = null) {
   }
   // ====== END CAMPAIGN CONTEXT ======
 
+  // ====== AUTO-FLAG WHOLESALE FROM AD/CAMPAIGN AUDIENCE ======
+  if (!convo.isWholesaleInquiry && campaign) {
+    // Check campaign audience (inherits: Ad > AdSet > Campaign)
+    const audienceType = sourceContext?.ad?.campaignAudience?.type || campaign.audience?.type;
+    if (audienceType === 'reseller') {
+      await updateConversation(psid, { isWholesaleInquiry: true });
+      convo.isWholesaleInquiry = true;
+      console.log(`🏪 Reseller audience detected from campaign "${campaign.name}" — marking as wholesale`);
+    }
+  }
+
   // ====== PRODUCT IDENTIFICATION & POI LOCK ======
   // Try to identify product from message content
   // This runs even if productInterest is already set (might be switching products)
