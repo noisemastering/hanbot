@@ -60,7 +60,8 @@ DATOS DE LA EMPRESA (usa estos para answer_question):
 - Borde separador: cinta plástica para delimitar jardín
 - Formas de pago: las que acepta Mercado Libre (tarjeta, transferencia, efectivo en OXXO, etc.)
 - La malla confeccionada NO incluye cuerda/lazo para instalar, se vende por separado
-- Fabricante directo (no revendedor)
+- Fabricante directo (no revendedor) — SÍ hacemos malla a la medida que el cliente necesite
+- Si preguntan si hacen medidas especiales/personalizadas/a la medida: SÍ, somos fabricantes y hacemos la malla a la medida
 
 CONTEXTO:
 - Flujo actual: ${flowType}

@@ -61,19 +61,17 @@ async function handleWarranty({ psid, convo }) {
  * Handle custom size query - "Hacen a medida exacta?", "Medidas personalizadas?"
  */
 async function handleCustomSize({ psid, convo }) {
-  const info = await getBusinessInfo();
-
   await updateConversation(psid, {
     lastIntent: "custom_size_query",
     unknownCount: 0
   });
 
-  const response = await generateBotResponse("custom_size_query", {
-    offersCustomSize: true,
-    convo
-  });
-
-  return { type: "text", text: response };
+  return {
+    type: "text",
+    text: `¡Sí! Somos fabricantes y hacemos la malla sombra a la medida que necesites.\n\n` +
+          `Tenemos medidas estándar listas para envío inmediato, y si necesitas una medida especial la fabricamos.\n\n` +
+          `¿Qué medida necesitas?`
+  };
 }
 
 /**

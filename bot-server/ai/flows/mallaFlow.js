@@ -1093,6 +1093,20 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
     }
   }
 
+  // Check if user is asking about custom sizes ("hacen la medida que necesita?", "a la medida?")
+  const customSizePattern = /\b(hacen|fabrican|tienen|manejan|pueden)\b.*(medida|tamaño).*(necesit|quier|pid|ocup|exact|personalizad|especial|cualquier)/i;
+  const customSizeAlt = /\b(a\s+la\s+medida|sobre\s*medida|cualquier\s*(medida|tamaño)|medidas?\s+(personalizad|especial|custom))\b/i;
+  if (userMessage && (customSizePattern.test(userMessage) || customSizeAlt.test(userMessage))) {
+    console.log(`📐 Custom size question detected in malla flow`);
+    await updateConversation(psid, { lastIntent: "custom_size_confirmed", unknownCount: 0 });
+    return {
+      type: "text",
+      text: `¡Sí! Somos fabricantes y hacemos la malla sombra a la medida que necesites.\n\n` +
+            `Tenemos medidas estándar listas para envío inmediato, y si necesitas una medida especial la fabricamos.\n\n` +
+            `¿Qué medida necesitas?`
+    };
+  }
+
   // Check if user is asking about price per meter (not a standard confeccionada query)
   const perMeterPattern = /\b(cu[aá]nto|precio|vale|cuesta)\s+(?:el\s+)?metro\b/i;
   if (userMessage && perMeterPattern.test(userMessage)) {

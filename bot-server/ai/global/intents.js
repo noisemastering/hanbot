@@ -2613,16 +2613,17 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   }
 
   // Handle custom size questions BEFORE generic measures
-  if (/\b(medidas?\s+(personalizad[ao]s?|especiales?|a\s+medida|custom)|pueden?\s+(hacer|fabricar|crear).*medida|venden?\s+(por|x)\s+medidas?)\b/i.test(msg)) {
+  if (/\b(medidas?\s+(personalizad[ao]s?|especiales?|a\s+medida|custom)|pueden?\s+(hacer|fabricar|crear).*medida|venden?\s+(por|x)\s+medidas?)\b/i.test(msg) ||
+      /\b(hacen|fabrican|tienen|manejan)\b.*(medida|tamaño).*(necesit|quier|pid|ocup|exact|personalizad|especial|cualquier)/i.test(msg) ||
+      /\b(cualquier|otra)\s*(medida|tamaño)\b/i.test(msg) ||
+      /\b(a\s+la\s+medida|sobre\s*medida)\b/i.test(msg) ||
+      /\b(hacen|fabrican)\s+(la|una|otra|cualquier)\s*(medida|otra)\b/i.test(msg)) {
     await updateConversation(psid, { lastIntent: "custom_sizes_question", unknownCount: 0 });
 
     return {
       type: "text",
-      text: `Sí, manejamos medidas estándar pero también fabricamos a la medida que necesites.\n\n` +
-            `Algunas de nuestras medidas estándar son:\n` +
-            `• 3x4m - $450\n` +
-            `• 4x6m - $650\n` +
-            `• 5x4m - $575\n\n` +
+      text: `¡Sí! Somos fabricantes y hacemos la malla sombra a la medida que necesites.\n\n` +
+            `Tenemos medidas estándar listas para envío inmediato, y si necesitas una medida especial la fabricamos.\n\n` +
             `¿Qué medida necesitas?`
     };
   }

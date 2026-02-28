@@ -323,6 +323,21 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     };
   }
 
+  // 4c) Custom size question — "hacen la medida que necesita?", "fabrican a medida?"
+  if (/\b(hacen|fabrican|tienen|manejan|pueden)\b.*(medida|tamaño|dimensi[oó]n).*(necesit|quier|pid|ocup|exact|personalizad|especial|cualquier)/i.test(clean) ||
+      /\b(medida|tamaño).*(personalizad|especial|exact|a\s+la\s+medida|custom|sobre\s*medida)\b/i.test(clean) ||
+      /\b(cualquier|otra)\s*(medida|tamaño|dimensi[oó]n)\b/i.test(clean) ||
+      /\b(a\s+la\s+medida|sobre\s*medida|a\s+medida)\b/i.test(clean) ||
+      /\b(hacen|fabrican)\s+(la|una|otra|cualquier)\s*(medida|otra)\b/i.test(clean)) {
+    await updateConversation(psid, { lastIntent: "custom_size_confirmed" });
+    return {
+      type: "text",
+      text: `¡Sí! Somos fabricantes y hacemos la malla sombra a la medida que necesites.\n\n` +
+            `Tenemos medidas estándar listas para envío inmediato, y si necesitas una medida especial la fabricamos.\n\n` +
+            `¿Qué medida necesitas? 😊`
+    };
+  }
+
   // 5) Mensajes de uso/contexto - expanded patterns
   if (/invernadero|jard[ií]n|cochera|estacionamiento|sombra|terraza|patio|vivero|cultivo|plantas?|casa|negocio|local|puesto|taco|comida|calle|afuera|exterior|tendido|toldo|techado|techo|cubrir|tapar/.test(clean)) {
     await updateConversation(psid, { lastIntent: "usage" });
