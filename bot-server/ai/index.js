@@ -470,7 +470,8 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
           const flowHandler = flowModule[handlerName];
 
           if (typeof flowHandler === "function") {
-            return await flowHandler(cleanMsg, psid, convo, campaign);
+            const campaignResponse = await flowHandler(cleanMsg, psid, convo, campaign);
+            if (campaignResponse) return campaignResponse;
           }
         } catch (err) {
           console.warn(`⚠️ No se encontró flujo dinámico para la campaña:`, err.message);

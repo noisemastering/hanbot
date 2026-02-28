@@ -269,19 +269,10 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
       };
     }
 
-    // 2b) Si no existe exacta → sugerir lo más cercano (abajo/arriba)
-    const { lower, upper } = findClosestUpDown(variants, requested);
-    await updateConversation(psid, { lastIntent: "size_suggested" });
-
-    // Construir respuesta con links para sugerencias
-    let suggestions = "No tengo exactamente esa medida, pero lo más cercano es:\n";
-    if (lower) suggestions += `${await variantLine(lower, true, psid, convo)}\n`;
-    if (upper) suggestions += `${await variantLine(upper, true, psid, convo)}\n`;
-
-    // Ofrecer confección a la medida
-    suggestions += `\nTambién puedo confeccionarla a la medida. ¿Te interesa alguna de estas o prefieres a la medida?`;
-
-    return { type: "text", text: suggestions };
+    // 2b) No exact campaign variant — fall through to mallaFlow which has the full product catalog
+    // Campaign variants are a subset; the product may exist in ProductFamily
+    console.log(`📏 Campaign: no exact variant for ${requested.w}x${requested.h}m, deferring to mallaFlow`);
+    return null;
   }
 
   // 3) Mensajes tipo precio (only if no dimension was detected)

@@ -11,19 +11,34 @@ const { getOrders } = require('../utils/mercadoLibreOrders');
 // GET /analytics - Get analytics data
 router.get('/', async (req, res) => {
   try {
+    const { dateFrom, dateTo } = req.query;
+
+    // Build date filter
+    const dateFilter = {};
+    if (dateFrom) dateFilter.$gte = new Date(dateFrom);
+    if (dateTo) dateFilter.$lte = new Date(dateTo);
+    const hasDateFilter = Object.keys(dateFilter).length > 0;
+
+    // Message date query (uses timestamp or createdAt)
+    const msgDateQuery = hasDateFilter
+      ? { $or: [{ timestamp: dateFilter }, { createdAt: dateFilter }] }
+      : {};
+
     // Total messages
-    const totalMessages = await Message.countDocuments();
+    const totalMessages = await Message.countDocuments(msgDateQuery);
 
     // Total unique users
-    const uniqueUsers = await Message.distinct('psid');
+    const uniqueUsers = await Message.distinct('psid', msgDateQuery);
     const totalUsers = uniqueUsers.length;
 
     // Bot response rate
-    const botMessages = await Message.countDocuments({ senderType: 'bot' });
+    const botMessages = await Message.countDocuments({ senderType: 'bot', ...msgDateQuery });
     const botResponseRate = totalMessages > 0 ? ((botMessages / totalMessages) * 100).toFixed(1) : 0;
 
     // Unanswered (conversations in pending state or with human_handoff intent)
+    const convoDateQuery = hasDateFilter ? { lastMessageAt: dateFilter } : {};
     const unanswered = await Conversation.countDocuments({
+      ...convoDateQuery,
       $or: [
         { state: 'pending' },
         { lastIntent: 'human_handoff' },
@@ -31,19 +46,24 @@ router.get('/', async (req, res) => {
       ]
     });
 
-    // Activity per day (last 7 days)
-    const sevenDaysAgo = new Date();
-    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+    // Activity per day (use selected range, fall back to 7 days)
+    const rangeStart = hasDateFilter ? dateFilter.$gte : (() => {
+      const d = new Date(); d.setDate(d.getDate() - 7); return d;
+    })();
+
+    const activityMatch = { $or: [
+      { timestamp: { $gte: rangeStart } },
+      { createdAt: { $gte: rangeStart } }
+    ]};
+    if (hasDateFilter && dateFilter.$lte) {
+      activityMatch.$or = [
+        { timestamp: { $gte: rangeStart, $lte: dateFilter.$lte } },
+        { createdAt: { $gte: rangeStart, $lte: dateFilter.$lte } }
+      ];
+    }
 
     const activityData = await Message.aggregate([
-      {
-        $match: {
-          $or: [
-            { timestamp: { $gte: sevenDaysAgo } },
-            { createdAt: { $gte: sevenDaysAgo } }
-          ]
-        }
-      },
+      { $match: activityMatch },
       {
         $group: {
           _id: {
@@ -62,7 +82,8 @@ router.get('/', async (req, res) => {
     const topRegionData = await Conversation.aggregate([
       {
         $match: {
-          stateMx: { $type: 'string', $ne: '' }
+          stateMx: { $type: 'string', $ne: '' },
+          ...(hasDateFilter ? { lastMessageAt: dateFilter } : {})
         }
       },
       {
@@ -791,11 +812,17 @@ router.post('/migrate-correlations', async (req, res) => {
 // GET /analytics/top-products - Get top selling products through ads
 router.get('/top-products', async (req, res) => {
   try {
+    const { dateFrom, dateTo } = req.query;
+    const dateMatch = {};
+    if (dateFrom) dateMatch.$gte = new Date(dateFrom);
+    if (dateTo) dateMatch.$lte = new Date(dateTo);
+
     const result = await ClickLog.aggregate([
       {
         $match: {
           converted: true,
-          productName: { $exists: true, $ne: null, $ne: '' }
+          productName: { $exists: true, $ne: null, $ne: '' },
+          ...(Object.keys(dateMatch).length > 0 ? { convertedAt: dateMatch } : {})
         }
       },
       {
@@ -874,12 +901,19 @@ router.get('/ad-metrics', async (req, res) => {
 // GET /analytics/top-region - Get most active region by conversations
 router.get('/top-region', async (req, res) => {
   try {
+    const { dateFrom, dateTo } = req.query;
+    const dateMatch = {};
+    if (dateFrom) dateMatch.$gte = new Date(dateFrom);
+    if (dateTo) dateMatch.$lte = new Date(dateTo);
+    const hasDateFilter = Object.keys(dateMatch).length > 0;
+
     // Aggregate conversations by stateMx (state in Mexico)
     // Only count conversations with actual state data
     const regionStats = await Conversation.aggregate([
       {
         $match: {
-          stateMx: { $type: 'string', $ne: '' }
+          stateMx: { $type: 'string', $ne: '' },
+          ...(hasDateFilter ? { lastMessageAt: dateMatch } : {})
         }
       },
       {
@@ -900,7 +934,8 @@ router.get('/top-region', async (req, res) => {
     const topCities = await Conversation.aggregate([
       {
         $match: {
-          city: { $type: 'string', $ne: '' }
+          city: { $type: 'string', $ne: '' },
+          ...(hasDateFilter ? { lastMessageAt: dateMatch } : {})
         }
       },
       {
@@ -916,9 +951,12 @@ router.get('/top-region', async (req, res) => {
 
     // Count conversations with/without location data
     const totalWithState = await Conversation.countDocuments({
-      stateMx: { $type: 'string', $ne: '' }
+      stateMx: { $type: 'string', $ne: '' },
+      ...(hasDateFilter ? { lastMessageAt: dateMatch } : {})
     });
-    const totalConversations = await Conversation.countDocuments();
+    const totalConversations = await Conversation.countDocuments(
+      hasDateFilter ? { lastMessageAt: dateMatch } : {}
+    );
 
     res.json({
       success: true,

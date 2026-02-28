@@ -71,11 +71,11 @@ function Home() {
 
       const [analyticsRes, convRes, clicksRes, productsRes, regionsRes, adsRes] =
         await Promise.all([
-          API.get("/analytics/"),
+          API.get(`/analytics/?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
           API.get(`/analytics/conversions?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
           API.get(`/click-logs/daily?startDate=${dateFrom}&endDate=${dateTo}`),
-          API.get("/analytics/top-products"),
-          API.get("/analytics/top-region"),
+          API.get(`/analytics/top-products?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
+          API.get(`/analytics/top-region?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
           API.get(`/analytics/clicks-by-ad?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         ]);
 
