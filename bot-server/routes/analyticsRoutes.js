@@ -977,6 +977,8 @@ router.get('/clicks-by-ad', async (req, res) => {
 
     // Get ad details for the top ads (adId in ClickLog is the Facebook Ad ID = fbAdId)
     const Ad = require('../models/Ad');
+    const Campaign = require('../models/Campaign');
+    const Conversation = require('../models/Conversation');
     const mongoose = require('mongoose');
     const fbAdIds = clickStats.map(s => s._id);
 
@@ -989,13 +991,37 @@ router.get('/clicks-by-ad', async (req, res) => {
       ]
     }).lean();
 
+    // For unmatched ads, try to get campaign name via conversations
+    const unmatchedIds = fbAdIds.filter(id => !ads.find(a => a.fbAdId === id || a._id?.toString() === id));
+    const campaignNamesByAdId = {};
+    if (unmatchedIds.length > 0) {
+      const convos = await Conversation.find(
+        { adId: { $in: unmatchedIds }, campaignRef: { $ne: null } },
+        { adId: 1, campaignRef: 1 }
+      ).lean();
+      const campaignRefs = [...new Set(convos.map(c => c.campaignRef).filter(Boolean))];
+      if (campaignRefs.length > 0) {
+        const campaigns = await Campaign.find(
+          { ref: { $in: campaignRefs } },
+          { ref: 1, name: 1 }
+        ).lean();
+        for (const c of convos) {
+          if (!campaignNamesByAdId[c.adId]) {
+            const camp = campaigns.find(cm => cm.ref === c.campaignRef);
+            if (camp) campaignNamesByAdId[c.adId] = camp.name;
+          }
+        }
+      }
+    }
+
     // Merge ad details with click stats
     const result = clickStats.map(stat => {
       const ad = ads.find(a => a.fbAdId === stat._id || a._id?.toString() === stat._id);
+      const name = ad?.name || campaignNamesByAdId[stat._id] || 'Anuncio no registrado';
       return {
         adId: stat._id,
         mongoId: ad?._id,
-        name: ad?.name || `Ad …${(stat._id || '').slice(-6)}`,
+        name,
         clicks: stat.clicks,
         conversions: stat.conversions,
         conversionRate: stat.clicks > 0 ? ((stat.conversions / stat.clicks) * 100).toFixed(1) : 0
