@@ -1710,9 +1710,8 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       const sizeDisplay = userExpressedSize || `${width}x${height}`;
       await updateConversation(psid, { lastIntent: "size_confirmed", unknownCount: 0 });
 
-      // Wholesale context — only hand off if customer explicitly asks for wholesale pricing
-      if (convo?.isWholesaleInquiry && userMessage &&
-          /\b(mayoreo|mayorist|distribui|revend|precio.*mayoreo|mayoreo.*precio)\b/i.test(userMessage)) {
+      // Wholesale context — don't use retail language
+      if (convo?.isWholesaleInquiry) {
         const { executeHandoff } = require('../utils/executeHandoff');
         return await executeHandoff(psid, convo, userMessage, {
           reason: `Mayoreo: cliente confirma ${sizeDisplay}m a $${product.price} — cotizar precio de mayoreo`,
@@ -1750,12 +1749,10 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       }
     }
 
-    // Wholesale context — only hand off if customer explicitly mentioned wholesale
-    // Auto-flagged isWholesaleInquiry from ad audience should NOT block retail quoting
-    if (convo?.isWholesaleInquiry && userMessage &&
-        /\b(mayoreo|mayorist|distribui|revend|precio.*mayoreo|mayoreo.*precio)\b/i.test(userMessage)) {
+    // Wholesale context — hand off for wholesale pricing instead of retail quote
+    if (convo?.isWholesaleInquiry) {
       const sizeDisplay = userExpressedSize || `${width}x${height}`;
-      console.log(`🏪 Wholesale inquiry — explicit wholesale language, handing off ${sizeDisplay}m`);
+      console.log(`🏪 Wholesale inquiry — handing off ${sizeDisplay}m for wholesale pricing`);
       const { executeHandoff: execHandoffW } = require('../utils/executeHandoff');
       return await execHandoffW(psid, convo, userMessage, {
         reason: `Mayoreo: cliente pregunta por ${sizeDisplay}m — cotizar precio de mayoreo`,
