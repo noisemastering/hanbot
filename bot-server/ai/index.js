@@ -540,12 +540,14 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
       console.log("✅ Mensaje entendido, contador de clarificación reiniciado");
     }
 
-    // 📎 MULTI-QUESTION: only use splitter when there's NO product flow context
-    // When a flow is active (from ad, product interest, etc.), let the flow handle everything
-    const hasFlowContext = (convo.currentFlow && convo.currentFlow !== 'default') ||
-                           convo.adFlowRef || convo.productInterest || convo.adProductIds?.length;
-    if (classification.intent === INTENTS.MULTI_QUESTION && !hasFlowContext) {
-      console.log(`📎 Multi-question detected (no flow context), using AI splitter`);
+    // 📎 MULTI-QUESTION: use AI splitter for multi-part messages
+    const mqClassified = classification.intent === INTENTS.MULTI_QUESTION;
+    const mqHasDims = /\d+(?:\.\d+)?\s*(?:[xX×*]|(?:metros?\s*)?por)\s*\d+/i.test(cleanMsg);
+    const mqHasSecondary = /\b(env[ií][oa]s?|hacen\s+env[ií]os?|entrega[ns]?|d[oó]nde\s+est[aá]n|ubicaci[oó]n|forma\s+de\s+pago|c[oó]mo\s+pago|contra\s*entrega|cu[aá]nto\s+tarda|tiempo\s+de\s+entrega|instala[nr]?|garant[ií]a|impermeable)\b/i.test(cleanMsg);
+    const mqLooksMulti = mqHasDims && mqHasSecondary;
+
+    if (mqClassified || mqLooksMulti) {
+      console.log(`📎 Multi-question detected (${mqClassified ? 'classifier' : 'heuristic'}), using AI splitter`);
       const { handleMultiQuestion } = require("./utils/multiQuestionHandler");
       const mqResponse = await handleMultiQuestion(
         userMessage, psid, convo, sourceContext, campaign, campaignContext
@@ -554,8 +556,6 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
         return await checkForRepetition(mqResponse, psid, convo);
       }
       console.log(`📎 Multi-question splitter returned null, continuing normal pipeline`);
-    } else if (classification.intent === INTENTS.MULTI_QUESTION && hasFlowContext) {
-      console.log(`📎 Multi-question detected but flow context exists (${convo.currentFlow || convo.adFlowRef || convo.productInterest}), letting flow handle it`);
     }
 
     // 🤖 AI-POWERED INTENT CLASSIFICATION
@@ -1253,10 +1253,18 @@ async function generateReply(userMessage, psid, referral = null) {
   // ====== END INTENT DB HANDLING ======
 
   // ====== MULTI-QUESTION HANDLER ======
-  // Only use multi-question splitter when there's no product flow context
-  const hasFlowContextLate = (convo.currentFlow && convo.currentFlow !== 'default') ||
-                             convo.adFlowRef || convo.productInterest || convo.adProductIds?.length;
-  if (classification.intent === INTENTS.MULTI_QUESTION && !hasFlowContextLate) {
+  // Detect multi-question messages from classifier OR heuristics
+  const isClassifiedMultiQuestion = classification.intent === INTENTS.MULTI_QUESTION;
+
+  // Heuristic: product dimensions + distinct logistics/FAQ sub-questions in same message
+  const mqHasDimensions = /\d+(?:\.\d+)?\s*(?:[xX×*]|(?:metros?\s*)?por)\s*\d+/i.test(userMessage);
+  const mqHasSecondaryQuestion = /\b(env[ií][oa]s?|hacen\s+env[ií]os?|entrega[ns]?|d[oó]nde\s+est[aá]n|ubicaci[oó]n|forma\s+de\s+pago|c[oó]mo\s+pago|pago\s+contra|contra\s*entrega|cu[aá]nto\s+tarda|tiempo\s+de\s+entrega|instala[nr]?|garant[ií]a|impermeable)\b/i.test(userMessage);
+  const looksMultiQuestion = mqHasDimensions && mqHasSecondaryQuestion;
+
+  if (isClassifiedMultiQuestion || looksMultiQuestion) {
+    if (looksMultiQuestion && !isClassifiedMultiQuestion) {
+      console.log(`📎 Heuristic multi-question: dimensions + secondary question detected`);
+    }
     const { handleMultiQuestion } = require("./utils/multiQuestionHandler");
     const mqResponse = await handleMultiQuestion(
       userMessage, psid, convo, sourceContext, campaign, campaignContext
