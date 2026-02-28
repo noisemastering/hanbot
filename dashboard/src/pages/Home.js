@@ -85,7 +85,9 @@ function Home() {
       setTopProducts((productsRes.data?.allProducts || []).slice(0, 5));
       setTopRegions((regionsRes.data?.allRegions || []).slice(0, 5));
       setAdData(
-        (adsRes.data?.allAds || []).sort((a, b) => (b.clicks || 0) - (a.clicks || 0))
+        (adsRes.data?.allAds || [])
+          .sort((a, b) => (b.clicks || 0) - (a.clicks || 0))
+          .slice(0, 3)
       );
     } catch (err) {
       console.error("Error fetching dashboard data:", err);
@@ -445,41 +447,22 @@ function Home() {
         </div>
       </div>
 
-      {/* Row 5: Ad Performance Table */}
+      {/* Row 5: Top Ads */}
       {adData.length > 0 && (
         <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-700/50">
             <h2 className="text-lg font-semibold text-white">{t("home.adPerformance")}</h2>
           </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-900/50">
-                <tr className="text-left text-xs text-gray-400 uppercase">
-                  <th className="px-6 py-3">{t("home.adName")}</th>
-                  <th className="px-6 py-3 text-right">{t("home.adClicks")}</th>
-                  <th className="px-6 py-3 text-right">{t("home.adConversions")}</th>
-                  <th className="px-6 py-3 text-right">{t("home.convRate")}</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-700/50">
-                {adData.map((ad) => (
-                  <tr key={ad.adId} className="hover:bg-gray-700/20">
-                    <td className="px-6 py-3 text-sm text-white">
-                      {ad.name || ad.adId}
-                    </td>
-                    <td className="px-6 py-3 text-sm text-gray-300 text-right">
-                      {(ad.clicks || 0).toLocaleString()}
-                    </td>
-                    <td className="px-6 py-3 text-sm text-green-400 text-right">
-                      {ad.conversions || 0}
-                    </td>
-                    <td className="px-6 py-3 text-sm text-gray-300 text-right">
-                      {ad.conversionRate || 0}%
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+          <div className="divide-y divide-gray-700/50">
+            {adData.map((ad) => (
+              <div key={ad.adId} className="px-6 py-3 flex items-center justify-between hover:bg-gray-700/20">
+                <span className="text-sm text-white truncate mr-4">{ad.name || ad.adId}</span>
+                <div className="flex items-center gap-4 shrink-0">
+                  <span className="text-sm text-gray-300">{(ad.clicks || 0).toLocaleString()} {t("home.adClicks").toLowerCase()}</span>
+                  <span className="text-sm text-green-400">{ad.conversions || 0} conv.</span>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
