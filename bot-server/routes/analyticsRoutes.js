@@ -955,12 +955,19 @@ router.get('/top-region', async (req, res) => {
 // GET /analytics/clicks-by-ad - Get click stats aggregated by ad
 router.get('/clicks-by-ad', async (req, res) => {
   try {
+    // Date filtering
+    const { dateFrom, dateTo } = req.query;
+    const dateMatch = {};
+    if (dateFrom) dateMatch.$gte = new Date(dateFrom);
+    if (dateTo) dateMatch.$lte = new Date(dateTo);
+
     // Aggregate clicks from ClickLog grouped by adId
     const clickStats = await ClickLog.aggregate([
       {
         $match: {
           adId: { $ne: null },
-          clicked: true
+          clicked: true,
+          ...(Object.keys(dateMatch).length > 0 ? { clickedAt: dateMatch } : {})
         }
       },
       {

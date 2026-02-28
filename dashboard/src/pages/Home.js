@@ -76,7 +76,7 @@ function Home() {
           API.get(`/click-logs/daily?startDate=${dateFrom}&endDate=${dateTo}`),
           API.get("/analytics/top-products"),
           API.get("/analytics/top-region"),
-          API.get("/analytics/clicks-by-ad"),
+          API.get(`/analytics/clicks-by-ad?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         ]);
 
       setAnalytics(analyticsRes.data);
