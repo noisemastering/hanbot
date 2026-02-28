@@ -1292,7 +1292,17 @@ async function generateReply(userMessage, psid, referral = null) {
     console.log(`🤔 Low confidence (${classification.confidence}) / unclear — skipping dispatcher, will try flow manager then AI fallback`);
   }
 
-  const shouldDispatch = !isLowConfidence && (!convo?.pendingHandoff || INFORMATIONAL_INTENTS.has(classification?.intent));
+  // Skip logistics intents when message has product keywords + dimensions
+  // Let the flow manager handle the full product request (including shipping/payment sub-questions)
+  const LOGISTICS_INTENTS_SKIP = new Set(['shipping_query', 'location_query', 'delivery_time_query', 'shipping_included_query', 'payment_query']);
+  const hasProductWithDimensions = /\b(rollo|malla|sombra|borde|groundcover|monofilamento)\b/i.test(userMessage) &&
+    /\d+(?:\.\d+)?\s*(?:[xX×*]|(?:metros?\s*)?por)\s*\d+/i.test(userMessage);
+  const skipForProduct = hasProductWithDimensions && LOGISTICS_INTENTS_SKIP.has(classification?.intent);
+  if (skipForProduct) {
+    console.log(`📦 Product + dimensions detected with ${classification.intent} — skipping dispatcher, letting flow manager handle`);
+  }
+
+  const shouldDispatch = !isLowConfidence && !skipForProduct && (!convo?.pendingHandoff || INFORMATIONAL_INTENTS.has(classification?.intent));
 
   if (shouldDispatch) {
     const dispatcherResponse = await dispatchToHandler(classification, {
