@@ -977,7 +977,6 @@ router.get('/clicks-by-ad', async (req, res) => {
 
     // Get ad details for the top ads (adId in ClickLog is the Facebook Ad ID = fbAdId)
     const Ad = require('../models/Ad');
-    const Campaign = require('../models/Campaign');
     const Conversation = require('../models/Conversation');
     const mongoose = require('mongoose');
     const fbAdIds = clickStats.map(s => s._id);
@@ -991,25 +990,25 @@ router.get('/clicks-by-ad', async (req, res) => {
       ]
     }).lean();
 
-    // For unmatched ads, try to get campaign name via conversations
+    // For unmatched ads, try to resolve a name via conversations + Ad→AdSet→Campaign chain
     const unmatchedIds = fbAdIds.filter(id => !ads.find(a => a.fbAdId === id || a._id?.toString() === id));
-    const campaignNamesByAdId = {};
+    const namesByAdId = {};
     if (unmatchedIds.length > 0) {
+      // Get one conversation per unmatched adId to read its campaignRef
       const convos = await Conversation.find(
         { adId: { $in: unmatchedIds }, campaignRef: { $ne: null } },
         { adId: 1, campaignRef: 1 }
       ).lean();
-      const campaignRefs = [...new Set(convos.map(c => c.campaignRef).filter(Boolean))];
-      if (campaignRefs.length > 0) {
-        const campaigns = await Campaign.find(
-          { ref: { $in: campaignRefs } },
-          { ref: 1, name: 1 }
-        ).lean();
-        for (const c of convos) {
-          if (!campaignNamesByAdId[c.adId]) {
-            const camp = campaigns.find(cm => cm.ref === c.campaignRef);
-            if (camp) campaignNamesByAdId[c.adId] = camp.name;
-          }
+
+      for (const c of convos) {
+        if (!namesByAdId[c.adId] && c.campaignRef) {
+          // Format the handler key into a readable name
+          // e.g. "hanlob_confeccionada_general_oct25" → "Confeccionada General Oct25"
+          const readable = c.campaignRef
+            .replace(/^hanlob_/, '')
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, l => l.toUpperCase());
+          namesByAdId[c.adId] = readable;
         }
       }
     }
@@ -1017,7 +1016,7 @@ router.get('/clicks-by-ad', async (req, res) => {
     // Merge ad details with click stats
     const result = clickStats.map(stat => {
       const ad = ads.find(a => a.fbAdId === stat._id || a._id?.toString() === stat._id);
-      const name = ad?.name || campaignNamesByAdId[stat._id] || 'Anuncio no registrado';
+      const name = ad?.name || namesByAdId[stat._id] || 'Anuncio no registrado';
       return {
         adId: stat._id,
         mongoId: ad?._id,
