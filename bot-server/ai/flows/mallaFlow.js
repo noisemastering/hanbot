@@ -1122,6 +1122,41 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
     };
   }
 
+  // Check if user is asking about wholesale QUALIFICATION (e.g. "3 ya es mayoreo?")
+  // Answer directly with the minimum instead of handing off
+  if (userMessage && /\b(mayoreo|mayorist)\b/i.test(userMessage) && convo?.lastSharedProductId) {
+    const qtyMatch = userMessage.match(/\b(\d+)\s*(?:piezas?|unidades?|mallas?)?\b/i);
+    try {
+      const quotedProduct = await ProductFamily.findById(convo.lastSharedProductId).lean();
+      if (quotedProduct?.wholesaleMinQty) {
+        const minQty = quotedProduct.wholesaleMinQty;
+        if (qtyMatch) {
+          const requestedQty = parseInt(qtyMatch[1]);
+          if (requestedQty < minQty) {
+            console.log(`📦 Wholesale min clarification: ${requestedQty} < ${minQty}`);
+            await updateConversation(psid, { lastIntent: "wholesale_min_clarified", unknownCount: 0 });
+            return {
+              type: "text",
+              text: `El precio de mayoreo es a partir de ${minQty} piezas de la misma medida. Con ${requestedQty} piezas aplica el precio normal de ${formatMoney(quotedProduct.price)} cada una.\n\n¿Te gustaría ordenar las ${requestedQty} piezas al precio normal?`
+            };
+          }
+          // Quantity meets minimum — hand off for wholesale pricing
+        }
+        // No quantity mentioned — just asking about wholesale, reiterate the minimum
+        if (!qtyMatch) {
+          console.log(`📦 Wholesale min reiteration: min is ${minQty}`);
+          await updateConversation(psid, { lastIntent: "wholesale_min_clarified", unknownCount: 0 });
+          return {
+            type: "text",
+            text: `El precio de mayoreo es a partir de ${minQty} piezas de la misma medida. ¿Cuántas piezas necesitas?`
+          };
+        }
+      }
+    } catch (err) {
+      console.error("Error checking wholesale min:", err.message);
+    }
+  }
+
   // Check if user is asking about wholesale/distributor
   const distributorPattern = /\b(distribuid|mayorist|revend|mayoreo|distribuc|publicidad.*distribui)\b/i;
   if (userMessage && distributorPattern.test(userMessage)) {
@@ -1326,6 +1361,37 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
  */
 async function handleComplete(intent, state, sourceContext, psid, convo, userMessage = '') {
   const { width, height, percentage, color, quantity, userExpressedSize, concerns, convertedFromFeet, originalFeetStr } = state;
+
+  // ====== WHOLESALE MINIMUM CLARIFICATION ======
+  // If customer asks about wholesale and we just quoted a product, answer with the minimum
+  if (userMessage && /\b(mayoreo|mayorist)\b/i.test(userMessage) && convo?.lastSharedProductId) {
+    try {
+      const quotedProd = await ProductFamily.findById(convo.lastSharedProductId).lean();
+      if (quotedProd?.wholesaleMinQty) {
+        const minQty = quotedProd.wholesaleMinQty;
+        const qtyM = userMessage.match(/\b(\d+)\s*(?:piezas?|unidades?|mallas?)?\b/i);
+        if (qtyM) {
+          const reqQty = parseInt(qtyM[1]);
+          if (reqQty < minQty) {
+            console.log(`📦 handleComplete: wholesale min clarification ${reqQty} < ${minQty}`);
+            await updateConversation(psid, { lastIntent: "wholesale_min_clarified", unknownCount: 0 });
+            return {
+              type: "text",
+              text: `El precio de mayoreo es a partir de ${minQty} piezas de la misma medida. Con ${reqQty} piezas aplica el precio normal de ${formatMoney(quotedProd.price)} cada una.\n\n¿Te gustaría ordenar las ${reqQty} piezas al precio normal?`
+            };
+          }
+        } else {
+          await updateConversation(psid, { lastIntent: "wholesale_min_clarified", unknownCount: 0 });
+          return {
+            type: "text",
+            text: `El precio de mayoreo es a partir de ${minQty} piezas de la misma medida. ¿Cuántas piezas necesitas?`
+          };
+        }
+      }
+    } catch (err) {
+      console.error("Error checking wholesale min in handleComplete:", err.message);
+    }
+  }
 
   // ====== GENERAL QUESTIONS GUARD ======
   // If the customer is asking a general question (not about dimensions/pricing),
