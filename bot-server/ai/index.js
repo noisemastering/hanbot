@@ -541,13 +541,21 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
     }
 
     // 📎 MULTI-QUESTION: use AI splitter for multi-part messages
-    const mqClassified = classification.intent === INTENTS.MULTI_QUESTION;
-    const mqHasDims = /\d+(?:\.\d+)?\s*(?:[xX×*]|(?:metros?\s*)?por)\s*\d+/i.test(cleanMsg);
-    const mqHasSecondary = /\b(env[ií][oa]s?|hacen\s+env[ií]os?|entrega[ns]?|d[oó]nde\s+est[aá]n|ubicaci[oó]n|forma\s+de\s+pago|c[oó]mo\s+pago|contra\s*entrega|cu[aá]nto\s+tarda|tiempo\s+de\s+entrega|instala[nr]?|garant[ií]a|impermeable)\b/i.test(cleanMsg);
-    const mqLooksMulti = mqHasDims && mqHasSecondary;
+    // Always available — flow context doesn't matter.
+    const mqIsMulti = classification.intent === INTENTS.MULTI_QUESTION ||
+      (cleanMsg.match(/\?/g) || []).length >= 2 ||
+      [
+        /\b(precio|cu[aá]nto|cuesta|vale|costo)\b/i,
+        /\b(env[ií][oa]s?|entrega|hacen\s+env[ií]os?)\b/i,
+        /\b(pago|forma\s+de\s+pago|tarjeta|contra\s*entrega)\b/i,
+        /\b(d[oó]nde\s+est[aá]n|ubicaci[oó]n|direcci[oó]n)\b/i,
+        /\b(instala|garant[ií]a|impermeable|material|durabilidad)\b/i,
+        /\b(cu[aá]nto\s+tarda|tiempo\s+de\s+entrega)\b/i,
+        /\d+(?:\.\d+)?\s*(?:[xX×*]|(?:metros?\s*)?por)\s*\d+/i,
+      ].filter(p => p.test(cleanMsg)).length >= 3;
 
-    if (mqClassified || mqLooksMulti) {
-      console.log(`📎 Multi-question detected (${mqClassified ? 'classifier' : 'heuristic'}), using AI splitter`);
+    if (mqIsMulti) {
+      console.log(`📎 Multi-question detected (${classification.intent === INTENTS.MULTI_QUESTION ? 'classifier' : 'heuristic'}), using AI splitter`);
       const { handleMultiQuestion } = require("./utils/multiQuestionHandler");
       const mqResponse = await handleMultiQuestion(
         userMessage, psid, convo, sourceContext, campaign, campaignContext
@@ -1253,18 +1261,22 @@ async function generateReply(userMessage, psid, referral = null) {
   // ====== END INTENT DB HANDLING ======
 
   // ====== MULTI-QUESTION HANDLER ======
-  // Detect multi-question messages from classifier OR heuristics
-  const isClassifiedMultiQuestion = classification.intent === INTENTS.MULTI_QUESTION;
+  // Always available — flow context doesn't matter.
+  // The AI splitter self-gates: returns null for single questions.
+  const isMultiQuestion = classification.intent === INTENTS.MULTI_QUESTION ||
+    (userMessage.match(/\?/g) || []).length >= 2 ||
+    [
+      /\b(precio|cu[aá]nto|cuesta|vale|costo)\b/i,
+      /\b(env[ií][oa]s?|entrega|hacen\s+env[ií]os?)\b/i,
+      /\b(pago|forma\s+de\s+pago|tarjeta|contra\s*entrega)\b/i,
+      /\b(d[oó]nde\s+est[aá]n|ubicaci[oó]n|direcci[oó]n)\b/i,
+      /\b(instala|garant[ií]a|impermeable|material|durabilidad)\b/i,
+      /\b(cu[aá]nto\s+tarda|tiempo\s+de\s+entrega)\b/i,
+      /\d+(?:\.\d+)?\s*(?:[xX×*]|(?:metros?\s*)?por)\s*\d+/i,
+    ].filter(p => p.test(userMessage)).length >= 3;
 
-  // Heuristic: product dimensions + distinct logistics/FAQ sub-questions in same message
-  const mqHasDimensions = /\d+(?:\.\d+)?\s*(?:[xX×*]|(?:metros?\s*)?por)\s*\d+/i.test(userMessage);
-  const mqHasSecondaryQuestion = /\b(env[ií][oa]s?|hacen\s+env[ií]os?|entrega[ns]?|d[oó]nde\s+est[aá]n|ubicaci[oó]n|forma\s+de\s+pago|c[oó]mo\s+pago|pago\s+contra|contra\s*entrega|cu[aá]nto\s+tarda|tiempo\s+de\s+entrega|instala[nr]?|garant[ií]a|impermeable)\b/i.test(userMessage);
-  const looksMultiQuestion = mqHasDimensions && mqHasSecondaryQuestion;
-
-  if (isClassifiedMultiQuestion || looksMultiQuestion) {
-    if (looksMultiQuestion && !isClassifiedMultiQuestion) {
-      console.log(`📎 Heuristic multi-question: dimensions + secondary question detected`);
-    }
+  if (isMultiQuestion) {
+    console.log(`📎 Multi-question detected (${classification.intent === INTENTS.MULTI_QUESTION ? 'classifier' : 'heuristic'}), using AI splitter`);
     const { handleMultiQuestion } = require("./utils/multiQuestionHandler");
     const mqResponse = await handleMultiQuestion(
       userMessage, psid, convo, sourceContext, campaign, campaignContext
@@ -1272,7 +1284,6 @@ async function generateReply(userMessage, psid, referral = null) {
     if (mqResponse) {
       return await checkForRepetition(mqResponse, psid, convo);
     }
-    // If handler returns null, fall through to normal pipeline
   }
   // ====== END MULTI-QUESTION HANDLER ======
 
