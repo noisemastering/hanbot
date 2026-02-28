@@ -977,16 +977,25 @@ router.get('/clicks-by-ad', async (req, res) => {
 
     // Get ad details for the top ads (adId in ClickLog is the Facebook Ad ID = fbAdId)
     const Ad = require('../models/Ad');
+    const mongoose = require('mongoose');
     const fbAdIds = clickStats.map(s => s._id);
-    const ads = await Ad.find({ fbAdId: { $in: fbAdIds } }).lean();
+
+    // Try matching by fbAdId first, then by _id as fallback
+    const mongoIds = fbAdIds.filter(id => mongoose.Types.ObjectId.isValid(id));
+    const ads = await Ad.find({
+      $or: [
+        { fbAdId: { $in: fbAdIds } },
+        ...(mongoIds.length > 0 ? [{ _id: { $in: mongoIds } }] : [])
+      ]
+    }).lean();
 
     // Merge ad details with click stats
     const result = clickStats.map(stat => {
-      const ad = ads.find(a => a.fbAdId === stat._id);
+      const ad = ads.find(a => a.fbAdId === stat._id || a._id?.toString() === stat._id);
       return {
         adId: stat._id,
         mongoId: ad?._id,
-        name: ad?.name || 'Unknown Ad',
+        name: ad?.name || `Ad …${(stat._id || '').slice(-6)}`,
         clicks: stat.clicks,
         conversions: stat.conversions,
         conversionRate: stat.clicks > 0 ? ((stat.conversions / stat.clicks) * 100).toFixed(1) : 0

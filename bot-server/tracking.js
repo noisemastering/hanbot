@@ -1,5 +1,6 @@
 const { randomUUID } = require('crypto');
 const ClickLog = require('./models/ClickLog');
+const Conversation = require('./models/Conversation');
 
 /**
  * Extract ML Item ID from a Mercado Libre URL
@@ -34,6 +35,21 @@ async function generateClickLink(psid, originalUrl, options = {}) {
 
   // Extract ML Item ID from URL for exact matching
   const mlItemId = extractMLItemId(originalUrl);
+
+  // Auto-populate adId and campaignId from conversation if not provided
+  if (psid && (!options.adId || !options.campaignId)) {
+    try {
+      const convo = await Conversation.findOne({ psid })
+        .select('adId campaignRef')
+        .lean();
+      if (convo) {
+        if (!options.adId && convo.adId) options.adId = convo.adId;
+        if (!options.campaignId && convo.campaignRef) options.campaignId = convo.campaignRef;
+      }
+    } catch (err) {
+      // Non-critical — continue without attribution
+    }
+  }
 
   const clickLog = new ClickLog({
     clickId,
