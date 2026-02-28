@@ -144,7 +144,7 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
 
   // 1) Entrada a campaña — only greet if user didn't ask something specific
   if (convo.lastIntent === "campaign_entry" || convo.lastIntent === null) {
-    const hasQuestion = /\b(precio|cu[aá]nto|cuesta|vale|costo|medida|tamaño|dimensi|metro|env[ií]o|entrega|impermeable|instala|garant|durabilidad|color|pago|compra|d[oó]nde|ubicaci[oó]n)\b/i.test(clean);
+    const hasQuestion = /\b(precio|cu[aá]nto|cuesta|vale|costo|medida|tamaño|dimensi|metro|env[ií]o|entrega|impermeable|instala|garant|durabilidad|color|pago|compra|d[oó]nde|ubicaci[oó]n|sombra|porcentaje|%)\b/i.test(clean);
     const hasDimensions = parseSize(clean);
 
     if (!hasQuestion && !hasDimensions) {
@@ -158,9 +158,11 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
   }
 
   // 1b) Non-90% shade percentage — confeccionada is ONLY 90%
-  const shadeMatch = clean.match(/\b(al\s*)?(35|50|70|80)\s*(%|porciento|por\s*ciento)/i);
-  if (shadeMatch) {
-    const requestedShade = shadeMatch[2];
+  const shadeMatch = clean.match(/\b(al\s*)?(\d{2,3})\s*(%|porciento|por\s*ciento|de\s+sombra)/i);
+  const requestedShade = shadeMatch ? parseInt(shadeMatch[2]) : null;
+  if (requestedShade && requestedShade !== 90) {
+    const AVAILABLE_ROLL_SHADES = [35, 50, 70, 80, 90];
+    const isAvailableAsRoll = AVAILABLE_ROLL_SHADES.includes(requestedShade);
     const dimInMsg = parseSize(clean);
 
     // If they also mentioned dimensions, offer the 90% product in that size
@@ -171,9 +173,12 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
         await updateConversation(psid, { lastIntent: "shade_clarified", unknownCount: 0 });
         return {
           type: "text",
-          text: `La malla confeccionada solo la manejamos en 90% de sombra, no tenemos en ${requestedShade}%.\n\n` +
-                `En tu medida de ${dimInMsg.w}x${dimInMsg.h}m tenemos:\n${line}\n\n` +
-                `Para malla al ${requestedShade}% la manejamos en rollo de 100m de largo. ¿Te interesa la confeccionada de 90% o prefieres que te cotice el rollo?`
+          text: `La malla confeccionada solo la manejamos en 90% de sombra.\n\n` +
+                (isAvailableAsRoll
+                  ? `Malla al ${requestedShade}% sí la manejamos pero en rollo de 100m de largo.\n\n`
+                  : `No manejamos ${requestedShade}% de sombra. Nuestros porcentajes disponibles en rollo son: 35%, 50%, 70%, 80% y 90%.\n\n`) +
+                `En tu medida de ${dimInMsg.w}x${dimInMsg.h}m en confeccionada de 90% tenemos:\n${line}\n\n` +
+                `¿Te interesa la confeccionada de 90% o prefieres información sobre rollos?`
         };
       }
     }
@@ -181,8 +186,10 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     await updateConversation(psid, { lastIntent: "shade_clarified", unknownCount: 0 });
     return {
       type: "text",
-      text: `La malla confeccionada solo la manejamos en 90% de sombra, no tenemos en ${requestedShade}%.\n\n` +
-            `Para malla al ${requestedShade}% la manejamos en rollo de 100m de largo.\n\n` +
+      text: `La malla confeccionada solo la manejamos en 90% de sombra.\n\n` +
+            (isAvailableAsRoll
+              ? `Malla al ${requestedShade}% sí la manejamos pero en rollo de 100m de largo.\n\n`
+              : `No manejamos ${requestedShade}% de sombra. Nuestros porcentajes disponibles en rollo son: 35%, 50%, 70%, 80% y 90%.\n\n`) +
             `¿Te interesa la confeccionada de 90% o prefieres información sobre rollos?`
     };
   }

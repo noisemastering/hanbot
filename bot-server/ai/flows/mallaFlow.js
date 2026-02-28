@@ -428,12 +428,16 @@ function checkProductFeatureQuestions(userMessage, state, convo) {
       response: "sí, manejamos 90% de sombra"
     },
     {
-      pattern: /\b(80|ochenta|70|setenta|50|cincuenta|35|treinta\s*y\s*cinco)\s*%?(?!\s*(m|metro|x|\d))/i,
-      response: "la malla confeccionada solo la manejamos en 90% de sombra; para otros porcentajes la manejamos en rollo de 100m de largo"
+      pattern: /\b(35|50|70|80)\s*%?(?!\s*(m|metro|x|\d))/i,
+      response: "la malla confeccionada solo la manejamos en 90% de sombra; en rollo manejamos 35%, 50%, 70%, 80% y 90%"
+    },
+    {
+      pattern: /\b(\d{2,3})\s*%?\s*(?:de\s+)?sombra/i,
+      response: "la malla confeccionada solo la manejamos en 90% de sombra; en rollo manejamos 35%, 50%, 70%, 80% y 90%"
     },
     {
       pattern: /\b(porcentaje|nivel\s*de\s*sombra)\b/i,
-      response: "la confeccionada es 90% de sombra"
+      response: "la confeccionada es 90% de sombra; en rollo manejamos desde 35% hasta 90%"
     },
     {
       pattern: /\b(beige|caf[eé])\b/i,
@@ -556,17 +560,22 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   // ====== END DUPLICATE QUOTE DETECTION ======
 
   // ====== IMMEDIATE HANDOFF: non-90% shade percentage ======
-  const nonStandardShade = /\b(al\s*)?(35|50|70|80)\s*(%|porciento|por\s*ciento)\b/i.test(userMessage);
+  const shadeMatchFlow = userMessage.match(/\b(al\s*)?(\d{2,3})\s*(%|porciento|por\s*ciento|de\s+sombra)\b/i);
+  const requestedShadeFlow = shadeMatchFlow ? parseInt(shadeMatchFlow[2]) : null;
 
-  if (nonStandardShade) {
-    const shadeMatch = userMessage.match(/\b(35|50|70|80)\s*(%|porciento|por\s*ciento)/i);
-    const requestedShade = shadeMatch ? shadeMatch[1] : '';
-    console.log(`🚨 Malla flow - Non-90% shade (${requestedShade}%) detected: "${userMessage}"`);
+  if (requestedShadeFlow && requestedShadeFlow !== 90) {
+    const AVAILABLE_ROLL_SHADES = [35, 50, 70, 80, 90];
+    const isAvailableAsRoll = AVAILABLE_ROLL_SHADES.includes(requestedShadeFlow);
+    console.log(`🚨 Malla flow - Non-90% shade (${requestedShadeFlow}%) detected: "${userMessage}"`);
+
+    const shadeNote = isAvailableAsRoll
+      ? `Malla al ${requestedShadeFlow}% sí la manejamos pero en rollo de 100m de largo.`
+      : `No manejamos ${requestedShadeFlow}% de sombra. Nuestros porcentajes disponibles en rollo son: 35%, 50%, 70%, 80% y 90%.`;
 
     const { executeHandoff } = require('../utils/executeHandoff');
     return await executeHandoff(psid, convo, userMessage, {
-      reason: `Malla sombra: porcentaje no estándar (${requestedShade}%, no 90%) — "${userMessage}"`,
-      responsePrefix: `La malla confeccionada solo la manejamos en 90% de sombra, no tenemos en ${requestedShade}%. Para malla al ${requestedShade}% la manejamos en rollo de 100m de largo.`,
+      reason: `Malla sombra: porcentaje no estándar (${requestedShadeFlow}%, no 90%) — "${userMessage}"`,
+      responsePrefix: `La malla confeccionada solo la manejamos en 90% de sombra. ${shadeNote}`,
       lastIntent: 'malla_specialist_handoff',
       extraState: { productInterest: "malla_sombra" },
       timingStyle: 'elaborate',
