@@ -53,8 +53,9 @@ PRODUCTO - MALLA SOMBRA CONFECCIONADA:
 - Confeccionada para mayor durabilidad
 - Refuerzo en las esquinas para ofrecer una vida útil de hasta 5 años
 - Ojillos para sujeción cada 80 cm por lado, lista para instalar
-- El envío está incluido
-- Se vende por Mercado Libre
+- La compra se realiza a través de Mercado Libre y el envío está incluido
+- Cuando el cliente pregunte por envío/entrega, di "La compra se realiza a través de Mercado Libre y el envío está incluido"
+- Cuando cotices varios precios, pregunta "¿Quieres los enlaces para comprar?" (NO "¿Cuál te interesa?")
 
 VARIANTES QUE SÍ FABRICAMOS:
 - Malla tipo cortina / cortinas de malla sombra

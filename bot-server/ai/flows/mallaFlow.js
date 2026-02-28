@@ -362,7 +362,7 @@ async function handleMultipleDimensions(dimensions, psid, convo) {
 
   return {
     type: "text",
-    text: `Aquí te van los precios:\n\n${responseParts.join('\n')}${fractionalNote}\n\n¿Cuál te interesa?`
+    text: `Aquí te van los precios:\n\n${responseParts.join('\n')}${fractionalNote}\n\n¿Quieres los enlaces para comprar?`
   };
 }
 
@@ -407,7 +407,7 @@ async function handleQuoteSelection(aiAction, lastQuotedProducts, psid, convo) {
 
   return {
     type: "text",
-    text: `${intro}\n\n${responseParts.join('\n\n')}\n\nEl envío está incluido.`
+    text: `${intro}\n\n${responseParts.join('\n\n')}\n\nLa compra se realiza a través de Mercado Libre y el envío está incluido.`
   };
 }
 
@@ -823,7 +823,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
         return {
           type: "text",
-          text: `${requestedArea} metros cuadrados puede ser varias medidas. Te muestro las más cercanas:\n\n${optionsList}\n\n¿Cuál te interesa?`
+          text: `${requestedArea} metros cuadrados puede ser varias medidas. Te muestro las más cercanas:\n\n${optionsList}\n\n¿Quieres los enlaces para comprar?`
         };
       }
     }
@@ -1351,7 +1351,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
         await updateConversation(psid, { lastIntent: 'shipping_question', unknownCount: 0 });
         return {
           type: "text",
-          text: "Sí, enviamos a todo México. El envío está incluido y tarda entre 3-5 días hábiles. Se realiza a través de Mercado Libre.\n\n¿Necesitas algo más?"
+          text: "La compra se realiza a través de Mercado Libre y el envío está incluido. Normalmente tarda de 3 a 5 días hábiles.\n\n¿Necesitas algo más?"
         };
       }
 
@@ -1634,7 +1634,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
 
       return {
         type: "text",
-        text: `Es correcto, ${sizeDisplay} metros a $${product.price} con envío incluido. Puedes realizar tu compra en el enlace que te compartí.`
+        text: `Es correcto, ${sizeDisplay} metros a $${product.price}. La compra se realiza a través de Mercado Libre y el envío está incluido. Puedes comprarla en el enlace que te compartí.`
       };
     }
 

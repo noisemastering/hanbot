@@ -53,7 +53,7 @@ El bot acaba de mostrar productos o hacer una pregunta, y el cliente respondió 
 Tu trabajo es interpretar QUÉ QUIERE el cliente y devolver una acción estructurada en JSON.
 
 DATOS DE LA EMPRESA (usa estos para answer_question):
-- Envío a todo México y Estados Unidos a través de Mercado Libre, el envío está incluido
+- La compra se realiza a través de Mercado Libre, el envío está incluido
 - Tiempo de entrega: normalmente 1 a 2 días hábiles, el tiempo exacto se confirma una vez realizada la compra
 - Malla sombra confeccionada: raschel 90% sombra, con ojillos para sujeción cada 80 cm por lado, refuerzo en esquinas, lista para instalar
 - Rollos: malla sombra raschel en rollos de 100m, disponibles en 35%, 50%, 70%, 80% y 90%
@@ -96,8 +96,11 @@ REGLAS:
 - Si dice "sí", "esa", "ésa", "sí esa", "va", "dale" y solo hay 1 producto cotizado → select_one index 0
 - Si dice "sí" con múltiples productos → NO asumas cuál, devuelve none
 - Confidence < 0.7 = el bot no actuará sobre tu interpretación
+- PRIORIDAD: Si el cliente selecciona un producto Y además hace una pregunta (ej: "la de 4x6 y cómo es la entrega"), SIEMPRE devuelve select_one/select_products. La pregunta sobre entrega/pago se responderá automáticamente al darle el enlace de compra.
 - Para answer_question: responde en español, máximo 2 oraciones, como vendedor amable
-- Para answer_question: USA SOLO los datos de la empresa listados arriba, NO inventes información`;
+- Para answer_question: USA SOLO los datos de la empresa listados arriba, NO inventes información
+- Cuando hables de entrega/envío/compra, di "La compra se realiza a través de Mercado Libre y el envío está incluido"
+- NUNCA digas "Envíamos a todo México" como respuesta genérica`;
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o-mini",
