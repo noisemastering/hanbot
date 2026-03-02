@@ -485,7 +485,16 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     return null;
   }
 
-  // 8) Fallback específico de campaña - show price range instead of generic message
+  // 8) Fallback — ONLY for messages that look like product questions.
+  // Everything else returns null so the AI classifier can properly identify
+  // complaints, frustration, payment issues, etc.
+  const isProductRelated = /\b(precio|cu[aá]nto|vale|costo|medida|tamaño|dimensi|metro|malla|sombra|confeccionada|beige|negr[oa]|rollo|tela|producto|cotiza|disponib|tienen|manejan|hay)\b/i.test(clean);
+
+  if (!isProductRelated) {
+    console.log("📋 Message not product-related in campaign, deferring to AI classifier");
+    return null;
+  }
+
   // Check if we'd be repeating the fallback - ask a different question instead
   if (convo.lastIntent === "campaign_fallback") {
     await updateConversation(psid, { lastIntent: "campaign_fallback_retry" });
