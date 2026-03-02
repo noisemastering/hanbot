@@ -4,6 +4,7 @@
 // When product is detected, flow manager transfers to appropriate product flow
 
 const { updateConversation } = require("../../conversationManager");
+const { MAPS_URL } = require("../../businessInfoManager");
 const { INTENTS } = require("../classifier");
 const { getAvailableSizes, generateGenericSizeResponse } = require("../../measureHandler");
 const { generateBotResponse } = require("../responseGenerator");
@@ -152,7 +153,7 @@ async function handleShipping(entities, convo, psid) {
  */
 async function handleLocation(convo, psid) {
   const response = await generateBotResponse("location_query", {
-    address: 'https://maps.app.goo.gl/WJbhpMqfUPYPSMdA7',
+    address: MAPS_URL,
     phone: '442 352 1646',
     hours: 'Lunes a Viernes 9am - 6pm',
     whatsapp: "https://wa.me/524425957432",

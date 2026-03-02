@@ -113,6 +113,13 @@ async function dispatch(classification, context) {
     return null;
   }
 
+  // For borde_separador, also skip shipping intents so the flow can answer in product context
+  if (currentFlow === 'borde_separador' &&
+      (intent === INTENTS.SHIPPING_QUERY || intent === INTENTS.SHIPPING_INCLUDED_QUERY)) {
+    console.log(`📋 Skipping dispatcher for "${intent}" — borde flow handles shipping in context`);
+    return null;
+  }
+
   // Get handler for this intent
   const handler = handlers[intent];
 

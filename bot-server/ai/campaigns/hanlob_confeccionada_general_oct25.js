@@ -157,6 +157,61 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     await updateConversation(psid, { lastIntent: "intro" });
   }
 
+  // 1c) Reseller disambiguation — user replied to "¿una pieza o mayoreo?"
+  if (convo.lastIntent === "awaiting_reseller_intent") {
+    const isRetail = /\b(una?\s*(pieza|unidad)?|solo\s*(una?|1)|personal|particular|nada\s+m[aá]s|mi\s*(casa|patio|jard[ií]n|negocio|terreno))\b/i.test(clean);
+    const isWholesale = /\b(mayoreo|mayor|al\s+por\s+mayor|revender|reventa|distribui[rd]|cantidad|lote|ferreter[ií]a|tienda|varias?)\b/i.test(clean);
+    const newDimensions = parseSize(clean);
+
+    if (newDimensions) {
+      // User gave new dimensions — clear pending state, fall through to normal handling
+      await updateConversation(psid, { lastIntent: "intro", productSpecs: { ...convo.productSpecs, pendingSize: null } });
+      // Fall through — will be caught by dimension detection below
+    } else if (isRetail) {
+      // Retail — clear wholesale flag, quote the pending size
+      await updateConversation(psid, { isWholesaleInquiry: false });
+      const pendingSize = convo.productSpecs?.pendingSize;
+      if (pendingSize) {
+        const req = parseSize(pendingSize);
+        if (req) {
+          const exact = findExactVariant(variants, req);
+          if (exact) {
+            await updateConversation(psid, { lastIntent: "size_exact", productSpecs: { ...convo.productSpecs, pendingSize: null } });
+            const line = await variantLine(exact, true, psid, convo);
+            return {
+              type: "text",
+              text: `¡Perfecto! Tengo ${exact.size} disponible.\n${line}\n\n¿Te interesa esta medida o buscas otra? 🌿`
+            };
+          }
+          // No exact match — show closest
+          const { lower, upper } = findClosestUpDown(variants, req);
+          await updateConversation(psid, { lastIntent: "size_suggested", productSpecs: { ...convo.productSpecs, pendingSize: null } });
+          let suggestions = "No tengo exactamente esa medida, pero lo más cercano es:\n";
+          if (lower) suggestions += `${await variantLine(lower, true, psid, convo)}\n`;
+          if (upper) suggestions += `${await variantLine(upper, true, psid, convo)}\n`;
+          suggestions += `\nTambién puedo confeccionarla a la medida. ¿Te interesa alguna de estas o prefieres a la medida?`;
+          return { type: "text", text: suggestions };
+        }
+      }
+      // No pending size — ask for dimensions
+      await updateConversation(psid, { lastIntent: "intro", productSpecs: { ...convo.productSpecs, pendingSize: null } });
+      return { type: "text", text: "¡Claro! ¿Qué medida necesitas? Dime las dimensiones y te paso el precio con link de compra 😊" };
+    } else if (isWholesale) {
+      // Wholesale — hand off to specialist
+      const pendingSize = convo.productSpecs?.pendingSize || "sin medida especificada";
+      await updateConversation(psid, { productSpecs: { ...convo.productSpecs, pendingSize: null } });
+      return await executeHandoff(psid, convo, msg, {
+        reason: `Mayoreo: cliente confirma interés en mayoreo — medida ${pendingSize}`,
+        responsePrefix: `Perfecto, para precio de mayoreo un especialista te dará la cotización.`,
+        lastIntent: 'wholesale_handoff',
+        timingStyle: 'elaborate'
+      });
+    } else {
+      // Unclear — re-ask
+      return { type: "text", text: "¿Buscas comprar una pieza o te interesa precio de mayoreo para reventa?" };
+    }
+  }
+
   // 1b) Non-90% shade percentage — confeccionada is ONLY 90%
   const shadeMatch = clean.match(/\b(al\s*)?(\d{2,3})\s*(%|porciento|por\s*ciento|de\s+sombra)/i);
   const requestedShade = shadeMatch ? parseInt(shadeMatch[2]) : null;
@@ -258,6 +313,18 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     // 2a) ¿Existe exacta?
     const exact = findExactVariant(variants, requested);
     if (exact) {
+      // Reseller ad disambiguation — ask retail vs wholesale before quoting
+      if (convo.isWholesaleInquiry) {
+        await updateConversation(psid, {
+          lastIntent: "awaiting_reseller_intent",
+          productSpecs: { ...convo.productSpecs, pendingSize: `${requested.w}x${requested.h}` }
+        });
+        return {
+          type: "text",
+          text: `¡Tenemos la medida de ${exact.size}! ¿Buscas comprar una pieza o te interesa precio de mayoreo para reventa?`
+        };
+      }
+
       await updateConversation(psid, { lastIntent: "size_exact" });
       const line = await variantLine(exact, true, psid, convo); // incluye link
       return {
@@ -271,6 +338,22 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
 
     // 2b) Si no existe exacta → sugerir lo más cercano (abajo/arriba)
     const { lower, upper } = findClosestUpDown(variants, requested);
+
+    // Reseller ad disambiguation — ask retail vs wholesale before quoting
+    if (convo.isWholesaleInquiry) {
+      await updateConversation(psid, {
+        lastIntent: "awaiting_reseller_intent",
+        productSpecs: { ...convo.productSpecs, pendingSize: `${requested.w}x${requested.h}` }
+      });
+      let closestInfo = "";
+      if (lower) closestInfo += `• ${lower.size}\n`;
+      if (upper) closestInfo += `• ${upper.size}\n`;
+      return {
+        type: "text",
+        text: `No tenemos exactamente ${requested.w}x${requested.h}, pero manejamos:\n${closestInfo}\n¿Buscas comprar una pieza o te interesa precio de mayoreo para reventa?`
+      };
+    }
+
     await updateConversation(psid, { lastIntent: "size_suggested" });
 
     // Construir respuesta con links para sugerencias
@@ -389,14 +472,10 @@ async function handleHanlobConfeccionadaGeneralOct25(msg, psid, convo, campaign)
     };
   }
 
-    // Ubicación / recoger en tienda
+    // Ubicación / recoger en tienda — defer to dispatcher for full address handling
     if (/d[oó]nde\s+(est[aá]n|se\s+ubican|quedan)|ubica[n]?|ubicaci[oó]n|direcci[oó]n|tienda|recoger|pasar/.test(clean)) {
-        console.log("📍 Location question detected");
-        await updateConversation(psid, { lastIntent: "location_info" });
-        return {
-            type: "text",
-            text: "Estamos en Querétaro, pero enviamos a todo el país por Mercado Libre 📦"
-        };
+        console.log("📍 Location question detected in campaign, deferring to dispatcher");
+        return null;
     }
 
   // 7) Product specs / FAQ questions — let the dispatcher handle these properly

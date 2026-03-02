@@ -5,7 +5,7 @@
 // See REFACTOR_PLAN.md for the migration plan.
 
 const { updateConversation } = require("../../conversationManager");
-const { getBusinessInfo } = require("../../businessInfoManager");
+const { getBusinessInfo, MAPS_URL } = require("../../businessInfoManager");
 const {
   parseDimensions,
   getAvailableSizes,
@@ -87,7 +87,7 @@ function getSecondaryPhrasePrefix(msg) {
 
 // Helper to get location text for combined responses
 function getLocationAppendix() {
-  return "\n\nTe comparto nuestra ubicación en Google Maps:\nhttps://maps.app.goo.gl/WJbhpMqfUPYPSMdA7\n\n" +
+  return `\n\nTe comparto nuestra ubicación en Google Maps:\n${MAPS_URL}\n\n` +
          "Recuerda que enviamos a todo México y Estados Unidos.";
 }
 
@@ -1694,7 +1694,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     return {
       type: "text",
       text: `¡Sí! Tenemos venta al público en Querétaro 🏪\n\n` +
-            `Te comparto nuestra ubicación en Google Maps:\nhttps://maps.app.goo.gl/WJbhpMqfUPYPSMdA7\n\n` +
+            `Te comparto nuestra ubicación en Google Maps:\n${MAPS_URL}\n\n` +
             `📞 ${businessInfo.phones.join(" / ")}\n` +
             `🕓 ${businessInfo.hours}\n\n` +
             `Puedes venir a ver el producto y pagar en efectivo o con tarjeta. ¿Qué medida te interesa?`

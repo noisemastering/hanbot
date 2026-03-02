@@ -3,7 +3,7 @@
 // Uses existing product utilities for search and tree climbing
 
 const { updateConversation } = require("../../conversationManager");
-const { getBusinessInfo } = require("../../businessInfoManager");
+const { getBusinessInfo, MAPS_URL } = require("../../businessInfoManager");
 const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
 const { INTENTS } = require("../classifier");
@@ -521,6 +521,69 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     const { resumePendingHandoff } = require('../utils/executeHandoff');
     const pendingResult = await resumePendingHandoff(psid, convo, userMessage);
     if (pendingResult) return pendingResult;
+  }
+
+  // ====== RESELLER DISAMBIGUATION RESPONSE ======
+  // User replied to "¿una pieza o mayoreo?"
+  if (convo?.lastIntent === "awaiting_reseller_intent") {
+    const cleanMsg = String(userMessage).trim().toLowerCase();
+    const isRetail = /\b(una?\s*(pieza|unidad)?|solo\s*(una?|1)|personal|particular|nada\s+m[aá]s|mi\s*(casa|patio|jard[ií]n|negocio|terreno))\b/i.test(cleanMsg);
+    const isWholesale = /\b(mayoreo|mayor|al\s+por\s+mayor|revender|reventa|distribui[rd]|cantidad|lote|ferreter[ií]a|tienda|varias?)\b/i.test(cleanMsg);
+    const newDimensions = parseDimensions(cleanMsg);
+
+    if (newDimensions) {
+      // User gave new dimensions — clear pending state, fall through to normal handling
+      await updateConversation(psid, { lastIntent: null, productSpecs: { ...convo.productSpecs, pendingSize: null } });
+      // Fall through to normal handling
+    } else if (isRetail) {
+      // Retail — clear wholesale flag, re-run product lookup for pending size
+      const pendingSize = convo.productSpecs?.pendingSize;
+      await updateConversation(psid, { isWholesaleInquiry: false, lastIntent: "size_retail_confirmed", productSpecs: { ...convo.productSpecs, pendingSize: null } });
+
+      if (pendingSize) {
+        const dims = parseDimensions(pendingSize);
+        if (dims) {
+          const retailProducts = await findMatchingProducts(dims.width, dims.height, 90, null, convo?.poiRootId);
+          if (retailProducts.length > 0) {
+            const product = retailProducts[0];
+            const preferredLink = product.onlineStoreLinks?.find(link => link.isPreferred);
+            const productUrl = preferredLink?.url || product.onlineStoreLinks?.[0]?.url;
+
+            if (productUrl) {
+              const trackedLink = await generateClickLink(psid, productUrl, {
+                productName: product.name,
+                productId: product._id,
+                city: convo?.city,
+                stateMx: convo?.stateMx
+              });
+
+              await updateConversation(psid, {
+                lastSharedProductId: product._id?.toString(),
+                lastSharedProductLink: trackedLink
+              });
+
+              return {
+                type: "text",
+                text: `¡Perfecto! Aquí tienes:\n\n• ${dims.width}x${dims.height}m → $${product.price}\n${trackedLink}\n\nLa compra es por Mercado Libre con envío incluido 📦`
+              };
+            }
+          }
+        }
+      }
+      return { type: "text", text: "¡Claro! ¿Qué medida necesitas? Dime las dimensiones y te paso el precio con link de compra 😊" };
+    } else if (isWholesale) {
+      const pendingSize = convo.productSpecs?.pendingSize || "sin medida especificada";
+      await updateConversation(psid, { productSpecs: { ...convo.productSpecs, pendingSize: null } });
+      const { executeHandoff } = require('../utils/executeHandoff');
+      return await executeHandoff(psid, convo, userMessage, {
+        reason: `Mayoreo: cliente confirma interés en mayoreo — medida ${pendingSize}`,
+        responsePrefix: `Perfecto, para precio de mayoreo un especialista te dará la cotización.`,
+        lastIntent: 'wholesale_handoff',
+        timingStyle: 'elaborate'
+      });
+    } else {
+      return { type: "text", text: "¿Buscas comprar una pieza o te interesa precio de mayoreo para reventa?" };
+    }
   }
 
   // Get current state
@@ -1417,7 +1480,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     // If the message has NO dimension/price/confirmation intent, check for general questions
     if (!hasNewDimensions && !isPriceRelated && !isConfirmation && !isNewSize) {
       // Ordering process questions
-      const MAPS_URL = 'https://maps.app.goo.gl/WJbhpMqfUPYPSMdA7';
+      // MAPS_URL imported from businessInfoManager
       if (/\b(pedido|orden|compra)\s+(se\s+)?(hace|realiza|es)\s+(por|en|a\s+trav[eé]s)/i.test(msg) ||
           /\b(por\s+(este\s+medio|aqu[ií]|mensaj|chat|facebook|messenger|inbox))\s*(se\s+)?(compra|pide|ordena|hace|realiza)?\b/i.test(msg) ||
           /\b(c[oó]mo|d[oó]nde)\s+(compro|pido|ordeno|hago\s+(el\s+)?pedido)\b/i.test(msg) ||
@@ -1710,15 +1773,27 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       const sizeDisplay = userExpressedSize || `${width}x${height}`;
       await updateConversation(psid, { lastIntent: "size_confirmed", unknownCount: 0 });
 
-      // Wholesale context — don't use retail language
+      // Wholesale context — ask disambiguation if no explicit wholesale language
       if (convo?.isWholesaleInquiry) {
-        const { executeHandoff } = require('../utils/executeHandoff');
-        return await executeHandoff(psid, convo, userMessage, {
-          reason: `Mayoreo: cliente confirma ${sizeDisplay}m a $${product.price} — cotizar precio de mayoreo`,
-          responsePrefix: `Perfecto, ${sizeDisplay} metros. Para precio de mayoreo un especialista te dará la cotización.`,
-          lastIntent: 'wholesale_handoff',
-          timingStyle: 'elaborate'
+        const hasExplicitWholesale = /\b(mayoreo|mayor|al\s+por\s+mayor|revender|reventa|distribui[rd]|para\s+vender)\b/i.test(userMessage);
+        if (hasExplicitWholesale) {
+          const { executeHandoff } = require('../utils/executeHandoff');
+          return await executeHandoff(psid, convo, userMessage, {
+            reason: `Mayoreo: cliente confirma ${sizeDisplay}m a $${product.price} — cotizar precio de mayoreo`,
+            responsePrefix: `Perfecto, ${sizeDisplay} metros. Para precio de mayoreo un especialista te dará la cotización.`,
+            lastIntent: 'wholesale_handoff',
+            timingStyle: 'elaborate'
+          });
+        }
+        // No explicit wholesale language — ask disambiguation
+        await updateConversation(psid, {
+          lastIntent: "awaiting_reseller_intent",
+          productSpecs: { ...convo.productSpecs, pendingSize: sizeDisplay }
         });
+        return {
+          type: "text",
+          text: `¡Tenemos la medida de ${sizeDisplay}m! ¿Buscas comprar una pieza o te interesa precio de mayoreo para reventa?`
+        };
       }
 
       return {
@@ -1749,17 +1824,30 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       }
     }
 
-    // Wholesale context — hand off for wholesale pricing instead of retail quote
+    // Wholesale context — ask disambiguation if no explicit wholesale language
     if (convo?.isWholesaleInquiry) {
       const sizeDisplay = userExpressedSize || `${width}x${height}`;
-      console.log(`🏪 Wholesale inquiry — handing off ${sizeDisplay}m for wholesale pricing`);
-      const { executeHandoff: execHandoffW } = require('../utils/executeHandoff');
-      return await execHandoffW(psid, convo, userMessage, {
-        reason: `Mayoreo: cliente pregunta por ${sizeDisplay}m — cotizar precio de mayoreo`,
-        responsePrefix: `¡Tenemos la medida ${sizeDisplay}m! Para precio de mayoreo un especialista te dará la cotización.`,
-        lastIntent: 'wholesale_handoff',
-        timingStyle: 'elaborate'
+      const hasExplicitWholesale = /\b(mayoreo|mayor|al\s+por\s+mayor|revender|reventa|distribui[rd]|para\s+vender)\b/i.test(userMessage);
+      if (hasExplicitWholesale) {
+        console.log(`🏪 Wholesale inquiry — explicit wholesale language, handing off ${sizeDisplay}m`);
+        const { executeHandoff: execHandoffW } = require('../utils/executeHandoff');
+        return await execHandoffW(psid, convo, userMessage, {
+          reason: `Mayoreo: cliente pregunta por ${sizeDisplay}m — cotizar precio de mayoreo`,
+          responsePrefix: `¡Tenemos la medida ${sizeDisplay}m! Para precio de mayoreo un especialista te dará la cotización.`,
+          lastIntent: 'wholesale_handoff',
+          timingStyle: 'elaborate'
+        });
+      }
+      // No explicit wholesale language — ask disambiguation
+      console.log(`🏪 Wholesale inquiry — no explicit wholesale terms, asking disambiguation for ${sizeDisplay}m`);
+      await updateConversation(psid, {
+        lastIntent: "awaiting_reseller_intent",
+        productSpecs: { ...convo.productSpecs, pendingSize: sizeDisplay }
       });
+      return {
+        type: "text",
+        text: `¡Tenemos la medida de ${sizeDisplay}m! ¿Buscas comprar una pieza o te interesa precio de mayoreo para reventa?`
+      };
     }
 
     // Get the preferred link from onlineStoreLinks

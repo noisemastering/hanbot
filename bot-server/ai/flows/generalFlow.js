@@ -3,6 +3,7 @@
 // These are non-product-specific queries that can occur at any point in conversation
 
 const { updateConversation } = require("../../conversationManager");
+const { MAPS_URL } = require("../../businessInfoManager");
 const { INTENTS } = require("../classifier");
 const { getAvailableSizes, getMallaSizeRange, parseDimensions } = require("../../measureHandler");
 const { isBusinessHours } = require("../utils/businessHours");
@@ -12,7 +13,7 @@ const { isBusinessHours } = require("../utils/businessHours");
  */
 const BUSINESS_INFO = {
   name: "Hanlob",
-  address: "https://maps.app.goo.gl/WJbhpMqfUPYPSMdA7",
+  address: MAPS_URL,
   city: "Querétaro",
   phones: ["442 352 1646"],
   hours: "Lunes a Viernes 9am - 6pm",

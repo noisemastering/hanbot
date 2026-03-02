@@ -4,6 +4,7 @@
 
 const { OpenAI } = require("openai");
 const openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
+const { MAPS_URL, STORE_ADDRESS } = require("../businessInfoManager");
 
 /**
  * Generate a natural response using AI
@@ -75,7 +76,8 @@ VARIANTES QUE NO FABRICAMOS:
 DATOS DEL NEGOCIO:
 - Ciudad: Querétaro
 - Ubicación corta: Microparque Industrial Navex Park, Tlacote
-- Link de ubicación en Google Maps: https://maps.app.goo.gl/WJbhpMqfUPYPSMdA7
+- Dirección completa: ${STORE_ADDRESS}
+- Link de ubicación en Google Maps: ${MAPS_URL}
 - Envío: A todo México y Estados Unidos
 - WhatsApp: https://wa.me/524425957432
 
@@ -118,10 +120,10 @@ ESCENARIOS ESPECIALES:
 - product_comparison: El cliente pregunta la diferencia entre productos. Lee userMessage para entender qué comparan (raschel vs monofilamento, confeccionada vs rollo, etc.) y explica las diferencias.
 - location_query: El cliente pregunta dónde estamos. Analiza userQuestion para decidir:
   1. Si preguntan "están en [ciudad]?" (ej: Mexicali) → Di que estamos en Querétaro pero enviamos a esa ciudad. NO des dirección.
-  2. Si quieren VISITAR sin pedir dirección (ej: "ir a ver", "verlos en persona", "tienda física") → Da ubicación CORTA: "Querétaro, en el Microparque Industrial Navex Park" + comparte el link de Google Maps + "Recuerda que enviamos a todo México y Estados Unidos".
-  3. Si piden "domicilio", "dirección", "ubicados", "ubicación", "dónde se ubica", "qué parte", o piden específicamente la dirección → Di "Te comparto nuestra ubicación en Google Maps:" seguido del link + "Recuerda que enviamos a todo México y Estados Unidos".
-  4. Si solo preguntan "dónde están?" sin contexto → Menciona Querétaro + comparte el link de Google Maps + "Recuerda que enviamos a todo México y Estados Unidos".
-  REGLA: SIEMPRE comparte el link de Google Maps cuando pregunten ubicación. NUNCA escribas la dirección física completa — usa el link de Google Maps. SIEMPRE incluye "Recuerda que enviamos a todo México y Estados Unidos".
+  2. Si quieren VISITAR o piden ubicación general → Da ubicación corta: "Querétaro, en el Microparque Industrial Navex Park" + comparte el link de Google Maps.
+  3. Si piden dirección específica, referencia, calle, o si includeFullAddress es true → Da la dirección completa (fullAddress) Y el link de Google Maps.
+  4. Si solo preguntan "dónde están?" sin contexto → Menciona Querétaro + comparte el link de Google Maps.
+  REGLA: SIEMPRE comparte el link de Google Maps cuando pregunten ubicación. Si el cliente pide referencias o dice que no puede ubicar en el mapa, da la dirección completa. SIEMPRE incluye "Recuerda que enviamos a todo México y Estados Unidos".
 - location_too_far: El cliente dice que estamos muy lejos o pregunta cómo puede adquirir desde lejos. Responde que enviamos a todo México y Estados Unidos. Si leadScore es bajo (deadbeat), responde breve y sin mucho entusiasmo.
 - color_not_available: El cliente pidió un color que no manejamos (requestedColor). Dile amablemente que ese color no lo tenemos y menciona los colores disponibles (availableColors). Si te doy dimensions, pregunta si le interesa en los colores que sí tenemos para esa medida.
 - durability_query: El cliente pregunta por la durabilidad o vida útil. Usa el lifespan que te doy (ej: 5 años). Menciona que es confeccionada para mayor durabilidad, resiste sol/viento/lluvia, y tiene protección UV. Mantén la respuesta breve.

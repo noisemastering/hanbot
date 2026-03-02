@@ -154,12 +154,14 @@ async function runSilenceFollowUpJob() {
           }
         } else {
           // --- Default follow-up: ML store link ---
+          const isBorde = convo.currentFlow === 'borde_separador' || convo.productInterest === 'borde_separador';
           const trackedLink = await generateClickLink(convo.psid, STORE_URL, {
-            productName: 'Tienda ML (follow-up)'
+            productName: isBorde ? 'Borde Separador (follow-up)' : 'Tienda ML (follow-up)'
           });
 
-          followUpText =
-            `Por si te interesa echar un vistazo, te comparto nuestra tienda en Mercado Libre con envío incluido a todo México:\n\n${trackedLink}`;
+          followUpText = isBorde
+            ? `Por si te interesa, te comparto nuestra tienda en Mercado Libre donde puedes encontrar el borde separador con envío incluido a todo México:\n\n${trackedLink}`
+            : `Por si te interesa echar un vistazo, te comparto nuestra tienda en Mercado Libre con envío incluido a todo México:\n\n${trackedLink}`;
 
           if (channel === 'whatsapp') {
             const phone = convo.psid.replace('wa:', '');

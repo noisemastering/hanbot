@@ -1,5 +1,6 @@
 // ai/core/greetings.js
 const { updateConversation, isHumanActive } = require("../../conversationManager");
+const { MAPS_URL } = require("../../businessInfoManager");
 const { getAudienceLanguage } = require("../utils/adContextHelper");
 
 async function handleGreeting(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
@@ -133,7 +134,7 @@ async function handleThanks(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
     return {
       type: "text",
       text: `¡Claro! También puedes visitarnos. Te comparto nuestra ubicación en Google Maps:\n\n` +
-            `https://maps.app.goo.gl/WJbhpMqfUPYPSMdA7\n\n` +
+            `${MAPS_URL}\n\n` +
             `🕐 Horario: Lunes a Viernes de 9:00 a 18:00 hrs, Sábados de 9:00 a 14:00 hrs.\n\n` +
             `¡Te esperamos!`
     };
@@ -328,7 +329,7 @@ async function handleStoreVisit(cleanMsg, psid, convo) {
   if (asksForAddress) {
     return {
       type: "text",
-      text: "¡Con gusto! Te comparto nuestra ubicación en Google Maps:\n\nhttps://maps.app.goo.gl/WJbhpMqfUPYPSMdA7\n\n¡Te esperamos!"
+      text: `¡Con gusto! Te comparto nuestra ubicación en Google Maps:\n\n${MAPS_URL}\n\n¡Te esperamos!`
     };
   }
 
@@ -350,7 +351,7 @@ async function handleStoreVisit(cleanMsg, psid, convo) {
   // General store visit
   return {
     type: "text",
-    text: "¡Perfecto! Te comparto nuestra ubicación en Google Maps:\n\nhttps://maps.app.goo.gl/WJbhpMqfUPYPSMdA7\n\n¿Hay algo que pueda adelantarte?"
+    text: `¡Perfecto! Te comparto nuestra ubicación en Google Maps:\n\n${MAPS_URL}\n\n¿Hay algo que pueda adelantarte?`
   };
 }
 

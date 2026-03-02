@@ -2,7 +2,7 @@
 require("dotenv").config();
 const { OpenAI } = require("openai");
 const { getConversation, updateConversation, isHumanActive } = require("../conversationManager");
-const { getBusinessInfo } = require("../businessInfoManager");
+const { getBusinessInfo, MAPS_URL, STORE_ADDRESS } = require("../businessInfoManager");
 const { getProduct } = require("../hybridSearch");
 const Campaign = require("../models/Campaign");
 const { extractReference } = require("../referenceEstimator");
@@ -718,17 +718,17 @@ async function generateReplyInternal(userMessage, psid, convo, referral = null) 
       console.log("📍 Physical location question detected");
       await updateConversation(psid, { lastIntent: "location_info" });
 
-      // If they explicitly ask for address/direction/domicilio, share Google Maps link
-      if (/\b(direcci[oó]n|domicilio|ubicaci[oó]n)\b/i.test(cleanMsg)) {
+      // If they explicitly ask for address/direction/domicilio, share full address + Maps link
+      if (/\b(direcci[oó]n|domicilio|ubicaci[oó]n|calle|referencia)\b/i.test(cleanMsg)) {
         return {
           type: "text",
-          text: "Te comparto nuestra ubicación en Google Maps:\n\nhttps://maps.app.goo.gl/WJbhpMqfUPYPSMdA7\n\nRecuerda que enviamos a todo México y Estados Unidos 📦"
+          text: `📍 ${STORE_ADDRESS}\n\n${MAPS_URL}\n\nRecuerda que enviamos a todo México y Estados Unidos 📦`
         };
       }
 
       return {
         type: "text",
-        text: "Estamos en Querétaro en el parque industrial Navex, Tlacote. Recuerda que enviamos a todo México y Estados Unidos 📦\n\n¿De qué ciudad nos escribes?"
+        text: `Estamos en Querétaro, en el Microparque Industrial Navex Park, Tlacote.\n\n📍 ${STORE_ADDRESS}\n\n${MAPS_URL}\n\nRecuerda que enviamos a todo México y Estados Unidos 📦`
       };
     }
 

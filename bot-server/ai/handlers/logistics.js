@@ -2,7 +2,7 @@
 // Handlers for logistics intents: shipping, location, payment, delivery time
 
 const { updateConversation } = require("../../conversationManager");
-const { getBusinessInfo } = require("../../businessInfoManager");
+const { getBusinessInfo, MAPS_URL, STORE_ADDRESS } = require("../../businessInfoManager");
 const { detectMexicanLocation } = require("../../mexicanLocations");
 const { generateBotResponse } = require("../responseGenerator");
 
@@ -68,23 +68,40 @@ async function handleShipping({ entities, psid, convo, userMessage }) {
  */
 async function handleLocation({ psid, userMessage, convo }) {
   const businessInfo = await getBusinessInfo();
-
-  // Detect if user mentioned a specific city
   const locationInfo = await detectMexicanLocation(userMessage);
 
+  // Same-intent loop detection
+  const isLocationRepeat = convo?.lastIntent === "location_query" || convo?.lastIntent === "location_detailed";
+  const isFrustrated = /\b(no\s+(me\s+)?(sirv|funciona|puedo|encuentro|aparece|abre|jal[ae])|ya\s+no|no\s+carga|no\s+abre|otra\s+vez|de\s+nuevo|referencia|cerca\s+de)\b/i.test(userMessage);
+
+  // Already gave full address and user is STILL asking → hand off
+  if (convo?.lastIntent === "location_detailed") {
+    console.log("📍 Location query 3rd+ time — handing off to human");
+    const { executeHandoff } = require('../utils/executeHandoff');
+    return await executeHandoff(psid, convo, userMessage, {
+      reason: `Cliente no puede ubicar la tienda después de recibir dirección completa y link`,
+      responsePrefix: `Entiendo, déjame comunicarte con alguien que te pueda dar indicaciones más detalladas.`,
+      lastIntent: 'location_handoff',
+      timingStyle: 'elaborate'
+    });
+  }
+
+  // Repeat location query OR frustrated → give full street address
+  const includeFullAddress = isLocationRepeat || isFrustrated ||
+    /\b(direcci[oó]n|calle|referencia|c[oó]mo\s+llego|llegar|cerca\s+de|por\s+d[oó]nde)\b/i.test(userMessage);
+
   await updateConversation(psid, {
-    lastIntent: "location_query",
+    lastIntent: includeFullAddress ? "location_detailed" : "location_query",
     unknownCount: 0
   });
 
-  const MAPS_URL = 'https://maps.app.goo.gl/WJbhpMqfUPYPSMdA7';
-
-  // Let AI decide from context whether to give full address
   let response = await generateBotResponse("location_query", {
     userQuestion: userMessage,
     mentionedCity: locationInfo?.normalized || null,
     city: "Querétaro",
     address: MAPS_URL,
+    fullAddress: STORE_ADDRESS,
+    includeFullAddress,
     shipsNationwide: true,
     shipsToUSA: true,
     convo
@@ -92,9 +109,7 @@ async function handleLocation({ psid, userMessage, convo }) {
 
   // Ensure the actual Google Maps URL is present — AI sometimes replaces it with a placeholder
   if (response) {
-    // Remove any bracketed placeholder like [Link de ubicación], [Enlace Google Maps], etc.
     response = response.replace(/\[(?:Link|Enlace)[^\]]*\]/gi, '').replace(/\n{3,}/g, '\n\n').trim();
-    // If URL got lost, append it
     if (!response.includes(MAPS_URL)) {
       response += `\n\n${MAPS_URL}`;
     }

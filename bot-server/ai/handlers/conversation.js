@@ -2,6 +2,7 @@
 // Handlers for conversation flow intents: future interest, will get back
 
 const { updateConversation } = require("../../conversationManager");
+const { MAPS_URL } = require("../../businessInfoManager");
 const { generateBotResponse } = require("../responseGenerator");
 
 /**
@@ -137,7 +138,7 @@ async function handleStoreVisit({ psid, convo, userMessage }) {
 
   const response = await generateBotResponse("store_visit", {
     userMessage,
-    storeAddress: "https://maps.app.goo.gl/WJbhpMqfUPYPSMdA7",
+    storeAddress: MAPS_URL,
     convo
   });
 

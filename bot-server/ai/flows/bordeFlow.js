@@ -380,7 +380,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   const availableLengths = await getAvailableLengths(sourceContext, convo);
 
   // WIDTH QUESTIONS — borde only comes in one width
-  if (userMessage && /\b(ancho|anchura|grosor|grueso|cm|cent[ií]metros?|qu[eé]\s*(?:tan\s*)?(?:ancho|grueso))\b/i.test(userMessage)) {
+  if (userMessage && /\b(anchos?|anchura|grosor|grueso|cm|cent[ií]metros?|dimensi[oó]n(?:es)?|qu[eé]\s*(?:tan\s*)?(?:anchos?|grueso))\b/i.test(userMessage)) {
     const widthCm = await getBordeWidth();
     const lengthList = availableLengths.map(l => `${l}m`).join(', ');
 
@@ -396,6 +396,66 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     return {
       type: "text",
       text: `Mide ${widthCm}cm de ancho. Lo tenemos en rollos de ${lengthList}. ¿Qué largo necesitas?`
+    };
+  }
+
+  // LENGTH / MEASUREMENT QUESTIONS — "Y el largo", "qué largos manejan", "medidas", "presentaciones"
+  if (userMessage && /\b(largos?|longitud(?:es)?|medidas?\s*(?:manejan?|tienen?|hay)|tamaños?|presentaci[oó]n(?:es)?|y\s+(?:el\s+)?largo)\b/i.test(userMessage)) {
+    const widthCm = await getBordeWidth();
+    const products = await findMatchingProducts(null, adProductIds);
+    const lengthsWithPrices = availableLengths.map(l => {
+      const product = products.find(p => {
+        const text = `${p.name || ''} ${p.size || ''}`;
+        return new RegExp(`\\b${l}\\b`).test(text);
+      });
+      return product?.price
+        ? `• ${l}m — ${formatMoney(product.price)}`
+        : `• ${l}m`;
+    });
+
+    return {
+      type: "text",
+      text: `Lo manejamos de ${widthCm}cm de ancho, en los siguientes largos:\n\n${lengthsWithPrices.join('\n')}\n\n¿Cuál te interesa?`
+    };
+  }
+
+  // SHIPPING / COST QUESTIONS — answer in borde context instead of generic dispatcher
+  if (intent === INTENTS.SHIPPING_QUERY || intent === INTENTS.SHIPPING_INCLUDED_QUERY ||
+      (userMessage && /\b(env[ií]os?|costo\s+de\s+env[ií]o|flete|paqueter[ií]a)\b/i.test(userMessage) &&
+       !/\b(anchos?|largos?|medida)\b/i.test(userMessage))) {
+    const products = await findMatchingProducts(null, adProductIds);
+    const hasML = products.some(p => hasMLLink(p));
+    const lengthList = availableLengths.map(l => `${l}m`).join(', ');
+
+    if (hasML) {
+      return {
+        type: "text",
+        text: `La compra es a través de Mercado Libre y el envío está incluido en el precio a todo México.\n\nTenemos rollos de ${lengthList}. ¿Qué largo te interesa?`
+      };
+    }
+    return {
+      type: "text",
+      text: `Hacemos envíos a todo México por paquetería. El costo depende de tu ubicación.\n\nTenemos rollos de ${lengthList}. ¿Qué largo necesitas?`
+    };
+  }
+
+  // CATALOG REQUEST — show borde products in context
+  if (intent === INTENTS.CATALOG_REQUEST) {
+    const widthCm = await getBordeWidth();
+    const products = await findMatchingProducts(null, adProductIds);
+    const lengthsWithPrices = availableLengths.map(l => {
+      const product = products.find(p => {
+        const text = `${p.name || ''} ${p.size || ''}`;
+        return new RegExp(`\\b${l}\\b`).test(text);
+      });
+      return product?.price
+        ? `• Rollo de ${l}m — ${formatMoney(product.price)}`
+        : `• Rollo de ${l}m`;
+    });
+
+    return {
+      type: "text",
+      text: `¡Claro! Nuestro borde separador mide ${widthCm}cm de ancho y lo tenemos en:\n\n${lengthsWithPrices.join('\n')}\n\nLa compra es por Mercado Libre con envío incluido. ¿Cuál te interesa?`
     };
   }
 
