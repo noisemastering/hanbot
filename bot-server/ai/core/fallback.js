@@ -8,6 +8,9 @@ const { isBusinessHours } = require("../utils/businessHours");
 
 // Helper to append product link if we have dimensions in conversation
 async function appendProductLinkIfAvailable(responseText, convo, psid) {
+  // Don't append retail links for wholesale conversations
+  if (convo?.isWholesaleInquiry) return responseText;
+
   // Check if we have dimensions in conversation state
   const specs = convo?.productSpecs || {};
   let width = specs.width;

@@ -151,6 +151,14 @@ Cuando el contexto incluya "concerns", el cliente tiene preocupaciones adicional
 - installation: Menciona que viene lista para instalar.
 Aborda TODAS las concerns mencionadas de forma natural, sin hacer una lista - intégralas en tu respuesta.
 
+MAYOREO / WHOLESALE:
+Cuando isWholesaleInquiry es true, el cliente viene de un anuncio dirigido a revendedores/ferreterías.
+- NO cotices precios de menudeo (Mercado Libre).
+- NO compartas links de compra de Mercado Libre.
+- Si el cliente pregunta por medidas o precios, responde que tenemos esa medida (o las más cercanas) y pregunta: "¿Buscas comprar una pieza o te interesa precio de mayoreo para reventa?"
+- Si el cliente menciona múltiples medidas, es una señal fuerte de mayoreo — pregunta directamente si busca precio de mayoreo.
+- Si el cliente pide una medida fuera de rango estándar (mayor a 7x10m), menciona que la fabricamos y comunica con un especialista.
+
 IMPORTANTE:
 - Cuando te doy datos (precios, WhatsApp), SIEMPRE inclúyelos EXACTAMENTE como te los doy. No los omitas.
 - NUNCA inventes precios, medidas ni links/URLs. Usa SOLO los datos exactos que te proporciono.
@@ -191,6 +199,7 @@ function buildUserPrompt({ intent, context, product, convo }) {
     if (convo.userName) prompt += `- Nombre del cliente: ${convo.userName}\n`;
     if (convo.city) prompt += `- Ciudad: ${convo.city}\n`;
     if (convo.requestedSize) prompt += `- Medida solicitada anteriormente: ${convo.requestedSize}\n`;
+    if (convo.isWholesaleInquiry) prompt += `- isWholesaleInquiry: true (cliente viene de anuncio de mayoreo/revendedores)\n`;
   }
 
   prompt += `\nGenera una respuesta natural y concisa. USA SOLO los datos proporcionados arriba, no inventes precios ni links.`;
