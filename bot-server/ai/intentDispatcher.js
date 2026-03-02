@@ -3,6 +3,7 @@
 // AI classification runs FIRST, then this dispatcher routes to pure business logic handlers
 
 const { INTENTS } = require("./classifier");
+const { parseConfeccionadaDimensions } = require("./utils/dimensionParsers");
 
 // Import all handlers
 const socialHandlers = require("./handlers/social");
@@ -117,6 +118,19 @@ async function dispatch(classification, context) {
   if (currentFlow === 'borde_separador' &&
       (intent === INTENTS.SHIPPING_QUERY || intent === INTENTS.SHIPPING_INCLUDED_QUERY)) {
     console.log(`📋 Skipping dispatcher for "${intent}" — borde flow handles shipping in context`);
+    return null;
+  }
+
+  // DIMENSION PRIORITY: If the message contains dimensions, let the flow manager
+  // handle it — flows do product lookup + quoting, dispatched handlers don't.
+  // This prevents handlers (shade_percentage, shipping, etc.) from swallowing
+  // messages that also contain a size request like "4x3 90%" or "envío de 5x3".
+  const DIMENSION_SAFE_INTENTS = new Set([
+    INTENTS.FRUSTRATION, INTENTS.HUMAN_REQUEST, INTENTS.COMPLAINT,
+    INTENTS.GREETING, INTENTS.GOODBYE, INTENTS.THANKS
+  ]);
+  if (userMessage && !DIMENSION_SAFE_INTENTS.has(intent) && parseConfeccionadaDimensions(userMessage)) {
+    console.log(`📐 Dimensions detected in message — skipping dispatcher for "${intent}", passing to flows`);
     return null;
   }
 
