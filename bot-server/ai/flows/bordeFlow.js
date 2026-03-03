@@ -501,22 +501,31 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   // PRICE / CATALOG REQUEST — show borde products with prices
   if (intent === INTENTS.CATALOG_REQUEST || intent === INTENTS.PRICE_QUERY || intent === INTENTS.AVAILABILITY_QUERY) {
-    const widthCm = await getBordeWidth();
-    const products = await findMatchingProducts(null, adProductIds);
-    const lengthsWithPrices = availableLengths.map(l => {
-      const product = products.find(p => {
-        const text = `${p.name || ''} ${p.size || ''}`;
-        return new RegExp(`\\b${l}\\b`).test(text);
+    // If user asked for a specific length, jump straight to quoting with ML link
+    const requestedLength = parseLengthFromMessage(userMessage, availableLengths);
+    if (requestedLength) {
+      console.log(`🌱 Price query with specific length: ${requestedLength}m — jumping to quote`);
+      state.length = requestedLength;
+      if (!state.quantity) state.quantity = 1;
+      // Fall through to stage machine (will hit COMPLETE → share ML link)
+    } else {
+      const widthCm = await getBordeWidth();
+      const products = await findMatchingProducts(null, adProductIds);
+      const lengthsWithPrices = availableLengths.map(l => {
+        const product = products.find(p => {
+          const text = `${p.name || ''} ${p.size || ''}`;
+          return new RegExp(`\\b${l}\\b`).test(text);
+        });
+        return product?.price
+          ? `• Rollo de ${l}m — ${formatMoney(product.price)}`
+          : `• Rollo de ${l}m`;
       });
-      return product?.price
-        ? `• Rollo de ${l}m — ${formatMoney(product.price)}`
-        : `• Rollo de ${l}m`;
-    });
 
-    return {
-      type: "text",
-      text: `¡Claro! Nuestro borde separador mide ${widthCm}cm de ancho y lo tenemos en:\n\n${lengthsWithPrices.join('\n')}\n\nLa compra es por Mercado Libre con envío incluido. ¿Cuál te interesa?`
-    };
+      return {
+        type: "text",
+        text: `¡Claro! Nuestro borde separador mide ${widthCm}cm de ancho y lo tenemos en:\n\n${lengthsWithPrices.join('\n')}\n\nLa compra es por Mercado Libre con envío incluido. ¿Cuál te interesa?`
+      };
+    }
   }
 
   // DIMENSION SHAPE CHECK — if user gives 2D dimensions (e.g. "2.5x5"),
@@ -573,6 +582,17 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   // Also check classifier entities for quantity
   if (!state.quantity && entities.quantity) {
     state.quantity = entities.quantity;
+  }
+
+  // Skip quantity question for retail — if length is known and product has an ML link,
+  // default qty=1 and go straight to COMPLETE (like confeccionada retail).
+  if (state.length && !state.quantity) {
+    const mlCheckProducts = await findMatchingProducts(state.length, adProductIds);
+    const hasML = mlCheckProducts[0] && hasMLLink(mlCheckProducts[0]);
+    if (hasML) {
+      console.log(`🌱 Borde flow - Product has ML link, defaulting qty=1 (skip quantity question)`);
+      state.quantity = 1;
+    }
   }
 
   const stage = determineStage(state);
