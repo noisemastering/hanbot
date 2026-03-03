@@ -12,6 +12,9 @@ const { parseAndLookupZipCode: sharedParseAndLookupZipCode } = require("../utils
 // AI fallback for flow dead-ends
 const { resolveWithAI } = require("../utils/flowFallback");
 
+// Dimension shape classifier — detects when dimensions suggest a different product
+const { classifyDimensionShape } = require("../utils/dimensionParsers");
+
 // Import existing utilities - USE THESE
 const { getAncestors, getRootFamily } = require("../utils/productMatcher");
 const {
@@ -415,6 +418,19 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   console.log(`📦 Rollo flow - Current state:`, state);
   console.log(`📦 Rollo flow - Intent: ${intent}, Entities:`, entities);
+
+  // DIMENSION SHAPE CHECK — if user gives 2D dimensions both ≤10m (e.g. "3x5"),
+  // that suggests confeccionada, not rollo. Ask for clarification.
+  if (userMessage && !state.width) {
+    const dimShape = classifyDimensionShape(userMessage);
+    if (dimShape === 'confeccionada') {
+      console.log(`📦 Rollo flow - Dimension shape "${userMessage.slice(0, 40)}" suggests confeccionada, asking disambiguation`);
+      return {
+        type: "text",
+        text: "Esa medida suena a malla sombra confeccionada (cortada a la medida), no a rollo. ¿Estás buscando malla confeccionada o rollo?"
+      };
+    }
+  }
 
   // SECOND: Extract width — classifier entities first, regex fallback
   if (!state.width && entities.width) {

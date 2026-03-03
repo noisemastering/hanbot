@@ -463,10 +463,46 @@ function extractAllDimensions(str, type = 'confeccionada') {
   return results;
 }
 
+/**
+ * Classify what product type a set of dimensions likely refers to,
+ * based purely on dimensional shape:
+ *
+ *  - Two dimensions, both ≤ 10m  → "confeccionada" (rectangular pre-made mesh)
+ *  - One dimension ≤ 10m, other > 50m  → "rollo" (roll product)
+ *  - Single dimension (length only)  → "borde" (linear edging)
+ *
+ * @param {string} msg - Raw user message
+ * @returns {string|null} "confeccionada" | "rollo" | null (no dimensions detected)
+ */
+function classifyDimensionShape(msg) {
+  if (!msg) return null;
+  const s = String(msg).toLowerCase();
+
+  // Try to extract two dimensions (WxH pattern)
+  const twoD = s.match(/(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*(?:x|×|\*|por)\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?/i);
+  if (twoD) {
+    const d1 = parseFloat(twoD[1]);
+    const d2 = parseFloat(twoD[2]);
+    if (d1 > 0 && d2 > 0) {
+      const small = Math.min(d1, d2);
+      const large = Math.max(d1, d2);
+
+      // One side ≤ 10m and other > 50m → roll
+      if (small <= 10 && large > 50) return "rollo";
+
+      // Both ≤ 10m → confeccionada (area measurement)
+      if (large <= 10) return "confeccionada";
+    }
+  }
+
+  return null;
+}
+
 module.exports = {
   parseConfeccionadaDimensions,
   parseCintaDimensions,
   parseRollDimensions,
   parseSingleDimension,
-  extractAllDimensions
+  extractAllDimensions,
+  classifyDimensionShape
 };

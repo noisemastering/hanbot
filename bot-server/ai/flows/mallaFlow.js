@@ -34,7 +34,8 @@ const {
 const {
   parseConfeccionadaDimensions: parseDimensions,
   parseSingleDimension,
-  extractAllDimensions
+  extractAllDimensions,
+  classifyDimensionShape
 } = require("../utils/dimensionParsers");
 
 // AI-powered response generation
@@ -69,6 +70,14 @@ const STAGES = {
  * Valid shade percentages
  */
 const VALID_PERCENTAGES = [35, 50, 70, 80, 90];
+
+/**
+ * Cache for malla confeccionada price/size range (from DB)
+ * TTL: 1 hour — prices change frequently
+ */
+let mallaRangeCache = null;
+let mallaRangeCacheExpiry = 0;
+const MALLA_RANGE_TTL = 60 * 60 * 1000; // 1 hour
 
 // NOTE: parseDimensions, parseSingleDimension, and extractAllDimensions
 // are now imported from ../utils/dimensionParsers.js for consistency across all flows
@@ -835,6 +844,18 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     }
   }
 
+  // ===== DIMENSION SHAPE CHECK — detect if dimensions suggest a different product =====
+  if (userMessage && !state.width && !state.height) {
+    const dimShape = classifyDimensionShape(userMessage);
+    if (dimShape === 'rollo') {
+      console.log(`🌐 Malla flow - Dimension shape "${userMessage.slice(0, 40)}" suggests rollo, asking disambiguation`);
+      return {
+        type: "text",
+        text: "Esa medida suena a rollo de malla sombra. ¿Estás buscando malla en rollo o malla confeccionada (cortada a la medida)?"
+      };
+    }
+  }
+
   // ===== DIMENSION EXTRACTION (layered: AI → regex → single) =====
   // Log what the classifier gave us so we can trace failures
   const classifierHadDims = !!(entities.width && entities.height);
@@ -1115,12 +1136,14 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 }
 
 /**
- * Get the standard product description + price range for malla confeccionada.
- * This should ALWAYS be sent on first contact or info requests.
+ * Fetch malla confeccionada price/size range from DB (cached, 1h TTL).
+ * Returns { priceMin, priceMax, sizeMin, sizeMax } or null if DB unavailable.
  */
-async function getMallaDescription() {
-  // Get dynamic price range from database
-  let priceMin = 350, priceMax = 3450, sizeMin = '2x2m', sizeMax = '7x10m';
+async function getMallaRange() {
+  if (mallaRangeCache && Date.now() < mallaRangeCacheExpiry) {
+    return mallaRangeCache;
+  }
+
   try {
     const products = await ProductFamily.find({
       sellable: true, active: true,
@@ -1136,27 +1159,52 @@ async function getMallaDescription() {
       return Math.max(parseInt(m[1]), parseInt(m[2])) < 50;
     });
 
-    if (confec.length > 0) {
-      priceMin = Math.round(confec[0].price);
-      priceMax = Math.round(confec[confec.length - 1].price);
-
-      // Compute actual size range from DB
-      const sizes = confec.map(p => {
-        const m = p.size.match(/(\d+)\s*[xX×]\s*(\d+)/);
-        return { w: Math.min(parseInt(m[1]), parseInt(m[2])), h: Math.max(parseInt(m[1]), parseInt(m[2])) };
-      });
-      const smallestArea = sizes.reduce((min, s) => s.w * s.h < min.w * min.h ? s : min, sizes[0]);
-      const largestArea = sizes.reduce((max, s) => s.w * s.h > max.w * max.h ? s : max, sizes[0]);
-      sizeMin = `${smallestArea.w}x${smallestArea.h}m`;
-      sizeMax = `${largestArea.w}x${largestArea.h}m`;
+    if (confec.length === 0) {
+      console.warn("⚠️ No confeccionada products found in DB");
+      return mallaRangeCache || null;
     }
+
+    const priceMin = Math.round(confec[0].price);
+    const priceMax = Math.round(confec[confec.length - 1].price);
+
+    const sizes = confec.map(p => {
+      const m = p.size.match(/(\d+)\s*[xX×]\s*(\d+)/);
+      return { w: Math.min(parseInt(m[1]), parseInt(m[2])), h: Math.max(parseInt(m[1]), parseInt(m[2])) };
+    });
+    const smallestArea = sizes.reduce((min, s) => s.w * s.h < min.w * min.h ? s : min, sizes[0]);
+    const largestArea = sizes.reduce((max, s) => s.w * s.h > max.w * max.h ? s : max, sizes[0]);
+
+    mallaRangeCache = {
+      priceMin,
+      priceMax,
+      sizeMin: `${smallestArea.w}x${smallestArea.h}m`,
+      sizeMax: `${largestArea.w}x${largestArea.h}m`
+    };
+    mallaRangeCacheExpiry = Date.now() + MALLA_RANGE_TTL;
+    console.log(`🔄 Malla range cache refreshed: $${priceMin}-$${priceMax}, ${mallaRangeCache.sizeMin}-${mallaRangeCache.sizeMax}`);
+
+    return mallaRangeCache;
   } catch (err) {
     console.error("❌ Error getting malla price range:", err.message);
+    return mallaRangeCache || null; // Use stale cache if available
+  }
+}
+
+/**
+ * Get the standard product description + price range for malla confeccionada.
+ * This should ALWAYS be sent on first contact or info requests.
+ */
+async function getMallaDescription() {
+  const range = await getMallaRange();
+
+  let rangeText = '';
+  if (range) {
+    rangeText = `Manejamos medidas desde ${range.sizeMin} hasta ${range.sizeMax}, con precios desde ${formatMoney(range.priceMin)} hasta ${formatMoney(range.priceMax)}.\n\n`;
   }
 
   return `Nuestra malla sombra raschel confeccionada con 90% de cobertura y protección UV.\n\n` +
     `Viene con refuerzo en las esquinas para una vida útil de hasta 5 años, y con ojillos para sujeción cada 80 cm por lado, lista para instalar. El envío está incluido.\n\n` +
-    `Manejamos medidas desde ${sizeMin} hasta ${sizeMax}, con precios desde ${formatMoney(priceMin)} hasta ${formatMoney(priceMax)}.\n\n` +
+    rangeText +
     `¿Qué medida te interesa?`;
 }
 

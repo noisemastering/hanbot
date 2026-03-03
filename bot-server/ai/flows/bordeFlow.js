@@ -10,6 +10,9 @@ const { INTENTS } = require("../classifier");
 // AI fallback for flow dead-ends
 const { resolveWithAI } = require("../utils/flowFallback");
 
+// Dimension shape classifier — detects when dimensions suggest a different product
+const { classifyDimensionShape } = require("../utils/dimensionParsers");
+
 // Import existing utilities - USE THESE
 const { getAncestors, getRootFamily } = require("../utils/productMatcher");
 const {
@@ -496,6 +499,26 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       type: "text",
       text: `¡Claro! Nuestro borde separador mide ${widthCm}cm de ancho y lo tenemos en:\n\n${lengthsWithPrices.join('\n')}\n\nLa compra es por Mercado Libre con envío incluido. ¿Cuál te interesa?`
     };
+  }
+
+  // DIMENSION SHAPE CHECK — if user gives 2D dimensions (e.g. "2.5x5"),
+  // that suggests confeccionada, not borde. Ask for clarification.
+  if (userMessage && !state.length) {
+    const dimShape = classifyDimensionShape(userMessage);
+    if (dimShape === 'confeccionada') {
+      console.log(`🌱 Borde flow - Dimension shape "${userMessage.slice(0, 40)}" suggests confeccionada, asking disambiguation`);
+      return {
+        type: "text",
+        text: "Esa medida suena a malla sombra, no a borde separador. ¿Estás buscando malla sombra o borde separador?"
+      };
+    }
+    if (dimShape === 'rollo') {
+      console.log(`🌱 Borde flow - Dimension shape "${userMessage.slice(0, 40)}" suggests rollo, asking disambiguation`);
+      return {
+        type: "text",
+        text: "Esa medida suena a rollo de malla sombra, no a borde separador. ¿Estás buscando malla sombra en rollo o borde separador?"
+      };
+    }
   }
 
   // FIRST: Check classifier entities

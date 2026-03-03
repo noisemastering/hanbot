@@ -7,6 +7,14 @@ const { MAPS_URL } = require("../../businessInfoManager");
 const { INTENTS } = require("../classifier");
 const { getAvailableSizes, getMallaSizeRange, parseDimensions } = require("../../measureHandler");
 const { isBusinessHours } = require("../utils/businessHours");
+const ProductFamily = require("../../models/ProductFamily");
+
+/**
+ * Cache for roll sizes from DB (weekly refresh)
+ */
+let rollSizesCache = null;
+let rollSizesCacheExpiry = 0;
+const ROLL_SIZES_TTL = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 /**
  * Business information constants
@@ -19,6 +27,50 @@ const BUSINESS_INFO = {
   hours: "Lunes a Viernes 9am - 6pm",
   website: "mercadolibre.com/sec/1991696"
 };
+
+/**
+ * Fetch available roll sizes from DB (cached, 7-day TTL).
+ * Returns a display string like "4.20x100m y 2.10x100m" or null if unavailable.
+ */
+async function getRollSizesText() {
+  if (rollSizesCache && Date.now() < rollSizesCacheExpiry) {
+    return rollSizesCache;
+  }
+
+  try {
+    const rolls = await ProductFamily.find({
+      sellable: true, active: true,
+      size: { $regex: /\d+(?:\.\d+)?\s*x\s*100/i }
+    }).select('size').lean();
+
+    // Extract unique roll sizes (e.g., "4.20x100m", "2.10x100m")
+    const sizesSet = new Set();
+    for (const r of rolls) {
+      const m = r.size?.match(/(\d+(?:\.\d+)?)\s*x\s*(100)/i);
+      if (m) sizesSet.add(`${m[1]}x${m[2]}m`);
+    }
+
+    if (sizesSet.size === 0) {
+      console.warn("⚠️ No roll products found in DB");
+      return rollSizesCache || null;
+    }
+
+    // Sort by width descending (widest first)
+    const sorted = [...sizesSet].sort((a, b) => {
+      const wa = parseFloat(a), wb = parseFloat(b);
+      return wb - wa;
+    });
+
+    rollSizesCache = sorted.join(' y ');
+    rollSizesCacheExpiry = Date.now() + ROLL_SIZES_TTL;
+    console.log(`🔄 Roll sizes cache refreshed: ${rollSizesCache}`);
+
+    return rollSizesCache;
+  } catch (err) {
+    console.error("❌ Error fetching roll sizes:", err.message);
+    return rollSizesCache || null; // Use stale cache if available
+  }
+}
 
 /**
  * Handle general queries
@@ -408,7 +460,12 @@ async function handleConfirmation(convo, psid) {
         response += `\n\n... y ${availableSizes.length - 15} medidas más.`;
       }
 
-      response += "\n\nTambién manejamos rollos de 4.20x100m y 2.10x100m.\n\n";
+      const rollSizes = await getRollSizesText();
+      if (rollSizes) {
+        response += `\n\nTambién manejamos rollos de ${rollSizes}.\n\n`;
+      } else {
+        response += "\n\n";
+      }
       response += "¿Cuál te interesa?";
 
       return { type: "text", text: response };

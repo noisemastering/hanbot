@@ -179,7 +179,7 @@ ${conversationContext}${historyContext}${stateContext}${adContextPrompt}
 PRODUCTOS Y CARACTERÍSTICAS:
 - **SÍ VENDEMOS EN MERCADO LIBRE** - Tenemos Tienda Oficial. Si preguntan si pueden pedir/comprar/ordenar en Mercado Libre, la respuesta es SÍ.
 - Ofrecemos una amplia variedad de mallas sombra en diferentes medidas y precios
-- **SOBRE DIMENSIONES**: Las mallas rectangulares pueden usarse en cualquier orientación (4x3m es lo mismo que 3x4m), pero NO necesitas aclararlo - simplemente da el precio de la medida que pidieron
+- **SOBRE DIMENSIONES**: Las medidas SIEMPRE se expresan con 2 lados: ancho x largo (ej: 5x5m, 4x3m). NUNCA uses 3 dimensiones — la malla es un producto plano. Las mallas rectangulares pueden usarse en cualquier orientación (4x3m es lo mismo que 3x4m), pero NO necesitas aclararlo - simplemente da el precio de la medida que pidieron
 - Rollos de malla sombra beige y monofilamento
 - Color: Solo BEIGE
 - **IMPORTANTE: La malla sombra es PERMEABLE (permite que pase el agua). NO es impermeable ni repele el agua.**
