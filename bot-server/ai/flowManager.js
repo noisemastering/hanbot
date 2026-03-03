@@ -125,22 +125,8 @@ const FLOWS = {
   lead_capture: leadCaptureFlow
 };
 
-/**
- * Maps flowRef values (from ad hierarchy) to flow names
- */
-const FLOW_REF_MAP = {
-  'mallaFlow': 'malla_sombra',
-  'rolloFlow': 'rollo',
-  'bordeFlow': 'borde_separador',
-  'groundcoverFlow': 'groundcover',
-  'monofilamentoFlow': 'monofilamento',
-  'malla_sombra': 'malla_sombra',
-  'malla_confeccionada_distribuidores': 'malla_sombra',
-  'rollo': 'rollo',
-  'borde_separador': 'borde_separador',
-  'groundcover': 'groundcover',
-  'monofilamento': 'monofilamento'
-};
+/** Valid flow names — flowRef values in the DB must match one of these */
+const VALID_FLOWS = ['malla_sombra', 'rollo', 'borde_separador', 'groundcover', 'monofilamento'];
 
 /**
  * Product-type keywords we don't sell — used to detect "unknown product" questions
@@ -444,9 +430,9 @@ async function detectFlow(classification, convo, userMessage, sourceContext) {
   // 2. FLOWREF: Explicitly configured on ads/campaigns — highest priority for ad context.
   // This is set manually and is the most reliable indicator of which flow an ad belongs to.
   const adFlowRef = sourceContext?.ad?.flowRef || convo?.adFlowRef;
-  if (adFlowRef && FLOW_REF_MAP[adFlowRef]) {
-    console.log(`🎯 Flow from ad/campaign flowRef: ${adFlowRef} → ${FLOW_REF_MAP[adFlowRef]}`);
-    return FLOW_REF_MAP[adFlowRef];
+  if (adFlowRef && VALID_FLOWS.includes(adFlowRef)) {
+    console.log(`🎯 Flow from ad/campaign flowRef: ${adFlowRef}`);
+    return adFlowRef;
   }
 
   // 3. AD PRODUCTS: Fallback — infer flow from product IDs on the ad

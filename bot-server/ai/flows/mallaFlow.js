@@ -523,6 +523,22 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     if (pendingResult) return pendingResult;
   }
 
+  // ====== WHOLESALE/RESELLER GUARD ======
+  // Reseller conversations (from reseller ads/campaigns) never see retail prices.
+  // Hand off to specialist immediately. The ad already told us they're wholesale.
+  if (convo?.isWholesaleInquiry && convo?.lastIntent !== 'wholesale_handoff') {
+    // Extract any size they mentioned for the handoff reason
+    const dims = parseDimensions(userMessage);
+    const sizeInfo = dims ? ` — pregunta por ${dims.width}x${dims.height}m` : '';
+    const { executeHandoff } = require('../utils/executeHandoff');
+    return await executeHandoff(psid, convo, userMessage, {
+      reason: `Mayoreo: distribuidor en malla sombra confeccionada${sizeInfo}`,
+      responsePrefix: `¡Claro! Para precios de mayoreo te comunico con un especialista.`,
+      lastIntent: 'wholesale_handoff',
+      timingStyle: 'elaborate'
+    });
+  }
+
   // ====== RESELLER DISAMBIGUATION RESPONSE ======
   // User replied to "¿una pieza o mayoreo?"
   if (convo?.lastIntent === "awaiting_reseller_intent") {

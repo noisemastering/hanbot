@@ -1106,14 +1106,8 @@ app.post("/webhook", async (req, res) => {
 
         // Set product interest and send greeting
         // Use flowRef for currentFlow (explicitly configured on ads/campaigns), fall back to adProductInterest
-        const FLOW_REF_MAP = {
-          'mallaFlow': 'malla_sombra', 'rolloFlow': 'rollo', 'bordeFlow': 'borde_separador',
-          'groundcoverFlow': 'groundcover', 'monofilamentoFlow': 'monofilamento',
-          'malla_sombra': 'malla_sombra', 'rollo': 'rollo', 'borde_separador': 'borde_separador',
-          'groundcover': 'groundcover', 'monofilamento': 'monofilamento'
-        };
         const adFlowRef = resolvedSettings?.flowRef;
-        const adCurrentFlow = (adFlowRef && FLOW_REF_MAP[adFlowRef]) || adProductInterest;
+        const adCurrentFlow = adFlowRef || adProductInterest;
         if (adProductInterest) {
           await updateConversation(senderPsid, { productInterest: adProductInterest, currentFlow: adCurrentFlow, adFlowRef: adFlowRef || null, greeted: true, lastGreetTime: Date.now() });
           await callSendAPI(senderPsid, { text: adGreeting });
