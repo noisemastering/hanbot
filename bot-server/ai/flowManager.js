@@ -440,8 +440,15 @@ async function detectFlow(classification, convo, userMessage, sourceContext) {
     return convo.currentFlow;
   }
 
-  // 2. AD HIERARCHY: Products take priority over flowRef (ad→adSet→campaign)
-  // The products on the ad are more specific than a campaign-level flowRef
+  // 2. FLOWREF: Explicitly configured on ads/campaigns — highest priority for ad context.
+  // This is set manually and is the most reliable indicator of which flow an ad belongs to.
+  const adFlowRef = sourceContext?.ad?.flowRef || convo?.adFlowRef;
+  if (adFlowRef && FLOW_REF_MAP[adFlowRef]) {
+    console.log(`🎯 Flow from ad/campaign flowRef: ${adFlowRef} → ${FLOW_REF_MAP[adFlowRef]}`);
+    return FLOW_REF_MAP[adFlowRef];
+  }
+
+  // 3. AD PRODUCTS: Fallback — infer flow from product IDs on the ad
   const adProductIds = sourceContext?.ad?.productIds || convo?.adProductIds;
   if (adProductIds?.length) {
     const flowFromProducts = await inferFlowFromProductIds(adProductIds);
@@ -459,13 +466,6 @@ async function detectFlow(classification, convo, userMessage, sourceContext) {
       console.log(`🎯 Flow from ad product interest: ${adProduct} → ${adFlow}`);
       return adFlow;
     }
-  }
-
-  // 3. AD HIERARCHY FLOWREF: Fallback to cascaded flowRef if no product resolved
-  const adFlowRef = sourceContext?.ad?.flowRef || convo?.adFlowRef;
-  if (adFlowRef && FLOW_REF_MAP[adFlowRef]) {
-    console.log(`🎯 Flow from ad hierarchy flowRef: ${adFlowRef} → ${FLOW_REF_MAP[adFlowRef]}`);
-    return FLOW_REF_MAP[adFlowRef];
   }
 
   // 4. PRODUCT INTEREST: From conversation context (ads, previous context)
