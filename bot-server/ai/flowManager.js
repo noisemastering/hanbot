@@ -273,7 +273,10 @@ async function buildUnknownProductResponse(unknownProduct, psid, convo, currentF
  */
 function normalizeFlow(flow) {
   if (!flow) return flow;
-  if (flow.startsWith('malla_sombra_raschel')) return 'rollo';
+  // malla_sombra_raschel is the root material — both confeccionada and rollo are children.
+  // Default to malla_sombra (confeccionada) since it's the most common product.
+  // Rollo is only set when explicitly identified as rollo.
+  if (flow.startsWith('malla_sombra_raschel')) return 'malla_sombra';
   if (flow === 'ground_cover') return 'groundcover';
   return flow;
 }
@@ -822,7 +825,7 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
 
   // ===== STEP 0.5: CHECK FOR EXPLICIT PRODUCT SWITCH =====
   // If user is in a product flow and explicitly asks for a different product we sell, switch directly
-  const currentFlow = convo?.currentFlow || 'default';
+  const currentFlow = normalizeFlow(convo?.currentFlow) || 'default';
   if (currentFlow !== 'default' && !convo?.pendingFlowChange) {
     const switchToFlow = await detectExplicitProductSwitch(userMessage, currentFlow, classification);
 
