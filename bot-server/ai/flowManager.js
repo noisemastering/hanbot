@@ -268,6 +268,19 @@ async function buildUnknownProductResponse(unknownProduct, psid, convo, currentF
 }
 
 /**
+ * Vocabulary that each flow naturally uses.
+ * If a keyword belongs to the current flow, it should NOT trigger a switch.
+ * "rollo" is a format word — borde, groundcover, monofilamento all sell in rollos.
+ */
+const FLOW_VOCABULARY = {
+  'malla_sombra': /\b(malla\s*sombra|confeccionada|sombra)\b/i,
+  'rollo':        /\b(rollo|malla\s*sombra|raschel)\b/i,
+  'borde_separador': /\b(borde|separador|cinta|rollo)\b/i,
+  'groundcover':  /\b(ground\s*cover|antimaleza|maleza|rollo)\b/i,
+  'monofilamento': /\b(monofilamento|rollo)\b/i,
+};
+
+/**
  * Product type to flow mapping (from productInterest string)
  */
 const PRODUCT_TYPE_TO_FLOW = {
@@ -314,7 +327,7 @@ function isUnambiguousSwitch(msg, currentFlow = null, targetFlow = null) {
 async function detectExplicitProductSwitch(userMessage, currentFlow, classification) {
   const msg = (userMessage || '').toLowerCase();
 
-  // Map of explicit product keywords to flows
+  // Map of product keywords to flows
   const explicitProductPatterns = {
     'rollo': { pattern: /\b(rollo|rollos|100\s*m(etros)?)\b/i, flow: 'rollo' },
     'borde_separador': { pattern: /\b(bordes?|separador|cinta\s*pl[aá]stica)\b/i, flow: 'borde_separador' },
@@ -323,18 +336,17 @@ async function detectExplicitProductSwitch(userMessage, currentFlow, classificat
     'malla_sombra': { pattern: /\b(confeccionada|malla\s*sombra)\b/i, flow: 'malla_sombra' }
   };
 
-  // Also check classification product
-  const classificationFlowMap = {
-    [PRODUCTS.ROLLO]: 'rollo',
-    [PRODUCTS.BORDE_SEPARADOR]: 'borde_separador',
-    [PRODUCTS.GROUNDCOVER]: 'groundcover',
-    [PRODUCTS.MONOFILAMENTO]: 'monofilamento',
-    [PRODUCTS.MALLA_SOMBRA]: 'malla_sombra'
-  };
-
   // Check for explicit keyword mentions
+  // Key rule: if the keyword also belongs to the current flow's vocabulary, don't switch.
+  // e.g. "rollo" in borde_separador flow → no switch, because borde sells in rollos too.
   for (const [productKey, config] of Object.entries(explicitProductPatterns)) {
     if (config.pattern.test(msg) && config.flow !== currentFlow) {
+      // Does the current flow also use this word? If so, current flow wins.
+      const currentVocab = FLOW_VOCABULARY[currentFlow];
+      if (currentVocab && currentVocab.test(msg)) {
+        console.log(`🔍 Keyword "${productKey}" also belongs to current flow ${currentFlow} — not switching`);
+        continue;
+      }
       console.log(`🔍 Explicit product mention detected: ${productKey} (current: ${currentFlow})`);
       return config.flow;
     }
@@ -813,25 +825,14 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
     const switchToFlow = await detectExplicitProductSwitch(userMessage, currentFlow, classification);
 
     if (switchToFlow) {
-      // Determine if this is an unambiguous switch or needs AI confirmation
-      const unambiguous = isUnambiguousSwitch(userMessage, currentFlow, switchToFlow);
-      let confirmed = unambiguous;
+      // Only switch silently when the customer used explicit switch language
+      // e.g. "en vez de malla quiero borde", "mejor quiero antimaleza"
+      // That IS the confirmation — no need to ask again.
+      const hasExplicitSwitchLanguage = /\b(en vez de|mejor quiero|cambio a|prefiero|no quiero .+ quiero|ya no .+ sino|en lugar de|cambi[ée]|quiero cambiar a)\b/i.test(userMessage);
 
-      if (!unambiguous) {
-        // Ambiguous keyword match — ask AI to confirm
-        console.log(`🔍 Ambiguous product switch detected: ${currentFlow} → ${switchToFlow}, verifying with AI...`);
-        const aiResult = await analyzeProductSwitch(userMessage, currentFlow, convo, sourceContext);
-        confirmed = aiResult.shouldSwitch;
+      if (hasExplicitSwitchLanguage) {
+        console.log(`🔄 Product switch: ${currentFlow} → ${switchToFlow} (explicit switch language)`);
 
-        if (!confirmed) {
-          console.log(`🤖 AI says NO switch (staying in ${currentFlow}): ${userMessage}`);
-        }
-      }
-
-      if (confirmed) {
-        console.log(`🔄 Product switch: ${currentFlow} → ${switchToFlow} (${unambiguous ? 'unambiguous' : 'AI confirmed'})`);
-
-        // Switch directly — confirmed by either explicit language or AI
         await updateConversation(psid, {
           currentFlow: switchToFlow,
           productInterest: switchToFlow,
@@ -839,7 +840,6 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
           pendingFlowChangeReason: null,
           flowTransferredFrom: currentFlow,
           flowTransferredAt: new Date(),
-          // Reset product specs for the new flow
           productSpecs: { productType: switchToFlow, updatedAt: new Date() }
         });
         convo.currentFlow = switchToFlow;
@@ -847,7 +847,32 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
         convo.productSpecs = { productType: switchToFlow };
 
         // Let the message fall through to be handled by the new flow
-        // (the flow detection in step 2 will pick up the new currentFlow)
+      } else {
+        // No explicit switch language — ask the customer to confirm
+        const productNames = {
+          'rollo': 'rollos de malla sombra',
+          'malla_sombra': 'malla sombra confeccionada',
+          'borde_separador': 'borde separador',
+          'groundcover': 'ground cover (antimaleza)',
+          'monofilamento': 'malla monofilamento'
+        };
+        const targetName = productNames[switchToFlow] || switchToFlow;
+        const currentName = productNames[currentFlow] || currentFlow;
+
+        console.log(`🔍 Possible product switch: ${currentFlow} → ${switchToFlow}, asking customer to confirm`);
+
+        await updateConversation(psid, {
+          pendingFlowChange: switchToFlow,
+          pendingFlowChangeReason: 'product_switch'
+        });
+
+        console.log(`🎯 ===== END FLOW MANAGER (pending product switch confirmation) =====\n`);
+        return {
+          type: "text",
+          text: `Estás preguntando por ${currentName}. ¿Te interesa cambiarte a ${targetName}?`,
+          handledBy: "flow:product_switch_confirmation",
+          purchaseIntent: 'medium'
+        };
       }
     }
 

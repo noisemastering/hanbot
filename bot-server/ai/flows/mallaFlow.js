@@ -424,11 +424,11 @@ function checkProductFeatureQuestions(userMessage, state, convo) {
       response: "sí, es malla raschel de alta densidad (HDPE)"
     },
     {
-      pattern: /\b(90|noventa)\s*%?(?!\s*(m|metro|x|\d))/i,
+      pattern: /(?<![.\d])\b(90|noventa)\s*%?(?!\s*(m|metro|x|\d))/i,
       response: "sí, manejamos 90% de sombra"
     },
     {
-      pattern: /\b(35|50|70|80)\s*%?(?!\s*(m|metro|x|\d))/i,
+      pattern: /(?<![.\d])\b(35|50|70|80)\s*%?(?!\s*(m|metro|x|\d))/i,
       response: "la malla confeccionada solo la manejamos en 90% de sombra; en rollo manejamos 35%, 50%, 70%, 80% y 90%"
     },
     {
