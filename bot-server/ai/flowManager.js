@@ -268,6 +268,17 @@ async function buildUnknownProductResponse(unknownProduct, psid, convo, currentF
 }
 
 /**
+ * Normalize flow aliases to canonical flow names.
+ * e.g. malla_sombra_raschel → rollo, ground_cover → groundcover
+ */
+function normalizeFlow(flow) {
+  if (!flow) return flow;
+  if (flow.startsWith('malla_sombra_raschel')) return 'rollo';
+  if (flow === 'ground_cover') return 'groundcover';
+  return flow;
+}
+
+/**
  * Vocabulary that each flow naturally uses.
  * If a keyword belongs to the current flow, it should NOT trigger a switch.
  * "rollo" is a format word — borde, groundcover, monofilamento all sell in rollos.
@@ -278,6 +289,17 @@ const FLOW_VOCABULARY = {
   'borde_separador': /\b(borde|separador|cinta|rollo)\b/i,
   'groundcover':  /\b(ground\s*cover|antimaleza|maleza|rollo)\b/i,
   'monofilamento': /\b(monofilamento|rollo)\b/i,
+};
+
+/**
+ * Human-readable product names for customer-facing messages.
+ */
+const FLOW_DISPLAY_NAMES = {
+  'rollo': 'rollos de malla sombra',
+  'malla_sombra': 'malla sombra confeccionada',
+  'borde_separador': 'borde separador',
+  'groundcover': 'ground cover (antimaleza)',
+  'monofilamento': 'malla monofilamento'
 };
 
 /**
@@ -324,8 +346,9 @@ function isUnambiguousSwitch(msg, currentFlow = null, targetFlow = null) {
  * Detect if user explicitly mentioned a different product than current flow
  * Returns the new product flow if detected, null otherwise
  */
-async function detectExplicitProductSwitch(userMessage, currentFlow, classification) {
+async function detectExplicitProductSwitch(userMessage, rawCurrentFlow, classification) {
   const msg = (userMessage || '').toLowerCase();
+  const currentFlow = normalizeFlow(rawCurrentFlow);
 
   // Map of product keywords to flows
   const explicitProductPatterns = {
@@ -619,14 +642,7 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
     }
 
     if (isWholesaleChoice) {
-      const productNames = {
-        'rollo': 'rollos de malla sombra',
-        'malla_sombra': 'malla sombra',
-        'borde_separador': 'borde separador',
-        'groundcover': 'ground cover',
-        'monofilamento': 'malla monofilamento'
-      };
-      const productName = productNames[convo.pendingWholesaleRetailChoice] || 'producto';
+      const productName = FLOW_DISPLAY_NAMES[convo.pendingWholesaleRetailChoice] || 'producto';
 
       console.log(`🏭 Wholesale choice confirmed, handing off to specialist`);
       await updateConversation(psid, { pendingWholesaleRetailChoice: null });
@@ -683,14 +699,7 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
 
           if (hasRetail && hasWholesale) {
             // Both modes available — ask the customer
-            const productNames = {
-              'rollo': 'rollos de malla sombra',
-              'malla_sombra': 'malla sombra',
-              'borde_separador': 'borde separador',
-              'groundcover': 'ground cover',
-              'monofilamento': 'malla monofilamento'
-            };
-            const productName = productNames[newFlow] || newFlow;
+            const productName = FLOW_DISPLAY_NAMES[newFlow] || newFlow;
 
             await updateConversation(psid, {
               pendingFlowChange: null,
@@ -709,14 +718,7 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
 
           if (!hasRetail && hasWholesale) {
             // Wholesale only — handoff to specialist
-            const productNames = {
-              'rollo': 'rollos de malla sombra',
-              'malla_sombra': 'malla sombra',
-              'borde_separador': 'borde separador',
-              'groundcover': 'ground cover',
-              'monofilamento': 'malla monofilamento'
-            };
-            const productName = productNames[newFlow] || newFlow;
+            const productName = FLOW_DISPLAY_NAMES[newFlow] || newFlow;
 
             await updateConversation(psid, {
               pendingFlowChange: null,
@@ -849,15 +851,8 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
         // Let the message fall through to be handled by the new flow
       } else {
         // No explicit switch language — ask the customer to confirm
-        const productNames = {
-          'rollo': 'rollos de malla sombra',
-          'malla_sombra': 'malla sombra confeccionada',
-          'borde_separador': 'borde separador',
-          'groundcover': 'ground cover (antimaleza)',
-          'monofilamento': 'malla monofilamento'
-        };
-        const targetName = productNames[switchToFlow] || switchToFlow;
-        const currentName = productNames[currentFlow] || currentFlow;
+        const targetName = FLOW_DISPLAY_NAMES[switchToFlow] || switchToFlow;
+        const currentName = FLOW_DISPLAY_NAMES[currentFlow] || currentFlow;
 
         console.log(`🔍 Possible product switch: ${currentFlow} → ${switchToFlow}, asking customer to confirm`);
 
