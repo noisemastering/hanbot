@@ -1059,16 +1059,44 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
   }
 
   // ===== STEP 5: FALLBACK TO GENERAL FLOW =====
-  // If product flow didn't handle it, try general flow for common queries
+  // If product flow didn't handle it, try general flow for SOCIAL/LOGISTICS queries only
+  // (greeting, thanks, goodbye, shipping, location, payment, etc.)
+  // NEVER let general flow answer product-related intents (price, product_inquiry, etc.)
+  // for a customer in a specific product flow — that would be a silent flow switch.
   if (activeFlow !== 'default' && generalFlow.shouldHandle(classification, sourceContext, convo, userMessage)) {
-    console.log(`🔄 Fallback to general flow for common query`);
-    const generalResponse = await generalFlow.handle(classification, sourceContext, convo, psid, campaign, userMessage);
+    // Only allow general flow for non-product intents when in a product flow
+    const productIntents = [
+      INTENTS.PRICE_QUERY, INTENTS.PRODUCT_INQUIRY, INTENTS.AVAILABILITY_QUERY,
+      INTENTS.CATALOG_REQUEST, INTENTS.DETAILS_REQUEST, INTENTS.DURABILITY_QUERY,
+      INTENTS.WARRANTY_QUERY, INTENTS.ACCESSORY_QUERY, INTENTS.EYELETS_QUERY,
+      INTENTS.INSTALLATION_QUERY, INTENTS.CUSTOM_SIZE_QUERY, INTENTS.COLOR_QUERY,
+      INTENTS.COLOR_SPECIFICATION, INTENTS.PHOTO_REQUEST, INTENTS.PRODUCT_COMPARISON,
+      INTENTS.LARGEST_PRODUCT, INTENTS.SMALLEST_PRODUCT, INTENTS.SHADE_PERCENTAGE_QUERY
+    ];
+    const isProductIntent = productIntents.includes(classification.intent);
 
-    if (generalResponse) {
-      console.log(`🎯 ===== END FLOW MANAGER (handled by general) =====\n`);
+    if (!isProductIntent) {
+      console.log(`🔄 Fallback to general flow for non-product query (${classification.intent})`);
+      const generalResponse = await generalFlow.handle(classification, sourceContext, convo, psid, campaign, userMessage);
+
+      if (generalResponse) {
+        console.log(`🎯 ===== END FLOW MANAGER (handled by general) =====\n`);
+        return {
+          ...generalResponse,
+          handledBy: 'flow:general',
+          purchaseIntent: intentScore.intent
+        };
+      }
+    } else {
+      // Product intent that the flow didn't handle — stay in context, don't switch
+      const productName = FLOW_DISPLAY_NAMES[activeFlow] || activeFlow;
+      console.warn(`⚠️ ${activeFlow} flow didn't handle product intent "${classification.intent}" — responding in flow context instead of falling through`);
+
+      console.log(`🎯 ===== END FLOW MANAGER (flow-aware fallback) =====\n`);
       return {
-        ...generalResponse,
-        handledBy: 'flow:general',
+        type: "text",
+        text: `Sobre ${productName}, déjame comunicarte con un especialista que pueda darte más información.`,
+        handledBy: `flow:${activeFlow}_fallback`,
         purchaseIntent: intentScore.intent
       };
     }
