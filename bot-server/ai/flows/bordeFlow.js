@@ -358,6 +358,24 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     if (pendingResult) return pendingResult;
   }
 
+  // ====== WHOLESALE/RESELLER GUARD ======
+  // Reseller conversations (from reseller ads) never see retail prices.
+  // Hand off to specialist immediately.
+  if (convo?.isWholesaleInquiry && convo?.lastIntent !== 'wholesale_handoff') {
+    const wAvailableLengths = await getAvailableLengths(sourceContext, convo);
+    const lengthList = wAvailableLengths.map(l => `${l}m`).join(' y ');
+    const parsed = parseLengthFromMessage(userMessage, wAvailableLengths);
+    const lengthInfo = parsed ? ` — pregunta por ${parsed}m` : '';
+
+    const { executeHandoff } = require('../utils/executeHandoff');
+    return await executeHandoff(psid, convo, userMessage, {
+      reason: `Mayoreo: distribuidor en borde separador${lengthInfo}`,
+      responsePrefix: `¡Claro! Manejamos borde separador en rollos de ${lengthList}. Para precios de mayoreo te comunico con un especialista.`,
+      lastIntent: 'wholesale_handoff',
+      timingStyle: 'elaborate'
+    });
+  }
+
   let state = getFlowState(convo);
 
   console.log(`🌱 Borde flow - Current state:`, state);
@@ -770,6 +788,18 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
         const wholesaleResponse = await handleWholesaleRequest(product, quantity, psid, convo);
         if (wholesaleResponse) return wholesaleResponse;
       }
+    }
+
+    // Wholesale guard — if isWholesaleInquiry was set mid-conversation, hand off
+    if (convo?.isWholesaleInquiry) {
+      const specsText = `${quantity} rollo${quantity > 1 ? 's' : ''} de borde de ${length}m`;
+      const { executeHandoff } = require('../utils/executeHandoff');
+      return await executeHandoff(psid, convo, userMessage, {
+        reason: `Mayoreo: ${specsText}`,
+        responsePrefix: `¡Perfecto! ${specsText}. Para precios de mayoreo te comunico con un especialista.`,
+        lastIntent: 'wholesale_handoff',
+        timingStyle: 'elaborate'
+      });
     }
 
     // Get preferred link
