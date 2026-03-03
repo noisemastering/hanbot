@@ -134,8 +134,9 @@ function parseDimensions(message) {
   normalized = normalized.replace(/(\d+(?:\.\d+)?)\s*mts(?=\s|[xX×*]|$)/gi, '$1');
   normalized = normalized.replace(/(\d+(?:\.\d+)?)\s*m(?=\s|[xX×*]|$)/gi, '$1');
 
-  // PREPROCESSING: Normalize "k" separator to "x" (common text abbreviation: "4 k 4" → "4 x 4")
+  // PREPROCESSING: Normalize "k" and "+" separators to "x" (common text abbreviations: "4 k 4", "6+4")
   normalized = normalized.replace(/(\d+(?:\.\d+)?)\s*k\s*(\d+(?:\.\d+)?)/gi, '$1 x $2');
+  normalized = normalized.replace(/(\d+(?:\.\d+)?)\s*\+\s*(\d+(?:\.\d+)?)/g, '$1 x $2');
 
   // PREPROCESSING: Remove stray commas near dimension separators (e.g., "4,×8" → "4×8", "4x,8" → "4x8")
   normalized = normalized.replace(/,\s*([xX×*])/g, '$1');

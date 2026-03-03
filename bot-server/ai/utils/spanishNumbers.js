@@ -60,6 +60,12 @@ function convertSpanishNumbers(text) {
     return match;
   });
 
+  // Handle number words glued to "x" separator (e.g., "seisx cuatro" → "6x cuatro")
+  converted = converted.replace(/\b(uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce)x\b/gi, (match, num) => {
+    const numVal = NUMBER_MAP[num.toLowerCase()];
+    return numVal ? `${numVal}x` : match;
+  });
+
   // Replace simple number words
   // Process una/uno LAST — they need all other words converted to digits first
   // so the "una de <digit>" guard works (e.g., "una de tres" → after tres→3, "una de 3" is caught)
