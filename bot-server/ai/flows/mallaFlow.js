@@ -835,15 +835,21 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     }
   }
 
+  // ===== DIMENSION EXTRACTION (layered: AI → regex → single) =====
+  // Log what the classifier gave us so we can trace failures
+  const classifierHadDims = !!(entities.width && entities.height);
+  const classifierHadDimStr = !!entities.dimensions;
+  console.log(`🌐 Malla flow - Classifier entities: width=${entities.width ?? 'null'}, height=${entities.height ?? 'null'}, dimensions="${entities.dimensions ?? 'null'}" | message="${userMessage.slice(0, 60)}"`);
+
   // FIRST: Check classifier entities (AI or quick classifier already extracted)
-  if (entities.width && entities.height) {
+  if (classifierHadDims) {
     state.width = entities.width;
     state.height = entities.height;
     state.userExpressedSize = `${entities.width} x ${entities.height}`;
-    console.log(`🌐 Malla flow - Using classifier entities: ${entities.width}x${entities.height}`);
+    console.log(`🌐 Malla flow - [1/4 AI entities] Using ${entities.width}x${entities.height}`);
   }
   if (!state.width || !state.height) {
-    if (entities.dimensions) {
+    if (classifierHadDimStr) {
       const dims = parseDimensions(entities.dimensions);
       if (dims) {
         state.width = dims.width;
@@ -853,6 +859,9 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
           state.convertedFromFeet = true;
           state.originalFeetStr = dims.originalFeetStr;
         }
+        console.log(`🌐 Malla flow - [2/4 AI dim string] Parsed "${entities.dimensions}" → ${dims.width}x${dims.height}`);
+      } else {
+        console.warn(`⚠️ Malla flow - [2/4 AI dim string] FAILED to parse "${entities.dimensions}" — classifier gave dimensions but regex couldn't parse them`);
       }
     }
   }
@@ -861,7 +870,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   if (!state.width || !state.height) {
     const dimsFromMessage = parseDimensions(userMessage);
     if (dimsFromMessage) {
-      console.log(`🌐 Malla flow - Regex fallback: ${dimsFromMessage.width}x${dimsFromMessage.height}`);
+      console.log(`🌐 Malla flow - [3/4 regex fallback] Parsed "${userMessage.slice(0, 40)}" → ${dimsFromMessage.width}x${dimsFromMessage.height}`);
       state.width = dimsFromMessage.width;
       state.height = dimsFromMessage.height;
       state.userExpressedSize = dimsFromMessage.userExpressed;
@@ -869,6 +878,8 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
         state.convertedFromFeet = true;
         state.originalFeetStr = dimsFromMessage.originalFeetStr;
       }
+    } else if (classifierHadDimStr || /\d/.test(userMessage)) {
+      console.warn(`⚠️ Malla flow - [3/4 regex fallback] FAILED on "${userMessage.slice(0, 60)}" — message has numbers but regex couldn't parse dimensions`);
     }
   }
 
@@ -880,12 +891,20 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     // Numbers like 100 are roll lengths, not confeccionada sizes
     if (singleDim && singleDim >= 2 && singleDim <= 10) {
       const rounded = Math.round(singleDim);
-      console.log(`🌐 Malla flow - Single dimension ${singleDim}m, assuming square ${rounded}x${rounded}`);
+      console.log(`🌐 Malla flow - [4/4 single dim] ${singleDim}m → assuming square ${rounded}x${rounded}`);
       state.width = rounded;
       state.height = rounded;
     } else if (singleDim && singleDim > 10) {
-      console.log(`⚠️ Single dimension ${singleDim}m is too large for confeccionada, ignoring`);
+      console.log(`⚠️ [4/4 single dim] ${singleDim}m too large for confeccionada, ignoring`);
     }
+  }
+
+  // Final trace: log which layer resolved dimensions (or if none did)
+  if (state.width && state.height) {
+    const source = classifierHadDims ? 'AI entities' : classifierHadDimStr ? 'AI dim string' : 'regex fallback';
+    console.log(`✅ Malla flow - Dimensions resolved: ${state.width}x${state.height} (source: ${source})`);
+  } else if (/\d/.test(userMessage)) {
+    console.warn(`❌ Malla flow - NO dimensions extracted from "${userMessage.slice(0, 60)}" — all 4 layers failed. Classifier had: width=${entities.width ?? 'null'}, height=${entities.height ?? 'null'}, dimensions="${entities.dimensions ?? 'null'}"`);
   }
 
   // CHECK FOR AREA (metros cuadrados) - offer closest standard sizes
