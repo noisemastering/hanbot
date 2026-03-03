@@ -449,8 +449,37 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     };
   }
 
-  // CATALOG REQUEST — show borde products in context
-  if (intent === INTENTS.CATALOG_REQUEST) {
+  // PRODUCT INQUIRY / DESCRIPTION — what is borde separador?
+  if (intent === INTENTS.PRODUCT_INQUIRY || intent === INTENTS.DETAILS_REQUEST) {
+    const widthCm = await getBordeWidth();
+    const products = await findMatchingProducts(null, adProductIds);
+    const lengthsWithPrices = availableLengths.map(l => {
+      const product = products.find(p => {
+        const text = `${p.name || ''} ${p.size || ''}`;
+        return new RegExp(`\\b${l}\\b`).test(text);
+      });
+      return product?.price
+        ? `• Rollo de ${l}m — ${formatMoney(product.price)}`
+        : `• Rollo de ${l}m`;
+    });
+
+    return {
+      type: "text",
+      text: `El borde separador es una cinta plástica gruesa de ${widthCm}cm de ancho para delimitar jardín. Es resistente a la intemperie y se fija al suelo con estacas.\n\nLo tenemos en:\n\n${lengthsWithPrices.join('\n')}\n\nLa compra es por Mercado Libre con envío incluido. ¿Qué largo te interesa?`
+    };
+  }
+
+  // DURABILITY — how long does it last?
+  if (intent === INTENTS.DURABILITY_QUERY || intent === INTENTS.WARRANTY_QUERY) {
+    const lengthList = availableLengths.map(l => `${l}m`).join(', ');
+    return {
+      type: "text",
+      text: `El borde separador está diseñado para resistir la intemperie y el paso del tiempo. Es de plástico grueso de alta resistencia.\n\nLo tenemos en rollos de ${lengthList}. ¿Qué largo necesitas?`
+    };
+  }
+
+  // PRICE / CATALOG REQUEST — show borde products with prices
+  if (intent === INTENTS.CATALOG_REQUEST || intent === INTENTS.PRICE_QUERY || intent === INTENTS.AVAILABILITY_QUERY) {
     const widthCm = await getBordeWidth();
     const products = await findMatchingProducts(null, adProductIds);
     const lengthsWithPrices = availableLengths.map(l => {
