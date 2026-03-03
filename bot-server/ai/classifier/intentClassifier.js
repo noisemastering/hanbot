@@ -888,7 +888,7 @@ function quickClassify(message, dbIntents = null) {
 
   // Deferral / "I'll measure later" — user is NOT asking a question, they're stepping away
   // "Voy a checar las medidas", "Voy a medir", "Déjame medir", "Necesito medir", "Voy medir"
-  if (/\b(voy\s+a?\s*(medir|checar|ver|revisar|pensar)|d[eé]jame\s+(medir|checar|pensar|ver)|necesito\s+medir|lo\s+(pienso|checo|veo)|ahorita\s+no|por\s+ahora|despu[eé]s\s+te\s+(aviso|digo|confirmo)|ma[ñn]ana\s+te\s+(aviso|digo|confirmo)|al\s+rato\s+te)\b/i.test(msg)) {
+  if (/\b(voy\s+a?\s*(medir|checar|ver|revisar|pensar)|d[eé]jame\s+(medir|checar|pensar|ver)|necesito\s+medir|hago\s+la\s+medici[oó]n|lo\s+(pienso|checo|veo)|ahorita\s+no|por\s+ahora|despu[eé]s\s+te\s+(aviso|digo|confirmo)|ma[ñn]ana\s+te\s+(aviso|digo|confirmo)|al\s+rato\s+te|me\s+estar[ií]a\s+comunicando|te\s+estar[ií]a\s+(contactando|escribiendo))\b/i.test(msg)) {
     return { intent: INTENTS.WILL_GET_BACK, product: PRODUCTS.UNKNOWN, entities: {}, confidence: 0.90 };
   }
 
