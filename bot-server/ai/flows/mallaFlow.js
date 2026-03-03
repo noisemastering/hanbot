@@ -1055,7 +1055,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       break;
 
     default:
-      response = await handleStart(sourceContext, convo);
+      response = await handleStart(sourceContext, convo, psid, userMessage);
   }
 
   // Save updated specs (but don't overwrite if we're awaiting confirmation)
@@ -1135,9 +1135,18 @@ async function handleProductInfo(userMessage, convo) {
 
 /**
  * Handle start - user just mentioned malla
- * Always sends the full product description with price range
+ * Wholesale/reseller conversations go straight to handoff — no retail prices.
  */
-async function handleStart(sourceContext, convo) {
+async function handleStart(sourceContext, convo, psid, userMessage) {
+  if (convo?.isWholesaleInquiry) {
+    const { executeHandoff } = require('../utils/executeHandoff');
+    return await executeHandoff(psid, convo, userMessage, {
+      reason: `Mayoreo: distribuidor pregunta por malla sombra confeccionada`,
+      responsePrefix: `¡Claro! Para precios de mayoreo te comunico con un especialista que te compartirá nuestro catálogo y precios de distribución.`,
+      lastIntent: 'wholesale_handoff',
+      timingStyle: 'elaborate'
+    });
+  }
   const description = await getMallaDescription();
   return { type: "text", text: description };
 }
@@ -1773,27 +1782,15 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       const sizeDisplay = userExpressedSize || `${width}x${height}`;
       await updateConversation(psid, { lastIntent: "size_confirmed", unknownCount: 0 });
 
-      // Wholesale context — ask disambiguation if no explicit wholesale language
+      // Wholesale/reseller context — hand off directly
       if (convo?.isWholesaleInquiry) {
-        const hasExplicitWholesale = /\b(mayoreo|mayor|al\s+por\s+mayor|revender|reventa|distribui[rd]|para\s+vender)\b/i.test(userMessage);
-        if (hasExplicitWholesale) {
-          const { executeHandoff } = require('../utils/executeHandoff');
-          return await executeHandoff(psid, convo, userMessage, {
-            reason: `Mayoreo: cliente confirma ${sizeDisplay}m a $${product.price} — cotizar precio de mayoreo`,
-            responsePrefix: `Perfecto, ${sizeDisplay} metros. Para precio de mayoreo un especialista te dará la cotización.`,
-            lastIntent: 'wholesale_handoff',
-            timingStyle: 'elaborate'
-          });
-        }
-        // No explicit wholesale language — ask disambiguation
-        await updateConversation(psid, {
-          lastIntent: "awaiting_reseller_intent",
-          productSpecs: { ...convo.productSpecs, pendingSize: sizeDisplay }
+        const { executeHandoff } = require('../utils/executeHandoff');
+        return await executeHandoff(psid, convo, userMessage, {
+          reason: `Mayoreo: distribuidor confirma ${sizeDisplay}m — cotizar precio de mayoreo`,
+          responsePrefix: `Perfecto, ${sizeDisplay} metros. Para precio de mayoreo te comunico con un especialista.`,
+          lastIntent: 'wholesale_handoff',
+          timingStyle: 'elaborate'
         });
-        return {
-          type: "text",
-          text: `¡Tenemos la medida de ${sizeDisplay}m! ¿Buscas comprar una pieza o te interesa precio de mayoreo para reventa?`
-        };
       }
 
       return {
@@ -1824,30 +1821,17 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       }
     }
 
-    // Wholesale context — ask disambiguation if no explicit wholesale language
+    // Wholesale/reseller context — hand off for wholesale pricing
     if (convo?.isWholesaleInquiry) {
       const sizeDisplay = userExpressedSize || `${width}x${height}`;
-      const hasExplicitWholesale = /\b(mayoreo|mayor|al\s+por\s+mayor|revender|reventa|distribui[rd]|para\s+vender)\b/i.test(userMessage);
-      if (hasExplicitWholesale) {
-        console.log(`🏪 Wholesale inquiry — explicit wholesale language, handing off ${sizeDisplay}m`);
-        const { executeHandoff: execHandoffW } = require('../utils/executeHandoff');
-        return await execHandoffW(psid, convo, userMessage, {
-          reason: `Mayoreo: cliente pregunta por ${sizeDisplay}m — cotizar precio de mayoreo`,
-          responsePrefix: `¡Tenemos la medida ${sizeDisplay}m! Para precio de mayoreo un especialista te dará la cotización.`,
-          lastIntent: 'wholesale_handoff',
-          timingStyle: 'elaborate'
-        });
-      }
-      // No explicit wholesale language — ask disambiguation
-      console.log(`🏪 Wholesale inquiry — no explicit wholesale terms, asking disambiguation for ${sizeDisplay}m`);
-      await updateConversation(psid, {
-        lastIntent: "awaiting_reseller_intent",
-        productSpecs: { ...convo.productSpecs, pendingSize: sizeDisplay }
+      console.log(`🏪 Wholesale inquiry — handing off ${sizeDisplay}m for wholesale pricing`);
+      const { executeHandoff: execHandoffW } = require('../utils/executeHandoff');
+      return await execHandoffW(psid, convo, userMessage, {
+        reason: `Mayoreo: distribuidor pregunta por ${sizeDisplay}m — cotizar precio de mayoreo`,
+        responsePrefix: `¡Tenemos la medida de ${sizeDisplay}m! Para precio de mayoreo te comunico con un especialista.`,
+        lastIntent: 'wholesale_handoff',
+        timingStyle: 'elaborate'
       });
-      return {
-        type: "text",
-        text: `¡Tenemos la medida de ${sizeDisplay}m! ¿Buscas comprar una pieza o te interesa precio de mayoreo para reventa?`
-      };
     }
 
     // Get the preferred link from onlineStoreLinks

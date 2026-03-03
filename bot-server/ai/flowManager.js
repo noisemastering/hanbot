@@ -135,6 +135,7 @@ const FLOW_REF_MAP = {
   'groundcoverFlow': 'groundcover',
   'monofilamentoFlow': 'monofilamento',
   'malla_sombra': 'malla_sombra',
+  'malla_confeccionada_distribuidores': 'malla_sombra',
   'rollo': 'rollo',
   'borde_separador': 'borde_separador',
   'groundcover': 'groundcover',
