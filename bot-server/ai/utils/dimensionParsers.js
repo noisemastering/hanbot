@@ -60,6 +60,10 @@ function parseConfeccionadaDimensions(str) {
   // Convert "y medio" to .5 (e.g., "2 y medio" -> "2.5")
   s = s.replace(/(\d+)\s*y\s*medio/gi, (_, num) => `${num}.5`);
 
+  // Normalize "+" and "k" separators to "x" (common text abbreviations: "6+4", "4 k 4")
+  s = s.replace(/(\d+(?:\.\d+)?)\s*\+\s*(\d+(?:\.\d+)?)/g, '$1 x $2');
+  s = s.replace(/(\d+(?:\.\d+)?)\s*k\s*(\d+(?:\.\d+)?)/gi, '$1 x $2');
+
   // Pattern 1: "N de largo x M de ancho" or "N de ancho x M de largo"
   // Examples: "8 mts. de largo x 5 de ancho", "5 de ancho por 8 de largo", "3 largo x 2 ancho"
   // Note: "d" is common abbreviation for "de" in Mexican Spanish (e.g., "7 mtrs d ancho")
@@ -366,6 +370,12 @@ function parseSingleDimension(str) {
 
   let s = String(str).toLowerCase();
 
+  // If the message contains two numbers joined by a separator (+, x, *, k, por),
+  // this is a two-dimension expression — NOT a single dimension. Bail out.
+  if (/\d\s*[+xX×*k]\s*\d/i.test(s) || /\d\s+por\s+\d/i.test(s)) {
+    return null;
+  }
+
   // Convert 3-digit numbers to decimals (common Mexican shorthand)
   // 610 → 6.10, 420 → 4.20, etc.
   // BUT keep multiples of 50 as-is (100, 150, 200, 250...)
@@ -422,6 +432,10 @@ function extractAllDimensions(str, type = 'confeccionada') {
 
   // Convert "y medio" to .5
   s = s.replace(/(\d+)\s*y\s*medio/gi, (_, num) => `${num}.5`);
+
+  // Normalize "+" and "k" separators to "x"
+  s = s.replace(/(\d+(?:\.\d+)?)\s*\+\s*(\d+(?:\.\d+)?)/g, '$1 x $2');
+  s = s.replace(/(\d+(?:\.\d+)?)\s*k\s*(\d+(?:\.\d+)?)/gi, '$1 x $2');
 
   // Global pattern to find all dimension pairs
   const pattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*(?:x|×|\*|por)\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?/gi;
