@@ -439,6 +439,16 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     };
   }
 
+  // ACCESSORY / INSTALLATION QUESTIONS — borde does NOT come with stakes or accessories
+  if (intent === INTENTS.ACCESSORY_QUERY || intent === INTENTS.EYELETS_QUERY || intent === INTENTS.INSTALLATION_QUERY ||
+      (userMessage && /\b(estacas?|anclas?|sujet[ao]|fij[ao]|clav[ao]|detenerse|detiene|sost[ei]en|amarre|viene\s*con|trae|incluye|c[oó]mo\s*se\s*(pone|coloca|instala|fija|detiene|sujeta|clava))\b/i.test(userMessage))) {
+    const lengthList = availableLengths.map(l => `${l}m`).join(', ');
+    return {
+      type: "text",
+      text: `El borde separador no incluye estacas ni accesorios, se venden por separado. Se fija al suelo con estacas o clavos.\n\nLo tenemos en rollos de ${lengthList}. ¿Qué largo te interesa?`
+    };
+  }
+
   // CATALOG REQUEST — show borde products in context
   if (intent === INTENTS.CATALOG_REQUEST) {
     const widthCm = await getBordeWidth();
