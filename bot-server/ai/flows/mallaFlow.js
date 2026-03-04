@@ -611,8 +611,10 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     }
   }
 
-  // Get current state
+  // Get current state and merge classifier entities
   let state = getFlowState(convo);
+  if (entities.color) state.color = entities.color;
+  if (entities.quantity) state.quantity = entities.quantity;
 
   console.log(`🌐 Malla flow - Current state:`, state);
   console.log(`🌐 Malla flow - Intent: ${intent}, Entities:`, entities);
