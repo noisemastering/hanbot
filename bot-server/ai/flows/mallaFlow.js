@@ -744,6 +744,52 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     }
   }
 
+  // CHECK FOR COLOR SPECIFICATION (without photo request)
+  // E.g., "Sería color beige", "en color negro", "la quiero negra"
+  const colorSpecPattern = /\b(color\s+|quiero\s+(?:(?:en|el|la)\s+)?|ser[ií]a\s+(?:en\s+)?)(negro|verde|beige|blanco|azul|caf[eé])\b/i;
+  const colorSpecMatch = userMessage.match(colorSpecPattern) || userMessage.match(colorOnlyPattern);
+  if (colorSpecMatch && convo?.lastSharedProductId && convo?.lastSharedProductLink && state.width && state.height) {
+    const requestedColor = (colorSpecMatch[2] || '').toLowerCase();
+    const sizeDisplay = state.userExpressedSize || `${state.width}x${state.height}`;
+    console.log(`🎨 Color specification with existing quote: "${userMessage}" → color: ${requestedColor}`);
+
+    // Find product with this color
+    const colorProducts = await findMatchingProducts(state.width, state.height, null, requestedColor, convo?.poiRootId);
+
+    if (colorProducts.length > 0) {
+      const product = colorProducts[0];
+      const productUrl = product.onlineStoreLinks?.find(link => link.isPreferred)?.url ||
+                         product.onlineStoreLinks?.[0]?.url;
+
+      if (productUrl) {
+        const trackedLink = await generateClickLink(psid, productUrl, {
+          productName: product.name,
+          productId: product._id
+        });
+
+        await updateConversation(psid, {
+          lastIntent: 'color_confirmed',
+          lastSharedProductId: product._id?.toString(),
+          lastSharedProductLink: trackedLink,
+          productSpecs: { ...convo?.productSpecs, color: requestedColor, updatedAt: new Date() },
+          unknownCount: 0
+        });
+
+        return {
+          type: "text",
+          text: `Sí, en color ${requestedColor} la de ${sizeDisplay}m está a $${product.price} con envío incluido.\n\n🛒 Cómprala aquí:\n${trackedLink}`
+        };
+      }
+    }
+
+    // Color not available for this size
+    await updateConversation(psid, { lastIntent: 'color_unavailable', unknownCount: 0 });
+    return {
+      type: "text",
+      text: `No tenemos la de ${sizeDisplay}m en color ${requestedColor}. La malla confeccionada en esa medida es color beige.\n\n¿Te interesa?`
+    };
+  }
+
   // CHECK FOR ACCESSORY QUESTIONS (arnés, cuerda, lazo, kit de instalación)
   const isAccessoryQuestion = /\b(arn[eé]s|cuerda|lazo|amarre|kit.*instalaci|incluye.*para\s*(colgar|instalar)|viene\s*con|dan\s*con|trae)\b/i.test(userMessage);
   if (isAccessoryQuestion) {
