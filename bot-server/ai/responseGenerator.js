@@ -212,14 +212,16 @@ function buildUserPrompt({ intent, context, product, convo }) {
  * Generate price quote response
  */
 async function generatePriceResponse({ dimensions, price, link, userExpression, convo, concerns }) {
+  // Preserve the customer's dimension order (e.g. "9x6" stays "9 x 6", not "6 x 9")
+  const displayDimensions = userExpression || `${dimensions.width} x ${dimensions.height} metros`;
   const context = {
-    userAskedFor: userExpression || `${dimensions.width} x ${dimensions.height} metros`,
+    userAskedFor: displayDimensions,
     includeFreeShipping: true,
     concerns: concerns ? concerns.join(", ") : null
   };
 
   const product = {
-    dimensions: `${dimensions.width} x ${dimensions.height} metros`,
+    dimensions: displayDimensions,
     price,
     link,
     features: [

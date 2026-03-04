@@ -866,7 +866,13 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   if (classifierHadDims) {
     state.width = entities.width;
     state.height = entities.height;
-    state.userExpressedSize = `${entities.width} x ${entities.height}`;
+    // Preserve user's dimension order from the raw dimension string (e.g. "9x6" stays "9 x 6")
+    if (entities.dimensions) {
+      const dimParts = entities.dimensions.match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)/);
+      state.userExpressedSize = dimParts ? `${dimParts[1]} x ${dimParts[2]}` : `${entities.width} x ${entities.height}`;
+    } else {
+      state.userExpressedSize = `${entities.width} x ${entities.height}`;
+    }
     console.log(`🌐 Malla flow - [1/4 AI entities] Using ${entities.width}x${entities.height}`);
   }
   if (!state.width || !state.height) {
