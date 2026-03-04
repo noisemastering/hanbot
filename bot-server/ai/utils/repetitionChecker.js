@@ -42,7 +42,10 @@ async function checkForRepetition(response, psid, convo) {
     console.log("🔄 REPETITION DETECTED - checking if it's same size request");
 
     // Check if this is a price/product quote (contains price and dimensions)
-    const isPriceQuote = /\$[\d,]+/.test(response.text) &&
+    // Exclude range displays that are still asking for info ("¿Qué medida", "desde...hasta")
+    const isRangeDisplay = /desde\s+\d+/i.test(response.text) && /hasta\s+\d+/i.test(response.text);
+    const isPriceQuote = !isRangeDisplay &&
+                         /\$[\d,]+/.test(response.text) &&
                          /\d+\s*[xX×]\s*\d+/.test(response.text);
 
     if (isPriceQuote) {

@@ -1479,10 +1479,16 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
     };
   }
 
-  // If they're asking about prices without dimensions
+  // If they're asking about prices without dimensions — ask for size
   if (intent === INTENTS.PRICE_QUERY) {
-    // Send full product description with price range
-    return await handleProductInfo(userMessage, convo);
+    const range = await getMallaRange();
+    const rangeText = range
+      ? `Manejamos medidas desde ${range.sizeMin} hasta ${range.sizeMax}, con precios desde ${formatMoney(range.priceMin)} hasta ${formatMoney(range.priceMax)}.`
+      : 'Manejamos diversas medidas.';
+    return {
+      type: "text",
+      text: `Para darte precio necesito saber qué medida te interesa. ${rangeText}`
+    };
   }
 
   // Check for product feature questions (shared handler — also runs in handle() for COMPLETE stage)
