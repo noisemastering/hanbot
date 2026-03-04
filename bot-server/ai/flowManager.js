@@ -545,7 +545,13 @@ async function detectFlow(classification, convo, userMessage, sourceContext) {
     return 'malla_sombra';
   }
 
-  // 8. DEFAULT
+  // 8. WHOLESALE INDICATOR — "mayoreo" / "por mayor" etc. without a specific product keyword → rollo
+  if (isWholesaleInquiry(userMessage, convo)) {
+    console.log(`🏭 Wholesale inquiry detected without specific product — routing to rollo`);
+    return 'rollo';
+  }
+
+  // 9. DEFAULT
   return 'default';
 }
 
