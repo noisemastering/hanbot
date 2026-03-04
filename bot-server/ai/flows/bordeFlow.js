@@ -285,28 +285,39 @@ function determineStage(state) {
 }
 
 /**
- * Parse borde length from user message
+ * Parse borde length(s) from user message.
+ * Returns the first valid length (single-length mode) or null.
  */
 function parseLengthFromMessage(msg, availableLengths) {
-  if (!msg) return null;
+  const lengths = parseLengthsFromMessage(msg, availableLengths);
+  return lengths.length > 0 ? lengths[0] : null;
+}
 
-  // First try with explicit meter suffix: "54 Mts", "18m", "54 metros"
-  const meterMatch = msg.match(/\b(\d+)\s*(?:m(?:ts?|etros?)?)\b/i);
-  if (meterMatch) {
-    const num = parseInt(meterMatch[1]);
-    if (availableLengths.includes(num)) return num;
+/**
+ * Parse ALL borde lengths from user message.
+ * Handles "18 y 54 mtrs", "54, 18", "cotizar 18 y 54 metros", etc.
+ * Returns an array of valid lengths (deduplicated, in message order).
+ */
+function parseLengthsFromMessage(msg, availableLengths) {
+  if (!msg) return [];
+
+  const found = new Set();
+
+  // Try numbers with explicit meter suffix: "54 Mts", "18m", "54 metros"
+  const meterMatches = msg.matchAll(/\b(\d+)\s*(?:m(?:ts?|etros?)?)\b/gi);
+  for (const m of meterMatches) {
+    const num = parseInt(m[1]);
+    if (availableLengths.includes(num)) found.add(num);
   }
 
-  // Then try bare numbers that match valid lengths
-  const numbers = msg.match(/\b(\d+)\b/g);
-  if (numbers) {
-    for (const numStr of numbers) {
-      const num = parseInt(numStr);
-      if (availableLengths.includes(num)) return num;
-    }
+  // Also try bare numbers that match valid lengths
+  const bareMatches = msg.matchAll(/\b(\d+)\b/g);
+  for (const m of bareMatches) {
+    const num = parseInt(m[1]);
+    if (availableLengths.includes(num)) found.add(num);
   }
 
-  return null;
+  return [...found];
 }
 
 /**
@@ -380,6 +391,16 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   console.log(`🌱 Borde flow - Current state:`, state);
   console.log(`🌱 Borde flow - Intent: ${intent}, Entities:`, entities);
+
+  // Opt-out / closing — "ya tengo los precios", "ya vi gracias", "no gracias"
+  // Runs regardless of flowCompleted so polite goodbyes are never misrouted.
+  const isOptOut = /\b(ya\s+tengo|ya\s+vi|ya\s+encontr[eé]|no\s+gracias|no,?\s*gracias|no\s+necesito|de\s+momento\s+no|por\s+ahora\s+no|ya\s+compr[eé]|ya\s+lo\s+ped[ií])\b/i.test(userMessage);
+  if (isOptOut) {
+    return {
+      type: "text",
+      text: "¡Perfecto! Cualquier cosa aquí andamos. ¡Que tengas excelente día!"
+    };
+  }
 
   // If flow already completed, handle gracefully
   if (state.flowCompleted) {
@@ -501,11 +522,63 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   // PRICE / CATALOG REQUEST — show borde products with prices
   if (intent === INTENTS.CATALOG_REQUEST || intent === INTENTS.PRICE_QUERY || intent === INTENTS.AVAILABILITY_QUERY) {
-    // If user asked for a specific length, jump straight to quoting with ML link
-    const requestedLength = parseLengthFromMessage(userMessage, availableLengths);
-    if (requestedLength) {
-      console.log(`🌱 Price query with specific length: ${requestedLength}m — jumping to quote`);
-      state.length = requestedLength;
+    // If user asked for specific lengths, quote them
+    const requestedLengths = parseLengthsFromMessage(userMessage, availableLengths);
+
+    // Multiple lengths → quote all inline (e.g. "cotizar 18 y 54 mtrs")
+    if (requestedLengths.length > 1) {
+      console.log(`🌱 Multi-length price query: ${requestedLengths.join(', ')}m`);
+      const products = await findMatchingProducts(null, adProductIds);
+      const lines = [];
+      const quotedProducts = [];
+      for (const len of requestedLengths) {
+        const product = products.find(p => {
+          const text = `${p.name || ''} ${p.size || ''}`;
+          return new RegExp(`\\b${len}\\b`).test(text);
+        });
+        if (product?.price) {
+          const displayName = await getProductDisplayName(product, 'short');
+          const productUrl = product.onlineStoreLinks?.find(l => l.isPreferred)?.url || product.onlineStoreLinks?.[0]?.url;
+          let linkText = '';
+          if (productUrl) {
+            const tracked = await generateClickLink(psid, productUrl, {
+              productName: product.name, productId: product._id,
+              city: convo?.city, stateMx: convo?.stateMx
+            });
+            linkText = `\n${tracked}`;
+          }
+          lines.push(`• Rollo de ${len}m — ${formatMoney(product.price)}${linkText}`);
+          quotedProducts.push({
+            displayText: `Borde ${len}m`, price: product.price,
+            productId: product._id?.toString(), productUrl, productName: product.name
+          });
+        } else {
+          lines.push(`• Rollo de ${len}m`);
+        }
+      }
+
+      await updateConversation(psid, {
+        lastQuotedProducts: quotedProducts,
+        lastIntent: 'borde_complete',
+        productSpecs: {
+          productType: 'borde_separador',
+          borde_length: requestedLengths[0],
+          quantity: 1,
+          flowCompleted: true,
+          updatedAt: new Date()
+        }
+      });
+
+      return {
+        type: "text",
+        text: `¡Claro! Aquí tienes:\n\n${lines.join('\n\n')}\n\nEl envío está incluido. ¿Necesitas algo más?`
+      };
+    }
+
+    // Single length → jump straight to quoting with ML link
+    if (requestedLengths.length === 1) {
+      console.log(`🌱 Price query with specific length: ${requestedLengths[0]}m — jumping to quote`);
+      state.length = requestedLengths[0];
       if (!state.quantity) state.quantity = 1;
       // Fall through to stage machine (will hit COMPLETE → share ML link)
     } else {

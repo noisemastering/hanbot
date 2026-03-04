@@ -574,7 +574,7 @@ function shouldHandle(classification, sourceContext, convo, userMessage = '') {
     }
 
     // Opt-out patterns (already ordered, not interested, have contact elsewhere)
-    if (/ya\s+(hice|realic[eé]|tengo)\s+(pedido|orden|contacto)|no\s+necesito|de\s+momento\s+no|por\s+ahora\s+no|ya\s+compr[eé]|ya\s+lo\s+ped[ií]/i.test(msg)) {
+    if (/ya\s+(hice|realic[eé]|tengo)\s+(pedido|orden|contacto|los?\s+precios?|la\s+info)|ya\s+(vi|encontr[eé])|no\s+necesito|de\s+momento\s+no|por\s+ahora\s+no|ya\s+compr[eé]|ya\s+lo\s+ped[ií]/i.test(msg)) {
       classification.intent = "opt_out";
       return true;
     }
