@@ -1698,7 +1698,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
           await updateConversation(psid, {
             lastIntent: "size_confirmed",
             lastSharedProductId: product._id?.toString(),
-            lastSharedProductLink: productUrl,
+            lastSharedProductLink: trackedLink,
             lastFractionalSize: fractionalKey,
             unknownCount: 0
           });
@@ -1964,7 +1964,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     const h = Math.max(width, height);
     await updateConversation(psid, {
       lastSharedProductId: product._id?.toString(),
-      lastSharedProductLink: productUrl,
+      lastSharedProductLink: trackedLink,
       lastQuotedProducts: [{
         width: w, height: h,
         displayText: `${w}x${h}m`,

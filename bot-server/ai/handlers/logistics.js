@@ -107,9 +107,11 @@ async function handleLocation({ psid, userMessage, convo }) {
     convo
   });
 
-  // Ensure the actual Google Maps URL is present — AI sometimes replaces it with a placeholder
+  // Ensure the actual Google Maps URL is present and well-formatted
   if (response) {
     response = response.replace(/\[(?:Link|Enlace)[^\]]*\]/gi, '').replace(/\n{3,}/g, '\n\n').trim();
+    // Clean up broken Maps URL formatting — AI sometimes outputs ": ." or ": \n" before the URL
+    response = response.replace(/:\s*\.?\s*\n+\s*(https:\/\/www\.google\.com\/maps)/g, ':\n\n$1');
     if (!response.includes(MAPS_URL)) {
       response += `\n\n${MAPS_URL}`;
     }
