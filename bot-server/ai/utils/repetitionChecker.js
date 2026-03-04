@@ -41,37 +41,20 @@ async function checkForRepetition(response, psid, convo) {
   if (lastNormalized && currentNormalized === lastNormalized) {
     console.log("🔄 REPETITION DETECTED - checking if it's same size request");
 
-    // Check if this is a price/product quote (contains price and dimensions)
-    // Exclude range displays that are still asking for info ("¿Qué medida", "desde...hasta")
-    const isRangeDisplay = /desde\s+\d+/i.test(response.text) && /hasta\s+\d+/i.test(response.text);
-    const isPriceQuote = !isRangeDisplay &&
-                         /\$[\d,]+/.test(response.text) &&
-                         /\d+\s*[xX×]\s*\d+/.test(response.text);
-
-    if (isPriceQuote) {
-      const sizeMatch = response.text.match(/(\d+)\s*[xX×]\s*(\d+)/);
-      const priceMatch = response.text.match(/\$([\d,]+)/);
+    // If customer already has a quoted product, confirm from conversation state (not bot text)
+    const specs = convo.productSpecs || {};
+    if (convo.lastSharedProductLink && specs.width && specs.height) {
+      const size = `${specs.width}x${specs.height}`;
       const linkMatch = response.text.match(/(https:\/\/agente\.hanlob\.com\.mx\/r\/\w+)/);
+      const link = linkMatch?.[1] || convo.lastSharedProductLink;
 
-      if (sizeMatch && priceMatch) {
-        const size = `${sizeMatch[1]}x${sizeMatch[2]}`;
-        const price = priceMatch[1];
+      console.log(`📏 Repetition with active quote — confirming ${size}m`);
+      await updateConversation(psid, { lastIntent: "same_size_confirmation" });
 
-        console.log(`📏 User asking for same size ${size} - sending link again`);
-        await updateConversation(psid, { lastIntent: "same_size_confirmation" });
-
-        if (linkMatch) {
-          return {
-            type: "text",
-            text: `¡Claro! Te paso nuevamente el link de la ${size}m a $${price} con envío incluido:\n\n${linkMatch[1]}`
-          };
-        } else {
-          return {
-            type: "text",
-            text: `Sí, es la misma medida: ${size}m a $${price} con envío incluido.\n\n¿Te paso el link para que puedas comprarlo?`
-          };
-        }
-      }
+      return {
+        type: "text",
+        text: `Es correcto, ${size}m con envío incluido. Puedes realizar tu compra aquí:\n\n${link}`
+      };
     }
 
     // Logistics re-asks are valid, not bot loops
