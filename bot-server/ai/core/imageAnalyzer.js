@@ -7,9 +7,10 @@
  * @param {object} openai - OpenAI client instance
  * @returns {object} - Analysis result with extracted information
  */
-async function analyzeImage(imageUrl, openai) {
+async function analyzeImage(imageUrl, openai, userMessage = '') {
   try {
     console.log(`🖼️  Analyzing image: ${imageUrl}`);
+    if (userMessage) console.log(`📝 Accompanying text: "${userMessage}"`);
 
     const response = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -21,7 +22,9 @@ async function analyzeImage(imageUrl, openai) {
 NUESTROS PRODUCTOS:
 - Mallas sombra en formas RECTANGULARES (incluyendo cuadradas) y TRIANGULARES
 - NO vendemos formas L, U, o formas irregulares
+- NO vendemos estructuras metálicas, pérgolas, postes, ni marcos
 - NO ofrecemos servicios de instalación, reparación, o forrado de estructuras existentes
+- SOLO vendemos la tela/malla sombra, no la estructura
 
 Tu trabajo es analizar imágenes y clasificarlas en una de estas categorías:
 
@@ -40,6 +43,12 @@ Si ves una estructura que YA tiene sombra (sombrilla de jardín, toldo, carpa, p
 - NO intentes analizar dimensiones
 - NO sugieras productos
 
+CATEGORÍA E - ESTRUCTURA / MARCO / PÉRGOLA:
+Si ves una estructura metálica, de madera, pérgola, velaria, marco, o poste — o si el usuario pregunta por la estructura:
+- Responde: "STRUCTURE_INQUIRY"
+- NO intentes analizar dimensiones
+- NO sugieras productos
+
 CATEGORÍA C - IMAGEN POSITIVA/AMIGABLE:
 Si la imagen es de emojis positivos (caritas felices, pulgares arriba, corazones), stickers amigables, o imágenes que expresan gratitud/felicidad:
 - Responde: "POSITIVE_IMAGE"
@@ -48,14 +57,16 @@ CATEGORÍA D - IMAGEN NO RELACIONADA:
 Si la imagen no es de un espacio exterior, no está relacionada con sombra, y no es positiva/amigable:
 - Responde: "UNRELATED_IMAGE"
 
-Responde en español de forma concisa. Para categorías B, C y D, solo responde con el código indicado.`
+Responde en español de forma concisa. Para categorías B, C, D y E, solo responde con el código indicado.`
         },
         {
           role: "user",
           content: [
             {
               type: "text",
-              text: "Analiza esta imagen. Si es un espacio que necesita sombra, describe el espacio y sugiere medidas. Si es una estructura existente (sombrilla, toldo, etc.) o imagen no relacionada, indica el código correspondiente."
+              text: userMessage
+                ? `El cliente escribió: "${userMessage}"\n\nAnaliza la imagen junto con su mensaje.`
+                : "Analiza esta imagen. Si es un espacio que necesita sombra, describe el espacio y sugiere medidas. Si es una estructura existente, una pregunta por estructuras, o imagen no relacionada, indica el código correspondiente."
             },
             {
               type: "image_url",
@@ -77,8 +88,11 @@ Responde en español de forma concisa. Para categorías B, C y D, solo responde 
     console.log(`📝 Analysis: ${analysis.substring(0, 100)}...`);
 
     // Detect special cases
-    const isCustomServiceRequest = analysis.includes("CUSTOM_SERVICE_REQUEST") ||
-                                    /sombrilla|toldo|parasol|carpa|pérgola.*tela|forrar|reparar|cambiar.*tela/i.test(analysis);
+    const isStructureInquiry = analysis.includes("STRUCTURE_INQUIRY") ||
+                                /estructura|marco|poste|velaria/i.test(userMessage || '');
+    const isCustomServiceRequest = !isStructureInquiry && (
+                                    analysis.includes("CUSTOM_SERVICE_REQUEST") ||
+                                    /sombrilla|toldo|parasol|carpa|pérgola.*tela|forrar|reparar|cambiar.*tela/i.test(analysis));
     const isPositiveImage = analysis.includes("POSITIVE_IMAGE") ||
                             /emoji|carita|feliz|pulgar|coraz[oó]n|gracias|amigable/i.test(analysis);
     const isUnrelated = analysis.includes("UNRELATED_IMAGE");
@@ -95,6 +109,7 @@ Responde en español de forma concisa. Para categorías B, C y D, solo responde 
       success: true,
       analysis,
       imageUrl,
+      isStructureInquiry,
       isCustomServiceRequest,
       isPositiveImage,
       isUnrelated,
@@ -142,6 +157,16 @@ function generateImageResponse(analysisResult) {
     return {
       type: "text",
       text: "¡Gracias! 😊 ¿Hay algo más en lo que pueda ayudarte?"
+    };
+  }
+
+  // Handle structure inquiries (pergolas, metal frames, posts, etc.)
+  if (analysisResult.isStructureInquiry) {
+    return {
+      type: "text",
+      text: "Nosotros solo vendemos la malla sombra (la tela), no la estructura metálica ni de madera.\n\n" +
+            "Si ya tienes la estructura y necesitas la malla para cubrirla, con gusto te ayudo. " +
+            "Solo dime las medidas del espacio que quieres cubrir."
     };
   }
 

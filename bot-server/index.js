@@ -1369,7 +1369,8 @@ app.post("/webhook", async (req, res) => {
             console.log(`📸 Image received: ${imageUrl}`);
 
             await registerUserIfNeeded(senderPsid);
-            await saveMessage(senderPsid, `[Imagen enviada: ${imageUrl}]`, "user", messageId);
+            const imageCaption = webhookEvent.message.text || '';
+            await saveMessage(senderPsid, imageCaption ? `${imageCaption}\n[Imagen enviada: ${imageUrl}]` : `[Imagen enviada: ${imageUrl}]`, "user", messageId);
 
             // Analyze the image using GPT-4 Vision
             const { OpenAI } = require("openai");
@@ -1378,7 +1379,9 @@ app.post("/webhook", async (req, res) => {
 
             (async () => {
               try {
-                const analysisResult = await analyzeImage(imageUrl, openai);
+                // Pass accompanying text (if any) so the AI sees both image + message
+                const accompanyingText = webhookEvent.message.text || '';
+                const analysisResult = await analyzeImage(imageUrl, openai, accompanyingText);
                 const reply = generateImageResponse(analysisResult);
 
                 await callSendAPI(senderPsid, { text: reply.text });
