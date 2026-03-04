@@ -586,7 +586,9 @@ function shouldHandle(classification, sourceContext, convo, userMessage = '') {
     // Don't handle if in a product flow
     if (lastIntent?.startsWith("roll_") ||
         lastIntent?.startsWith("malla_") ||
-        lastIntent?.startsWith("borde_")) {
+        lastIntent?.startsWith("borde_") ||
+        lastIntent?.startsWith("groundcover_") ||
+        lastIntent?.startsWith("monofilamento_")) {
       return false;
     }
     return true;

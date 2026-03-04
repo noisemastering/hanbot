@@ -1114,6 +1114,14 @@ async function handleComplete(intent, state, sourceContext, psid, convo) {
 function shouldHandle(classification, sourceContext, convo) {
   const { product } = classification;
 
+  // If conversation is locked into a different product flow, don't claim the message.
+  // The flow manager handles switching — shouldHandle should respect the lock.
+  const currentFlow = convo?.currentFlow;
+  if (currentFlow && currentFlow !== 'default' &&
+      currentFlow !== 'rollo' && currentFlow !== 'groundcover' && currentFlow !== 'monofilamento') {
+    return false;
+  }
+
   // Rollo signals
   if (product === "rollo") return true;
   if (convo?.productSpecs?.productType === "rollo") return true;

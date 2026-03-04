@@ -909,6 +909,13 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
 function shouldHandle(classification, sourceContext, convo) {
   const { product } = classification;
 
+  // If conversation is locked into a different product flow, don't claim the message.
+  // The flow manager handles switching — shouldHandle should respect the lock.
+  const currentFlow = convo?.currentFlow;
+  if (currentFlow && currentFlow !== 'default' && currentFlow !== 'borde_separador') {
+    return false;
+  }
+
   if (product === "borde_separador") return true;
   if (convo?.productSpecs?.productType === "borde_separador") return true;
   if (convo?.lastIntent?.startsWith("borde_")) return true;

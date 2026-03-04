@@ -2196,9 +2196,12 @@ function shouldHandle(classification, sourceContext, convo, userMessage = '') {
   const { product } = classification;
   const msg = (userMessage || '').toLowerCase();
 
-  // Non-90% shade with malla/sombra keywords: accept it here so we can hand off properly
-  // (If rollo flow already matched via "rollo" keyword, it runs first and handles it)
-  // Without this, non-90% shade requests like "malla sombra de 70% 6x20" fall through unhandled
+  // If conversation is locked into a different product flow, don't claim the message.
+  // The flow manager handles switching — shouldHandle should respect the lock.
+  const currentFlow = convo?.currentFlow;
+  if (currentFlow && currentFlow !== 'default' && currentFlow !== 'malla_sombra') {
+    return false;
+  }
 
   // Explicitly about malla sombra (not rolls)
   if (product === "malla_sombra") return true;
