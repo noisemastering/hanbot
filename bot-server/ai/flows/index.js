@@ -140,12 +140,14 @@ async function routeToFlow(classification, sourceContext, convo, psid, userMessa
 
       if (response) {
         // ====== WRAP WITH MULTI-QUESTION CONTEXT ======
-        // Add prefix (greeting) and suffix (secondary questions) to response
+        // Add prefix (greeting) and suffix (secondary questions) to response.
+        // Location answers go into followUp (separate message bubble).
         if (parsedQuestions.questionCount > 1 && response.text) {
-          const wrappedText = wrapResponse(response.text, parsedQuestions);
-          if (wrappedText !== response.text) {
+          const wrapped = wrapResponse(response.text, parsedQuestions);
+          if (wrapped.text !== response.text || wrapped.followUp) {
             console.log(`📝 Wrapped response with ${parsedQuestions.secondary.length} secondary answers`);
-            response.text = wrappedText;
+            response.text = wrapped.text;
+            if (wrapped.followUp) response.followUp = wrapped.followUp;
           }
         }
         // ====== END WRAP ======

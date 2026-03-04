@@ -189,14 +189,30 @@ async function lookupProductPrice(w, h, psid, convo) {
 }
 
 /**
- * Combine multiple segment answers into a single response.
- * Simple concatenation — flow handlers already produce well-formatted responses.
+ * Combine multiple segment answers, separating location into followUp.
+ * Location answers are a different topic from the product quote and read
+ * better as a separate message bubble.
+ *
+ * @returns {{ text: string, followUp?: string }}
  */
 function combineAnswers(segmentAnswers) {
-  return segmentAnswers
-    .filter(s => s.answer)
-    .map(s => s.answer)
-    .join('\n\n');
+  const main = [];
+  const location = [];
+
+  for (const s of segmentAnswers) {
+    if (!s.answer) continue;
+    if (s.intent === 'location_query') {
+      location.push(s.answer);
+    } else {
+      main.push(s.answer);
+    }
+  }
+
+  const result = { text: main.join('\n\n') };
+  if (location.length > 0) {
+    result.followUp = location.join('\n\n');
+  }
+  return result;
 }
 
 /**
@@ -221,11 +237,11 @@ async function handleMultiQuestion(userMessage, psid, convo, sourceContext, camp
     return null;
   }
 
-  // 2. Get answer for each segment
+  // 2. Get answer for each segment (carry intent for combineAnswers)
   const segmentAnswers = [];
   for (const segment of segments) {
     const answer = await getAnswerForSegment(segment, psid, convo, sourceContext, campaign);
-    segmentAnswers.push({ question: segment.question, answer });
+    segmentAnswers.push({ question: segment.question, intent: segment.intent, answer });
   }
 
   // 3. If ALL answers are null, fall through to normal pipeline
@@ -235,8 +251,8 @@ async function handleMultiQuestion(userMessage, psid, convo, sourceContext, camp
     return null;
   }
 
-  // 4. Simple concatenation — handlers already produce good responses
-  const combinedResponse = combineAnswers(segmentAnswers);
+  // 4. Combine answers — location goes into followUp (separate message bubble)
+  const combined = combineAnswers(segmentAnswers);
 
   // 5. Update conversation
   const { updateConversation } = require("../../conversationManager");
@@ -245,7 +261,9 @@ async function handleMultiQuestion(userMessage, psid, convo, sourceContext, camp
   console.log(`✅ Multi-question handled: ${segmentAnswers.filter(s => s.answer).length}/${segmentAnswers.length} segments answered`);
   console.log(`📎 ===== END MULTI-QUESTION HANDLER =====\n`);
 
-  return { type: "text", text: combinedResponse };
+  const response = { type: "text", text: combined.text };
+  if (combined.followUp) response.followUp = combined.followUp;
+  return response;
 }
 
 module.exports = { handleMultiQuestion, splitAndClassify, getAnswerForSegment, combineAnswers };

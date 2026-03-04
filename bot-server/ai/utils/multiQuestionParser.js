@@ -290,14 +290,17 @@ function parseQuestions(message) {
 }
 
 /**
- * Build prefix/suffix responses from secondary questions
+ * Build prefix/suffix/followUp responses from secondary questions.
+ * Location answers go into followUp (separate message bubble) instead
+ * of being appended to the main text.
+ *
  * @param {array} secondary - Array of secondary questions
  * @param {object} options - Options for building response
- * @returns {object} { prefix, suffix } strings to add to main response
+ * @returns {object} { prefix, suffix, followUp } strings
  */
 function buildAppendableResponse(secondary, options = {}) {
   if (!secondary || secondary.length === 0) {
-    return { prefix: '', suffix: '' };
+    return { prefix: '', suffix: '', followUp: '' };
   }
 
   const { skipSocial = false } = options;
@@ -310,7 +313,9 @@ function buildAppendableResponse(secondary, options = {}) {
   }
 
   // Build suffix from MEDIUM priority logistics questions
+  // Location goes into followUp instead of suffix
   const suffixParts = [];
+  const followUpParts = [];
 
   for (const q of secondary) {
     // Skip LOW priority if combined with substantive questions
@@ -321,7 +326,13 @@ function buildAppendableResponse(secondary, options = {}) {
       continue;
     }
 
-    // Add MEDIUM priority responses
+    // Location → separate message (followUp)
+    if (q.priority === PRIORITY.MEDIUM && q.type === 'location' && q.appendResponse) {
+      followUpParts.push(q.appendResponse);
+      continue;
+    }
+
+    // Other MEDIUM priority → inline suffix
     if (q.priority === PRIORITY.MEDIUM && q.appendResponse) {
       suffixParts.push(q.appendResponse);
     }
@@ -329,28 +340,33 @@ function buildAppendableResponse(secondary, options = {}) {
 
   return {
     prefix,
-    suffix: suffixParts.length > 0 ? '\n\n' + suffixParts.join('\n') : ''
+    suffix: suffixParts.length > 0 ? '\n\n' + suffixParts.join('\n') : '',
+    followUp: followUpParts.join('\n')
   };
 }
 
 /**
- * Wrap a response with prefix/suffix from parsed questions
+ * Wrap a response with prefix/suffix from parsed questions.
+ * Location answers are returned in the followUp field (separate message).
+ *
  * @param {string} mainResponse - The main response text
  * @param {object} parsed - Result from parseQuestions()
- * @returns {string} Response with prefix/suffix added
+ * @returns {{ text: string, followUp?: string }}
  */
 function wrapResponse(mainResponse, parsed) {
   if (!parsed || !mainResponse) {
-    return mainResponse;
+    return { text: mainResponse };
   }
 
-  const { prefix, suffix } = buildAppendableResponse(parsed.secondary);
+  const { prefix, suffix, followUp } = buildAppendableResponse(parsed.secondary);
 
   // Don't double-add greeting if response already starts with one
   const startsWithGreeting = /^[¡!]?hola/i.test(mainResponse);
   const finalPrefix = startsWithGreeting ? '' : prefix;
 
-  return `${finalPrefix}${mainResponse}${suffix}`;
+  const result = { text: `${finalPrefix}${mainResponse}${suffix}` };
+  if (followUp) result.followUp = followUp;
+  return result;
 }
 
 /**
