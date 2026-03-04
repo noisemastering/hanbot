@@ -307,23 +307,20 @@ function shouldHandoffForQuote(campaign) {
  */
 async function processMessage(classification, sourceContext, convo, psid, userMessage, campaign = null) {
   // === PURCHASE INTENT SCORING ===
-  // Runs on every message to track buying readiness (retail only for now)
+  // Runs on every message to track buying readiness
+  // NOTE: isWholesaleInquiry is NOT written here — it's only set by explicit
+  // handlers (wholesaleFlag middleware, intents.js) and cleared on new ad clicks.
   const isWholesale = isWholesaleInquiry(userMessage, convo);
 
   if (!isWholesale) {
     const intentScore = scorePurchaseIntent(userMessage, convo);
 
-    // Update conversation with purchase intent (non-blocking)
     const { updateConversation } = require("../../conversationManager");
     updateConversation(psid, {
       purchaseIntent: intentScore.intent,
-      intentSignals: intentScore.signals,
-      isWholesaleInquiry: false
+      intentSignals: intentScore.signals
     }).catch(err => console.error("Error updating purchase intent:", err));
   } else {
-    // Mark as wholesale - different rules apply (to be implemented)
-    const { updateConversation } = require("../../conversationManager");
-    updateConversation(psid, { isWholesaleInquiry: true }).catch(err => console.error("Error marking wholesale:", err));
     console.log("🏭 Wholesale inquiry detected - different scoring rules apply");
   }
   // === END PURCHASE INTENT SCORING ===

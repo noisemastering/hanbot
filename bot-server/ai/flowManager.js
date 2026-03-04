@@ -405,7 +405,14 @@ async function detectExplicitProductSwitch(userMessage, rawCurrentFlow, classifi
 
   // Check classification if it detected a different product
   if (classification?.product && classification.product !== PRODUCTS.UNKNOWN) {
-    const classifiedFlow = classificationFlowMap[classification.product];
+    const flowMap = {
+      [PRODUCTS.MALLA_SOMBRA]: 'malla_sombra',
+      [PRODUCTS.ROLLO]: 'rollo',
+      [PRODUCTS.BORDE_SEPARADOR]: 'borde_separador',
+      [PRODUCTS.GROUNDCOVER]: 'groundcover',
+      [PRODUCTS.MONOFILAMENTO]: 'monofilamento'
+    };
+    const classifiedFlow = flowMap[classification.product];
     if (classifiedFlow && classifiedFlow !== currentFlow) {
       console.log(`🔍 Classification detected different product: ${classifiedFlow} (current: ${currentFlow})`);
       return classifiedFlow;
@@ -918,10 +925,12 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
   const intentScore = scorePurchaseIntent(userMessage, convo);
 
   // Update conversation with score (non-blocking but we want it to persist)
+  // NOTE: isWholesaleInquiry is NOT written here — it's only set by explicit
+  // handlers (wholesaleFlag middleware for reseller ads, intents.js for
+  // "mayoreo" messages) and cleared by the referral handler on new ad clicks.
   await updateConversation(psid, {
     purchaseIntent: intentScore.intent,
-    intentSignals: intentScore.signals,
-    isWholesaleInquiry: isWholesale
+    intentSignals: intentScore.signals
   });
 
   console.log(`📊 Purchase intent: ${intentScore.intent.toUpperCase()}`);
@@ -955,15 +964,17 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
   }
 
   // ===== STEP 3.1: VERIFY NEWLY-ESTABLISHED FLOW AGAINST USER MESSAGE =====
-  // When a flow was just established (transfer from default), the user's explicit
-  // message may contradict the ad context. E.g., ad says "rollo" but user asks
-  // for "malla sombra de 5x6.50m" — the user's intent should win.
-  if (transferTo && currentFlow === 'default' && activeFlow !== 'default') {
+  // Only for ORGANIC conversations (no ad context). When the flow came from an
+  // ad, the ad dictates the product — don't override it with keyword heuristics.
+  // Words like "rollo" are ambiguous (ground cover, malla sombra, monofilamento
+  // all come in rolls) but the ad already resolved that ambiguity.
+  const hasAdContext = !!(convo?.adFlowRef || convo?.adId || convo?.adProductIds?.length);
+  if (transferTo && currentFlow === 'default' && activeFlow !== 'default' && !hasAdContext) {
     const switchFromNew = await detectExplicitProductSwitch(userMessage, activeFlow, classification);
     if (switchFromNew) {
       const unambiguous = isUnambiguousSwitch(userMessage, activeFlow, switchFromNew);
       if (unambiguous) {
-        console.log(`🔄 Overriding ad-established flow: ${activeFlow} → ${switchFromNew} (user's message contradicts ad context)`);
+        console.log(`🔄 Overriding flow: ${activeFlow} → ${switchFromNew} (user's message contradicts inferred flow)`);
         activeFlow = switchFromNew;
 
         await updateConversation(psid, {

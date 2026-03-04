@@ -42,11 +42,15 @@ module.exports = async function stateManager(ctx, next) {
         flowData: {},
         silenceFollowUpSent: false,
         silenceFollowUpAt: null,
+        isWholesaleInquiry: false,
+        pendingHandoff: false,
+        pendingHandoffInfo: null,
       });
       convo.state = "active";
       convo.lastIntent = null;
       convo.handoffRequested = false;
       convo.currentFlow = null;
+      convo.isWholesaleInquiry = false;
     }
   }
 

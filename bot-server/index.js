@@ -982,12 +982,18 @@ app.post("/webhook", async (req, res) => {
           campaignId: referral.campaign_id || null,
           agentTookOverAt: null,
           productSpecs: null,
+          isWholesaleInquiry: false,
+          pendingHandoff: false,
+          pendingHandoffInfo: null,
+          handoffRequested: false,
+          handoffReason: null,
         });
 
         // 🔍 Look up ad with inheritance (Campaign → AdSet → Ad)
         let adProductInterest = null;
         let adGreeting = null;
 
+        try {
         if (referral.ad_id) {
           const { resolveByAdId } = require("./utils/campaignResolver");
           const { getProductInterest } = require("./ai/utils/productEnricher");
@@ -1121,6 +1127,17 @@ app.post("/webhook", async (req, res) => {
             : "👋 ¡Hola! Gracias por contactarnos. ¿En qué producto te puedo ayudar?";
           await callSendAPI(senderPsid, { text: genericGreeting });
           adGreetingSent = true;
+        }
+        } catch (adResolutionErr) {
+          console.error(`❌ Error in ad resolution/greeting for ${senderPsid}:`, adResolutionErr.message);
+          // Still send a generic greeting so the user isn't left in silence
+          try {
+            await updateConversation(senderPsid, { greeted: true, lastGreetTime: Date.now() });
+            await callSendAPI(senderPsid, { text: "👋 ¡Hola! Gracias por contactarnos. ¿En qué producto te puedo ayudar?" });
+            adGreetingSent = true;
+          } catch (greetErr) {
+            console.error(`❌ Failed to send fallback greeting:`, greetErr.message);
+          }
         }
         } // close isDuplicateReferral else
       }
