@@ -259,14 +259,13 @@ function scorePurchaseIntent(message, convo = {}) {
 function isWholesaleInquiry(message, convo = {}) {
   const cleanMsg = message.toLowerCase();
 
-  // Direct wholesale indicators (includes hectare mentions — agricultural coverage = bulk)
+  // Direct wholesale indicators
   const wholesalePatterns = /\b(mayoreo|distribuidor|grandes\s+cantidades|por\s+mayor|compra\s+grande|100\s*(piezas|rollos|unidades)|volumen|reventa|negocio|tienda|ferreteria|ferreter[ií]a)\b/i;
-  const hectarePattern = /\b\d+\s*(hect[aá]reas?|has?)\b/i;
 
   // Reseller intent — "quiero vender", "para vender", "empezar a vender"
   const resellerPatterns = /\b(para\s+vender|quiero\s+vender|empezar\s+a\s+vender|vender\s+en\s+mi|incursionar.*vender|ser\s+distribuid|hacerme\s+distribuid|busco\s+proveed|soy\s+(vendedor|comerciante))\b/i;
 
-  return wholesalePatterns.test(cleanMsg) || hectarePattern.test(cleanMsg) || resellerPatterns.test(cleanMsg) || convo.isWholesaleInquiry === true;
+  return wholesalePatterns.test(cleanMsg) || resellerPatterns.test(cleanMsg) || convo.isWholesaleInquiry === true;
 }
 
 /**

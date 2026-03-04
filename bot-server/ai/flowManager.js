@@ -501,7 +501,7 @@ async function detectFlow(classification, convo, userMessage, sourceContext) {
   if (/\bmalla\b/i.test(msg) && !/rollo|maleza|antimaleza|ground\s*cover|monofilamento|cicl[oó]n|electrosoldada|galvanizada/i.test(msg)) {
     return 'malla_sombra';
   }
-  if (/\brollo\b/i.test(msg) || /\b100\s*m(etros?)?\b/i.test(msg)) {
+  if (/\brollo\b/i.test(msg) || /\b100\s*m(etros?)?\b/i.test(msg) || /\b\d+\s*(hect[aá]reas?|has?)\b/i.test(msg)) {
     return 'rollo';
   }
   // "malla" + shade percentage (35/50/70/80/90%) → rollo (rolls come in percentages)
