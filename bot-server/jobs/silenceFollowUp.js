@@ -1,16 +1,13 @@
 // jobs/silenceFollowUp.js
-// Auto-send store link after 10 minutes of customer silence
+// Contextual follow-up after 23 hours of customer silence (maximizes 24h messaging window)
 
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
-const { generateClickLink } = require('../tracking');
 const axios = require('axios');
 const { sendTextMessage: sendWhatsAppText, sendWhatsAppMessage } = require('../channels/whatsapp/api');
 const { sendCatalog } = require('../utils/sendCatalog');
 const { getCatalogUrl } = require('../ai/flowManager');
-
-const STORE_URL = 'https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob';
-const FOLLOW_UP_DELAY_MS = 10 * 60 * 1000; // 10 minutes
+const FOLLOW_UP_DELAY_MS = 23 * 60 * 60 * 1000; // 23 hours
 
 /** Flows considered wholesale — prefer catalog + pitch over ML store link */
 const WHOLESALE_FLOWS = ['rollo', 'groundcover', 'monofilamento'];
@@ -43,18 +40,7 @@ async function scheduleFollowUpIfNeeded(psid, botResponseText) {
   // Skip if conversation is not in a bot-active state
   if (['closed', 'needs_human', 'human_active'].includes(convo.state)) return;
 
-  // Check if bot response contains a URL — customer already has something to click
-  const hasUrl = /https?:\/\//.test(botResponseText || '');
-
-  if (hasUrl) {
-    // Cancel any pending follow-up — they already have a link
-    if (convo.silenceFollowUpAt) {
-      await Conversation.updateOne({ psid }, { $set: { silenceFollowUpAt: null } });
-    }
-    return;
-  }
-
-  // Schedule follow-up 5 minutes from now
+  // Schedule follow-up 23 hours from now (resets on every bot response)
   await Conversation.updateOne({ psid }, {
     $set: { silenceFollowUpAt: new Date(Date.now() + FOLLOW_UP_DELAY_MS) }
   });
@@ -153,15 +139,28 @@ async function runSilenceFollowUpJob() {
             }
           }
         } else {
-          // --- Default follow-up: ML store link ---
+          // --- Contextual follow-up based on what the customer was looking at ---
+          const specs = convo.productSpecs || {};
           const isBorde = convo.currentFlow === 'borde_separador' || convo.productInterest === 'borde_separador';
-          const trackedLink = await generateClickLink(convo.psid, STORE_URL, {
-            productName: isBorde ? 'Borde Separador (follow-up)' : 'Tienda ML (follow-up)'
-          });
 
-          followUpText = isBorde
-            ? `Por si te interesa, te comparto nuestra tienda en Mercado Libre donde puedes encontrar el borde separador con envío incluido a todo México:\n\n${trackedLink}`
-            : `Por si te interesa echar un vistazo, te comparto nuestra tienda en Mercado Libre con envío incluido a todo México:\n\n${trackedLink}`;
+          if (!isBorde && specs.width && specs.height) {
+            // Malla with dimensions
+            followUpText = `¿Te decidiste por la malla de ${specs.width}x${specs.height}m? Recuerda que estamos para servirte.`;
+          } else if (isBorde && specs.borde_length) {
+            // Borde with length
+            followUpText = `¿Te decidiste por el borde de ${specs.borde_length}m? Recuerda que estamos para servirte.`;
+          } else if (convo.lastQuotedProducts && convo.lastQuotedProducts.length > 0 && convo.lastQuotedProducts[0].displayText) {
+            // Has quoted products but no specific specs
+            followUpText = `¿Te decidiste por ${convo.lastQuotedProducts[0].displayText}? Recuerda que estamos para servirte.`;
+          } else {
+            // Generic — no product context
+            followUpText = '¿Te puedo ayudar con algo más? Recuerda que estamos para servirte.';
+          }
+
+          // Re-share the product link if one was previously shared
+          if (convo.lastSharedProductLink) {
+            followUpText += `\n\n${convo.lastSharedProductLink}`;
+          }
 
           if (channel === 'whatsapp') {
             const phone = convo.psid.replace('wa:', '');
@@ -187,7 +186,7 @@ async function runSilenceFollowUpJob() {
           }
         });
 
-        console.log(`✅ Silence follow-up sent to ${convo.psid} (${WHOLESALE_FLOWS.includes(convo.currentFlow) ? 'wholesale' : 'store link'})`);
+        console.log(`✅ Silence follow-up sent to ${convo.psid} (${WHOLESALE_FLOWS.includes(convo.currentFlow) ? 'wholesale' : 'contextual'})`);
       } catch (err) {
         console.error(`❌ Error sending silence follow-up to ${convo.psid}:`, err.message);
         // Clear the timer so we don't retry endlessly on a broken conversation
