@@ -926,38 +926,6 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
 
   console.log(`📊 Purchase intent: ${intentScore.intent.toUpperCase()}`);
 
-  // ===== STEP 1.5: RESELLER / DISTRIBUTOR GUARD =====
-  // Catch reseller intent via regex regardless of classifier output.
-  // Same patterns as flows/index.js but placed here so the flow manager handles it first.
-  if (userMessage && (
-    /\b(para\s+vender|incursionar.*vender|quiero\s+vender|empezar\s+a\s+vender|vender\s+en\s+mi)\b/i.test(userMessage) ||
-    /\b(ser\s+distribuid|hacerme\s+distribuid|quiero\s+distribui|busco\s+proveed)\b/i.test(userMessage) ||
-    /\b(paquetes?.*para\s+vend|para\s+mi\s+(negocio|tienda|local|ferreter[ií]a|comercio))\b/i.test(userMessage) ||
-    /\b(quiero\s+distribui|soy\s+(vendedor|comerciante)|tengo\s+(un\s+)?(negocio|tienda|ferreter[ií]a|local))\b/i.test(userMessage)
-  ) && convo?.lastIntent !== 'reseller_inquiry' && convo?.lastIntent !== 'wholesale_handoff') {
-    console.log(`🏪 Reseller/distributor intent detected in flow manager — handoff`);
-    const { getBusinessInfo } = require("../businessInfoManager");
-    const info = await getBusinessInfo();
-
-    await updateConversation(psid, { isWholesaleInquiry: true });
-
-    console.log(`🎯 ===== END FLOW MANAGER (reseller handoff) =====\n`);
-    const handoffResponse = await executeHandoff(psid, convo, userMessage, {
-      reason: `Cliente quiere revender/distribuir: "${userMessage.substring(0, 80)}"`,
-      responsePrefix: "¡Excelente! Somos fabricantes y trabajamos con distribuidores en todo México.\n\n" +
-            "Un especialista te contactará para darte información sobre paquetes y precios de mayoreo.\n\n" +
-            `📞 ${info?.phones?.[0] || "442 352 1646"}\n` +
-            `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`,
-      lastIntent: 'reseller_inquiry',
-      notificationText: `Cliente quiere revender: "${userMessage.substring(0, 60)}"`,
-      timingStyle: 'none',
-      includeQueretaro: false
-    });
-
-    return { ...handoffResponse, handledBy: "flow:reseller_handoff" };
-  }
-  // ===== END RESELLER GUARD =====
-
   // ===== END SCORING =====
 
   // ===== STEP 2: DETECT APPROPRIATE FLOW =====
