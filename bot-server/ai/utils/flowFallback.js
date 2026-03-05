@@ -101,6 +101,7 @@ REGLAS:
 - Las medidas SIEMPRE se expresan con 2 lados: ancho x largo (ej: 5x5m, 4x3m). NUNCA uses 3 dimensiones — la malla es un producto plano.
 - Para answer_question: responde en español, máximo 2 oraciones, como vendedor amable
 - Para answer_question: USA SOLO los datos de la empresa listados arriba, NO inventes información
+- Para answer_question: NUNCA incluyas URLs ni enlaces en el texto. Si el cliente pide el link de compra o no sabe cómo comprar, usa select_one (index 0 si solo hay 1 producto) para que el sistema genere el enlace correcto
 - ${flowType === 'rollo' ? 'Cuando hables de compra/envío, di "La compra es directa con nosotros, necesitamos tu código postal para cotizar el envío"' : 'Cuando hables de entrega/envío/compra, di "La compra se realiza a través de Mercado Libre y el envío está incluido"'}
 - NUNCA digas "Envíamos a todo México" como respuesta genérica`;
 
