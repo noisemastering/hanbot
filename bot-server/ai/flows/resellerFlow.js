@@ -78,12 +78,13 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     const msg = String(userMessage || '').trim();
     const intent = classification?.intent;
 
+    const channel = convo?.channel || (psid.startsWith('wa:') ? 'whatsapp' : 'facebook');
+
     // --- Path 1: Reseller interest ---
     if (RESELLER_PATTERNS.test(msg) || intent === INTENTS.CONFIRMATION) {
       console.log(`🏪 Reseller flow — reseller confirmed, sending catalog + handoff`);
 
       const catalogUrl = await getCatalogUrl(convo, 'malla_sombra');
-      const channel = convo?.channel || (psid.startsWith('wa:') ? 'whatsapp' : 'facebook');
 
       if (catalogUrl) {
         if (channel === 'whatsapp') {
@@ -126,9 +127,31 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       const dims = parseDimensions(msg);
       const sizeInfo = dims ? ` — medida ${dims.userExpressed || dims.normalized}` : '';
 
+      // Send price list / catalog before handoff
+      const wholesaleCatalogUrl = await getCatalogUrl(convo, 'malla_sombra');
+      if (wholesaleCatalogUrl) {
+        if (channel === 'whatsapp') {
+          const phone = psid.replace('wa:', '');
+          const { sendWhatsAppMessage } = require('../../channels/whatsapp/api');
+          try {
+            await sendWhatsAppMessage(phone, {
+              type: 'document',
+              document: { link: wholesaleCatalogUrl, filename: 'Catalogo_Hanlob.pdf' }
+            });
+          } catch (err) {
+            console.error('❌ Error sending WhatsApp catalog:', err.message);
+          }
+        } else {
+          const fbPsid = psid.startsWith('fb:') ? psid.replace('fb:', '') : psid;
+          await sendCatalog(fbPsid, wholesaleCatalogUrl);
+        }
+      }
+
       const handoffResponse = await executeHandoff(psid, convo, userMessage, {
         reason: `Mayoreo desde anuncio revendedor${sizeInfo}: "${msg.substring(0, 80)}"`,
-        responsePrefix: "¡Claro! Para pedidos de mayoreo te comunico con un especialista.\n\n",
+        responsePrefix: wholesaleCatalogUrl
+          ? "Te comparto nuestra lista de precios. Un especialista te contactará para darte la cotización de mayoreo.\n\n"
+          : "¡Claro! Para pedidos de mayoreo te comunico con un especialista.\n\n",
         lastIntent: 'wholesale_handoff',
         timingStyle: 'elaborate'
       });
