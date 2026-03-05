@@ -141,26 +141,36 @@ const WHOLESALE_FLOWS = ['rollo', 'groundcover', 'monofilamento'];
  */
 async function getCatalogUrl(convo, currentFlow) {
   try {
+    let url = null;
     // 1. Ad catalog
     if (convo?.adId) {
       const ad = await Ad.findOne({ fbAdId: convo.adId }).select('catalog').lean();
-      if (ad?.catalog?.url) return ad.catalog.url;
+      if (ad?.catalog?.url) url = ad.catalog.url;
     }
     // 2. Campaign catalog
-    if (convo?.campaignId) {
+    if (!url && convo?.campaignId) {
       const campaign = await Campaign.findOne({ fbCampaignId: convo.campaignId }).select('catalog').lean();
-      if (campaign?.catalog?.url) return campaign.catalog.url;
+      if (campaign?.catalog?.url) url = campaign.catalog.url;
     }
     // 3. Product Family catalog (based on current flow)
-    const flow = currentFlow || convo?.currentFlow;
-    if (flow) {
-      const familyCatalog = await getProductFamilyCatalog(flow);
-      if (familyCatalog) return familyCatalog;
+    if (!url) {
+      const flow = currentFlow || convo?.currentFlow;
+      if (flow) {
+        const familyCatalog = await getProductFamilyCatalog(flow);
+        if (familyCatalog) url = familyCatalog;
+      }
     }
     // 4. Global catalog (from BusinessInfo)
-    const { getBusinessInfo } = require("../businessInfoManager");
-    const bizInfo = await getBusinessInfo();
-    if (bizInfo?.catalog?.url) return bizInfo.catalog.url;
+    if (!url) {
+      const { getBusinessInfo } = require("../businessInfoManager");
+      const bizInfo = await getBusinessInfo();
+      if (bizInfo?.catalog?.url) url = bizInfo.catalog.url;
+    }
+    // Fix Cloudinary raw URLs missing file extension (causes download instead of display)
+    if (url && url.includes('/raw/upload/') && !/\.\w{2,4}$/.test(url)) {
+      url += '.pdf';
+    }
+    return url;
   } catch (err) {
     console.error("Error looking up catalog:", err.message);
   }

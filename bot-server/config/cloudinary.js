@@ -20,7 +20,8 @@ const catalogStorage = new CloudinaryStorage({
     public_id: (req, file) => {
       const timestamp = Date.now();
       const name = file.originalname.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9]/g, '_');
-      return `${name}_${timestamp}`;
+      const ext = file.originalname.match(/\.([^/.]+)$/)?.[1] || 'pdf';
+      return `${name}_${timestamp}.${ext}`;
     }
   }
 });
