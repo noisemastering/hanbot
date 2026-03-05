@@ -3,7 +3,6 @@
 // Uses existing product utilities for search and tree climbing
 
 const { updateConversation } = require("../../conversationManager");
-const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
 const ZipCode = require("../../models/ZipCode");
 const { INTENTS } = require("../classifier");
@@ -481,9 +480,19 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   }
   // Regex fallback: parse percentage from user message - both numeric and natural language
   if (!state.percentage && userMessage) {
+    // "del 90", "al 70", "del 50" — common natural phrasing without % suffix
+    const delMatch = userMessage.match(/\b(?:del|al)\s+(\d{2,3})\b/i);
+    if (delMatch) {
+      const pct = parseInt(delMatch[1]);
+      if (VALID_PERCENTAGES.includes(pct)) {
+        console.log(`📦 Rollo flow - Parsed "del/al" percentage: ${pct}%`);
+        state.percentage = pct;
+      }
+    }
+
     // Try numeric percentage: "35%", "al 50%", "50 porciento"
     // IMPORTANT: Require % or porciento suffix to avoid matching dimensions like "4.20"
-    const numericMatch = userMessage.match(/\b(\d{2,3})\s*(%|porciento|por\s*ciento)/i);
+    const numericMatch = !state.percentage && userMessage.match(/\b(\d{2,3})\s*(%|porciento|por\s*ciento)/i);
     if (numericMatch) {
       const pct = parseInt(numericMatch[1]);
       if (pct >= 10 && pct <= 100) {
@@ -659,8 +668,23 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   const stage = determineStage(state);
 
-  // ====== AI FALLBACK: when quoted products exist and regex couldn't parse ======
+  // ====== CONFIRMATION SHORTCUT: "si", "xfavor", "ok", "dale", "va", "por favor" ======
+  let confirmationHandled = false;
   if (convo?.lastQuotedProducts?.length > 0 && userMessage) {
+    const isConfirmation = /^\s*(s[ií]|ok|dale|va|xfavor|por\s*favor|x\s*favor|claro|sale|órale|orale|sim[oó]n|ándale|andale|está bien|esta bien)\s*[.!]?\s*$/i.test(userMessage);
+    if (isConfirmation) {
+      console.log(`📦 Rollo flow - Confirmation detected: "${userMessage}", advancing flow`);
+      // Default quantity to 1 if we have width+percentage but no quantity
+      if (!state.quantity) state.quantity = 1;
+      // Clear quoted products so stage handler runs cleanly
+      await updateConversation(psid, { lastQuotedProducts: null, unknownCount: 0 });
+      confirmationHandled = true;
+      // Fall through to stage handler below (don't enter AI fallback)
+    }
+  }
+
+  // ====== AI FALLBACK: when quoted products exist and regex couldn't parse ======
+  if (!confirmationHandled && convo?.lastQuotedProducts?.length > 0 && userMessage) {
     const aiResult = await resolveWithAI({
       psid,
       userMessage,
@@ -672,18 +696,11 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
     if (aiResult.confidence >= 0.7) {
       if (aiResult.action === 'select_one' && convo.lastQuotedProducts[aiResult.selectedIndex]) {
-        const prod = convo.lastQuotedProducts[aiResult.selectedIndex];
-        if (prod.productUrl) {
-          const trackedLink = await generateClickLink(psid, prod.productUrl, {
-            productName: prod.productName || prod.displayText,
-            productId: prod.productId
-          });
-          await updateConversation(psid, { lastIntent: 'roll_complete', unknownCount: 0, lastQuotedProducts: null });
-          return {
-            type: "text",
-            text: `¡Perfecto! Aquí tienes el link de compra:\n\n• ${prod.displayText} — ${formatMoney(prod.price)}\n  🛒 ${trackedLink}\n\nEl envío está incluido.`
-          };
-        }
+        // Customer confirmed a product — default quantity to 1 if not set, clear quoted products
+        // so the stage handler advances (asks for zip, then hands off)
+        if (!state.quantity) state.quantity = 1;
+        await updateConversation(psid, { unknownCount: 0, lastQuotedProducts: null });
+        // Fall through to stage handler below
       }
 
       if (aiResult.action === 'answer_question' && aiResult.text) {
@@ -715,7 +732,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       break;
 
     case STAGES.COMPLETE:
-      response = await handleComplete(intent, state, sourceContext, psid, convo);
+      response = await handleComplete(intent, state, sourceContext, psid, convo, userMessage);
       break;
 
     default:
@@ -983,73 +1000,9 @@ async function handleAwaitingQuantity(intent, state, sourceContext) {
 }
 
 /**
- * Handle awaiting zip code stage
- * If retail quantity + product has ML link → share link (done)
- * Otherwise → ask for zip code to quote shipping
+ * Handle awaiting zip code stage — ask for zip to quote shipping (direct sale)
  */
 async function handleAwaitingZip(intent, state, sourceContext, psid, convo) {
-  const rolloType = state.rolloType || ROLLO_TYPES.MALLA_SOMBRA;
-  const typeInfo = TYPE_DISPLAY[rolloType] || TYPE_DISPLAY.malla_sombra;
-  let specsText = `rollo de ${typeInfo.name} de ${state.width}m x 100m`;
-  if (state.percentage) {
-    specsText += ` al ${state.percentage}%`;
-  }
-
-  const products = await findMatchingProducts(state.width, state.percentage, rolloType);
-  const product = products[0];
-
-  if (product) {
-    // Check if retail order (below wholesale minimum)
-    const isRetail = !product.wholesaleEnabled ||
-      !product.wholesaleMinQty ||
-      state.quantity < product.wholesaleMinQty;
-
-    if (isRetail) {
-      // Try to share ML link for retail purchase
-      const productUrl = product.onlineStoreLinks?.find(l => l.isPreferred)?.url ||
-                         product.onlineStoreLinks?.[0]?.url;
-
-      if (productUrl && psid) {
-        const trackedLink = await generateClickLink(psid, productUrl, {
-          productName: product.name,
-          productId: product._id,
-          city: convo?.city,
-          stateMx: convo?.stateMx
-        });
-
-        const priceText = product.price
-          ? ` por ${formatMoney(product.price)}${state.quantity > 1 ? ' c/u' : ''}`
-          : "";
-        const quantityText = state.quantity > 1
-          ? `Para ${state.quantity} rollos, `
-          : "";
-
-        let wholesaleMention = "";
-        if (product.wholesaleEnabled && product.wholesaleMinQty) {
-          wholesaleMention = `\n\nA partir de ${product.wholesaleMinQty} rollos manejamos precio de mayoreo.`;
-        }
-
-        // Mark as complete — no need for zip
-        state.zipCode = 'ML_PURCHASE';
-        state._lastQuotedProducts = [{
-          displayText: specsText,
-          price: product.price,
-          productId: product._id?.toString(),
-          productUrl,
-          productName: product.name
-        }];
-
-        return {
-          type: "text",
-          text: `${quantityText}tenemos el ${specsText}${priceText}. El envío está incluido.\n\n` +
-                `🛒 Cómpralo aquí:\n${trackedLink}${wholesaleMention}\n\n` +
-                `¿Necesitas algo más?`
-        };
-      }
-    }
-  }
-
-  // Wholesale or no ML link — ask for zip code
   return {
     type: "text",
     text: `¿Me puedes proporcionar tu código postal para calcular el envío?`
@@ -1059,7 +1012,7 @@ async function handleAwaitingZip(intent, state, sourceContext, psid, convo) {
 /**
  * Handle complete - we have all specs + zip, hand off to human
  */
-async function handleComplete(intent, state, sourceContext, psid, convo) {
+async function handleComplete(intent, state, sourceContext, psid, convo, userMessage = '') {
   const rolloType = state.rolloType || ROLLO_TYPES.MALLA_SOMBRA;
   const typeInfo = TYPE_DISPLAY[rolloType] || TYPE_DISPLAY.malla_sombra;
   const locationText = state.zipInfo

@@ -53,7 +53,7 @@ El bot acaba de mostrar productos o hacer una pregunta, y el cliente respondió 
 Tu trabajo es interpretar QUÉ QUIERE el cliente y devolver una acción estructurada en JSON.
 
 DATOS DE LA EMPRESA (usa estos para answer_question):
-- La compra se realiza a través de Mercado Libre, el envío está incluido
+- ${flowType === 'rollo' ? 'La compra es directa con nosotros (no por Mercado Libre). Se requiere código postal para cotizar envío.' : 'La compra se realiza a través de Mercado Libre, el envío está incluido'}
 - Tiempo de entrega: normalmente 1 a 2 días hábiles, el tiempo exacto se confirma una vez realizada la compra
 - Malla sombra confeccionada: raschel 90% sombra, con ojillos para sujeción cada 80 cm por lado, refuerzo en esquinas, lista para instalar
 - Rollos: malla sombra raschel en rollos de 100m, disponibles en 35%, 50%, 70%, 80% y 90%
@@ -101,7 +101,7 @@ REGLAS:
 - Las medidas SIEMPRE se expresan con 2 lados: ancho x largo (ej: 5x5m, 4x3m). NUNCA uses 3 dimensiones — la malla es un producto plano.
 - Para answer_question: responde en español, máximo 2 oraciones, como vendedor amable
 - Para answer_question: USA SOLO los datos de la empresa listados arriba, NO inventes información
-- Cuando hables de entrega/envío/compra, di "La compra se realiza a través de Mercado Libre y el envío está incluido"
+- ${flowType === 'rollo' ? 'Cuando hables de compra/envío, di "La compra es directa con nosotros, necesitamos tu código postal para cotizar el envío"' : 'Cuando hables de entrega/envío/compra, di "La compra se realiza a través de Mercado Libre y el envío está incluido"'}
 - NUNCA digas "Envíamos a todo México" como respuesta genérica`;
 
     const response = await openai.chat.completions.create({
