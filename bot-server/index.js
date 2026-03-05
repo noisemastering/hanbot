@@ -1379,8 +1379,18 @@ app.post("/webhook", async (req, res) => {
 
             (async () => {
               try {
-                // Pass accompanying text (if any) so the AI sees both image + message
                 const accompanyingText = webhookEvent.message.text || '';
+
+                // If the text already tells us what they want, skip the Vision call
+                const textReply = require("./ai/core/imageAnalyzer").resolveFromText(accompanyingText);
+                if (textReply) {
+                  console.log(`📸 Resolved from text alone — skipping Vision call`);
+                  await callSendAPI(senderPsid, { text: textReply.text });
+                  await saveMessage(senderPsid, textReply.text, "bot");
+                  await updateConversation(senderPsid, { lastIntent: "image_received", state: "active" });
+                  return;
+                }
+
                 const analysisResult = await analyzeImage(imageUrl, openai, accompanyingText);
                 const reply = generateImageResponse(analysisResult);
 

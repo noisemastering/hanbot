@@ -88,8 +88,7 @@ Responde en español de forma concisa. Para categorías B, C, D y E, solo respon
     console.log(`📝 Analysis: ${analysis.substring(0, 100)}...`);
 
     // Detect special cases
-    const isStructureInquiry = analysis.includes("STRUCTURE_INQUIRY") ||
-                                /estructura|marco|poste|velaria/i.test(userMessage || '');
+    const isStructureInquiry = analysis.includes("STRUCTURE_INQUIRY");
     const isCustomServiceRequest = !isStructureInquiry && (
                                     analysis.includes("CUSTOM_SERVICE_REQUEST") ||
                                     /sombrilla|toldo|parasol|carpa|pérgola.*tela|forrar|reparar|cambiar.*tela/i.test(analysis));
@@ -201,7 +200,41 @@ function generateImageResponse(analysisResult) {
   };
 }
 
+/**
+ * Try to answer from the accompanying text alone — no Vision call needed.
+ * Returns a response object if the text already tells us what they want
+ * (and it's something we don't offer), or null to proceed with image analysis.
+ */
+function resolveFromText(text) {
+  if (!text) return null;
+  const msg = text.toLowerCase();
+
+  // Structures — we only sell the fabric
+  if (/\b(estructura|p[eé]rgola|marco|poste|velaria|domo|techo|arco)\b/i.test(msg)) {
+    return {
+      type: "text",
+      text: "Nosotros solo vendemos la malla sombra (la tela), no la estructura metálica ni de madera.\n\n" +
+            "Si ya tienes la estructura y necesitas la malla para cubrirla, con gusto te ayudo. " +
+            "Solo dime las medidas del espacio que quieres cubrir."
+    };
+  }
+
+  // Umbrella/toldo recovering — we don't do that
+  if (/\b(sombrilla|parasol|toldo|carpa|forrar|reparar|cambiar\s+(?:la\s+)?tela)\b/i.test(msg)) {
+    return {
+      type: "text",
+      text: "Nosotros vendemos mallas sombra en medidas rectangulares y triangulares para cubrir espacios abiertos, " +
+            "pero no ofrecemos servicio de forrado o reparación de estructuras existentes.\n\n" +
+            "Si buscas cubrir un espacio abierto con malla sombra, con gusto te ayudo. " +
+            "¿Tienes algún área descubierta que quieras proteger del sol?"
+    };
+  }
+
+  return null;
+}
+
 module.exports = {
   analyzeImage,
-  generateImageResponse
+  generateImageResponse,
+  resolveFromText
 };
