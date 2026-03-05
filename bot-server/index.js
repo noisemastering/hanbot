@@ -1140,8 +1140,9 @@ app.post("/webhook", async (req, res) => {
 
         // Set product interest and send greeting
         // Use flowRef for currentFlow (explicitly configured on ads/campaigns), fall back to adProductInterest
+        // Reseller ads stay on 'default' so resellerFlow.shouldHandle can activate
         const adFlowRef = resolvedSettings?.flowRef;
-        const adCurrentFlow = adFlowRef || adProductInterest;
+        const adCurrentFlow = isResellerAd ? 'default' : (adFlowRef || adProductInterest);
         if (adProductInterest) {
           await updateConversation(senderPsid, { productInterest: adProductInterest, currentFlow: adCurrentFlow, adFlowRef: adFlowRef || null, greeted: true, lastGreetTime: Date.now() });
           await callSendAPI(senderPsid, { text: adGreeting });
