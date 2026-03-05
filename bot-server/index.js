@@ -1113,8 +1113,8 @@ app.post("/webhook", async (req, res) => {
           }
         }
 
-        // Override greeting for recent returning users
-        if (isRecentReturn && convo?.userName) {
+        // Override greeting for recent returning users (but NOT reseller ads — the pitch IS the greeting)
+        if (isRecentReturn && convo?.userName && !isResellerAd) {
           const prevProduct = convo.previousSession?.productInterest || convo.productInterest;
           const productNames = {
             malla_sombra: 'malla sombra',
