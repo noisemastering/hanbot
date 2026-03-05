@@ -637,6 +637,37 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     }
   }
 
+  // ====== RETAIL PRICE CONFIRMATION (from wholesale context) ======
+  // User said "solo quiero el precio" → we asked "¿buscas una pieza?" → handle response
+  if (convo?.lastIntent === 'malla_awaiting_retail_price_confirm') {
+    const cleanMsg = String(userMessage).trim().toLowerCase();
+    const isYes = /^\s*(s[ií]|ok|dale|va|una?\s*(pieza)?|solo\s*una?|claro|exacto|eso|as[ií])\s*[.!]?\s*$/i.test(cleanMsg);
+    const isNo = /^\s*(no|nel|nop|nope|negativo|mayoreo|varias?|m[aá]s\s+de\s+una?)\s*[.!]?\s*$/i.test(cleanMsg);
+
+    if (isYes) {
+      console.log(`💰 Retail price confirmed from wholesale context`);
+      // Temporarily clear wholesale flag and re-run handleComplete
+      const updatedConvo = { ...convo, isWholesaleInquiry: false };
+      await updateConversation(psid, { isWholesaleInquiry: false, lastIntent: 'malla_complete' });
+      const state = getFlowState(convo);
+      return await handleComplete(null, state, null, psid, updatedConvo, userMessage);
+    }
+    if (isNo) {
+      // They want wholesale — hand off
+      const state = getFlowState(convo);
+      const sizeDisplay = state.userExpressedSize || `${state.width}x${state.height}`;
+      const { executeHandoff } = require('../utils/executeHandoff');
+      return await executeHandoff(psid, convo, userMessage, {
+        reason: `Mayoreo: distribuidor pregunta por ${sizeDisplay}m — cotizar precio de mayoreo`,
+        responsePrefix: `Perfecto, para precio de mayoreo te comunico con un especialista.`,
+        lastIntent: 'wholesale_handoff',
+        timingStyle: 'elaborate'
+      });
+    }
+    // Not clear — fall through to normal parsing
+    await updateConversation(psid, { lastIntent: 'malla_complete' });
+  }
+
   // ====== REPAIR REQUEST ======
   // "Necesito reparar", "pueden reparar", "hacen reparaciones", etc.
   // We only repair if the customer bought from us — hand off to a specialist.
@@ -2033,8 +2064,25 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       }
     }
 
-    // Wholesale/reseller context — hand off for wholesale pricing
+    // Wholesale/reseller context — check if user just wants the retail price
     if (convo?.isWholesaleInquiry) {
+      const msg = String(userMessage || '').toLowerCase();
+      const wantsJustPrice = /\b(solo\s*(quiero\s*)?(saber\s*)?(el\s*)?precio|solo\s*el\s*precio|cu[aá]nto\s*(cuesta|vale|es)|qu[eé]\s*precio\s*tiene|precio\s*unitario|una\s*(sola\s*)?pieza)\b/i.test(msg);
+
+      if (wantsJustPrice) {
+        console.log(`💰 Wholesale context but user wants retail price — asking confirmation`);
+        const sizeDisplay = userExpressedSize || `${width}x${height}`;
+        await updateConversation(psid, {
+          lastIntent: 'malla_awaiting_retail_price_confirm',
+          productSpecs: { ...convo?.productSpecs, width, height, percentage, color, userExpressedSize, updatedAt: new Date() }
+        });
+        return {
+          type: "text",
+          text: `¿Buscas comprar una pieza de ${sizeDisplay}m?`
+        };
+      }
+
+      // Hand off for wholesale pricing
       const sizeDisplay = userExpressedSize || `${width}x${height}`;
       console.log(`🏪 Wholesale inquiry — handing off ${sizeDisplay}m for wholesale pricing`);
       const { executeHandoff: execHandoffW } = require('../utils/executeHandoff');
