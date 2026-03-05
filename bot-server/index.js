@@ -955,6 +955,20 @@ app.post("/webhook", async (req, res) => {
           : 999;
         const isRecentReturn = hoursSinceLast <= 24 && convo?.greeted;
 
+        // If user is mid-conversation (messaged within last 30 min), don't reset —
+        // they likely re-clicked the ad accidentally. Just update campaign tracking.
+        const minutesSinceLast = hoursSinceLast * 60;
+        if (minutesSinceLast < 30 && convo?.currentFlow) {
+          console.log(`🛡️ User ${senderPsid} is mid-conversation (${minutesSinceLast.toFixed(0)}min ago, flow: ${convo.currentFlow}), skipping reset & greeting`);
+          await updateConversation(senderPsid, {
+            campaignRef: referral.ref || null,
+            adId: referral.ad_id || null,
+            campaignId: referral.campaign_id || null,
+          });
+          adGreetingSent = true; // prevent greeting, let message handler run normally
+        } else {
+        // ---- Normal ad-entry flow: reset + greet ----
+
         if (isRecentReturn) {
           await updateConversation(senderPsid, {
             previousSession: {
@@ -1139,6 +1153,7 @@ app.post("/webhook", async (req, res) => {
             console.error(`❌ Failed to send fallback greeting:`, greetErr.message);
           }
         }
+        } // close normal ad-entry else (not mid-conversation)
         } // close isDuplicateReferral else
       }
 
