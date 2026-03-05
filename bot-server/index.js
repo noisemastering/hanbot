@@ -991,6 +991,7 @@ app.post("/webhook", async (req, res) => {
         await updateConversation(senderPsid, {
           state: "active",
           lastIntent: "ad_entry",
+          currentFlow: null,
           campaignRef: referral.ref || null,
           adId: referral.ad_id || null,
           campaignId: referral.campaign_id || null,
@@ -1072,6 +1073,14 @@ app.post("/webhook", async (req, res) => {
               adProductInterest = 'ground_cover';
               adGreeting = greetings['ground_cover'];
               console.log(`📦 Inferred productInterest: ground_cover from campaign name`);
+            } else if (campaignName.includes('rollo') || campaignName.includes('agrícola') || campaignName.includes('agricola')) {
+              adProductInterest = 'rollo';
+              adGreeting = greetings['malla_sombra_raschel_agricola'] || greetings['malla_sombra'];
+              console.log(`📦 Inferred productInterest: rollo from campaign name`);
+            } else if (campaignName.includes('monofilamento')) {
+              adProductInterest = 'monofilamento';
+              adGreeting = greetings['monofilamento'];
+              console.log(`📦 Inferred productInterest: monofilamento from campaign name`);
             }
           } else {
             console.log(`⚠️ Ad ${referral.ad_id} not found in database`);
