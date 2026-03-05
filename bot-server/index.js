@@ -1078,6 +1078,20 @@ app.post("/webhook", async (req, res) => {
           }
         }
 
+        // Reseller ad detection — override greeting with reseller pitch
+        const isResellerAd = resolvedSettings?.audience?.type === 'reseller' ||
+          /\b(vende|distribuidor|revendedor|revende|ferreter[ií]a|mayorist)\b/i.test(resolvedSettings?.campaignName || '');
+        if (isResellerAd) {
+          console.log(`🏪 Reseller ad detected — using reseller pitch as greeting`);
+          adProductInterest = adProductInterest || 'malla_sombra';
+          const { PITCH_MESSAGE } = require("./ai/flows/resellerFlow");
+          if (PITCH_MESSAGE) {
+            adGreeting = PITCH_MESSAGE;
+          }
+          // Mark as wholesale + set lastIntent so resellerFlow activates on next message
+          await updateConversation(senderPsid, { isWholesaleInquiry: true, lastIntent: 'reseller_pitch_sent' });
+        }
+
         // Fallback to ref-based detection if no ad products found
         if (!adProductInterest && referral.ref) {
           const refLower = referral.ref.toLowerCase();

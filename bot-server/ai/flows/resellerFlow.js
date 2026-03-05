@@ -187,4 +187,4 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   return null;
 }
 
-module.exports = { shouldHandle, handle };
+module.exports = { shouldHandle, handle, PITCH_MESSAGE };
