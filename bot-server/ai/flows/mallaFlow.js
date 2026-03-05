@@ -540,6 +540,40 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     if (pendingResult) return pendingResult;
   }
 
+  // ====== CENTIMETER CONFIRMATION RESPONSE ======
+  if (convo?.lastIntent === 'malla_awaiting_cm_confirmation' && convo?.productSpecs?.pendingCmConfirmation) {
+    const isYes = /^\s*(s[ií]|ok|dale|va|exacto|correcto|eso|as[ií]|esas?|claro|afirmativo)\s*[.!]?\s*$/i.test(userMessage);
+    const isNo = /^\s*(no|nel|nop|nope|negativo)\s*[.!]?\s*$/i.test(userMessage);
+
+    if (isYes) {
+      console.log(`📐 Centimeter confirmation accepted, proceeding to quote`);
+      state.convertedFromCentimeters = false; // prevent re-asking
+      await updateConversation(psid, {
+        lastIntent: 'malla_cm_confirmed',
+        productSpecs: { ...convo.productSpecs, pendingCmConfirmation: false, updatedAt: new Date() }
+      });
+      return await handleComplete(null, state, null, psid, convo, userMessage);
+    }
+    if (isNo) {
+      console.log(`📐 Centimeter confirmation rejected, asking for correct dimensions`);
+      await updateConversation(psid, {
+        lastIntent: 'malla_awaiting_dimensions',
+        productSpecs: { productType: 'malla_sombra', pendingCmConfirmation: false, updatedAt: new Date() }
+      });
+      state.width = null;
+      state.height = null;
+      return { type: "text", text: "¿Me puedes indicar la medida en metros? Por ejemplo: 3x4" };
+    }
+    // Not a clear yes/no — might be new dimensions, fall through to normal parsing
+    state.width = null;
+    state.height = null;
+    state.convertedFromCentimeters = false;
+    await updateConversation(psid, {
+      lastIntent: null,
+      productSpecs: { productType: 'malla_sombra', pendingCmConfirmation: false, updatedAt: new Date() }
+    });
+  }
+
   // ====== RESELLER DISAMBIGUATION RESPONSE ======
   // User replied to "¿una pieza o mayoreo?"
   if (convo?.lastIntent === "awaiting_reseller_intent") {
@@ -939,6 +973,10 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
           state.convertedFromFeet = true;
           state.originalFeetStr = dims.originalFeetStr;
         }
+        if (dims.convertedFromCentimeters) {
+          state.convertedFromCentimeters = true;
+          state.originalCmStr = dims.originalCmStr;
+        }
         console.log(`🌐 Malla flow - [2/4 AI dim string] Parsed "${entities.dimensions}" → ${dims.width}x${dims.height}`);
       } else {
         console.warn(`⚠️ Malla flow - [2/4 AI dim string] FAILED to parse "${entities.dimensions}" — classifier gave dimensions but regex couldn't parse them`);
@@ -957,6 +995,10 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       if (dimsFromMessage.convertedFromFeet) {
         state.convertedFromFeet = true;
         state.originalFeetStr = dimsFromMessage.originalFeetStr;
+      }
+      if (dimsFromMessage.convertedFromCentimeters) {
+        state.convertedFromCentimeters = true;
+        state.originalCmStr = dimsFromMessage.originalCmStr;
       }
     } else if (classifierHadDimStr || /\d/.test(userMessage)) {
       console.warn(`⚠️ Malla flow - [3/4 regex fallback] FAILED on "${userMessage.slice(0, 60)}" — message has numbers but regex couldn't parse dimensions`);
@@ -1166,6 +1208,28 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       break;
 
     case STAGES.COMPLETE:
+      // If dimensions were inferred from centimeters, confirm before quoting
+      if (state.convertedFromCentimeters && convo?.lastIntent !== 'malla_cm_confirmed') {
+        console.log(`📐 Centimeter conversion detected: ${state.originalCmStr} → ${state.width}x${state.height}m, asking confirmation`);
+        await updateConversation(psid, {
+          lastIntent: 'malla_awaiting_cm_confirmation',
+          productInterest: 'malla_sombra',
+          currentFlow: 'malla_sombra',
+          productSpecs: {
+            productType: 'malla_sombra',
+            width: state.width,
+            height: state.height,
+            pendingCmConfirmation: true,
+            originalCmStr: state.originalCmStr,
+            updatedAt: new Date()
+          }
+        });
+        response = {
+          type: "text",
+          text: `¿Te refieres a ${state.width} x ${state.height} metros?`
+        };
+        break;
+      }
       response = await handleComplete(intent, state, sourceContext, psid, convo, userMessage);
       break;
 

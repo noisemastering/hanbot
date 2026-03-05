@@ -225,6 +225,24 @@ function buildResult(dim1, dim2, isFeet = false, userExpressed = null) {
     result.originalFeetStr = `${originalDim1}x${originalDim2} pies`;
   }
 
+  // Detect likely centimeter input: both dimensions > 10, neither near 100 (rollo pattern)
+  // e.g. "259x390" → 2.59 x 3.90m, "180x230" → 1.80 x 2.30m
+  if (!isFeet && width > 10 && height > 10 &&
+      Math.abs(width - 100) > 10 && Math.abs(height - 100) > 10) {
+    const cmWidth = Math.round(width) / 100;
+    const cmHeight = Math.round(height) / 100;
+    // Only convert if results are reasonable confeccionada sizes (1-10m)
+    if (cmWidth >= 1 && cmWidth <= 10 && cmHeight >= 1 && cmHeight <= 10) {
+      result.width = cmWidth;
+      result.height = cmHeight;
+      result.area = cmWidth * cmHeight;
+      result.normalized = `${cmWidth}x${cmHeight}`;
+      result.convertedFromCentimeters = true;
+      result.originalCm = { dim1: originalDim1, dim2: originalDim2 };
+      result.originalCmStr = `${originalDim1}x${originalDim2}`;
+    }
+  }
+
   return result;
 }
 
