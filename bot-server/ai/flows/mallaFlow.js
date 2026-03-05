@@ -595,6 +595,19 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     }
   }
 
+  // ====== REPAIR REQUEST ======
+  // "Necesito reparar", "pueden reparar", "hacen reparaciones", etc.
+  // We only repair if the customer bought from us — hand off to a specialist.
+  if (/\b(reparar|reparaci[oó]n|arreglar|componer|remiend[oa]|coser|parchar)\b/i.test(userMessage)) {
+    const { executeHandoff } = require('../utils/executeHandoff');
+    return await executeHandoff(psid, convo, userMessage, {
+      reason: 'Reparación de malla sombra',
+      responsePrefix: 'Si realizó la compra con nosotros, sí podemos hacer la reparación.',
+      lastIntent: 'repair_handoff',
+      timingStyle: 'elaborate'
+    });
+  }
+
   // Get current state and merge classifier entities
   let state = getFlowState(convo);
   if (entities.color) state.color = entities.color;
