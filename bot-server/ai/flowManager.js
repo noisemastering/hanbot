@@ -137,6 +137,16 @@ const UNKNOWN_PRODUCTS = /\b(lona|polisombra|media\s*sombra|malla\s*cicl[oó]n|m
 const WHOLESALE_FLOWS = ['rollo', 'groundcover', 'monofilamento'];
 
 /**
+ * Fix Cloudinary raw URLs missing file extension (causes download instead of display).
+ */
+function fixCatalogUrl(url) {
+  if (url && url.includes('/raw/upload/') && !/\.\w{2,4}$/.test(url)) {
+    return url + '.pdf';
+  }
+  return url;
+}
+
+/**
  * Look up catalog URL with hierarchy: Ad → Campaign → Product Family → Global → null
  */
 async function getCatalogUrl(convo, currentFlow) {
@@ -166,11 +176,7 @@ async function getCatalogUrl(convo, currentFlow) {
       const bizInfo = await getBusinessInfo();
       if (bizInfo?.catalog?.url) url = bizInfo.catalog.url;
     }
-    // Fix Cloudinary raw URLs missing file extension (causes download instead of display)
-    if (url && url.includes('/raw/upload/') && !/\.\w{2,4}$/.test(url)) {
-      url += '.pdf';
-    }
-    return url;
+    return fixCatalogUrl(url);
   } catch (err) {
     console.error("Error looking up catalog:", err.message);
   }
@@ -226,7 +232,7 @@ async function buildUnknownProductResponse(unknownProduct, psid, convo, currentF
 
   // For wholesale/roll contexts, prefer sending the catalog
   if (isWholesaleContext) {
-    const catalogUrl = await getCatalogUrl(convo, currentFlow) || campaign?.catalog?.url;
+    const catalogUrl = await getCatalogUrl(convo, currentFlow) || fixCatalogUrl(campaign?.catalog?.url);
     if (catalogUrl) {
       console.log(`📄 Unknown product in wholesale context — sharing catalog instead of ML store`);
       return {
@@ -1152,5 +1158,6 @@ module.exports = {
   checkFlowTransfer,
   getFlowState,
   getCatalogUrl,
+  fixCatalogUrl,
   FLOWS
 };

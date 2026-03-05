@@ -6,6 +6,7 @@ const { updateConversation, getConversation } = require("../../conversationManag
 const { INTENTS } = require("../classifier");
 const Campaign = require("../../models/Campaign");
 const { isBusinessHours } = require("../utils/businessHours");
+const { fixCatalogUrl } = require("../flowManager");
 
 /**
  * Lead capture stages
@@ -150,7 +151,7 @@ async function handleInitial(psid, campaign, msg, convo) {
     await updateConversation(psid, { lastIntent: "lead_awaiting_catalog_choice" });
     return {
       type: "text",
-      text: `¡Claro! Aquí está nuestro catálogo con lista de precios:\n\n📄 ${campaign.catalog.url}\n\n¿Te gustaría una cotización personalizada para tu pedido?`
+      text: `¡Claro! Aquí está nuestro catálogo con lista de precios:\n\n📄 ${fixCatalogUrl(campaign.catalog.url)}\n\n¿Te gustaría una cotización personalizada para tu pedido?`
     };
   }
 
@@ -190,7 +191,7 @@ async function handleCatalogChoice(psid, campaign, msg, classification) {
     await updateConversation(psid, { lastIntent: "lead_catalog_sent" });
     return {
       type: "text",
-      text: `📄 Aquí está el catálogo:\n${campaign.catalog.url}\n\n¿Te gustaría también una cotización personalizada?`
+      text: `📄 Aquí está el catálogo:\n${fixCatalogUrl(campaign.catalog.url)}\n\n¿Te gustaría también una cotización personalizada?`
     };
   }
 
