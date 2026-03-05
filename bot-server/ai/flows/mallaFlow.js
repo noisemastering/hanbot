@@ -457,6 +457,10 @@ function checkProductFeatureQuestions(userMessage, state, convo) {
       response: "sí, la manejamos en beige"
     },
     {
+      pattern: /\b(negro|negra)\b/i,
+      response: "sí, la manejamos en negro"
+    },
+    {
       pattern: /\b(uv|rayos|sol)\b/i,
       response: "sí, tiene protección UV"
     },
