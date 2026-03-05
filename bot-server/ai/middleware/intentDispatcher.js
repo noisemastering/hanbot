@@ -21,7 +21,7 @@ const INFORMATIONAL_INTENTS = new Set([
   "installation_query", "warranty_query", "structure_query",
   "durability_query", "custom_size_query", "accessory_query",
   "photo_request", "product_comparison", "catalog_request",
-  "how_to_buy", "phone_request", "price_per_sqm", "bulk_discount", "reseller_inquiry",
+  "how_to_buy", "phone_request", "price_per_sqm", "bulk_discount",
   "frustration", "human_request", "complaint", "out_of_stock_report",
   "price_confusion", "store_link_request", "custom_modification"
 ]);

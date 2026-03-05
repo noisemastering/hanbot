@@ -62,7 +62,7 @@ const handlers = {
   [INTENTS.STORE_LINK_REQUEST]: purchaseHandlers.handleStoreLinkRequest,
   [INTENTS.HOW_TO_BUY]: purchaseHandlers.handleHowToBuy,
   [INTENTS.BULK_DISCOUNT]: purchaseHandlers.handleBulkDiscount,
-  [INTENTS.RESELLER_INQUIRY]: purchaseHandlers.handleResellerInquiry,
+  // reseller_inquiry handled by resellerFlow + mallaFlow reseller detection — not dispatched here
   [INTENTS.PHONE_REQUEST]: purchaseHandlers.handlePhoneRequest,
   [INTENTS.PRICE_PER_SQM]: purchaseHandlers.handlePricePerSqm,
 
