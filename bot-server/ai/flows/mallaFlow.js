@@ -449,8 +449,12 @@ function checkProductFeatureQuestions(userMessage, state, convo) {
       response: "la confeccionada es 90% de sombra; en rollo manejamos desde 35% hasta 90%"
     },
     {
+      pattern: /\b(colou?re?s|qu[eé]\s+colou?re?s)\b/i,
+      response: "la manejamos en negro y beige"
+    },
+    {
       pattern: /\b(beige|caf[eé])\b/i,
-      response: "el color disponible es beige"
+      response: "sí, la manejamos en beige"
     },
     {
       pattern: /\b(uv|rayos|sol)\b/i,
