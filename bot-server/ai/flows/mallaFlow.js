@@ -2069,7 +2069,9 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
   // ====== END POI TREE CHECK ======
 
   // Check if customer asked for a non-standard percentage
-  const requestedInvalidPercentage = percentage && !VALID_PERCENTAGES.includes(Number(percentage));
+  // Confeccionada only comes in 90% — any other percentage is non-standard for this flow
+  const CONFECCIONADA_PERCENTAGE = 90;
+  const requestedInvalidPercentage = percentage && Number(percentage) !== CONFECCIONADA_PERCENTAGE;
 
   // Check if customer asked for an unavailable color
   const AVAILABLE_COLORS = ['beige', 'negro'];
@@ -2221,9 +2223,9 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     // If customer asked for non-standard percentage or unavailable color, note the correction
     let correctionNote = '';
     if (requestedInvalidPercentage && requestedUnavailableColor) {
-      correctionNote = `No manejamos ${percentage}% ni color ${color}. Solo la tenemos en ${AVAILABLE_COLORS.join(' y ')}:\n\n`;
+      correctionNote = `La malla confeccionada solo la manejamos al ${CONFECCIONADA_PERCENTAGE}% y en ${AVAILABLE_COLORS.join(' y ')}:\n\n`;
     } else if (requestedInvalidPercentage) {
-      correctionNote = `No manejamos ${percentage}%, pero tenemos esta opción:\n\n`;
+      correctionNote = `La malla confeccionada solo la manejamos al ${CONFECCIONADA_PERCENTAGE}% de sombra:\n\n`;
     } else if (requestedUnavailableColor) {
       correctionNote = `No la manejamos en color ${color}, solo en ${AVAILABLE_COLORS.join(' y ')}:\n\n`;
     }
