@@ -1785,6 +1785,43 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
           text: "En compras a través de Mercado Libre el pago es 100% por adelantado al momento de ordenar (tarjeta, efectivo en OXXO, o meses sin intereses). Tu compra está protegida: si no te llega o llega diferente, se te devuelve tu dinero."
         };
       }
+
+      // No regex matched — ask AI to interpret the question
+      const lastQuoted = convo?.lastQuotedProducts || [];
+      const aiResult = await resolveWithAI({
+        psid,
+        userMessage,
+        flowType: 'malla',
+        stage: 'complete_question',
+        basket: convo?.productSpecs || {},
+        lastQuotedProducts: lastQuoted
+      });
+
+      if (aiResult?.action === 'answer_question' && aiResult.confidence >= 0.7) {
+        console.log(`🧠 General question AI fallback: "${userMessage}" → answered`);
+        await updateConversation(psid, { lastIntent: 'malla_ai_answered', unknownCount: 0 });
+        return { type: "text", text: aiResult.text };
+      }
+      if (aiResult?.action === 'select_one' && aiResult.confidence >= 0.7 && lastQuoted.length > 0) {
+        const idx = aiResult.selectedIndex || 0;
+        const prod = lastQuoted[idx];
+        if (prod?.productUrl) {
+          const trackedLink = await generateClickLink(psid, prod.productUrl, {
+            productName: prod.productName,
+            productId: prod.productId
+          });
+          await updateConversation(psid, {
+            lastSharedProductLink: trackedLink,
+            lastIntent: 'malla_link_shared',
+            unknownCount: 0
+          });
+          return {
+            type: "text",
+            text: `🛒 Aquí está el enlace para comprarla:\n${trackedLink}`
+          };
+        }
+      }
+      // AI couldn't answer either — fall through to normal handleComplete logic
     }
   }
 
