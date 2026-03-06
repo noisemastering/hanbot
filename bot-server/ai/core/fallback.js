@@ -52,7 +52,7 @@ async function appendProductLinkIfAvailable(responseText, convo, psid) {
           productId: product._id
         });
         console.log(`🔗 Appending product link for ${w}x${h}m to AI response`);
-        return responseText + `\n\n🛒 Cómprala aquí:\n${trackedLink}`;
+        return responseText + `\n\nMalla sombra confeccionada de ${w}x${h}m, 90% sombra.\n🛒 Cómprala aquí:\n${trackedLink}`;
       }
     }
   } catch (err) {
