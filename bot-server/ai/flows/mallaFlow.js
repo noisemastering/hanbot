@@ -1768,6 +1768,15 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
         };
       }
 
+      // Address / location questions
+      if (/\b(direcci[oó]n|ubicaci[oó]n|d[oó]nde\s+(est[aá]n|se\s+ubica|queda)|domicilio|tienda\s+f[ií]sica|sucursal|local|mostrador|recoger|pasar\s+a\s+recoger)\b/i.test(msg)) {
+        await updateConversation(psid, { lastIntent: 'address_question', unknownCount: 0 });
+        return {
+          type: "text",
+          text: `Nuestra tienda física está en Querétaro:\n${MAPS_URL}\n\nTambién puedes comprar en línea a través de Mercado Libre con envío incluido a todo México.`
+        };
+      }
+
       // Payment questions
       if (/\b(pag[oa]|tarjeta|efectivo|transfer|meses|oxxo|dep[oó]sito|forma\s+de\s+pago|m[eé]todo\s+de\s+pago)\b/i.test(msg)) {
         await updateConversation(psid, { lastIntent: 'payment_question', unknownCount: 0 });
