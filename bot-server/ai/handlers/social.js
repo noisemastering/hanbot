@@ -60,10 +60,17 @@ async function handleThanks({ psid, convo }) {
     return null;
   }
 
+  // Already said goodbye/thanks — don't repeat the farewell + video
+  const alreadyClosing = convo?.lastIntent === 'thanks' || convo?.lastIntent === 'goodbye';
+
   await updateConversation(psid, {
     lastIntent: "thanks",
     unknownCount: 0
   });
+
+  if (alreadyClosing) {
+    return { type: "text", text: "¡Con gusto! Aquí estamos para cuando necesites." };
+  }
 
   const response = await generateBotResponse("thanks", { convo });
 
@@ -78,6 +85,9 @@ async function handleThanks({ psid, convo }) {
  * Handle goodbye intent
  */
 async function handleGoodbye({ psid, convo, entities }) {
+  // Already said goodbye/thanks — don't repeat the farewell + video
+  const alreadyClosing = convo?.lastIntent === 'thanks' || convo?.lastIntent === 'goodbye';
+
   await updateConversation(psid, {
     lastIntent: "goodbye",
     state: "closed",
@@ -94,6 +104,10 @@ async function handleGoodbye({ psid, convo, entities }) {
   if (entities?.accidentalClick) {
     console.log(`👋 Accidental click for ${psid} - acknowledging gracefully`);
     return { type: "text", text: "¡No te preocupes! Si en algún momento necesitas algo, aquí estamos. ¡Que tengas buen día!" };
+  }
+
+  if (alreadyClosing) {
+    return { type: "text", text: "¡Hasta pronto! Aquí estamos para cuando necesites." };
   }
 
   const response = await generateBotResponse("goodbye", {
