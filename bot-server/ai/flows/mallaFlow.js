@@ -1170,19 +1170,38 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   // Confeccionada goes up to ~7x10m. Rolls are 3x100, 4x50, etc.
   if (state.width && state.height && Math.max(state.width, state.height) > 12) {
     const rollSize = `${Math.min(state.width, state.height)}x${Math.max(state.width, state.height)}`;
-    console.log(`📦 Roll-size detected in malla flow: ${rollSize}m — handing off`);
 
-    const { executeHandoff } = require('../utils/executeHandoff');
-    return await executeHandoff(psid, convo, userMessage, {
-      reason: `Rollo de malla sombra: ${rollSize}m (no confeccionada)`,
-      responsePrefix: `La medida ${rollSize}m es un rollo de malla sombra. Para cotización de rollos te comunico con un especialista. `,
-      specsText: `Rollo de ${rollSize}m. `,
-      lastIntent: 'roll_handoff',
-      notificationText: `Rollo ${rollSize}m desde flujo confeccionada`,
-      extraState: { productInterest: 'rollo_malla_sombra' },
-      timingStyle: 'elaborate',
-      includeVideo: true
-    });
+    // Check if the message also contains a confeccionada-size dimension
+    const { extractAllDimensions } = require('../core/multipleSizes');
+    const allDims = extractAllDimensions(userMessage);
+    const confeccionadaDim = allDims.find(d => Math.max(d.width, d.height) <= 12);
+
+    if (confeccionadaDim) {
+      // Mixed request: roll + confeccionada — handle confeccionada, note roll needs specialist
+      console.log(`📦 Mixed request: roll ${rollSize}m + confeccionada ${confeccionadaDim.width}x${confeccionadaDim.height}m`);
+      state.width = confeccionadaDim.width;
+      state.height = confeccionadaDim.height;
+      state.userExpressedSize = `${confeccionadaDim.width}x${confeccionadaDim.height}`;
+      // Try to extract percentage near the confeccionada dimension (e.g. "2X5 al 80%")
+      const dimStr = confeccionadaDim.rawText || '';
+      const afterDim = userMessage.slice(userMessage.indexOf(dimStr) + dimStr.length);
+      const pctMatch = afterDim.match(/^\s*(?:al\s*)?(\d{2,3})\s*%/i);
+      if (pctMatch) state.percentage = parseInt(pctMatch[1]);
+      state.rollNote = `La de ${rollSize}m es un rollo de malla sombra, para esa medida te comunico con un especialista.\n\n`;
+    } else {
+      console.log(`📦 Roll-size detected in malla flow: ${rollSize}m — handing off`);
+      const { executeHandoff } = require('../utils/executeHandoff');
+      return await executeHandoff(psid, convo, userMessage, {
+        reason: `Rollo de malla sombra: ${rollSize}m (no confeccionada)`,
+        responsePrefix: `La medida ${rollSize}m es un rollo de malla sombra. Para cotización de rollos te comunico con un especialista. `,
+        specsText: `Rollo de ${rollSize}m. `,
+        lastIntent: 'roll_handoff',
+        notificationText: `Rollo ${rollSize}m desde flujo confeccionada`,
+        extraState: { productInterest: 'rollo_malla_sombra' },
+        timingStyle: 'elaborate',
+        includeVideo: true
+      });
+    }
   }
 
   // ====== PRODUCT FEATURE QUESTIONS (any stage) ======
@@ -2209,9 +2228,10 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       correctionNote = `No la manejamos en color ${color}, solo en ${AVAILABLE_COLORS.join(' y ')}:\n\n`;
     }
 
+    const rollNote = state.rollNote || '';
     return {
       type: "text",
-      text: `${correctionNote}${quantityText}${salesPitch}\n` +
+      text: `${rollNote}${correctionNote}${quantityText}${salesPitch}\n` +
             `🛒 Cómprala aquí:\n${trackedLink}${wholesaleMention}`
     };
   }
