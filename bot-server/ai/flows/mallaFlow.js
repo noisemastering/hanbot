@@ -1840,7 +1840,17 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
           };
         }
       }
-      // AI couldn't answer either — fall through to normal handleComplete logic
+      // AI couldn't answer either — give a helpful nudge instead of re-quoting
+      const link = convo.lastSharedProductLink;
+      const specs = convo?.productSpecs || {};
+      const sizeStr = specs.width && specs.height ? `${Math.min(specs.width, specs.height)}x${Math.max(specs.width, specs.height)}m` : '';
+      await updateConversation(psid, { lastIntent: 'malla_info_nudge', unknownCount: 0 });
+      return {
+        type: "text",
+        text: sizeStr && link
+          ? `Te cotizamos la malla sombra confeccionada de ${sizeStr} al 90% de sombra.\n\n🛒 Cómprala aquí:\n${link}\n\n¿Tienes alguna duda sobre el producto o necesitas otra medida?`
+          : `¿Qué información necesitas? Con gusto te ayudo.`
+      };
     }
   }
 
