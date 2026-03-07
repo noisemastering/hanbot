@@ -94,8 +94,8 @@ REGLAS:
 - Si el cliente dice "las dos", "ambas", "todas" → select_products con todos los índices
 - Si dice "la primera", "la de arriba" → select_one con index 0
 - Si dice "la segunda", "la otra", "la de abajo" → select_one con index 1
-- Si dice "sí", "esa", "ésa", "sí esa", "va", "dale" y solo hay 1 producto cotizado → select_one index 0
-- Si dice "sí" con múltiples productos → NO asumas cuál, devuelve none
+- Si dice "sí", "esa", "ésa", "sí esa", "va", "dale", "por favor", "xfavor", "xfa" → select_one index 0 si solo hay 1 producto
+- Si dice "sí", "va", "dale", "por favor", "xfavor" con múltiples productos → select_products con TODOS los índices (el bot acaba de preguntar "¿Quieres los enlaces?", así que "sí" = todos)
 - Confidence < 0.7 = el bot no actuará sobre tu interpretación
 - PRIORIDAD: Si el cliente selecciona un producto Y además hace una pregunta (ej: "la de 4x6 y cómo es la entrega"), SIEMPRE devuelve select_one/select_products. La pregunta sobre entrega/pago se responderá automáticamente al darle el enlace de compra.
 - Las medidas SIEMPRE se expresan con 2 lados: ancho x largo (ej: 5x5m, 4x3m). NUNCA uses 3 dimensiones — la malla es un producto plano.
