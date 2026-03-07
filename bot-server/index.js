@@ -1088,8 +1088,11 @@ app.post("/webhook", async (req, res) => {
         }
 
         // Reseller ad detection — override greeting with reseller pitch
+        // Check audience.type, campaign name, ad name, and adSet name for reseller keywords
+        const resellerPattern = /\b(vende|distribuidor|revendedor|revende|ferreter[ií]a|mayorist|red\s+de\s+distribuid)\b/i;
+        const namesToCheck = [resolvedSettings?.campaignName, resolvedSettings?.adName, resolvedSettings?.adSetName].filter(Boolean).join(' ');
         const isResellerAd = resolvedSettings?.audience?.type === 'reseller' ||
-          /\b(vende|distribuidor|revendedor|revende|ferreter[ií]a|mayorist)\b/i.test(resolvedSettings?.campaignName || '');
+          resellerPattern.test(namesToCheck);
         if (isResellerAd) {
           console.log(`🏪 Reseller ad detected — using reseller pitch as greeting`);
           adProductInterest = adProductInterest || 'malla_sombra';
@@ -1516,7 +1519,11 @@ app.post("/webhook", async (req, res) => {
           }
 
           // 🎤 Check for audio/voice messages
-          const audioAttachment = attachments.find(att => att.type === "audio");
+          // Messenger sends voice clips as "audio", but some platforms/versions use "file" with audio URLs
+          const audioAttachment = attachments.find(att =>
+            att.type === "audio" ||
+            (att.type === "file" && /\.(mp3|mp4|m4a|ogg|opus|wav|aac|amr|oga)/i.test(att.payload?.url || ''))
+          );
 
           if (audioAttachment) {
             const audioUrl = audioAttachment.payload.url;
@@ -1674,6 +1681,20 @@ app.post("/webhook", async (req, res) => {
               }
             });
 
+            res.sendStatus(200);
+            return;
+          }
+
+          // ⚠️ Unrecognized attachment type — log it so we can add handling later
+          const attTypes = attachments.map(a => `${a.type}${a.payload?.url ? ` (${a.payload.url.split('?')[0].slice(-20)})` : ''}`);
+          console.warn(`⚠️ Unrecognized attachment type(s) from ${senderPsid}: [${attTypes.join(', ')}]`);
+
+          // If there's no text at all, don't fall through to text processing with undefined
+          if (!messageText) {
+            await registerUserIfNeeded(senderPsid);
+            await saveMessage(senderPsid, "[Archivo enviado]", "user", messageId);
+            await callSendAPI(senderPsid, { text: "Recibí tu archivo. ¿Me podrías escribir tu pregunta?" });
+            await saveMessage(senderPsid, "Recibí tu archivo. ¿Me podrías escribir tu pregunta?", "bot");
             res.sendStatus(200);
             return;
           }
