@@ -225,18 +225,34 @@ router.get("/daily", async (req, res) => {
     if (endDate) dateFilter.$lte = new Date(endDate + 'T23:59:59.999');
 
     // Aggregate links created per day (using Mexico City timezone)
+    // Links & clicks grouped by createdAt
     const linksPerDay = await ClickLog.aggregate([
       { $match: dateFilter.$gte ? { createdAt: dateFilter } : {} },
       {
         $group: {
           _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "America/Mexico_City" } },
           links: { $sum: 1 },
-          clicks: { $sum: { $cond: ["$clicked", 1, 0] } },
-          conversions: { $sum: { $cond: ["$converted", 1, 0] } }
+          clicks: { $sum: { $cond: ["$clicked", 1, 0] } }
         }
       },
       { $sort: { _id: 1 } }
     ]);
+
+    // Conversions grouped by click/link date (attribution date — when the lead was generated)
+    const conversionsPerDay = await ClickLog.aggregate([
+      { $match: { converted: true, ...(dateFilter.$gte ? { createdAt: dateFilter } : {}) } },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "America/Mexico_City" } },
+          conversions: { $sum: 1 }
+        }
+      }
+    ]);
+
+    // Merge conversions into linksPerDay
+    const conversionMap = {};
+    conversionsPerDay.forEach(d => { conversionMap[d._id] = d.conversions; });
+    linksPerDay.forEach(day => { day.conversions = conversionMap[day._id] || 0; });
 
     // Format for chart
     const chartData = linksPerDay.map(day => ({

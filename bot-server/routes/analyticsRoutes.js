@@ -568,30 +568,44 @@ router.get('/attribution/:psid', async (req, res) => {
 // POST /analytics/correlate-conversions - Run correlation (dashboard format)
 router.post('/correlate-conversions', async (req, res) => {
   try {
-    const { sellerId = '482595248', timeWindowHours = 48, orderLimit = 50, dryRun = false } = req.body;
+    const { sellerId = '482595248', timeWindowHours = 48, orderLimit = 50, dryRun = false, dateFrom, dateTo } = req.body;
 
-    // ML API max limit is 51, cap it to 50 to be safe
+    // ML API max limit is 51, cap it to 50 per page
     const safeLimit = Math.min(parseInt(orderLimit) || 50, 50);
 
-    console.log(`🔄 Running enhanced correlation: seller=${sellerId}, limit=${safeLimit}, dryRun=${dryRun}`);
+    console.log(`🔄 Running enhanced correlation: seller=${sellerId}, limit=${safeLimit}, dryRun=${dryRun}, dateFrom=${dateFrom}, dateTo=${dateTo}`);
 
-    // Fetch recent orders from ML API
-    const ordersResult = await getOrders(sellerId, {
-      limit: safeLimit,
-      sort: 'date_desc'
-    });
+    // Build order fetch options
+    const orderOptions = { limit: safeLimit, sort: 'date_desc' };
+    if (dateFrom) orderOptions.dateFrom = new Date(dateFrom).toISOString().replace('Z', '-00:00');
+    if (dateTo) orderOptions.dateTo = new Date(dateTo + 'T23:59:59').toISOString().replace('Z', '-00:00');
 
-    if (!ordersResult.success) {
-      return res.status(500).json({
-        success: false,
-        error: 'Failed to fetch orders from ML API',
-        details: ordersResult.error
-      });
+    // Paginate through all orders in the date range (ML API max 50 per page)
+    let allOrders = [];
+    let offset = 0;
+    const maxPages = 10; // Safety limit: 500 orders max
+    for (let page = 0; page < maxPages; page++) {
+      const pageOptions = { ...orderOptions, offset };
+      const ordersResult = await getOrders(sellerId, pageOptions);
+      if (!ordersResult.success) {
+        if (allOrders.length === 0) {
+          return res.status(500).json({
+            success: false,
+            error: 'Failed to fetch orders from ML API',
+            details: ordersResult.error
+          });
+        }
+        break; // Use what we have so far
+      }
+      allOrders = allOrders.concat(ordersResult.orders);
+      // Stop if we got fewer than requested (no more pages)
+      if (ordersResult.orders.length < safeLimit) break;
+      offset += safeLimit;
     }
 
     // Filter to paid orders only
-    const paidOrders = ordersResult.orders.filter(o => o.status === 'paid');
-    console.log(`📦 Found ${paidOrders.length} paid orders out of ${ordersResult.orders.length} total`);
+    const paidOrders = allOrders.filter(o => o.status === 'paid');
+    console.log(`📦 Found ${paidOrders.length} paid orders out of ${allOrders.length} total (${Math.ceil(allOrders.length / safeLimit)} pages)`);
 
     // Use enhanced correlation system (same as auto-sync)
     // This checks ML Item ID, name, location, POI - not just time

@@ -118,28 +118,49 @@ async function generateReply(userMessage, psid, referral = null) {
 
   // ====== CHECK NEEDS_HUMAN STATE ======
   // If conversation still needs human (active handoff, not a closed convo), stay mostly silent
+  // BUT allow the bot to answer simple product questions while the customer waits
   if (convo.state === "needs_human") {
     console.log("🚨 Conversation is waiting for human (needs_human state)");
 
-    // Check when we last sent a reminder (avoid spamming)
-    const lastReminder = convo.lastNeedsHumanReminder ? new Date(convo.lastNeedsHumanReminder) : null;
-    const minutesSinceReminder = lastReminder
-      ? (Date.now() - lastReminder.getTime()) / (1000 * 60)
-      : 999;
+    // Classify the message to see if it's a question the bot can answer
+    const { classify: classifyMsg } = require("./classifier");
+    const quickClassification = await classifyMsg(userMessage, null, null, null);
+    const qi = quickClassification?.intent;
 
-    // Send reminder at most every 10 minutes
-    if (minutesSinceReminder >= 10) {
-      await updateConversation(psid, { lastNeedsHumanReminder: new Date() });
+    // Let product/informational questions pass through to the normal pipeline
+    const ANSWERABLE_INTENTS = new Set([
+      "price_query", "product_inquiry", "availability_query", "catalog_request",
+      "size_specification", "percentage_specification", "color_query",
+      "shade_percentage_query", "shipping_query", "payment_query",
+      "delivery_time_query", "shipping_included_query", "installation_query",
+      "warranty_query", "durability_query", "custom_size_query",
+      "product_comparison", "location_query", "largest_product", "smallest_product"
+    ]);
 
-      return {
-        type: "text",
-        text: "Tu mensaje fue recibido. Un especialista te atenderá en breve. 🙏"
-      };
+    if (qi && ANSWERABLE_INTENTS.has(qi)) {
+      console.log(`💬 needs_human but answerable intent "${qi}" — letting bot respond (state stays needs_human)`);
+      // Fall through to normal pipeline — state stays needs_human so human still gets notified
+    } else {
+      // Check when we last sent a reminder (avoid spamming)
+      const lastReminder = convo.lastNeedsHumanReminder ? new Date(convo.lastNeedsHumanReminder) : null;
+      const minutesSinceReminder = lastReminder
+        ? (Date.now() - lastReminder.getTime()) / (1000 * 60)
+        : 999;
+
+      // Send reminder at most every 10 minutes
+      if (minutesSinceReminder >= 10) {
+        await updateConversation(psid, { lastNeedsHumanReminder: new Date() });
+
+        return {
+          type: "text",
+          text: "Tu mensaje fue recibido. Un especialista te atenderá en breve. 🙏"
+        };
+      }
+
+      // Already sent a recent reminder, stay silent
+      console.log(`⏳ Already sent reminder ${minutesSinceReminder.toFixed(1)} min ago, staying silent`);
+      return null;
     }
-
-    // Already sent a recent reminder, stay silent
-    console.log(`⏳ Already sent reminder ${minutesSinceReminder.toFixed(1)} min ago, staying silent`);
-    return null;
   }
   // ====== END CHECK NEEDS_HUMAN STATE ======
 
@@ -588,7 +609,7 @@ async function generateReply(userMessage, psid, referral = null) {
       /\b(precio|cu[aá]nto|cuesta|vale|costo)\b/i,
       /\b(env[ií][oa]s?|entrega|hacen\s+env[ií]os?)\b/i,
       /\b(pago|forma\s+de\s+pago|tarjeta|contra\s*entrega)\b/i,
-      /\b(d[oó]nde\s+est[aá]n|ubicaci[oó]n|direcci[oó]n)\b/i,
+      /\b((?:d[oó]nde|dnd)\s+est[aá]n|ubicaci[oó]n|direcci[oó]n)\b/i,
       /\b(instala|garant[ií]a|impermeable|material|durabilidad)\b/i,
       /\b(cu[aá]nto\s+tarda|tiempo\s+de\s+entrega)\b/i,
       /\d+(?:\.\d+)?\s*(?:[xX×*]|(?:metros?\s*)?por)\s*\d+/i,

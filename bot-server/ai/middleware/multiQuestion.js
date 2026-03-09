@@ -13,7 +13,7 @@ const TOPIC_PATTERNS = [
   /\b(precio|cu[aá]nto|cuesta|vale|costo)\b/i,
   /\b(env[ií][oa]s?|entrega|hacen\s+env[ií]os?)\b/i,
   /\b(pago|forma\s+de\s+pago|tarjeta|contra\s*entrega)\b/i,
-  /\b(d[oó]nde\s+est[aá]n|ubicaci[oó]n|direcci[oó]n)\b/i,
+  /\b((?:d[oó]nde|dnd)\s+est[aá]n|ubicaci[oó]n|direcci[oó]n)\b/i,
   /\b(instala|garant[ií]a|impermeable|material|durabilidad)\b/i,
   /\b(cu[aá]nto\s+tarda|tiempo\s+de\s+entrega)\b/i,
   /\d+(?:\.\d+)?\s*(?:[xX\u00D7*]|(?:metros?\s*)?por)\s*\d+/i,

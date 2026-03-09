@@ -69,8 +69,29 @@ module.exports = async function stateManager(ctx, next) {
   }
 
   // ── Block pipeline when needs_human is active ───────────────────────
+  // BUT allow the bot to answer simple product questions while the customer waits
   if (convo.state === "needs_human") {
     console.log("🚨 Conversation is waiting for human (needs_human state)");
+
+    // Classify the message to see if it's a question the bot can answer
+    const { classify: classifyMsg } = require("../classifier");
+    const quickClassification = await classifyMsg(ctx.userMessage, null, null, null);
+    const qi = quickClassification?.intent;
+
+    const ANSWERABLE_INTENTS = new Set([
+      "price_query", "product_inquiry", "availability_query", "catalog_request",
+      "size_specification", "percentage_specification", "color_query",
+      "shade_percentage_query", "shipping_query", "payment_query",
+      "delivery_time_query", "shipping_included_query", "installation_query",
+      "warranty_query", "durability_query", "custom_size_query",
+      "product_comparison", "location_query", "largest_product", "smallest_product"
+    ]);
+
+    if (qi && ANSWERABLE_INTENTS.has(qi)) {
+      console.log(`💬 needs_human but answerable intent "${qi}" — letting bot respond (state stays needs_human)`);
+      // Fall through to next middleware — state stays needs_human so human still gets notified
+      return await next();
+    }
 
     const lastReminder = convo.lastNeedsHumanReminder
       ? new Date(convo.lastNeedsHumanReminder)

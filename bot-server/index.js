@@ -1008,6 +1008,8 @@ app.post("/webhook", async (req, res) => {
         let adProductInterest = null;
         let adGreeting = null;
 
+        let resolvedSettings = null;
+
         try {
         if (referral.ad_id) {
           const { resolveByAdId } = require("./utils/campaignResolver");
@@ -1015,7 +1017,7 @@ app.post("/webhook", async (req, res) => {
           const ProductFamily = require("./models/ProductFamily");
 
           // Use campaign resolver for proper inheritance
-          const resolvedSettings = await resolveByAdId(referral.ad_id);
+          resolvedSettings = await resolveByAdId(referral.ad_id);
 
           // Dynamic borde greeting from DB
           const { getAvailableLengths: getBordeLengthsForGreeting, getBordeWidth: getBordeWidthForGreeting } = require("./ai/flows/bordeFlow");
@@ -1089,17 +1091,34 @@ app.post("/webhook", async (req, res) => {
 
         // Reseller ad detection — override greeting with reseller pitch
         // Check audience.type, campaign name, ad name, and adSet name for reseller keywords
-        const resellerPattern = /\b(vende|distribuidor|revendedor|revende|ferreter[ií]a|mayorist|red\s+de\s+distribuid)\b/i;
-        const namesToCheck = [resolvedSettings?.campaignName, resolvedSettings?.adName, resolvedSettings?.adSetName].filter(Boolean).join(' ');
+        const resellerPattern = /\b(vende[rs]?|distribuidor|revendedor|revende|ferreter[ií]a|mayorist|red\s+de\s+distribuid)/i;
+        let namesToCheck = [resolvedSettings?.campaignName, resolvedSettings?.adName, resolvedSettings?.adSetName].filter(Boolean).join(' ');
+
+        // Fallback: if resolvedSettings is null (broken campaign chain), query Ad directly
+        if (!namesToCheck && referral.ad_id) {
+          try {
+            const AdModel = require("./models/Ad");
+            const adDoc = await AdModel.findOne({ fbAdId: referral.ad_id }).lean();
+            if (adDoc) {
+              namesToCheck = adDoc.name || '';
+              if (adDoc.audience?.type === 'reseller') {
+                namesToCheck += ' reseller'; // ensure pattern matches
+              }
+              console.log(`🔍 Reseller check fallback — Ad name from DB: "${adDoc.name}"`);
+            }
+          } catch (e) {
+            console.error('❌ Reseller fallback Ad lookup error:', e.message);
+          }
+        }
+
         const isResellerAd = resolvedSettings?.audience?.type === 'reseller' ||
           resellerPattern.test(namesToCheck);
+        console.log(`🏪 Reseller check: namesToCheck="${namesToCheck}", audience=${resolvedSettings?.audience?.type || 'N/A'}, isReseller=${isResellerAd}`);
         if (isResellerAd) {
           console.log(`🏪 Reseller ad detected — using reseller pitch as greeting`);
           adProductInterest = adProductInterest || 'malla_sombra';
-          const { PITCH_MESSAGE } = require("./ai/flows/resellerFlow");
-          if (PITCH_MESSAGE) {
-            adGreeting = PITCH_MESSAGE;
-          }
+          const { getPitchMessage } = require("./ai/flows/resellerFlow");
+          adGreeting = getPitchMessage(adProductInterest);
           // Mark as wholesale + set lastIntent so resellerFlow activates on next message
           await updateConversation(senderPsid, { isWholesaleInquiry: true, lastIntent: 'reseller_pitch_sent' });
         }
@@ -1152,9 +1171,9 @@ app.post("/webhook", async (req, res) => {
 
         // Set product interest and send greeting
         // Use flowRef for currentFlow (explicitly configured on ads/campaigns), fall back to adProductInterest
-        // Reseller ads stay on 'default' so resellerFlow.shouldHandle can activate
+        // Reseller ads use 'reseller' flow — same currentFlow governance as all other flows
         const adFlowRef = resolvedSettings?.flowRef;
-        const adCurrentFlow = isResellerAd ? 'default' : (adFlowRef || adProductInterest);
+        const adCurrentFlow = isResellerAd ? 'reseller' : (adFlowRef || adProductInterest);
         if (adProductInterest) {
           await updateConversation(senderPsid, { productInterest: adProductInterest, currentFlow: adCurrentFlow, adFlowRef: adFlowRef || null, greeted: true, lastGreetTime: Date.now() });
           await callSendAPI(senderPsid, { text: adGreeting });

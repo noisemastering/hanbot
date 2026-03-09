@@ -6,17 +6,33 @@
 const { updateConversation } = require("../../conversationManager");
 const { executeHandoff } = require("../utils/executeHandoff");
 const { parseConfeccionadaDimensions: parseDimensions } = require("../utils/dimensionParsers");
-const { getCatalogUrl } = require("../flowManager");
+// getCatalogUrl required lazily inside handle() to avoid circular dependency with flowManager
 const { sendCatalog } = require("../../utils/sendCatalog");
 const { INTENTS } = require("../classifier");
 
-const PITCH_MESSAGE =
-  `Estamos buscando revendedores para nuestra malla sombra raschel confeccionada con 90% de cobertura y protección UV.\n\n` +
-  `Viene con refuerzo en las esquinas para una vida útil de hasta 5 años, y con ojillos para sujeción cada 80 cm por lado, lista para instalar. El envío está incluido.\n\n` +
-  `Manejamos medidas desde 2x2m hasta 7x10m.\n\n` +
-  `Si deseas ampliar el catálogo de tu negocio con un producto de primera calidad y fabricación 100% mexicana, nos encantaría tenerte en nuestra red de distribuidores.\n\n` +
-  `Si solo buscas comprar al mayoreo por favor indícanos la cantidad y tu código postal.\n\n` +
-  `Si solo buscas una malla sombra, solo indícanos la medida.`;
+const PITCH_MESSAGES = {
+  malla_sombra:
+    `Estamos buscando revendedores para nuestra malla sombra raschel confeccionada con 90% de cobertura y protección UV.\n\n` +
+    `Viene con refuerzo en las esquinas para una vida útil de hasta 5 años, y con ojillos para sujeción cada 80 cm por lado, lista para instalar. El envío está incluido.\n\n` +
+    `Manejamos medidas desde 2x2m hasta 7x10m.\n\n` +
+    `Si deseas ampliar el catálogo de tu negocio con un producto de primera calidad y fabricación 100% mexicana, nos encantaría tenerte en nuestra red de distribuidores.\n\n` +
+    `Si solo buscas comprar al mayoreo por favor indícanos la cantidad y tu código postal.\n\n` +
+    `Si solo buscas una malla sombra, solo indícanos la medida.`,
+  borde_separador:
+    `Somos fabricantes de borde separador de jardín, el complemento perfecto para paisajistas, ferreterías y viveros.\n\n` +
+    `Nuestro borde es más grueso y resistente que los de la competencia, fácil de instalar y con alta demanda.\n\n` +
+    `Manejamos rollos de 18m y 54m con envío a todo México.\n\n` +
+    `Si deseas ampliar el catálogo de tu negocio con un producto de primera calidad y fabricación 100% mexicana, nos encantaría tenerte en nuestra red de distribuidores.\n\n` +
+    `Si solo buscas comprar al mayoreo por favor indícanos la cantidad y tu código postal.\n\n` +
+    `Si solo buscas un borde para tu jardín, solo indícanos el largo que necesitas.`
+};
+
+// Default pitch (backwards compatibility)
+const PITCH_MESSAGE = PITCH_MESSAGES.malla_sombra;
+
+function getPitchMessage(productInterest) {
+  return PITCH_MESSAGES[productInterest] || PITCH_MESSAGE;
+}
 
 // ── Detection patterns ──
 
@@ -33,24 +49,15 @@ const WHOLESALE_KEYWORD = /\b(mayoreo|al\s*por\s*mayor|mayor)\b/i;
  *  - lastIntent starts with 'reseller_' OR no product-specific intent yet
  */
 function shouldHandle(classification, sourceContext, convo, userMessage = '') {
-  if (!convo?.isWholesaleInquiry) return false;
+  // Primary governance: currentFlow lock-in (same as all other flows)
+  if (convo?.currentFlow === 'reseller') return true;
 
-  const currentFlow = convo?.currentFlow || 'default';
-  if (currentFlow !== 'default') return false;
-
-  const lastIntent = convo?.lastIntent || '';
-
-  // Already in the reseller flow
-  if (lastIntent.startsWith('reseller_')) return true;
-
-  // No product-specific intent yet (first contact)
-  const hasProductIntent = lastIntent.startsWith('malla_') ||
-    lastIntent.startsWith('borde_') ||
-    lastIntent.startsWith('rollo_') ||
-    lastIntent === 'wholesale_handoff' ||
-    lastIntent === 'handoff';
-
-  if (!hasProductIntent) return true;
+  // Secondary: wholesale inquiry detected outside ad path (e.g., user typed "mayoreo")
+  // Only activate if no product flow has claimed the conversation yet
+  if (convo?.isWholesaleInquiry) {
+    const currentFlow = convo?.currentFlow || 'default';
+    if (currentFlow === 'default') return true;
+  }
 
   return false;
 }
@@ -63,6 +70,7 @@ function shouldHandle(classification, sourceContext, convo, userMessage = '') {
  *  AWAITING_RESPONSE → parse reply → route to reseller/wholesale/retail path
  */
 async function handle(classification, sourceContext, convo, psid, campaign = null, userMessage = '') {
+  const { getCatalogUrl } = require("../flowManager");
   const lastIntent = convo?.lastIntent || '';
 
   // ── Stage: PITCH ──
@@ -70,7 +78,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   if (!lastIntent.startsWith('reseller_')) {
     console.log(`🏪 Reseller flow — sending pitch`);
     await updateConversation(psid, { lastIntent: 'reseller_pitch_sent' });
-    return { type: "text", text: PITCH_MESSAGE };
+    return { type: "text", text: getPitchMessage(convo?.productInterest) };
   }
 
   // ── Stage: AWAITING_RESPONSE ──
@@ -115,6 +123,9 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
         includeQueretaro: false
       });
 
+      // Release currentFlow so other flows can handle post-handoff questions
+      await updateConversation(psid, { currentFlow: null });
+
       return { ...handoffResponse, handledBy: "reseller" };
     }
 
@@ -156,30 +167,38 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
         timingStyle: 'elaborate'
       });
 
+      // Release currentFlow so other flows can handle post-handoff questions
+      await updateConversation(psid, { currentFlow: null });
+
       return { ...handoffResponse, handledBy: "reseller" };
     }
 
-    // --- Path 3: Retail buyer (gives dimensions) ---
+    // --- Path 3: Retail buyer (gives dimensions or asks for a specific product) ---
     const dimensions = parseDimensions(msg);
     if (dimensions) {
-      console.log(`🏪 Reseller flow — retail buyer detected (${dimensions.normalized}), breaking out to malla flow`);
+      // Break out to the ad's product flow (malla by default, borde if that's what the ad sells)
+      const retailFlow = convo?.productInterest === 'borde_separador' ? 'borde_separador' : 'malla_sombra';
+      console.log(`🏪 Reseller flow — retail buyer detected (${dimensions.normalized}), breaking out to ${retailFlow} flow`);
 
       await updateConversation(psid, {
         isWholesaleInquiry: false,
-        currentFlow: 'malla_sombra',
+        currentFlow: retailFlow,
         lastIntent: null
       });
 
-      // Return null so the message gets re-processed by the malla flow
+      // Return null so the message gets re-processed by the appropriate flow
       return null;
     }
 
     // --- Fallback: not clear yet, re-send a shorter prompt ---
     console.log(`🏪 Reseller flow — unclear response, asking to clarify`);
     await updateConversation(psid, { lastIntent: 'reseller_pitch_sent' });
+    const isBorde = convo?.productInterest === 'borde_separador';
     return {
       type: "text",
-      text: "¿Te interesa ser distribuidor, o buscas comprar malla sombra para uso propio? Si solo necesitas una pieza, indícanos la medida."
+      text: isBorde
+        ? "¿Te interesa ser distribuidor, o buscas comprar borde separador para uso propio? Si solo necesitas uno, indícanos el largo."
+        : "¿Te interesa ser distribuidor, o buscas comprar malla sombra para uso propio? Si solo necesitas una pieza, indícanos la medida."
     };
   }
 
@@ -187,4 +206,4 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   return null;
 }
 
-module.exports = { shouldHandle, handle, PITCH_MESSAGE };
+module.exports = { shouldHandle, handle, PITCH_MESSAGE, PITCH_MESSAGES, getPitchMessage };

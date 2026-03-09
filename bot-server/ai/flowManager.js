@@ -24,6 +24,7 @@ const groundcoverFlow = require("./flows/groundcoverFlow");
 const monofilamentoFlow = require("./flows/monofilamentoFlow");
 const generalFlow = require("./flows/generalFlow");
 const leadCaptureFlow = require("./flows/leadCaptureFlow");
+const resellerFlow = require("./flows/resellerFlow");
 
 /**
  * Cache for product-based flow inference
@@ -117,6 +118,7 @@ async function inferFlowFromProductIds(productIds) {
  */
 const FLOWS = {
   default: defaultFlow,
+  reseller: resellerFlow,
   malla_sombra: mallaFlow,
   rollo: rolloFlow,
   borde_separador: bordeFlow,
@@ -126,7 +128,7 @@ const FLOWS = {
 };
 
 /** Valid flow names — flowRef values in the DB must match one of these */
-const VALID_FLOWS = ['malla_sombra', 'rollo', 'borde_separador', 'groundcover', 'monofilamento'];
+const VALID_FLOWS = ['reseller', 'malla_sombra', 'rollo', 'borde_separador', 'groundcover', 'monofilamento'];
 
 /**
  * Product-type keywords we don't sell — used to detect "unknown product" questions
@@ -362,7 +364,7 @@ async function detectExplicitProductSwitch(userMessage, rawCurrentFlow, classifi
     'borde_separador': { pattern: /\b(bordes?|separador|cinta\s*pl[aá]stica)\b/i, flow: 'borde_separador' },
     'groundcover': { pattern: /\b(ground\s*cover|antimaleza|malla\s*(para\s*)?maleza)\b/i, flow: 'groundcover' },
     'monofilamento': { pattern: /\b(monofilamento)\b/i, flow: 'monofilamento' },
-    'malla_sombra': { pattern: /\b(confeccionada|malla\s*sombra)\b/i, flow: 'malla_sombra' }
+    'malla_sombra': { pattern: /\b(confeccionada|malla\s*sombra|mallas?)\b/i, flow: 'malla_sombra' }
   };
 
   // Check for explicit keyword mentions
@@ -846,12 +848,11 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
     const switchToFlow = await detectExplicitProductSwitch(userMessage, currentFlow, classification);
 
     if (switchToFlow) {
-      // Only switch silently when the customer used explicit switch language
-      // e.g. "en vez de malla quiero borde", "mejor quiero antimaleza"
-      // That IS the confirmation — no need to ask again.
-      const hasExplicitSwitchLanguage = /\b(en vez de|mejor quiero|cambio a|prefiero|no quiero .+ quiero|ya no .+ sino|en lugar de|cambi[ée]|quiero cambiar a)\b/i.test(userMessage);
+      // Switch silently when: explicit switch language OR clearly different product category
+      // e.g. "en vez de malla quiero borde" OR "mallas?" while in borde flow
+      const canSwitchSilently = isUnambiguousSwitch(userMessage, currentFlow, switchToFlow);
 
-      if (hasExplicitSwitchLanguage) {
+      if (canSwitchSilently) {
         console.log(`🔄 Product switch: ${currentFlow} → ${switchToFlow} (explicit switch language)`);
 
         await updateConversation(psid, {

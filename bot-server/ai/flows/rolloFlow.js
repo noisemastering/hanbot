@@ -529,6 +529,10 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   }
 
   // Parse quantity from user message
+  // Only parse quantity when we're EXPLICITLY in the awaiting_quantity stage,
+  // or when the message has clear quantity language (e.g. "5 rollos").
+  // This prevents "un" (Spanish article) from being parsed as quantity=1.
+  const isAwaitingQuantity = convo?.lastIntent === 'roll_awaiting_quantity';
   if (!state.quantity && userMessage) {
     // Strip dimensions, percentages, and width measurements to avoid false positives
     // e.g. "Precio de 4 x 100 al 30%" → "Precio de   al "
@@ -542,17 +546,17 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       console.log(`📦 Rollo flow - Parsed quantity "un par" → 2`);
       state.quantity = 2;
     }
-    // "uno", "una", "1", "ocuparía uno", "necesito uno"
-    else if (/\b(un[oa]?|1)\s*(rollo|pza|pieza)?\b/i.test(qtyMsg) || /\bocupar[ií]a\s+un[oa]?\b/i.test(qtyMsg)) {
-      console.log(`📦 Rollo flow - Parsed quantity "uno" → 1`);
+    // "uno/una" + explicit unit word: "un rollo", "una pieza" (NOT bare "un" as article)
+    else if (/\b(un[oa]?)\s+(rollos?|pzas?|piezas?|unidad(?:es)?)\b/i.test(qtyMsg) || /\bocupar[ií]a\s+un[oa]?\b/i.test(qtyMsg)) {
+      console.log(`📦 Rollo flow - Parsed quantity "uno + unit" → 1`);
       state.quantity = 1;
     }
-    // "dos", "2"
+    // "dos", "2" + optional unit
     else if (/\b(dos|2)\s*(rollos?|pzas?|piezas?)?\b/i.test(qtyMsg)) {
       console.log(`📦 Rollo flow - Parsed quantity "dos" → 2`);
       state.quantity = 2;
     }
-    // "tres", "3"
+    // "tres", "3" + optional unit
     else if (/\b(tres|3)\s*(rollos?|pzas?|piezas?)?\b/i.test(qtyMsg)) {
       console.log(`📦 Rollo flow - Parsed quantity "tres" → 3`);
       state.quantity = 3;
@@ -565,6 +569,23 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
         if (qty > 0 && qty <= 100) {
           console.log(`📦 Rollo flow - Parsed quantity → ${qty}`);
           state.quantity = qty;
+        }
+      }
+    }
+
+    // When in AWAITING_QUANTITY stage, also accept bare numbers and "1"/"uno" without unit
+    if (!state.quantity && isAwaitingQuantity) {
+      if (/\b(un[oa]?|1)\b/i.test(qtyMsg)) {
+        console.log(`📦 Rollo flow - Awaiting quantity, bare "uno/1" → 1`);
+        state.quantity = 1;
+      } else {
+        const bareMatch = qtyMsg.trim().match(/^(\d+)$/);
+        if (bareMatch) {
+          const qty = parseInt(bareMatch[1]);
+          if (qty > 0 && qty <= 100) {
+            console.log(`📦 Rollo flow - Awaiting quantity, bare number → ${qty}`);
+            state.quantity = qty;
+          }
         }
       }
     }

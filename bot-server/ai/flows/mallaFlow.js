@@ -454,10 +454,12 @@ function checkProductFeatureQuestions(userMessage, state, convo) {
     },
     {
       pattern: /\b(beige|caf[eé])\b/i,
+      skipIf: /\b(m[aá]nda|env[ií]a|quiero|dame|p[aá]sa|mand[ae])\b/i,
       response: "sí, la manejamos en beige"
     },
     {
       pattern: /\b(negro|negra)\b/i,
+      skipIf: /\b(m[aá]nda|env[ií]a|quiero|dame|p[aá]sa|mand[ae])\b/i,
       response: "sí, la manejamos en negro"
     },
     {
@@ -493,7 +495,7 @@ function checkProductFeatureQuestions(userMessage, state, convo) {
     },
   ];
 
-  const matchedFeatures = featureChecks.filter(f => f.pattern.test(userMessage));
+  const matchedFeatures = featureChecks.filter(f => f.pattern.test(userMessage) && !(f.skipIf && f.skipIf.test(userMessage)));
   if (matchedFeatures.length === 0) return null;
 
   // Completeness check: only return if ALL significant topics are covered
@@ -621,6 +623,11 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
           }
         }
       }
+      const priceAsks = (convo?.productSpecs?.priceAsksWithoutSize || 0) + 1;
+      await updateConversation(psid, { productSpecs: { ...convo?.productSpecs, priceAsksWithoutSize: priceAsks } });
+      if (priceAsks >= 2) {
+        return { type: "text", text: "No puedo ofrecerte un precio sin una medida específica. Dime el ancho y largo que necesitas (ejemplo: 3x4m) y te paso precio y link de compra." };
+      }
       return { type: "text", text: "¡Claro! ¿Qué medida necesitas? Dime las dimensiones y te paso el precio con link de compra 😊" };
     } else if (isWholesale) {
       const pendingSize = convo.productSpecs?.pendingSize || "sin medida especificada";
@@ -746,7 +753,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   // CHECK FOR PHOTO/IMAGE REQUEST WITH COLOR
   // E.g., "foto del negro", "imagen en color negro", "ver el verde"
   const photoColorPattern = /\b(foto|imagen|ver|mostrar|ense[ñn]ar?)\b.*\b(color\s*)?(negro|verde|beige|blanco|azul|caf[eé])\b/i;
-  const colorOnlyPattern = /\b(el|la|del?|en)\s*(negro|verde|beige|blanco|azul|caf[eé])\b/i;
+  const colorOnlyPattern = /\b(el|la|del?|en|un|una)\s*(negro|negra|verde|beige|blanco|azul|caf[eé])\b/i;
 
   const photoMatch = userMessage.match(photoColorPattern);
   const colorMatch = userMessage.match(colorOnlyPattern);
@@ -817,8 +824,8 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   }
 
   // CHECK FOR COLOR SPECIFICATION (without photo request)
-  // E.g., "Sería color beige", "en color negro", "la quiero negra"
-  const colorSpecPattern = /\b(color\s+|quiero\s+(?:(?:en|el|la)\s+)?|ser[ií]a\s+(?:en\s+)?)(negro|verde|beige|blanco|azul|caf[eé])\b/i;
+  // E.g., "Sería color beige", "en color negro", "la quiero negra", "mándame un beige"
+  const colorSpecPattern = /\b(color\s+|quiero\s+(?:(?:en|el|la|un|una)\s+)?|ser[ií]a\s+(?:en\s+)?|m[aá]nda(?:me)?\s+(?:(?:un|una|el|la)\s+)?|env[ií]a(?:me)?\s+(?:(?:un|una|el|la)\s+)?)(negro|negra|verde|beige|blanco|azul|caf[eé])\b/i;
   const colorSpecMatch = userMessage.match(colorSpecPattern) || userMessage.match(colorOnlyPattern);
   if (colorSpecMatch && convo?.lastSharedProductId && convo?.lastSharedProductLink && state.width && state.height) {
     const requestedColor = (colorSpecMatch[2] || '').toLowerCase();
@@ -980,8 +987,34 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   const classifierHadDimStr = !!entities.dimensions;
   console.log(`🌐 Malla flow - Classifier entities: width=${entities.width ?? 'null'}, height=${entities.height ?? 'null'}, dimensions="${entities.dimensions ?? 'null'}" | message="${userMessage.slice(0, 60)}"`);
 
+  // PRIORITY: If user mentions feet/yards, force re-parse with unit conversion
+  // This handles corrections like "13x17. las medidas son en pies"
+  const hasNonMetricUnit = /\b(pies?|ft|feet|foot|yardas?|yards?|yd|pulgadas?|inch|inches|in)\b/i.test(userMessage);
+  if (hasNonMetricUnit) {
+    const feetDims = parseDimensions(userMessage);
+    if (feetDims && feetDims.convertedFromFeet) {
+      console.log(`🌐 Malla flow - [FEET] Detected feet: "${userMessage.slice(0, 40)}" → ${feetDims.width}x${feetDims.height}m`);
+      state.width = feetDims.width;
+      state.height = feetDims.height;
+      state.userExpressedSize = feetDims.userExpressed;
+      state.convertedFromFeet = true;
+      state.originalFeetStr = feetDims.originalFeetStr;
+    } else if (state.width && state.height) {
+      // No dimensions in current message but user says "son en pies" — re-convert existing dimensions
+      const FEET_TO_METERS = 0.3048;
+      const w = Math.round(state.width * FEET_TO_METERS * 10) / 10;
+      const h = Math.round(state.height * FEET_TO_METERS * 10) / 10;
+      console.log(`🌐 Malla flow - [FEET CORRECTION] Re-converting ${state.width}x${state.height} pies → ${w}x${h}m`);
+      state.originalFeetStr = `${state.width}x${state.height} pies`;
+      state.convertedFromFeet = true;
+      state.width = Math.min(w, h);
+      state.height = Math.max(w, h);
+      state.userExpressedSize = `${state.width} x ${state.height}`;
+    }
+  }
+
   // FIRST: Check classifier entities (AI or quick classifier already extracted)
-  if (classifierHadDims) {
+  if (!hasNonMetricUnit && classifierHadDims) {
     state.width = entities.width;
     state.height = entities.height;
     // Preserve user's dimension order from the raw dimension string (e.g. "9x6" stays "9 x 6")
@@ -1243,7 +1276,11 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
       if (aiResult.action === 'answer_question' && aiResult.text) {
         await updateConversation(psid, { lastIntent: 'malla_ai_answered', unknownCount: 0 });
-        return { type: "text", text: aiResult.text };
+        let answerText = aiResult.text;
+        if (convo.lastQuotedProducts?.length > 0) {
+          answerText += '\n\n¿Quieres que te pase los enlaces para comprar?';
+        }
+        return { type: "text", text: answerText };
       }
     }
     // If AI returned "none" or low confidence, fall through to normal flow
@@ -1395,6 +1432,25 @@ async function handleProductInfo(userMessage, convo) {
  */
 async function handleStart(sourceContext, convo, psid, userMessage) {
   if (convo?.isWholesaleInquiry) {
+    // Answer "how many pieces for wholesale?" directly — we have the data
+    const wholesaleQtyQuestion = /\b(a\s*partir\s*de\s*cu[aá]nt[oa]s|cu[aá]nt[oa]s\s*(piezas?|rollos?|unidades?)\s*(son|para|es|se\s*necesit|se\s*ocup|para\s*mayoreo)|m[ií]nimo\s*(de\s*)?(piezas?|compra|pedido))\b/i;
+    if (userMessage && wholesaleQtyQuestion.test(userMessage)) {
+      const minQty = 5; // Confeccionada wholesale minimum
+      await updateConversation(psid, { lastIntent: 'malla_wholesale_qty_answered', unknownCount: 0 });
+      return {
+        type: "text",
+        text: `El precio de mayoreo es a partir de ${minQty} piezas de la misma medida. ¿Qué medida te interesa?`
+      };
+    }
+
+    // Answer catalog/size questions directly — no need to hand off for this
+    const sizesCatalogQuestion = /\b(qu[eé]\s*(medidas?|tamaños?|dimensiones?)|cu[aá]les?\s*(medidas?|tamaños?)|medidas?\s*(que\s*)?(trabajan|manejan|tienen|hay|disponibles?)|tamaños?\s*(que\s*)?(trabajan|manejan|tienen|hay|disponibles?)|cat[aá]logo|qu[eé]\s*tienen)\b/i;
+    if (userMessage && sizesCatalogQuestion.test(userMessage)) {
+      const description = await getMallaDescription();
+      await updateConversation(psid, { lastIntent: 'malla_wholesale_sizes_answered', unknownCount: 0 });
+      return { type: "text", text: description };
+    }
+
     const { executeHandoff } = require('../utils/executeHandoff');
     return await executeHandoff(psid, convo, userMessage, {
       reason: `Mayoreo: distribuidor pregunta por malla sombra confeccionada`,
@@ -1411,6 +1467,18 @@ async function handleStart(sourceContext, convo, psid, userMessage) {
  * Handle awaiting dimensions stage
  */
 async function handleAwaitingDimensions(intent, state, sourceContext, userMessage = '', convo = null, psid = null) {
+  // Detect thanks/goodbye/come-back-later — let social handler respond instead of repeating catalog
+  const hasThanksOrBye = /\b(gracias|grax|thanks|adi[oó]s|bye|hasta\s*luego)\b/i.test(userMessage);
+  const hasComeLater = /\b(tomar[eé]|tomo|voy\s*a|dej[ae]|despu[eé]s|luego|m[aá]s\s*tarde|al\s*rato|te\s*aviso|lo\s*pienso|lo\s*platico|env[ií]o|mando|regreso|vuelvo)\b/i.test(userMessage);
+  const hasNoDimensionContent = !parseDimensions(userMessage) && !/\d+\s*[xX×]\s*\d+/.test(userMessage);
+  if (hasThanksOrBye && hasComeLater && hasNoDimensionContent) {
+    return null; // Fall through to social handler
+  }
+  // Pure thanks/goodbye with no product question — also let social handler respond
+  if (hasThanksOrBye && hasNoDimensionContent && (intent === INTENTS.THANKS || intent === INTENTS.GOODBYE)) {
+    return null;
+  }
+
   // Check if user is asking about max/min size (e.g., "de cuantos metros es de ancha maximo")
   const maxSizePattern = /\b(m[aá]xim[oa]|m[aá]s\s+(grande|anch[oa]|larg[oa])|cu[aá]nto\s+de\s+anch|metros\s+.*\s+m[aá]xim|anch[oa]\s+m[aá]xim|larg[oa]\s+m[aá]xim)\b/i;
   if (userMessage && maxSizePattern.test(userMessage)) {
@@ -1600,6 +1668,16 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
 
   // If they're asking about prices without dimensions — ask for size
   if (intent === INTENTS.PRICE_QUERY) {
+    const priceAsks = (convo?.productSpecs?.priceAsksWithoutSize || 0) + 1;
+    await updateConversation(psid, { productSpecs: { ...convo?.productSpecs, priceAsksWithoutSize: priceAsks } });
+
+    if (priceAsks >= 2) {
+      return {
+        type: "text",
+        text: "No puedo ofrecerte un precio sin una medida específica. Dime el ancho y largo que necesitas (ejemplo: 3x4m) y te paso precio y link de compra."
+      };
+    }
+
     const range = await getMallaRange();
     const rangeText = range
       ? `Manejamos medidas desde ${range.sizeMin} hasta ${range.sizeMax}, con precios desde ${formatMoney(range.priceMin)} hasta ${formatMoney(range.priceMax)}.`
@@ -1772,6 +1850,15 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       // Shipping / delivery questions
       if (/\b(entreg|env[ií]|llega|domicilio|paqueter[ií]a|mensajer[ií]a|recib[oi]|tarda|demora|d[ií]as\s+h[aá]biles)\b/i.test(msg)) {
         await updateConversation(psid, { lastIntent: 'shipping_question', unknownCount: 0 });
+
+        // Specific concern about delivery schedule (weekends, not home, pickup, etc.)
+        if (/\b(fin\s*de\s*semana|s[aá]bado|domingo|no\s+(hay\s+)?nadie|no\s+est[oéa]y|entre\s*semana|lunes\s+a\s+viernes|horario|d[ií]a\s+espec[ií]fico|recoger|punto\s+de\s+entrega)\b/i.test(msg)) {
+          return {
+            type: "text",
+            text: "El envío depende de Mercado Libre, nosotros no tenemos control sobre los días ni horarios de entrega. Sin embargo, ellos cuentan con un servicio muy eficiente e incluso puedes recogerlo en alguna de sus oficinas o puntos de entrega cercanos. ¡Tienen muchas opciones!\n\n¿Te puedo ayudar con algo más?"
+          };
+        }
+
         return {
           type: "text",
           text: "La compra se realiza a través de Mercado Libre y el envío está incluido. Normalmente tarda de 3 a 5 días hábiles.\n\n¿Necesitas algo más?"
@@ -1788,7 +1875,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       }
 
       // Address / location questions
-      if (/\b(direcci[oó]n|ubicaci[oó]n|d[oó]nde\s+(est[aá]n|se\s+ubica|queda)|domicilio|tienda\s+f[ií]sica|sucursal|local|mostrador|recoger|pasar\s+a\s+recoger)\b/i.test(msg)) {
+      if (/\b(direcci[oó]n|ubicaci[oó]n|(?:d[oó]nde|dnd)\s+(est[aá]n|se\s+ubica|queda)|domicilio|tienda\s+f[ií]sica|sucursal|local|mostrador|recoger|pasar\s+a\s+recoger)\b/i.test(msg)) {
         await updateConversation(psid, { lastIntent: 'address_question', unknownCount: 0 });
         return {
           type: "text",
@@ -2144,31 +2231,29 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     // Wholesale/reseller context — check if user just wants the retail price
     if (convo?.isWholesaleInquiry) {
       const msg = String(userMessage || '').toLowerCase();
-      const wantsJustPrice = /\b(solo\s*(quiero\s*)?(saber\s*)?(el\s*)?precio|solo\s*el\s*precio|cu[aá]nto\s*(cuesta|vale|es)|qu[eé]\s*precio\s*tiene|precio\s*unitario|una\s*(sola\s*)?pieza)\b/i.test(msg);
+      // Detect retail intent: "necesito una", "quiero una malla", "su precio", "una pieza", "precio unitario"
+      const wantsJustPrice = /\b(solo\s*(quiero\s*)?(saber\s*)?(el\s*)?precio|solo\s*el\s*precio|cu[aá]nto\s*(cuesta|vale|es)|qu[eé]\s*precio\s*tiene|precio\s*unitario|una\s*(sola\s*)?pieza)\b/i.test(msg) ||
+        /\b(necesit|nes[ie]t|quiero|ocupo|busco)\s+una\b/i.test(msg) ||
+        /\bsu\s+precio\b/i.test(msg);
 
       if (wantsJustPrice) {
-        console.log(`💰 Wholesale context but user wants retail price — asking confirmation`);
+        console.log(`💰 Wholesale context but user wants retail price — serving retail directly`);
+        // Clear wholesale flag and serve retail price directly (no confirmation needed)
+        await updateConversation(psid, { isWholesaleInquiry: false });
+        convo = { ...convo, isWholesaleInquiry: false };
+        // Fall through to normal retail flow below
+      } else {
+        // Hand off for wholesale pricing
         const sizeDisplay = userExpressedSize || `${width}x${height}`;
-        await updateConversation(psid, {
-          lastIntent: 'malla_awaiting_retail_price_confirm',
-          productSpecs: { ...convo?.productSpecs, width, height, percentage, color, userExpressedSize, updatedAt: new Date() }
+        console.log(`🏪 Wholesale inquiry — handing off ${sizeDisplay}m for wholesale pricing`);
+        const { executeHandoff: execHandoffW } = require('../utils/executeHandoff');
+        return await execHandoffW(psid, convo, userMessage, {
+          reason: `Mayoreo: distribuidor pregunta por ${sizeDisplay}m — cotizar precio de mayoreo`,
+          responsePrefix: `¡Tenemos la medida de ${sizeDisplay}m! Para precio de mayoreo te comunico con un especialista.`,
+          lastIntent: 'wholesale_handoff',
+          timingStyle: 'elaborate'
         });
-        return {
-          type: "text",
-          text: `¿Buscas comprar una pieza de ${sizeDisplay}m?`
-        };
       }
-
-      // Hand off for wholesale pricing
-      const sizeDisplay = userExpressedSize || `${width}x${height}`;
-      console.log(`🏪 Wholesale inquiry — handing off ${sizeDisplay}m for wholesale pricing`);
-      const { executeHandoff: execHandoffW } = require('../utils/executeHandoff');
-      return await execHandoffW(psid, convo, userMessage, {
-        reason: `Mayoreo: distribuidor pregunta por ${sizeDisplay}m — cotizar precio de mayoreo`,
-        responsePrefix: `¡Tenemos la medida de ${sizeDisplay}m! Para precio de mayoreo te comunico con un especialista.`,
-        lastIntent: 'wholesale_handoff',
-        timingStyle: 'elaborate'
-      });
     }
 
     // Get the preferred link from onlineStoreLinks

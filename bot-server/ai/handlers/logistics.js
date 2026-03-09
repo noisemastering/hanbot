@@ -5,6 +5,9 @@ const { updateConversation } = require("../../conversationManager");
 const { getBusinessInfo, MAPS_URL, STORE_ADDRESS } = require("../../businessInfoManager");
 const { detectMexicanLocation } = require("../../mexicanLocations");
 const { generateBotResponse } = require("../responseGenerator");
+const { generateClickLink } = require("../../tracking");
+
+const STORE_URL = "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob";
 
 /**
  * Handle shipping query - "Hacen envíos?", "Envían a mi ciudad?"
@@ -89,6 +92,37 @@ async function handleLocation({ psid, userMessage, convo }) {
   // Repeat location query OR frustrated → give full street address
   const includeFullAddress = isLocationRepeat || isFrustrated ||
     /\b(direcci[oó]n|calle|referencia|c[oó]mo\s+llego|llegar|cerca\s+de|por\s+d[oó]nde)\b/i.test(userMessage);
+
+  // Explicitly about physical location?
+  const isExplicitlyPhysical = /\b(direcci[oó]n|ubicaci[oó]n|domicilio|tienda\s*f[ií]sica|sucursal|mostrador|visitar|ir\s*a|recoger|pasar\s*a\s*recoger|c[oó]mo\s+llego|calle|referencia)\b/i.test(userMessage);
+
+  // Ambiguous: "dónde ver", "dónde compro", "dónde encuentro", "dónde lo venden"
+  const isAmbiguousLocation = !isExplicitlyPhysical;
+
+  // If ambiguous, show both physical store + online store
+  if (isAmbiguousLocation) {
+    await updateConversation(psid, {
+      lastIntent: "location_query",
+      unknownCount: 0
+    });
+
+    const trackedLink = await generateClickLink(psid, STORE_URL, {
+      productName: "Tienda Oficial",
+      campaignId: convo?.campaignId,
+      adId: convo?.adId,
+      userName: convo?.userName,
+      city: convo?.city,
+      stateMx: convo?.stateMx
+    });
+
+    return {
+      type: "text",
+      text: `Puedes vernos en línea o en persona:\n\n` +
+            `🛒 Tienda en línea (Mercado Libre, envío incluido):\n${trackedLink}\n\n` +
+            `📍 Tienda física en Querétaro:\n${MAPS_URL}\n\n` +
+            `¿En qué te puedo ayudar?`
+    };
+  }
 
   await updateConversation(psid, {
     lastIntent: includeFullAddress ? "location_detailed" : "location_query",

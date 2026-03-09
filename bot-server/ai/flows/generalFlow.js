@@ -550,7 +550,7 @@ function shouldHandle(classification, sourceContext, convo, userMessage = '') {
     }
 
     // Location patterns (sucursal, tienda, donde están, etc.)
-    if (/d[oó]nde\s+(est[aá]n|tienen|se\s+ubican|quedan)|ubicaci[oó]n|direcci[oó]n|sucursal|tienda\s+f[ií]sica/i.test(msg)) {
+    if (/(?:d[oó]nde|dnd)\s+(est[aá]n|tienen|se\s+ubican|quedan)|ubicaci[oó]n|direcci[oó]n|sucursal|tienda\s+f[ií]sica/i.test(msg)) {
       classification.intent = INTENTS.LOCATION_QUERY; // Override for handler
       return true;
     }

@@ -375,6 +375,27 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   if (convo?.isWholesaleInquiry && convo?.lastIntent !== 'wholesale_handoff') {
     const wAvailableLengths = await getAvailableLengths(sourceContext, convo);
     const lengthList = wAvailableLengths.map(l => `${l}m`).join(' y ');
+
+    // Answer "how many for wholesale?" directly
+    const wholesaleQtyQuestion = /\b(a\s*partir\s*de\s*cu[aá]nt[oa]s|cu[aá]nt[oa]s\s*(piezas?|rollos?|unidades?)\s*(son|para|es|se\s*necesit|se\s*ocup|para\s*mayoreo)|m[ií]nimo\s*(de\s*)?(piezas?|rollos?|compra|pedido))\b/i;
+    if (userMessage && wholesaleQtyQuestion.test(userMessage)) {
+      await updateConversation(psid, { lastIntent: 'borde_wholesale_qty_answered', unknownCount: 0 });
+      return {
+        type: "text",
+        text: `El precio de mayoreo en borde separador es:\n\n• Rollos de 18m: a partir de 20 rollos\n• Rollos de 54m: a partir de 7 rollos\n\n¿Qué largo te interesa?`
+      };
+    }
+
+    // Answer catalog/size questions directly
+    const sizesCatalogQuestion = /\b(qu[eé]\s*(medidas?|tamaños?|largos?|dimensiones?)|cu[aá]les?\s*(medidas?|tamaños?|largos?)|medidas?\s*(que\s*)?(trabajan|manejan|tienen|hay|disponibles?)|qu[eé]\s*tienen|cat[aá]logo)\b/i;
+    if (userMessage && sizesCatalogQuestion.test(userMessage)) {
+      await updateConversation(psid, { lastIntent: 'borde_wholesale_sizes_answered', unknownCount: 0 });
+      return {
+        type: "text",
+        text: `Manejamos borde separador en rollos de ${lengthList}.\n\nPara mayoreo los mínimos son:\n• 18m: 20 rollos\n• 54m: 7 rollos\n\n¿Qué largo te interesa?`
+      };
+    }
+
     const parsed = parseLengthFromMessage(userMessage, wAvailableLengths);
     const lengthInfo = parsed ? ` — pregunta por ${parsed}m` : '';
 
@@ -404,13 +425,23 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   // If flow already completed, handle gracefully
   if (state.flowCompleted) {
-    const isDenial = /\b(no|nada|eso\s*es\s*todo|es\s*todo|nah?|nel|gracias|no\s*gracias)\b/i.test(userMessage);
+    const isDenial = /\b(no|nada|eso\s*es\s*todo|es\s*todo|nah?|nel|no\s*gracias)\b/i.test(userMessage);
     if (isDenial) {
       return {
         type: "text",
         text: "¡Perfecto! Cualquier cosa aquí andamos. ¡Que tengas excelente día!"
       };
     }
+
+    // Acknowledgment — user is just confirming, saying thanks, or saying they'll check the link
+    const isAcknowledgment = /\b(deja|ya\s*(voy|entro|lo\s*(veo|checo|reviso))|ok|va|s[ií]|gracias|perfecto|sale|listo|d[eé]jame|ahorita|entro\s*a\s*la|voy\s*a\s*(ver|entrar|checar)|xfavor|por\s*favor)\b/i.test(userMessage);
+    if (isAcknowledgment) {
+      return {
+        type: "text",
+        text: "¡Perfecto! Ahí está el link cuando gustes. Si necesitas algo más, aquí andamos."
+      };
+    }
+
     // For other messages after completion, reset flow so they can start over
     state = { length: null, quantity: null, flowCompleted: false };
   }

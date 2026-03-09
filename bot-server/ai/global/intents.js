@@ -59,7 +59,7 @@ function addOfferHookIfRelevant(responseText, convo) {
 
 // Helper to check if location is also being asked in a multi-question message
 function isAlsoAskingLocation(msg) {
-  return /\b(d[oó]nde\s+est[aá]n|d[oó]nde\s+quedan|ubicaci[oó]n|direcci[oó]n|d[oó]nde\s+se\s+encuentran)\b/i.test(msg);
+  return /\b((?:d[oó]nde|dnd)\s+est[aá]n|(?:d[oó]nde|dnd)\s+quedan|ubicaci[oó]n|direcci[oó]n|(?:d[oó]nde|dnd)\s+se\s+encuentran)\b/i.test(msg);
 }
 
 /**
@@ -586,7 +586,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   // 🌿 BORDE SEPARADOR FOLLOW-UP - Handle questions when in borde context
   // EXCEPT: Skip if user is asking about location/address (let location handler deal with it)
-  const isLocationQuestion = /d[oó]nde\s+(est[aá]n|se\s+ubican|quedan)|h?ubicaci[oó]n|direcci[oó]n|qued[ao]n?|encuentran|ir\s+a\s+ver|f[ií]sicamente/i.test(msg);
+  const isLocationQuestion = /(?:d[oó]nde|dnd)\s+(est[aá]n|se\s+ubican|quedan)|h?ubicaci[oó]n|direcci[oó]n|qued[ao]n?|encuentran|ir\s+a\s+ver|f[ií]sicamente/i.test(msg);
 
   if (!isLocationQuestion && (convo.lastIntent === "borde_separador" || convo.productInterest === "borde_separador" ||
       convo.lastIntent === "borde_link_sent")) {
@@ -1622,7 +1622,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   // 📍 Ubicación - respond with location info
   // Note: "ciudad" removed - too broad, matches "Ciudad de México" when user answers where they're from
-  if (/d[oó]nde\s+(est[aá]n|se\s+ubican|quedan)|h?ubicaci[oó]n|direcci[oó]n|qued[ao]n?|encuentran/i.test(msg) ||
+  if (/(?:d[oó]nde|dnd)\s+(est[aá]n|se\s+ubican|quedan)|h?ubicaci[oó]n|direcci[oó]n|qued[ao]n?|encuentran/i.test(msg) ||
       /ir\s+a\s+ver|ver(lo)?\s+f[ií]sicamente|verlos?\s+en\s+persona/i.test(msg)) {
     console.log("📍 Location question detected");
     await updateConversation(psid, { lastIntent: "location_info" });

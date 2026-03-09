@@ -26,9 +26,10 @@ module.exports = async function phoneCapture(ctx, next) {
       state: "needs_human"
     });
 
+    const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
     ctx.response = {
       type: "text",
-      text: "¡Perfecto! Anotado tu número. En un momento te contacta uno de nuestros asesores para atenderte personalmente."
+      text: `¡Perfecto! Anotado tu número. En un momento te contacta uno de nuestros asesores para atenderte personalmente.\n\n📽️ Mientras tanto, conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`
     };
     ctx.handledBy = "phone_captured";
     return;

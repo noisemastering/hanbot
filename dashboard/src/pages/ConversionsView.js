@@ -96,7 +96,9 @@ function ConversionsView() {
         sellerId: '482595248',
         timeWindowHours,
         orderLimit,
-        dryRun
+        dryRun,
+        dateFrom,
+        dateTo
       });
 
       setCorrelationResult({
@@ -117,9 +119,18 @@ function ConversionsView() {
   };
 
   useEffect(() => {
+    // Show cached data immediately, sync in background, then refresh
     fetchData();
+    API.post('/analytics/correlate-conversions', {
+      sellerId: '482595248',
+      timeWindowHours,
+      orderLimit,
+      dryRun: false,
+      dateFrom,
+      dateTo
+    }).then(() => fetchData()).catch(err => console.error('Auto-sync failed:', err));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Only fetch on mount, use button to refresh with new dates
+  }, []); // Fetch on mount + background sync
 
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return 'N/A';
@@ -259,6 +270,30 @@ function ConversionsView() {
                   {t('conversions.low')}: {stats.confidenceBreakdown?.low || 0}
                 </span>
               </div>
+              <details className="mt-3 text-xs text-gray-500">
+                <summary className="cursor-pointer hover:text-gray-300">Scoring criteria</summary>
+                <div className="mt-2 space-y-2">
+                  <div>
+                    <p className="text-gray-400 font-medium mb-1">Señales (puntos):</p>
+                    <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                      <span>ML Item ID</span><span className="text-white">+100</span>
+                      <span>Código postal</span><span className="text-white">+45</span>
+                      <span>Nombre (receptor)</span><span className="text-white">+40</span>
+                      <span>Ciudad</span><span className="text-white">+35</span>
+                      <span>Nombre en nickname</span><span className="text-white">+35</span>
+                      <span>POI del producto</span><span className="text-white">+30</span>
+                      <span>Estado</span><span className="text-white">+25</span>
+                      <span>Proximidad temporal</span><span className="text-white">+5–20</span>
+                    </div>
+                  </div>
+                  <div>
+                    <p className="text-gray-400 font-medium mb-1">Umbrales:</p>
+                    <p><span className="text-green-400">Alta:</span> ML Item ID match, o score ≥ 100</p>
+                    <p><span className="text-yellow-400">Media:</span> Señales adicionales (nombre, ciudad, CP) con score &lt; 100</p>
+                    <p><span className="text-red-400">Baja:</span> Solo ventana de tiempo, sin señales</p>
+                  </div>
+                </div>
+              </details>
             </div>
           </div>
         </div>

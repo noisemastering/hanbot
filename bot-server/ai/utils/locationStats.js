@@ -215,15 +215,15 @@ function parseLocationResponse(message) {
   // Skip if message is too long (probably not just a city)
   if (clean.length > 60) return null;
 
-  // Skip if contains common non-location words
-  if (/\b(precio|cuanto|cuesta|medida|tamaño|gracias|ok|si|no|hola|buenas?|quiero|necesito|tiene[ns]?|hay|envío|envio)\b/i.test(clean)) {
-    return null;
-  }
-
-  // Check for zip code first
+  // Check for zip code first — even if message has filler words like "si claro es 45800"
   const zipMatch = clean.match(/\b(\d{5})\b/);
   if (zipMatch) {
     return { zipcode: zipMatch[1], city: null, state: null };
+  }
+
+  // Skip if contains common non-location words
+  if (/\b(precio|cuanto|cuesta|medida|tamaño|gracias|ok|si|no|hola|buenas?|quiero|necesito|tiene[ns]?|hay|envío|envio)\b/i.test(clean)) {
+    return null;
   }
 
   // Check for "City, State" format

@@ -97,7 +97,7 @@ function detectNegativeSignals(message, currentSignals) {
 
   // "Asking around" questions - indicates shopping around/comparing
   // "¿Dónde están ubicados?", "¿Tienen tienda?", "¿De dónde son?"
-  if (/\b(d[oó]nde\s+(est[aá]n|se\s+ubican|quedan)|tienen\s+tienda|de\s+d[oó]nde\s+son|en\s+qu[eé]\s+(ciudad|parte|estado))\b/i.test(cleanMsg)) {
+  if (/\b((?:d[oó]nde|dnd)\s+(est[aá]n|se\s+ubican|quedan)|tienen\s+tienda|de\s+d[oó]nde\s+son|en\s+qu[eé]\s+(ciudad|parte|estado))\b/i.test(cleanMsg)) {
     signals.askingAroundQuestions = (currentSignals.askingAroundQuestions || 0) + 1;
   }
 

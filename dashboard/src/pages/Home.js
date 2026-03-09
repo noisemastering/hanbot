@@ -97,7 +97,13 @@ function Home() {
   };
 
   useEffect(() => {
+    // Show cached data immediately, sync in background, then refresh
     fetchAll();
+    API.post('/analytics/correlate-conversions', {
+      sellerId: '482595248',
+      dateFrom,
+      dateTo
+    }).then(() => fetchAll()).catch(err => console.error('Auto-sync failed:', err));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range]);
 

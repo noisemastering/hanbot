@@ -79,6 +79,10 @@ async function checkZipBeforeHandoff(psid, convo, userMessage, handoffInfo = {})
     return null; // Proceed with handoff
   }
 
+  // Note: we don't use isLikelyLocationName here because this is the FIRST check
+  // — the user hasn't been asked for location yet, so a short message could be anything.
+  // The fuzzy fallback is in handlePendingZipResponse (AFTER we've asked).
+
   // No location info — save pending handoff and ask
   await updateConversation(psid, {
     pendingHandoff: true,
@@ -124,6 +128,20 @@ async function handlePendingZipResponse(psid, convo, userMessage) {
       pendingHandoffInfo: null
     });
     return { proceed: true, zipInfo: { city: locationDetected.normalized || locationDetected.location, state: locationDetected.state } };
+  }
+
+  // Fuzzy fallback: if message looks like a location name (short, no product words),
+  // accept it as-is to avoid asking for zip again in a loop
+  const { isLikelyLocationName } = require("../../mexicanLocations");
+  if (isLikelyLocationName(userMessage)) {
+    const cityName = userMessage.trim();
+    console.log(`📍 Accepting unrecognized location as-is: "${cityName}"`);
+    await updateConversation(psid, {
+      city: cityName,
+      pendingHandoff: false,
+      pendingHandoffInfo: null
+    });
+    return { proceed: true, zipInfo: { city: cityName } };
   }
 
   // Couldn't parse location — customer is probably asking something else.
