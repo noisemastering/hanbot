@@ -1011,8 +1011,13 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
 
   // ===== STEP 3.5: CHECK USE CASE FIT =====
   // Detect if user mentions a use case and validate product fit
+  // Skip when message contains explicit dimensions — the customer already knows what they want,
+  // so let the flow handler parse sizes + quote directly instead of suggesting alternatives.
+  const hasDimensions = /\d+\s*[x×X]\s*\d+/.test(userMessage);
   const productInterest = convo?.productInterest || activeFlow;
-  const useCaseAnalysis = await analyzeUseCaseFit(userMessage, productInterest);
+  const useCaseAnalysis = hasDimensions
+    ? { detected: false, keywords: [], fits: true, bestUso: null, suggestedProducts: [], shouldSuggestChange: false }
+    : await analyzeUseCaseFit(userMessage, productInterest);
 
   if (useCaseAnalysis.detected) {
     // Store the detected use case in conversation

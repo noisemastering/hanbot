@@ -724,7 +724,7 @@ function quickClassify(message, dbIntents = null) {
     { intent: 'price_query', pattern: /\b(precio|presio|costo|cu[aá]nto\s*(cuesta|vale|es|está)|qu[eé]\s*precio|en\s+cu[aá]nto|a\s+c[oó]mo)\b/i },
     { intent: 'availability_query', pattern: /\b(medidas?|tamaños?|disponib|stock|tienen|manejan|qu[eé]\s*medidas?)\b/i },
     { intent: 'payment_query', pattern: /\b(pago|pagar|tarjeta|efectivo|transferencia|forma\s*de\s*(pago|compra)|meses)\b/i },
-    { intent: 'location_query', pattern: /\b(ubicaci[oó]n|direcci[oó]n|(?:d[oó]nde|dnd)\s*(est[aá]n|quedan|se\s*encuentran)|soy\s+de\s+\w|recog[ei]r|domicilio)\b/i },
+    { intent: 'location_query', pattern: /\b(ubicaci[oó]n|direcci[oó]n|(?:d[oó]nde|dnd)\s*(est[aá]n|quedan|se\s*encuentran)|soy\s+de\s+\w|recog[ei]r|domicilio|de\s+(?:qu[eé]|q|cu[aá]l)\s+(?:cd\.?|ciudad|estado|parte)\s+son)\b/i },
     { intent: 'shipping_query', pattern: /\b(env[ií]o|envi[aá]n|entrega|[ly]lega|mandan|cu[aá]nto\s*tarda)\b/i },
     { intent: 'installation_query', pattern: /\b(instal[ae]n?|ponen|colocan|c[oó]mo\s*se\s*(instala|pone|coloca))\b/i },
     { intent: 'product_inquiry', pattern: /\b(informes?|info|caracter[ií]sticas?|especificaciones?|de\s*qu[eé]\s*(es|est[aá]|material))\b/i },

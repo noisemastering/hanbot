@@ -839,7 +839,9 @@ app.post("/webhook", async (req, res) => {
         continue;
       }
 
-      const webhookEvent = entry.messaging[0];
+      // Process ALL messaging events in the entry, not just the first one.
+      // Facebook can batch echoes and referrals in the same entry.
+      for (const webhookEvent of entry.messaging) {
       const senderPsid = webhookEvent.sender.id;
 
       // 🔍 DEBUG: Log referral detection
@@ -864,8 +866,7 @@ app.post("/webhook", async (req, res) => {
           agentTookOverAt: new Date()
         });
 
-        res.sendStatus(200);
-        return;
+        continue; // Don't return — other entries in this webhook may contain referrals
       }
 
       if (webhookEvent.take_thread_control) {
@@ -878,8 +879,7 @@ app.post("/webhook", async (req, res) => {
           lastIntent: "bot_resumed"
         });
 
-        res.sendStatus(200);
-        return;
+        continue; // Don't return — other entries in this webhook may contain referrals
       }
 
       // 📢 MESSAGE ECHO: Page sent a message (through native inbox or API)
@@ -925,8 +925,9 @@ app.post("/webhook", async (req, res) => {
           });
         }
 
-        res.sendStatus(200);
-        return;
+        // Don't return — continue to process other entries in this webhook
+        // (the referral event may be in a different entry in the same payload)
+        continue;
       }
 
       // 🧩 BLOQUE NUEVO: detección de campañas o enlaces con ?ref=
@@ -1002,6 +1003,17 @@ app.post("/webhook", async (req, res) => {
           pendingHandoffInfo: null,
           handoffRequested: false,
           handoffReason: null,
+          // Clear all transient flow state so old sessions don't leak
+          pendingFlowChange: null,
+          pendingFlowChangeReason: null,
+          pendingUseCaseProducts: null,
+          pendingWholesaleRetailChoice: null,
+          lastSharedProductId: null,
+          lastSharedProductLink: null,
+          lastProductLink: null,
+          lastQuotedProducts: null,
+          requestedSize: null,
+          lastUnavailableSize: null,
         });
 
         // 🔍 Look up ad with inheritance (Campaign → AdSet → Ad)
@@ -1287,14 +1299,18 @@ app.post("/webhook", async (req, res) => {
         // 🎯 Check if the ad associated with this conversation is active
         const conversation = await getConversation(senderPsid);
 
-        // 💬 COMMENT CONTEXT: If no referral, check if user recently commented on a post
-        if (conversation && !conversation.adId && !conversation.campaignRef && messageText) {
+        // 💬 COMMENT CONTEXT: Check if user recently commented on a post
+        // A comment is a NEW entry point even if the user already has an adId from a previous session.
+        // Only match comments from the last 2 hours to avoid stale matches.
+        if (conversation && messageText) {
           try {
             const CommentContext = require('./models/CommentContext');
+            const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
 
             // Try to match by comment text (first message often IS the comment)
             const commentContext = await CommentContext.findOne({
-              commentText: { $regex: messageText.slice(0, 50).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' }
+              commentText: { $regex: messageText.slice(0, 50).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' },
+              createdAt: { $gte: twoHoursAgo }
             }).sort({ createdAt: -1 }).lean();
 
             if (commentContext) {
@@ -1346,14 +1362,36 @@ app.post("/webhook", async (req, res) => {
                 }
               }
 
-              // Update conversation with inferred context
+              // New entry point → full state reset (same as ad click handler)
+              // This prevents old session state from leaking into the new context
               const updateData = {
+                state: "active",
                 productInterest: inferredProduct,
+                currentFlow: inferredProduct || null,
                 source: {
                   type: 'comment',
                   postId: commentContext.postId,
                   commentId: commentContext.commentId
-                }
+                },
+                // Reset all transient flow state
+                lastIntent: null,
+                productSpecs: null,
+                agentTookOverAt: null,
+                pendingHandoff: false,
+                pendingHandoffInfo: null,
+                handoffRequested: false,
+                handoffReason: null,
+                pendingFlowChange: null,
+                pendingFlowChangeReason: null,
+                pendingUseCaseProducts: null,
+                pendingWholesaleRetailChoice: null,
+                lastSharedProductId: null,
+                lastSharedProductLink: null,
+                lastProductLink: null,
+                lastQuotedProducts: null,
+                requestedSize: null,
+                lastUnavailableSize: null,
+                isWholesaleInquiry: false,
               };
 
               // If resolved from Ad, store campaign context for full inheritance downstream
@@ -1363,6 +1401,7 @@ app.post("/webhook", async (req, res) => {
                 if (resolvedFromAd.flowRef) updateData.currentFlow = resolvedFromAd.flowRef;
               }
 
+              console.log(`🔄 Comment re-entry: resetting flow state for ${senderPsid} (inferred: ${inferredProduct || 'unknown'})`);
               await updateConversation(senderPsid, updateData);
 
               // Link the PSID back to comment context for future reference
@@ -1793,6 +1832,7 @@ app.post("/webhook", async (req, res) => {
           }
         });
       }
+    } // end for (webhookEvent of entry.messaging)
     }
     res.status(200).send("EVENT_RECEIVED");
   } else {

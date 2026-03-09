@@ -1623,7 +1623,8 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   // 📍 Ubicación - respond with location info
   // Note: "ciudad" removed - too broad, matches "Ciudad de México" when user answers where they're from
   if (/(?:d[oó]nde|dnd)\s+(est[aá]n|se\s+ubican|quedan)|h?ubicaci[oó]n|direcci[oó]n|qued[ao]n?|encuentran/i.test(msg) ||
-      /ir\s+a\s+ver|ver(lo)?\s+f[ií]sicamente|verlos?\s+en\s+persona/i.test(msg)) {
+      /ir\s+a\s+ver|ver(lo)?\s+f[ií]sicamente|verlos?\s+en\s+persona/i.test(msg) ||
+      /\bde\s+(?:qu[eé]|q|cual|cu[aá]l)\s+(?:cd\.?|ciudad|estado|parte)\s+son\b/i.test(msg)) {
     console.log("📍 Location question detected");
     await updateConversation(psid, { lastIntent: "location_info" });
 

@@ -33,6 +33,10 @@ function parseConfeccionadaDimensions(str) {
   // "seis por cuatro" -> "6 por 4"
   let s = convertSpanishNumbers(String(str).toLowerCase());
 
+  // Convert Spanish decimal commas to periods: "3,59" → "3.59", "3,50" → "3.50"
+  // Only convert when followed by 1-2 digits (not 3+, which is a thousands separator like "3,500")
+  s = s.replace(/(\d),(\d{1,2})(?!\d)/g, '$1.$2');
+
   // Normalize spaces within decimal numbers: "4. 50" -> "4.50", "4 .50" -> "4.50"
   // This handles typos where users add spaces around decimal points
   s = s.replace(/(\d+)\s*\.\s*(\d+)/g, '$1.$2');

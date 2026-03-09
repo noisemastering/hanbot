@@ -1580,39 +1580,21 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
     };
   }
 
-  // Check if user is asking about wholesale QUALIFICATION (e.g. "3 ya es mayoreo?")
-  // Answer directly with the minimum instead of handing off
-  if (userMessage && /\b(mayoreo|mayorist)\b/i.test(userMessage) && convo?.lastSharedProductId) {
-    const qtyMatch = userMessage.match(/\b(\d+)\s*(?:piezas?|unidades?|mallas?)?\b/i);
-    try {
-      const quotedProduct = await ProductFamily.findById(convo.lastSharedProductId).lean();
-      if (quotedProduct?.wholesaleMinQty) {
-        const minQty = quotedProduct.wholesaleMinQty;
-        if (qtyMatch) {
-          const requestedQty = parseInt(qtyMatch[1]);
-          if (requestedQty < minQty) {
-            console.log(`📦 Wholesale min clarification: ${requestedQty} < ${minQty}`);
-            await updateConversation(psid, { lastIntent: "wholesale_min_clarified", unknownCount: 0 });
-            return {
-              type: "text",
-              text: `El precio de mayoreo es a partir de ${minQty} piezas de la misma medida. Con ${requestedQty} piezas aplica el precio normal de ${formatMoney(quotedProduct.price)} cada una.\n\n¿Te gustaría ordenar las ${requestedQty} piezas al precio normal?`
-            };
-          }
-          // Quantity meets minimum — hand off for wholesale pricing
-        }
-        // No quantity mentioned — just asking about wholesale, reiterate the minimum
-        if (!qtyMatch) {
-          console.log(`📦 Wholesale min reiteration: min is ${minQty}`);
-          await updateConversation(psid, { lastIntent: "wholesale_min_clarified", unknownCount: 0 });
-          return {
-            type: "text",
-            text: `El precio de mayoreo es a partir de ${minQty} piezas de la misma medida. ¿Cuántas piezas necesitas?`
-          };
-        }
-      }
-    } catch (err) {
-      console.error("Error checking wholesale min:", err.message);
-    }
+  // Wholesale inquiry in confeccionada = hand off to human
+  if (userMessage && /\b(mayoreo|mayorist|al\s+por\s+mayor)\b/i.test(userMessage)) {
+    const specs = convo?.productSpecs;
+    const sizeDisplay = (specs?.width && specs?.height)
+      ? `${Math.min(specs.width, specs.height)}x${Math.max(specs.width, specs.height)}m`
+      : '';
+    console.log(`🏪 Wholesale inquiry in awaiting_dimensions — handing off ${sizeDisplay}`);
+    const { executeHandoff: execWholesale2 } = require('../utils/executeHandoff');
+    return await execWholesale2(psid, convo, userMessage, {
+      reason: `Mayoreo confeccionada${sizeDisplay ? ' ' + sizeDisplay : ''}: "${userMessage.substring(0, 80)}"`,
+      responsePrefix: `Para precio de mayoreo te comunico con un especialista que te dará la cotización.\n\n`,
+      lastIntent: 'wholesale_handoff',
+      notificationText: `Mayoreo confeccionada${sizeDisplay ? ' ' + sizeDisplay : ''}`,
+      timingStyle: 'elaborate'
+    });
   }
 
   // Check if user is asking about wholesale/distributor
@@ -1836,35 +1818,27 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
 async function handleComplete(intent, state, sourceContext, psid, convo, userMessage = '') {
   const { width, height, percentage, color, quantity, userExpressedSize, concerns, convertedFromFeet, originalFeetStr } = state;
 
-  // ====== WHOLESALE MINIMUM CLARIFICATION ======
-  // If customer asks about wholesale and we just quoted a product, answer with the minimum
-  if (userMessage && /\b(mayoreo|mayorist)\b/i.test(userMessage) && convo?.lastSharedProductId) {
-    try {
-      const quotedProd = await ProductFamily.findById(convo.lastSharedProductId).lean();
-      if (quotedProd?.wholesaleMinQty) {
-        const minQty = quotedProd.wholesaleMinQty;
-        const qtyM = userMessage.match(/\b(\d+)\s*(?:piezas?|unidades?|mallas?)?\b/i);
-        if (qtyM) {
-          const reqQty = parseInt(qtyM[1]);
-          if (reqQty < minQty) {
-            console.log(`📦 handleComplete: wholesale min clarification ${reqQty} < ${minQty}`);
-            await updateConversation(psid, { lastIntent: "wholesale_min_clarified", unknownCount: 0 });
-            return {
-              type: "text",
-              text: `El precio de mayoreo es a partir de ${minQty} piezas de la misma medida. Con ${reqQty} piezas aplica el precio normal de ${formatMoney(quotedProd.price)} cada una.\n\n¿Te gustaría ordenar las ${reqQty} piezas al precio normal?`
-            };
-          }
-        } else {
-          await updateConversation(psid, { lastIntent: "wholesale_min_clarified", unknownCount: 0 });
-          return {
-            type: "text",
-            text: `El precio de mayoreo es a partir de ${minQty} piezas de la misma medida. ¿Cuántas piezas necesitas?`
-          };
-        }
-      }
-    } catch (err) {
-      console.error("Error checking wholesale min in handleComplete:", err.message);
-    }
+  // ====== WHOLESALE → HANDOFF ======
+  // Any wholesale inquiry in confeccionada flow = hand off to human
+  const hasWholesaleKeyword = /\b(mayoreo|mayorist|al\s+por\s+mayor)\b/i.test(userMessage);
+  // "pedido de 5", "si pido 5 piezas", "compro 5 cuánto", "ago pedido de 5"
+  const multiPiecePrice = userMessage && /\b(pedido|pido|compro|ordeno|[ah]ago?\s*pedido)\s+(de\s+)?\d+/i.test(userMessage);
+  // "5 piezas precio", "5 piezas cuánto" — quantity + price question after product was just quoted
+  const qtyPriceAsk = userMessage && convo?.lastSharedProductId &&
+    /\b\d+\s*(piezas?|unidades?|mallas?)\b/i.test(userMessage) &&
+    /\b(precio|presio|costo|cu[aá]nto|cotiza)\b/i.test(userMessage);
+  const isWholesaleAsk = userMessage && (hasWholesaleKeyword || multiPiecePrice || qtyPriceAsk);
+  if (isWholesaleAsk) {
+    const sizeDisplay = `${Math.min(width, height)}x${Math.max(width, height)}`;
+    console.log(`🏪 handleComplete: wholesale inquiry for ${sizeDisplay}m — handing off`);
+    const { executeHandoff: execWholesale } = require('../utils/executeHandoff');
+    return await execWholesale(psid, convo, userMessage, {
+      reason: `Mayoreo confeccionada ${sizeDisplay}m: "${userMessage.substring(0, 80)}"`,
+      responsePrefix: `Para precio de mayoreo te comunico con un especialista que te dará la cotización.\n\n`,
+      lastIntent: 'wholesale_handoff',
+      notificationText: `Mayoreo confeccionada ${sizeDisplay}m`,
+      timingStyle: 'elaborate'
+    });
   }
 
   // ====== GENERAL QUESTIONS GUARD ======

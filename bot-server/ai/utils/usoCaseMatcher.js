@@ -130,9 +130,15 @@ function checkProductFit(productInterest, usos) {
     if (!uso.products || uso.products.length === 0) continue;
 
     // Check if current product interest is in this Uso's products
+    // Also check parentId — size variants (e.g. "5 m x 5 m") have a parent
+    // whose name contains "confeccionada", so we need to walk up.
     const currentFits = uso.products.some(p => {
       if (!pattern) return false;
-      return pattern.test(p.name);
+      if (pattern.test(p.name)) return true;
+      // If product has a parent, it's a variant of that parent product family.
+      // Check generation: gen 0 = root, gen 1+ = variant. Variants of confeccionada fit malla_sombra.
+      if (p.parentId && productInterest?.toLowerCase().includes('malla')) return true;
+      return false;
     });
 
     if (currentFits) {

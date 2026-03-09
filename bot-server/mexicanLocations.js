@@ -67,12 +67,11 @@ const LOCATION_VARIATIONS = {
   'bcs': 'Baja California Sur',
   'nl': 'Nuevo León',
   'jal': 'Jalisco',
-  'sin': 'Sinaloa',
-  'son': 'Sonora',
+  // 'sin', 'son', 'ver' removed — too ambiguous (Spanish words: sin=without, son=are, ver=see)
+  // Users will write the full state name; these are matched in MEXICAN_STATES below
   'chih': 'Chihuahua',
   'coah': 'Coahuila',
   'tamps': 'Tamaulipas',
-  'ver': 'Veracruz',
   'yuc': 'Yucatán',
   'qroo': 'Quintana Roo',
   'camp': 'Campeche',
@@ -86,7 +85,7 @@ const LOCATION_VARIATIONS = {
   'zac': 'Zacatecas',
   'dgo': 'Durango',
   'nay': 'Nayarit',
-  'col': 'Colima',
+  // 'col' removed — ambiguous (common abbreviation for "colonia" in Mexican addresses)
   'mor': 'Morelos',
   'hgo': 'Hidalgo',
   'tlax': 'Tlaxcala',

@@ -25,11 +25,9 @@ const STATE_ALIASES = {
   'ags': 'Aguascalientes',
   'chih': 'Chihuahua',
   'coah': 'Coahuila',
-  'sin': 'Sinaloa',
-  'son': 'Sonora',
+  // 'sin', 'son', 'ver' removed — common Spanish words (sin=without, son=are, ver=see)
   'tab': 'Tabasco',
   'tamps': 'Tamaulipas',
-  'ver': 'Veracruz',
   'yuc': 'Yucatán',
   'qroo': 'Quintana Roo',
   'mor': 'Morelos',
@@ -41,7 +39,7 @@ const STATE_ALIASES = {
   'tlax': 'Tlaxcala',
   'zac': 'Zacatecas',
   'dgo': 'Durango',
-  'col': 'Colima',
+  // 'col' removed — ambiguous (common abbreviation for "colonia")
   'camp': 'Campeche',
   'chis': 'Chiapas',
   'gro': 'Guerrero'
