@@ -576,6 +576,55 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     });
   }
 
+  // ====== ROLL CONFIRMATION RESPONSE ======
+  // User replied to "¿Buscas un rollo o una malla confeccionada?"
+  if (convo?.lastIntent === 'malla_roll_confirmation' && convo?.productSpecs?.pendingRollSize) {
+    const msg = String(userMessage).trim().toLowerCase();
+    const rollSize = convo.productSpecs.pendingRollSize;
+    const wantsRoll = /\b(rollo|roll|s[ií].*rollo|el rollo|un rollo)\b/i.test(msg);
+    const wantsConfeccionada = /\b(confeccionada|lista|instalar|la malla|no.*rollo|malla sombra)\b/i.test(msg);
+    const hasNewDims = parseDimensions(msg);
+
+    if (hasNewDims) {
+      // Customer gave new dimensions — clear pending state, fall through to normal handling
+      console.log(`📦 Roll confirmation → new dimensions provided, reprocessing`);
+      await updateConversation(psid, {
+        lastIntent: null,
+        productSpecs: { productType: 'malla', pendingRollSize: null, width: null, height: null, updatedAt: new Date() }
+      });
+      // Fall through to normal dimension parsing below
+    } else if (wantsRoll) {
+      // Confirmed roll → switch to rollo flow
+      console.log(`📦 Roll confirmation → customer wants rollo ${rollSize}m, switching flow`);
+      await updateConversation(psid, {
+        currentFlow: 'rollo',
+        productInterest: 'rollo_malla_sombra',
+        lastIntent: null,
+        productSpecs: { productType: 'rollo', pendingRollSize: null, updatedAt: new Date() }
+      });
+      // Return null so the message gets re-processed by the rollo flow
+      return null;
+    } else if (wantsConfeccionada) {
+      // Wants confeccionada — clear roll state, ask for valid dimensions
+      console.log(`📦 Roll confirmation → customer wants confeccionada, clearing roll state`);
+      await updateConversation(psid, {
+        lastIntent: 'malla_awaiting_dimensions',
+        productSpecs: { productType: 'malla', pendingRollSize: null, width: null, height: null, updatedAt: new Date() }
+      });
+      return {
+        type: "text",
+        text: "Nuestra malla confeccionada viene en medidas desde 2x2m hasta 7x10m. ¿Qué medida necesitas?"
+      };
+    } else {
+      // Unclear — ask again more directly
+      console.log(`📦 Roll confirmation → unclear response: "${msg.substring(0, 40)}"`);
+      return {
+        type: "text",
+        text: "¿Necesitas un rollo de malla sombra (para proyectos grandes) o una malla confeccionada lista para instalar (hasta 7x10m)?"
+      };
+    }
+  }
+
   // ====== RESELLER DISAMBIGUATION RESPONSE ======
   // User replied to "¿una pieza o mayoreo?"
   if (convo?.lastIntent === "awaiting_reseller_intent") {
@@ -1199,8 +1248,8 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   }
 
   // ====== ROLL-SIZE DETECTION (any stage) ======
-  // If any dimension > 12m, this is a roll request, not confeccionada.
-  // Confeccionada goes up to ~7x10m. Rolls are 3x100, 4x50, etc.
+  // If any dimension > 12m, this MIGHT be a roll request — but don't switch silently.
+  // Ask the customer to confirm before changing flow.
   if (state.width && state.height && Math.max(state.width, state.height) > 12) {
     const rollSize = `${Math.min(state.width, state.height)}x${Math.max(state.width, state.height)}`;
 
@@ -1215,25 +1264,29 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       state.width = confeccionadaDim.width;
       state.height = confeccionadaDim.height;
       state.userExpressedSize = `${confeccionadaDim.width}x${confeccionadaDim.height}`;
-      // Try to extract percentage near the confeccionada dimension (e.g. "2X5 al 80%")
       const dimStr = confeccionadaDim.rawText || '';
       const afterDim = userMessage.slice(userMessage.indexOf(dimStr) + dimStr.length);
       const pctMatch = afterDim.match(/^\s*(?:al\s*)?(\d{2,3})\s*%/i);
       if (pctMatch) state.percentage = parseInt(pctMatch[1]);
       state.rollNote = `La de ${rollSize}m es un rollo de malla sombra, para esa medida te comunico con un especialista.\n\n`;
     } else {
-      console.log(`📦 Roll-size detected in malla flow: ${rollSize}m — handing off`);
-      const { executeHandoff } = require('../utils/executeHandoff');
-      return await executeHandoff(psid, convo, userMessage, {
-        reason: `Rollo de malla sombra: ${rollSize}m (no confeccionada)`,
-        responsePrefix: `La medida ${rollSize}m es un rollo de malla sombra. Para cotización de rollos te comunico con un especialista. `,
-        specsText: `Rollo de ${rollSize}m. `,
-        lastIntent: 'roll_handoff',
-        notificationText: `Rollo ${rollSize}m desde flujo confeccionada`,
-        extraState: { productInterest: 'rollo_malla_sombra' },
-        timingStyle: 'elaborate',
-        includeVideo: true
+      // Don't silently switch flow — ask for confirmation first
+      console.log(`📦 Roll-size detected in malla flow: ${rollSize}m — asking confirmation`);
+      await updateConversation(psid, {
+        lastIntent: 'malla_roll_confirmation',
+        productSpecs: {
+          productType: 'malla',
+          pendingRollSize: rollSize,
+          width: state.width,
+          height: state.height,
+          updatedAt: new Date()
+        }
       });
+      const maxConfeccionada = '7x10';
+      return {
+        type: "text",
+        text: `La medida ${rollSize}m es más grande que nuestra malla confeccionada (máximo ${maxConfeccionada}m). ¿Buscas un rollo de malla sombra o una malla confeccionada lista para instalar?`
+      };
     }
   }
 
