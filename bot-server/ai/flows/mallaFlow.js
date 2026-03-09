@@ -981,8 +981,9 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     }
   }
 
-  // ===== DIMENSION EXTRACTION (layered: AI → regex → single) =====
-  // Log what the classifier gave us so we can trace failures
+  // ===== DIMENSION EXTRACTION (layered: regex → AI → single) =====
+  // Regex is deterministic and reliable — always try it first.
+  // AI classifier can hallucinate dimensions (e.g. "4 por 10" → 4x19), so it's the fallback.
   const classifierHadDims = !!(entities.width && entities.height);
   const classifierHadDimStr = !!entities.dimensions;
   console.log(`🌐 Malla flow - Classifier entities: width=${entities.width ?? 'null'}, height=${entities.height ?? 'null'}, dimensions="${entities.dimensions ?? 'null'}" | message="${userMessage.slice(0, 60)}"`);
@@ -1013,18 +1014,38 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     }
   }
 
-  // FIRST: Check classifier entities (AI or quick classifier already extracted)
-  if (!hasNonMetricUnit && classifierHadDims) {
-    state.width = entities.width;
-    state.height = entities.height;
-    // Preserve user's dimension order from the raw dimension string (e.g. "9x6" stays "9 x 6")
-    if (entities.dimensions) {
-      const dimParts = entities.dimensions.match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)/);
-      state.userExpressedSize = dimParts ? `${dimParts[1]} x ${dimParts[2]}` : `${entities.width} x ${entities.height}`;
-    } else {
-      state.userExpressedSize = `${entities.width} x ${entities.height}`;
+  // FIRST: Regex on raw message (deterministic, can't hallucinate)
+  if (!hasNonMetricUnit) {
+    const dimsFromMessage = parseDimensions(userMessage);
+    if (dimsFromMessage) {
+      console.log(`🌐 Malla flow - [1/4 regex] Parsed "${userMessage.slice(0, 40)}" → ${dimsFromMessage.width}x${dimsFromMessage.height}`);
+      state.width = dimsFromMessage.width;
+      state.height = dimsFromMessage.height;
+      state.userExpressedSize = dimsFromMessage.userExpressed;
+      if (dimsFromMessage.convertedFromFeet) {
+        state.convertedFromFeet = true;
+        state.originalFeetStr = dimsFromMessage.originalFeetStr;
+      }
+      if (dimsFromMessage.convertedFromCentimeters) {
+        state.convertedFromCentimeters = true;
+        state.originalCmStr = dimsFromMessage.originalCmStr;
+      }
     }
-    console.log(`🌐 Malla flow - [1/4 AI entities] Using ${entities.width}x${entities.height}`);
+  }
+
+  // SECOND: AI classifier entities (fallback when regex can't parse)
+  if (!state.width || !state.height) {
+    if (classifierHadDims) {
+      state.width = entities.width;
+      state.height = entities.height;
+      if (entities.dimensions) {
+        const dimParts = entities.dimensions.match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)/);
+        state.userExpressedSize = dimParts ? `${dimParts[1]} x ${dimParts[2]}` : `${entities.width} x ${entities.height}`;
+      } else {
+        state.userExpressedSize = `${entities.width} x ${entities.height}`;
+      }
+      console.log(`🌐 Malla flow - [2/4 AI entities] Using ${entities.width}x${entities.height}`);
+    }
   }
   if (!state.width || !state.height) {
     if (classifierHadDimStr) {
@@ -1041,31 +1062,10 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
           state.convertedFromCentimeters = true;
           state.originalCmStr = dims.originalCmStr;
         }
-        console.log(`🌐 Malla flow - [2/4 AI dim string] Parsed "${entities.dimensions}" → ${dims.width}x${dims.height}`);
+        console.log(`🌐 Malla flow - [3/4 AI dim string] Parsed "${entities.dimensions}" → ${dims.width}x${dims.height}`);
       } else {
-        console.warn(`⚠️ Malla flow - [2/4 AI dim string] FAILED to parse "${entities.dimensions}" — classifier gave dimensions but regex couldn't parse them`);
+        console.warn(`⚠️ Malla flow - [3/4 AI dim string] FAILED to parse "${entities.dimensions}" — classifier gave dimensions but regex couldn't parse them`);
       }
-    }
-  }
-
-  // SECOND: Regex fallback on raw message (safety net)
-  if (!state.width || !state.height) {
-    const dimsFromMessage = parseDimensions(userMessage);
-    if (dimsFromMessage) {
-      console.log(`🌐 Malla flow - [3/4 regex fallback] Parsed "${userMessage.slice(0, 40)}" → ${dimsFromMessage.width}x${dimsFromMessage.height}`);
-      state.width = dimsFromMessage.width;
-      state.height = dimsFromMessage.height;
-      state.userExpressedSize = dimsFromMessage.userExpressed;
-      if (dimsFromMessage.convertedFromFeet) {
-        state.convertedFromFeet = true;
-        state.originalFeetStr = dimsFromMessage.originalFeetStr;
-      }
-      if (dimsFromMessage.convertedFromCentimeters) {
-        state.convertedFromCentimeters = true;
-        state.originalCmStr = dimsFromMessage.originalCmStr;
-      }
-    } else if (classifierHadDimStr || /\d/.test(userMessage)) {
-      console.warn(`⚠️ Malla flow - [3/4 regex fallback] FAILED on "${userMessage.slice(0, 60)}" — message has numbers but regex couldn't parse dimensions`);
     }
   }
 
@@ -1087,10 +1087,10 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   // Final trace: log which layer resolved dimensions (or if none did)
   if (state.width && state.height) {
-    const source = classifierHadDims ? 'AI entities' : classifierHadDimStr ? 'AI dim string' : 'regex fallback';
+    const source = hasNonMetricUnit ? 'feet conversion' : 'regex/AI';
     console.log(`✅ Malla flow - Dimensions resolved: ${state.width}x${state.height} (source: ${source})`);
   } else if (/\d/.test(userMessage)) {
-    console.warn(`❌ Malla flow - NO dimensions extracted from "${userMessage.slice(0, 60)}" — all 4 layers failed. Classifier had: width=${entities.width ?? 'null'}, height=${entities.height ?? 'null'}, dimensions="${entities.dimensions ?? 'null'}"`);
+    console.warn(`❌ Malla flow - NO dimensions extracted from "${userMessage.slice(0, 60)}" — all layers failed. Classifier had: width=${entities.width ?? 'null'}, height=${entities.height ?? 'null'}, dimensions="${entities.dimensions ?? 'null'}"`);
   }
 
   // CHECK FOR AREA (metros cuadrados) - offer closest standard sizes
