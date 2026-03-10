@@ -90,12 +90,18 @@ async function tryRegexAnswer(segment) {
       const w = Math.min(Math.floor(d1), Math.floor(d2));
       const h = Math.max(Math.floor(d1), Math.floor(d2));
 
+      // Track whether we floored the customer's dimensions
+      const wasFloored = (d1 !== Math.floor(d1)) || (d2 !== Math.floor(d2));
+      const requestedSize = wasFloored ? `${Math.min(d1, d2)}x${Math.max(d1, d2)}` : null;
+
       const product = await lookupProduct(w, h);
       if (product) {
         return {
           type: 'product_quote',
           width: w,
           height: h,
+          requestedSize,
+          sizeAdjusted: wasFloored,
           price: product.price,
           productName: product.name,
           productId: product._id?.toString(),
@@ -178,8 +184,9 @@ async function getAIAnswers(unansweredSegments, convo) {
           role: "system",
           content: `Eres una asesora de ventas de Hanlob, empresa mexicana que vende malla sombra confeccionada.
 
-PRODUCTO: Malla sombra raschel confeccionada, 90% cobertura, refuerzo en esquinas (vida útil hasta 5 años), ojillos cada 80 cm por lado, lista para instalar.
+PRODUCTO: Malla sombra raschel confeccionada, 90% cobertura, refuerzo en esquinas (vida útil hasta 5 años), ojillos cada 80 cm por lado, lista para instalar. Sí es reforzada — tiene refuerzo en las 4 esquinas.
 COLORES: beige y negro.
+MEDIDAS: Solo medidas estándar en números enteros (ej: 2x4, 3x5, 4x6). NO manejamos medidas con decimales (ej: 2.50, 3.50). Si preguntan por una medida con decimales, explicar que solo manejamos medidas enteras y que se recomienda la medida inmediata inferior para dar espacio a los tensores o soga sujetadora.
 ENVÍO: incluido a todo México vía Mercado Libre.
 PAGO: 100% por adelantado en Mercado Libre (tarjeta, OXXO, meses sin intereses). NO contra entrega.
 UBICACIÓN: Querétaro, Microparque Industrial Navex Park, Tlacote.
@@ -230,7 +237,11 @@ async function combineWithAI(segments, userMessage, psid, convo) {
 
     if (seg.answer.type === 'product_quote') {
       productQuote = seg.answer;
-      answeredData.push(`- Precio: Malla de ${seg.answer.width}x${seg.answer.height}m a $${seg.answer.price} con envío incluido`);
+      if (seg.answer.sizeAdjusted && seg.answer.requestedSize) {
+        answeredData.push(`- Precio: El cliente pidió ${seg.answer.requestedSize}m pero no manejamos medidas con decimales. La medida estándar más cercana es ${seg.answer.width}x${seg.answer.height}m a $${seg.answer.price} con envío incluido. (Es necesario considerar un tamaño menor para dar espacio a los tensores o soga sujetadora.)`);
+      } else {
+        answeredData.push(`- Precio: Malla de ${seg.answer.width}x${seg.answer.height}m a $${seg.answer.price} con envío incluido`);
+      }
     } else {
       answeredData.push(`- ${seg.answer.text}`);
     }

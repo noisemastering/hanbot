@@ -421,21 +421,11 @@ async function detectExplicitProductSwitch(userMessage, rawCurrentFlow, classifi
     }
   }
 
-  // Check classification if it detected a different product
-  if (classification?.product && classification.product !== PRODUCTS.UNKNOWN) {
-    const flowMap = {
-      [PRODUCTS.MALLA_SOMBRA]: 'malla_sombra',
-      [PRODUCTS.ROLLO]: 'rollo',
-      [PRODUCTS.BORDE_SEPARADOR]: 'borde_separador',
-      [PRODUCTS.GROUNDCOVER]: 'groundcover',
-      [PRODUCTS.MONOFILAMENTO]: 'monofilamento'
-    };
-    const classifiedFlow = flowMap[classification.product];
-    if (classifiedFlow && classifiedFlow !== currentFlow) {
-      console.log(`🔍 Classification detected different product: ${classifiedFlow} (current: ${currentFlow})`);
-      return classifiedFlow;
-    }
-  }
+  // NOTE: Do NOT use classification.product here. The AI classifier often defaults to
+  // malla_sombra for ambiguous messages (it's the primary product), which would silently
+  // switch away from borde/rollo/groundcover flows even when the user never mentioned
+  // a different product. This function should only detect EXPLICIT product mentions
+  // (keywords, dimensions) — not AI inference.
 
   return null;
 }
