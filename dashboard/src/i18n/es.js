@@ -987,6 +987,7 @@ const es = {
   "messages.whatsappNote": "WhatsApp • Puedes llamar o enviar mensaje directo",
   "messages.replyVia": "Responder por {{channel}}...",
   "messages.status": "Estado",
+  "messages.allAds": "Todos los anuncios",
   "messages.resumeBot": "Retomar Bot",
   "messages.resumeBotTitle": "Re-procesar el último mensaje del cliente con el bot",
   "messages.noResponse": "El bot no generó respuesta",

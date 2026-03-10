@@ -25,10 +25,13 @@ function Messages() {
   const [totalPages, setTotalPages] = useState(1);
   const [totalConversations, setTotalConversations] = useState(0);
   const [loadingFiltered, setLoadingFiltered] = useState(false);
+  const [adFilter, setAdFilter] = useState('');
+  const [availableAds, setAvailableAds] = useState([]);
 
   const quickActionPsidsRef = useRef([]);
   const currentPageRef = useRef(1);
   const dateFilterRef = useRef('today');
+  const adFilterRef = useRef('');
 
   // Helper function to show message excerpt
   const getMessageExcerpt = (text, maxLength = 60) => {
@@ -226,6 +229,9 @@ function Messages() {
       if (exclude.length > 0) {
         params.set('excludePsids', exclude.join(','));
       }
+      if (adFilterRef.current) {
+        params.set('adId', adFilterRef.current);
+      }
       const res = await API.get(`/conversations/grouped?${params}`);
       const convs = res.data.conversations || [];
       setFilteredConversations(convs);
@@ -241,12 +247,22 @@ function Messages() {
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const fetchAvailableAds = useCallback(async () => {
+    try {
+      const res = await API.get('/conversations/ads');
+      setAvailableAds(res.data.ads || []);
+    } catch (err) {
+      console.error("Error fetching available ads:", err);
+    }
+  }, []);
+
   useEffect(() => {
     const init = async () => {
-      // Fetch quick actions + pending handoffs in parallel
+      // Fetch quick actions + pending handoffs + available ads in parallel
       const [excludePsids] = await Promise.all([
         fetchQuickActions(),
-        fetchPendingHandoffs()
+        fetchPendingHandoffs(),
+        fetchAvailableAds()
       ]);
       setInitialLoading(false);
       // Then fetch filtered page (needs exclude list)
@@ -262,7 +278,13 @@ function Messages() {
     }, 30000);
 
     return () => clearInterval(interval);
-  }, [fetchQuickActions, fetchFilteredPage]);
+  }, [fetchQuickActions, fetchFilteredPage, fetchAvailableAds]);
+
+  // Refetch filtered page when ad filter changes
+  useEffect(() => {
+    adFilterRef.current = adFilter;
+    fetchFilteredPage(1);
+  }, [adFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refetch filtered page when date filter changes
   useEffect(() => {
@@ -824,8 +846,9 @@ function Messages() {
           )}
         </div>
 
-        {/* Date Filter Buttons */}
-        <div style={{ marginBottom: "1rem" }}>
+        {/* Filters Row */}
+        <div style={{ marginBottom: "1rem", display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
+          {/* Date Filter Buttons */}
           <div style={{
             display: "flex",
             gap: "0.5rem",
@@ -867,6 +890,31 @@ function Messages() {
               </button>
             ))}
           </div>
+
+          {/* Ad Filter Dropdown */}
+          {availableAds.length > 0 && (
+            <select
+              value={adFilter}
+              onChange={(e) => setAdFilter(e.target.value)}
+              style={{
+                padding: "0.5rem 0.75rem",
+                backgroundColor: adFilter ? "#7c4dff" : "rgba(255, 255, 255, 0.1)",
+                color: "white",
+                border: adFilter ? "2px solid #7c4dff" : "1px solid #555",
+                borderRadius: "8px",
+                cursor: "pointer",
+                fontSize: "0.9rem",
+                maxWidth: "280px"
+              }}
+            >
+              <option value="" style={{ backgroundColor: "#1a1a1a" }}>{t('messages.allAds')}</option>
+              {availableAds.map(ad => (
+                <option key={ad.adId} value={ad.adId} style={{ backgroundColor: "#1a1a1a" }}>
+                  {ad.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         {/* Main conversations table */}

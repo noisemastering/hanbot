@@ -1023,6 +1023,7 @@ const en = {
   "messages.whatsappNote": "WhatsApp • You can call or send a direct message",
   "messages.replyVia": "Reply via {{channel}}...",
   "messages.status": "Status",
+  "messages.allAds": "All ads",
   "messages.resumeBot": "Resume Bot",
   "messages.resumeBotTitle": "Re-process customer's last message with the bot",
   "messages.noResponse": "Bot generated no response",

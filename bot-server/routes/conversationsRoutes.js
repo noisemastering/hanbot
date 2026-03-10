@@ -30,9 +30,48 @@ async function sendMessengerMessage(psid, text) {
 }
 
 // GET /conversations/grouped - Grouped conversations with pagination (replaces old / + N status calls)
+// GET /conversations/ads - List ads that have at least one conversation (for filter dropdown)
+router.get('/ads', async (req, res) => {
+  try {
+    const Ad = require('../models/Ad');
+
+    // Get distinct adIds from conversations that have one
+    const adIds = await Conversation.distinct('adId', { adId: { $ne: null, $exists: true } });
+
+    if (adIds.length === 0) {
+      return res.json({ ads: [] });
+    }
+
+    // Look up ad names from Ad collection
+    const ads = await Ad.find({ fbAdId: { $in: adIds } })
+      .select('fbAdId name status')
+      .lean();
+
+    // Build map of fbAdId → name
+    const adNameMap = {};
+    for (const ad of ads) {
+      adNameMap[ad.fbAdId] = ad.name;
+    }
+
+    // Return all adIds with names (some may not have an Ad doc)
+    const result = adIds.map(id => ({
+      adId: id,
+      name: adNameMap[id] || id
+    }));
+
+    // Sort by name
+    result.sort((a, b) => a.name.localeCompare(b.name));
+
+    res.json({ ads: result });
+  } catch (error) {
+    console.error('Error fetching ads for filter:', error);
+    res.status(500).json({ error: 'Failed to fetch ads' });
+  }
+});
+
 router.get('/grouped', async (req, res) => {
   try {
-    const { start, end, page = 1, limit = 30, excludePsids } = req.query;
+    const { start, end, page = 1, limit = 30, excludePsids, adId } = req.query;
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
 
@@ -44,13 +83,28 @@ router.get('/grouped', async (req, res) => {
     // Build exclude list
     const excludeList = excludePsids ? excludePsids.split(',').filter(Boolean) : [];
 
+    // If filtering by ad, first get psids from conversations with that adId
+    let adFilterPsids = null;
+    if (adId) {
+      adFilterPsids = await Conversation.distinct('psid', { adId });
+      if (adFilterPsids.length === 0) {
+        return res.json({
+          conversations: [],
+          pagination: { page: 1, limit: limitNum, total: 0, pages: 0 }
+        });
+      }
+    }
+
     const hasDateFilter = !!(start || end);
     const pipeline = [];
 
-    // 1. Optional date filter on messages
+    // 1. Optional date filter on messages + ad filter
     const matchStage = {};
     if (hasDateFilter) matchStage.timestamp = dateMatch;
     if (excludeList.length > 0) matchStage.psid = { $nin: excludeList };
+    if (adFilterPsids) {
+      matchStage.psid = { ...matchStage.psid, $in: adFilterPsids };
+    }
     if (Object.keys(matchStage).length > 0) pipeline.push({ $match: matchStage });
 
     // 2. Sort by timestamp desc so $first gives latest
@@ -58,7 +112,7 @@ router.get('/grouped', async (req, res) => {
 
     // 2b. For unfiltered queries (quick actions), pre-limit to recent messages
     // to avoid scanning the entire collection. 500 messages covers 10+ conversations easily.
-    if (!hasDateFilter && excludeList.length === 0) {
+    if (!hasDateFilter && excludeList.length === 0 && !adFilterPsids) {
       pipeline.push({ $limit: 500 });
     }
 
@@ -99,16 +153,18 @@ router.get('/grouped', async (req, res) => {
         },
         handoffRequested: { $ifNull: ['$conv.handoffRequested', false] },
         handoffReason: '$conv.handoffReason',
-        state: '$conv.state'
+        state: '$conv.state',
+        adId: '$conv.adId'
       }
     });
 
     // 6. Sort by latest message
     pipeline.push({ $sort: { lastMessageAt: -1 } });
 
-    // Count total only when paginating (date-filtered queries)
+    // Count total for paginated queries
+    const shouldCount = hasDateFilter || !!adFilterPsids;
     let total = 0;
-    if (hasDateFilter) {
+    if (shouldCount) {
       const countPipeline = [...pipeline, { $count: 'total' }];
       const countResult = await Message.aggregate(countPipeline);
       total = countResult.length > 0 ? countResult[0].total : 0;
@@ -125,8 +181,8 @@ router.get('/grouped', async (req, res) => {
       pagination: {
         page: pageNum,
         limit: limitNum,
-        total: hasDateFilter ? total : conversations.length,
-        pages: hasDateFilter ? Math.ceil(total / limitNum) : 1
+        total: shouldCount ? total : conversations.length,
+        pages: shouldCount ? Math.ceil(total / limitNum) : 1
       }
     });
   } catch (error) {
