@@ -1295,25 +1295,22 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     }
   }
 
-  // ====== PRODUCT FEATURE QUESTIONS (any stage) ======
-  // When THIS message contains dimensions, don't return the feature answer early —
-  // instead capture it and prepend to the quote so the customer gets both.
-  const messageHasDimensions = /\d+\s*[xX×]\s*\d+/.test(userMessage);
+  // ====== PRODUCT FEATURE QUESTIONS ======
+  // NEVER return early — always capture feature answers and fold them into the main response.
+  // The flow must process everything (dimensions, stage, quote) before responding.
   const featureResponse = checkProductFeatureQuestions(userMessage, state, convo);
-  if (featureResponse && !messageHasDimensions) {
-    await updateConversation(psid, { lastIntent: 'malla_feature_answer', unknownCount: 0 });
-    return featureResponse;
-  }
-  // Both dimensions AND a feature question in the same message — fold the answer into the quote
-  if (featureResponse && messageHasDimensions) {
+  if (featureResponse) {
     state.featureNote = featureResponse.text.replace(/\n\n¿(?:Necesitas algo más|Qué medida necesitas)\?$/, '');
-    console.log(`📝 Feature answer saved for quote: "${state.featureNote}"`);
+    console.log(`📝 Feature answer captured: "${state.featureNote}"`);
   }
 
   // Determine current stage
   const stage = determineStage(state);
 
   // ====== AI FALLBACK: when we quoted products and user responds but regex can't parse ======
+  let response;
+  let aiFallbackHandled = false;
+
   if (stage === STAGES.AWAITING_DIMENSIONS &&
       convo?.lastQuotedProducts?.length > 0 &&
       userMessage) {
@@ -1330,81 +1327,89 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       if ((aiResult.action === 'select_products' || aiResult.action === 'select_one') &&
           convo.lastQuotedProducts.length > 0) {
         const selectionResponse = await handleQuoteSelection(aiResult, convo.lastQuotedProducts, psid, convo);
-        if (selectionResponse) return selectionResponse;
+        if (selectionResponse) { response = selectionResponse; aiFallbackHandled = true; }
       }
 
-      if (aiResult.action === 'provide_dimensions' && aiResult.dimensions) {
+      if (!aiFallbackHandled && aiResult.action === 'provide_dimensions' && aiResult.dimensions) {
         state.width = aiResult.dimensions.width;
         state.height = aiResult.dimensions.height;
-        return await handleComplete(intent, state, sourceContext, psid, convo, userMessage);
+        response = await handleComplete(intent, state, sourceContext, psid, convo, userMessage);
+        aiFallbackHandled = true;
       }
 
-      if (aiResult.action === 'answer_question' && aiResult.text) {
+      if (!aiFallbackHandled && aiResult.action === 'answer_question' && aiResult.text) {
         await updateConversation(psid, { lastIntent: 'malla_ai_answered', unknownCount: 0 });
         let answerText = aiResult.text;
         if (convo.lastQuotedProducts?.length > 0) {
           answerText += '\n\n¿Quieres que te pase los enlaces para comprar?';
         }
-        return { type: "text", text: answerText };
+        response = { type: "text", text: answerText };
+        aiFallbackHandled = true;
       }
     }
     // If AI returned "none" or low confidence, fall through to normal flow
   }
 
-  // Generate response based on stage
-  let response;
-
-  switch (stage) {
-    case STAGES.AWAITING_DIMENSIONS:
-      response = await handleAwaitingDimensions(intent, state, sourceContext, userMessage, convo, psid);
-      break;
-
-    case STAGES.COMPLETE:
-      // If dimensions were inferred from centimeters, confirm before quoting
-      if (state.convertedFromCentimeters && convo?.lastIntent !== 'malla_cm_confirmed') {
-        console.log(`📐 Centimeter conversion detected: ${state.originalCmStr} → ${state.width}x${state.height}m, asking confirmation`);
-        await updateConversation(psid, {
-          lastIntent: 'malla_awaiting_cm_confirmation',
-          productInterest: 'malla_sombra',
-          currentFlow: 'malla_sombra',
-          productSpecs: {
-            productType: 'malla_sombra',
-            width: state.width,
-            height: state.height,
-            pendingCmConfirmation: true,
-            originalCmStr: state.originalCmStr,
-            updatedAt: new Date()
-          }
-        });
-        response = {
-          type: "text",
-          text: `¿Te refieres a ${state.width} x ${state.height} metros?`
-        };
+  // Generate response based on stage (if AI fallback didn't handle it)
+  if (!aiFallbackHandled) {
+    switch (stage) {
+      case STAGES.AWAITING_DIMENSIONS:
+        response = await handleAwaitingDimensions(intent, state, sourceContext, userMessage, convo, psid);
         break;
-      }
-      response = await handleComplete(intent, state, sourceContext, psid, convo, userMessage);
-      break;
 
-    default:
-      response = await handleStart(sourceContext, convo, psid, userMessage);
+      case STAGES.COMPLETE:
+        // If dimensions were inferred from centimeters, confirm before quoting
+        if (state.convertedFromCentimeters && convo?.lastIntent !== 'malla_cm_confirmed') {
+          console.log(`📐 Centimeter conversion detected: ${state.originalCmStr} → ${state.width}x${state.height}m, asking confirmation`);
+          await updateConversation(psid, {
+            lastIntent: 'malla_awaiting_cm_confirmation',
+            productInterest: 'malla_sombra',
+            currentFlow: 'malla_sombra',
+            productSpecs: {
+              productType: 'malla_sombra',
+              width: state.width,
+              height: state.height,
+              pendingCmConfirmation: true,
+              originalCmStr: state.originalCmStr,
+              updatedAt: new Date()
+            }
+          });
+          response = {
+            type: "text",
+            text: `¿Te refieres a ${state.width} x ${state.height} metros?`
+          };
+          break;
+        }
+        response = await handleComplete(intent, state, sourceContext, psid, convo, userMessage);
+        break;
+
+      default:
+        response = await handleStart(sourceContext, convo, psid, userMessage);
+    }
+
+    // Save updated specs (but don't overwrite if we're awaiting confirmation)
+    const convoNow = await require("../../conversationManager").getConversation(psid);
+    if (convoNow?.lastIntent !== "malla_awaiting_confirmation") {
+      await updateConversation(psid, {
+        lastIntent: `malla_${stage}`,
+        productInterest: "malla_sombra",
+        productSpecs: {
+          productType: "malla",
+          width: state.width,
+          height: state.height,
+          percentage: state.percentage,
+          color: state.color,
+          quantity: state.quantity,
+          updatedAt: new Date()
+        }
+      });
+    }
   }
 
-  // Save updated specs (but don't overwrite if we're awaiting confirmation)
-  const convoNow = await require("../../conversationManager").getConversation(psid);
-  if (convoNow?.lastIntent !== "malla_awaiting_confirmation") {
-    await updateConversation(psid, {
-      lastIntent: `malla_${stage}`,
-      productInterest: "malla_sombra",
-      productSpecs: {
-        productType: "malla",
-        width: state.width,
-        height: state.height,
-        percentage: state.percentage,
-        color: state.color,
-        quantity: state.quantity,
-        updatedAt: new Date()
-      }
-    });
+  // ====== PREPEND FEATURE ANSWER to ANY response ======
+  // Feature answers are never standalone — they're always folded into the main response.
+  if (state.featureNote && response?.text) {
+    response.text = `${state.featureNote}\n\n${response.text}`;
   }
 
   return response;
@@ -2304,10 +2309,9 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       console.log(`⚠️ Product ${product.name} has no online store link`);
 
       const { executeHandoff: execHandoff6 } = require('../utils/executeHandoff');
-      const featurePrefix = state.featureNote ? `${state.featureNote}.\n\n` : '';
       return await execHandoff6(psid, convo, userMessage, {
         reason: `Malla ${width}x${height}m - no link available`,
-        responsePrefix: `${featurePrefix}¡Tenemos la ${displayName}! `,
+        responsePrefix: `¡Tenemos la ${displayName}! `,
         specsText: `Malla de ${width}x${height}m. `,
         notificationText: `Malla ${width}x${height}m - producto sin link`,
         timingStyle: 'elaborate',
@@ -2366,10 +2370,9 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     }
 
     const rollNote = state.rollNote || '';
-    const featureNote = state.featureNote ? `${state.featureNote}.\n\n` : '';
     return {
       type: "text",
-      text: `${featureNote}${rollNote}${correctionNote}${quantityText}${salesPitch}\n` +
+      text: `${rollNote}${correctionNote}${quantityText}${salesPitch}\n` +
             `🛒 Cómprala aquí:\n${trackedLink}${wholesaleMention}`
     };
   }
