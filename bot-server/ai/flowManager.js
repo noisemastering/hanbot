@@ -833,8 +833,10 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
 
   // ===== STEP 0.5: CHECK FOR EXPLICIT PRODUCT SWITCH =====
   // If user is in a product flow and explicitly asks for a different product we sell, switch directly
+  // Skip for non-product flows (reseller, lead_capture) — they have their own routing logic
   const currentFlow = normalizeFlow(convo?.currentFlow) || 'default';
-  if (currentFlow !== 'default' && !convo?.pendingFlowChange) {
+  const PRODUCT_FLOWS = new Set(['malla_sombra', 'rollo', 'borde_separador', 'groundcover', 'monofilamento']);
+  if (PRODUCT_FLOWS.has(currentFlow) && !convo?.pendingFlowChange) {
     const switchToFlow = await detectExplicitProductSwitch(userMessage, currentFlow, classification);
 
     if (switchToFlow) {
@@ -874,7 +876,7 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
         console.log(`🎯 ===== END FLOW MANAGER (pending product switch confirmation) =====\n`);
         return {
           type: "text",
-          text: `Estás preguntando por ${currentName}. ¿Te interesa cambiarte a ${targetName}?`,
+          text: `Veo que estamos hablando de ${currentName}. ¿Te interesa más bien ${targetName}?`,
           handledBy: "flow:product_switch_confirmation",
           purchaseIntent: 'medium'
         };
