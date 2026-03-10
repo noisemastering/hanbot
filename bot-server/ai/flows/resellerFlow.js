@@ -173,7 +173,35 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       return { ...handoffResponse, handledBy: "reseller" };
     }
 
-    // --- Path 3: Retail buyer (gives dimensions or asks for a specific product) ---
+    // --- Path 3: Retail intent (wants to buy, not resell) ---
+    const RETAIL_PATTERNS = /\b(busco\s+comprar|quiero\s+comprar|solo\s+(quiero\s+)?comprar|para\s+uso\s+propio|comprar\s+una|quiero\s+una|necesito\s+una|una\s+pieza|una\s+malla|solo\s+una|para\s+mi|uso\s+personal)\b/i;
+    if (RETAIL_PATTERNS.test(msg)) {
+      const retailFlow = convo?.productInterest === 'borde_separador' ? 'borde_separador' : 'malla_sombra';
+      console.log(`🏪 Reseller flow — retail intent "${msg.substring(0, 40)}", switching to ${retailFlow}`);
+
+      await updateConversation(psid, {
+        isWholesaleInquiry: false,
+        currentFlow: retailFlow,
+        lastIntent: null
+      });
+
+      // Check if they also gave dimensions in the same message
+      const dims = parseDimensions(msg);
+      if (dims) {
+        // Return null to re-process with dimensions in the retail flow
+        return null;
+      }
+
+      // No dimensions yet — ask for them naturally
+      return {
+        type: "text",
+        text: convo?.productInterest === 'borde_separador'
+          ? "¡Perfecto! ¿Qué largo necesitas?"
+          : "¡Perfecto! ¿Qué medida necesitas? (ejemplo: 3x4m)"
+      };
+    }
+
+    // --- Path 4: Retail buyer (gives dimensions directly) ---
     const dimensions = parseDimensions(msg);
     if (dimensions) {
       // Break out to the ad's product flow (malla by default, borde if that's what the ad sells)
