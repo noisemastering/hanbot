@@ -307,7 +307,8 @@ const FLOW_DISPLAY_NAMES = {
   'malla_sombra': 'malla sombra confeccionada',
   'borde_separador': 'borde separador',
   'groundcover': 'ground cover (antimaleza)',
-  'monofilamento': 'malla monofilamento'
+  'monofilamento': 'malla monofilamento',
+  'reseller': 'distribución'
 };
 
 /**
@@ -833,10 +834,8 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
 
   // ===== STEP 0.5: CHECK FOR EXPLICIT PRODUCT SWITCH =====
   // If user is in a product flow and explicitly asks for a different product we sell, switch directly
-  // Skip for non-product flows (reseller, lead_capture) — they have their own routing logic
   const currentFlow = normalizeFlow(convo?.currentFlow) || 'default';
-  const PRODUCT_FLOWS = new Set(['malla_sombra', 'rollo', 'borde_separador', 'groundcover', 'monofilamento']);
-  if (PRODUCT_FLOWS.has(currentFlow) && !convo?.pendingFlowChange) {
+  if (currentFlow !== 'default' && !convo?.pendingFlowChange) {
     const switchToFlow = await detectExplicitProductSwitch(userMessage, currentFlow, classification);
 
     if (switchToFlow) {
@@ -874,9 +873,15 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
         });
 
         console.log(`🎯 ===== END FLOW MANAGER (pending product switch confirmation) =====\n`);
+
+        // Reseller flow gets a special confirmation that makes sense to the customer
+        const confirmText = currentFlow === 'reseller'
+          ? `¿Deseas convertirte en distribuidor Hanlob o solo buscas comprar ${targetName}?`
+          : `Veo que estamos hablando de ${currentName}. ¿Te interesa más bien ${targetName}?`;
+
         return {
           type: "text",
-          text: `Veo que estamos hablando de ${currentName}. ¿Te interesa más bien ${targetName}?`,
+          text: confirmText,
           handledBy: "flow:product_switch_confirmation",
           purchaseIntent: 'medium'
         };
