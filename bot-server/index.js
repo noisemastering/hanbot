@@ -956,16 +956,13 @@ app.post("/webhook", async (req, res) => {
           : 999;
         const isRecentReturn = hoursSinceLast <= 24 && convo?.greeted;
 
-        // If user is mid-conversation (messaged within last 30 min), don't reset —
-        // they likely re-clicked the ad accidentally. Just update campaign tracking.
+        // If user is mid-conversation AND this is the exact same ad they already
+        // clicked, skip — they likely re-clicked accidentally. Otherwise always
+        // process the referral (the ad IS the entry point and sets the flow).
         const minutesSinceLast = hoursSinceLast * 60;
-        if (minutesSinceLast < 30 && convo?.currentFlow) {
-          console.log(`🛡️ User ${senderPsid} is mid-conversation (${minutesSinceLast.toFixed(0)}min ago, flow: ${convo.currentFlow}), skipping reset & greeting`);
-          await updateConversation(senderPsid, {
-            campaignRef: referral.ref || null,
-            adId: referral.ad_id || null,
-            campaignId: referral.campaign_id || null,
-          });
+        const isSameAd = convo?.adId && convo.adId === referral.ad_id;
+        if (minutesSinceLast < 30 && isSameAd) {
+          console.log(`🛡️ User ${senderPsid} re-clicked same ad ${referral.ad_id} (${minutesSinceLast.toFixed(0)}min ago), skipping reset & greeting`);
           adGreetingSent = true; // prevent greeting, let message handler run normally
         } else {
         // ---- Normal ad-entry flow: reset + greet ----
