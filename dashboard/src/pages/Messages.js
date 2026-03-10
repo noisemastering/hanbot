@@ -651,6 +651,31 @@ function Messages() {
         </div>
       )}
 
+      {/* Ad Filter — applies to both sections */}
+      <div style={{ marginBottom: "1rem" }}>
+        <select
+          value={adFilter}
+          onChange={(e) => setAdFilter(e.target.value)}
+          style={{
+            padding: "0.5rem 0.75rem",
+            backgroundColor: adFilter ? "#7c4dff" : "rgba(255, 255, 255, 0.1)",
+            color: "white",
+            border: adFilter ? "2px solid #7c4dff" : "1px solid #555",
+            borderRadius: "8px",
+            cursor: "pointer",
+            fontSize: "0.9rem",
+            maxWidth: "300px"
+          }}
+        >
+          <option value="" style={{ backgroundColor: "#1a1a1a" }}>{t('messages.allAds')}</option>
+          {availableAds.map(ad => (
+            <option key={ad.adId} value={ad.adId} style={{ backgroundColor: "#1a1a1a" }}>
+              {ad.name}
+            </option>
+          ))}
+        </select>
+      </div>
+
       {/* SECTION 1: Recent Activity Table */}
       <div style={{ marginBottom: "2.5rem" }}>
         <h2 style={{ color: "white", marginBottom: "1rem", fontSize: "1.3rem", fontWeight: "bold" }}>
@@ -848,73 +873,43 @@ function Messages() {
           )}
         </div>
 
-        {/* Filters Row */}
-        <div style={{ marginBottom: "1rem", display: "flex", gap: "1rem", flexWrap: "wrap", alignItems: "center" }}>
-          {/* Date Filter Buttons */}
-          <div style={{
-            display: "flex",
-            gap: "0.5rem",
-            flexWrap: "wrap"
-          }}>
-            {[
-              { key: 'today', label: t('messages.filterToday') },
-              { key: 'yesterday', label: t('messages.filterYesterday') },
-              { key: 'week', label: t('messages.filterWeek') },
-              { key: 'month', label: t('messages.filterMonth') },
-              { key: 'all', label: t('messages.filterAll') }
-            ].map(({ key, label }) => (
-              <button
-                key={key}
-                onClick={() => setDateFilter(key)}
-                style={{
-                  padding: "0.5rem 1rem",
-                  backgroundColor: dateFilter === key ? "#4caf50" : "rgba(255, 255, 255, 0.1)",
-                  color: "white",
-                  border: dateFilter === key ? "2px solid #4caf50" : "1px solid #555",
-                  borderRadius: "8px",
-                  cursor: "pointer",
-                  fontWeight: dateFilter === key ? "bold" : "normal",
-                  transition: "all 0.2s ease",
-                  fontSize: "0.9rem"
-                }}
-                onMouseEnter={(e) => {
-                  if (dateFilter !== key) {
-                    e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.15)";
-                  }
-                }}
-                onMouseLeave={(e) => {
-                  if (dateFilter !== key) {
-                    e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.1)";
-                  }
-                }}
-              >
-                {label}
-              </button>
-            ))}
-          </div>
-
-          {/* Ad Filter Dropdown */}
-          <select
-              value={adFilter}
-              onChange={(e) => setAdFilter(e.target.value)}
+        {/* Date Filter Buttons */}
+        <div style={{ marginBottom: "1rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
+          {[
+            { key: 'today', label: t('messages.filterToday') },
+            { key: 'yesterday', label: t('messages.filterYesterday') },
+            { key: 'week', label: t('messages.filterWeek') },
+            { key: 'month', label: t('messages.filterMonth') },
+            { key: 'all', label: t('messages.filterAll') }
+          ].map(({ key, label }) => (
+            <button
+              key={key}
+              onClick={() => setDateFilter(key)}
               style={{
-                padding: "0.5rem 0.75rem",
-                backgroundColor: adFilter ? "#7c4dff" : "rgba(255, 255, 255, 0.1)",
+                padding: "0.5rem 1rem",
+                backgroundColor: dateFilter === key ? "#4caf50" : "rgba(255, 255, 255, 0.1)",
                 color: "white",
-                border: adFilter ? "2px solid #7c4dff" : "1px solid #555",
+                border: dateFilter === key ? "2px solid #4caf50" : "1px solid #555",
                 borderRadius: "8px",
                 cursor: "pointer",
-                fontSize: "0.9rem",
-                maxWidth: "280px"
+                fontWeight: dateFilter === key ? "bold" : "normal",
+                transition: "all 0.2s ease",
+                fontSize: "0.9rem"
+              }}
+              onMouseEnter={(e) => {
+                if (dateFilter !== key) {
+                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.15)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (dateFilter !== key) {
+                  e.currentTarget.style.backgroundColor = "rgba(255, 255, 255, 0.1)";
+                }
               }}
             >
-              <option value="" style={{ backgroundColor: "#1a1a1a" }}>{t('messages.allAds')}</option>
-              {availableAds.map(ad => (
-                <option key={ad.adId} value={ad.adId} style={{ backgroundColor: "#1a1a1a" }}>
-                  {ad.name}
-                </option>
-              ))}
-            </select>
+              {label}
+            </button>
+          ))}
         </div>
 
         {/* Main conversations table */}
