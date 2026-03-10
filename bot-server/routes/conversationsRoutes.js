@@ -287,6 +287,81 @@ router.post('/:psid/resolve-handoff', async (req, res) => {
   }
 });
 
+// POST /conversations/:psid/resume-bot - Resume bot on a needs_human conversation
+// Re-processes the customer's last message through the bot pipeline and sends the response
+router.post('/:psid/resume-bot', async (req, res) => {
+  try {
+    const { psid } = req.params;
+
+    const conversation = await Conversation.findOne({ psid }).lean();
+    if (!conversation) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+
+    const channel = conversation.channel || 'facebook';
+
+    // Find the customer's last message
+    const lastUserMsg = await Message.findOne({ psid, senderType: 'user' })
+      .sort({ timestamp: -1 })
+      .lean();
+
+    if (!lastUserMsg?.text) {
+      return res.status(400).json({ success: false, error: 'No user message to re-process' });
+    }
+
+    console.log(`🔄 Resume bot for ${psid}: re-processing "${lastUserMsg.text.substring(0, 80)}..."`);
+
+    // Clear needs_human / human_active state so generateReply doesn't bail
+    await Conversation.findOneAndUpdate(
+      { psid },
+      {
+        state: 'active',
+        lastIntent: 'bot_resumed',
+        handoffResolved: true,
+        handoffResolvedAt: new Date(),
+        handoffRequested: false
+      }
+    );
+
+    // Re-run the message through the AI pipeline
+    const { generateReply } = require('../ai');
+    const aiResponse = await generateReply(lastUserMsg.text, psid);
+
+    if (!aiResponse?.text) {
+      return res.json({ success: true, responded: false, reason: 'No AI response generated' });
+    }
+
+    // Send via appropriate channel
+    if (channel === 'whatsapp') {
+      const phoneNumber = psid.startsWith('wa:') ? psid.substring(3) : psid;
+      await sendWhatsAppText(phoneNumber, aiResponse.text);
+    } else {
+      await sendMessengerMessage(psid, aiResponse.text);
+    }
+
+    // Save bot response
+    await Message.create({
+      psid,
+      text: aiResponse.text,
+      senderType: 'bot',
+      timestamp: new Date()
+    });
+
+    console.log(`✅ Bot resumed for ${psid}, sent: "${aiResponse.text.substring(0, 80)}..."`);
+
+    res.json({
+      success: true,
+      responded: true,
+      text: aiResponse.text,
+      channel
+    });
+
+  } catch (error) {
+    console.error('Error resuming bot:', error);
+    res.status(500).json({ success: false, error: 'Failed to resume bot' });
+  }
+});
+
 // GET /conversations/:psid - Get messages for specific user with channel information
 router.get('/:psid', async (req, res) => {
   try {

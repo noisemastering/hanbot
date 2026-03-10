@@ -333,6 +333,35 @@ function Messages() {
     }
   };
 
+  // Resume bot — re-process customer's last message through the AI pipeline
+  const [resumingBot, setResumingBot] = useState(false);
+  const handleResumeBot = async (psid) => {
+    setResumingBot(true);
+    try {
+      const response = await API.post(`/conversations/${psid}/resume-bot`);
+      if (response.data.success && response.data.responded) {
+        // Add bot response to the conversation view
+        setFullConversation(prev => [...prev, {
+          text: response.data.text,
+          senderType: 'bot',
+          timestamp: new Date().toISOString()
+        }]);
+        // Update status to show bot is active
+        setConversationStatuses(prev => ({
+          ...prev,
+          [psid]: { ...prev[psid], humanActive: false }
+        }));
+      } else {
+        alert(response.data.reason || t('messages.noResponse'));
+      }
+    } catch (err) {
+      console.error("Error resuming bot:", err);
+      alert(`Error: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setResumingBot(false);
+    }
+  };
+
   // Send reply to user (works for both Messenger and WhatsApp)
   const handleSendReply = async () => {
     if (!replyText.trim() || !selectedPsid) return;
@@ -1313,6 +1342,22 @@ function Messages() {
                   }}
                 >
                   {showSaleForm ? `✕ ${t('messages.closeSale')}` : `💲 ${t('messages.registerSale')}`}
+                </button>
+                <button
+                  onClick={() => handleResumeBot(selectedPsid)}
+                  disabled={resumingBot}
+                  style={{
+                    padding: "8px 16px",
+                    backgroundColor: "#7c4dff",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "8px",
+                    cursor: resumingBot ? "not-allowed" : "pointer",
+                    opacity: resumingBot ? 0.6 : 1
+                  }}
+                  title={t('messages.resumeBotTitle')}
+                >
+                  {resumingBot ? "..." : t('messages.resumeBot')}
                 </button>
                 {conversationStatuses[selectedPsid]?.humanActive ? (
                   <button
