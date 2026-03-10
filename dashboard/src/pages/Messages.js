@@ -894,8 +894,7 @@ function Messages() {
           </div>
 
           {/* Ad Filter Dropdown */}
-          {availableAds.length > 0 && (
-            <select
+          <select
               value={adFilter}
               onChange={(e) => setAdFilter(e.target.value)}
               style={{
@@ -916,7 +915,6 @@ function Messages() {
                 </option>
               ))}
             </select>
-          )}
         </div>
 
         {/* Main conversations table */}
