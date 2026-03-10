@@ -442,6 +442,23 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       };
     }
 
+    // Interest/reaffirmation — user wants the already-quoted product ("lo quiero", "solo quiero el borde", "ese mero")
+    const isInterest = /\b(quiero|lo\s*quiero|la\s*quiero|me\s*interesa|ese|esa|eso|el\s*borde|solo.*borde|mand[ae]|lo\s*llevo|compro)\b/i.test(userMessage);
+    if (isInterest && convo?.lastQuotedProducts?.length > 0) {
+      const prod = convo.lastQuotedProducts[0];
+      if (prod.productUrl) {
+        const trackedLink = await generateClickLink(psid, prod.productUrl, {
+          productName: prod.productName || prod.displayText,
+          productId: prod.productId
+        });
+        await updateConversation(psid, { lastIntent: 'borde_complete', unknownCount: 0 });
+        return {
+          type: "text",
+          text: `¡Perfecto! Aquí tienes el link:\n\n• ${prod.displayText} — ${formatMoney(prod.price)}\n🛒 ${trackedLink}\n\nEl envío está incluido.`
+        };
+      }
+    }
+
     // For other messages after completion, reset flow so they can start over
     state = { length: null, quantity: null, flowCompleted: false };
   }
@@ -552,7 +569,9 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   }
 
   // PRICE / CATALOG REQUEST — show borde products with prices
-  if (intent === INTENTS.CATALOG_REQUEST || intent === INTENTS.PRICE_QUERY || intent === INTENTS.AVAILABILITY_QUERY) {
+  // Also trigger on price keywords regardless of classified intent (e.g. "cuanto cuesta el de 18")
+  const hasPriceKeyword = /\b(precio|presio|costo|cu[aá]nto|cuesta|vale|cotiza)\b/i.test(userMessage);
+  if (intent === INTENTS.CATALOG_REQUEST || intent === INTENTS.PRICE_QUERY || intent === INTENTS.AVAILABILITY_QUERY || hasPriceKeyword) {
     // If user asked for specific lengths, quote them
     const requestedLengths = parseLengthsFromMessage(userMessage, availableLengths);
 
