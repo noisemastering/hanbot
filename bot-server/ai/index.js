@@ -612,8 +612,7 @@ async function generateReply(userMessage, psid, referral = null) {
       /\b((?:d[oó]nde|dnd)\s+est[aá]n|ubicaci[oó]n|direcci[oó]n)\b/i,
       /\b(instala|garant[ií]a|impermeable|material|durabilidad)\b/i,
       /\b(cu[aá]nto\s+tarda|tiempo\s+de\s+entrega)\b/i,
-      // NOTE: dimensions removed — they're context for a price query, not a separate question.
-      // "6x4m precio y entrega" is one product request, not multi-question.
+      /\d+(?:\.\d+)?\s*(?:[xX×*]|(?:metros?\s*)?por)\s*\d+/i,
     ].filter(p => p.test(userMessage)).length >= 3;
 
   if (isMultiQuestion) {
