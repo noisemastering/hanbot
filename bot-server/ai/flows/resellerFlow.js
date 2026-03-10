@@ -74,29 +74,10 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   const lastIntent = convo?.lastIntent || '';
 
   // ── Stage: PITCH ──
-  // First message for a reseller-ad conversation
+  // First message for a reseller-ad conversation.
+  // Always send the pitch — even if the message has dimensions or retail signals,
+  // we need to confirm intent before changing flow.
   if (!lastIntent.startsWith('reseller_')) {
-    const msg = String(userMessage || '').trim();
-
-    // If the first message already reveals retail intent or has dimensions,
-    // skip the reseller pitch entirely and route to the product flow.
-    const dims = parseDimensions(msg);
-    const RETAIL_FIRST_MSG = /\b(busco\s+comprar|quiero\s+comprar|solo\s+(quiero\s+)?comprar|para\s+uso\s+propio|comprar\s+una|quiero\s+una|necesito\s+una|una\s+pieza|una\s+malla|solo\s+una|para\s+mi|uso\s+personal)\b/i;
-
-    if (dims || RETAIL_FIRST_MSG.test(msg)) {
-      const retailFlow = convo?.productInterest === 'borde_separador' ? 'borde_separador' : 'malla_sombra';
-      console.log(`🏪 Reseller flow — first message is retail ("${msg.substring(0, 50)}"), skipping pitch → ${retailFlow}`);
-
-      await updateConversation(psid, {
-        isWholesaleInquiry: false,
-        currentFlow: retailFlow,
-        lastIntent: null
-      });
-
-      // Return null so the message gets re-processed by the product flow with all info intact
-      return null;
-    }
-
     console.log(`🏪 Reseller flow — sending pitch`);
     await updateConversation(psid, { lastIntent: 'reseller_pitch_sent' });
     return { type: "text", text: getPitchMessage(convo?.productInterest) };
