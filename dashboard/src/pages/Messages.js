@@ -202,7 +202,9 @@ function Messages() {
 
   const fetchQuickActions = useCallback(async () => {
     try {
-      const res = await API.get("/conversations/grouped?limit=10");
+      const params = new URLSearchParams({ limit: '10' });
+      if (adFilterRef.current) params.set('adId', adFilterRef.current);
+      const res = await API.get(`/conversations/grouped?${params}`);
       const convs = res.data.conversations || [];
       setQuickActions(convs);
       applyStatusesFromGrouped(convs);
@@ -280,10 +282,10 @@ function Messages() {
     return () => clearInterval(interval);
   }, [fetchQuickActions, fetchFilteredPage, fetchAvailableAds]);
 
-  // Refetch filtered page when ad filter changes
+  // Refetch both sections when ad filter changes
   useEffect(() => {
     adFilterRef.current = adFilter;
-    fetchFilteredPage(1);
+    fetchQuickActions().then(excludePsids => fetchFilteredPage(1, excludePsids));
   }, [adFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Refetch filtered page when date filter changes
