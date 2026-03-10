@@ -25,6 +25,15 @@ const COLORS = {
   cyan: "#06B6D4",
 };
 
+// Benchmarks for Facebook Messenger e-commerce
+// Click rate: % of purchase links generated that get clicked
+// Conversion rate: % of link clicks that result in a purchase
+const BENCHMARKS = {
+  clickRate:      { green: 35, yellow: 20 },
+  conversionRate: { green: 10, yellow: 5 },
+};
+
+
 const CONFIDENCE_COLORS = {
   high: COLORS.green,
   medium: COLORS.amber,
@@ -33,6 +42,30 @@ const CONFIDENCE_COLORS = {
 
 const PRODUCT_COLORS = ["#10B981", "#34D399", "#6EE7B7", "#A7F3D0", "#065F46"];
 const REGION_COLORS = ["#06B6D4", "#22D3EE", "#67E8F9", "#A5F3FC", "#0E7490"];
+const AD_COLORS = ["#8B5CF6", "#A78BFA", "#C4B5FD", "#7C3AED", "#6D28D9"];
+
+const STATE_ABBR = {
+  "aguascalientes": "Ags.", "baja california": "B.C.", "baja california sur": "B.C.S.",
+  "campeche": "Camp.", "chiapas": "Chis.", "chihuahua": "Chih.",
+  "ciudad de méxico": "CDMX", "ciudad de mexico": "CDMX", "cdmx": "CDMX",
+  "coahuila": "Coah.", "coahuila de zaragoza": "Coah.", "colima": "Col.",
+  "durango": "Dgo.", "guanajuato": "Gto.", "guerrero": "Gro.",
+  "hidalgo": "Hgo.", "jalisco": "Jal.",
+  "méxico": "Edoméx", "mexico": "Edoméx", "estado de méxico": "Edoméx",
+  "michoacán": "Mich.", "michoacan": "Mich.", "michoacán de ocampo": "Mich.",
+  "morelos": "Mor.", "nayarit": "Nay.", "nuevo león": "N.L.", "nuevo leon": "N.L.",
+  "oaxaca": "Oax.", "puebla": "Pue.", "querétaro": "Qro.", "queretaro": "Qro.",
+  "quintana roo": "Q. Roo", "san luis potosí": "S.L.P.", "san luis potosi": "S.L.P.",
+  "sinaloa": "Sin.", "sonora": "Son.", "tabasco": "Tab.",
+  "tamaulipas": "Tamps.", "tlaxcala": "Tlax.",
+  "veracruz": "Ver.", "veracruz de ignacio de la llave": "Ver.",
+  "yucatán": "Yuc.", "yucatan": "Yuc.", "zacatecas": "Zac.",
+};
+
+function abbrState(name) {
+  if (!name) return name;
+  return STATE_ABBR[name.toLowerCase().trim()] || name;
+}
 
 const tooltipStyle = {
   backgroundColor: "#1F2937",
@@ -62,6 +95,15 @@ function Home() {
 
   const dateFrom = useMemo(() => getDaysAgo(range), [range]);
   const dateTo = useMemo(() => new Date().toISOString().split("T")[0], []);
+
+  // "7 feb – 9 mar" style label for KPI cards
+  const periodLabel = useMemo(() => {
+    const fmt = (iso) => {
+      const d = new Date(iso + "T12:00:00");
+      return `${d.getDate()} ${d.toLocaleString("es-MX", { month: "short" })}`;
+    };
+    return `${fmt(dateFrom)} – ${fmt(dateTo)}`;
+  }, [dateFrom, dateTo]);
 
   const fetchAll = async () => {
     setLoading(true);
@@ -186,44 +228,99 @@ function Home() {
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Revenue */}
-        <div className="bg-gradient-to-br from-green-500/10 to-green-600/5 backdrop-blur-lg border border-green-500/20 rounded-xl p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-400 mb-1">{t("home.totalRevenue")}</p>
-              <h3 className="text-3xl font-bold text-white">
-                {formatCurrency(conversionStats?.totalRevenue)}
-              </h3>
+        {/* Revenue + confidence semaphore */}
+        {(() => {
+          const bd = conversionStats?.confidenceBreakdown;
+          const total = (bd?.high || 0) + (bd?.medium || 0) + (bd?.low || 0);
+          const pct = (v) => total > 0 ? Math.round((v / total) * 100) : 0;
+          const tiers = [
+            { key: "high", count: bd?.high || 0, pct: pct(bd?.high || 0), color: "#10B981", label: t("home.high") },
+            { key: "medium", count: bd?.medium || 0, pct: pct(bd?.medium || 0), color: "#F59E0B", label: t("home.medium") },
+            { key: "low", count: bd?.low || 0, pct: pct(bd?.low || 0), color: "#EF4444", label: t("home.low") },
+          ];
+          return (
+            <div className="bg-gradient-to-br from-green-500/10 to-green-600/5 backdrop-blur-lg border border-green-500/20 rounded-xl p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-400 mb-1">{t("home.totalRevenue")}</p>
+                  <h3 className="text-3xl font-bold text-white">
+                    {formatCurrency(conversionStats?.totalRevenue)}
+                  </h3>
+                  <p className="text-xs text-gray-500 mt-1">{periodLabel}</p>
+                </div>
+                <div className="w-12 h-12 bg-green-500/20 rounded-lg flex items-center justify-center">
+                  <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+              {total > 0 && (
+                <div className="mt-3 pt-3 border-t border-green-500/10">
+                  <p className="text-xs text-gray-500 mb-1.5">{t("home.confidenceBreakdown")}</p>
+                  <div className="flex flex-col gap-1">
+                    {tiers.map((tier) => (
+                      <div key={tier.key} className="flex items-center gap-2">
+                        <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tier.color }} />
+                        <span className="text-[11px] text-gray-400">{tier.label}</span>
+                        <span className="text-[11px] font-semibold" style={{ color: tier.color }}>{tier.pct}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
-            <div className="w-12 h-12 bg-green-500/20 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
-        </div>
+          );
+        })()}
 
-        {/* Conversions */}
-        <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 backdrop-blur-lg border border-blue-500/20 rounded-xl p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-400 mb-1">{t("home.totalConversions")}</p>
-              <h3 className="text-3xl font-bold text-white">{conversionStats?.conversions || 0}</h3>
+        {/* Conversions + click rate semaphore */}
+        {(() => {
+          const cr = parseFloat(conversionStats?.clickRate) || 0;
+          const b = BENCHMARKS.clickRate;
+          return (
+            <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 backdrop-blur-lg border border-blue-500/20 rounded-xl p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-400 mb-1">{t("home.totalConversions")}</p>
+                  <h3 className="text-3xl font-bold text-white">{conversionStats?.conversions || 0}</h3>
+                  <p className="text-xs text-gray-500 mt-1">{periodLabel}</p>
+                </div>
+                <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center">
+                  <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-blue-500/10">
+                <p className="text-xs text-gray-500 mb-1.5">{t("home.clickRate")}: <span className="text-white font-semibold">{cr}%</span></p>
+                <div className="flex flex-col gap-1">
+                  {[
+                    { min: b.green, color: "#10B981", label: `>= ${b.green}%` },
+                    { min: b.yellow, max: b.green, color: "#F59E0B", label: `${b.yellow}–${b.green - 1}%` },
+                    { max: b.yellow, color: "#EF4444", label: `< ${b.yellow}%` },
+                  ].map((tier) => {
+                    const active = tier.min != null && tier.max != null
+                      ? cr >= tier.min && cr < tier.max
+                      : tier.min != null ? cr >= tier.min : cr < tier.max;
+                    return (
+                      <div key={tier.label} className="flex items-center gap-2">
+                        <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tier.color, opacity: active ? 1 : 0.3 }} />
+                        <span className="text-[11px]" style={{ color: active ? tier.color : "#6B7280" }}>{tier.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
             </div>
-            <div className="w-12 h-12 bg-blue-500/20 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-            </div>
-          </div>
-        </div>
+          );
+        })()}
 
-        {/* Active Conversations */}
+        {/* Unique Users + sub-metrics */}
         <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 backdrop-blur-lg border border-purple-500/20 rounded-xl p-6">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium text-gray-400 mb-1">{t("home.activeConversations")}</p>
+              <p className="text-sm font-medium text-gray-400 mb-1">{t("home.uniqueUsers")}</p>
               <h3 className="text-3xl font-bold text-white">{analytics?.totalUsers || 0}</h3>
+              <p className="text-xs text-gray-500 mt-1">{periodLabel}</p>
             </div>
             <div className="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center">
               <svg className="w-6 h-6 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -231,24 +328,69 @@ function Home() {
               </svg>
             </div>
           </div>
-        </div>
-
-        {/* Conversion Rate */}
-        <div className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 backdrop-blur-lg border border-amber-500/20 rounded-xl p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium text-gray-400 mb-1">{t("home.conversionRate")}</p>
-              <h3 className="text-3xl font-bold text-white">
-                {conversionStats?.conversionRate || 0}%
-              </h3>
+          <div className="mt-3 pt-3 border-t border-purple-500/10 flex flex-col gap-1">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-gray-500">{t("home.totalMessages")}</span>
+              <span className="text-[11px] text-white font-semibold">{(analytics?.totalMessages || 0).toLocaleString()}</span>
             </div>
-            <div className="w-12 h-12 bg-amber-500/20 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-              </svg>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-gray-500">{t("home.botResponseRate")}</span>
+              <span className="text-[11px] text-white font-semibold">{analytics?.botResponseRate || 0}%</span>
             </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-gray-500">{t("home.unanswered")}</span>
+              <span className="text-[11px] text-white font-semibold">{analytics?.unanswered || 0}</span>
+            </div>
+            {analytics?.topRegion && (
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-gray-500">{t("home.topRegion")}</span>
+                <span className="text-[11px] text-white font-semibold">{analytics.topRegion.state}</span>
+              </div>
+            )}
           </div>
         </div>
+
+        {/* Conversion Rate + semaphore */}
+        {(() => {
+          const cvr = parseFloat(conversionStats?.conversionRate) || 0;
+          const b = BENCHMARKS.conversionRate;
+          return (
+            <div className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 backdrop-blur-lg border border-amber-500/20 rounded-xl p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-sm font-medium text-gray-400 mb-1">{t("home.conversionRate")}</p>
+                  <h3 className="text-3xl font-bold text-white">{cvr}%</h3>
+                  <p className="text-xs text-gray-500 mt-1">{periodLabel}</p>
+                </div>
+                <div className="w-12 h-12 bg-amber-500/20 rounded-lg flex items-center justify-center">
+                  <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                  </svg>
+                </div>
+              </div>
+              <div className="mt-3 pt-3 border-t border-amber-500/10">
+                <p className="text-xs text-gray-500 mb-1.5">{t("home.conversionRate")}</p>
+                <div className="flex flex-col gap-1">
+                  {[
+                    { min: b.green, color: "#10B981", label: `>= ${b.green}%` },
+                    { min: b.yellow, max: b.green, color: "#F59E0B", label: `${b.yellow}–${b.green - 1}%` },
+                    { max: b.yellow, color: "#EF4444", label: `< ${b.yellow}%` },
+                  ].map((tier) => {
+                    const active = tier.min != null && tier.max != null
+                      ? cvr >= tier.min && cvr < tier.max
+                      : tier.min != null ? cvr >= tier.min : cvr < tier.max;
+                    return (
+                      <div key={tier.label} className="flex items-center gap-2">
+                        <span className="inline-block w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: tier.color, opacity: active ? 1 : 0.3 }} />
+                        <span className="text-[11px]" style={{ color: active ? tier.color : "#6B7280" }}>{tier.label}</span>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Row 2: Main ComposedChart */}
@@ -269,7 +411,30 @@ function Home() {
                   axisLine={{ stroke: "#374151" }}
                   allowDecimals={false}
                 />
-                <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: "#9CA3AF" }} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  labelStyle={{ color: "#9CA3AF" }}
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    const clicks = payload.find(p => p.dataKey === "clicks")?.value || 0;
+                    const conversions = payload.find(p => p.dataKey === "conversions")?.value || 0;
+                    const links = payload.find(p => p.dataKey === "links")?.value || 0;
+                    const clickRate = links > 0 ? ((clicks / links) * 100).toFixed(1) : "0";
+                    const convRate = clicks > 0 ? ((conversions / clicks) * 100).toFixed(1) : "0";
+                    return (
+                      <div style={tooltipStyle} className="p-3 text-sm">
+                        <p style={{ color: "#9CA3AF" }} className="mb-1">{label}</p>
+                        {payload.map(p => (
+                          <p key={p.dataKey} style={{ color: p.color }}>{p.name} : {p.value}</p>
+                        ))}
+                        <div className="mt-1 pt-1 border-t border-gray-600">
+                          <p style={{ color: "#9CA3AF" }}>{t("home.clickRate")}: {clickRate}%</p>
+                          <p style={{ color: "#9CA3AF" }}>{t("home.conversionRate")}: {convRate}%</p>
+                        </div>
+                      </div>
+                    );
+                  }}
+                />
                 <Legend wrapperStyle={{ color: "#9CA3AF" }} />
                 <Bar
                   dataKey="clicks"
@@ -299,7 +464,39 @@ function Home() {
         </div>
       )}
 
-      {/* Row 3: Top Products + Sales Funnel */}
+      {/* Row 3: Sales Funnel (full width) */}
+      <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-white mb-4">{t("home.salesFunnel")}</h2>
+        {funnelSteps.length > 0 ? (
+          <div className="flex items-center justify-around">
+            {funnelSteps.map((step, i) => (
+              <React.Fragment key={step.label}>
+                <div className="text-center flex-1">
+                  <div
+                    className="w-28 h-28 mx-auto rounded-full flex items-center justify-center mb-3"
+                    style={{ backgroundColor: `${step.color}20` }}
+                  >
+                    <span
+                      className="text-xl font-bold"
+                      style={{ color: step.color }}
+                    >
+                      {step.isRevenue ? step.value : step.value.toLocaleString()}
+                    </span>
+                  </div>
+                  <p className="text-sm text-gray-400">{step.label}</p>
+                </div>
+                {i < funnelSteps.length - 1 && (
+                  <div className="text-gray-600 text-2xl shrink-0">&#8594;</div>
+                )}
+              </React.Fragment>
+            ))}
+          </div>
+        ) : (
+          <p className="text-gray-500 text-center py-8">{t("home.noData")}</p>
+        )}
+      </div>
+
+      {/* Row 4: Top Products + Ad Performance Donut */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top Products */}
         <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
@@ -343,32 +540,46 @@ function Home() {
           )}
         </div>
 
-        {/* Sales Funnel */}
+        {/* Ad Performance Donut */}
         <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">{t("home.salesFunnel")}</h2>
-          {funnelSteps.length > 0 ? (
-            <div className="flex items-center justify-between h-64">
-              {funnelSteps.map((step, i) => (
-                <React.Fragment key={step.label}>
-                  <div className="text-center flex-1">
-                    <div
-                      className="w-20 h-20 mx-auto rounded-full flex items-center justify-center mb-3"
-                      style={{ backgroundColor: `${step.color}20` }}
-                    >
-                      <span
-                        className="text-lg font-bold"
-                        style={{ color: step.color }}
-                      >
-                        {step.isRevenue ? step.value : step.value.toLocaleString()}
-                      </span>
-                    </div>
-                    <p className="text-sm text-gray-400">{step.label}</p>
-                  </div>
-                  {i < funnelSteps.length - 1 && (
-                    <div className="text-gray-600 text-xl shrink-0">&#8594;</div>
-                  )}
-                </React.Fragment>
-              ))}
+          <h2 className="text-lg font-semibold text-white mb-1">{t("home.adPerformance")}</h2>
+          <p className="text-sm text-gray-500 mb-4">{t("home.byClicks")}</p>
+          {adData.length > 0 ? (
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={adData.map((ad) => ({
+                      name: ad.name || ad.adId,
+                      value: ad.clicks || 0,
+                      conversions: ad.conversions || 0,
+                    }))}
+                    cx="50%"
+                    cy="55%"
+                    innerRadius={55}
+                    outerRadius={85}
+                    paddingAngle={4}
+                    dataKey="value"
+                    label={({ name, value }) => `${name}: ${value}`}
+                  >
+                    {adData.map((_, i) => (
+                      <Cell
+                        key={i}
+                        fill={AD_COLORS[i % AD_COLORS.length]}
+                        stroke="transparent"
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={tooltipStyle}
+                    formatter={(value, name, props) => [
+                      `${value} clics / ${props.payload.conversions} conv.`,
+                      props.payload.name
+                    ]}
+                  />
+                  <Legend wrapperStyle={{ color: "#9CA3AF" }} />
+                </PieChart>
+              </ResponsiveContainer>
             </div>
           ) : (
             <p className="text-gray-500 text-center py-8">{t("home.noData")}</p>
@@ -376,7 +587,7 @@ function Home() {
         </div>
       </div>
 
-      {/* Row 4: Geographic Distribution + Confidence Donut */}
+      {/* Row 5: Geographic Distribution + Confidence Donut */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Geographic Distribution */}
         <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
@@ -388,7 +599,7 @@ function Home() {
                 <PieChart>
                   <Pie
                     data={topRegions.map((r) => ({
-                      name: r.state,
+                      name: abbrState(r.state),
                       value: r.conversations || 0,
                     }))}
                     cx="50%"
@@ -452,26 +663,6 @@ function Home() {
           )}
         </div>
       </div>
-
-      {/* Row 5: Top Ads */}
-      {adData.length > 0 && (
-        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-700/50">
-            <h2 className="text-lg font-semibold text-white">{t("home.adPerformance")}</h2>
-          </div>
-          <div className="divide-y divide-gray-700/50">
-            {adData.map((ad) => (
-              <div key={ad.adId} className="px-6 py-3 flex items-center justify-between hover:bg-gray-700/20">
-                <span className="text-sm text-white truncate mr-4">{ad.name || ad.adId}</span>
-                <div className="flex items-center gap-4 shrink-0">
-                  <span className="text-sm text-gray-300">{(ad.clicks || 0).toLocaleString()} {t("home.adClicks").toLowerCase()}</span>
-                  <span className="text-sm text-green-400">{ad.conversions || 0} conv.</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
     </div>
   );
 }
