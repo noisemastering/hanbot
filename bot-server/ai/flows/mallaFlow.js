@@ -427,6 +427,11 @@ async function handleQuoteSelection(aiAction, lastQuotedProducts, psid, convo) {
 function checkProductFeatureQuestions(userMessage, state, convo) {
   if (!userMessage) return null;
 
+  // If message contains dimensions (e.g. "5x4", "3 x 6"), don't short-circuit —
+  // let the main flow process dimensions first, even if a feature keyword is present.
+  const hasDimensions = /\b\d+\s*[xX×]\s*\d+\b/.test(userMessage);
+  if (hasDimensions && !state.width) return null;
+
   const featureChecks = [
     {
       pattern: /\b(es\s+)?raschel\b/i,
@@ -1291,11 +1296,18 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   }
 
   // ====== PRODUCT FEATURE QUESTIONS (any stage) ======
-  // Answer product questions regardless of whether dimensions are already known
+  // When THIS message contains dimensions, don't return the feature answer early —
+  // instead capture it and prepend to the quote so the customer gets both.
+  const messageHasDimensions = /\d+\s*[xX×]\s*\d+/.test(userMessage);
   const featureResponse = checkProductFeatureQuestions(userMessage, state, convo);
-  if (featureResponse) {
+  if (featureResponse && !messageHasDimensions) {
     await updateConversation(psid, { lastIntent: 'malla_feature_answer', unknownCount: 0 });
     return featureResponse;
+  }
+  // Both dimensions AND a feature question in the same message — fold the answer into the quote
+  if (featureResponse && messageHasDimensions) {
+    state.featureNote = featureResponse.text.replace(/\n\n¿(?:Necesitas algo más|Qué medida necesitas)\?$/, '');
+    console.log(`📝 Feature answer saved for quote: "${state.featureNote}"`);
   }
 
   // Determine current stage
@@ -2292,9 +2304,10 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       console.log(`⚠️ Product ${product.name} has no online store link`);
 
       const { executeHandoff: execHandoff6 } = require('../utils/executeHandoff');
+      const featurePrefix = state.featureNote ? `${state.featureNote}.\n\n` : '';
       return await execHandoff6(psid, convo, userMessage, {
         reason: `Malla ${width}x${height}m - no link available`,
-        responsePrefix: `¡Tenemos la ${displayName}! `,
+        responsePrefix: `${featurePrefix}¡Tenemos la ${displayName}! `,
         specsText: `Malla de ${width}x${height}m. `,
         notificationText: `Malla ${width}x${height}m - producto sin link`,
         timingStyle: 'elaborate',
@@ -2353,9 +2366,10 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     }
 
     const rollNote = state.rollNote || '';
+    const featureNote = state.featureNote ? `${state.featureNote}.\n\n` : '';
     return {
       type: "text",
-      text: `${rollNote}${correctionNote}${quantityText}${salesPitch}\n` +
+      text: `${featureNote}${rollNote}${correctionNote}${quantityText}${salesPitch}\n` +
             `🛒 Cómprala aquí:\n${trackedLink}${wholesaleMention}`
     };
   }
