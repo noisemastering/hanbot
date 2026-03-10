@@ -53,11 +53,10 @@ router.get('/ads', async (req, res) => {
       adNameMap[ad.fbAdId] = ad.name;
     }
 
-    // Return all adIds with names (some may not have an Ad doc)
-    const result = adIds.map(id => ({
-      adId: id,
-      name: adNameMap[id] || id
-    }));
+    // Only return ads that have a real name (skip raw IDs without an Ad doc)
+    const result = adIds
+      .filter(id => adNameMap[id])
+      .map(id => ({ adId: id, name: adNameMap[id] }));
 
     // Sort by name
     result.sort((a, b) => a.name.localeCompare(b.name));
