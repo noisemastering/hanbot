@@ -85,6 +85,7 @@ function Home() {
   const [range, setRange] = useState(30);
   const [loading, setLoading] = useState(true);
   const [correlating, setCorrelating] = useState(false);
+  const [lastSync, setLastSync] = useState(null);
 
   // Data states
   const [analytics, setAnalytics] = useState(null);
@@ -146,7 +147,7 @@ function Home() {
       sellerId: '482595248',
       dateFrom,
       dateTo
-    }).then(() => fetchAll()).catch(err => console.error('Auto-sync failed:', err));
+    }).then(() => { setLastSync(new Date()); return fetchAll(); }).catch(err => console.error('Auto-sync failed:', err));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range]);
 
@@ -203,6 +204,7 @@ function Home() {
         dateFrom,
         dateTo
       });
+      setLastSync(new Date());
       await fetchAll();
     } catch (err) {
       console.error('Correlation failed:', err);
@@ -481,14 +483,24 @@ function Home() {
         </div>
       )}
 
-      {/* Correlate button */}
-      <div className="flex justify-end">
+      {/* Correlate button + progress */}
+      <div className="flex items-center justify-end gap-3">
+        {lastSync && !correlating && (
+          <span className="text-xs text-gray-500">
+            Última sync: {lastSync.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+          </span>
+        )}
+        {correlating && (
+          <div className="w-40 h-2 bg-gray-700 rounded-full overflow-hidden">
+            <div className="h-full bg-blue-500 rounded-full animate-pulse" style={{ width: "100%" }} />
+          </div>
+        )}
         <button
           onClick={runCorrelation}
           disabled={correlating}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-all"
         >
-          {correlating ? "Correlacionando..." : "Correlacionar"}
+          {correlating ? "Sincronizando..." : "Correlacionar"}
         </button>
       </div>
 
