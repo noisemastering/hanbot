@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import API from "../api";
 import { useTranslation } from "../i18n";
 import {
@@ -85,7 +85,9 @@ function Home() {
   const [range, setRange] = useState(30);
   const [loading, setLoading] = useState(true);
   const [correlating, setCorrelating] = useState(false);
+  const [syncProgress, setSyncProgress] = useState(0);
   const [lastSync, setLastSync] = useState(null);
+  const progressRef = useRef(null);
 
   // Data states
   const [analytics, setAnalytics] = useState(null);
@@ -196,8 +198,27 @@ function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversionStats, t, locale]);
 
+  const startProgress = useCallback(() => {
+    setSyncProgress(0);
+    let progress = 0;
+    progressRef.current = setInterval(() => {
+      // Fast to 30%, slow crawl to 90%, never reaches 100% on its own
+      const remaining = 90 - progress;
+      progress += remaining * 0.08;
+      setSyncProgress(Math.min(Math.round(progress), 90));
+    }, 300);
+  }, []);
+
+  const stopProgress = useCallback(() => {
+    if (progressRef.current) clearInterval(progressRef.current);
+    progressRef.current = null;
+    setSyncProgress(100);
+    setTimeout(() => setSyncProgress(0), 800);
+  }, []);
+
   const runCorrelation = async () => {
     setCorrelating(true);
+    startProgress();
     try {
       await API.post('/analytics/correlate-conversions', {
         sellerId: '482595248',
@@ -205,9 +226,11 @@ function Home() {
         dateTo
       });
       setLastSync(new Date());
+      stopProgress();
       await fetchAll();
     } catch (err) {
       console.error('Correlation failed:', err);
+      stopProgress();
     } finally {
       setCorrelating(false);
     }
@@ -485,14 +508,17 @@ function Home() {
 
       {/* Correlate button + progress */}
       <div className="flex items-center justify-end gap-3">
-        {lastSync && !correlating && (
+        {lastSync && (
           <span className="text-xs text-gray-500">
             Última sync: {lastSync.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
           </span>
         )}
         {correlating && (
-          <div className="w-40 h-2 bg-gray-700 rounded-full overflow-hidden">
-            <div className="h-full bg-blue-500 rounded-full animate-pulse" style={{ width: "100%" }} />
+          <div className="w-48 h-2 bg-gray-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-blue-500 rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${syncProgress}%` }}
+            />
           </div>
         )}
         <button
@@ -500,7 +526,7 @@ function Home() {
           disabled={correlating}
           className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-all"
         >
-          {correlating ? "Sincronizando..." : "Correlacionar"}
+          {correlating ? `${syncProgress}%` : "Correlacionar"}
         </button>
       </div>
 
