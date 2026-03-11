@@ -410,17 +410,6 @@ function Home() {
         })()}
       </div>
 
-      {/* Correlate button */}
-      <div className="flex justify-end">
-        <button
-          onClick={runCorrelation}
-          disabled={correlating}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-all"
-        >
-          {correlating ? "Correlacionando..." : "Correlacionar"}
-        </button>
-      </div>
-
       {/* Row 2: Main ComposedChart */}
       {chartData.length > 0 && (
         <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
@@ -491,6 +480,17 @@ function Home() {
           </div>
         </div>
       )}
+
+      {/* Correlate button */}
+      <div className="flex justify-end">
+        <button
+          onClick={runCorrelation}
+          disabled={correlating}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-all"
+        >
+          {correlating ? "Correlacionando..." : "Correlacionar"}
+        </button>
+      </div>
 
       {/* Row 3: Sales Funnel (full width) */}
       <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
