@@ -468,6 +468,10 @@ function checkProductFeatureQuestions(userMessage, state, convo) {
       response: "sí, la manejamos en negro"
     },
     {
+      pattern: /\b(reforzad[oa]|refuerz[oa]|reforz[oa]r|orillas?\s+(reforzad|con\s+refuerz)|esquinas?\s+(reforzad|con\s+refuerz))\b/i,
+      response: "es correcto, viene con refuerzo en las esquinas para una vida útil de hasta 5 años"
+    },
+    {
       pattern: /\b(uv|rayos|sol)\b/i,
       response: "sí, tiene protección UV"
     },
