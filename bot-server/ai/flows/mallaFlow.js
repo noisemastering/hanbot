@@ -2302,10 +2302,8 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
         /\bsu\s+precio\b/i.test(msg);
 
       if (wantsJustPrice) {
-        console.log(`💰 Wholesale context but user wants retail price — serving retail directly`);
-        // Clear wholesale flag and serve retail price directly (no confirmation needed)
-        await updateConversation(psid, { isWholesaleInquiry: false });
-        convo = { ...convo, isWholesaleInquiry: false };
+        console.log(`💰 Wholesale context but user wants retail price — serving retail (flag stays)`);
+        // Bypass wholesale check for this request only — do NOT clear the flag
         // Fall through to normal retail flow below
       } else {
         // Hand off for wholesale pricing
