@@ -385,6 +385,12 @@ async function generateReply(userMessage, psid, referral = null) {
     convo.productInterest = sourceContext.ad.product;
     console.log(`🎯 Product interest stored from ad: ${sourceContext.ad.product}`);
   }
+  // Store ad's main product name (e.g., "6m x 4m") so flows can use it when customer says "esa medida"
+  if (sourceContext?.ad?.productName && !convo.adMainProductName) {
+    await updateConversation(psid, { adMainProductName: sourceContext.ad.productName });
+    convo.adMainProductName = sourceContext.ad.productName;
+    console.log(`🎯 Ad main product name stored: ${sourceContext.ad.productName}`);
+  }
   // Set currentFlow from ad context so the ad's flow governs the whole conversation
   if (!convo.currentFlow || convo.currentFlow === 'default') {
     const adProduct = sourceContext?.ad?.product || '';

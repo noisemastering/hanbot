@@ -1549,6 +1549,23 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
     return null;
   }
 
+  // ====== AD PRODUCT REFERENCE ======
+  // When customer says "esa medida", "esa", "la quiero" etc. and came from an ad with a main product,
+  // use the ad product's dimensions instead of asking again
+  if (userMessage && convo?.adMainProductName && !parseDimensions(userMessage)) {
+    const refersToAd = /\b(esa\s*(medida|malla)?|la\s*quiero|me\s*interesa|mand[ae](me|la)?|esa\s*misma|de\s*esa)\b/i.test(userMessage);
+    if (refersToAd) {
+      const adDims = parseDimensions(convo.adMainProductName);
+      if (adDims) {
+        console.log(`🎯 Customer references ad product "${convo.adMainProductName}" → ${adDims.width}x${adDims.height}`);
+        const newState = getFlowState(convo);
+        newState.width = adDims.width;
+        newState.height = adDims.height;
+        return await handleComplete(null, newState, null, psid, convo, userMessage);
+      }
+    }
+  }
+
   // Check if user is asking about max/min size (e.g., "de cuantos metros es de ancha maximo")
   const maxSizePattern = /\b(m[aá]xim[oa]|m[aá]s\s+(grande|anch[oa]|larg[oa])|cu[aá]nto\s+de\s+anch|metros\s+.*\s+m[aá]xim|anch[oa]\s+m[aá]xim|larg[oa]\s+m[aá]xim)\b/i;
   if (userMessage && maxSizePattern.test(userMessage)) {
