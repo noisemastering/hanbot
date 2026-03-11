@@ -622,7 +622,7 @@ function wasAlreadyOffered(sizeStr, offeredSizes) {
  */
 async function generateSizeResponse(options) {
   const { smaller, bigger, exact, requestedDim, availableSizes, isRepeated, businessInfo, offeredSizes } = options;
-  const { generatePriceResponse, generateCustomOrderResponse, generateNoMatchResponse } = require('./ai/responseGenerator');
+  const { generateCustomOrderResponse, generateNoMatchResponse } = require('./ai/responseGenerator');
 
   const suggestedSizes = [];
 
@@ -686,21 +686,10 @@ async function generateSizeResponse(options) {
   // EXACT MATCH
   if (exact) {
     suggestedSizes.push(exact.sizeStr);
-    const link = exact.mLink || exact.permalink;
-
-    try {
-      const aiResponse = await generatePriceResponse({
-        dimensions: requestedDim || { width: exact.width, height: exact.height },
-        price: exact.price,
-        link: link,
-        userExpression: requestedDim ? `${requestedDim.width} x ${requestedDim.height} metros` : exact.sizeStr
-      });
-      if (aiResponse) {
-        return { text: aiResponse, suggestedSizes, offeredToShowAllSizes: false };
-      }
-    } catch (err) {
-      console.error("AI failed for price response:", err.message);
-    }
+    const sizeDisplay = requestedDim ? `${requestedDim.width} x ${requestedDim.height} metros` : exact.sizeStr;
+    const formattedPrice = typeof exact.price === 'number' ? `$${exact.price.toLocaleString('es-MX')}` : `$${exact.price}`;
+    const text = `Malla sombra raschel confeccionada con refuerzo en las esquinas para una vida útil de hasta 5 años en la medida de ${sizeDisplay} a ${formattedPrice}. Envío incluido.`;
+    return { text, suggestedSizes, offeredToShowAllSizes: false };
   }
 
   // NO EXACT MATCH - suggest alternative or custom fabrication

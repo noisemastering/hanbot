@@ -646,40 +646,30 @@ async function buildProductSalesPitch(product) {
  * @returns {string} - Formatted response text
  */
 async function formatProductResponse(product, options = {}) {
-  const { price, link, quantity, userExpressedSize, concerns } = options;
-  const { generatePriceResponse } = require('../responseGenerator');
+  const { price, userExpressedSize, concerns } = options;
 
   const pitch = await buildProductSalesPitch(product);
+  const sizeDisplay = userExpressedSize || pitch?.sizeText || product.size;
+  const formattedPrice = typeof price === 'number' ? `$${price.toLocaleString('es-MX')}` : `$${price}`;
 
-  // Extract dimensions from product
-  let dimensions = null;
-  if (product.size) {
-    const match = product.size.match(/(\d+(?:\.\d+)?)\s*[xX×]\s*(\d+(?:\.\d+)?)/);
-    if (match) {
-      dimensions = { width: parseFloat(match[1]), height: parseFloat(match[2]) };
+  // Build deterministic response — no AI, no hallucination
+  let text = `Malla sombra raschel confeccionada con refuerzo en las esquinas para una vida útil de hasta 5 años en la medida de ${sizeDisplay} a ${formattedPrice}. Envío incluido.`;
+
+  // Address concerns if any
+  if (concerns && concerns.length > 0) {
+    const concernNotes = [];
+    for (const c of concerns) {
+      if (c === 'color' || c === 'colores') concernNotes.push('La manejamos en beige y negro.');
+      else if (c === 'durability' || c === 'weather_resistance') concernNotes.push('Resiste sol, viento y lluvia.');
+      else if (c === 'reinforcement') concernNotes.push('Cuenta con ojillos para sujeción cada 80 cm por lado.');
+      else if (c === 'installation') concernNotes.push('Viene lista para instalar.');
+    }
+    if (concernNotes.length > 0) {
+      text += '\n' + concernNotes.join(' ');
     }
   }
 
-  // Use AI to generate response
-  try {
-    const aiResponse = await generatePriceResponse({
-      dimensions: dimensions || { width: 0, height: 0 },
-      price: price,
-      link: link,
-      userExpression: userExpressedSize || pitch?.sizeText || product.size,
-      concerns: concerns
-    });
-
-    if (aiResponse) {
-      return aiResponse;
-    }
-  } catch (err) {
-    console.error("AI response generation failed in formatProductResponse:", err.message);
-  }
-
-  // Minimal fallback if AI fails
-  const displayName = await getProductDisplayName(product, 'short');
-  return `${displayName} - $${price}. Envío incluido.\n\n${link || ''}`;
+  return text;
 }
 
 module.exports = {
