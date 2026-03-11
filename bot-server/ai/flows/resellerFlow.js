@@ -203,21 +203,39 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       };
     }
 
-    // --- Path 4: Retail buyer (gives dimensions directly) ---
+    // --- Path 4: Dimensions given ---
     const dimensions = parseDimensions(msg);
     if (dimensions) {
-      // Break out to the ad's product flow (malla by default, borde if that's what the ad sells)
-      const retailFlow = convo?.productInterest === 'borde_separador' ? 'borde_separador' : 'malla_sombra';
-      console.log(`🏪 Reseller flow — retail buyer detected (${dimensions.normalized}), breaking out to ${retailFlow} flow`);
+      // Check if message has explicit retail signals ("quiero una", "solo una", "para mi")
+      const hasRetailSignal = /\b(quiero\s+una|necesito\s+una|solo\s+una|una\s+pieza|para\s+mi|uso\s+personal|comprar\s+una)\b/i.test(msg);
 
-      await updateConversation(psid, {
-        isWholesaleInquiry: false,
-        currentFlow: retailFlow,
-        lastIntent: null
+      if (hasRetailSignal) {
+        // Explicit retail intent — break out to product flow
+        const retailFlow = convo?.productInterest === 'borde_separador' ? 'borde_separador' : 'malla_sombra';
+        console.log(`🏪 Reseller flow — retail buyer detected (${dimensions.normalized}), breaking out to ${retailFlow} flow`);
+
+        await updateConversation(psid, {
+          isWholesaleInquiry: false,
+          currentFlow: retailFlow,
+          lastIntent: null
+        });
+
+        return null;
+      }
+
+      // No retail signal — reseller is checking prices, hand off for wholesale
+      const sizeInfo = dimensions.userExpressed || dimensions.normalized;
+      console.log(`🏪 Reseller flow — dimensions ${sizeInfo} without retail signal, handing off for wholesale`);
+
+      const handoffResponse = await executeHandoff(psid, convo, userMessage, {
+        reason: `Mayoreo desde anuncio revendedor — medida ${sizeInfo}: "${msg.substring(0, 80)}"`,
+        responsePrefix: `¡Tenemos la medida de ${sizeInfo}! Para precio de mayoreo te comunico con un especialista.\n\n`,
+        lastIntent: 'wholesale_handoff',
+        timingStyle: 'elaborate'
       });
 
-      // Return null so the message gets re-processed by the appropriate flow
-      return null;
+      await updateConversation(psid, { currentFlow: null });
+      return { ...handoffResponse, handledBy: "reseller" };
     }
 
     // --- Fallback: not clear yet, re-send a shorter prompt ---
