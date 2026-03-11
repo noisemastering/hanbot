@@ -84,6 +84,7 @@ function Home() {
   const { t, locale } = useTranslation();
   const [range, setRange] = useState(30);
   const [loading, setLoading] = useState(true);
+  const [correlating, setCorrelating] = useState(false);
 
   // Data states
   const [analytics, setAnalytics] = useState(null);
@@ -193,6 +194,22 @@ function Home() {
     ];
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [conversionStats, t, locale]);
+
+  const runCorrelation = async () => {
+    setCorrelating(true);
+    try {
+      await API.post('/analytics/correlate-conversions', {
+        sellerId: '482595248',
+        dateFrom,
+        dateTo
+      });
+      await fetchAll();
+    } catch (err) {
+      console.error('Correlation failed:', err);
+    } finally {
+      setCorrelating(false);
+    }
+  };
 
   if (loading) {
     return (
@@ -391,6 +408,17 @@ function Home() {
             </div>
           );
         })()}
+      </div>
+
+      {/* Correlate button */}
+      <div className="flex justify-end">
+        <button
+          onClick={runCorrelation}
+          disabled={correlating}
+          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-all"
+        >
+          {correlating ? "Correlacionando..." : "Correlacionar"}
+        </button>
       </div>
 
       {/* Row 2: Main ComposedChart */}
