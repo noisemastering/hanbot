@@ -2327,9 +2327,26 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
         });
       }
 
+      // Re-share the tracked link instead of just referencing it
+      const { generateClickLink } = require('../../tracking');
+      const preferredLink = product.onlineStoreLinks?.find(l => l.isPreferred)?.url || product.onlineStoreLinks?.[0]?.url;
+      let linkText = '';
+      if (preferredLink) {
+        try {
+          const trackedLink = await generateClickLink(psid, preferredLink, {
+            reason: 'reconfirmation',
+            productName: product.name,
+            productId: product._id
+          });
+          linkText = `\n\n🛒 Cómprala aquí:\n${trackedLink}`;
+        } catch (e) {
+          linkText = `\n\n🛒 Cómprala aquí:\n${preferredLink}`;
+        }
+      }
+
       return {
         type: "text",
-        text: `Es correcto, ${sizeDisplay} metros a $${product.price}. La compra se realiza a través de Mercado Libre y el envío está incluido. Puedes comprarla en el enlace que te compartí.`
+        text: `¡Con gusto! La malla de ${sizeDisplay} metros está en $${product.price} con envío incluido.${linkText}`
       };
     }
 

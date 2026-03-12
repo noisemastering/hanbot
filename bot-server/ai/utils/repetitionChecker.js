@@ -53,7 +53,7 @@ async function checkForRepetition(response, psid, convo) {
 
       return {
         type: "text",
-        text: `Es correcto, ${size}m con envío incluido. Puedes realizar tu compra aquí:\n\n${link}`
+        text: `¡Con gusto! La malla de ${size}m tiene envío incluido. Puedes comprarla aquí:\n\n${link}`
       };
     }
 
