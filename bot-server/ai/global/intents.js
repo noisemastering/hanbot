@@ -1823,17 +1823,17 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         };
       }
 
-      // First time - only floor the fractional dimension(s), keep whole-number dimensions as-is
+      // Round up fractional dimensions to next standard size
       const minDim = Math.min(dimensions.width, dimensions.height);
       const maxDim = Math.max(dimensions.width, dimensions.height);
-      const flooredW = (minDim % 1 !== 0) ? Math.floor(minDim) : minDim;
-      const flooredH = (maxDim % 1 !== 0) ? Math.floor(maxDim) : maxDim;
-      console.log(`🔘📏 Argollas + fractional ${dimensions.width}x${dimensions.height}m → offering ${flooredW}x${flooredH}m`);
+      const ceiledW = (minDim % 1 !== 0) ? Math.ceil(minDim) : minDim;
+      const ceiledH = (maxDim % 1 !== 0) ? Math.ceil(maxDim) : maxDim;
+      console.log(`🔘📏 Argollas + fractional ${dimensions.width}x${dimensions.height}m → offering ${ceiledW}x${ceiledH}m`);
 
       try {
         const sizeVariants = [
-          `${flooredW}x${flooredH}`, `${flooredW}x${flooredH}m`,
-          `${flooredH}x${flooredW}`, `${flooredH}x${flooredW}m`
+          `${ceiledW}x${ceiledH}`, `${ceiledW}x${ceiledH}m`,
+          `${ceiledH}x${ceiledW}`, `${ceiledH}x${ceiledW}m`
         ];
 
         const product = await ProductFamily.findOne({
@@ -1864,8 +1864,8 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
             });
 
             const sizeExplanation = (dimensions && dimensions.convertedFromFeet)
-              ? `📏 Tu medida de ${dimensions.originalFeetStr} equivale a aproximadamente ${dimensions.width}x${dimensions.height} metros.\n\nLa medida más cercana que manejamos es ${flooredW}x${flooredH}m:`
-              : `Te ofrecemos ${flooredW}x${flooredH} ya que es necesario considerar un tamaño menor para dar espacio a los tensores o soga sujetadora.`;
+              ? `📏 Tu medida de ${dimensions.originalFeetStr} equivale a aproximadamente ${dimensions.width}x${dimensions.height} metros.\n\nLa medida más cercana que manejamos es ${ceiledW}x${ceiledH}m:`
+              : `La medida más cercana que manejamos es ${ceiledW}x${ceiledH}m:`;
 
             return {
               type: "text",
@@ -2698,17 +2698,17 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
           };
         }
 
-        // First time - only floor the fractional dimension(s), keep whole-number dimensions as-is
+        // Round up fractional dimensions to next standard size
         const minDim2 = Math.min(dimensions.width, dimensions.height);
         const maxDim2 = Math.max(dimensions.width, dimensions.height);
-        const flooredW = (minDim2 % 1 !== 0) ? Math.floor(minDim2) : minDim2;
-        const flooredH = (maxDim2 % 1 !== 0) ? Math.floor(maxDim2) : maxDim2;
-        console.log(`📏 Fractional ${dimensions.width}x${dimensions.height}m → offering ${flooredW}x${flooredH}m`);
+        const ceiledW2 = (minDim2 % 1 !== 0) ? Math.ceil(minDim2) : minDim2;
+        const ceiledH2 = (maxDim2 % 1 !== 0) ? Math.ceil(maxDim2) : maxDim2;
+        console.log(`📏 Fractional ${dimensions.width}x${dimensions.height}m → offering ${ceiledW2}x${ceiledH2}m`);
 
         try {
           const sizeVariants = [
-            `${flooredW}x${flooredH}`, `${flooredW}x${flooredH}m`,
-            `${flooredH}x${flooredW}`, `${flooredH}x${flooredW}m`
+            `${ceiledW2}x${ceiledH2}`, `${ceiledW2}x${ceiledH2}m`,
+            `${ceiledH2}x${ceiledW2}`, `${ceiledH2}x${ceiledW2}m`
           ];
 
           const product = await ProductFamily.findOne({
@@ -2739,8 +2739,8 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
               });
 
               const feetExplanation = (dimensions && dimensions.convertedFromFeet)
-                ? `📏 Tu medida de ${dimensions.originalFeetStr} equivale a aproximadamente ${dimensions.width}x${dimensions.height} metros.\n\nLa medida más cercana que manejamos es ${flooredW}x${flooredH}m:`
-                : `Te ofrecemos ${flooredW}x${flooredH} ya que es necesario considerar un tamaño menor para dar espacio a los tensores o soga sujetadora.`;
+                ? `📏 Tu medida de ${dimensions.originalFeetStr} equivale a aproximadamente ${dimensions.width}x${dimensions.height} metros.\n\nLa medida más cercana que manejamos es ${ceiledW2}x${ceiledH2}m:`
+                : `La medida más cercana que manejamos es ${ceiledW2}x${ceiledH2}m:`;
 
               return {
                 type: "text",

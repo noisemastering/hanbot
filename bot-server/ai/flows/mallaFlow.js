@@ -171,8 +171,8 @@ async function findSizesNearArea(targetArea, convo = null) {
 async function findMatchingProducts(width, height, percentage = null, color = null, poiRootId = null) {
   try {
     // Normalize dimensions (smaller first for consistent matching)
-    const w = Math.min(Math.floor(width), Math.floor(height));
-    const h = Math.max(Math.floor(width), Math.floor(height));
+    const w = Math.min(Math.ceil(width), Math.ceil(height));
+    const h = Math.max(Math.ceil(width), Math.ceil(height));
 
     // Build size regex - match exactly WxH or HxW (not any combo like WxW or HxH)
     // Formats: "3x5", "5x3", "3x5m", "5 x 3 m", "5 m x 3 m", etc.
@@ -310,18 +310,18 @@ async function handleMultipleDimensions(dimensions, psid, convo) {
     const hasFractions = (w % 1 !== 0) || (h % 1 !== 0);
 
     if (hasFractions) {
-      // Floor to standard size and explain
-      const flooredW = Math.floor(w);
-      const flooredH = Math.floor(h);
-      const products = await findMatchingProducts(flooredW, flooredH, null, null, poiRootId);
+      // Ceil to next standard size
+      const ceiledW = Math.ceil(w);
+      const ceiledH = Math.ceil(h);
+      const products = await findMatchingProducts(ceiledW, ceiledH, null, null, poiRootId);
 
       if (products.length > 0) {
         const product = products[0];
-        responseParts.push(`• ${dim.width}x${dim.height}m → te ofrecemos ${flooredW}x${flooredH}m: ${formatMoney(product.price)}`);
+        responseParts.push(`• ${dim.width}x${dim.height}m → te ofrecemos ${ceiledW}x${ceiledH}m: ${formatMoney(product.price)}`);
         const productUrl = product.onlineStoreLinks?.find(l => l.isPreferred)?.url || product.onlineStoreLinks?.[0]?.url;
         quotedProducts.push({
-          width: flooredW, height: flooredH,
-          displayText: `${flooredW}x${flooredH}m`,
+          width: ceiledW, height: ceiledH,
+          displayText: `${ceiledW}x${ceiledH}m`,
           price: product.price,
           productId: product._id?.toString(),
           productUrl,
@@ -2108,17 +2108,17 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       });
     }
 
-    // First time - only floor the fractional dimension(s), keep whole-number dimensions as-is
+    // Round up fractional dimensions to next standard size
     const minDim = Math.min(width, height);
     const maxDim = Math.max(width, height);
-    const flooredW = (minDim % 1 !== 0) ? Math.floor(minDim) : minDim;
-    const flooredH = (maxDim % 1 !== 0) ? Math.floor(maxDim) : maxDim;
-    console.log(`📏 Fractional size ${width}x${height}m → offering ${flooredW}x${flooredH}m`);
+    const ceiledW = (minDim % 1 !== 0) ? Math.ceil(minDim) : minDim;
+    const ceiledH = (maxDim % 1 !== 0) ? Math.ceil(maxDim) : maxDim;
+    console.log(`📏 Fractional size ${width}x${height}m → offering ${ceiledW}x${ceiledH}m`);
 
     try {
       const sizeVariants = [
-        `${flooredW}x${flooredH}`, `${flooredW}x${flooredH}m`,
-        `${flooredH}x${flooredW}`, `${flooredH}x${flooredW}m`
+        `${ceiledW}x${ceiledH}`, `${ceiledW}x${ceiledH}m`,
+        `${ceiledH}x${ceiledW}`, `${ceiledH}x${ceiledW}m`
       ];
 
       const product = await ProductFamily.findOne({
@@ -2141,7 +2141,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
 
           const salesPitch = await formatProductResponse(product, {
             price: product.price,
-            userExpressedSize: `${flooredW} x ${flooredH} m`
+            userExpressedSize: `${ceiledW} x ${ceiledH} m`
           });
 
           await updateConversation(psid, {
@@ -2155,9 +2155,9 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
           // Build explanation — different for feet conversion vs. fractional meters
           let explanation;
           if (convertedFromFeet) {
-            explanation = `📏 Tu medida de ${originalFeetStr} equivale a aproximadamente ${width}x${height} metros.\n\nLa medida más cercana que manejamos es ${flooredW}x${flooredH}m:`;
+            explanation = `📏 Tu medida de ${originalFeetStr} equivale a aproximadamente ${width}x${height} metros.\n\nLa medida más cercana que manejamos es ${ceiledW}x${ceiledH}m:`;
           } else {
-            explanation = `Te ofrecemos ${flooredW}x${flooredH} ya que es necesario considerar un tamaño menor para dar espacio a los tensores o soga sujetadora.`;
+            explanation = `La medida más cercana que manejamos es ${ceiledW}x${ceiledH}m:`;
           }
 
           return {
