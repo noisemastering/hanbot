@@ -687,7 +687,72 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   }
   // ====== END CATALOG / INFO REQUESTS ======
 
+  // ====== RESELLER/DISTRIBUTOR INTENT: let dispatcher handle it (sends catalog + handoff) ======
+  if (userMessage && /\b(distribui[rd]|revend|quiero\s+vender|ser\s+distribuid|ampliar\s*(mi\s+)?cat[aá]logo)\b/i.test(userMessage)) {
+    console.log(`🏪 Reseller intent detected in rollo flow — deferring to dispatcher`);
+    return null;
+  }
+
+  // ====== WHOLESALE / BULK DISCOUNT QUESTIONS ======
+  // "A partir de cuántos rollos es precio mayorista?", "Precio por mayoreo?", "Descuento por cantidad?"
+  if (userMessage && /\b(mayoreo|mayorist|descuento|precio\s*especial|al\s*por\s*mayor|a\s*partir\s*de\s*cu[aá]nt)/i.test(userMessage)) {
+    await updateConversation(psid, { lastIntent: 'roll_wholesale_answered', unknownCount: 0 });
+
+    let text = "Sí manejamos precio de mayoreo en rollos. El precio que te cotizamos es directo de fábrica, y para pedidos grandes podemos mejorar el precio.";
+
+    // If we have specs, reference them
+    if (state.width && state.percentage) {
+      text += `\n\nPara cotizarte el rollo de ${state.width}m x 100m al ${state.percentage}%, indícanos la cantidad y tu código postal.`;
+    } else {
+      text += "\n\nPara cotizarte necesitamos la medida (ancho), porcentaje de sombra, cantidad y tu código postal.";
+    }
+
+    return { type: "text", text };
+  }
+  // ====== END WHOLESALE QUESTIONS ======
+
   const stage = determineStage(state);
+
+  // ====== AD ENTRY CONFIRMATION: customer clicked ad, says "me interesa" / "sí" ======
+  // Look up the ad's main product and show price, then ask for zip code.
+  if (convo?.adId && !convo?.lastQuotedProducts?.length && userMessage) {
+    const isInterest = /\b(quiero|lo\s*quiero|la\s*quiero|me\s*interesa|s[ií]|ok|dale|va|esa|eso|mand[ae]|compro|claro|perfecto|[oó]rale|sim[oó]n)\b/i.test(userMessage);
+    if (isInterest && (convo?.lastIntent === 'ad_entry' || convo?.lastIntent === 'greeting' || convo?.lastIntent === 'roll_start')) {
+      try {
+        const { resolveByAdId } = require("../../utils/campaignResolver");
+        const resolved = await resolveByAdId(convo.adId);
+        const mainProductId = resolved?.mainProductId || resolved?.productIds?.[0];
+        if (mainProductId) {
+          const product = await ProductFamily.findById(mainProductId).lean();
+          if (product && product.price) {
+            console.log(`🎯 Rollo ad confirmation → "${product.name}" at $${product.price}`);
+            // Parse product name for width/percentage to set flow state
+            const widthMatch = product.name.match(/(\d+(?:\.\d+)?)\s*(?:m|mt|mts|metros?)/i);
+            const pctMatch = product.name.match(/(\d{2,3})\s*%/);
+            const updates = {
+              lastIntent: 'roll_awaiting_zipcode',
+              unknownCount: 0,
+              productSpecs: {
+                ...convo?.productSpecs,
+                productType: 'rollo',
+                quantity: 1,
+                updatedAt: new Date()
+              }
+            };
+            if (widthMatch) updates.productSpecs.width = parseFloat(widthMatch[1]);
+            if (pctMatch) updates.productSpecs.percentage = parseInt(pctMatch[1]);
+            await updateConversation(psid, updates);
+            return {
+              type: "text",
+              text: `¡Con gusto! El ${product.name} tiene un precio de ${formatMoney(product.price)}. La compra es directa con nosotros.\n\n¿Me compartes tu código postal para cotizarte el envío?`
+            };
+          }
+        }
+      } catch (err) {
+        console.error('❌ Error looking up rollo ad product:', err.message);
+      }
+    }
+  }
 
   // ====== CONFIRMATION SHORTCUT: "si", "xfavor", "ok", "dale", "va", "por favor" ======
   let confirmationHandled = false;
@@ -987,6 +1052,12 @@ async function handleAwaitingQuantity(intent, state, sourceContext) {
   const rolloType = state.rolloType || ROLLO_TYPES.MALLA_SOMBRA;
   const typeInfo = TYPE_DISPLAY[rolloType] || TYPE_DISPLAY.malla_sombra;
 
+  // If we already have the zip, only ask for quantity (not both)
+  const hasZip = !!state.zipCode;
+  const askSuffix = hasZip
+    ? `\n\n¿Cuántos rollos necesitas?`
+    : `\n\n📍 Estamos en Querétaro, pero realizamos envíos a toda la República. 📦✈️\n\nPara cotizarte por favor indícanos cuántas unidades y tu código postal para calcular el envío.`;
+
   // Look up product to build description dynamically
   const products = await findMatchingProducts(state.width, state.percentage, rolloType);
   if (products.length > 0) {
@@ -997,15 +1068,14 @@ async function handleAwaitingQuantity(intent, state, sourceContext) {
 
     if (product.price) {
       let priceMsg = `El precio de promoción es de ${formatMoney(product.price)} + IVA por ${specsDesc}.`;
-      priceMsg += `\n\n📍 Estamos en Querétaro, pero realizamos envíos a toda la República. 📦✈️`;
-      priceMsg += `\n\nPara cotizarte por favor indícanos cuántas unidades y tu código postal para calcular el envío.`;
+      priceMsg += askSuffix;
 
       return { type: "text", text: priceMsg };
     }
 
     return {
       type: "text",
-      text: `Tenemos ${specsDesc}.\n\n📍 Estamos en Querétaro, pero realizamos envíos a toda la República. 📦✈️\n\nPara cotizarte por favor indícanos cuántas unidades y tu código postal para calcular el envío.`
+      text: `Tenemos ${specsDesc}.${askSuffix}`
     };
   }
 
@@ -1016,7 +1086,7 @@ async function handleAwaitingQuantity(intent, state, sourceContext) {
 
   return {
     type: "text",
-    text: `Tenemos ${fallbackDesc}.\n\n📍 Estamos en Querétaro, pero realizamos envíos a toda la República. 📦✈️\n\nPara cotizarte por favor indícanos cuántas unidades y tu código postal para calcular el envío.`
+    text: `Tenemos ${fallbackDesc}.${askSuffix}`
   };
 }
 

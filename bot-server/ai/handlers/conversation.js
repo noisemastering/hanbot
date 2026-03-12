@@ -59,6 +59,51 @@ async function handleConfirmation({ psid, convo, userMessage }) {
     return null;
   }
 
+  // Customer confirms interest after ad greeting — look up the ad's main product and send the link
+  if (convo?.adId && (convo?.lastIntent === 'ad_entry' || convo?.lastIntent === 'greeting')) {
+    try {
+      const Ad = require("../../models/Ad");
+      const ProductFamily = require("../../models/ProductFamily");
+      const { generateClickLink } = require("../../tracking");
+      const { resolveByAdId } = require("../../utils/campaignResolver");
+
+      const resolved = await resolveByAdId(convo.adId);
+      const mainProductId = resolved?.mainProductId || resolved?.productIds?.[0];
+
+      if (mainProductId) {
+        const product = await ProductFamily.findById(mainProductId).lean();
+        if (product && product.price) {
+          const preferredLink = product.onlineStoreLinks?.find(l => l.isPreferred);
+          const productUrl = preferredLink?.url || product.onlineStoreLinks?.[0]?.url;
+
+          if (productUrl) {
+            const trackedLink = await generateClickLink(psid, productUrl, {
+              reason: 'ad_confirmation',
+              productName: product.name,
+              productId: product._id,
+              userName: convo?.userName
+            });
+
+            await updateConversation(psid, {
+              lastIntent: "malla_complete",
+              lastSharedProductId: product._id?.toString(),
+              lastSharedProductLink: productUrl,
+              unknownCount: 0
+            });
+
+            console.log(`🎯 Ad confirmation → main product "${product.name}" at $${product.price}`);
+            return {
+              type: "text",
+              text: `¡Con gusto! La malla de ${product.name} está en $${product.price} con envío incluido.\n\n🛒 Cómprala aquí:\n${trackedLink}`
+            };
+          }
+        }
+      }
+    } catch (err) {
+      console.error('❌ Error looking up ad main product:', err.message);
+    }
+  }
+
   // Defer to flow manager when a flow is waiting for this confirmation
   const flowAwaitingStates = [
     "awaiting_alternatives_confirmation",
@@ -101,10 +146,14 @@ async function handleConfirmation({ psid, convo, userMessage }) {
   }
 
   // Defer to flow manager when user is in an active product flow
-  // e.g., borde_start, borde_awaiting_length — user saying "sí" should continue the flow
+  // Check both lastIntent prefix AND currentFlow — lastIntent can be 'ad_entry' right after greeting
   const activeProductFlows = ['borde', 'malla', 'rollo', 'groundcover', 'monofilamento'];
-  if (convo?.lastIntent && activeProductFlows.some(f => convo.lastIntent.startsWith(f + '_'))) {
-    console.log(`✋ Confirmation deferred to product flow (lastIntent: ${convo.lastIntent})`);
+  const activeCurrentFlows = ['malla_sombra', 'borde_separador', 'rollo', 'groundcover', 'monofilamento', 'reseller'];
+  if (
+    (convo?.lastIntent && activeProductFlows.some(f => convo.lastIntent.startsWith(f + '_'))) ||
+    (convo?.currentFlow && activeCurrentFlows.includes(convo.currentFlow))
+  ) {
+    console.log(`✋ Confirmation deferred to product flow (lastIntent: ${convo?.lastIntent}, currentFlow: ${convo?.currentFlow})`);
     return null;
   }
 

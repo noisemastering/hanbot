@@ -7,7 +7,7 @@ const Campaign = require("../models/Campaign");
 const { handleFallback } = require("./core/fallback");
 const { identifyAndSetProduct } = require("./utils/productIdentifier");
 const { lockPOI, checkVariantExists } = require("./utils/productTree");
-const { handleLocationStatsResponse, appendStatsQuestionIfNeeded, shouldAskLocationStatsNow } = require("./utils/locationStats");
+const { handleLocationStatsResponse, appendStatsQuestionIfNeeded } = require("./utils/locationStats");
 
 // Extracted shared helpers (used by both old monolith and new pipeline)
 const { checkForRepetition } = require("./utils/repetitionChecker");
@@ -94,7 +94,8 @@ async function generateReply(userMessage, psid, referral = null) {
         flowStep: null,
         flowData: {},
         silenceFollowUpSent: false,
-        silenceFollowUpAt: null
+        silenceFollowUpAt: null,
+        linkFollowUpAt: null
       });
       // Update local convo object
       convo.state = "active";
@@ -392,7 +393,8 @@ async function generateReply(userMessage, psid, referral = null) {
     console.log(`🎯 Ad main product name stored: ${sourceContext.ad.productName}`);
   }
   // Set currentFlow from ad context so the ad's flow governs the whole conversation
-  if (!convo.currentFlow || convo.currentFlow === 'default') {
+  // Skip if already in reseller flow (wholesale inquiry takes priority over product flow)
+  if ((!convo.currentFlow || convo.currentFlow === 'default') && !convo.isWholesaleInquiry) {
     const adProduct = sourceContext?.ad?.product || '';
     let adFlow = null;
     if (adProduct.startsWith('malla_sombra') || adProduct === 'confeccionada') {
@@ -466,9 +468,10 @@ async function generateReply(userMessage, psid, referral = null) {
     // Check campaign audience (inherits: Ad > AdSet > Campaign)
     const audienceType = sourceContext?.ad?.campaignAudience?.type || campaign.audience?.type;
     if (audienceType === 'reseller') {
-      await updateConversation(psid, { isWholesaleInquiry: true });
+      await updateConversation(psid, { isWholesaleInquiry: true, currentFlow: 'reseller' });
       convo.isWholesaleInquiry = true;
-      console.log(`🏪 Reseller audience detected from campaign "${campaign.name}" — marking as wholesale`);
+      convo.currentFlow = 'reseller';
+      console.log(`🏪 Reseller audience detected from campaign "${campaign.name}" — routing to reseller flow`);
     }
   }
 
@@ -633,63 +636,27 @@ async function generateReply(userMessage, psid, referral = null) {
   }
   // ====== END MULTI-QUESTION HANDLER ======
 
-  // ====== INTENT DISPATCHER - AI-FIRST ROUTING ======
-  // Route classified intents to pure business logic handlers
-  // This runs BEFORE flows - handles intents that don't need multi-step flow processing
-  // Examples: color_query, frustration, phone_request, human_request, etc.
-  // During pendingHandoff (waiting for zip/city), only dispatch informational FAQ intents
-  // — anything that's clearly a question, not a zip/city response
-  const INFORMATIONAL_INTENTS = new Set([
-    "color_query", "shade_percentage_query", "eyelets_query",
-    "shipping_query", "payment_query", "delivery_time_query",
-    "shipping_included_query", "pay_on_delivery_query",
-    "installation_query", "warranty_query", "structure_query",
-    "durability_query", "custom_size_query", "accessory_query",
-    "photo_request", "product_comparison", "catalog_request",
-    "how_to_buy", "phone_request", "price_per_sqm", "bulk_discount", "reseller_inquiry",
-    "frustration", "human_request", "complaint", "out_of_stock_report",
-    "price_confusion", "store_link_request", "custom_modification"
+  // ====== INTENT DISPATCHER — PRE-FLOW: only urgent/cross-cutting intents ======
+  // These intents ALWAYS dispatch first regardless of flow:
+  // frustration, human_request, complaint — customer needs immediate attention
+  const ALWAYS_DISPATCH = new Set([
+    "frustration", "human_request", "complaint", "out_of_stock_report"
   ]);
 
-  // Skip dispatcher when confidence is low — a wrong intent routed to a handler gives bad answers
   const isLowConfidence = classification.confidence < 0.4 || classification.intent === 'unclear';
-  if (isLowConfidence) {
-    console.log(`🤔 Low confidence (${classification.confidence}) / unclear — skipping dispatcher, will try flow manager then AI fallback`);
-  }
 
-  // Skip logistics intents when message has product keywords + dimensions
-  // Let the flow manager handle the full product request (including shipping/payment sub-questions)
-  const LOGISTICS_INTENTS_SKIP = new Set(['shipping_query', 'location_query', 'delivery_time_query', 'shipping_included_query', 'payment_query']);
-  const hasProductWithDimensions = /\b(rollo|malla|sombra|borde|groundcover|monofilamento)\b/i.test(userMessage) &&
-    /\d+(?:\.\d+)?\s*(?:[xX×*]|(?:metros?\s*)?por)\s*\d+/i.test(userMessage);
-  const skipForProduct = hasProductWithDimensions && LOGISTICS_INTENTS_SKIP.has(classification?.intent);
-  if (skipForProduct) {
-    console.log(`📦 Product + dimensions detected with ${classification.intent} — skipping dispatcher, letting flow manager handle`);
-  }
-
-  const shouldDispatch = !isLowConfidence && !skipForProduct && (!convo?.pendingHandoff || INFORMATIONAL_INTENTS.has(classification?.intent));
-
-  if (shouldDispatch) {
-    const dispatcherResponse = await dispatchToHandler(classification, {
-      psid,
-      convo,
-      userMessage
-    });
-
-    if (dispatcherResponse) {
-      console.log(`✅ Intent handled by dispatcher (${dispatcherResponse.handledBy})`);
-      return await checkForRepetition(dispatcherResponse, psid, convo);
+  if (!isLowConfidence && ALWAYS_DISPATCH.has(classification?.intent)) {
+    const urgentResponse = await dispatchToHandler(classification, { psid, convo, userMessage });
+    if (urgentResponse) {
+      console.log(`✅ Urgent intent handled by dispatcher (${urgentResponse.handledBy})`);
+      return await checkForRepetition(urgentResponse, psid, convo);
     }
-  } else if (!isLowConfidence) {
-    console.log(`⏭️ Skipping dispatcher - pendingHandoff active, letting flow handle zip/city response`);
   }
-  // ====== END INTENT DISPATCHER ======
+  // ====== END PRE-FLOW DISPATCHER ======
 
-  // ====== FLOW MANAGER - CENTRAL ROUTING ======
-  // ALL messages go through the flow manager
-  // - Scoring ALWAYS runs (detects tire-kickers, competitors)
-  // - Routes to appropriate flow (default, malla, rollo, etc.)
-  // - Handles flow transfers when product is detected
+  // ====== FLOW MANAGER - CENTRAL ROUTING (runs FIRST) ======
+  // Product flows handle their own shipping, payment, location, wholesale, price, etc.
+  // Scoring ALWAYS runs (detects tire-kickers, competitors)
   let response = null;
 
   try {
@@ -702,7 +669,40 @@ async function generateReply(userMessage, psid, referral = null) {
     console.error(`❌ Error in flow manager:`, flowError.message);
   }
 
-  // ====== FALLBACK: Legacy flows if flow manager didn't handle ======
+  // ====== INTENT DISPATCHER — POST-FLOW FALLBACK ======
+  // Only runs if the flow manager didn't handle the message.
+  // Handles informational intents (color, shipping, payment, etc.) for the default flow
+  // or when a product flow returns null.
+  const INFORMATIONAL_INTENTS = new Set([
+    "color_query", "shade_percentage_query", "eyelets_query",
+    "shipping_query", "payment_query", "delivery_time_query",
+    "shipping_included_query", "pay_on_delivery_query",
+    "installation_query", "warranty_query", "structure_query",
+    "durability_query", "custom_size_query", "accessory_query",
+    "photo_request", "product_comparison", "catalog_request",
+    "how_to_buy", "phone_request", "price_per_sqm", "bulk_discount", "reseller_inquiry",
+    "price_confusion", "store_link_request", "custom_modification"
+  ]);
+
+  if (!response && !isLowConfidence) {
+    const shouldDispatch = !convo?.pendingHandoff || INFORMATIONAL_INTENTS.has(classification?.intent);
+
+    if (shouldDispatch) {
+      const dispatcherResponse = await dispatchToHandler(classification, {
+        psid,
+        convo,
+        userMessage
+      });
+
+      if (dispatcherResponse) {
+        console.log(`✅ Intent handled by dispatcher fallback (${dispatcherResponse.handledBy})`);
+        response = await checkForRepetition(dispatcherResponse, psid, convo);
+      }
+    }
+  }
+  // ====== END INTENT DISPATCHER FALLBACK ======
+
+  // ====== FALLBACK: Legacy flows if nothing handled ======
   if (!response) {
     try {
       response = await processWithFlows(classification, sourceContext, convo, psid, userMessage, campaign);
@@ -765,8 +765,7 @@ async function generateReply(userMessage, psid, referral = null) {
   // ====== END PAY-ON-DELIVERY POST-CHECK ======
 
   // ====== LOCATION STATS QUESTION ======
-  // Append "de qué ciudad nos escribes?" if we're sending an ML link
-  // and haven't asked yet
+  // Append zip code question to price quotes (responses with ML link)
   if (response && response.text) {
     const statsResult = await appendStatsQuestionIfNeeded(response.text, convo, psid);
     if (statsResult.askedStats) {
@@ -774,18 +773,6 @@ async function generateReply(userMessage, psid, referral = null) {
     }
   }
   // ====== END LOCATION STATS QUESTION ======
-
-  // ====== DEFERRED ZIP CODE QUESTION ======
-  // If previous message set shouldAskLocationStats, append the question now
-  if (response && response.text && shouldAskLocationStatsNow(convo)) {
-    response.text += '\n\n¿Me puedes compartir tu código postal para fines estadísticos?';
-    await updateConversation(psid, {
-      askedLocationStats: true,
-      shouldAskLocationStats: false,
-      pendingLocationResponse: true
-    });
-  }
-  // ====== END DEFERRED ZIP CODE QUESTION ======
 
   // Check for repetition and escalate if needed
   return await checkForRepetition(response, psid, convo);

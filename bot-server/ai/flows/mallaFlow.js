@@ -46,6 +46,7 @@ const { resolveWithAI } = require("../utils/flowFallback");
 
 // Location detection
 const { detectMexicanLocation, detectZipCode } = require("../../mexicanLocations");
+const { classifyLocationIntent } = require("../utils/locationIntent");
 
 
 // NOTE: Global intents are now handled by the Intent Dispatcher (ai/intentDispatcher.js)
@@ -553,8 +554,8 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   // ====== CENTIMETER CONFIRMATION RESPONSE ======
   if (convo?.lastIntent === 'malla_awaiting_cm_confirmation' && convo?.productSpecs?.pendingCmConfirmation) {
-    const isYes = /^\s*(s[ií]|ok|dale|va|exacto|correcto|eso|as[ií]|esas?|claro|afirmativo)\s*[.!]?\s*$/i.test(userMessage);
-    const isNo = /^\s*(no|nel|nop|nope|negativo)\s*[.!]?\s*$/i.test(userMessage);
+    const isYes = /^\s*(s[ií]|si+|ok|okey|dale|va|exacto|correcto|eso|as[ií]|esas?|claro|afirmativo|[oó]rale|[aá]ndale|est[aá]\s*bien|pues\s*s[ií]|claro\s*que\s*s[ií]|por\s*supuesto|sim[oó]n|sale|va\s*eso|eso\s*es|sip|sep|ajá|aja)\s*[.!,]?\s*$/i.test(userMessage);
+    const isNo = /^\s*(no|nel|nop|nope|negativo|para\s*nada|ni\s*modo|nah|neh|tampoco|eso\s*no|nel\s*pas)\s*[.!,]?\s*$/i.test(userMessage);
 
     if (isYes) {
       console.log(`📐 Centimeter confirmation accepted, proceeding to quote`);
@@ -590,8 +591,8 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   if (convo?.lastIntent === 'malla_roll_confirmation' && convo?.productSpecs?.pendingRollSize) {
     const msg = String(userMessage).trim().toLowerCase();
     const rollSize = convo.productSpecs.pendingRollSize;
-    const wantsRoll = /\b(rollo|roll|s[ií].*rollo|el rollo|un rollo)\b/i.test(msg);
-    const wantsConfeccionada = /\b(confeccionada|lista|instalar|la malla|no.*rollo|malla sombra)\b/i.test(msg);
+    const wantsRoll = /\b(rollo|roll|s[ií].*rollo|el rollo|un rollo|en rollo|por rollo|bobina|completo)\b/i.test(msg);
+    const wantsConfeccionada = /\b(confeccionada|cortada|lista|instalar|la malla|no.*rollo|malla sombra|la peque[ñn]a|la chica|por pieza|una pieza|una malla|malla lista)\b/i.test(msg);
     const hasNewDims = parseDimensions(msg);
 
     if (hasNewDims) {
@@ -638,8 +639,8 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   // User replied to "¿una pieza o mayoreo?"
   if (convo?.lastIntent === "awaiting_reseller_intent") {
     const cleanMsg = String(userMessage).trim().toLowerCase();
-    const isRetail = /\b(una?\s*(pieza|unidad)?|solo\s*(una?|1)|personal|particular|nada\s+m[aá]s|mi\s*(casa|patio|jard[ií]n|negocio|terreno))\b/i.test(cleanMsg);
-    const isWholesale = /\b(mayoreo|mayor|al\s+por\s+mayor|revender|reventa|distribui[rd]|cantidad|lote|ferreter[ií]a|tienda|varias?)\b/i.test(cleanMsg);
+    const isRetail = /\b(una?\s*(pieza|unidad)?|solo\s*(una?|1|\d)|personal|particular|nada\s*m[aá]s|nadamas|nomas|nom[aá]s|mi\s*(casa|patio|jard[ií]n|negocio|terreno|cochera|terraza)|uso\s*propio|para\s*m[ií]|de\s*un[oa]?\s*(nada|nomas)?|servirle)\b/i.test(cleanMsg);
+    const isWholesale = /\b(mayoreo|mayor|al\s+por\s+mayor|revender|reventa|distribui[rd]|cantidad|lote|ferreter[ií]a|tienda|varias?|vender|negocio|ampliar|cat[aá]logo)\b/i.test(cleanMsg);
     const newDimensions = parseDimensions(cleanMsg);
 
     if (newDimensions) {
@@ -1311,6 +1312,33 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   // Determine current stage
   const stage = determineStage(state);
 
+  // ====== RESELLER/DISTRIBUTOR INTENT: let dispatcher handle it, not AI fallback ======
+  if (userMessage && /\b(distribui[rd]|revend|quiero\s+vender|ser\s+distribuid|ampliar\s*(mi\s+)?cat[aá]logo)\b/i.test(userMessage)) {
+    console.log(`🏪 Reseller intent detected in malla flow — deferring to dispatcher`);
+    return null;
+  }
+
+  // ====== CUSTOM SIZE REQUEST: detect BEFORE AI fallback so it's not intercepted ======
+  // "a la medida", "a la media" (typo), "fabricación a medida", "una a medida", etc.
+  if (stage === STAGES.AWAITING_DIMENSIONS && userMessage) {
+    const customSizeAlt = /\b(a\s+la\s+medi[ad]a|sobre\s*medida|a\s+medida|fabricaci[oó]n\s+(a\s+)?medida|medidas?\s+(personalizad|especial|custom))\b/i;
+    const customSizePattern = /\b(hacen|fabrican|tienen|manejan|pueden)\b.*(medida|tamaño).*(necesit|quier|pid|ocup|exact|personalizad|especial|cualquier)/i;
+    if (customSizeAlt.test(userMessage) || customSizePattern.test(userMessage)) {
+      console.log(`📐 Custom size request detected — handoff with fabrication confirmation`);
+      const requestedSize = convo?.productSpecs?.width && convo?.productSpecs?.height
+        ? `${convo.productSpecs.width}x${convo.productSpecs.height}m`
+        : (convo?.customOrderSize || null);
+      const { executeHandoff } = require("../utils/executeHandoff");
+      return await executeHandoff(psid, convo, userMessage, {
+        reason: `Cliente solicita fabricación a medida${requestedSize ? ` (pidió ${requestedSize})` : ''}`,
+        responsePrefix: '¡Claro que sí! Somos fabricantes y podemos hacer la malla a la medida que necesites. Te comunico con un especialista para cotizarte la fabricación.\n\n',
+        lastIntent: 'custom_size_handoff',
+        notificationText: `Cliente solicita malla a medida${requestedSize ? ` — pidió ${requestedSize}` : ''}`,
+        includeQueretaro: false
+      });
+    }
+  }
+
   // ====== AI FALLBACK: when we quoted products and user responds but regex can't parse ======
   let response;
   let aiFallbackHandled = false;
@@ -1554,14 +1582,41 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
   }
 
   // ====== AD PRODUCT REFERENCE ======
-  // When customer says "esa medida", "esa", "la quiero" etc. and came from an ad with a main product,
-  // use the ad product's dimensions instead of asking again
-  if (userMessage && convo?.adMainProductName && !parseDimensions(userMessage)) {
+  // When customer says "esa medida", "esa", "la quiero", "me interesa" etc. and came from an ad,
+  // look up the ad's main product directly and quote it — no dimension parsing needed.
+  if (userMessage && !parseDimensions(userMessage)) {
     const refersToAd = /\b(esa\s*(medida|malla)?|la\s*quiero|me\s*interesa|mand[ae](me|la)?|esa\s*misma|de\s*esa)\b/i.test(userMessage);
     if (refersToAd) {
-      const adDims = parseDimensions(convo.adMainProductName);
+      // Direct path: ad → main product → quote with link
+      if (convo?.adId) {
+        try {
+          const { resolveByAdId } = require("../../utils/campaignResolver");
+          const resolved = await resolveByAdId(convo.adId);
+          const mainProductId = resolved?.mainProductId || resolved?.productIds?.[0];
+          if (mainProductId) {
+            const product = await ProductFamily.findById(mainProductId).lean();
+            if (product) {
+              const dims = parseDimensions(product.name);
+              if (dims) {
+                console.log(`🎯 Customer references ad product "${product.name}" → ${dims.width}x${dims.height} (from adId)`);
+                const newState = getFlowState(convo);
+                newState.width = dims.width;
+                newState.height = dims.height;
+                return await handleComplete(null, newState, null, psid, convo, userMessage);
+              }
+            }
+          }
+        } catch (err) {
+          console.error('❌ Error looking up ad product:', err.message);
+        }
+      }
+
+      // Fallback: try adMainProductName or lastBotResponse for dimensions
+      const adDims = (convo?.adMainProductName && parseDimensions(convo.adMainProductName)) ||
+                     (convo?.lastBotResponse && parseDimensions(convo.lastBotResponse));
       if (adDims) {
-        console.log(`🎯 Customer references ad product "${convo.adMainProductName}" → ${adDims.width}x${adDims.height}`);
+        const source = convo?.adMainProductName ? convo.adMainProductName : 'last bot message';
+        console.log(`🎯 Customer references ad product (from ${source}) → ${adDims.width}x${adDims.height}`);
         const newState = getFlowState(convo);
         newState.width = adDims.width;
         newState.height = adDims.height;
@@ -1591,7 +1646,7 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
 
   // Check if user is asking about custom sizes ("hacen la medida que necesita?", "a la medida?")
   const customSizePattern = /\b(hacen|fabrican|tienen|manejan|pueden)\b.*(medida|tamaño).*(necesit|quier|pid|ocup|exact|personalizad|especial|cualquier)/i;
-  const customSizeAlt = /\b(a\s+la\s+medida|sobre\s*medida|cualquier\s*(medida|tamaño)|medidas?\s+(personalizad|especial|custom))\b/i;
+  const customSizeAlt = /\b(a\s+la\s+medi[ad]a|a\s+medida|sobre\s*medida|cualquier\s*(medida|tamaño)|medidas?\s+(personalizad|especial|custom))\b/i;
   if (userMessage && (customSizePattern.test(userMessage) || customSizeAlt.test(userMessage))) {
     console.log(`📐 Custom size question detected in malla flow`);
     await updateConversation(psid, { lastIntent: "custom_size_confirmed", unknownCount: 0 });
@@ -1888,7 +1943,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     // Does the message contain new dimensions or price-related keywords?
     const hasNewDimensions = parseDimensions(userMessage);
     const isPriceRelated = /\b(precio|presio|costo|cu[aá]nto|vale|cuesta|cotiza|descuento|oferta|mayoreo)\b/i.test(msg);
-    const isConfirmation = /\b(s[ií]|ok|va|dale|lo quiero|la quiero|compro|llev[oa]|perfecto|esa|ese|mand[ae])\b/i.test(msg);
+    const isConfirmation = /\b(s[ií]|ok|okey|va|dale|lo quiero|la quiero|compro|llev[oa]|perfecto|esa|ese|mand[ae]|[oó]rale|[aá]ndale|sim[oó]n|sale|claro|xfavor|x\s*favor|por\s*favor|est[aá]\s*bien|pues\s*s[ií]|sip|sep)\b/i.test(msg);
     const isNewSize = /\b(\d+\s*[xX×]\s*\d+|\d+\s*por\s*\d+)\b/.test(msg);
 
     // If the message has NO dimension/price/confirmation intent, check for general questions
@@ -1940,11 +1995,18 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       }
 
       // Address / location questions
-      if (/\b(direcci[oó]n|ubicaci[oó]n|(?:d[oó]nde|dnd)\s+(est[aá]n|se\s+ubica|queda)|domicilio|tienda\s+f[ií]sica|sucursal|local|mostrador|recoger|pasar\s+a\s+recoger)\b/i.test(msg)) {
+      const locationIntent = classifyLocationIntent(msg);
+      if (locationIntent === 'asking_ours') {
         await updateConversation(psid, { lastIntent: 'address_question', unknownCount: 0 });
         return {
           type: "text",
           text: `Nuestra tienda física está en Querétaro:\n${MAPS_URL}\n\nTambién puedes comprar en línea a través de Mercado Libre con envío incluido a todo México.`
+        };
+      }
+      if (locationIntent === 'sending_theirs') {
+        return {
+          type: "text",
+          text: "¡Perfecto! Mándanos tu ubicación por WhatsApp: https://wa.me/524425957432"
         };
       }
 
@@ -2352,9 +2414,9 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       concerns: concerns
     });
 
-    // Add wholesale mention if product is eligible
+    // Add wholesale mention only for wholesale/reseller conversations
     let wholesaleMention = "";
-    if (product.wholesaleMinQty && !quantity) {
+    if (product.wholesaleMinQty && !quantity && convo?.isWholesaleInquiry) {
       wholesaleMention = `\n\nA partir de ${product.wholesaleMinQty} piezas manejamos precio de mayoreo.`;
     }
 

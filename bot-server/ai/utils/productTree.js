@@ -328,9 +328,25 @@ async function lockPOI(psid, productId) {
     const product = await getProductWithAncestry(productId);
     if (!product) return null;
 
+    // Compute productInterest string from hierarchy
+    // Special case: Cinta Plástica family uses gen2 name (Borde Separador, etc.)
+    let interestSource = product.rootName;
+    if (product.rootName === 'Cinta Plástica') {
+      if (product.ancestors.length >= 2) {
+        interestSource = product.ancestors[1].name; // gen2 ancestor
+      } else if (product.depth === 2) {
+        interestSource = product.name; // product itself is gen2
+      }
+    }
+    const computedInterest = interestSource
+      .toLowerCase()
+      .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .replace(/\s+/g, '_')
+      .replace(/[^a-z0-9_]/g, '');
+
     // Update conversation with POI locked
     await updateConversation(psid, {
-      productInterest: product._id.toString(),
+      productInterest: computedInterest,
       productFamilyId: product._id.toString(),
       poiLocked: true,
       poiRootId: product.rootId.toString(),

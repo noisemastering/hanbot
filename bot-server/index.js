@@ -774,6 +774,29 @@ app.post("/webhook", async (req, res) => {
               // Key: Facebook user ID, Value: post context
               const CommentContext = require('./models/CommentContext');
               try {
+                // Resolve product from post at storage time so it's available on lookup
+                let commentProductInterest = null;
+                try {
+                  const PostMapping = require('./models/PostMapping');
+                  const pm = await PostMapping.findOne({ postId: post_id }).lean();
+                  if (pm?.productInterest) {
+                    commentProductInterest = pm.productInterest;
+                  } else {
+                    const { resolveByPostId } = require('./utils/campaignResolver');
+                    const { getProductInterest } = require('./ai/utils/productEnricher');
+                    const ProductFamily = require('./models/ProductFamily');
+                    const resolved = await resolveByPostId(post_id);
+                    if (resolved?.productIds?.length) {
+                      const pid = resolved.mainProductId || resolved.productIds[0];
+                      const prod = await ProductFamily.findById(pid).lean();
+                      if (prod) commentProductInterest = await getProductInterest(prod);
+                    }
+                  }
+                  if (commentProductInterest) console.log(`   📍 Resolved post product: ${commentProductInterest}`);
+                } catch (e) {
+                  console.error(`   ⚠️ Could not resolve post product:`, e.message);
+                }
+
                 await CommentContext.findOneAndUpdate(
                   { fbUserId: from.id },
                   {
@@ -782,6 +805,7 @@ app.post("/webhook", async (req, res) => {
                     postId: post_id,
                     commentId: comment_id,
                     commentText: message,
+                    productInterest: commentProductInterest,
                     createdAt: new Date()
                   },
                   { upsert: true, new: true }
@@ -1016,6 +1040,7 @@ app.post("/webhook", async (req, res) => {
         // 🔍 Look up ad with inheritance (Campaign → AdSet → Ad)
         let adProductInterest = null;
         let adGreeting = null;
+        let adMainProductName = null;
 
         let resolvedSettings = null;
 
@@ -1063,6 +1088,7 @@ app.post("/webhook", async (req, res) => {
 
             if (product) {
               adProductInterest = await getProductInterest(product);
+              adMainProductName = product.name;
               console.log(`📦 Ad ${referral.ad_id} - Resolved products from ${resolvedSettings.campaignName}`);
               console.log(`📦 Using: ${product.name} → productInterest: ${adProductInterest}`);
               adGreeting = greetings[adProductInterest] || "👋 ¡Hola! Gracias por contactarnos. ¿En qué producto te puedo ayudar?";
@@ -1121,7 +1147,7 @@ app.post("/webhook", async (req, res) => {
         }
 
         const isResellerAd = resolvedSettings?.audience?.type === 'reseller' ||
-          resellerPattern.test(namesToCheck);
+          (!resolvedSettings?.audience?.type && resellerPattern.test(namesToCheck));
         console.log(`🏪 Reseller check: namesToCheck="${namesToCheck}", audience=${resolvedSettings?.audience?.type || 'N/A'}, isReseller=${isResellerAd}`);
         if (isResellerAd) {
           console.log(`🏪 Reseller ad detected — using reseller pitch as greeting`);
@@ -1184,7 +1210,9 @@ app.post("/webhook", async (req, res) => {
         const adFlowRef = resolvedSettings?.flowRef;
         const adCurrentFlow = isResellerAd ? 'reseller' : (adFlowRef || adProductInterest);
         if (adProductInterest) {
-          await updateConversation(senderPsid, { productInterest: adProductInterest, currentFlow: adCurrentFlow, adFlowRef: adFlowRef || null, greeted: true, lastGreetTime: Date.now() });
+          const adConvoUpdate = { productInterest: adProductInterest, currentFlow: adCurrentFlow, adFlowRef: adFlowRef || null, greeted: true, lastGreetTime: Date.now() };
+          if (adMainProductName) adConvoUpdate.adMainProductName = adMainProductName;
+          await updateConversation(senderPsid, adConvoUpdate);
           await callSendAPI(senderPsid, { text: adGreeting });
           adGreetingSent = true;
         } else if (referral.ad_id) {
@@ -1315,17 +1343,23 @@ app.post("/webhook", async (req, res) => {
               console.log(`   Post ID: ${commentContext.postId}`);
               console.log(`   Original comment: ${commentContext.commentText?.slice(0, 50)}`);
 
-              // Infer product from post mapping or comment text
+              // Infer product from post mapping, ad lookup, or comment text
               const postId = commentContext.postId || '';
-              let inferredProduct = null;
+              let inferredProduct = commentContext.productInterest || null;
 
-              // First, check if we have a post mapping
-              const PostMapping = require('./models/PostMapping');
-              const postMapping = await PostMapping.findOne({ postId }).lean();
+              if (inferredProduct) {
+                console.log(`   📍 Product from stored comment context: ${inferredProduct}`);
+              }
 
-              if (postMapping?.productInterest) {
-                inferredProduct = postMapping.productInterest;
-                console.log(`   📍 Found post mapping: ${inferredProduct}`);
+              // Then check post mapping
+              if (!inferredProduct) {
+                const PostMapping = require('./models/PostMapping');
+                const postMapping = await PostMapping.findOne({ postId }).lean();
+
+                if (postMapping?.productInterest) {
+                  inferredProduct = postMapping.productInterest;
+                  console.log(`   📍 Found post mapping: ${inferredProduct}`);
+                }
               }
 
               // Try Ad lookup by postId (campaign inheritance chain)
@@ -1361,10 +1395,10 @@ app.post("/webhook", async (req, res) => {
 
               // New entry point → full state reset (same as ad click handler)
               // This prevents old session state from leaking into the new context
+              // When we can't determine the product from the post, preserve existing
+              // flow context (e.g. customer from borde ad commenting "Precio")
               const updateData = {
                 state: "active",
-                productInterest: inferredProduct,
-                currentFlow: inferredProduct || null,
                 source: {
                   type: 'comment',
                   postId: commentContext.postId,
@@ -1390,6 +1424,12 @@ app.post("/webhook", async (req, res) => {
                 lastUnavailableSize: null,
                 isWholesaleInquiry: false,
               };
+
+              // Only overwrite product context when we actually determined the product
+              if (inferredProduct) {
+                updateData.productInterest = inferredProduct;
+                updateData.currentFlow = inferredProduct;
+              }
 
               // If resolved from Ad, store campaign context for full inheritance downstream
               if (resolvedFromAd) {
@@ -2017,10 +2057,12 @@ setTimeout(scheduleMLPriceSync, 60000);
 
 // Silence follow-up job - sends store link after 10min of customer inactivity
 setTimeout(() => {
-  const { runSilenceFollowUpJob } = require('./jobs/silenceFollowUp');
+  const { runSilenceFollowUpJob, runLinkFollowUpJob } = require('./jobs/silenceFollowUp');
   console.log('⏰ Silence follow-up job scheduled (every 60s)');
   runSilenceFollowUpJob();
+  runLinkFollowUpJob();
   setInterval(runSilenceFollowUpJob, 60 * 1000);
+  setInterval(runLinkFollowUpJob, 60 * 1000);
 }, 90000);
 
 // Health check - monitors tracking domain, emails alert on SSL/DNS/HTTP failure

@@ -113,40 +113,41 @@ function containsMLLink(responseText) {
 }
 
 /**
- * Mark that we should ask for location on the NEXT user message
- * (after they acknowledge receiving the link)
+ * Append zip code question to the response if it contains an ML link
+ * and we haven't asked yet.
  * @param {string} responseText - The bot's response
  * @param {object} convo - Conversation state
  * @param {string} psid - User's PSID
- * @returns {object} { text: unchanged, markedForStats: boolean }
+ * @returns {object} { text, askedStats: boolean }
  */
-async function markForLocationStatsIfNeeded(responseText, convo, psid) {
-  // Don't mark if already asked
+async function appendStatsQuestionToResponse(responseText, convo, psid) {
+  // Don't ask if already asked
   if (convo.askedLocationStats) {
-    return { text: responseText, markedForStats: false };
+    return { text: responseText, askedStats: false };
   }
 
-  // Don't mark if we already have their location
+  // Don't ask if we already have their location
   if (convo.city && convo.stateMx) {
-    return { text: responseText, markedForStats: false };
+    return { text: responseText, askedStats: false };
   }
 
-  // Only mark if response contains ML link
+  // Only ask if response contains ML link (price quote with purchase link)
   if (!containsMLLink(responseText)) {
-    return { text: responseText, markedForStats: false };
+    return { text: responseText, askedStats: false };
   }
 
-  // Mark to ask on NEXT message (not now)
+  // Append question and mark as asked
   await updateConversation(psid, {
-    shouldAskLocationStats: true,
+    askedLocationStats: true,
+    pendingLocationResponse: true,
     lastLinkSentAt: new Date()
   });
 
-  console.log("📊 Marked to ask location stats on next user message");
+  console.log("📊 Appending zip code question to price quote response");
 
   return {
-    text: responseText, // Don't modify the response
-    markedForStats: true
+    text: responseText + '\n\n¿Me puedes compartir tu código postal para fines estadísticos?',
+    askedStats: true
   };
 }
 
@@ -189,9 +190,9 @@ async function askLocationStatsQuestion(psid, convo) {
   return response ? { type: "text", text: response } : null;
 }
 
-// Keep old function name for backwards compatibility during migration
+// Keep old function name for backwards compatibility
 async function appendStatsQuestionIfNeeded(responseText, convo, psid) {
-  return await markForLocationStatsIfNeeded(responseText, convo, psid);
+  return await appendStatsQuestionToResponse(responseText, convo, psid);
 }
 
 /**
@@ -485,8 +486,8 @@ async function syncConversationPOIToUser(psid, convo) {
 
 module.exports = {
   containsMLLink,
-  appendStatsQuestionIfNeeded, // Legacy - now just marks for later
-  markForLocationStatsIfNeeded,
+  appendStatsQuestionIfNeeded,
+  appendStatsQuestionToResponse,
   shouldAskLocationStatsNow,
   askLocationStatsQuestion,
   parseLocationResponse,

@@ -36,7 +36,7 @@ function getPitchMessage(productInterest) {
 
 // ── Detection patterns ──
 
-const RESELLER_PATTERNS = /\b(distribui|revend|cat[aá]logo|lista\s*(?:de\s*)?precios?|red\s*distribuid|ampliar\s*cat[aá]logo|mi\s+negocio|mi\s+tienda|mi\s+ferreter[ií]a)\b/i;
+const RESELLER_PATTERNS = /\b(distribui\w*|revend\w*|revent\w*|vender\s+sus|vender\s+producto|cat[aá]logo|lista\s*(?:de\s*)?precios?|red\s*de?\s*distribui\w*|ampliar\s*(?:mi\s+)?cat[aá]logo|mi\s+negocio|mi\s+tienda|mi\s+ferreter[ií]a|intermediario|socio\s*comercial|agente\s*de\s*ventas)\b/i;
 const WHOLESALE_QUANTITY_PATTERN = /\b\d+\s*(piezas?|unidades?|mallas?)\b/i;
 const WHOLESALE_KEYWORD = /\b(mayoreo|al\s*por\s*mayor|mayor)\b/i;
 
@@ -79,7 +79,14 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   // we need to confirm intent before changing flow.
   if (!lastIntent.startsWith('reseller_')) {
     console.log(`🏪 Reseller flow — sending pitch`);
-    await updateConversation(psid, { lastIntent: 'reseller_pitch_sent' });
+    // Store any dimensions from the initial message so we can reference them later
+    const initialDims = parseDimensions(String(userMessage || ''));
+    const pitchUpdate = { lastIntent: 'reseller_pitch_sent', currentFlow: 'reseller' };
+    if (initialDims) {
+      pitchUpdate.resellerInitialDimensions = `${initialDims.width}x${initialDims.height}`;
+      console.log(`🏪 Stored initial dimensions: ${pitchUpdate.resellerInitialDimensions}`);
+    }
+    await updateConversation(psid, pitchUpdate);
     return { type: "text", text: getPitchMessage(convo?.productInterest) };
   }
 
@@ -176,15 +183,24 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     }
 
     // --- Path 3: Retail intent (wants to buy, not resell) ---
-    const RETAIL_PATTERNS = /\b(busco\s+comprar|quiero\s+comprar|solo\s+(quiero\s+)?comprar|para\s+uso\s+propio|comprar\s+una|quiero\s+una|necesito\s+una|una\s+pieza|una\s+malla|solo\s+una|para\s+mi|uso\s+personal)\b/i;
-    if (RETAIL_PATTERNS.test(msg)) {
+    // Catch "solo una", "nada más una", "1 nada mas", "nomas quiero una", "para servirle de uno", etc.
+    const RETAIL_PATTERNS = /\b(busco\s+comprar|quiero\s+comprar|solo\s+(quiero\s+)?comprar|para\s+uso\s+propio|comprar\s+una?|quiero\s+una?|necesito\s+una?|una?\s+pieza|una?\s+malla|solo\s+una?|solo\s+esa|esa\s+medida|solo\s+esa\s+medida|solo\s+busco|para\s+mi|uso\s+personal|nada\s*m[aá]s|nadamas|no\s*m[aá]s|nomas|nom[aá]s|servirle\s+de\s+un|de\s+un[oa]?\s+(nada\s*m[aá]s|nadamas|nomas|nom[aá]s)|solo\s+\d+|un[oa]?\s+nada\s*m[aá]s)\b/i;
+    // Also catch bare small quantities: "1", "1 nadamas", "2 piezas" — retail when bot just asked
+    const SMALL_QTY_RETAIL = /^\s*(\d{1,2})\s*(piezas?|mallas?|nada\s*m[aá]s|nadamas|nomas|nom[aá]s|solo|unidades?)?\s*$/i;
+    const isRetailIntent = RETAIL_PATTERNS.test(msg) || SMALL_QTY_RETAIL.test(msg);
+    if (isRetailIntent) {
       const retailFlow = convo?.productInterest === 'borde_separador' ? 'borde_separador' : 'malla_sombra';
       console.log(`🏪 Reseller flow — retail intent "${msg.substring(0, 40)}", switching to ${retailFlow}`);
+
+      // Extract quantity if present (e.g., "1 nadamas", "2 piezas")
+      const qtyMatch = msg.match(/\b(\d{1,2})\s*(piezas?|mallas?|unidades?)?\b/);
+      const quantity = qtyMatch ? parseInt(qtyMatch[1]) : null;
 
       await updateConversation(psid, {
         isWholesaleInquiry: false,
         currentFlow: retailFlow,
-        lastIntent: null
+        lastIntent: null,
+        resellerInitialDimensions: null
       });
 
       // Check if they also gave dimensions in the same message
@@ -192,6 +208,19 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       if (dims) {
         // Return null to re-process with dimensions in the retail flow
         return null;
+      }
+
+      // Check if they're referencing dimensions from their initial message
+      if (convo?.resellerInitialDimensions) {
+        const storedDims = parseDimensions(convo.resellerInitialDimensions);
+        if (storedDims) {
+          console.log(`🏪 Using stored initial dimensions: ${convo.resellerInitialDimensions}`);
+          // Set productSpecs so the flow knows the size, then re-process
+          await updateConversation(psid, {
+            productSpecs: { productType: 'malla', width: storedDims.width, height: storedDims.height, quantity: quantity || 1 }
+          });
+          return null;
+        }
       }
 
       // No dimensions yet — ask for them naturally
@@ -238,9 +267,24 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       return { ...handoffResponse, handledBy: "reseller" };
     }
 
+    // --- Path 5: Price inquiry (valid reseller question) ---
+    const PRICE_INQUIRY = /\b(precios?|costos?|cuanto|cu[aá]nto|cotizaci[oó]n|metro\s*cuadrado|m2|por\s*metro|precio.*metro|tarifas?|lista.*precios?|medidas?\s+y\s+precios?|medidas?\s+que\s+manejan)\b/i;
+    if (PRICE_INQUIRY.test(msg)) {
+      console.log(`🏪 Reseller flow — price inquiry: "${msg.substring(0, 40)}"`);
+      // Answer the question and stay in the reseller flow
+      await updateConversation(psid, { lastIntent: 'reseller_pitch_sent', currentFlow: 'reseller' });
+      const isBorde = convo?.productInterest === 'borde_separador';
+      return {
+        type: "text",
+        text: isBorde
+          ? "Manejamos rollos de 18m y 54m. Los precios de mayoreo dependen de la cantidad. ¿Cuántos rollos te interesan?"
+          : "Manejamos la malla confeccionada por pieza (no por metro cuadrado). Las medidas van desde 2x2m hasta 7x10m, con precios desde $294 hasta $3,450 en menudeo.\n\nPara precios de mayoreo, ¿qué medida y cantidad te interesan?"
+      };
+    }
+
     // --- Fallback: not clear yet, re-send a shorter prompt ---
     console.log(`🏪 Reseller flow — unclear response, asking to clarify`);
-    await updateConversation(psid, { lastIntent: 'reseller_pitch_sent' });
+    await updateConversation(psid, { lastIntent: 'reseller_pitch_sent', currentFlow: 'reseller' });
     const isBorde = convo?.productInterest === 'borde_separador';
     return {
       type: "text",

@@ -369,6 +369,12 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     if (pendingResult) return pendingResult;
   }
 
+  // ====== RESELLER/DISTRIBUTOR INTENT: let dispatcher handle it (sends catalog + handoff) ======
+  if (userMessage && /\b(distribui[rd]|revend|quiero\s+vender|ser\s+distribuid|ampliar\s*(mi\s+)?cat[aá]logo)\b/i.test(userMessage)) {
+    console.log(`🏪 Reseller intent detected in borde flow — deferring to dispatcher`);
+    return null;
+  }
+
   // ====== WHOLESALE/RESELLER GUARD ======
   // Reseller conversations (from reseller ads) never see retail prices.
   // Hand off to specialist immediately.
@@ -421,6 +427,49 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       type: "text",
       text: "¡Perfecto! Cualquier cosa aquí andamos. ¡Que tengas excelente día!"
     };
+  }
+
+  // AD ENTRY CONFIRMATION — customer clicked ad, got greeting, says "me interesa" / "sí" / etc.
+  // Look up the ad's main product directly and quote it.
+  if (convo?.adId && !convo?.lastQuotedProducts?.length) {
+    const isInterest = /\b(quiero|lo\s*quiero|la\s*quiero|me\s*interesa|s[ií]|ok|dale|va|esa|eso|mand[ae]|lo\s*llevo|compro|claro|perfecto|[oó]rale|sim[oó]n)\b/i.test(userMessage);
+    if (isInterest && (convo?.lastIntent === 'ad_entry' || convo?.lastIntent === 'greeting' || convo?.lastIntent === 'borde_start')) {
+      try {
+        const { resolveByAdId } = require("../../utils/campaignResolver");
+        const ProductFamily = require("../../models/ProductFamily");
+        const resolved = await resolveByAdId(convo.adId);
+        const mainProductId = resolved?.mainProductId || resolved?.productIds?.[0];
+        if (mainProductId) {
+          const product = await ProductFamily.findById(mainProductId).lean();
+          if (product && product.price) {
+            const preferredLink = product.onlineStoreLinks?.find(l => l.isPreferred);
+            const productUrl = preferredLink?.url || product.onlineStoreLinks?.[0]?.url;
+            if (productUrl) {
+              const trackedLink = await generateClickLink(psid, productUrl, {
+                reason: 'ad_confirmation',
+                productName: product.name,
+                productId: product._id,
+                userName: convo?.userName
+              });
+              await updateConversation(psid, {
+                lastIntent: 'borde_complete',
+                lastSharedProductId: product._id?.toString(),
+                lastSharedProductLink: productUrl,
+                lastQuotedProducts: [{ productName: product.name, price: product.price, productUrl, productId: product._id?.toString(), displayText: product.name }],
+                unknownCount: 0
+              });
+              console.log(`🎯 Borde ad confirmation → "${product.name}" at $${product.price}`);
+              return {
+                type: "text",
+                text: `¡Con gusto! ${product.name} a ${formatMoney(product.price)} con envío incluido.\n\n🛒 Cómpralo aquí:\n${trackedLink}`
+              };
+            }
+          }
+        }
+      } catch (err) {
+        console.error('❌ Error looking up borde ad product:', err.message);
+      }
+    }
   }
 
   // REAFFIRMATION — runs REGARDLESS of flowCompleted state.

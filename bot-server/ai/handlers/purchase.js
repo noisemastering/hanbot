@@ -87,13 +87,42 @@ async function handleHowToBuy({ psid, convo }) {
 /**
  * Handle bulk discount - "Si compro 5 me hacen descuento?", "Precio por cantidad"
  * Buyer wants multiple units for personal use or a project.
+ * Flow-aware: gives rollo/borde-specific answers when in those flows.
  */
-async function handleBulkDiscount({ psid, convo }) {
+async function handleBulkDiscount({ psid, convo, userMessage }) {
   await updateConversation(psid, {
     lastIntent: "bulk_discount",
     unknownCount: 0
   });
 
+  const flow = convo?.currentFlow || convo?.productInterest;
+
+  // Rollo / groundcover / monofilamento — wholesale is direct sales
+  if (flow === 'rollo' || flow === 'groundcover' || flow === 'monofilamento') {
+    let text = "Sí manejamos precio de mayoreo en rollos.\n\n" +
+      "Para cotización de mayoreo necesitamos saber la medida, porcentaje de sombra, cantidad y tu código postal.\n\n" +
+      "¿Me compartes esos datos?";
+
+    const catalogUrl = await getCatalogUrl(convo, flow);
+    if (catalogUrl) {
+      text += `\n\n📄 Aquí está nuestro catálogo con lista de precios:\n${catalogUrl}`;
+    }
+
+    return { type: "text", text };
+  }
+
+  // Borde separador — fixed wholesale minimums
+  if (flow === 'borde_separador') {
+    return {
+      type: "text",
+      text: "El precio de mayoreo en borde separador es:\n\n" +
+        "• Rollos de 18m: a partir de 20 rollos\n" +
+        "• Rollos de 54m: a partir de 7 rollos\n\n" +
+        "¿Qué largo y cantidad te interesan?"
+    };
+  }
+
+  // Default: malla sombra confeccionada
   let text = "¡Ahora puedes acceder a precio de mayoreo a partir de la compra de 5 mallas en adelante!\n\n" +
     "Es una excelente oportunidad para comenzar o fortalecer tu venta de malla sombra con mejores márgenes, sin compras excesivas y de forma sencilla.\n\n" +
     "Si tienes alguna duda o quieres una cotización personalizada, con gusto te apoyo.";
@@ -110,27 +139,44 @@ async function handleBulkDiscount({ psid, convo }) {
 /**
  * Handle reseller inquiry - "Quiero revender", "Soy distribuidor"
  * Prospect wants to become a distributor/reseller.
+ * Sends catalog PDF + hands off to specialist.
  */
-async function handleResellerInquiry({ psid, convo }) {
-  await updateConversation(psid, {
-    lastIntent: "reseller_inquiry",
-    unknownCount: 0
-  });
+async function handleResellerInquiry({ psid, convo, userMessage }) {
+  const { executeHandoff } = require("../utils/executeHandoff");
+  const { sendCatalog } = require("../../utils/sendCatalog");
+  const { sendTextMessage: sendWhatsAppText, sendWhatsAppMessage } = require("../../channels/whatsapp/api");
 
-  let text = "Somos fabricantes de malla sombra de alta calidad y buscamos revendedores que quieran expandir su negocio.\n\n" +
-    "Beneficios para revendedores:\n" +
-    "• Descuento por mayoreo para maximizar tu ganancia\n" +
-    "• Variedad de medidas y colores para diferentes usos\n" +
-    "• Entrega rápida y atención personalizada\n\n" +
-    "Si quieres revender un producto rentable, con gusto te preparo una cotización especial.";
+  const catalogUrl = await getCatalogUrl(convo, convo?.currentFlow || 'malla_sombra');
 
-  // Attach catalog if available
-  const catalogUrl = await getCatalogUrl(convo, convo?.currentFlow);
+  // Send catalog PDF as attachment before the handoff text
   if (catalogUrl) {
-    text += `\n\n📄 Aquí está nuestro catálogo con lista de precios:\n${catalogUrl}`;
+    const channel = convo?.channel || (psid.startsWith('wa:') ? 'whatsapp' : 'facebook');
+    try {
+      if (channel === 'whatsapp') {
+        const phone = psid.replace('wa:', '');
+        await sendWhatsAppMessage(phone, {
+          type: 'document',
+          document: { link: catalogUrl, filename: 'Catalogo_Hanlob.pdf' }
+        });
+      } else {
+        const fbPsid = psid.startsWith('fb:') ? psid.replace('fb:', '') : psid;
+        await sendCatalog(fbPsid, catalogUrl);
+      }
+    } catch (err) {
+      console.error('❌ Error sending catalog in reseller handler:', err.message);
+    }
   }
 
-  return { type: "text", text };
+  return await executeHandoff(psid, convo, userMessage || '', {
+    reason: `Revendedor interesado — ${(userMessage || '').substring(0, 80)}`,
+    responsePrefix: catalogUrl
+      ? 'Te comparto nuestro catálogo con medidas y precios de mayoreo. Un especialista te contactará para darte más detalles sobre cómo ser parte de nuestra red de distribuidores.\n\n'
+      : 'Un especialista te contactará para darte información sobre precios de mayoreo y cómo ser parte de nuestra red de distribuidores.\n\n',
+    lastIntent: 'reseller_catalog_sent',
+    notificationText: `Revendedor interesado: "${(userMessage || '').substring(0, 60)}"`,
+    timingStyle: 'elaborate',
+    includeQueretaro: false
+  });
 }
 
 /**

@@ -266,8 +266,12 @@ async function handleAcknowledgment(cleanMsg, psid, convo) {
 
     // Defer when user is in an active product flow
     const activeProductFlows = ['borde', 'malla', 'rollo', 'groundcover', 'monofilamento'];
-    if (convo?.lastIntent && activeProductFlows.some(f => convo.lastIntent.startsWith(f + '_'))) {
-      console.log(`✋ Acknowledgment deferred to product flow (lastIntent: ${convo.lastIntent})`);
+    const activeCurrentFlows = ['malla_sombra', 'borde_separador', 'rollo', 'groundcover', 'monofilamento', 'reseller'];
+    if (
+      (convo?.lastIntent && activeProductFlows.some(f => convo.lastIntent.startsWith(f + '_'))) ||
+      (convo?.currentFlow && activeCurrentFlows.includes(convo.currentFlow))
+    ) {
+      console.log(`✋ Acknowledgment deferred to product flow (lastIntent: ${convo?.lastIntent}, currentFlow: ${convo?.currentFlow})`);
       return null;
     }
 

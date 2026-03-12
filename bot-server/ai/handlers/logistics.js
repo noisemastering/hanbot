@@ -6,6 +6,7 @@ const { getBusinessInfo, MAPS_URL, STORE_ADDRESS } = require("../../businessInfo
 const { detectMexicanLocation } = require("../../mexicanLocations");
 const { generateBotResponse } = require("../responseGenerator");
 const { generateClickLink } = require("../../tracking");
+const { classifyLocationIntent } = require("../utils/locationIntent");
 
 const STORE_URL = "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob";
 
@@ -70,6 +71,15 @@ async function handleShipping({ entities, psid, convo, userMessage }) {
  * Handle location query - "Dónde están?", "Tienen tienda física?"
  */
 async function handleLocation({ psid, userMessage, convo }) {
+  // Customer is talking about sending THEIR location, not asking for ours
+  if (classifyLocationIntent(userMessage) === 'sending_theirs') {
+    console.log(`📍 Customer is offering to send their location, not asking for ours`);
+    return {
+      type: "text",
+      text: "¡Perfecto! Mándanos tu ubicación por WhatsApp: https://wa.me/524425957432"
+    };
+  }
+
   const businessInfo = await getBusinessInfo();
   const locationInfo = await detectMexicanLocation(userMessage);
 

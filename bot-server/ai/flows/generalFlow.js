@@ -8,6 +8,7 @@ const { INTENTS } = require("../classifier");
 const { getAvailableSizes, getMallaSizeRange, parseDimensions } = require("../../measureHandler");
 const { isBusinessHours } = require("../utils/businessHours");
 const ProductFamily = require("../../models/ProductFamily");
+const { classifyLocationIntent } = require("../utils/locationIntent");
 
 /**
  * Cache for roll sizes from DB (weekly refresh)
@@ -103,7 +104,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       return handleShipping(entities, convo, psid);
 
     case INTENTS.LOCATION_QUERY:
-      return handleLocation(convo, psid);
+      return handleLocation(convo, psid, userMessage);
 
     case INTENTS.PAYMENT_QUERY:
       return handlePayment(entities, convo, psid);
@@ -237,7 +238,14 @@ async function handleShipping(entities, convo, psid) {
  * Handle location query
  * IMPORTANT: Lead with shipping info - users often think they can't buy if they're far away
  */
-async function handleLocation(convo, psid) {
+async function handleLocation(convo, psid, userMessage = '') {
+  if (classifyLocationIntent(userMessage) === 'sending_theirs') {
+    return {
+      type: "text",
+      text: "¡Perfecto! Mándanos tu ubicación por WhatsApp: https://wa.me/524425957432"
+    };
+  }
+
   await updateConversation(psid, { lastIntent: "location_query" });
 
   return {

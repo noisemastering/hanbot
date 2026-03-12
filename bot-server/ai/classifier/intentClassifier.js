@@ -5,6 +5,7 @@
 const { OpenAI } = require("openai");
 
 const openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
+const { isSendingTheirLocation } = require("../utils/locationIntent");
 
 // ========== INTENT CACHE FOR DB-DRIVEN INTENTS ==========
 let intentCache = null;
@@ -736,6 +737,8 @@ function quickClassify(message, dbIntents = null) {
   const detectedIntents = [];
   for (const { intent, pattern } of questionIndicators) {
     if (pattern.test(msg)) {
+      // "ubicación" in "le mando ubicación" is NOT a location query
+      if (intent === 'location_query' && isSendingTheirLocation(msg)) continue;
       detectedIntents.push(intent);
     }
   }

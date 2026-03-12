@@ -229,9 +229,32 @@ function buildResult(dim1, dim2, isFeet = false, userExpressed = null) {
     result.originalFeetStr = `${originalDim1}x${originalDim2} pies`;
   }
 
+  // Detect mixed input: one dimension is large (multiple of 50) paired with a small one
+  // e.g. "250 x 4" → 2.50 x 4m, "350 x 5" → 3.50 x 5m
+  // People write "250" meaning 2.50m (2 metros 50 centímetros)
+  if (!isFeet) {
+    // Skip 100/200 (ambiguous with rollos) — only convert 150, 250, 350, 450, 550, 650, 750, 850, 950
+    const wLarge = width >= 150 && width <= 950 && width % 50 === 0 && width % 100 !== 0 && height <= 10;
+    const hLarge = height >= 150 && height <= 950 && height % 50 === 0 && height % 100 !== 0 && width <= 10;
+    if (wLarge || hLarge) {
+      const newW = wLarge ? width / 100 : width;
+      const newH = hLarge ? height / 100 : height;
+      if (newW >= 1 && newW <= 10 && newH >= 1 && newH <= 10) {
+        result.width = Math.min(newW, newH);
+        result.height = Math.max(newW, newH);
+        result.area = newW * newH;
+        result.normalized = `${result.width}x${result.height}`;
+        result.convertedFromCentimeters = true;
+        result.originalCm = { dim1: originalDim1, dim2: originalDim2 };
+        result.originalCmStr = `${originalDim1}x${originalDim2}`;
+      }
+    }
+  }
+
   // Detect likely centimeter input: both dimensions > 10, neither near 100 (rollo pattern)
   // e.g. "259x390" → 2.59 x 3.90m, "180x230" → 1.80 x 2.30m
-  if (!isFeet && width > 10 && height > 10 &&
+  if (!isFeet && !result.convertedFromCentimeters &&
+      width > 10 && height > 10 &&
       Math.abs(width - 100) > 10 && Math.abs(height - 100) > 10) {
     const cmWidth = Math.round(width) / 100;
     const cmHeight = Math.round(height) / 100;
