@@ -239,14 +239,84 @@ async function processMessage(normalizedMessage, io = null) {
     } else if (channel === 'whatsapp') {
       // WhatsApp CTWA (Click-to-WhatsApp) ad referral
       console.log(`📣 WhatsApp ad referral: ad=${referral.source_id}, type=${referral.source_type}`);
-      await updateConversation(unifiedId, {
+      const waAdUpdate = {
         lastIntent: 'ad_entry',
         adId: referral.source_id || null,
         adHeadline: referral.headline || null,
         adBody: referral.body || null,
         adSourceUrl: referral.source_url || null,
         adSourceType: referral.source_type || null
-      });
+      };
+
+      // Resolve ad → product context (same logic as Messenger handler)
+      if (referral.source_id) {
+        try {
+          const { resolveByAdId } = require('../../utils/campaignResolver');
+          const { getProductInterest } = require('../../ai/utils/productEnricher');
+          const PF = require('../../models/ProductFamily');
+
+          const resolved = await resolveByAdId(referral.source_id);
+          if (resolved) {
+            let adProductInterest = null;
+
+            // Strategy 1: product IDs from campaign chain
+            if (resolved.productIds?.length) {
+              const productId = resolved.mainProductId || resolved.productIds[0];
+              const product = await PF.findById(productId).lean();
+              if (product) {
+                adProductInterest = await getProductInterest(product);
+                console.log(`📦 WA ad → ${product.name} → interest: ${adProductInterest}`);
+              }
+            }
+
+            // Strategy 2: infer from campaign name
+            if (!adProductInterest) {
+              const cn = (resolved.campaignName || '').toLowerCase();
+              if (cn.includes('borde') || cn.includes('jardin') || cn.includes('jardín')) adProductInterest = 'borde_separador';
+              else if (cn.includes('malla') || cn.includes('sombra') || cn.includes('confeccionada') || cn.includes('raschel')) adProductInterest = 'malla_sombra';
+              else if (cn.includes('ground') || cn.includes('cover') || cn.includes('maleza')) adProductInterest = 'ground_cover';
+              else if (cn.includes('rollo') || cn.includes('agrícola') || cn.includes('agricola')) adProductInterest = 'rollo';
+              else if (cn.includes('monofilamento')) adProductInterest = 'monofilamento';
+              if (adProductInterest) console.log(`📦 WA ad inferred: ${adProductInterest} from "${resolved.campaignName}"`);
+            }
+
+            // Reseller / wholesale detection
+            const resellerPattern = /\b(vende[rs]?|distribuidor|revendedor|revende|ferreter[ií]a|mayorist|red\s+de\s+distribuid)/i;
+            const namesToCheck = [resolved.campaignName, resolved.adName, resolved.adSetName].filter(Boolean).join(' ');
+            // "mayoreo" / "al por mayor" in ad/campaign name is unambiguous — always wholesale
+            const explicitWholesale = /\b(mayoreo|al\s+por\s+mayor)\b/i.test(namesToCheck);
+            const isResellerAd = resolved.audience?.type === 'reseller' ||
+              explicitWholesale ||
+              (!resolved.audience?.type && resellerPattern.test(namesToCheck));
+
+            // Set flow and product context
+            if (adProductInterest) {
+              const adFlowRef = resolved.flowRef;
+              waAdUpdate.productInterest = adProductInterest;
+              waAdUpdate.currentFlow = isResellerAd ? 'reseller' : (adFlowRef || adProductInterest);
+              waAdUpdate.greeted = true;
+              waAdUpdate.lastGreetTime = Date.now();
+            }
+            if (resolved.productIds?.length) {
+              waAdUpdate.adProductIds = resolved.productIds.map(id => id.toString());
+            }
+            const mainProdId = resolved.mainProductId || resolved.productIds?.[0];
+            if (mainProdId) {
+              waAdUpdate.adMainProductId = mainProdId.toString();
+            }
+            if (isResellerAd) {
+              waAdUpdate.isWholesaleInquiry = true;
+              console.log(`🏪 WA reseller ad detected`);
+            }
+
+            console.log(`📦 WA ad context:`, { productInterest: waAdUpdate.productInterest, currentFlow: waAdUpdate.currentFlow, wholesale: !!waAdUpdate.isWholesaleInquiry });
+          }
+        } catch (err) {
+          console.error(`❌ WA ad resolution error:`, err.message);
+        }
+      }
+
+      await updateConversation(unifiedId, waAdUpdate);
     }
   }
 

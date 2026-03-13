@@ -1146,7 +1146,10 @@ app.post("/webhook", async (req, res) => {
           }
         }
 
+        // "mayoreo" / "al por mayor" in ad/campaign name is unambiguous — always wholesale
+        const explicitWholesale = /\b(mayoreo|al\s+por\s+mayor)\b/i.test(namesToCheck);
         const isResellerAd = resolvedSettings?.audience?.type === 'reseller' ||
+          explicitWholesale ||
           (!resolvedSettings?.audience?.type && resellerPattern.test(namesToCheck));
         console.log(`🏪 Reseller check: namesToCheck="${namesToCheck}", audience=${resolvedSettings?.audience?.type || 'N/A'}, isReseller=${isResellerAd}`);
         if (isResellerAd) {
@@ -1212,6 +1215,8 @@ app.post("/webhook", async (req, res) => {
         if (adProductInterest) {
           const adConvoUpdate = { productInterest: adProductInterest, currentFlow: adCurrentFlow, adFlowRef: adFlowRef || null, greeted: true, lastGreetTime: Date.now() };
           if (adMainProductName) adConvoUpdate.adMainProductName = adMainProductName;
+          const adMainProductId = resolvedSettings?.mainProductId || resolvedSettings?.productIds?.[0];
+          if (adMainProductId) adConvoUpdate.adMainProductId = adMainProductId.toString();
           await updateConversation(senderPsid, adConvoUpdate);
           await callSendAPI(senderPsid, { text: adGreeting });
           adGreetingSent = true;

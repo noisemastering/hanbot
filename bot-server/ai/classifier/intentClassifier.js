@@ -727,7 +727,7 @@ function quickClassify(message, dbIntents = null) {
     { intent: 'payment_query', pattern: /\b(pago|pagar|tarjeta|efectivo|transferencia|forma\s*de\s*(pago|compra)|meses)\b/i },
     { intent: 'location_query', pattern: /\b(ubicaci[oó]n|direcci[oó]n|(?:d[oó]nde|dnd)\s*(est[aá]n|quedan|se\s*encuentran)|soy\s+de\s+\w|recog[ei]r|domicilio|de\s+(?:qu[eé]|q|cu[aá]l)\s+(?:cd\.?|ciudad|estado|parte)\s+son)\b/i },
     { intent: 'shipping_query', pattern: /\b(env[ií]o|envi[aá]n|entrega|[ly]lega|mandan|cu[aá]nto\s*tarda)\b/i },
-    { intent: 'installation_query', pattern: /\b(instal[ae]n?|ponen|colocan|c[oó]mo\s*se\s*(instala|pone|coloca))\b/i },
+    { intent: 'installation_query', pattern: /\b(instalaci[oó]n|instal[ae]n?|ponen|colocan|c[oó]mo\s*se\s*(instala|pone|coloca))\b/i },
     { intent: 'product_inquiry', pattern: /\b(informes?|info|caracter[ií]sticas?|especificaciones?|de\s*qu[eé]\s*(es|est[aá]|material))\b/i },
     { intent: 'delivery_time_query', pattern: /\b(cu[aá]nto\s*tarda|cu[aá]ntos?\s*d[ií]as?|tiempo\s*de\s*entrega|cuando\s*[ly]lega)\b/i }
   ];

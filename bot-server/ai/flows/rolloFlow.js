@@ -392,6 +392,16 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     if (pendingResult) return pendingResult;
   }
 
+  // ====== PURCHASE PROCESS QUESTION ======
+  // "¿Cómo realizo una compra?", "¿Cómo compro?" — rollos are direct sale, not ML
+  if (userMessage && /\b(c[oó]mo\s+(realiz[oa]|hago|hacer|compro|pido|ordeno|le\s+hago|puedo\s+comprar)|d[oó]nde\s+(compro|pido|ordeno|puedo\s+comprar)|proceso\s+de\s+compra|pasos?\s+(para|de)\s+compra)/i.test(userMessage)) {
+    await updateConversation(psid, { lastIntent: 'purchase_process', unknownCount: 0 });
+    return {
+      type: "text",
+      text: "La compra es directa con nosotros (no por Mercado Libre). Para cotizarte necesito el ancho del rollo y tu código postal. ¿Qué medida te interesa?"
+    };
+  }
+
   let state = getFlowState(convo);
 
   // FIRST: Detect or confirm rollo type (before normalizing width, so we query the right type)

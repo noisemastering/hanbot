@@ -522,6 +522,16 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   // Get available lengths (filtered by ad if applicable)
   const availableLengths = await getAvailableLengths(sourceContext, convo);
 
+  // PURCHASE PROCESS QUESTION — "¿Cómo realizo una compra?", "¿Cómo compro?"
+  if (userMessage && /\b(c[oó]mo\s+(realiz[oa]|hago|hacer|compro|pido|ordeno|le\s+hago|puedo\s+comprar)|d[oó]nde\s+(compro|pido|ordeno|puedo\s+comprar)|proceso\s+de\s+compra|pasos?\s+(para|de)\s+compra)/i.test(userMessage)) {
+    const lengthList = availableLengths.map(l => `${l}m`).join(' y ');
+    await updateConversation(psid, { lastIntent: 'purchase_process', unknownCount: 0 });
+    return {
+      type: "text",
+      text: `Las compras se realizan a través de Mercado Libre, para poderte dar precio y un enlace de compra necesito que me indiques el largo que te interesa. Tenemos rollos de ${lengthList}.`
+    };
+  }
+
   // WIDTH QUESTIONS — borde only comes in one width
   if (userMessage && /\b(anchos?|anchura|grosor|grueso|cm|cent[ií]metros?|dimensi[oó]n(?:es)?|qu[eé]\s*(?:tan\s*)?(?:anchos?|grueso))\b/i.test(userMessage)) {
     const widthCm = await getBordeWidth();

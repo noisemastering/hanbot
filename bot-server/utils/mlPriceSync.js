@@ -38,6 +38,49 @@ function extractMLItemId(url) {
 }
 
 /**
+ * Extract ML catalog product ID from a URL (MLMU format)
+ * These require the /products/{id}/items endpoint to resolve to an item ID
+ * @param {string} url - ML product URL
+ * @returns {string|null} - Catalog product ID (e.g., "MLMU724578403") or null
+ */
+function extractMLCatalogId(url) {
+  if (!url) return null;
+  const match = url.match(/MLMU(\d+)/);
+  return match ? `MLMU${match[1]}` : null;
+}
+
+/**
+ * Resolve a catalog product ID (MLMU) to an item ID (MLM) via the ML API
+ * @param {string} catalogId - Catalog product ID (e.g., "MLMU724578403")
+ * @param {string} token - ML API token
+ * @returns {string|null} - Item ID (e.g., "MLM923085679") or null
+ */
+async function resolveCatalogToItemId(catalogId, token) {
+  try {
+    // The catalog product ID maps to a ML product ID: MLM + digits from MLMU
+    const productId = catalogId.replace("MLMU", "MLM");
+    const response = await axios.get(
+      `https://api.mercadolibre.com/products/${productId}/items`,
+      {
+        params: { status: "active" },
+        headers: { Authorization: `Bearer ${token}` }
+      }
+    );
+
+    const items = response.data?.results || response.data;
+    if (Array.isArray(items) && items.length > 0) {
+      const itemId = items[0].id || items[0];
+      console.log(`🔗 Resolved catalog ${catalogId} → ${itemId}`);
+      return typeof itemId === "string" ? itemId : null;
+    }
+    return null;
+  } catch (err) {
+    console.error(`⚠️ Error resolving catalog ${catalogId}:`, err.message);
+    return null;
+  }
+}
+
+/**
  * Fetch current prices for multiple ML items (including promotions)
  * @param {string[]} itemIds - Array of ML item IDs
  * @param {string} token - ML API token
@@ -146,9 +189,10 @@ async function syncMLPrices({ productIds = null } = {}) {
     return { synced: 0, errors: 0, products: [] };
   }
 
-  // Extract ML item IDs
+  // Extract ML item IDs (resolve catalog URLs if needed)
   const productMLMap = {}; // mlItemId -> productId
   const mlItemIds = [];
+  const catalogToResolve = []; // { catalogId, productId }
 
   for (const product of products) {
     const mlLink = product.onlineStoreLinks?.find(l => l.url?.includes("mercadolibre"));
@@ -156,6 +200,24 @@ async function syncMLPrices({ productIds = null } = {}) {
     if (mlItemId) {
       productMLMap[mlItemId] = product._id;
       mlItemIds.push(mlItemId);
+    } else {
+      // Try catalog URL (MLMU format)
+      const catalogId = extractMLCatalogId(mlLink?.url);
+      if (catalogId) {
+        catalogToResolve.push({ catalogId, productId: product._id });
+      }
+    }
+  }
+
+  // Resolve catalog IDs to item IDs
+  if (catalogToResolve.length > 0) {
+    console.log(`🔗 Resolving ${catalogToResolve.length} catalog URL(s)...`);
+    for (const { catalogId, productId } of catalogToResolve) {
+      const resolvedId = await resolveCatalogToItemId(catalogId, token);
+      if (resolvedId) {
+        productMLMap[resolvedId] = productId;
+        mlItemIds.push(resolvedId);
+      }
     }
   }
 
@@ -224,7 +286,15 @@ async function syncSingleProductMLPrice(productId) {
   }
 
   const mlLink = product.onlineStoreLinks?.find(l => l.url?.includes("mercadolibre"));
-  const mlItemId = extractMLItemId(mlLink?.url);
+  let mlItemId = extractMLItemId(mlLink?.url);
+
+  // Try catalog URL resolution if direct extraction fails
+  if (!mlItemId) {
+    const catalogId = extractMLCatalogId(mlLink?.url);
+    if (catalogId) {
+      mlItemId = await resolveCatalogToItemId(catalogId, token);
+    }
+  }
 
   if (!mlItemId) {
     return null;
@@ -256,6 +326,8 @@ async function syncSingleProductMLPrice(productId) {
 
 module.exports = {
   extractMLItemId,
+  extractMLCatalogId,
+  resolveCatalogToItemId,
   fetchMLPrices,
   syncMLPrices,
   syncSingleProductMLPrice

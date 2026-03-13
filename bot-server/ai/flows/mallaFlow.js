@@ -747,6 +747,19 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     });
   }
 
+  // ====== PURCHASE PROCESS QUESTION (before state machine) ======
+  // "¿Cómo realizo una compra?", "¿Cómo compro?", "¿Dónde compro?", "Proceso de compra"
+  // Answer the question and ask for dimensions — don't just show the greeting
+  if (userMessage && /\b(c[oó]mo\s+(realiz[oa]|hago|hacer|compro|pido|ordeno|le\s+hago|puedo\s+comprar)|d[oó]nde\s+(compro|pido|ordeno|puedo\s+comprar)|proceso\s+de\s+compra|pasos?\s+(para|de)\s+compra)/i.test(userMessage)) {
+    const range = await getMallaRange();
+    const rangeText = range ? `, contamos con malla sombra confeccionada de diferentes medidas, desde ${range.sizeMin} hasta ${range.sizeMax}` : '';
+    await updateConversation(psid, { lastIntent: 'purchase_process', unknownCount: 0 });
+    return {
+      type: "text",
+      text: `Las compras se realizan a través de Mercado Libre, para poderte dar precio y un enlace de compra necesito que me indiques la medida que te interesa${rangeText}.`
+    };
+  }
+
   // Get current state and merge classifier entities
   let state = getFlowState(convo);
   if (entities.color) state.color = entities.color;
@@ -2016,6 +2029,15 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
         return {
           type: "text",
           text: "En compras a través de Mercado Libre el pago es 100% por adelantado al momento de ordenar (tarjeta, efectivo en OXXO, o meses sin intereses). Tu compra está protegida: si no te llega o llega diferente, se te devuelve tu dinero."
+        };
+      }
+
+      // Installation / service questions
+      if (/\b(instalaci[oó]n|instal[ae]n?|ponen|colocan|pasan?\s+a\s+medir)\b/i.test(msg)) {
+        await updateConversation(psid, { lastIntent: 'installation_query', unknownCount: 0 });
+        return {
+          type: "text",
+          text: "No contamos con servicio de instalación, pero nuestra malla confeccionada viene lista para instalar con ojillos cada 80 cm para fácil sujeción.\n\n¿Tienes alguna otra duda?"
         };
       }
 

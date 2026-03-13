@@ -77,7 +77,7 @@ Responde ÚNICAMENTE con JSON:
 // Step 2: Try regex/deterministic answers for each segment
 // Returns structured data — no AI calls, no state changes
 // ────────────────────────────────────────────────────────
-async function tryRegexAnswer(segment) {
+async function tryRegexAnswer(segment, convo = null) {
   const intent = segment.intent;
   const question = segment.question;
 
@@ -101,7 +101,7 @@ async function tryRegexAnswer(segment) {
           width: w,
           height: h,
           requestedSize,
-          sizeAdjusted: wasFloored,
+          sizeAdjusted: wasCeiled,
           price: product.price,
           productName: product.name,
           productId: product._id?.toString(),
@@ -249,7 +249,8 @@ async function combineWithAI(segments, userMessage, psid, convo) {
 
   const unansweredQuestions = segments.filter(s => !s.answer).map(s => s.question);
 
-  // Generate tracked link for product quote
+  // Generate tracked link — use product URL if available, otherwise fall back to store link
+  const STORE_URL = "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob";
   let trackedLink = null;
   if (productQuote?.productUrl) {
     try {
@@ -282,6 +283,19 @@ async function combineWithAI(segments, userMessage, psid, convo) {
     }
   }
 
+  // Fallback: always have a store link when no specific product link
+  if (!trackedLink) {
+    try {
+      trackedLink = await generateClickLink(psid, STORE_URL, {
+        productName: 'Tienda Hanlob',
+        city: convo?.city,
+        stateMx: convo?.stateMx
+      });
+    } catch (e) {
+      console.error("❌ Error generating store link:", e.message);
+    }
+  }
+
   // Build prompt for the combine step
   const dataLines = [];
   dataLines.push(`Mensaje original: "${userMessage}"`);
@@ -309,11 +323,13 @@ async function combineWithAI(segments, userMessage, psid, convo) {
 REGLAS:
 - Integra todo de forma fluida — NO hagas listas ni repitas datos
 - Si hay cotización, empieza con "Malla sombra raschel confeccionada con refuerzo en las esquinas para una vida útil de hasta 5 años:"
-- Si hay enlace de compra, ponlo en su propia línea con "🛒 Cómprala aquí:" DESPUÉS de la descripción del producto
+- Si hay enlace de compra (URL real que empieza con http), ponlo en su propia línea con "🛒 Cómprala aquí:" DESPUÉS de la descripción del producto
+- Si NO hay enlace de compra proporcionado, NO escribas placeholders como "[enlace de compra]", "[link]", ni texto entre corchetes. Simplemente omítelo.
 - Si hay info de mayoreo, ponla al final
 - IGNORA las preguntas sin respuesta — no digas que no puedes responder
 - NO inventes precios, medidas ni datos — usa SOLO los datos proporcionados
 - NO agregues URLs que no te haya dado
+- NO inventes medidas como "2x4, 3x5, 4x6" — si no sabes las medidas exactas, usa el rango (ej: "desde 2x2m hasta 7x10m")
 - Tono amable y profesional, máximo 4-5 oraciones (sin contar enlace y mayoreo)`
         },
         { role: "user", content: dataLines.join('\n') }
@@ -322,7 +338,10 @@ REGLAS:
       max_tokens: 400
     });
 
-    return { type: "text", text: response.choices[0].message.content.trim() };
+    let combinedText = response.choices[0].message.content.trim();
+    // Strip any hallucinated placeholders like "[enlace de compra]", "[link]", etc.
+    combinedText = combinedText.replace(/\[(?:enlace|link)[^\]]*\]/gi, '').replace(/\n{3,}/g, '\n\n').trim();
+    return { type: "text", text: combinedText };
   } catch (error) {
     console.error("❌ Error in combineWithAI:", error.message);
 
@@ -362,7 +381,7 @@ async function handleMultiQuestion(userMessage, psid, convo, sourceContext, camp
 
   // Step 2: Try regex/deterministic answers for each segment
   for (const seg of segments) {
-    const regexAnswer = await tryRegexAnswer(seg);
+    const regexAnswer = await tryRegexAnswer(seg, convo);
     if (regexAnswer) {
       seg.answer = regexAnswer;
       console.log(`  📋 [regex] ${seg.intent}: ✅`);

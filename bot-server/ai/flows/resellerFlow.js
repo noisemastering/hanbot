@@ -1,14 +1,13 @@
 // ai/flows/resellerFlow.js
-// Dedicated flow for reseller-ad conversations.
-// Owns the first touchpoint: sends a pitch, then routes based on reply
-// (reseller interest → catalog + handoff, wholesale → handoff, retail → malla flow).
+// Wholesale flow for reseller-ad conversations.
+// Pitch → dimensions → zip → handoff.
+// Detects singular-unit language ("quiero una") to pivot to retail.
 
 const { updateConversation } = require("../../conversationManager");
 const { executeHandoff } = require("../utils/executeHandoff");
 const { parseConfeccionadaDimensions: parseDimensions } = require("../utils/dimensionParsers");
 // getCatalogUrl required lazily inside handle() to avoid circular dependency with flowManager
 const { sendCatalog } = require("../../utils/sendCatalog");
-const { INTENTS } = require("../classifier");
 
 const PITCH_MESSAGES = {
   malla_sombra:
@@ -16,44 +15,32 @@ const PITCH_MESSAGES = {
     `Viene con refuerzo en las esquinas para una vida útil de hasta 5 años, y con ojillos para sujeción cada 80 cm por lado, lista para instalar. El envío está incluido.\n\n` +
     `Manejamos medidas desde 2x2m hasta 7x10m.\n\n` +
     `Si deseas ampliar el catálogo de tu negocio con un producto de primera calidad y fabricación 100% mexicana, nos encantaría tenerte en nuestra red de distribuidores.\n\n` +
-    `Si solo buscas comprar al mayoreo por favor indícanos la cantidad y tu código postal.\n\n` +
+    `Si solo buscas comprar al mayoreo por favor indícanos la medida y tu código postal.\n\n` +
     `Si solo buscas una malla sombra, solo indícanos la medida.`,
   borde_separador:
     `Somos fabricantes de borde separador de jardín, el complemento perfecto para paisajistas, ferreterías y viveros.\n\n` +
     `Nuestro borde es más grueso y resistente que los de la competencia, fácil de instalar y con alta demanda.\n\n` +
     `Manejamos rollos de 18m y 54m con envío a todo México.\n\n` +
     `Si deseas ampliar el catálogo de tu negocio con un producto de primera calidad y fabricación 100% mexicana, nos encantaría tenerte en nuestra red de distribuidores.\n\n` +
-    `Si solo buscas comprar al mayoreo por favor indícanos la cantidad y tu código postal.\n\n` +
+    `Si solo buscas comprar al mayoreo por favor indícanos el largo y tu código postal.\n\n` +
     `Si solo buscas un borde para tu jardín, solo indícanos el largo que necesitas.`
 };
 
-// Default pitch (backwards compatibility)
-const PITCH_MESSAGE = PITCH_MESSAGES.malla_sombra;
-
 function getPitchMessage(productInterest) {
-  return PITCH_MESSAGES[productInterest] || PITCH_MESSAGE;
+  return PITCH_MESSAGES[productInterest] || PITCH_MESSAGES.malla_sombra;
 }
 
-// ── Detection patterns ──
-
-const RESELLER_PATTERNS = /\b(distribui\w*|revend\w*|revent\w*|vender\s+sus|vender\s+producto|cat[aá]logo|lista\s*(?:de\s*)?precios?|red\s*de?\s*distribui\w*|ampliar\s*(?:mi\s+)?cat[aá]logo|mi\s+negocio|mi\s+tienda|mi\s+ferreter[ií]a|intermediario|socio\s*comercial|agente\s*de\s*ventas)\b/i;
-const WHOLESALE_QUANTITY_PATTERN = /\b\d+\s*(piezas?|unidades?|mallas?)\b/i;
-const WHOLESALE_KEYWORD = /\b(mayoreo|al\s*por\s*mayor|mayor)\b/i;
+// Singular-unit language → retail signal
+// "quiero una", "busco uno", "una malla", "un rollo", "solo una", "nada más una", "para mi casa"
+// But NOT plural: "unas mallas", "mallas", "las de 3x4"
+const SINGULAR_RETAIL = /\b((?:quiero|busco|necesito|ocupo|llevo|me\s+llevo)\s+un[oa]?\b|(?:solo|solamente|nada\s*m[aá]s|nadamas|nomas|nom[aá]s)\s+un[oa]\b|un[oa]\s+(?:malla|pieza|rollo|borde|unidad)\b|un[oa]\s+(?:nada\s*m[aá]s|nadamas|nomas|nom[aá]s|sol[oa])\b|para\s+mi\s+(?:casa|jard[ií]n|patio|terreno|propiedad)|uso\s+personal|para\s+uso\s+propio|de\s+a\s+un[oa])\b/i;
 
 /**
  * Should this flow handle the message?
- *
- * Activates when:
- *  - convo.isWholesaleInquiry === true (set by purchase-intent scorer for reseller ads)
- *  - currentFlow is 'default' or unset (hasn't entered a product flow)
- *  - lastIntent starts with 'reseller_' OR no product-specific intent yet
  */
 function shouldHandle(classification, sourceContext, convo, userMessage = '') {
-  // Primary governance: currentFlow lock-in (same as all other flows)
   if (convo?.currentFlow === 'reseller') return true;
 
-  // Secondary: wholesale inquiry detected outside ad path (e.g., user typed "mayoreo")
-  // Only activate if no product flow has claimed the conversation yet
   if (convo?.isWholesaleInquiry) {
     const currentFlow = convo?.currentFlow || 'default';
     if (currentFlow === 'default') return true;
@@ -63,239 +50,181 @@ function shouldHandle(classification, sourceContext, convo, userMessage = '') {
 }
 
 /**
+ * Extract dimensions from message (malla WxH or borde lengths)
+ */
+function extractSpecs(msg, isBorde) {
+  if (!msg) return null;
+
+  // Malla: WxH format
+  if (!isBorde) {
+    const dims = parseDimensions(msg);
+    if (dims) return { sizeStr: dims.userExpressed || dims.normalized, width: dims.width, height: dims.height };
+    return null;
+  }
+
+  // Borde: length with meter suffix
+  const meterMatch = msg.match(/\b(\d+)\s*(?:m(?:ts?|etros?)?)\b/i);
+  if (meterMatch) return { sizeStr: `${meterMatch[1]}m` };
+
+  // Bare numbers matching common borde lengths
+  const bareMatch = msg.match(/\b(6|9|18|54)\b/);
+  if (bareMatch) return { sizeStr: `${bareMatch[1]}m` };
+
+  return null;
+}
+
+/**
+ * Send catalog PDF via the appropriate channel
+ */
+async function sendCatalogToUser(catalogUrl, psid, channel) {
+  if (!catalogUrl) return;
+
+  if (channel === 'whatsapp') {
+    const phone = psid.replace('wa:', '');
+    const { sendWhatsAppMessage } = require('../../channels/whatsapp/api');
+    try {
+      await sendWhatsAppMessage(phone, {
+        type: 'document',
+        document: { link: catalogUrl, filename: 'Catalogo_Hanlob.pdf' }
+      });
+    } catch (err) {
+      console.error('❌ Error sending WhatsApp catalog:', err.message);
+    }
+  } else {
+    const fbPsid = psid.startsWith('fb:') ? psid.replace('fb:', '') : psid;
+    await sendCatalog(fbPsid, catalogUrl);
+  }
+}
+
+/**
  * Handle the reseller flow.
  *
  * Stages:
- *  PITCH → send value proposition
- *  AWAITING_RESPONSE → parse reply → route to reseller/wholesale/retail path
+ *  PITCH → send wholesale value proposition
+ *  AWAITING_RESPONSE → dimensions given? ask zip : catalog + handoff
+ *  AWAITING_ZIP → zip given? handoff
+ *
+ * At any stage: singular-unit language → switch to retail flow
  */
 async function handle(classification, sourceContext, convo, psid, campaign = null, userMessage = '') {
   const { getCatalogUrl } = require("../flowManager");
   const lastIntent = convo?.lastIntent || '';
+  const msg = String(userMessage || '').trim();
+  const channel = convo?.channel || (psid.startsWith('wa:') ? 'whatsapp' : 'facebook');
+  const isBorde = convo?.productInterest === 'borde_separador';
 
-  // ── Stage: PITCH ──
-  // First message for a reseller-ad conversation.
-  // Always send the pitch — even if the message has dimensions or retail signals,
-  // we need to confirm intent before changing flow.
+  // ── PITCH ──
   if (!lastIntent.startsWith('reseller_')) {
     console.log(`🏪 Reseller flow — sending pitch`);
-    // Store any dimensions from the initial message so we can reference them later
-    const initialDims = parseDimensions(String(userMessage || ''));
-    const pitchUpdate = { lastIntent: 'reseller_pitch_sent', currentFlow: 'reseller' };
-    if (initialDims) {
-      pitchUpdate.resellerInitialDimensions = `${initialDims.width}x${initialDims.height}`;
-      console.log(`🏪 Stored initial dimensions: ${pitchUpdate.resellerInitialDimensions}`);
-    }
-    await updateConversation(psid, pitchUpdate);
+    await updateConversation(psid, { lastIntent: 'reseller_pitch_sent', currentFlow: 'reseller' });
     return { type: "text", text: getPitchMessage(convo?.productInterest) };
   }
 
-  // ── Stage: AWAITING_RESPONSE ──
-  if (lastIntent === 'reseller_pitch_sent') {
-    const msg = String(userMessage || '').trim();
-    const intent = classification?.intent;
+  // ── RETAIL DETECTION (any stage after pitch) ──
+  if (SINGULAR_RETAIL.test(msg)) {
+    const retailFlow = isBorde ? 'borde_separador' : 'malla_sombra';
+    console.log(`🏪 Reseller flow — singular retail detected "${msg.substring(0, 40)}", switching to ${retailFlow}`);
 
-    const channel = convo?.channel || (psid.startsWith('wa:') ? 'whatsapp' : 'facebook');
+    await updateConversation(psid, {
+      isWholesaleInquiry: false,
+      currentFlow: retailFlow,
+      lastIntent: null
+    });
 
-    // --- Path 1: Reseller interest ---
-    if (RESELLER_PATTERNS.test(msg) || intent === INTENTS.CONFIRMATION) {
-      console.log(`🏪 Reseller flow — reseller confirmed, sending catalog + handoff`);
+    // If they also gave dimensions, re-process in the retail flow
+    const specs = extractSpecs(msg, isBorde);
+    if (specs) return null;
 
-      const catalogUrl = await getCatalogUrl(convo, 'malla_sombra');
-
-      if (catalogUrl) {
-        if (channel === 'whatsapp') {
-          const phone = psid.replace('wa:', '');
-          const { sendWhatsAppMessage } = require('../../channels/whatsapp/api');
-          try {
-            await sendWhatsAppMessage(phone, {
-              type: 'document',
-              document: { link: catalogUrl, filename: 'Catalogo_Hanlob.pdf' }
-            });
-          } catch (err) {
-            console.error('❌ Error sending WhatsApp catalog:', err.message);
-          }
-        } else {
-          const fbPsid = psid.startsWith('fb:') ? psid.replace('fb:', '') : psid;
-          await sendCatalog(fbPsid, catalogUrl);
-        }
-      }
-
-      const handoffResponse = await executeHandoff(psid, convo, userMessage, {
-        reason: `Revendedor interesado: "${msg.substring(0, 80)}"`,
-        responsePrefix: catalogUrl
-          ? "Te comparto nuestro catálogo con medidas y precios. Un especialista te contactará para darte más detalles sobre cómo ser parte de nuestra red de distribuidores.\n\n"
-          : "Un especialista te contactará para darte información sobre cómo ser parte de nuestra red de distribuidores.\n\n",
-        lastIntent: 'reseller_catalog_sent',
-        notificationText: `Revendedor interesado: "${msg.substring(0, 60)}"`,
-        timingStyle: 'elaborate',
-        includeQueretaro: false
-      });
-
-      // Release currentFlow so other flows can handle post-handoff questions
-      await updateConversation(psid, { currentFlow: null });
-
-      return { ...handoffResponse, handledBy: "reseller" };
-    }
-
-    // --- Path 2: Wholesale buyer ---
-    const hasQuantity = WHOLESALE_QUANTITY_PATTERN.test(msg);
-    const hasMayoreo = WHOLESALE_KEYWORD.test(msg);
-    if (hasQuantity || hasMayoreo) {
-      console.log(`🏪 Reseller flow — wholesale buyer detected, handoff`);
-
-      const dims = parseDimensions(msg);
-      const sizeInfo = dims ? ` — medida ${dims.userExpressed || dims.normalized}` : '';
-
-      // Send price list / catalog before handoff
-      const wholesaleCatalogUrl = await getCatalogUrl(convo, 'malla_sombra');
-      if (wholesaleCatalogUrl) {
-        if (channel === 'whatsapp') {
-          const phone = psid.replace('wa:', '');
-          const { sendWhatsAppMessage } = require('../../channels/whatsapp/api');
-          try {
-            await sendWhatsAppMessage(phone, {
-              type: 'document',
-              document: { link: wholesaleCatalogUrl, filename: 'Catalogo_Hanlob.pdf' }
-            });
-          } catch (err) {
-            console.error('❌ Error sending WhatsApp catalog:', err.message);
-          }
-        } else {
-          const fbPsid = psid.startsWith('fb:') ? psid.replace('fb:', '') : psid;
-          await sendCatalog(fbPsid, wholesaleCatalogUrl);
-        }
-      }
-
-      const handoffResponse = await executeHandoff(psid, convo, userMessage, {
-        reason: `Mayoreo desde anuncio revendedor${sizeInfo}: "${msg.substring(0, 80)}"`,
-        responsePrefix: wholesaleCatalogUrl
-          ? "Te comparto nuestra lista de precios. Un especialista te contactará para darte la cotización de mayoreo.\n\n"
-          : "¡Claro! Para pedidos de mayoreo te comunico con un especialista.\n\n",
-        lastIntent: 'wholesale_handoff',
-        timingStyle: 'elaborate'
-      });
-
-      // Release currentFlow so other flows can handle post-handoff questions
-      await updateConversation(psid, { currentFlow: null });
-
-      return { ...handoffResponse, handledBy: "reseller" };
-    }
-
-    // --- Path 3: Retail intent (wants to buy, not resell) ---
-    // Catch "solo una", "nada más una", "1 nada mas", "nomas quiero una", "para servirle de uno", etc.
-    const RETAIL_PATTERNS = /\b(busco\s+comprar|quiero\s+comprar|solo\s+(quiero\s+)?comprar|para\s+uso\s+propio|comprar\s+una?|quiero\s+una?|necesito\s+una?|una?\s+pieza|una?\s+malla|solo\s+una?|solo\s+esa|esa\s+medida|solo\s+esa\s+medida|solo\s+busco|para\s+mi|uso\s+personal|nada\s*m[aá]s|nadamas|no\s*m[aá]s|nomas|nom[aá]s|servirle\s+de\s+un|de\s+un[oa]?\s+(nada\s*m[aá]s|nadamas|nomas|nom[aá]s)|solo\s+\d+|un[oa]?\s+nada\s*m[aá]s)\b/i;
-    // Also catch bare small quantities: "1", "1 nadamas", "2 piezas" — retail when bot just asked
-    const SMALL_QTY_RETAIL = /^\s*(\d{1,2})\s*(piezas?|mallas?|nada\s*m[aá]s|nadamas|nomas|nom[aá]s|solo|unidades?)?\s*$/i;
-    const isRetailIntent = RETAIL_PATTERNS.test(msg) || SMALL_QTY_RETAIL.test(msg);
-    if (isRetailIntent) {
-      const retailFlow = convo?.productInterest === 'borde_separador' ? 'borde_separador' : 'malla_sombra';
-      console.log(`🏪 Reseller flow — retail intent "${msg.substring(0, 40)}", switching to ${retailFlow}`);
-
-      // Extract quantity if present (e.g., "1 nadamas", "2 piezas")
-      const qtyMatch = msg.match(/\b(\d{1,2})\s*(piezas?|mallas?|unidades?)?\b/);
-      const quantity = qtyMatch ? parseInt(qtyMatch[1]) : null;
-
-      await updateConversation(psid, {
-        isWholesaleInquiry: false,
-        currentFlow: retailFlow,
-        lastIntent: null,
-        resellerInitialDimensions: null
-      });
-
-      // Check if they also gave dimensions in the same message
-      const dims = parseDimensions(msg);
-      if (dims) {
-        // Return null to re-process with dimensions in the retail flow
-        return null;
-      }
-
-      // Check if they're referencing dimensions from their initial message
-      if (convo?.resellerInitialDimensions) {
-        const storedDims = parseDimensions(convo.resellerInitialDimensions);
-        if (storedDims) {
-          console.log(`🏪 Using stored initial dimensions: ${convo.resellerInitialDimensions}`);
-          // Set productSpecs so the flow knows the size, then re-process
-          await updateConversation(psid, {
-            productSpecs: { productType: 'malla', width: storedDims.width, height: storedDims.height, quantity: quantity || 1 }
-          });
-          return null;
-        }
-      }
-
-      // No dimensions yet — ask for them naturally
-      return {
-        type: "text",
-        text: convo?.productInterest === 'borde_separador'
-          ? "¡Perfecto! ¿Qué largo necesitas?"
-          : "¡Perfecto! ¿Qué medida necesitas? (ejemplo: 3x4m)"
-      };
-    }
-
-    // --- Path 4: Dimensions given ---
-    const dimensions = parseDimensions(msg);
-    if (dimensions) {
-      // Check if message has explicit retail signals ("quiero una", "solo una", "para mi")
-      const hasRetailSignal = /\b(quiero\s+una|necesito\s+una|solo\s+una|una\s+pieza|para\s+mi|uso\s+personal|comprar\s+una)\b/i.test(msg);
-
-      if (hasRetailSignal) {
-        // Explicit retail intent — break out to product flow
-        const retailFlow = convo?.productInterest === 'borde_separador' ? 'borde_separador' : 'malla_sombra';
-        console.log(`🏪 Reseller flow — retail buyer detected (${dimensions.normalized}), breaking out to ${retailFlow} flow`);
-
-        await updateConversation(psid, {
-          isWholesaleInquiry: false,
-          currentFlow: retailFlow,
-          lastIntent: null
-        });
-
-        return null;
-      }
-
-      // No retail signal — reseller is checking prices, hand off for wholesale
-      const sizeInfo = dimensions.userExpressed || dimensions.normalized;
-      console.log(`🏪 Reseller flow — dimensions ${sizeInfo} without retail signal, handing off for wholesale`);
-
-      const handoffResponse = await executeHandoff(psid, convo, userMessage, {
-        reason: `Mayoreo desde anuncio revendedor — medida ${sizeInfo}: "${msg.substring(0, 80)}"`,
-        responsePrefix: `¡Tenemos la medida de ${sizeInfo}! Para precio de mayoreo te comunico con un especialista.\n\n`,
-        lastIntent: 'wholesale_handoff',
-        timingStyle: 'elaborate'
-      });
-
-      await updateConversation(psid, { currentFlow: null });
-      return { ...handoffResponse, handledBy: "reseller" };
-    }
-
-    // --- Path 5: Price inquiry (valid reseller question) ---
-    const PRICE_INQUIRY = /\b(precios?|costos?|cuanto|cu[aá]nto|cotizaci[oó]n|metro\s*cuadrado|m2|por\s*metro|precio.*metro|tarifas?|lista.*precios?|medidas?\s+y\s+precios?|medidas?\s+que\s+manejan)\b/i;
-    if (PRICE_INQUIRY.test(msg)) {
-      console.log(`🏪 Reseller flow — price inquiry: "${msg.substring(0, 40)}"`);
-      // Answer the question and stay in the reseller flow
-      await updateConversation(psid, { lastIntent: 'reseller_pitch_sent', currentFlow: 'reseller' });
-      const isBorde = convo?.productInterest === 'borde_separador';
-      return {
-        type: "text",
-        text: isBorde
-          ? "Manejamos rollos de 18m y 54m. Los precios de mayoreo dependen de la cantidad. ¿Cuántos rollos te interesan?"
-          : "Manejamos la malla confeccionada por pieza (no por metro cuadrado). Las medidas van desde 2x2m hasta 7x10m, con precios desde $294 hasta $3,450 en menudeo.\n\nPara precios de mayoreo, ¿qué medida y cantidad te interesan?"
-      };
-    }
-
-    // --- Fallback: not clear yet, re-send a shorter prompt ---
-    console.log(`🏪 Reseller flow — unclear response, asking to clarify`);
-    await updateConversation(psid, { lastIntent: 'reseller_pitch_sent', currentFlow: 'reseller' });
-    const isBorde = convo?.productInterest === 'borde_separador';
     return {
       type: "text",
       text: isBorde
-        ? "¿Te interesa ser distribuidor, o buscas comprar borde separador para uso propio? Si solo necesitas uno, indícanos el largo."
-        : "¿Te interesa ser distribuidor, o buscas comprar malla sombra para uso propio? Si solo necesitas una pieza, indícanos la medida."
+        ? "¡Perfecto! ¿Qué largo necesitas?"
+        : "¡Perfecto! ¿Qué medida necesitas? (ejemplo: 3x4m)"
     };
   }
 
-  // Already handed off or past the reseller stage — don't interfere
-  return null;
+  // ── AWAITING ZIP ──
+  if (lastIntent === 'reseller_awaiting_zip') {
+    const zipMatch = msg.match(/\b(\d{5})\b/);
+
+    if (zipMatch) {
+      const zip = zipMatch[1];
+      const savedSize = convo?.productSpecs?.userExpressedSize || '';
+      console.log(`🏪 Reseller flow — zip ${zip}, handing off`);
+
+      const handoffResponse = await executeHandoff(psid, convo, userMessage, {
+        reason: `Mayoreo — ${savedSize}, CP ${zip}`,
+        responsePrefix: `¡Perfecto! Un especialista te contactará para cotizarte.\n\n`,
+        lastIntent: 'wholesale_handoff',
+        timingStyle: 'elaborate'
+      });
+
+      await updateConversation(psid, { currentFlow: null });
+      return { ...handoffResponse, handledBy: "reseller" };
+    }
+
+    // New dimensions instead of zip — update and re-ask
+    const newSpecs = extractSpecs(msg, isBorde);
+    if (newSpecs) {
+      await updateConversation(psid, {
+        productSpecs: { userExpressedSize: newSpecs.sizeStr, width: newSpecs.width, height: newSpecs.height }
+      });
+      return { type: "text", text: "¿Cuál es tu código postal para cotizar el envío?" };
+    }
+
+    return { type: "text", text: "¿Me compartes tu código postal para cotizar el envío?" };
+  }
+
+  // ── AFTER PITCH — check for dimensions ──
+  const specs = extractSpecs(msg, isBorde);
+
+  if (specs) {
+    // Check if zip is also in the message (5-digit number that isn't part of the dimensions)
+    const zipCandidates = [...msg.matchAll(/\b(\d{5})\b/g)].map(m => m[1]);
+    const zip = zipCandidates.find(z => !specs.sizeStr.includes(z));
+
+    if (zip) {
+      // Dimensions + zip → handoff immediately
+      console.log(`🏪 Reseller flow — ${specs.sizeStr} + CP ${zip}, handing off`);
+
+      const handoffResponse = await executeHandoff(psid, convo, userMessage, {
+        reason: `Mayoreo — ${specs.sizeStr}, CP ${zip}`,
+        responsePrefix: `¡Perfecto! Un especialista te contactará para cotizarte.\n\n`,
+        lastIntent: 'wholesale_handoff',
+        timingStyle: 'elaborate'
+      });
+
+      await updateConversation(psid, { currentFlow: null });
+      return { ...handoffResponse, handledBy: "reseller" };
+    }
+
+    // Dimensions but no zip → ask for zip
+    console.log(`🏪 Reseller flow — ${specs.sizeStr}, asking for zip`);
+    await updateConversation(psid, {
+      lastIntent: 'reseller_awaiting_zip',
+      productSpecs: { userExpressedSize: specs.sizeStr, width: specs.width, height: specs.height }
+    });
+
+    return { type: "text", text: `¿Cuál es tu código postal para cotizar el envío?` };
+  }
+
+  // ── NO DIMENSIONS — catalog + handoff ──
+  console.log(`🏪 Reseller flow — no dimensions, catalog + handoff`);
+
+  const catalogUrl = await getCatalogUrl(convo, convo?.productInterest || 'malla_sombra');
+  await sendCatalogToUser(catalogUrl, psid, channel);
+
+  const handoffResponse = await executeHandoff(psid, convo, userMessage, {
+    reason: `Mayoreo: "${msg.substring(0, 80)}"`,
+    responsePrefix: catalogUrl
+      ? "Te comparto nuestro catálogo con medidas y precios. Un especialista te contactará para darte más detalles.\n\n"
+      : "Un especialista te contactará para darte más detalles sobre precios de mayoreo.\n\n",
+    lastIntent: 'wholesale_handoff',
+    timingStyle: 'elaborate'
+  });
+
+  await updateConversation(psid, { currentFlow: null });
+  return { ...handoffResponse, handledBy: "reseller" };
 }
 
-module.exports = { shouldHandle, handle, PITCH_MESSAGE, PITCH_MESSAGES, getPitchMessage };
+module.exports = { shouldHandle, handle, PITCH_MESSAGES, getPitchMessage };
