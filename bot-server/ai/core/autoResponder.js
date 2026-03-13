@@ -24,37 +24,44 @@ async function autoResponder(cleanMsg) {
 
   // Detectar intención simple
   if (/precio|cu[aá]nto|vale|costo/.test(cleanMsg)) {
-    const prices = subfamilies.map(s => s.priceRange || "por cotizar").join(", ");
+    const prices = subfamilies.map(s => s.priceRange).filter(Boolean);
+    const priceText = prices.length <= 3
+      ? prices.join(", ")
+      : `desde ${prices[0]} hasta ${prices[prices.length - 1]}`;
     return {
       type: "text",
-      text: `Los precios de ${family.name.toLowerCase()} varían según la medida 🌿.\n` +
-            `Por ejemplo: ${prices}. ¿Quieres que te muestre las medidas disponibles?`
+      text: `Los precios de ${family.name.toLowerCase()} varían según la medida.\n` +
+            `${priceText ? `Por ejemplo: ${priceText}. ` : ''}¿Qué medida te interesa?`
     };
   }
 
   if (/medida|dimensiones|tamañ|rollo/.test(cleanMsg)) {
-    const medidas = subfamilies.flatMap(s => s.dimensions || []).join(", ");
+    const medidas = subfamilies.flatMap(s => s.dimensions || []);
+    const medidasText = medidas.length <= 3
+      ? medidas.join(", ")
+      : `desde ${medidas[0]} hasta ${medidas[medidas.length - 1]}`;
     return {
       type: "text",
-      text: `Estas son las medidas más comunes de ${family.name.toLowerCase()}:\n${medidas}\n` +
-            `¿Quieres saber cuál conviene para tu proyecto?`
+      text: `Manejamos varias medidas de ${family.name.toLowerCase()}${medidasText ? `: ${medidasText}` : ''}.\n` +
+            `¿Qué medida necesitas?`
     };
   }
 
   if (/invernadero|jard[ií]n|estacionamiento|sombra/.test(cleanMsg)) {
-    const usos = family.commonUses?.join(", ") || "invernaderos y jardines";
+    const usos = family.commonUses?.slice(0, 3).join(", ") || "invernaderos y jardines";
     return {
       type: "text",
-      text: `Perfecto 🌞 la ${family.name.toLowerCase()} es ideal para ${usos}.\n` +
-            `¿Deseas ver opciones beige o monofilamento?`
+      text: `La ${family.name.toLowerCase()} es ideal para ${usos}.\n` +
+            `¿Qué medida necesitas?`
     };
   }
 
   if (/diferencia|distinto|compar/.test(cleanMsg)) {
-    const variantes = subfamilies.map(s => s.name).join(" vs ");
+    const variantes = subfamilies.slice(0, 3).map(s => s.name);
+    const varText = variantes.length <= 2 ? variantes.join(" y ") : variantes.slice(0, 2).join(", ") + " y " + variantes[2];
     return {
       type: "text",
-      text: `La diferencia principal entre ${variantes} está en el tipo de tejido y resistencia.\n` +
+      text: `La diferencia principal entre ${varText} está en el tipo de tejido y resistencia.\n` +
             `¿Quieres que te explique cuál conviene para tu uso?`
     };
   }

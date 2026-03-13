@@ -380,7 +380,9 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   // Hand off to specialist immediately.
   if (convo?.isWholesaleInquiry && convo?.lastIntent !== 'wholesale_handoff') {
     const wAvailableLengths = await getAvailableLengths(sourceContext, convo);
-    const lengthList = wAvailableLengths.map(l => `${l}m`).join(' y ');
+    const lengthList = wAvailableLengths.length <= 3
+      ? wAvailableLengths.map(l => `${l}m`).join(' y ')
+      : `desde ${wAvailableLengths[0]}m hasta ${wAvailableLengths[wAvailableLengths.length - 1]}m`;
 
     // Answer "how many for wholesale?" directly
     const wholesaleQtyQuestion = /\b(a\s*partir\s*de\s*cu[aá]nt[oa]s|cu[aá]nt[oa]s\s*(piezas?|rollos?|unidades?)\s*(son|para|es|se\s*necesit|se\s*ocup|para\s*mayoreo)|m[ií]nimo\s*(de\s*)?(piezas?|rollos?|compra|pedido))\b/i;

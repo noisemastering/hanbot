@@ -44,7 +44,7 @@ async function handleFamilyFlow(cleanMsg, psid, convo) {
       type: "image",
       text:
         `Sí, contamos con ${familyInfo.name.toLowerCase()} 🌿\n` +
-        `${familyInfo.description}\n\nUsos comunes:\n- ${familyInfo.commonUses?.join("\n- ") || "Jardines e invernaderos"}\n\n` +
+        `${familyInfo.description}\n\nUsos comunes:\n- ${(familyInfo.commonUses?.slice(0, 3) || ["Jardines e invernaderos"]).join("\n- ")}\n\n` +
         `¿Quieres ver opciones beige confeccionadas o en rollo monofilamento?`,
       imageUrl: familyInfo.imageUrl || "https://i.imgur.com/X3vYt8E.png"
     };
