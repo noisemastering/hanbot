@@ -929,6 +929,37 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   }
   // ====== END DUPLICATE QUOTE DETECTION ======
 
+  // ====== ZIP CODE AFTER QUOTE ======
+  // Bot asked "¿Me puedes compartir tu código postal?" after giving a quote.
+  // Capture it, save it, and acknowledge — don't re-quote.
+  if (state.width && state.height && convo?.lastSharedProductLink && /^\s*\d{5}\s*$/.test(userMessage.trim())) {
+    const zipInfo = await parseAndLookupZipCode(userMessage);
+    if (zipInfo) {
+      console.log(`📍 Malla flow - Zip code after quote: ${zipInfo.code} → ${zipInfo.city}, ${zipInfo.state}`);
+      await updateConversation(psid, {
+        zipCode: zipInfo.code,
+        city: zipInfo.city,
+        stateMx: zipInfo.state,
+        lastIntent: 'malla_zip_captured',
+        unknownCount: 0
+      });
+      return {
+        type: "text",
+        text: `¡Gracias! Registré tu código postal (${zipInfo.city}, ${zipInfo.state}). Si necesitas algo más, aquí estoy.`
+      };
+    }
+    // Valid 5-digit but not found in DB — still acknowledge
+    await updateConversation(psid, {
+      zipCode: userMessage.trim(),
+      lastIntent: 'malla_zip_captured',
+      unknownCount: 0
+    });
+    return {
+      type: "text",
+      text: `¡Gracias! Si necesitas algo más, aquí estoy.`
+    };
+  }
+
   // ====== IMMEDIATE HANDOFF: non-90% shade percentage ======
   const shadeMatchFlow = userMessage.match(/\b(al\s*)?(\d{2,3})\s*(%|porciento|por\s*ciento|de\s+sombra)\b/i);
   const requestedShadeFlow = shadeMatchFlow ? parseInt(shadeMatchFlow[2]) : null;
