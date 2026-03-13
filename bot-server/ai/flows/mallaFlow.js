@@ -960,6 +960,41 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     };
   }
 
+  // ====== DIRECT TRANSFER PAYMENT REQUEST ======
+  // Customer asks to pay via bank transfer instead of Mercado Libre.
+  // First mention: explain ML accepts transfers. Insistence: escalate to human.
+  if (/\b(transferencia|transf|deposito\s*bancario|dep[oó]sito\s*directo)\b/i.test(userMessage)) {
+    const alreadyAskedTransfer = convo?.productSpecs?.transferAsked;
+
+    if (alreadyAskedTransfer) {
+      // Insistence — escalate to human
+      console.log(`💳 Malla flow - Transfer payment insistence, escalating to human`);
+      const { executeHandoff } = require('../utils/executeHandoff');
+      return await executeHandoff(psid, convo, userMessage, {
+        reason: `Cliente insiste en pagar por transferencia directa: "${userMessage.substring(0, 80)}"`,
+        responsePrefix: 'Te comunico con un especialista para coordinar el pago por transferencia.',
+        lastIntent: 'transfer_payment_handoff',
+        timingStyle: 'elaborate'
+      });
+    }
+
+    // First mention — explain ML accepts transfers
+    console.log(`💳 Malla flow - Transfer payment question (first mention)`);
+    await updateConversation(psid, {
+      lastIntent: 'malla_transfer_asked',
+      productSpecs: { ...convo?.productSpecs, transferAsked: true, updatedAt: new Date() },
+      unknownCount: 0
+    });
+
+    const hasQuote = state.width && state.height && convo?.lastSharedProductLink;
+    const linkReminder = hasQuote ? `\n\nAquí tienes el link de compra:\n${convo.lastSharedProductLink}` : '';
+
+    return {
+      type: "text",
+      text: `Sí, Mercado Libre acepta transferencia bancaria como forma de pago. Al momento de comprar puedes seleccionar esa opción.${linkReminder}`
+    };
+  }
+
   // ====== IMMEDIATE HANDOFF: non-90% shade percentage ======
   const shadeMatchFlow = userMessage.match(/\b(al\s*)?(\d{2,3})\s*(%|porciento|por\s*ciento|de\s+sombra)\b/i);
   const requestedShadeFlow = shadeMatchFlow ? parseInt(shadeMatchFlow[2]) : null;
