@@ -149,9 +149,10 @@ function checkProductFit(productInterest, usos) {
   }
 
   // Current product doesn't fit - return suggested alternatives
+  // Exclude triangular/velaria products — never suggest those as examples
   const bestUso = usos[0]; // Highest priority matching uso
   const suggestedProducts = bestUso.products
-    .filter(p => p.sellable)
+    .filter(p => p.sellable && !/tri[aá]ngul|velaria|\d+\s*x\s*\d+\s*x\s*\d+/i.test(p.name))
     .slice(0, 3); // Top 3 suggestions
 
   return {
