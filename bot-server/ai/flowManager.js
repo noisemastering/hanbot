@@ -533,7 +533,7 @@ async function detectFlow(classification, convo, userMessage, sourceContext) {
       return 'rollo';
     }
   }
-  if (/\bbordes?\b/i.test(msg) || /\bcinta\s*pl[aá]stica\b/i.test(msg)) {
+  if (/\bbordes?\b/i.test(msg) || /\bcinta\s*pl[aá]stica\b/i.test(msg) || /\bdivisor(es)?\s*(de\s+)?(jard[ií]n)?\b/i.test(msg)) {
     return 'borde_separador';
   }
   if (/\b(ground\s*cover|antimaleza|malla\s*(para\s*)?maleza)\b/i.test(msg)) {

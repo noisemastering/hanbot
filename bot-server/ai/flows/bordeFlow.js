@@ -718,18 +718,11 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   // that suggests confeccionada, not borde. Ask for clarification.
   if (userMessage && !state.length) {
     const dimShape = classifyDimensionShape(userMessage);
-    if (dimShape === 'confeccionada') {
-      console.log(`🌱 Borde flow - Dimension shape "${userMessage.slice(0, 40)}" suggests confeccionada, asking disambiguation`);
+    if (dimShape === 'confeccionada' || dimShape === 'rollo') {
+      console.log(`🌱 Borde flow - Dimension shape "${userMessage.slice(0, 40)}" suggests ${dimShape}, asking disambiguation`);
       return {
         type: "text",
-        text: "Esa medida suena a malla sombra, no a borde separador. ¿Estás buscando malla sombra o borde separador?"
-      };
-    }
-    if (dimShape === 'rollo') {
-      console.log(`🌱 Borde flow - Dimension shape "${userMessage.slice(0, 40)}" suggests rollo, asking disambiguation`);
-      return {
-        type: "text",
-        text: "Esa medida suena a rollo de malla sombra, no a borde separador. ¿Estás buscando malla sombra en rollo o borde separador?"
+        text: "Esa medida no corresponde a borde separador. El borde se mide en metros lineales (largo). ¿Me indicas cuántos metros necesitas?"
       };
     }
   }

@@ -57,6 +57,137 @@ const { handleGlobalIntents } = require("../global/intents");
 // parseAndLookupZipCode is now shared — imported from ../utils/preHandoffCheck
 const { parseAndLookupZipCode } = require("../utils/preHandoffCheck");
 
+// AI escalation — when regex can't handle the full message
+const { OpenAI } = require("openai");
+const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
+
+/**
+ * Escalate a message to AI when regex can't handle it.
+ * Returns either:
+ *   { dimensions: { width, height } }  — customer is requesting a size
+ *   { response: "..." }                — AI generated a full response
+ *   null                                — AI couldn't help
+ */
+async function escalateToAI(userMessage, convo) {
+  try {
+    // ── Gather product data from DB ──
+    const range = await getMallaRange();
+    let catalogSummary = '';
+    if (range) {
+      catalogSummary = `Medidas disponibles: desde ${range.sizeMin} hasta ${range.sizeMax}. Precios: desde $${range.priceMin} hasta $${range.priceMax}.`;
+    }
+
+    // If message mentions dimensions, look up that specific product
+    const mentionedDims = parseDimensions(userMessage);
+    let specificProduct = '';
+    if (mentionedDims) {
+      const products = await findMatchingProducts(mentionedDims.width, mentionedDims.height, null, null, convo?.poiRootId);
+      if (products.length > 0) {
+        const p = products[0];
+        const colors = products.map(pr => {
+          const lineage = pr.name?.toLowerCase() || '';
+          if (/negro/i.test(lineage)) return 'negro';
+          if (/beige/i.test(lineage)) return 'beige';
+          return null;
+        }).filter(Boolean);
+        const uniqueColors = [...new Set(colors)];
+        specificProduct = `Producto ${mentionedDims.width}x${mentionedDims.height}m: $${Math.round(p.price)}, envío incluido.`;
+        if (products.length > 1) {
+          const prices = products.map(pr => `$${Math.round(pr.price)}`);
+          specificProduct = `Producto ${mentionedDims.width}x${mentionedDims.height}m: ${prices.join(' / ')} (depende del color), envío incluido.`;
+        }
+        if (uniqueColors.length > 0) specificProduct += ` Colores disponibles: ${uniqueColors.join(' y ')}.`;
+      } else {
+        specificProduct = `No tenemos la medida ${mentionedDims.width}x${mentionedDims.height}m de línea.`;
+      }
+    }
+
+    // ── Build conversation context ──
+    const adProduct = convo?.adMainProductName || null;
+    const lastQuote = convo?.productSpecs?.userExpressedSize || null;
+    const lastPrice = convo?.productSpecs?.lastQuotedPrice || null;
+    const lastBotMsg = convo?.lastBotResponse || null;
+    const userName = convo?.userName || null;
+
+    let contextLines = [];
+    if (userName) contextLines.push(`Nombre del cliente: ${userName}`);
+    if (adProduct) contextLines.push(`Anuncio de Facebook que trajo al cliente: ${adProduct}`);
+    if (lastQuote) contextLines.push(`Última medida cotizada: ${lastQuote}`);
+    if (lastPrice) contextLines.push(`Último precio cotizado: $${lastPrice}`);
+    if (lastBotMsg) contextLines.push(`Último mensaje del bot: "${lastBotMsg.slice(0, 150)}"`);
+    if (specificProduct) contextLines.push(specificProduct);
+    if (catalogSummary) contextLines.push(catalogSummary);
+    const contextBlock = contextLines.length > 0 ? `\nCONTEXTO:\n${contextLines.join('\n')}\n` : '';
+
+    const response = await _openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        {
+          role: "system",
+          content: `Eres asesora de ventas de Hanlob, empresa mexicana fabricante de malla sombra.
+${contextBlock}
+PRODUCTO: Malla sombra raschel confeccionada.
+- 90% de cobertura, protección UV
+- Refuerzo en esquinas, vida útil hasta 5 años
+- Ojillos para sujeción cada 80cm, lista para instalar
+- Colores: negro y beige
+- Compra por Mercado Libre, envío incluido
+- Compra protegida: si no llega o llega diferente, Mercado Libre devuelve el dinero
+
+DATOS DEL NEGOCIO:
+- Somos fabricantes en Querétaro, más de 5 años vendiendo en Mercado Libre
+- Envío a todo México y Estados Unidos
+- WhatsApp: +52 442 595 7432
+- Horario: Lunes a Viernes 9am-6pm, Sábados 9am-2pm
+
+INSTRUCCIONES:
+1. Si el cliente PIDE una medida específica (incluso con formato desordenado como "8 X. 6. Mtrs"):
+   → { "type": "dimensions", "width": <menor lado>, "height": <mayor lado> }
+
+2. Para cualquier otra cosa (pregunta, duda, queja, confirmación, etc.):
+   → { "type": "response", "text": "<tu respuesta>" }
+   - Usa los datos de CONTEXTO y PRODUCTO para dar respuestas precisas con precios reales
+   - Si preguntan si el anuncio/oferta es real: confirma, somos fabricantes, compra protegida por ML
+   - Si confirman que quieren una medida: cotiza con el precio real del CONTEXTO
+   - Si piden un color: confirma si lo tenemos (negro y beige)
+   - Si preguntan hasta cuándo dura la oferta/promoción: "Hasta agotar existencias"
+   - Si preguntan algo que no sabes: di que con gusto un especialista le puede ayudar
+
+REGLAS:
+- Español mexicano, amable y conciso (2-4 oraciones)
+- USA los precios reales del CONTEXTO, NUNCA inventes
+- NUNCA incluyas URLs/links (el sistema los agrega después)
+- NUNCA pidas código postal
+- Solo devuelve JSON`
+        },
+        { role: "user", content: userMessage }
+      ],
+      temperature: 0.3,
+      max_tokens: 250,
+      response_format: { type: "json_object" }
+    });
+
+    const result = JSON.parse(response.choices[0].message.content);
+
+    if (result.type === 'dimensions' && result.width && result.height) {
+      const w = Math.min(result.width, result.height);
+      const h = Math.max(result.width, result.height);
+      if (w > 0 && h > 0 && w <= 100 && h <= 100) {
+        return { dimensions: { width: w, height: h } };
+      }
+    }
+
+    if (result.type === 'response' && result.text) {
+      return { response: result.text };
+    }
+
+    return null;
+  } catch (err) {
+    console.error("❌ escalateToAI error:", err.message);
+    return null;
+  }
+}
+
 /**
  * Flow stages for malla confeccionada
  */
@@ -942,7 +1073,8 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   }
 
   // CHECK FOR ACCESSORY QUESTIONS (arnés, cuerda, lazo, kit de instalación)
-  const isAccessoryQuestion = /\b(arn[eé]s|cuerda|lazo|amarre|kit.*instalaci|incluye.*para\s*(colgar|instalar)|viene\s*con|dan\s*con|trae)\b/i.test(userMessage);
+  // Only match specific accessory keywords — NOT generic "viene con" / "trae" which cause false positives
+  const isAccessoryQuestion = /\b(arn[eé]s|cuerda|lazo|amarre|kit\s*(de\s+)?instalaci|incluye.*para\s*(colgar|instalar|sujetar|amarrar))\b/i.test(userMessage);
   if (isAccessoryQuestion) {
     console.log(`🔧 Accessory question detected: "${userMessage}"`);
     return await handleAccessoryQuestion(psid, convo, userMessage);
@@ -1086,74 +1218,68 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     }
   }
 
-  // FIRST: Regex on raw message (deterministic, can't hallucinate)
+  // ===== DIMENSION EXTRACTION (regex only for pure dimension messages, AI for everything else) =====
+  // PILOT: Regex only fires when the FULL message is a dimension request.
+  // If the message contains dimensions but also other content (questions, concerns, references),
+  // escalate to AI — don't extract dimensions and ignore the rest of the message.
+
+  // Pure dimension message patterns — regex is 100% confident these are dimension requests:
+  // "6x4", "6 x 4", "6x4m", "de 6x4", "la de 6x4", "6 por 4 metros", "malla de 3x5",
+  // "cuánto cuesta la de 6x4", "precio de 6x4", "3x4 cuánto sale", "quiero una de 5x3"
+  // Filler: greeting, price words, "la de", "una de", "malla de", meter suffixes
+  const cleanForFullMatch = userMessage.trim().toLowerCase()
+    .replace(/^(hola|buenas?|buenos?\s+d[ií]as?|buenas?\s+tardes?|buenas?\s+noches?)[,.\s]*/i, '')
+    .trim();
+  const PURE_DIMENSION_MSG = /^(?:(?:(?:cu[aá]nto|cuanto)\s+(?:cuesta|sale|vale|est[aá])\s+)?(?:(?:la|una|el)\s+)?(?:de\s+)?(?:(?:malla|malla\s+sombra|malla\s+de)\s+)?(?:de\s+)?)?(\d+(?:[.,]\d+)?)\s*(?:m(?:trs?|ts|etros?)?\.?)?\s*(?:[xX×*]|(?:\s+)?por(?:\s+)?)\s*(\d+(?:[.,]\d+)?)\s*(?:m(?:trs?|ts|etros?)?\.?)?(?:\s+(?:m(?:trs?|ts|etros?)?\.?))?(?:\s+(?:(?:cu[aá]nto|cuanto)\s+(?:cuesta|sale|vale)|(?:precio|costo)))?[?\s]*$/i;
+
   if (!hasNonMetricUnit) {
-    const dimsFromMessage = parseDimensions(userMessage);
-    if (dimsFromMessage) {
-      console.log(`🌐 Malla flow - [1/4 regex] Parsed "${userMessage.slice(0, 40)}" → ${dimsFromMessage.width}x${dimsFromMessage.height}`);
-      state.width = dimsFromMessage.width;
-      state.height = dimsFromMessage.height;
-      state.userExpressedSize = dimsFromMessage.userExpressed;
-      if (dimsFromMessage.convertedFromFeet) {
-        state.convertedFromFeet = true;
-        state.originalFeetStr = dimsFromMessage.originalFeetStr;
-      }
-      if (dimsFromMessage.convertedFromCentimeters) {
-        state.convertedFromCentimeters = true;
-        state.originalCmStr = dimsFromMessage.originalCmStr;
-      }
-    }
-  }
-
-  // SECOND: AI classifier entities (fallback when regex can't parse)
-  if (!state.width || !state.height) {
-    if (classifierHadDims) {
-      state.width = entities.width;
-      state.height = entities.height;
-      if (entities.dimensions) {
-        const dimParts = entities.dimensions.match(/(\d+(?:\.\d+)?)\s*[xX×*]\s*(\d+(?:\.\d+)?)/);
-        state.userExpressedSize = dimParts ? `${dimParts[1]} x ${dimParts[2]}` : `${entities.width} x ${entities.height}`;
-      } else {
-        state.userExpressedSize = `${entities.width} x ${entities.height}`;
-      }
-      console.log(`🌐 Malla flow - [2/4 AI entities] Using ${entities.width}x${entities.height}`);
-    }
-  }
-  if (!state.width || !state.height) {
-    if (classifierHadDimStr) {
-      const dims = parseDimensions(entities.dimensions);
-      if (dims) {
-        state.width = dims.width;
-        state.height = dims.height;
-        state.userExpressedSize = dims.userExpressed;
-        if (dims.convertedFromFeet) {
+    if (PURE_DIMENSION_MSG.test(cleanForFullMatch)) {
+      // Full message is a dimension request — regex handles it
+      const dimsFromMessage = parseDimensions(userMessage);
+      if (dimsFromMessage) {
+        console.log(`🌐 Malla flow - [REGEX] Pure dimension message: "${userMessage.slice(0, 40)}" → ${dimsFromMessage.width}x${dimsFromMessage.height}`);
+        state.width = dimsFromMessage.width;
+        state.height = dimsFromMessage.height;
+        state.userExpressedSize = dimsFromMessage.userExpressed;
+        if (dimsFromMessage.convertedFromFeet) {
           state.convertedFromFeet = true;
-          state.originalFeetStr = dims.originalFeetStr;
+          state.originalFeetStr = dimsFromMessage.originalFeetStr;
         }
-        if (dims.convertedFromCentimeters) {
+        if (dimsFromMessage.convertedFromCentimeters) {
           state.convertedFromCentimeters = true;
-          state.originalCmStr = dims.originalCmStr;
+          state.originalCmStr = dimsFromMessage.originalCmStr;
         }
-        console.log(`🌐 Malla flow - [3/4 AI dim string] Parsed "${entities.dimensions}" → ${dims.width}x${dims.height}`);
-      } else {
-        console.warn(`⚠️ Malla flow - [3/4 AI dim string] FAILED to parse "${entities.dimensions}" — classifier gave dimensions but regex couldn't parse them`);
       }
+    } else if (parseDimensions(userMessage)) {
+      // Message contains dimensions but also other content — escalate to AI
+      console.log(`🌐 Malla flow - [AI ESCALATION] Dimensions found but message has extra content, escalating: "${userMessage.slice(0, 60)}"`);
+      // Don't extract dimensions — let AI handle the full message
     }
   }
 
-  // THIRD: Try single dimension - assume square (e.g., "2 y medio" -> 3x3)
-  // BUT only for reasonable confeccionada sizes (2-10m), not roll sizes like 100m
+  // AI ESCALATION: When regex didn't fully handle the message.
+  // This covers: messages with dimensions + extra content, messages with no dimensions,
+  // questions, concerns, complaints, confirmations — anything the regex can't handle in full.
+  // AI interprets the full message with conversation context and either:
+  // - Extracts dimensions (customer IS requesting a size)
+  // - Returns a full response (customer is asking something else)
   if (!state.width || !state.height) {
-    const singleDim = parseSingleDimension(userMessage);
-    // Sanity check: confeccionada single dimensions should be 2-10m
-    // Numbers like 100 are roll lengths, not confeccionada sizes
-    if (singleDim && singleDim >= 2 && singleDim <= 10) {
-      const rounded = Math.round(singleDim);
-      console.log(`🌐 Malla flow - [4/4 single dim] ${singleDim}m → assuming square ${rounded}x${rounded}`);
-      state.width = rounded;
-      state.height = rounded;
-    } else if (singleDim && singleDim > 10) {
-      console.log(`⚠️ [4/4 single dim] ${singleDim}m too large for confeccionada, ignoring`);
+    console.log(`🌐 Malla flow - [AI ESCALATION] Escalating to AI: "${userMessage.slice(0, 60)}"`);
+    try {
+      const aiResult = await escalateToAI(userMessage, convo);
+      if (aiResult?.dimensions) {
+        state.width = aiResult.dimensions.width;
+        state.height = aiResult.dimensions.height;
+        state.userExpressedSize = `${aiResult.dimensions.width} x ${aiResult.dimensions.height}`;
+        console.log(`🌐 Malla flow - [AI] Dimensions: ${aiResult.dimensions.width}x${aiResult.dimensions.height}`);
+      } else if (aiResult?.response) {
+        console.log(`🌐 Malla flow - [AI] Full response (not a dimension request)`);
+        return { type: "text", text: aiResult.response, handledBy: "malla_ai_escalation" };
+      } else {
+        console.log(`🌐 Malla flow - [AI] No result`);
+      }
+    } catch (err) {
+      console.error(`❌ Malla flow - AI escalation error:`, err.message);
     }
   }
 
@@ -1162,7 +1288,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     const source = hasNonMetricUnit ? 'feet conversion' : 'regex/AI';
     console.log(`✅ Malla flow - Dimensions resolved: ${state.width}x${state.height} (source: ${source})`);
   } else if (/\d/.test(userMessage)) {
-    console.warn(`❌ Malla flow - NO dimensions extracted from "${userMessage.slice(0, 60)}" — all layers failed. Classifier had: width=${entities.width ?? 'null'}, height=${entities.height ?? 'null'}, dimensions="${entities.dimensions ?? 'null'}"`);
+    console.warn(`❌ Malla flow - NO dimensions extracted from "${userMessage.slice(0, 60)}" — all 4 layers failed`);
   }
 
   // CHECK FOR AREA (metros cuadrados) - offer closest standard sizes

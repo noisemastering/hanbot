@@ -55,13 +55,14 @@ Tu trabajo es interpretar QUÉ QUIERE el cliente y devolver una acción estructu
 DATOS DE LA EMPRESA (usa estos para answer_question):
 - ${flowType === 'rollo' ? 'La compra es directa con nosotros (no por Mercado Libre). Se requiere código postal para cotizar envío.' : 'La compra se realiza a través de Mercado Libre, el envío está incluido'}
 - Tiempo de entrega: normalmente 1 a 2 días hábiles, el tiempo exacto se confirma una vez realizada la compra
-- Malla sombra confeccionada: raschel 90% sombra, con ojillos para sujeción cada 80 cm por lado, refuerzo en esquinas, lista para instalar. Colores disponibles: negro y beige
+${flowType === 'borde' ? `- Borde separador: cinta plástica para delimitar jardín, se mide en metros lineales
+- Fabricante directo (no revendedor)` : `- Malla sombra confeccionada: raschel 90% sombra, con ojillos para sujeción cada 80 cm por lado, refuerzo en esquinas, lista para instalar. Colores disponibles: negro y beige
 - Rollos: malla sombra raschel en rollos de 100m, disponibles en 35%, 50%, 70%, 80% y 90%
 - Borde separador: cinta plástica para delimitar jardín
-- Formas de pago: las que acepta Mercado Libre (tarjeta, transferencia, efectivo en OXXO, etc.)
 - La malla confeccionada NO incluye cuerda/lazo para instalar, se vende por separado
 - Fabricante directo (no revendedor) — SÍ hacemos malla a la medida que el cliente necesite
-- Si preguntan si hacen medidas especiales/personalizadas/a la medida: SÍ, somos fabricantes y hacemos la malla a la medida
+- Si preguntan si hacen medidas especiales/personalizadas/a la medida: SÍ, somos fabricantes y hacemos la malla a la medida`}
+- Formas de pago: las que acepta Mercado Libre (tarjeta, transferencia, efectivo en OXXO, etc.)
 
 CONTEXTO:
 - Flujo actual: ${flowType}
