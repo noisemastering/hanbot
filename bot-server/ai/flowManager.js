@@ -1010,9 +1010,12 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
   // Detect if user mentions a use case and validate product fit
   // Skip when message contains explicit dimensions — the customer already knows what they want,
   // so let the flow handler parse sizes + quote directly instead of suggesting alternatives.
+  // Also skip when customer is deferring (will come back later) — use case keyword is incidental context.
   const hasDimensions = /\d+\s*[x×X]\s*\d+/.test(userMessage);
+  const isDeferral = /\b(despu[eé]s|m[aá]s\s+tarde|luego|ma[nñ]ana|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|la\s+pr[oó]xima|al\s+rato|ahorita\s+no|todav[ií]a\s+no|no\s+s[eé]|a[uú]n\s+no|cuando\s+tenga|cuando\s+pueda|saco\s+las\s+medidas|tomo\s+las\s+medidas|checo|reviso)\b/i.test(userMessage);
   const productInterest = convo?.productInterest || activeFlow;
-  const useCaseAnalysis = hasDimensions
+  const skipUseCaseCheck = hasDimensions || isDeferral;
+  const useCaseAnalysis = skipUseCaseCheck
     ? { detected: false, keywords: [], fits: true, bestUso: null, suggestedProducts: [], shouldSuggestChange: false }
     : await analyzeUseCaseFit(userMessage, productInterest);
 

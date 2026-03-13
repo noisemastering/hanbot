@@ -114,11 +114,13 @@ function checkProductFit(productInterest, usos) {
 
   // Map product interest to possible product name patterns
   const interestPatterns = {
-    'malla_sombra': /malla.*sombra.*confeccionada|confeccionada/i,
-    'malla_sombra_confeccionada': /malla.*sombra.*confeccionada|confeccionada/i,
-    'confeccionada': /malla.*sombra.*confeccionada|confeccionada/i,
+    'malla_sombra': /malla.*sombra|confeccionada/i,
+    'malla_sombra_confeccionada': /malla.*sombra|confeccionada/i,
+    'malla_sombra_raschel': /malla.*sombra|raschel|confeccionada/i,
+    'confeccionada': /malla.*sombra|confeccionada/i,
     'rollo': /rollo|malla.*sombra.*rollo/i,
-    'borde_separador': /borde.*separador|borde.*jardin/i,
+    'rollo_malla_sombra': /rollo|malla.*sombra.*rollo/i,
+    'borde_separador': /borde.*separador|borde.*jardin|cinta.*pl[aá]stica/i,
     'groundcover': /ground\s*cover|antimaleza/i,
     'ground_cover': /ground\s*cover|antimaleza/i,
     'monofilamento': /monofilamento/i
@@ -232,15 +234,15 @@ function generateSuggestionMessage(analysis) {
     return null;
   }
 
-  // Build product suggestions
+  // Build product suggestions — always use category names, never raw DB product names
   const productNames = products.map(p => {
-    // Extract key info from product name
     const name = p.name.toLowerCase();
     if (name.includes('rollo')) return 'rollo de malla sombra';
     if (name.includes('ground') || name.includes('antimaleza')) return 'ground cover antimaleza';
     if (name.includes('monofilamento')) return 'malla monofilamento';
-    if (name.includes('borde')) return 'borde separador';
-    return p.name;
+    if (name.includes('borde') || name.includes('cinta')) return 'borde separador';
+    if (name.includes('malla') || name.includes('sombra') || name.includes('confeccionada') || name.includes('raschel')) return 'malla sombra confeccionada';
+    return 'malla sombra'; // Safe fallback — never dump raw product names/sizes
   });
 
   const uniqueProducts = [...new Set(productNames)];
