@@ -1826,8 +1826,8 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       // Round up fractional dimensions to next standard size
       const minDim = Math.min(dimensions.width, dimensions.height);
       const maxDim = Math.max(dimensions.width, dimensions.height);
-      const ceiledW = (minDim % 1 !== 0) ? Math.ceil(minDim) : minDim;
-      const ceiledH = (maxDim % 1 !== 0) ? Math.ceil(maxDim) : maxDim;
+      const ceiledW = (minDim % 1 !== 0) ? Math.round(minDim) : minDim;
+      const ceiledH = (maxDim % 1 !== 0) ? Math.round(maxDim) : maxDim;
       console.log(`🔘📏 Argollas + fractional ${dimensions.width}x${dimensions.height}m → offering ${ceiledW}x${ceiledH}m`);
 
       try {
@@ -2701,8 +2701,8 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         // Round up fractional dimensions to next standard size
         const minDim2 = Math.min(dimensions.width, dimensions.height);
         const maxDim2 = Math.max(dimensions.width, dimensions.height);
-        const ceiledW2 = (minDim2 % 1 !== 0) ? Math.ceil(minDim2) : minDim2;
-        const ceiledH2 = (maxDim2 % 1 !== 0) ? Math.ceil(maxDim2) : maxDim2;
+        const ceiledW2 = (minDim2 % 1 !== 0) ? Math.round(minDim2) : minDim2;
+        const ceiledH2 = (maxDim2 % 1 !== 0) ? Math.round(maxDim2) : maxDim2;
         console.log(`📏 Fractional ${dimensions.width}x${dimensions.height}m → offering ${ceiledW2}x${ceiledH2}m`);
 
         try {

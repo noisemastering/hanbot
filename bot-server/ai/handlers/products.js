@@ -244,8 +244,8 @@ async function handleProductInquiry({ entities, psid, convo, userMessage }) {
 
   // If we have dimensions, look up the product
   if (width && height) {
-    const w = Math.min(Math.ceil(width), Math.ceil(height));
-    const h = Math.max(Math.ceil(width), Math.ceil(height));
+    const w = Math.min(Math.round(width), Math.round(height));
+    const h = Math.max(Math.round(width), Math.round(height));
 
     // Build size regex for matching
     const sizeRegex = new RegExp(

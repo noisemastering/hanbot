@@ -87,11 +87,11 @@ async function tryRegexAnswer(segment, convo = null) {
     if (dimMatch) {
       const d1 = parseFloat(dimMatch[1].replace(',', '.'));
       const d2 = parseFloat(dimMatch[2].replace(',', '.'));
-      const w = Math.min(Math.ceil(d1), Math.ceil(d2));
-      const h = Math.max(Math.ceil(d1), Math.ceil(d2));
+      const w = Math.min(Math.round(d1), Math.round(d2));
+      const h = Math.max(Math.round(d1), Math.round(d2));
 
-      // Track whether we ceiled the customer's dimensions
-      const wasCeiled = (d1 !== Math.ceil(d1)) || (d2 !== Math.ceil(d2));
+      // Track whether we rounded the customer's dimensions
+      const wasCeiled = (d1 !== Math.round(d1)) || (d2 !== Math.round(d2));
       const requestedSize = wasCeiled ? `${Math.min(d1, d2)}x${Math.max(d1, d2)}` : null;
 
       const product = await lookupProduct(w, h);

@@ -302,8 +302,8 @@ async function findSizesNearArea(targetArea, convo = null) {
 async function findMatchingProducts(width, height, percentage = null, color = null, poiRootId = null) {
   try {
     // Normalize dimensions (smaller first for consistent matching)
-    const w = Math.min(Math.ceil(width), Math.ceil(height));
-    const h = Math.max(Math.ceil(width), Math.ceil(height));
+    const w = Math.min(Math.round(width), Math.round(height));
+    const h = Math.max(Math.round(width), Math.round(height));
 
     // Build size regex - match exactly WxH or HxW (not any combo like WxW or HxH)
     // Formats: "3x5", "5x3", "3x5m", "5 x 3 m", "5 m x 3 m", etc.
@@ -441,9 +441,9 @@ async function handleMultipleDimensions(dimensions, psid, convo) {
     const hasFractions = (w % 1 !== 0) || (h % 1 !== 0);
 
     if (hasFractions) {
-      // Ceil to next standard size
-      const ceiledW = Math.ceil(w);
-      const ceiledH = Math.ceil(h);
+      // Round to nearest standard size (4.2→4, 5.8→6)
+      const ceiledW = Math.round(w);
+      const ceiledH = Math.round(h);
       const products = await findMatchingProducts(ceiledW, ceiledH, null, null, poiRootId);
 
       if (products.length > 0) {
@@ -2322,11 +2322,11 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       });
     }
 
-    // Round up fractional dimensions to next standard size
+    // Round fractional dimensions to nearest standard size (4.2→4, 5.8→6)
     const minDim = Math.min(width, height);
     const maxDim = Math.max(width, height);
-    const ceiledW = (minDim % 1 !== 0) ? Math.ceil(minDim) : minDim;
-    const ceiledH = (maxDim % 1 !== 0) ? Math.ceil(maxDim) : maxDim;
+    const ceiledW = (minDim % 1 !== 0) ? Math.round(minDim) : minDim;
+    const ceiledH = (maxDim % 1 !== 0) ? Math.round(maxDim) : maxDim;
     console.log(`📏 Fractional size ${width}x${height}m → offering ${ceiledW}x${ceiledH}m`);
 
     try {
