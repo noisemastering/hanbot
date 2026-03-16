@@ -1103,4 +1103,133 @@ router.get('/clicks-by-ad', async (req, res) => {
   }
 });
 
+// GET /analytics/ad-performance - Daily breakdown per ad for charting
+router.get('/ad-performance', async (req, res) => {
+  try {
+    const { dateFrom, dateTo } = req.query;
+    const dateMatch = {};
+    if (dateFrom) dateMatch.$gte = new Date(dateFrom);
+    if (dateTo) dateMatch.$lte = new Date(dateTo);
+    const hasDate = Object.keys(dateMatch).length > 0;
+
+    // Aggregate daily links, clicks, conversions per adId
+    const daily = await ClickLog.aggregate([
+      {
+        $match: {
+          adId: { $ne: null },
+          ...(hasDate ? { createdAt: dateMatch } : {})
+        }
+      },
+      {
+        $group: {
+          _id: {
+            adId: '$adId',
+            date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'America/Mexico_City' } }
+          },
+          links: { $sum: 1 },
+          clicks: { $sum: { $cond: ['$clicked', 1, 0] } },
+          conversions: { $sum: { $cond: ['$converted', 1, 0] } },
+          revenue: { $sum: { $cond: ['$converted', { $ifNull: ['$conversionData.totalAmount', 0] }, 0] } }
+        }
+      },
+      { $sort: { '_id.date': 1 } }
+    ]);
+
+    // Aggregate totals per ad
+    const totals = await ClickLog.aggregate([
+      {
+        $match: {
+          adId: { $ne: null },
+          ...(hasDate ? { createdAt: dateMatch } : {})
+        }
+      },
+      {
+        $group: {
+          _id: '$adId',
+          links: { $sum: 1 },
+          clicks: { $sum: { $cond: ['$clicked', 1, 0] } },
+          conversions: { $sum: { $cond: ['$converted', 1, 0] } },
+          revenue: { $sum: { $cond: ['$converted', { $ifNull: ['$conversionData.totalAmount', 0] }, 0] } },
+          firstSeen: { $min: '$createdAt' },
+          lastSeen: { $max: '$createdAt' }
+        }
+      },
+      { $sort: { clicks: -1 } }
+    ]);
+
+    // Resolve ad names (same pattern as clicks-by-ad)
+    const Ad = require('../models/Ad');
+    const adIds = totals.map(t => t._id);
+    const mongoose = require('mongoose');
+    const mongoIds = adIds.filter(id => mongoose.Types.ObjectId.isValid(id));
+    const ads = await Ad.find({
+      $or: [
+        { fbAdId: { $in: adIds } },
+        ...(mongoIds.length > 0 ? [{ _id: { $in: mongoIds } }] : [])
+      ]
+    }).lean();
+
+    // Fallback: resolve names from conversation campaignRef
+    const unmatchedIds = adIds.filter(id => !ads.find(a => a.fbAdId === id || a._id?.toString() === id));
+    const namesByAdId = {};
+    if (unmatchedIds.length > 0) {
+      const convos = await Conversation.find(
+        { adId: { $in: unmatchedIds }, campaignRef: { $ne: null } },
+        { adId: 1, campaignRef: 1 }
+      ).lean();
+      for (const c of convos) {
+        if (!namesByAdId[c.adId] && c.campaignRef) {
+          namesByAdId[c.adId] = c.campaignRef
+            .replace(/^hanlob_/, '')
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, l => l.toUpperCase());
+        }
+      }
+    }
+
+    // Build per-ad result
+    const adMap = {};
+    for (const t of totals) {
+      const ad = ads.find(a => a.fbAdId === t._id || a._id?.toString() === t._id);
+      adMap[t._id] = {
+        adId: t._id,
+        name: ad?.name || namesByAdId[t._id] || 'Anuncio no registrado',
+        totals: {
+          links: t.links,
+          clicks: t.clicks,
+          conversions: t.conversions,
+          revenue: t.revenue,
+          clickRate: t.links > 0 ? ((t.clicks / t.links) * 100).toFixed(1) : '0',
+          conversionRate: t.clicks > 0 ? ((t.conversions / t.clicks) * 100).toFixed(1) : '0'
+        },
+        firstSeen: t.firstSeen,
+        lastSeen: t.lastSeen,
+        daily: []
+      };
+    }
+
+    // Attach daily data
+    for (const d of daily) {
+      if (adMap[d._id.adId]) {
+        adMap[d._id.adId].daily.push({
+          date: d._id.date,
+          dateLabel: new Date(d._id.date + 'T12:00:00').toLocaleDateString('es-MX', { month: 'short', day: 'numeric' }),
+          links: d.links,
+          clicks: d.clicks,
+          conversions: d.conversions,
+          revenue: d.revenue
+        });
+      }
+    }
+
+    res.json({
+      success: true,
+      ads: Object.values(adMap)
+    });
+  } catch (error) {
+    console.error('❌ Error fetching ad performance:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;

@@ -54,6 +54,7 @@ import UsersView from "./components/UsersView";
 import RolesView from "./components/RolesView";
 import ProfilesView from "./components/ProfilesView";
 import ClickLogsView from "./components/ClickLogsView";
+import AdPerformanceView from "./pages/AdPerformanceView";
 import ConversionsView from "./pages/ConversionsView";
 import ManualSalesView from "./pages/ManualSalesView";
 import MLImporterView from "./pages/MLImporterView";
@@ -125,6 +126,14 @@ const menuItems = [
         path: "/click-logs",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
+        )
+      },
+      {
+        id: "ad-performance",
+        labelKey: "menu.adPerformance",
+        path: "/ad-performance",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 3.055A9.001 9.001 0 1020.945 13H11V3.055z M20.488 9H15V3.512A9.025 9.025 0 0120.488 9z" />
         )
       },
       {
@@ -2120,6 +2129,7 @@ function App() {
           <Route path="/roles" element={<RolesView />} />
           <Route path="/profiles" element={<ProfilesView />} />
           <Route path="/click-logs" element={<ClickLogsView />} />
+          <Route path="/ad-performance" element={<AdPerformanceView />} />
           <Route path="/conversions" element={<ConversionsView />} />
           <Route path="/manual-sales" element={<ManualSalesView />} />
 

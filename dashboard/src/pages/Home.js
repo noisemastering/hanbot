@@ -609,7 +609,7 @@ function Home() {
         </div>
 
         {/* Ad Performance Donut */}
-        <div onClick={() => navigate('/click-logs')} className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6 cursor-pointer hover:border-gray-600/70 hover:scale-[1.01] transition-all">
+        <div onClick={() => navigate('/ad-performance')} className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6 cursor-pointer hover:border-gray-600/70 hover:scale-[1.01] transition-all">
           <h2 className="text-lg font-semibold text-white mb-1">{t("home.adPerformance")}</h2>
           <p className="text-sm text-gray-500 mb-4">{t("home.byClicks")}</p>
           {adData.length > 0 ? (

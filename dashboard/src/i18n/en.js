@@ -5,6 +5,7 @@ const en = {
   "menu.statistics": "Statistics",
   "menu.analytics": "Analytics",
   "menu.clicks": "Clicks",
+  "menu.adPerformance": "Ad Performance",
   "menu.conversions": "Conversions",
   "menu.catalog": "Catalog",
   "menu.families": "Families",

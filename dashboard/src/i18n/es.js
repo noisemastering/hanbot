@@ -5,6 +5,7 @@ const es = {
   "menu.statistics": "Estadísticas",
   "menu.analytics": "Analíticas",
   "menu.clicks": "Clicks",
+  "menu.adPerformance": "Rendimiento Ads",
   "menu.conversions": "Conversiones",
   "menu.catalog": "Catálogo",
   "menu.families": "Familias",
