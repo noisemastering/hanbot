@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import API from "../api";
 import { useTranslation } from "../i18n";
 import {
@@ -82,6 +83,7 @@ function getDaysAgo(days) {
 
 function Home() {
   const { t, locale } = useTranslation();
+  const navigate = useNavigate();
   const [range, setRange] = useState(30);
   const [loading, setLoading] = useState(true);
   const [correlating, setCorrelating] = useState(false);
@@ -281,7 +283,7 @@ function Home() {
             { key: "low", count: bd?.low || 0, pct: pct(bd?.low || 0), color: "#EF4444", label: t("home.low") },
           ];
           return (
-            <div className="bg-gradient-to-br from-green-500/10 to-green-600/5 backdrop-blur-lg border border-green-500/20 rounded-xl p-6">
+            <div onClick={() => navigate('/conversions')} className="bg-gradient-to-br from-green-500/10 to-green-600/5 backdrop-blur-lg border border-green-500/20 rounded-xl p-6 cursor-pointer hover:border-green-500/40 hover:scale-[1.02] transition-all">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-400 mb-1">{t("home.totalRevenue")}</p>
@@ -319,7 +321,7 @@ function Home() {
           const cr = parseFloat(conversionStats?.clickRate) || 0;
           const b = BENCHMARKS.clickRate;
           return (
-            <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 backdrop-blur-lg border border-blue-500/20 rounded-xl p-6">
+            <div onClick={() => navigate('/conversions')} className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 backdrop-blur-lg border border-blue-500/20 rounded-xl p-6 cursor-pointer hover:border-blue-500/40 hover:scale-[1.02] transition-all">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-400 mb-1">{t("home.totalConversions")}</p>
@@ -357,7 +359,7 @@ function Home() {
         })()}
 
         {/* Unique Users + sub-metrics */}
-        <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 backdrop-blur-lg border border-purple-500/20 rounded-xl p-6">
+        <div onClick={() => navigate('/conversations')} className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 backdrop-blur-lg border border-purple-500/20 rounded-xl p-6 cursor-pointer hover:border-purple-500/40 hover:scale-[1.02] transition-all">
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium text-gray-400 mb-1">{t("home.uniqueUsers")}</p>
@@ -397,7 +399,7 @@ function Home() {
           const cvr = parseFloat(conversionStats?.conversionRate) || 0;
           const b = BENCHMARKS.conversionRate;
           return (
-            <div className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 backdrop-blur-lg border border-amber-500/20 rounded-xl p-6">
+            <div onClick={() => navigate('/click-logs')} className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 backdrop-blur-lg border border-amber-500/20 rounded-xl p-6 cursor-pointer hover:border-amber-500/40 hover:scale-[1.02] transition-all">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm font-medium text-gray-400 mb-1">{t("home.conversionRate")}</p>
@@ -437,7 +439,7 @@ function Home() {
 
       {/* Row 2: Main ComposedChart */}
       {chartData.length > 0 && (
-        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
+        <div onClick={() => navigate('/click-logs')} className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6 cursor-pointer hover:border-gray-600/70 hover:scale-[1.005] transition-all">
           <h2 className="text-lg font-semibold text-white mb-4">{t("home.revenueOverTime")}</h2>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
@@ -531,7 +533,7 @@ function Home() {
       </div>
 
       {/* Row 3: Sales Funnel (full width) */}
-      <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
+      <div onClick={() => navigate('/conversions')} className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6 cursor-pointer hover:border-gray-600/70 hover:scale-[1.005] transition-all">
         <h2 className="text-lg font-semibold text-white mb-4">{t("home.salesFunnel")}</h2>
         {funnelSteps.length > 0 ? (
           <div className="flex items-center justify-around">
@@ -565,11 +567,11 @@ function Home() {
       {/* Row 4: Top Products + Ad Performance Donut */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Top Products */}
-        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
+        <div onClick={() => navigate('/conversions')} className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6 cursor-pointer hover:border-gray-600/70 hover:scale-[1.01] transition-all">
           <h2 className="text-lg font-semibold text-white mb-1">{t("home.topProducts")}</h2>
           <p className="text-sm text-gray-500 mb-4">{t("home.byRevenue")}</p>
           {topProducts.length > 0 ? (
-            <div className="h-64">
+            <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -578,7 +580,7 @@ function Home() {
                       value: p.totalRevenue || 0,
                     }))}
                     cx="50%"
-                    cy="50%"
+                    cy="55%"
                     innerRadius={60}
                     outerRadius={90}
                     paddingAngle={4}
@@ -607,7 +609,7 @@ function Home() {
         </div>
 
         {/* Ad Performance Donut */}
-        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
+        <div onClick={() => navigate('/click-logs')} className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6 cursor-pointer hover:border-gray-600/70 hover:scale-[1.01] transition-all">
           <h2 className="text-lg font-semibold text-white mb-1">{t("home.adPerformance")}</h2>
           <p className="text-sm text-gray-500 mb-4">{t("home.byClicks")}</p>
           {adData.length > 0 ? (
@@ -656,11 +658,11 @@ function Home() {
       {/* Row 5: Geographic Distribution + Confidence Donut */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Geographic Distribution */}
-        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
+        <div onClick={() => navigate('/conversations')} className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6 cursor-pointer hover:border-gray-600/70 hover:scale-[1.01] transition-all">
           <h2 className="text-lg font-semibold text-white mb-1">{t("home.geoDistribution")}</h2>
           <p className="text-sm text-gray-500 mb-4">{t("home.byConversations")}</p>
           {topRegions.length > 0 ? (
-            <div className="h-64">
+            <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -669,7 +671,7 @@ function Home() {
                       value: r.conversations || 0,
                     }))}
                     cx="50%"
-                    cy="50%"
+                    cy="55%"
                     innerRadius={60}
                     outerRadius={90}
                     paddingAngle={4}
@@ -695,16 +697,16 @@ function Home() {
         </div>
 
         {/* Confidence Donut */}
-        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
+        <div onClick={() => navigate('/conversions')} className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6 cursor-pointer hover:border-gray-600/70 hover:scale-[1.01] transition-all">
           <h2 className="text-lg font-semibold text-white mb-4">{t("home.confidenceBreakdown")}</h2>
           {confidenceData.length > 0 ? (
-            <div className="h-64">
+            <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={confidenceData}
                     cx="50%"
-                    cy="50%"
+                    cy="55%"
                     innerRadius={60}
                     outerRadius={90}
                     paddingAngle={4}

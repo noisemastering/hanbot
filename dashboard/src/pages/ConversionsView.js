@@ -354,7 +354,7 @@ function ConversionsView() {
         {stats?.confidenceBreakdown && (
           <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4">
             <h2 className="text-lg font-semibold text-white mb-4">{t('conversions.confidenceChart')}</h2>
-            <div className="h-64">
+            <div className="h-80">
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
@@ -364,7 +364,7 @@ function ConversionsView() {
                       { name: t('conversions.low'), value: stats.confidenceBreakdown.low || 0, key: 'low' },
                     ].filter(d => d.value > 0)}
                     cx="50%"
-                    cy="50%"
+                    cy="55%"
                     innerRadius={55}
                     outerRadius={85}
                     paddingAngle={4}
