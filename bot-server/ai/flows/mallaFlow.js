@@ -77,11 +77,22 @@ async function escalateToAI(userMessage, convo) {
       catalogSummary = `Medidas disponibles: desde ${range.sizeMin} hasta ${range.sizeMax}. Precios: desde $${range.priceMin} hasta $${range.priceMax}.`;
     }
 
-    // If message mentions dimensions, look up that specific product
+    // Look up specific product price — from message dimensions OR from ad product
     const mentionedDims = parseDimensions(userMessage);
     let specificProduct = '';
-    if (mentionedDims) {
-      const products = await findMatchingProducts(mentionedDims.width, mentionedDims.height, null, null, convo?.poiRootId);
+
+    // Try dimensions from message first, then from ad product name
+    let lookupDims = mentionedDims;
+    if (!lookupDims && convo?.adMainProductName) {
+      lookupDims = parseDimensions(convo.adMainProductName);
+    }
+    // Also try previously quoted dimensions
+    if (!lookupDims && convo?.productSpecs?.width && convo?.productSpecs?.height) {
+      lookupDims = { width: convo.productSpecs.width, height: convo.productSpecs.height };
+    }
+
+    if (lookupDims) {
+      const products = await findMatchingProducts(lookupDims.width, lookupDims.height, null, null, convo?.poiRootId);
       if (products.length > 0) {
         const p = products[0];
         const colors = products.map(pr => {
@@ -91,14 +102,14 @@ async function escalateToAI(userMessage, convo) {
           return null;
         }).filter(Boolean);
         const uniqueColors = [...new Set(colors)];
-        specificProduct = `Producto ${mentionedDims.width}x${mentionedDims.height}m: $${Math.round(p.price)}, envío incluido.`;
+        specificProduct = `Producto ${lookupDims.width}x${lookupDims.height}m: $${Math.round(p.price)}, envío incluido.`;
         if (products.length > 1) {
           const prices = products.map(pr => `$${Math.round(pr.price)}`);
-          specificProduct = `Producto ${mentionedDims.width}x${mentionedDims.height}m: ${prices.join(' / ')} (depende del color), envío incluido.`;
+          specificProduct = `Producto ${lookupDims.width}x${lookupDims.height}m: ${prices.join(' / ')} (depende del color), envío incluido.`;
         }
         if (uniqueColors.length > 0) specificProduct += ` Colores disponibles: ${uniqueColors.join(' y ')}.`;
       } else {
-        specificProduct = `No tenemos la medida ${mentionedDims.width}x${mentionedDims.height}m de línea.`;
+        specificProduct = `No tenemos la medida ${lookupDims.width}x${lookupDims.height}m de línea.`;
       }
     }
 
