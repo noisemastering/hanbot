@@ -1151,7 +1151,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   // CHECK FOR QUALITY / PHOTO / VIDEO REQUEST
   // "qué calidad es", "fotos", "poner fotos", "cómo se ve", "es buena calidad"
-  const isQualityOrPhotoRequest = /\b(calidad|fotos?|fotograf[ií]as?|c[oó]mo\s+se\s+ve|ense[ñn]a(r|me)|mostrar(me)?|ver\s+(el|la|un)\s+producto|im[aá]gen(es)?)\b/i.test(userMessage) &&
+  const isQualityOrPhotoRequest = /\b(calidad|fotos?|fotograf[ií]as?|c[oó]mo\s+se\s+ve[n]?|c[oó]mo\s+(es|son)|ver\s+c[oó]mo|quer[ií]a\s+ver|quiero\s+ver|ense[ñn]a(r|me)|mostrar(me)?|ver\s+(el|la|un)\s+producto|im[aá]gen(es)?)\b/i.test(userMessage) &&
     !/\b(negro|negra|beige|verde|azul|caf[eé]|blanco)\b/i.test(userMessage); // color-specific photo requests handled separately
   if (isQualityOrPhotoRequest) {
     console.log(`📽️ Malla flow - Quality/photo request: "${userMessage.slice(0, 50)}"`);
