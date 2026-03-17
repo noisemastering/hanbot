@@ -64,7 +64,6 @@ function GeoDetailView() {
 
   const fetchData = async () => {
     setLoading(true);
-    setData(null);
     try {
       const dateFromISO = `${dateFrom}T00:00:00.000Z`;
       const dateToISO = `${dateTo}T23:59:59.999Z`;
@@ -109,7 +108,7 @@ function GeoDetailView() {
     ];
   }, [regions]);
 
-  if (loading) {
+  if (loading || !data) {
     return (
       <div className="p-6 flex items-center justify-center min-h-[60vh]">
         <div className="text-center">
