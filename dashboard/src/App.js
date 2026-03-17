@@ -450,6 +450,9 @@ function App() {
   const [topProduct, setTopProduct] = useState(null);
   const [topRegion, setTopRegion] = useState(null);
 
+  // Analytics page loading state
+  const [analyticsLoading, setAnalyticsLoading] = useState(true);
+
   const fetchMessages = async () => {
     try {
       const res = await fetch(`${API_URL}/conversations`, {
@@ -1245,10 +1248,13 @@ function App() {
       fetchAdSets(); // Also fetch adsets for Ad modal dropdown
     }
     if (location.pathname === "/analytics") {
-      fetchClickStats(); // Fetch click stats from ClickLog for analytics
-      fetchAdMetrics(); // Fetch aggregated ad metrics (impressions, clicks, CTR)
-      fetchTopProducts(); // Fetch top selling products through ads
-      fetchTopRegion(); // Fetch most active region
+      setAnalyticsLoading(true);
+      Promise.all([
+        fetchClickStats(),
+        fetchAdMetrics(),
+        fetchTopProducts(),
+        fetchTopRegion()
+      ]).finally(() => setAnalyticsLoading(false));
     }
   }, [location.pathname]);
 
@@ -1723,7 +1729,14 @@ function App() {
           <Route path="/conversations" element={<Messages />} />
 
           {/* Analytics Route */}
-          <Route path="/analytics" element={(
+          <Route path="/analytics" element={analyticsLoading ? (
+          <div className="p-6 flex items-center justify-center min-h-[60vh]">
+            <div className="text-center">
+              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-400"></div>
+              <p className="mt-4 text-gray-400">{t('home.loadingDashboard')}</p>
+            </div>
+          </div>
+          ) : (
           <div className="space-y-8">
             {/* Category: Mensajes del día */}
             {canAccess('stats_messages') && (
