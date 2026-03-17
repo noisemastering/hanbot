@@ -7,6 +7,7 @@ const es = {
   "menu.clicks": "Clicks",
   "menu.adPerformance": "Rendimiento Ads",
   "menu.conversions": "Conversiones",
+  "menu.crm": "CRM",
   "menu.catalog": "Catálogo",
   "menu.families": "Familias",
   "menu.usosGrupos": "Usos y Grupos",

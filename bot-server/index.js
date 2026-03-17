@@ -115,6 +115,7 @@ const intentsRoutes = require('./routes/intentsRoutes');
 const intentCategoriesRoutes = require('./routes/intentCategoriesRoutes');
 const flowsRoutes = require('./routes/flowsRoutes');
 const uploadsRoutes = require('./routes/uploadsRoutes');
+const crmRoutes = require('./routes/crmRoutes');
 
 // Auth routes (no prefix, will be /auth/login, /auth/me, etc.)
 app.use('/auth', authRoutes);
@@ -145,6 +146,7 @@ app.use('/intents', intentsRoutes);
 app.use('/intent-categories', intentCategoriesRoutes);
 app.use('/flows', flowsRoutes);
 app.use('/uploads', uploadsRoutes);
+app.use('/crm', crmRoutes);
 
 // ============================================
 // Global Error Handler (returns JSON, not HTML)

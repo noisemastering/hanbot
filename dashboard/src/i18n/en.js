@@ -7,6 +7,7 @@ const en = {
   "menu.clicks": "Clicks",
   "menu.adPerformance": "Ad Performance",
   "menu.conversions": "Conversions",
+  "menu.crm": "CRM",
   "menu.catalog": "Catalog",
   "menu.families": "Families",
   "menu.usosGrupos": "Uses & Groups",

@@ -172,6 +172,14 @@ const conversationSchema = new mongoose.Schema({
   // Location from zip code lookup
   zipCode: { type: String, default: null },
 
+  // CRM notes and tags
+  notes: [{
+    text: { type: String, required: true },
+    author: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now }
+  }],
+  tags: [{ type: String }],
+
   // Previous session snapshot (for returning user context on ad-click re-entry)
   previousSession: {
     productInterest: { type: String, default: null },
