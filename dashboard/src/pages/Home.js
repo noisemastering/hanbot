@@ -113,6 +113,8 @@ function Home() {
 
   const fetchAll = async () => {
     setLoading(true);
+    setAnalytics(null);
+    setConversionStats(null);
     try {
       const dateFromISO = `${dateFrom}T00:00:00.000Z`;
       const dateToISO = `${dateTo}T23:59:59.999Z`;

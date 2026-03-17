@@ -64,6 +64,7 @@ function GeoDetailView() {
 
   const fetchData = async () => {
     setLoading(true);
+    setData(null);
     try {
       const dateFromISO = `${dateFrom}T00:00:00.000Z`;
       const dateToISO = `${dateTo}T23:59:59.999Z`;
