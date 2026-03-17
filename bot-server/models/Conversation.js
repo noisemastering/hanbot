@@ -172,6 +172,11 @@ const conversationSchema = new mongoose.Schema({
   // Location from zip code lookup
   zipCode: { type: String, default: null },
 
+  // CRM contact info
+  crmName: { type: String, default: null },
+  crmEmail: { type: String, default: null },
+  crmPhone: { type: String, default: null },
+
   // CRM notes and tags
   notes: [{
     text: { type: String, required: true },

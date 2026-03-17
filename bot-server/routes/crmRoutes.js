@@ -195,6 +195,35 @@ router.get('/customers/:psid', async (req, res) => {
   }
 });
 
+// PUT /crm/customers/:psid/profile - Update customer profile
+router.put('/customers/:psid/profile', async (req, res) => {
+  try {
+    const { psid } = req.params;
+    const { crmName, crmEmail, crmPhone, zipCode } = req.body;
+
+    const update = {};
+    if (crmName !== undefined) update.crmName = crmName.trim() || null;
+    if (crmEmail !== undefined) update.crmEmail = crmEmail.trim() || null;
+    if (crmPhone !== undefined) update.crmPhone = crmPhone.trim() || null;
+    if (zipCode !== undefined) update.zipCode = zipCode.trim() || null;
+
+    const conv = await Conversation.findOneAndUpdate(
+      { psid },
+      { $set: update },
+      { new: true }
+    );
+
+    if (!conv) {
+      return res.status(404).json({ success: false, error: 'Customer not found' });
+    }
+
+    res.json({ success: true, customer: conv });
+  } catch (error) {
+    console.error('Error updating customer profile:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // POST /crm/customers/:psid/notes - Add a note
 router.post('/customers/:psid/notes', async (req, res) => {
   try {

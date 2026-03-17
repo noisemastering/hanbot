@@ -19,6 +19,10 @@ function CustomerDetailView() {
   const [newNote, setNewNote] = useState('');
   const [newTag, setNewTag] = useState('');
   const [saving, setSaving] = useState(false);
+  const [profileForm, setProfileForm] = useState({ crmName: '', crmEmail: '', crmPhone: '', zipCode: '' });
+  const [profileDirty, setProfileDirty] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileSaved, setProfileSaved] = useState(false);
 
   const decodedPsid = decodeURIComponent(psid);
 
@@ -39,6 +43,42 @@ function CustomerDetailView() {
   useEffect(() => {
     fetchDetail();
   }, [fetchDetail]);
+
+  // Populate profile form when customer loads
+  useEffect(() => {
+    if (customer) {
+      setProfileForm({
+        crmName: customer.crmName || customer.productSpecs?.customerName || '',
+        crmEmail: customer.crmEmail || '',
+        crmPhone: customer.crmPhone || '',
+        zipCode: customer.zipCode || ''
+      });
+      setProfileDirty(false);
+    }
+  }, [customer]);
+
+  const updateProfileField = (field, value) => {
+    setProfileForm(prev => ({ ...prev, [field]: value }));
+    setProfileDirty(true);
+    setProfileSaved(false);
+  };
+
+  const saveProfile = async () => {
+    setProfileSaving(true);
+    try {
+      const res = await API.put(`/crm/customers/${encodeURIComponent(decodedPsid)}/profile`, profileForm);
+      if (res.data.success) {
+        setCustomer(res.data.customer);
+        setProfileDirty(false);
+        setProfileSaved(true);
+        setTimeout(() => setProfileSaved(false), 2000);
+      }
+    } catch (err) {
+      console.error('Error saving profile:', err);
+    } finally {
+      setProfileSaving(false);
+    }
+  };
 
   const addNote = async () => {
     if (!newNote.trim()) return;
@@ -193,17 +233,67 @@ function CustomerDetailView() {
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Left Column: Profile, Tags, Notes */}
         <div className="space-y-6">
-          {/* Profile Card */}
-          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5 space-y-3">
-            <h2 className="text-lg font-semibold text-white">Perfil</h2>
-            <div className="space-y-2 text-sm">
-              {customer.productSpecs?.customerName && (
-                <div className="flex justify-between"><span className="text-gray-400">Nombre</span><span className="text-white">{customer.productSpecs.customerName}</span></div>
-              )}
+          {/* Profile Card - Editable */}
+          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5 space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-lg font-semibold text-white">Perfil</h2>
+              {profileSaved && <span className="text-xs text-green-400">Guardado</span>}
+            </div>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Nombre</label>
+                <input
+                  type="text"
+                  value={profileForm.crmName}
+                  onChange={(e) => updateProfileField('crmName', e.target.value)}
+                  placeholder="Nombre del cliente..."
+                  className="w-full px-3 py-2 bg-gray-900/50 border border-gray-700/50 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Email</label>
+                <input
+                  type="email"
+                  value={profileForm.crmEmail}
+                  onChange={(e) => updateProfileField('crmEmail', e.target.value)}
+                  placeholder="correo@ejemplo.com"
+                  className="w-full px-3 py-2 bg-gray-900/50 border border-gray-700/50 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Teléfono</label>
+                <input
+                  type="tel"
+                  value={profileForm.crmPhone}
+                  onChange={(e) => updateProfileField('crmPhone', e.target.value)}
+                  placeholder="52 1 555 123 4567"
+                  className="w-full px-3 py-2 bg-gray-900/50 border border-gray-700/50 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Código Postal</label>
+                <input
+                  type="text"
+                  value={profileForm.zipCode}
+                  onChange={(e) => updateProfileField('zipCode', e.target.value)}
+                  placeholder="06600"
+                  className="w-full px-3 py-2 bg-gray-900/50 border border-gray-700/50 rounded-lg text-sm text-white placeholder-gray-500 focus:outline-none focus:border-purple-500/50"
+                />
+              </div>
+              <button
+                onClick={saveProfile}
+                disabled={!profileDirty || profileSaving}
+                className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 disabled:opacity-30 disabled:cursor-not-allowed text-white text-sm rounded-lg transition-colors"
+              >
+                {profileSaving ? 'Guardando...' : 'Guardar Perfil'}
+              </button>
+            </div>
+
+            {/* Read-only bot data */}
+            <div className="border-t border-gray-700/50 pt-3 space-y-2 text-sm">
               <div className="flex justify-between"><span className="text-gray-400">Canal</span><span className={channelColor}>{channelLabel}</span></div>
               {customer.city && <div className="flex justify-between"><span className="text-gray-400">Ciudad</span><span className="text-white">{customer.city}</span></div>}
               {customer.stateMx && <div className="flex justify-between"><span className="text-gray-400">Estado</span><span className="text-white">{customer.stateMx}</span></div>}
-              {customer.zipCode && <div className="flex justify-between"><span className="text-gray-400">C.P.</span><span className="text-white">{customer.zipCode}</span></div>}
               {customer.currentFlow && (
                 <div className="flex justify-between"><span className="text-gray-400">Flow</span><span className="text-white">{customer.currentFlow}</span></div>
               )}
