@@ -89,9 +89,8 @@ function GeoDetailView() {
     }).format(amount);
   };
 
-  const regions = data?.allRegions || [];
+  const regions = useMemo(() => data?.allRegions || [], [data]);
   const cities = data?.topCities || [];
-  const coverage = data?.coverage || {};
 
   const totalConversations = useMemo(
     () => regions.reduce((sum, r) => sum + r.conversations, 0),
