@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { useTranslation } from "../i18n";
 import API from "../api";
 
@@ -10,6 +10,38 @@ function ManualSaleForm({ psid, onClose }) {
   const [registering, setRegistering] = useState(false);
   const [success, setSuccess] = useState(null);
   const [error, setError] = useState(null);
+  const [allProducts, setAllProducts] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const suggestionsRef = useRef(null);
+
+  useEffect(() => {
+    API.get('/crm/products').then(res => {
+      if (res.data.success) setAllProducts(res.data.products);
+    }).catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (productName.length >= 1 && allProducts.length > 0) {
+      const q = productName.toLowerCase();
+      const matches = allProducts.filter(p => p.toLowerCase().includes(q)).slice(0, 8);
+      setSuggestions(matches);
+      setShowSuggestions(matches.length > 0);
+    } else {
+      setSuggestions([]);
+      setShowSuggestions(false);
+    }
+  }, [productName, allProducts]);
+
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (suggestionsRef.current && !suggestionsRef.current.contains(e.target)) {
+        setShowSuggestions(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, []);
 
   const handleRegister = async () => {
     if (!productName.trim() || !totalAmount) return;
@@ -85,26 +117,60 @@ function ManualSaleForm({ psid, onClose }) {
         </div>
       ) : (
         <>
-          {/* Product Name */}
+          {/* Product Name with Autocomplete */}
           <label style={{ display: "block", color: "#aaa", fontSize: "0.8rem", marginBottom: "0.25rem" }}>
             {t('manualSale.product')} *
           </label>
-          <input
-            type="text"
-            placeholder={t('manualSale.productPlaceholder')}
-            value={productName}
-            onChange={(e) => setProductName(e.target.value)}
-            style={{
-              width: "100%",
-              padding: "0.5rem",
-              borderRadius: "4px",
-              border: "1px solid #3a3a3a",
-              backgroundColor: "#1a1a1a",
-              color: "white",
-              marginBottom: "0.75rem",
-              boxSizing: "border-box"
-            }}
-          />
+          <div style={{ position: "relative", marginBottom: "0.75rem" }} ref={suggestionsRef}>
+            <input
+              type="text"
+              placeholder={t('manualSale.productPlaceholder')}
+              value={productName}
+              onChange={(e) => setProductName(e.target.value)}
+              onFocus={() => { if (suggestions.length > 0) setShowSuggestions(true); }}
+              style={{
+                width: "100%",
+                padding: "0.5rem",
+                borderRadius: "4px",
+                border: "1px solid #3a3a3a",
+                backgroundColor: "#1a1a1a",
+                color: "white",
+                boxSizing: "border-box"
+              }}
+            />
+            {showSuggestions && (
+              <div style={{
+                position: "absolute",
+                top: "100%",
+                left: 0,
+                right: 0,
+                backgroundColor: "#1a1a1a",
+                border: "1px solid #3a3a3a",
+                borderRadius: "4px",
+                maxHeight: "180px",
+                overflowY: "auto",
+                zIndex: 10
+              }}>
+                {suggestions.map((s) => (
+                  <div
+                    key={s}
+                    onClick={() => { setProductName(s); setShowSuggestions(false); }}
+                    style={{
+                      padding: "0.5rem 0.75rem",
+                      color: "#ddd",
+                      fontSize: "0.85rem",
+                      cursor: "pointer",
+                      borderBottom: "1px solid #2a2a2a"
+                    }}
+                    onMouseEnter={(e) => { e.target.style.backgroundColor = "#2a2a2a"; }}
+                    onMouseLeave={(e) => { e.target.style.backgroundColor = "transparent"; }}
+                  >
+                    {s}
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
 
           {/* Sale Amount */}
           <label style={{ display: "block", color: "#aaa", fontSize: "0.8rem", marginBottom: "0.25rem" }}>

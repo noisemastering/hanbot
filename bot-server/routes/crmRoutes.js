@@ -295,4 +295,22 @@ router.delete('/customers/:psid/tags/:tag', async (req, res) => {
   }
 });
 
+// GET /crm/products - Autocomplete product names
+router.get('/products', async (req, res) => {
+  try {
+    const { q = '' } = req.query;
+    const names = await ClickLog.distinct('productName', {
+      productName: { $type: 'string', $ne: '' }
+    });
+    const filtered = q
+      ? names.filter(n => n.toLowerCase().includes(q.toLowerCase()))
+      : names;
+    filtered.sort();
+    res.json({ success: true, products: filtered });
+  } catch (error) {
+    console.error('Error fetching product names:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 module.exports = router;
