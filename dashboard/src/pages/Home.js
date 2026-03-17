@@ -658,7 +658,7 @@ function Home() {
       {/* Row 5: Geographic Distribution + Confidence Donut */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Geographic Distribution */}
-        <div onClick={() => navigate('/conversations')} className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6 cursor-pointer hover:border-gray-600/70 hover:scale-[1.01] transition-all">
+        <div onClick={() => navigate('/geo')} className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6 cursor-pointer hover:border-gray-600/70 hover:scale-[1.01] transition-all">
           <h2 className="text-lg font-semibold text-white mb-1">{t("home.geoDistribution")}</h2>
           <p className="text-sm text-gray-500 mb-4">{t("home.byConversations")}</p>
           {topRegions.length > 0 ? (

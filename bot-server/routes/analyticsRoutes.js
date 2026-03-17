@@ -937,8 +937,7 @@ router.get('/top-region', async (req, res) => {
           cities: { $addToSet: '$city' }
         }
       },
-      { $sort: { conversations: -1 } },
-      { $limit: 10 }
+      { $sort: { conversations: -1 } }
     ]);
 
     // Get top region
@@ -959,9 +958,93 @@ router.get('/top-region', async (req, res) => {
           state: { $first: '$stateMx' }
         }
       },
-      { $sort: { conversations: -1 } },
-      { $limit: 5 }
+      { $sort: { conversations: -1 } }
     ]);
+
+    // Map ML shipping state names → Conversation.stateMx names
+    const SHIPPING_STATE_MAP = {
+      'estado de méxico': 'México',
+      'estado de mexico': 'México',
+      'distrito federal': 'Ciudad de México',
+      'coahuila de zaragoza': 'Coahuila',
+      'michoacán de ocampo': 'Michoacán',
+      'veracruz de ignacio de la llave': 'Veracruz',
+    };
+
+    function normalizeState(shippingState) {
+      if (!shippingState) return null;
+      const lower = shippingState.toLowerCase().trim();
+      if (SHIPPING_STATE_MAP[lower]) return SHIPPING_STATE_MAP[lower];
+      // Title-case the first letter of each word
+      return shippingState.replace(/\b\w/g, c => c.toUpperCase());
+    }
+
+    // Conversions by state (from ClickLog.conversionData.shippingState)
+    const conversionsByState = await ClickLog.aggregate([
+      {
+        $match: {
+          converted: true,
+          'conversionData.shippingState': { $type: 'string', $ne: '' },
+          ...(hasDateFilter ? { convertedAt: dateMatch } : {})
+        }
+      },
+      {
+        $group: {
+          _id: '$conversionData.shippingState',
+          conversions: { $sum: 1 },
+          revenue: { $sum: { $ifNull: ['$conversionData.totalAmount', 0] } }
+        }
+      }
+    ]);
+    const convStateMap = {};
+    conversionsByState.forEach(c => {
+      const key = normalizeState(c._id);
+      if (!key) return;
+      if (convStateMap[key]) {
+        convStateMap[key].conversions += c.conversions;
+        convStateMap[key].revenue += c.revenue;
+      } else {
+        convStateMap[key] = { conversions: c.conversions, revenue: c.revenue };
+      }
+    });
+
+    // Conversions by city (from ClickLog.conversionData.shippingCity)
+    const conversionsByCity = await ClickLog.aggregate([
+      {
+        $match: {
+          converted: true,
+          'conversionData.shippingCity': { $type: 'string', $ne: '' },
+          ...(hasDateFilter ? { convertedAt: dateMatch } : {})
+        }
+      },
+      {
+        $group: {
+          _id: '$conversionData.shippingCity',
+          conversions: { $sum: 1 },
+          revenue: { $sum: { $ifNull: ['$conversionData.totalAmount', 0] } }
+        }
+      }
+    ]);
+    const convCityMap = {};
+    conversionsByCity.forEach(c => { convCityMap[c._id] = { conversions: c.conversions, revenue: c.revenue }; });
+
+    // Overall conversion totals (all conversions, regardless of geo data)
+    const overallConversions = await ClickLog.aggregate([
+      {
+        $match: {
+          converted: true,
+          ...(hasDateFilter ? { convertedAt: dateMatch } : {})
+        }
+      },
+      {
+        $group: {
+          _id: null,
+          conversions: { $sum: 1 },
+          revenue: { $sum: { $ifNull: ['$conversionData.totalAmount', 0] } }
+        }
+      }
+    ]);
+    const totals = overallConversions[0] || { conversions: 0, revenue: 0 };
 
     // Count conversations with/without location data
     const totalWithState = await Conversation.countDocuments({
@@ -982,13 +1065,21 @@ router.get('/top-region', async (req, res) => {
       topCities: topCities.map(c => ({
         city: c._id,
         state: c.state,
-        conversations: c.conversations
+        conversations: c.conversations,
+        conversions: convCityMap[c._id]?.conversions || 0,
+        revenue: convCityMap[c._id]?.revenue || 0
       })),
       allRegions: regionStats.map(r => ({
         state: r._id,
         conversations: r.conversations,
-        uniqueCities: r.cities.filter(c => c).length
+        uniqueCities: r.cities.filter(c => c).length,
+        conversions: convStateMap[r._id]?.conversions || 0,
+        revenue: convStateMap[r._id]?.revenue || 0
       })),
+      totals: {
+        conversions: totals.conversions,
+        revenue: totals.revenue
+      },
       coverage: {
         withLocation: totalWithState,
         total: totalConversations,

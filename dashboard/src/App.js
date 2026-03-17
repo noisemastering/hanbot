@@ -55,6 +55,7 @@ import RolesView from "./components/RolesView";
 import ProfilesView from "./components/ProfilesView";
 import ClickLogsView from "./components/ClickLogsView";
 import AdPerformanceView from "./pages/AdPerformanceView";
+import GeoDetailView from "./pages/GeoDetailView";
 import ConversionsView from "./pages/ConversionsView";
 import ManualSalesView from "./pages/ManualSalesView";
 import MLImporterView from "./pages/MLImporterView";
@@ -1775,7 +1776,7 @@ function App() {
                   </div>
 
                   {/* Unanswered */}
-                  <div className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 backdrop-blur-lg border border-amber-500/20 rounded-xl p-6">
+                  <div onClick={() => navigate('/conversations')} className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 backdrop-blur-lg border border-amber-500/20 rounded-xl p-6 cursor-pointer hover:border-amber-500/40 hover:scale-[1.02] transition-all">
                     <div className="flex items-center justify-between">
                       <div>
                         <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.unanswered')}</p>
@@ -1791,7 +1792,7 @@ function App() {
 
                   {/* Top Region */}
                   {topRegion && (
-                    <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 backdrop-blur-lg border border-purple-500/20 rounded-xl p-6">
+                    <div onClick={() => navigate('/geo')} className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 backdrop-blur-lg border border-purple-500/20 rounded-xl p-6 cursor-pointer hover:border-purple-500/40 hover:scale-[1.02] transition-all">
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.topRegion')}</p>
@@ -2130,6 +2131,7 @@ function App() {
           <Route path="/profiles" element={<ProfilesView />} />
           <Route path="/click-logs" element={<ClickLogsView />} />
           <Route path="/ad-performance" element={<AdPerformanceView />} />
+          <Route path="/geo" element={<GeoDetailView />} />
           <Route path="/conversions" element={<ConversionsView />} />
           <Route path="/manual-sales" element={<ManualSalesView />} />
 
