@@ -9,23 +9,7 @@ const ProductFamily = require("./models/ProductFamily");
 const { extractReference } = require("./referenceEstimator");
 const { convertSpanishNumbers } = require("./ai/utils/spanishNumbers");
 
-/**
- * Check if we're in business hours (Mon-Fri, 9am-6pm Mexico City time)
- * @returns {boolean}
- */
-function isBusinessHours() {
-  const now = new Date();
-  const mexicoTime = new Date(now.toLocaleString("en-US", { timeZone: "America/Mexico_City" }));
-
-  const day = mexicoTime.getDay(); // 0 = Sunday, 6 = Saturday
-  const hour = mexicoTime.getHours();
-
-  // Monday-Friday (1-5) and between 9am-6pm
-  const isWeekday = day >= 1 && day <= 5;
-  const isDuringHours = hour >= 9 && hour < 18;
-
-  return isWeekday && isDuringHours;
-}
+const { isBusinessHours } = require("./ai/utils/businessHours");
 
 /**
  * Check if dimensions qualify as a custom order (both sides >= 8m)

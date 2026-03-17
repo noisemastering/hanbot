@@ -25,7 +25,7 @@ const BUSINESS_INFO = {
   address: MAPS_URL,
   city: "Querétaro",
   phones: ["442 352 1646"],
-  hours: "Lunes a Viernes 9am - 6pm",
+  hours: "Lunes a Viernes 8am - 6pm",
   website: "mercadolibre.com/sec/1991696"
 };
 
@@ -419,7 +419,7 @@ async function handleHumanRequest(convo, psid) {
 
   const timingNote = inBusinessHours
     ? "Un especialista te contactará a la brevedad."
-    : "Nuestro horario de atención es de lunes a viernes de 9am a 6pm. Un especialista te contactará el siguiente día hábil a primera hora.";
+    : "Nuestro horario de atención es de lunes a viernes de 8am a 6pm. Un especialista te contactará el siguiente día hábil a primera hora.";
 
   let response = `¡Claro! ${timingNote}\n\n` +
                  "También puedes llamarnos al 📞 " + BUSINESS_INFO.phones[0] +

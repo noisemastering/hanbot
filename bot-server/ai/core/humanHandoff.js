@@ -47,7 +47,7 @@ async function handleHumanHandoff(userMessage, psid, convo, reason = "explicit")
   // Timing suffix based on business hours
   const timingSuffix = inBusinessHours
     ? "Un especialista tomará tu conversación pronto 👍"
-    : "Nuestro horario de atención es de lunes a viernes de 9am a 6pm. Un especialista te contactará el siguiente día hábil a primera hora 👍";
+    : "Nuestro horario de atención es de lunes a viernes de 8am a 6pm. Un especialista te contactará el siguiente día hábil a primera hora 👍";
 
   // Different responses based on reason
   const responses = {

@@ -99,7 +99,7 @@ async function handleUnintelligible(psid, convo, BOT_PERSONA_NAME) {
 
     return {
       type: "text",
-      text: `Lo siento 😔 sigo sin comprender bien.\n\nTe paso con alguien de nuestro equipo que puede ayudarte mejor 👇\n\n💬 WhatsApp: ${whatsappLink}\n📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`
+      text: `Lo siento 😔 sigo sin comprender bien.\n\nTe paso con alguien de nuestro equipo que puede ayudarte mejor 👇\n\n💬 WhatsApp: ${whatsappLink}\n📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n🕓 ${info?.hours || "Lun-Vie 8am-6pm"}`
     };
   }
 }
@@ -124,7 +124,7 @@ async function handleComplexQuestion(psid, convo, reason) {
 
   return {
     type: "text",
-    text: `Entiendo que tu consulta requiere una atención más especializada 🤓\n\nPermíteme conectarte con un especialista que podrá ayudarte mejor con esto:\n\n💬 WhatsApp: ${whatsappLink}\n📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`
+    text: `Entiendo que tu consulta requiere una atención más especializada 🤓\n\nPermíteme conectarte con un especialista que podrá ayudarte mejor con esto:\n\n💬 WhatsApp: ${whatsappLink}\n📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n🕓 ${info?.hours || "Lun-Vie 8am-6pm"}`
   };
 }
 

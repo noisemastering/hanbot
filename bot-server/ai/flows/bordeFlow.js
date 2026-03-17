@@ -594,6 +594,16 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     };
   }
 
+  // HEIGHT / WIDTH DIMENSION QUESTIONS — "De qué alto es?", "Qué ancho tiene?"
+  if (userMessage && /\b(alto|altura|ancho|anchura|grosor|qu[eé]\s+mide|medida\s+de\s+(alto|ancho)|qu[eé]\s+tan\s+(alto|ancho)|de\s+qu[eé]\s+(alto|ancho)|cu[aá]nto\s+mide\s+de\s+(alto|ancho))\b/i.test(userMessage) &&
+      !/\b(largo|longitud|metros?\s+lineal|rollo)\b/i.test(userMessage)) {
+    const widthCm = await getBordeWidth();
+    return {
+      type: "text",
+      text: `El borde separador mide ${widthCm} cm de alto. ¿Te interesa algún largo en específico?`
+    };
+  }
+
   // ACCESSORY / INSTALLATION QUESTIONS — borde does NOT come with stakes or accessories
   if (intent === INTENTS.ACCESSORY_QUERY || intent === INTENTS.EYELETS_QUERY || intent === INTENTS.INSTALLATION_QUERY ||
       (userMessage && /\b(estacas?|anclas?|sujet[ao]|fij[ao]|clav[ao]|detenerse|detiene|sost[ei]en|amarre|viene\s*con|trae|incluye|c[oó]mo\s*se\s*(pone|coloca|instala|fija|detiene|sujeta|clava))\b/i.test(userMessage))) {

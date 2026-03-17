@@ -81,7 +81,7 @@ async function executeHandoff(psid, convo, userMessage, options = {}) {
     if (isBusinessHours()) {
       text += "Un especialista te contactará pronto.";
     } else {
-      text += `Un especialista te contactará el siguiente día hábil en horario de atención (lunes a viernes 9am-6pm).`;
+      text += `Un especialista te contactará el siguiente día hábil en horario de atención (lunes a viernes 8am-6pm).`;
     }
   }
   // timingStyle === 'none' → no timing appended

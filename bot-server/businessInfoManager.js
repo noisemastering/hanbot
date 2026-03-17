@@ -29,7 +29,7 @@ async function getBusinessInfo() {
     return {
       name: "Hanlob",
       phones: ["55 0000 0000"],
-      hours: "Lunes a Viernes de 9:00 a 18:00",
+      hours: "Lunes a Viernes de 8:00 a 18:00",
       address: "CDMX",
     };
   }

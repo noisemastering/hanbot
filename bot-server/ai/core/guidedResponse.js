@@ -57,7 +57,7 @@ INSTRUCCIONES:
 
 DATOS DE CONTACTO (si son relevantes):
 - Teléfono: ${businessInfo?.phones?.join(", ") || "442 352 1646"}
-- Horario: ${businessInfo?.hours || "Lunes a Viernes 9am - 6pm"}
+- Horario: ${businessInfo?.hours || "Lunes a Viernes 8am - 6pm"}
 - Vendemos en Mercado Libre (NO incluyas links/URLs - el sistema los agrega automáticamente)`
         },
         { role: "user", content: userMessage }

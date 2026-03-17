@@ -135,7 +135,7 @@ async function handleThanks(cleanMsg, psid, convo, BOT_PERSONA_NAME) {
       type: "text",
       text: `¡Claro! También puedes visitarnos. Te comparto nuestra ubicación en Google Maps:\n\n` +
             `${MAPS_URL}\n\n` +
-            `🕐 Horario: Lunes a Viernes de 9:00 a 18:00 hrs, Sábados de 9:00 a 14:00 hrs.\n\n` +
+            `🕐 Horario: Lunes a Viernes de 8:00 a 18:00 hrs.\n\n` +
             `¡Te esperamos!`
     };
   }

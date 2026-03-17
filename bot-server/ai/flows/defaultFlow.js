@@ -155,7 +155,7 @@ async function handleLocation(convo, psid) {
   const response = await generateBotResponse("location_query", {
     address: MAPS_URL,
     phone: '442 352 1646',
-    hours: 'Lunes a Viernes 9am - 6pm',
+    hours: 'Lunes a Viernes 8am - 6pm',
     whatsapp: "https://wa.me/524425957432",
     convo
   });

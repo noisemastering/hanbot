@@ -149,6 +149,7 @@ async function handleResellerInquiry({ psid, convo, userMessage }) {
   const catalogUrl = await getCatalogUrl(convo, convo?.currentFlow || 'malla_sombra');
 
   // Send catalog PDF as attachment before the handoff text
+  let catalogSent = false;
   if (catalogUrl) {
     const channel = convo?.channel || (psid.startsWith('wa:') ? 'whatsapp' : 'facebook');
     try {
@@ -158,9 +159,11 @@ async function handleResellerInquiry({ psid, convo, userMessage }) {
           type: 'document',
           document: { link: catalogUrl, filename: 'Catalogo_Hanlob.pdf' }
         });
+        catalogSent = true;
       } else {
         const fbPsid = psid.startsWith('fb:') ? psid.replace('fb:', '') : psid;
-        await sendCatalog(fbPsid, catalogUrl);
+        const result = await sendCatalog(fbPsid, catalogUrl);
+        catalogSent = result?.fileSent === true;
       }
     } catch (err) {
       console.error('❌ Error sending catalog in reseller handler:', err.message);
@@ -169,7 +172,7 @@ async function handleResellerInquiry({ psid, convo, userMessage }) {
 
   return await executeHandoff(psid, convo, userMessage || '', {
     reason: `Revendedor interesado — ${(userMessage || '').substring(0, 80)}`,
-    responsePrefix: catalogUrl
+    responsePrefix: catalogSent
       ? 'Te comparto nuestro catálogo con medidas y precios de mayoreo. Un especialista te contactará para darte más detalles sobre cómo ser parte de nuestra red de distribuidores.\n\n'
       : 'Un especialista te contactará para darte información sobre precios de mayoreo y cómo ser parte de nuestra red de distribuidores.\n\n',
     lastIntent: 'reseller_catalog_sent',
@@ -193,7 +196,7 @@ async function handlePhoneRequest({ psid, convo }) {
   const response = await generateBotResponse("phone_request", {
     phone: info?.phones?.[0] || "442 352 1646",
     whatsapp: WHATSAPP_LINK,
-    hours: info?.hours || "Lun-Vie 9am-6pm",
+    hours: info?.hours || "Lun-Vie 8am-6pm",
     convo
   });
 

@@ -932,7 +932,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       type: "text",
       text: `¡Con gusto! ${timing}\n\n` +
             `📞 ${info?.phones?.[0] || "442 352 1646"}\n` +
-            `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}\n\n` +
+            `🕓 ${info?.hours || "Lun-Vie 8am-6pm"}\n\n` +
             `Si prefieres, también puedes llamarnos directamente a ese número.`
     };
   }
@@ -969,7 +969,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       text: `¡Excelente! Somos fabricantes y trabajamos con distribuidores en todo México.\n\n` +
             `${timing}\n\n` +
             `📞 ${info?.phones?.[0] || "442 352 1646"}\n` +
-            `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}\n\n` +
+            `🕓 ${info?.hours || "Lun-Vie 8am-6pm"}\n\n` +
             `También puedes contactarnos directo por WhatsApp: https://wa.me/524423521646`
     };
   }
@@ -994,7 +994,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       text: `¡Claro! Nuestro teléfono es:\n\n` +
             `📞 ${info?.phones?.[0] || "442 352 1646"}\n` +
             `💬 WhatsApp: https://wa.me/524423521646\n\n` +
-            `🕓 Horario: ${info?.hours || "Lun-Vie 9am-6pm"}\n\n` +
+            `🕓 Horario: ${info?.hours || "Lun-Vie 8am-6pm"}\n\n` +
             `También puedes comprar directamente en nuestra tienda de Mercado Libre si prefieres.`
     };
   }
@@ -1157,7 +1157,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
               "Para cotizar rollos, comunícate directamente con uno de nuestros especialistas:\n\n" +
               `💬 WhatsApp: ${whatsappLink}\n` +
               `📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n` +
-              `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`
+              `🕓 ${info?.hours || "Lun-Vie 8am-6pm"}`
       };
     }
 
@@ -1443,7 +1443,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
             "Para cotizar tu pedido y conocer los descuentos disponibles, te comunico con uno de nuestros especialistas:\n\n" +
             `💬 WhatsApp: ${whatsappLink}\n` +
             `📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n` +
-            `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`
+            `🕓 ${info?.hours || "Lun-Vie 8am-6pm"}`
     };
   }
 
@@ -2831,7 +2831,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
         return {
           type: "text",
-          text: `Entiendo que necesitas específicamente una malla de ${requestedSizeStr}. 🤔\n\nPara poder ayudarte mejor con esta medida personalizada, te paso con nuestro equipo de ventas:\n\n📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n🕓 ${info?.hours || "Lun-Vie 9am-6pm"}\n\nEllos podrán cotizar la fabricación exacta de ${requestedSizeStr} y darte un presupuesto personalizado. 👍`
+          text: `Entiendo que necesitas específicamente una malla de ${requestedSizeStr}. 🤔\n\nPara poder ayudarte mejor con esta medida personalizada, te paso con nuestro equipo de ventas:\n\n📞 ${info?.phones?.join(" / ") || "Teléfono no disponible"}\n🕓 ${info?.hours || "Lun-Vie 8am-6pm"}\n\nEllos podrán cotizar la fabricación exacta de ${requestedSizeStr} y darte un presupuesto personalizado. 👍`
         };
       }
 

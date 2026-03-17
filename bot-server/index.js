@@ -1591,7 +1591,7 @@ app.post("/webhook", async (req, res) => {
                   const { getBusinessInfo } = require("./businessInfoManager");
                   const businessInfo = await getBusinessInfo();
                   await callSendAPI(senderPsid, {
-                    text: `Gracias por tu imagen. Un especialista la revisará y te responderá en breve.\n\nSi es urgente, puedes contactarnos:\n📞 ${businessInfo.phones?.join(" / ") || "55 1234 5678"}\n🕓 ${businessInfo.hours || "Lun-Vie 9am-6pm"}`
+                    text: `Gracias por tu imagen. Un especialista la revisará y te responderá en breve.\n\nSi es urgente, puedes contactarnos:\n📞 ${businessInfo.phones?.join(" / ") || "55 1234 5678"}\n🕓 ${businessInfo.hours || "Lun-Vie 8am-6pm"}`
                   });
                   await saveMessage(senderPsid, "[Imagen transferida a especialista humano]", "bot");
                 } else {
@@ -1599,7 +1599,7 @@ app.post("/webhook", async (req, res) => {
                   const { getBusinessInfo } = require("./businessInfoManager");
                   const businessInfo = await getBusinessInfo();
                   await callSendAPI(senderPsid, {
-                    text: `Gracias por tu imagen. En este momento estamos fuera de horario, pero un especialista la revisará y te contactará en horario de atención.\n\n🕓 ${businessInfo.hours || "Lun-Vie 9am-6pm"}\n📞 ${businessInfo.phones?.join(" / ") || "55 1234 5678"}`
+                    text: `Gracias por tu imagen. En este momento estamos fuera de horario, pero un especialista la revisará y te contactará en horario de atención.\n\n🕓 ${businessInfo.hours || "Lun-Vie 8am-6pm"}\n📞 ${businessInfo.phones?.join(" / ") || "55 1234 5678"}`
                   });
                   await saveMessage(senderPsid, "[Imagen recibida fuera de horario - pendiente de revisión]", "bot");
 

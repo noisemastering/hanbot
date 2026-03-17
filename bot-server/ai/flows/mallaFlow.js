@@ -149,7 +149,7 @@ DATOS DEL NEGOCIO:
 - Somos fabricantes en Querétaro, más de 5 años vendiendo en Mercado Libre
 - Envío a todo México y Estados Unidos
 - WhatsApp: +52 442 595 7432
-- Horario: Lunes a Viernes 9am-6pm, Sábados 9am-2pm
+- Horario: Lunes a Viernes 8am-6pm
 
 INSTRUCCIONES:
 1. Si el cliente PIDE una medida específica (incluso con formato desordenado como "8 X. 6. Mtrs"):
@@ -1166,6 +1166,17 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     };
   }
 
+  // CHECK FOR LOCATION QUESTION — "ubicación", "dónde están", "dirección", "tienda física"
+  const isLocationQuestion = /\b(ubicaci[oó]n|direcci[oó]n|d[oó]nde\s+(est[aá]n|est[aá]s|se\s+ubica|queda)|tienda\s+f[ií]sica|pueden?\s+ir|puedo\s+ir|recoger|pasar\s+a\s+recoger|visitar(los|les)?|showroom|local|bodega|sucursal)\b/i.test(userMessage);
+  if (isLocationQuestion) {
+    console.log(`📍 Malla flow - Location question: "${userMessage.slice(0, 50)}"`);
+    await updateConversation(psid, { lastIntent: 'location_shared', unknownCount: 0 });
+    return {
+      type: "text",
+      text: `Estamos en Querétaro. Te comparto nuestra ubicación:\n\n${MAPS_URL}\n\nTambién puedes comprar en línea por Mercado Libre con envío incluido a todo México.`
+    };
+  }
+
   // CHECK FOR ACCESSORY QUESTIONS (arnés, cuerda, lazo, kit de instalación)
   // Only match specific accessory keywords — NOT generic "viene con" / "trae" which cause false positives
   const isAccessoryQuestion = /\b(arn[eé]s|cuerda|lazo|amarre|kit\s*(de\s+)?instalaci|incluye.*para\s*(colgar|instalar|sujetar|amarrar))\b/i.test(userMessage);
@@ -1481,7 +1492,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       responsePrefix: "¡Excelente! Somos fabricantes y trabajamos con distribuidores en todo México.\n\n" +
             "Un especialista te contactará para darte información sobre paquetes y precios de mayoreo.\n\n" +
             `📞 ${info?.phones?.[0] || "442 352 1646"}\n` +
-            `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`,
+            `🕓 ${info?.hours || "Lun-Vie 8am-6pm"}`,
       lastIntent: 'reseller_inquiry',
       notificationText: `Cliente quiere revender: "${userMessage.substring(0, 60)}"`,
       extraState: { isWholesaleInquiry: true, productInterest: convo?.productInterest || "wholesale" },
@@ -1935,7 +1946,7 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
       responsePrefix: "Somos fabricantes de malla sombra y buscamos distribuidores.\n\n" +
             "Para cotizaciones de mayoreo, comunícate con nuestro equipo:\n\n" +
             `📞 ${info?.phones?.join(" / ") || "442 595 7432"}\n` +
-            `🕓 ${info?.hours || "Lun-Vie 9am-6pm"}`,
+            `🕓 ${info?.hours || "Lun-Vie 8am-6pm"}`,
       lastIntent: 'reseller_inquiry',
       notificationText: `Consulta de distribuidores: "${userMessage}"`,
       skipChecklist: true,
