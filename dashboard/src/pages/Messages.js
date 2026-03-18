@@ -1471,6 +1471,7 @@ function Messages() {
               <div style={{ padding: "0 1rem 1rem 1rem" }}>
                 <ManualSaleForm
                   psid={selectedPsid}
+                  channel={selectedChannel}
                   onClose={() => setShowSaleForm(false)}
                 />
               </div>

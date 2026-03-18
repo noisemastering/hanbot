@@ -1,166 +1,174 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useNavigate } from 'react-router-dom';
 import API from '../api';
+import { useAuth } from '../contexts/AuthContext';
 
-const INTENT_COLORS = {
-  high: 'bg-green-500/20 text-green-400 border-green-500/30',
-  medium: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-  low: 'bg-red-500/20 text-red-400 border-red-500/30',
-};
-
-const INTENT_LABELS = { high: 'Alto', medium: 'Medio', low: 'Bajo' };
+const inputClass = "w-full px-3 py-1.5 bg-gray-900/50 border border-gray-600/50 rounded text-white text-sm focus:outline-none focus:border-purple-500/50";
 
 function CRMView() {
-  const navigate = useNavigate();
+  const { user } = useAuth();
+  const isSuperAdmin = user?.role === 'super_admin';
+
   const [customers, setCustomers] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [kpis, setKpis] = useState(null);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, pages: 1 });
   const [search, setSearch] = useState('');
-  const [channelFilter, setChannelFilter] = useState('');
-  const [intentFilter, setIntentFilter] = useState('');
-  const [convertedFilter, setConvertedFilter] = useState('');
+
+  // CRUD state
+  const [editingPsid, setEditingPsid] = useState(null);
+  const [editForm, setEditForm] = useState({ crmName: '', crmPhone: '', crmEmail: '', zipCode: '' });
+  const [showAdd, setShowAdd] = useState(false);
+  const [addForm, setAddForm] = useState({ crmName: '', crmPhone: '', crmEmail: '', zipCode: '' });
+  const [saving, setSaving] = useState(false);
+  const [deletingPsid, setDeletingPsid] = useState(null);
 
   const fetchCustomers = useCallback(async () => {
     setLoading(true);
     try {
       const params = new URLSearchParams({ page, limit: 30 });
       if (search) params.set('search', search);
-      if (channelFilter) params.set('channel', channelFilter);
-      if (intentFilter) params.set('intent', intentFilter);
-      if (convertedFilter) params.set('hasConverted', convertedFilter);
       const res = await API.get(`/crm/customers?${params}`);
       setCustomers(res.data.customers || []);
       setPagination(res.data.pagination || { total: 0, pages: 1 });
-      if (res.data.kpis) setKpis(res.data.kpis);
     } catch (err) {
-      console.error('Error fetching CRM data:', err);
+      console.error('Error fetching CRM customers:', err);
     } finally {
       setLoading(false);
     }
-  }, [page, search, channelFilter, intentFilter, convertedFilter]);
+  }, [page, search]);
 
-  useEffect(() => {
-    fetchCustomers();
-  }, [fetchCustomers]);
+  useEffect(() => { fetchCustomers(); }, [fetchCustomers]);
 
-  // Debounced search
   const [searchInput, setSearchInput] = useState('');
   useEffect(() => {
-    const timer = setTimeout(() => {
-      setSearch(searchInput);
-      setPage(1);
-    }, 400);
+    const timer = setTimeout(() => { setSearch(searchInput); setPage(1); }, 400);
     return () => clearTimeout(timer);
   }, [searchInput]);
 
-  const formatCurrency = (amount) => {
-    if (!amount && amount !== 0) return '$0';
-    return new Intl.NumberFormat('es-MX', {
-      style: 'currency', currency: 'MXN',
-      minimumFractionDigits: 0, maximumFractionDigits: 0,
-    }).format(amount);
+  const toTitleCase = (str) => {
+    if (!str) return str;
+    return str.replace(/\w\S*/g, (w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
   };
 
-  const formatDate = (date) => {
-    if (!date) return '-';
-    return new Date(date).toLocaleDateString('es-MX', {
-      day: 'numeric', month: 'short', year: 'numeric'
-    });
+  // Edit
+  const startEdit = (c) => {
+    setEditingPsid(c.psid);
+    setEditForm({ crmName: c.crmName || '', crmPhone: c.crmPhone || '', crmEmail: c.crmEmail || '', zipCode: c.zipCode || '' });
+    setShowAdd(false);
   };
 
-  const channelBadge = (ch) => {
-    if (ch === 'whatsapp') return <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-500/20 text-green-400">WA</span>;
-    if (ch === 'facebook') return <span className="px-2 py-0.5 rounded text-xs font-medium bg-blue-500/20 text-blue-400">FB</span>;
-    return <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-500/20 text-gray-400">-</span>;
+  const saveEdit = async () => {
+    setSaving(true);
+    try {
+      await API.put(`/crm/customers/${encodeURIComponent(editingPsid)}/profile`, editForm);
+      setEditingPsid(null);
+      fetchCustomers();
+    } catch (err) {
+      console.error('Error updating customer:', err);
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const displayName = (c) => c.customerName || c.psid?.replace(/^(fb:|wa:)/, '') || '-';
+  // Create
+  const saveNew = async () => {
+    if (!addForm.crmName.trim() && !addForm.crmPhone.trim() && !addForm.crmEmail.trim()) return;
+    setSaving(true);
+    try {
+      await API.post('/crm/customers', addForm);
+      setShowAdd(false);
+      setAddForm({ crmName: '', crmPhone: '', crmEmail: '', zipCode: '' });
+      fetchCustomers();
+    } catch (err) {
+      console.error('Error creating customer:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
 
-  if (loading && !kpis) {
+  // Delete
+  const confirmDelete = async (psid) => {
+    setSaving(true);
+    try {
+      await API.delete(`/crm/customers/${encodeURIComponent(psid)}`);
+      setDeletingPsid(null);
+      fetchCustomers();
+    } catch (err) {
+      console.error('Error deleting customer:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading && customers.length === 0) {
     return (
       <div className="p-6 flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-400"></div>
-          <p className="mt-4 text-gray-400">Cargando CRM...</p>
-        </div>
+        <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-400" />
       </div>
     );
   }
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
-      <div className="flex items-center gap-3">
-        <button onClick={() => navigate('/')} className="text-gray-400 hover:text-white transition-colors">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
-          </svg>
-        </button>
-        <h1 className="text-2xl font-bold text-white">CRM - Clientes</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-white">Clientes</h1>
+        <div className="flex items-center gap-3">
+          <span className="text-sm text-gray-400">{pagination.total} registrados</span>
+          <button
+            onClick={() => { setShowAdd(true); setEditingPsid(null); }}
+            className="px-3 py-1.5 rounded-lg text-sm bg-purple-600 hover:bg-purple-500 text-white font-medium"
+          >+ Agregar</button>
+        </div>
       </div>
 
-      {/* KPI Cards */}
-      {kpis && (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-            <p className="text-sm text-gray-400">Total Clientes</p>
-            <p className="text-2xl font-bold text-purple-400">{kpis.totalCustomers}</p>
+      {/* Search */}
+      <input
+        type="text"
+        value={searchInput}
+        onChange={(e) => setSearchInput(e.target.value)}
+        placeholder="Buscar por nombre, teléfono, email o ciudad..."
+        className="w-full max-w-md px-4 py-2 bg-gray-800/50 border border-gray-700/50 rounded-lg text-white placeholder-gray-500 text-sm focus:outline-none focus:border-purple-500/50"
+      />
+
+      {/* Add form */}
+      {showAdd && (
+        <div className="bg-gray-800/50 border border-purple-500/30 rounded-xl p-4">
+          <h3 className="text-sm font-medium text-white mb-3">Nuevo cliente</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <input type="text" placeholder="Nombre" value={addForm.crmName}
+              onChange={(e) => setAddForm(f => ({ ...f, crmName: e.target.value }))} className={inputClass} />
+            <input type="text" placeholder="Teléfono" value={addForm.crmPhone}
+              onChange={(e) => setAddForm(f => ({ ...f, crmPhone: e.target.value }))} className={inputClass} />
+            <input type="email" placeholder="Email" value={addForm.crmEmail}
+              onChange={(e) => setAddForm(f => ({ ...f, crmEmail: e.target.value }))} className={inputClass} />
+            <input type="text" placeholder="Código postal" value={addForm.zipCode}
+              onChange={(e) => setAddForm(f => ({ ...f, zipCode: e.target.value }))} className={inputClass} />
           </div>
-          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-            <p className="text-sm text-gray-400">Leads Activos</p>
-            <p className="text-2xl font-bold text-blue-400">{kpis.activeLeads}</p>
-          </div>
-          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-            <p className="text-sm text-gray-400">Con Compras</p>
-            <p className="text-2xl font-bold text-green-400">{kpis.customersWithPurchases}</p>
-          </div>
-          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-            <p className="text-sm text-gray-400">Ingresos Totales</p>
-            <p className="text-2xl font-bold text-amber-400">{formatCurrency(kpis.totalRevenue)}</p>
+          <div className="flex gap-2 mt-3">
+            <button onClick={saveNew} disabled={saving || (!addForm.crmName.trim() && !addForm.crmPhone.trim() && !addForm.crmEmail.trim())}
+              className="px-3 py-1.5 rounded text-sm bg-purple-600 hover:bg-purple-500 text-white disabled:opacity-40">
+              {saving ? 'Guardando...' : 'Guardar'}
+            </button>
+            <button onClick={() => setShowAdd(false)}
+              className="px-3 py-1.5 rounded text-sm bg-gray-700/50 text-gray-300 hover:bg-gray-600/50">Cancelar</button>
           </div>
         </div>
       )}
 
-      {/* Filters */}
-      <div className="flex flex-wrap gap-3">
-        <input
-          type="text"
-          value={searchInput}
-          onChange={(e) => setSearchInput(e.target.value)}
-          placeholder="Buscar por nombre o ciudad..."
-          className="flex-1 min-w-[200px] px-4 py-2 bg-gray-800/50 border border-gray-700/50 rounded-lg text-white placeholder-gray-500 text-sm focus:outline-none focus:border-purple-500/50"
-        />
-        <select
-          value={channelFilter}
-          onChange={(e) => { setChannelFilter(e.target.value); setPage(1); }}
-          className="px-3 py-2 bg-gray-800/50 border border-gray-700/50 rounded-lg text-sm text-gray-300 focus:outline-none focus:border-purple-500/50"
-        >
-          <option value="">Todos los canales</option>
-          <option value="facebook">Facebook</option>
-          <option value="whatsapp">WhatsApp</option>
-        </select>
-        <select
-          value={intentFilter}
-          onChange={(e) => { setIntentFilter(e.target.value); setPage(1); }}
-          className="px-3 py-2 bg-gray-800/50 border border-gray-700/50 rounded-lg text-sm text-gray-300 focus:outline-none focus:border-purple-500/50"
-        >
-          <option value="">Todas las intenciones</option>
-          <option value="high">Alto</option>
-          <option value="medium">Medio</option>
-          <option value="low">Bajo</option>
-        </select>
-        <select
-          value={convertedFilter}
-          onChange={(e) => { setConvertedFilter(e.target.value); setPage(1); }}
-          className="px-3 py-2 bg-gray-800/50 border border-gray-700/50 rounded-lg text-sm text-gray-300 focus:outline-none focus:border-purple-500/50"
-        >
-          <option value="">Todas</option>
-          <option value="true">Con compras</option>
-          <option value="false">Sin compras</option>
-        </select>
-      </div>
+      {/* Delete confirmation */}
+      {deletingPsid && (
+        <div className="bg-red-900/20 border border-red-500/30 rounded-xl p-4 flex items-center justify-between">
+          <span className="text-sm text-red-300">Eliminar datos de CRM de este cliente?</span>
+          <div className="flex gap-2">
+            <button onClick={() => confirmDelete(deletingPsid)} disabled={saving}
+              className="px-3 py-1.5 rounded text-sm bg-red-600 hover:bg-red-500 text-white disabled:opacity-40">
+              {saving ? 'Eliminando...' : 'Confirmar'}
+            </button>
+            <button onClick={() => setDeletingPsid(null)}
+              className="px-3 py-1.5 rounded text-sm bg-gray-700/50 text-gray-300 hover:bg-gray-600/50">Cancelar</button>
+          </div>
+        </div>
+      )}
 
       {/* Table */}
       <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl">
@@ -169,83 +177,95 @@ function CRMView() {
             <thead className="bg-gray-900/50">
               <tr className="text-left text-xs text-gray-400 uppercase">
                 <th className="px-6 py-3">Nombre</th>
-                <th className="px-4 py-3">Canal</th>
-                <th className="px-6 py-3">Ubicación</th>
-                <th className="px-4 py-3">Intención</th>
-                <th className="px-4 py-3 text-right">Compras</th>
-                <th className="px-4 py-3 text-right">Ingresos</th>
-                <th className="px-6 py-3">Último contacto</th>
-                <th className="px-6 py-3">Etiquetas</th>
+                <th className="px-6 py-3">Teléfono</th>
+                <th className="px-6 py-3">Email</th>
+                <th className="px-6 py-3">Ciudad</th>
+                <th className="px-4 py-3 w-24">Acciones</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700/50">
               {loading ? (
-                <tr><td colSpan={8} className="px-6 py-12 text-center text-gray-500">
-                  <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-purple-400"></div>
+                <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-500">
+                  <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-purple-400" />
                 </td></tr>
               ) : customers.length === 0 ? (
-                <tr><td colSpan={8} className="px-6 py-12 text-center text-gray-500">No se encontraron clientes</td></tr>
+                <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-500">No hay clientes registrados</td></tr>
               ) : customers.map((c) => (
-                <tr
-                  key={c.psid}
-                  onClick={() => navigate(`/crm/${encodeURIComponent(c.psid)}`)}
-                  className="hover:bg-gray-700/20 cursor-pointer"
-                >
-                  <td className="px-6 py-3 text-sm text-white font-medium">{displayName(c)}</td>
-                  <td className="px-4 py-3">{channelBadge(c.channel)}</td>
-                  <td className="px-6 py-3 text-sm text-gray-300">
-                    {[c.city, c.stateMx].filter(Boolean).join(', ') || '-'}
-                  </td>
-                  <td className="px-4 py-3">
-                    {c.purchaseIntent ? (
-                      <span className={`px-2 py-0.5 rounded text-xs font-medium border ${INTENT_COLORS[c.purchaseIntent] || ''}`}>
-                        {INTENT_LABELS[c.purchaseIntent] || c.purchaseIntent}
-                      </span>
-                    ) : <span className="text-sm text-gray-500">-</span>}
-                  </td>
-                  <td className="px-4 py-3 text-right text-sm text-white font-medium">{c.totalPurchases || 0}</td>
-                  <td className="px-4 py-3 text-right text-sm text-green-400">{formatCurrency(c.totalRevenue || 0)}</td>
-                  <td className="px-6 py-3 text-sm text-gray-300">{formatDate(c.lastMessageAt)}</td>
-                  <td className="px-6 py-3">
-                    <div className="flex gap-1 flex-wrap">
-                      {(c.tags || []).slice(0, 3).map(tag => (
-                        <span key={tag} className="px-2 py-0.5 rounded-full text-xs bg-purple-500/20 text-purple-300">{tag}</span>
-                      ))}
-                      {(c.tags || []).length > 3 && (
-                        <span className="text-xs text-gray-500">+{c.tags.length - 3}</span>
-                      )}
-                    </div>
-                  </td>
-                </tr>
+                editingPsid === c.psid ? (
+                  <tr key={c.psid} className="bg-gray-700/10">
+                    <td className="px-6 py-2"><input type="text" value={editForm.crmName}
+                      onChange={(e) => setEditForm(f => ({ ...f, crmName: e.target.value }))} className={inputClass} /></td>
+                    <td className="px-6 py-2"><input type="text" value={editForm.crmPhone}
+                      onChange={(e) => setEditForm(f => ({ ...f, crmPhone: e.target.value }))} className={inputClass} /></td>
+                    <td className="px-6 py-2"><input type="email" value={editForm.crmEmail}
+                      onChange={(e) => setEditForm(f => ({ ...f, crmEmail: e.target.value }))} className={inputClass} /></td>
+                    <td className="px-6 py-2"><input type="text" value={editForm.zipCode}
+                      onChange={(e) => setEditForm(f => ({ ...f, zipCode: e.target.value }))} className={inputClass} /></td>
+                    <td className="px-4 py-2">
+                      <div className="flex gap-1">
+                        <button onClick={saveEdit} disabled={saving} title="Guardar"
+                          className="p-1.5 rounded hover:bg-green-500/20 text-green-400 disabled:opacity-40">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                          </svg>
+                        </button>
+                        <button onClick={() => setEditingPsid(null)} title="Cancelar"
+                          className="p-1.5 rounded hover:bg-gray-500/20 text-gray-400">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ) : (
+                  <tr key={c.psid} className="hover:bg-gray-700/20">
+                    <td className="px-6 py-3 text-sm text-white font-medium">{toTitleCase(c.crmName) || '-'}</td>
+                    <td className="px-6 py-3 text-sm text-gray-300">{c.crmPhone || '-'}</td>
+                    <td className="px-6 py-3 text-sm text-gray-300">{c.crmEmail || '-'}</td>
+                    <td className="px-6 py-3 text-sm text-gray-300">
+                      {[c.city, c.stateMx].filter(Boolean).join(', ') || '-'}
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex gap-1">
+                        <button onClick={() => startEdit(c)} title="Editar"
+                          className="p-1.5 rounded hover:bg-blue-500/20 text-blue-400">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                        {isSuperAdmin && (
+                          <button onClick={() => setDeletingPsid(c.psid)} title="Eliminar"
+                            className="p-1.5 rounded hover:bg-red-500/20 text-red-400">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
+                    </td>
+                  </tr>
+                )
               ))}
             </tbody>
           </table>
         </div>
 
-        {/* Pagination */}
         {pagination.pages > 1 && (
           <div className="px-6 py-4 border-t border-gray-700/50 flex items-center justify-between">
-            <p className="text-sm text-gray-400">
-              {pagination.total} clientes
-            </p>
+            <p className="text-sm text-gray-400">{pagination.total} clientes</p>
             <div className="flex gap-2">
               <button
                 onClick={() => setPage(p => Math.max(1, p - 1))}
                 disabled={page === 1}
                 className="px-3 py-1 rounded text-sm bg-gray-700/50 text-gray-300 disabled:opacity-30 hover:bg-gray-600/50"
-              >
-                Anterior
-              </button>
-              <span className="px-3 py-1 text-sm text-gray-400">
-                {page} / {pagination.pages}
-              </span>
+              >Anterior</button>
+              <span className="px-3 py-1 text-sm text-gray-400">{page} / {pagination.pages}</span>
               <button
                 onClick={() => setPage(p => Math.min(pagination.pages, p + 1))}
                 disabled={page >= pagination.pages}
                 className="px-3 py-1 rounded text-sm bg-gray-700/50 text-gray-300 disabled:opacity-30 hover:bg-gray-600/50"
-              >
-                Siguiente
-              </button>
+              >Siguiente</button>
             </div>
           </div>
         )}

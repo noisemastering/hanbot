@@ -5,6 +5,8 @@ const jwt = require('jsonwebtoken');
 const Conversation = require('../models/Conversation');
 const Message = require('../models/Message');
 const ClickLog = require('../models/ClickLog');
+const ProductFamily = require('../models/ProductFamily');
+const ZipCode = require('../models/ZipCode');
 const DashboardUser = require('../models/DashboardUser');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'your-super-secret-jwt-key-change-in-production';
@@ -30,123 +32,68 @@ const authenticate = async (req, res, next) => {
 
 router.use(authenticate);
 
-// GET /crm/customers - Aggregated customer list
+// GET /crm/customers - Manually-added customers only
 router.get('/customers', async (req, res) => {
   try {
     const {
       page = 1,
       limit = 30,
       search = '',
-      channel = '',
-      intent = '',
-      hasConverted = '',
-      sort = 'lastContact'
+      sort = 'name'
     } = req.query;
 
     const pageNum = parseInt(page);
     const limitNum = parseInt(limit);
 
-    // Build match filter
-    const match = {};
-    if (channel) match.channel = channel;
-    if (intent) match.purchaseIntent = intent;
+    // Only show conversations where CRM data was manually entered
+    const match = {
+      $or: [
+        { crmName: { $exists: true, $nin: [null, ''] } },
+        { crmPhone: { $exists: true, $nin: [null, ''] } },
+        { crmEmail: { $exists: true, $nin: [null, ''] } }
+      ]
+    };
+
     if (search) {
       const regex = { $regex: search, $options: 'i' };
-      match.$or = [
-        { 'productSpecs.customerName': regex },
-        { 'leadData.name': regex },
-        { city: regex },
-        { psid: regex }
+      match.$and = [
+        { $or: [
+          { crmName: regex },
+          { crmPhone: regex },
+          { crmEmail: regex },
+          { city: regex }
+        ]}
       ];
     }
 
-    // Sort options
     const sortMap = {
+      name: { crmName: 1 },
       lastContact: { lastMessageAt: -1 },
-      revenue: { totalRevenue: -1 },
-      purchases: { totalPurchases: -1 },
-      name: { customerName: 1 }
+      city: { city: 1 }
     };
-    const sortStage = sortMap[sort] || sortMap.lastContact;
+    const sortStage = sortMap[sort] || sortMap.name;
 
-    // Main aggregation
-    const pipeline = [
-      { $match: match },
-      {
-        $lookup: {
-          from: 'clicklogs',
-          let: { customerPsid: '$psid' },
-          pipeline: [
-            { $match: { $expr: { $and: [{ $eq: ['$psid', '$$customerPsid'] }, { $eq: ['$converted', true] }] } } },
-            { $group: { _id: null, count: { $sum: 1 }, revenue: { $sum: { $ifNull: ['$conversionData.totalAmount', 0] } } } }
-          ],
-          as: 'salesData'
-        }
-      },
-      {
-        $addFields: {
-          totalPurchases: { $ifNull: [{ $arrayElemAt: ['$salesData.count', 0] }, 0] },
-          totalRevenue: { $ifNull: [{ $arrayElemAt: ['$salesData.revenue', 0] }, 0] },
-          customerName: {
-            $ifNull: [
-              '$productSpecs.customerName',
-              { $ifNull: ['$leadData.name', null] }
-            ]
-          }
-        }
-      },
-      { $project: { salesData: 0 } }
-    ];
-
-    // hasConverted filter (after lookup)
-    if (hasConverted === 'true') {
-      pipeline.push({ $match: { totalPurchases: { $gt: 0 } } });
-    } else if (hasConverted === 'false') {
-      pipeline.push({ $match: { totalPurchases: 0 } });
-    }
-
-    pipeline.push(
-      { $sort: sortStage },
-      {
-        $facet: {
-          data: [
-            { $skip: (pageNum - 1) * limitNum },
-            { $limit: limitNum },
-            {
-              $project: {
-                psid: 1, channel: 1, city: 1, stateMx: 1,
-                customerName: 1, purchaseIntent: 1,
-                totalPurchases: 1, totalRevenue: 1,
-                lastMessageAt: 1, tags: 1,
-                handoffRequested: 1, currentFlow: 1
-              }
-            }
-          ],
-          total: [{ $count: 'count' }]
-        }
-      }
-    );
-
-    const [result] = await Conversation.aggregate(pipeline);
-    const customers = result.data || [];
-    const total = result.total[0]?.count || 0;
-
-    // KPIs (lightweight parallel queries)
-    const [totalCustomers, activeLeads, purchaseData] = await Promise.all([
-      Conversation.countDocuments({}),
-      Conversation.countDocuments({ purchaseIntent: 'high' }),
-      ClickLog.aggregate([
-        { $match: { converted: true } },
-        { $group: { _id: null, uniqueCustomers: { $addToSet: '$psid' }, totalRevenue: { $sum: { $ifNull: ['$conversionData.totalAmount', 0] } } } }
-      ])
+    const [customersRaw, total] = await Promise.all([
+      Conversation.find(match)
+        .select('psid crmName crmPhone crmEmail city stateMx zipCode channel tags lastMessageAt')
+        .sort(sortStage)
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean(),
+      Conversation.countDocuments(match)
     ]);
 
-    const kpis = {
-      totalCustomers,
-      activeLeads,
-      customersWithPurchases: purchaseData[0]?.uniqueCustomers?.length || 0,
-      totalRevenue: purchaseData[0]?.totalRevenue || 0
-    };
+    // Extrapolate city/state from zip code when missing
+    const customers = await Promise.all(customersRaw.map(async (c) => {
+      if (!c.city && c.zipCode) {
+        const loc = await ZipCode.lookup(c.zipCode);
+        if (loc) {
+          c.city = loc.city;
+          c.stateMx = loc.state;
+        }
+      }
+      return c;
+    }));
 
     res.json({
       success: true,
@@ -156,11 +103,89 @@ router.get('/customers', async (req, res) => {
         page: pageNum,
         limit: limitNum,
         pages: Math.ceil(total / limitNum)
-      },
-      kpis
+      }
     });
   } catch (error) {
     console.error('Error fetching CRM customers:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// GET /crm/sales - All sales (ML + manual)
+router.get('/sales', async (req, res) => {
+  try {
+    const {
+      page = 1,
+      limit = 30,
+      search = '',
+      source = '',  // 'ml' or 'manual' or '' (all)
+      sort = 'newest'
+    } = req.query;
+
+    const pageNum = parseInt(page);
+    const limitNum = parseInt(limit);
+
+    const match = { converted: true };
+
+    if (source === 'manual') {
+      match.correlationMethod = 'manual';
+    } else if (source === 'ml') {
+      match.correlationMethod = { $ne: 'manual' };
+    }
+
+    if (search) {
+      const regex = { $regex: search, $options: 'i' };
+      match.$or = [
+        { productName: regex },
+        { 'conversionData.buyerFirstName': regex },
+        { 'conversionData.buyerLastName': regex },
+        { 'conversionData.buyerNickname': regex },
+        { userName: regex },
+        { city: regex }
+      ];
+    }
+
+    const sortMap = {
+      newest: { convertedAt: -1 },
+      oldest: { convertedAt: 1 },
+      amount: { 'conversionData.totalAmount': -1 },
+      product: { productName: 1 }
+    };
+    const sortStage = sortMap[sort] || sortMap.newest;
+
+    const [sales, total, totals] = await Promise.all([
+      ClickLog.find(match)
+        .select('clickId psid productName correlationMethod convertedAt city stateMx conversionData.totalAmount conversionData.itemTitle conversionData.buyerFirstName conversionData.buyerLastName conversionData.buyerNickname conversionData.manualNotes conversionData.orderStatus userName')
+        .sort(sortStage)
+        .skip((pageNum - 1) * limitNum)
+        .limit(limitNum)
+        .lean(),
+      ClickLog.countDocuments(match),
+      ClickLog.aggregate([
+        { $match: { converted: true } },
+        { $group: {
+          _id: null,
+          totalRevenue: { $sum: { $ifNull: ['$conversionData.totalAmount', 0] } },
+          totalSales: { $sum: 1 },
+          mlSales: { $sum: { $cond: [{ $ne: ['$correlationMethod', 'manual'] }, 1, 0] } },
+          manualSales: { $sum: { $cond: [{ $eq: ['$correlationMethod', 'manual'] }, 1, 0] } }
+        }}
+      ])
+    ]);
+
+    res.json({
+      success: true,
+      sales,
+      pagination: {
+        total,
+        page: pageNum,
+        limit: limitNum,
+        pages: Math.ceil(total / limitNum)
+      },
+      totals: totals[0] || { totalRevenue: 0, totalSales: 0, mlSales: 0, manualSales: 0 }
+    });
+  } catch (error) {
+    console.error('Error fetching CRM sales:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -220,6 +245,57 @@ router.put('/customers/:psid/profile', async (req, res) => {
     res.json({ success: true, customer: conv });
   } catch (error) {
     console.error('Error updating customer profile:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// DELETE /crm/customers/:psid - Clear CRM data (super_admin only)
+router.delete('/customers/:psid', async (req, res) => {
+  try {
+    if (req.user.role !== 'super_admin') {
+      return res.status(403).json({ success: false, error: 'Only super_admin can delete customers' });
+    }
+    const { psid } = req.params;
+    const conv = await Conversation.findOneAndUpdate(
+      { psid },
+      { $set: { crmName: null, crmPhone: null, crmEmail: null } },
+      { new: true }
+    );
+    if (!conv) {
+      return res.status(404).json({ success: false, error: 'Customer not found' });
+    }
+    res.json({ success: true });
+  } catch (error) {
+    console.error('Error deleting customer CRM data:', error);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /crm/customers - Create customer (add CRM data to existing or new conversation)
+router.post('/customers', async (req, res) => {
+  try {
+    const { psid, crmName, crmPhone, crmEmail, zipCode } = req.body;
+    if (!crmName?.trim() && !crmPhone?.trim() && !crmEmail?.trim()) {
+      return res.status(400).json({ success: false, error: 'At least one field (name, phone, or email) is required' });
+    }
+
+    const update = {};
+    if (crmName?.trim()) update.crmName = crmName.trim();
+    if (crmPhone?.trim()) update.crmPhone = crmPhone.trim();
+    if (crmEmail?.trim()) update.crmEmail = crmEmail.trim();
+    if (zipCode?.trim()) update.zipCode = zipCode.trim();
+
+    // If psid provided, update existing conversation; otherwise create a placeholder
+    const identifier = psid?.trim() || `manual:${Date.now()}`;
+    const conv = await Conversation.findOneAndUpdate(
+      { psid: identifier },
+      { $set: update },
+      { new: true, upsert: true }
+    );
+
+    res.json({ success: true, customer: conv });
+  } catch (error) {
+    console.error('Error creating customer:', error);
     res.status(500).json({ success: false, error: error.message });
   }
 });
@@ -324,18 +400,35 @@ router.delete('/customers/:psid/tags/:tag', async (req, res) => {
   }
 });
 
-// GET /crm/products - Autocomplete product names
+// GET /crm/products - Autocomplete product names (full inherited names from ProductFamily)
 router.get('/products', async (req, res) => {
   try {
-    const { q = '' } = req.query;
-    const names = await ClickLog.distinct('productName', {
-      productName: { $type: 'string', $ne: '' }
-    });
-    const filtered = q
-      ? names.filter(n => n.toLowerCase().includes(q.toLowerCase()))
-      : names;
-    filtered.sort();
-    res.json({ success: true, products: filtered });
+    const sellable = await ProductFamily.find({ sellable: true, active: true })
+      .populate('parentId')
+      .sort({ name: 1 })
+      .lean();
+
+    // Build full inherited names by walking the parent chain
+    const names = await Promise.all(sellable.map(async (product) => {
+      const hierarchy = [];
+      let current = product;
+      while (current) {
+        hierarchy.unshift(current.name);
+        if (current.parentId) {
+          if (typeof current.parentId === 'object' && current.parentId.name) {
+            current = current.parentId;
+          } else {
+            current = await ProductFamily.findById(current.parentId).lean();
+          }
+        } else {
+          current = null;
+        }
+      }
+      return hierarchy.join(' - ');
+    }));
+
+    const unique = [...new Set(names)].sort();
+    res.json({ success: true, products: unique });
   } catch (error) {
     console.error('Error fetching product names:', error);
     res.status(500).json({ success: false, error: error.message });

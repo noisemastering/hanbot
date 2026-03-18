@@ -673,7 +673,7 @@ router.get('/purchase-intent/:psid', async (req, res) => {
 router.post('/:psid/register-sale', async (req, res) => {
   try {
     const { psid } = req.params;
-    const { productName, totalAmount, notes, orderId } = req.body;
+    const { productName, quantity, totalAmount, notes, orderId, crmName, crmPhone, crmEmail, zipCode } = req.body;
 
     if (!productName || !totalAmount) {
       return res.status(400).json({
@@ -684,6 +684,16 @@ router.post('/:psid/register-sale', async (req, res) => {
 
     // Get conversation context
     const conversation = await Conversation.findOne({ psid }).lean();
+
+    // Save customer CRM info if provided
+    const crmUpdate = {};
+    if (crmName?.trim()) crmUpdate.crmName = crmName.trim();
+    if (crmPhone?.trim()) crmUpdate.crmPhone = crmPhone.trim();
+    if (crmEmail?.trim()) crmUpdate.crmEmail = crmEmail.trim();
+    if (zipCode?.trim()) crmUpdate.zipCode = zipCode.trim();
+    if (Object.keys(crmUpdate).length > 0) {
+      await Conversation.updateOne({ psid }, { $set: crmUpdate });
+    }
 
     // Generate synthetic clickId
     const { randomUUID } = require('crypto');
@@ -699,7 +709,7 @@ router.post('/:psid/register-sale', async (req, res) => {
       campaignId: conversation?.adId ? conversation.campaignId : null,
       adSetId: conversation?.adSetId || null,
       adId: conversation?.adId || null,
-      userName: conversation?.userName || null,
+      userName: crmName?.trim() || conversation?.crmName || conversation?.userName || null,
       city: conversation?.city || null,
       stateMx: conversation?.stateMx || null,
       clicked: true,
@@ -712,6 +722,7 @@ router.post('/:psid/register-sale', async (req, res) => {
         totalAmount: parseFloat(totalAmount),
         paidAmount: parseFloat(totalAmount),
         itemTitle: productName,
+        itemQuantity: parseInt(quantity) || 1,
         orderId: orderId || clickId,
         orderDate: new Date(),
         manualNotes: notes || null
