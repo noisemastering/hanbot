@@ -26,10 +26,14 @@ const trustConcern = require("./middleware/trustConcern");
 const payOnDelivery = require("./middleware/payOnDelivery");
 const intentDB = require("./middleware/intentDB");
 const multiQuestion = require("./middleware/multiQuestion");
+// Pre-flow dispatcher: only urgent intents (frustration, human_request, etc.)
+// when in a product flow. All intents when in default flow.
 const intentDispatcher = require("./middleware/intentDispatcher");
 
 // --- Group D: Flow Routing ---
 const flowManager = require("./middleware/flowManager");
+// Post-flow dispatcher: handles intents the flow manager didn't handle
+const intentDispatcherFallback = require("./middleware/intentDispatcherFallback");
 const legacyFlows = require("./middleware/legacyFlows");
 const pendingHandoff = require("./middleware/pendingHandoff");
 
@@ -60,17 +64,18 @@ function getMiddleware() {
     { name: "productIdentifier", fn: productIdentifier },
     { name: "intentClassifier",  fn: intentClassifier },
 
-    // Group C: Intent Handlers
+    // Group C: Intent Handlers (pre-flow)
     { name: "phoneCapture",      fn: phoneCapture },
     { name: "linkNotWorking",    fn: linkNotWorking },
     { name: "trustConcern",      fn: trustConcern },
     { name: "payOnDelivery",     fn: payOnDelivery },
     { name: "intentDB",          fn: intentDB },
     { name: "multiQuestion",     fn: multiQuestion },
-    { name: "intentDispatcher",  fn: intentDispatcher },
+    { name: "intentDispatcher",  fn: intentDispatcher },  // urgent-only when in product flow
 
     // Group D: Flow Routing
     { name: "flowManager",      fn: flowManager },
+    { name: "intentDispatcherFallback", fn: intentDispatcherFallback },  // post-flow fallback
     { name: "legacyFlows",      fn: legacyFlows },
     { name: "pendingHandoff",   fn: pendingHandoff },
 

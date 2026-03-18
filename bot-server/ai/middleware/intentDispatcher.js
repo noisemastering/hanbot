@@ -5,11 +5,20 @@
  * intents to their registered handler functions (social, specs, logistics,
  * escalation, products, purchase, service, conversation).
  *
+ * CRITICAL ORDERING RULE (2026-03-11):
+ *   Flow manager MUST run before the dispatcher for product flows.
+ *   When the conversation is in a non-default flow, only URGENT intents
+ *   (frustration, human_request, complaint, out_of_stock_report) dispatch
+ *   here. Everything else falls through to the flow manager, which runs
+ *   next in the pipeline. The dispatcher gets a second chance as a
+ *   post-flow fallback (see intentDispatcherFallback middleware).
+ *
  * Skipped when:
  *  - Classification confidence is low or unclear
  *  - A product with explicit dimensions is detected alongside a logistics
  *    intent (so the product pipeline handles it instead)
  *  - A pending handoff is active and the intent is not informational
+ *  - Conversation is in a non-default flow and intent is not urgent
  */
 
 const { dispatch: dispatchToHandler } = require("../intentDispatcher");
@@ -26,6 +35,11 @@ const INFORMATIONAL_INTENTS = new Set([
   "price_confusion", "store_link_request", "custom_modification"
 ]);
 
+// Intents that ALWAYS dispatch before the flow manager (customer needs immediate attention)
+const ALWAYS_DISPATCH = new Set([
+  "frustration", "human_request", "complaint", "out_of_stock_report"
+]);
+
 const LOGISTICS_INTENTS_SKIP = new Set([
   "shipping_query", "location_query", "delivery_time_query",
   "shipping_included_query", "payment_query"
@@ -37,6 +51,16 @@ module.exports = async function intentDispatcher(ctx, next) {
   const isLowConfidence = classification.confidence < 0.4 || classification.intent === "unclear";
   if (isLowConfidence) {
     console.log(`\u{1F914} Low confidence (${classification.confidence}) / unclear \u2014 skipping dispatcher`);
+  }
+
+  // When conversation is in a non-default product flow, only dispatch urgent intents.
+  // The flow manager handles everything else — it owns the product context.
+  const currentFlow = convo?.currentFlow || 'default';
+  const inProductFlow = currentFlow !== 'default';
+  if (inProductFlow && !ALWAYS_DISPATCH.has(classification?.intent)) {
+    console.log(`\u23ED\uFE0F In ${currentFlow} flow \u2014 skipping pre-flow dispatcher for "${classification?.intent}"`);
+    await next();
+    return;
   }
 
   const hasProductWithDimensions =
