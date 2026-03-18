@@ -1363,12 +1363,7 @@ function App() {
 
     // For items with children (including CRM), check if user has access to ANY child
     if (item.children && item.children.length > 0) {
-      const accessibleChildren = item.children.filter(child => {
-        // crm-sales is super_admin only
-        if (child.id === 'crm-sales') return effectiveRole === 'super_admin';
-        return canAccess(child.id);
-      });
-      return accessibleChildren.length > 0;
+      return item.children.some(child => canAccess(child.id));
     }
 
     // Filter other sections based on canAccess
@@ -1378,10 +1373,7 @@ function App() {
     if (item.children && item.children.length > 0) {
       return {
         ...item,
-        children: item.children.filter(child => {
-          if (child.id === 'crm-sales') return effectiveRole === 'super_admin';
-          return canAccess(child.id);
-        })
+        children: item.children.filter(child => canAccess(child.id))
       };
     }
     return item;
