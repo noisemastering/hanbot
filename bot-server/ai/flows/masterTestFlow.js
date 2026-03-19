@@ -1,9 +1,14 @@
-// ai/flows/mallaFlow.js
-// State machine for malla confeccionada (pre-made shade mesh) product flow
-// Uses existing product utilities for search and tree climbing
+// ai/flows/masterTestFlow.js
+// Test flow: 6x4 promo — full copy of mallaFlow with masterFlow logic embedded.
+// Default product: malla sombra confeccionada reforzada 6x4m.
+// Common questions handled by embedded AI (no regex), product logic from mallaFlow.
 
+const { OpenAI } = require("openai");
 const { updateConversation } = require("../../conversationManager");
-const { getBusinessInfo, MAPS_URL } = require("../../businessInfoManager");
+const { getBusinessInfo, MAPS_URL, STORE_ADDRESS } = require("../../businessInfoManager");
+const { isBusinessHours } = require("../utils/businessHours");
+
+const _masterAI = new OpenAI({ apiKey: process.env.AI_API_KEY });
 const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
 const { INTENTS } = require("../classifier");
@@ -684,6 +689,15 @@ function checkProductFeatureQuestions(userMessage, state, convo) {
  * Handle malla flow
  */
 async function handle(classification, sourceContext, convo, psid, campaign = null, userMessage = '') {
+  // ══════ INHERITED: AI-driven common question handler (from masterFlow) ══════
+  // Handles: shipping, payment, location, trust, phone, invoice, installation,
+  //          farewell, human escalation — all via AI, no regex.
+  if (userMessage) {
+    const commonResponse = await _handleCommonQuestions(userMessage, convo, psid);
+    if (commonResponse) return commonResponse;
+  }
+  // ══════ END INHERITED ══════
+
   const { intent, entities } = classification;
 
   // ====== PENDING ZIP CODE RESPONSE ======
@@ -1834,8 +1848,69 @@ async function handleStart(sourceContext, convo, psid, userMessage) {
       timingStyle: 'elaborate'
     });
   }
-  const description = await getMallaDescription();
-  return { type: "text", text: description };
+  // Default: offer the 6x4 promo product
+  return await offerDefaultProduct(psid, convo);
+}
+
+/**
+ * Look up the 6x4 beige confeccionada product and offer it with price + link.
+ */
+async function offerDefaultProduct(psid, convo) {
+  try {
+    const product = await ProductFamily.findOne({
+      size: { $in: ['6x4m', '4x6m', '6x4', '4x6'] },
+      sellable: true,
+      active: true
+    }).lean();
+
+    if (product) {
+      const price = product.price || product.mlPrice;
+      const link = product.onlineStoreLinks?.[0]?.url;
+
+      let text = `¡Hola! Gracias por tu interés en nuestra malla sombra raschel confeccionada con refuerzo en las esquinas para una vida útil de hasta 5 años.\n\n`;
+      text += `Tenemos la medida de 6 x 4 metros`;
+      if (price) text += ` a $${price.toLocaleString('es-MX')}`;
+      text += `. Envío incluido a todo México.`;
+
+      if (link) {
+        const trackedLink = await generateClickLink(link, psid, {
+          productId: product._id.toString(),
+          productName: product.name,
+          source: 'master_test_default'
+        });
+        text += `\n\nCompra aquí:\n${trackedLink || link}`;
+
+        await updateConversation(psid, {
+          lastSharedProductLink: link,
+          lastSharedProductId: product._id.toString(),
+          lastIntent: 'malla_default_product_offered',
+          productInterest: 'malla_sombra',
+          productSpecs: {
+            productType: 'malla_sombra',
+            width: 6,
+            height: 4,
+            updatedAt: new Date()
+          }
+        });
+      }
+
+      text += `\n\n¿Te interesa esta medida o necesitas otra?`;
+      return { type: "text", text };
+    }
+
+    // Product not found in DB — fall back to description without price
+    console.log(`⚠️ [master_test] 6x4 product not found in DB, offering description only`);
+    return {
+      type: "text",
+      text: `¡Hola! Gracias por tu interés en nuestra malla sombra raschel confeccionada con refuerzo en las esquinas para una vida útil de hasta 5 años en la medida de 6 x 4 metros. Envío incluido.\n\n¿Te interesa esta medida o necesitas otra?`
+    };
+  } catch (err) {
+    console.error(`❌ [master_test] Error looking up default product:`, err.message);
+    return {
+      type: "text",
+      text: `¡Hola! Tenemos malla sombra confeccionada en la medida de 6 x 4 metros con envío incluido. ¿Te interesa o necesitas otra medida?`
+    };
+  }
 }
 
 /**
@@ -2947,6 +3022,113 @@ function shouldHandle(classification, sourceContext, convo, userMessage = '') {
   if (adProduct.startsWith('malla_sombra') || adProduct === 'confeccionada') return true;
 
   return false;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// INHERITED FROM MASTER FLOW — AI-driven common question handler
+// This block is embedded in every product flow. No regex, pure AI classification.
+// ══════════════════════════════════════════════════════════════════════════════
+async function _handleCommonQuestions(userMessage, convo, psid) {
+  try {
+    const info = await getBusinessInfo();
+    const afterHours = !isBusinessHours();
+
+    const systemPrompt = `Eres asesora de ventas de Hanlob, empresa mexicana fabricante de malla sombra.
+Tu trabajo es clasificar el mensaje del cliente y responder SI es una pregunta general.
+Si el mensaje es sobre un PRODUCTO ESPECÍFICO (medidas, cotización, colores, porcentaje de sombra, comparación de productos), NO respondas — devuelve null para que el flujo de producto lo maneje.
+
+PRODUCTO ACTUAL: malla sombra confeccionada
+
+CANAL DE VENTA: Mercado Libre.
+- Pago: 100% por adelantado al ordenar en Mercado Libre (tarjeta crédito/débito, OXXO, transferencia, meses sin intereses).
+- Envío: INCLUIDO en todas las compras por Mercado Libre. Tarda aprox 3-5 días hábiles.
+- Compra protegida: si no llega, llega defectuoso o diferente, Mercado Libre devuelve el dinero.
+- Factura: Mercado Libre la genera automáticamente con los datos fiscales del cliente.
+
+DATOS DEL NEGOCIO:
+- Ubicación: Querétaro, Microparque Industrial Navex Park, Tlacote
+- Dirección: ${STORE_ADDRESS || 'Microparque Industrial Navex Park, Tlacote, Querétaro'}
+- Google Maps: ${MAPS_URL}
+- Teléfono: ${info?.phones?.[0] || '442 352 1646'}
+- WhatsApp: https://wa.me/524425957432
+- Horario: ${info?.hours || 'Lun-Vie 8am-6pm'}
+- Envío a todo México y Estados Unidos
+- Más de 5 años de experiencia como fabricantes
+${afterHours ? '- FUERA DE HORARIO: si el cliente necesita un especialista, menciona que le contactarán el siguiente día hábil.' : ''}
+
+REGLAS DE PAGO:
+- NUNCA digas que tenemos pago contra entrega — NO lo manejamos.
+- SIEMPRE di "100% por adelantado", nunca frases ambiguas.
+
+INSTALACIÓN: No contamos con servicio de instalación. La malla es muy fácil de instalar — viene con ojillos cada 80cm lista para colgar.
+
+INSTRUCCIONES:
+Clasifica el mensaje y responde con JSON:
+
+1. Si el cliente pide hablar con un humano/especialista/asesor:
+   → { "type": "handoff", "reason": "<razón breve>" }
+
+2. Si es una pregunta general que puedes responder con los datos de arriba (envío, pago, ubicación, factura, instalación, teléfono, confianza/seguridad, horario, etc.):
+   → { "type": "response", "text": "<respuesta>", "intent": "<tema>" }
+   Temas: phone_request, trust_concern, pay_on_delivery, location, shipping, payment_method, invoice, installation, farewell, general
+
+3. Si es un agradecimiento o despedida (gracias, adiós, bye) sin pregunta adicional:
+   → { "type": "response", "text": "<despedida breve>", "intent": "farewell" }
+
+4. Si es sobre un producto específico (medidas, cotización, precio, colores, porcentaje, comparación, compra) o si NO estás seguro:
+   → { "type": "product_specific" }
+
+REGLAS:
+- Español mexicano, amable y conciso (2-4 oraciones máximo)
+- NUNCA inventes precios ni medidas
+- NUNCA incluyas URLs en tu respuesta EXCEPTO el link de Google Maps cuando pregunten ubicación y el WhatsApp cuando compartas el teléfono
+- Si tienes duda entre "general" y "producto específico", SIEMPRE devuelve product_specific
+- Solo devuelve JSON, nada más`;
+
+    const userContext = [];
+    if (convo?.userName) userContext.push(`Nombre: ${convo.userName}`);
+    if (convo?.lastSharedProductLink) userContext.push(`(Ya se le compartió un link de compra previamente)`);
+    if (convo?.lastBotResponse) userContext.push(`Último mensaje del bot: "${convo.lastBotResponse.slice(0, 120)}"`);
+    const contextStr = userContext.length > 0 ? `\n[Contexto: ${userContext.join(' | ')}]` : '';
+
+    const response = await _masterAI.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: `${userMessage}${contextStr}` }
+      ],
+      temperature: 0.2,
+      max_tokens: 300,
+      response_format: { type: "json_object" }
+    });
+
+    const result = JSON.parse(response.choices[0].message.content);
+    console.log(`🏛️ [master_test] AI classified: ${result.type}${result.intent ? ` (${result.intent})` : ''}`);
+
+    if (result.type === 'handoff') {
+      const { executeHandoff } = require('../utils/executeHandoff');
+      return await executeHandoff(psid, convo, userMessage, {
+        reason: result.reason || 'Cliente pide hablar con un especialista',
+        responsePrefix: result.text || 'Con gusto te comunico con un especialista.',
+        lastIntent: 'human_escalation',
+        timingStyle: 'elaborate'
+      });
+    }
+
+    if (result.type === 'response' && result.text) {
+      await updateConversation(psid, {
+        lastIntent: result.intent || 'common_question',
+        unknownCount: 0
+      });
+      return { type: "text", text: result.text };
+    }
+
+    // product_specific → return null, let product logic handle it
+    return null;
+  } catch (err) {
+    console.error(`❌ [master_test] Common question AI error:`, err.message);
+    return null;
+  }
 }
 
 module.exports = {
