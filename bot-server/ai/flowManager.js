@@ -437,13 +437,21 @@ async function detectExplicitProductSwitch(userMessage, rawCurrentFlow, classifi
  */
 async function detectFlow(classification, convo, userMessage, sourceContext) {
   const msg = (userMessage || '').toLowerCase();
+  const hasExistingFlow = convo?.currentFlow && convo.currentFlow !== 'default';
 
-  // 1. CONVERSATION CONTINUITY: Already in a product flow
-  if (convo?.currentFlow && convo.currentFlow !== 'default') {
+  // 1. RESELLER INTENT: "quiero vender", "mayoreo", "distribuidor", "cartera de clientes"
+  // Checked FIRST — if the message clearly asks about reselling, that overrides everything
+  if (convo?.isWholesaleInquiry || isWholesaleInquiry(userMessage, convo)) {
+    console.log(`🏪 Reseller/wholesale intent detected — routing to reseller flow`);
+    return 'reseller';
+  }
+
+  // 2. CONVERSATION CONTINUITY: Already in a product flow and no switch detected above
+  if (hasExistingFlow) {
     return convo.currentFlow;
   }
 
-  // 2. FLOWREF: Explicitly configured on ads/campaigns — highest priority for ad context.
+  // 3. FLOWREF: Explicitly configured on ads/campaigns — highest priority for ad context.
   // This is set manually and is the most reliable indicator of which flow an ad belongs to.
   const adFlowRef = sourceContext?.ad?.flowRef || convo?.adFlowRef;
   if (adFlowRef && VALID_FLOWS.includes(adFlowRef)) {
@@ -451,7 +459,7 @@ async function detectFlow(classification, convo, userMessage, sourceContext) {
     return adFlowRef;
   }
 
-  // 3. AD PRODUCTS: Fallback — infer flow from product IDs on the ad
+  // 4. AD PRODUCTS: Fallback — infer flow from product IDs on the ad
   const adProductIds = sourceContext?.ad?.productIds || convo?.adProductIds;
   if (adProductIds?.length) {
     const flowFromProducts = await inferFlowFromProductIds(adProductIds);
@@ -561,13 +569,7 @@ async function detectFlow(classification, convo, userMessage, sourceContext) {
     return 'malla_sombra';
   }
 
-  // 8. WHOLESALE INDICATOR — "mayoreo" / "por mayor" etc. without a specific product keyword → rollo
-  if (isWholesaleInquiry(userMessage, convo)) {
-    console.log(`🏭 Wholesale inquiry detected without specific product — routing to rollo`);
-    return 'rollo';
-  }
-
-  // 9. DEFAULT
+  // 8. DEFAULT
   return 'default';
 }
 

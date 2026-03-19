@@ -262,8 +262,9 @@ function isWholesaleInquiry(message, convo = {}) {
   // Direct wholesale indicators
   const wholesalePatterns = /\b(mayoreo|distribuidor|grandes\s+cantidades|por\s+mayor|compra\s+grande|100\s*(piezas|rollos|unidades)|volumen|reventa|negocio|tienda|ferreteria|ferreter[ií]a)\b/i;
 
-  // Reseller intent — "quiero vender", "para vender", "empezar a vender"
-  const resellerPatterns = /\b(para\s+vender|quiero\s+vender|empezar\s+a\s+vender|vender\s+en\s+mi|incursionar.*vender|ser\s+distribuid|hacerme\s+distribuid|busco\s+proveed|soy\s+(vendedor|comerciante))\b/i;
+  // Reseller intent — "quiero vender", "para vender", "empezar a vender", "cartera de clientes",
+  // "me dedicaba a vender", "me interesa vender", "trabajo de vender"
+  const resellerPatterns = /\b(para\s+vender|quiero\s+vender|empezar\s+a\s+vender|vender\s+en\s+mi|incursionar.*vender|ser\s+distribuid|hacerme\s+distribuid|busco\s+proveed|soy\s+(vendedor|comerciante)|me\s+interesa\s+vender|interesa\s+vender|me\s+dedicaba?\s+(?:\w+\s+)*a\s+(?:producir|vender|distribuir)|trabajo\s+de\s+vender|cartera\s+de\s+clientes|tengo\s+clientes|revender|para\s+reventa|precio\s+de\s+distribuidor|precio\s+de\s+mayoreo|lista\s+de\s+precios?\s+(?:de\s+)?mayoreo|de\s+a\s*como\s+me\s+las?\s+dejar[ií]a)/i;
 
   return wholesalePatterns.test(cleanMsg) || resellerPatterns.test(cleanMsg) || convo.isWholesaleInquiry === true;
 }
