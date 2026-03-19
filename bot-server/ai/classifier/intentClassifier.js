@@ -5,6 +5,7 @@
 const { OpenAI } = require("openai");
 
 const openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
+const { handleOpenAIError, logOpenAISuccess } = require("../utils/openaiErrorHandler");
 const { isSendingTheirLocation } = require("../utils/locationIntent");
 
 // ========== INTENT CACHE FOR DB-DRIVEN INTENTS ==========
@@ -615,6 +616,7 @@ async function classifyMessage(message, sourceContext = null, conversationFlow =
     });
 
     const result = JSON.parse(response.choices[0].message.content);
+    logOpenAISuccess(); // fire-and-forget: clears error state in ApiHealth
 
     // Validate and normalize the result
     // Map unknown intents with dimensions to product_inquiry
@@ -680,6 +682,7 @@ async function classifyMessage(message, sourceContext = null, conversationFlow =
 
   } catch (error) {
     console.error(`❌ Classification error:`, error);
+    await handleOpenAIError(error, "intentClassifier");
 
     // Return a safe fallback
     return {

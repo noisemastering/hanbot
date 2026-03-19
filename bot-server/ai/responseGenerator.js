@@ -4,6 +4,7 @@
 
 const { OpenAI } = require("openai");
 const openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
+const { handleOpenAIError } = require("./utils/openaiErrorHandler");
 const { MAPS_URL, STORE_ADDRESS } = require("../businessInfoManager");
 
 /**
@@ -34,6 +35,7 @@ async function generateResponse({ intent, context, product, convo }) {
     return response.choices[0].message.content.trim();
   } catch (error) {
     console.error("❌ AI response generation failed:", error.message);
+    await handleOpenAIError(error, "responseGenerator");
     // Return null to let caller handle fallback
     return null;
   }

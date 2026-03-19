@@ -284,6 +284,8 @@ INSTRUCCIONES CRÍTICAS:
     return { text: cleanReply, isGeneric: false };
   } catch (err) {
     console.error("❌ Error in tryUnderstandMessage:", err);
+    const { handleOpenAIError } = require("../utils/openaiErrorHandler");
+    await handleOpenAIError(err, "fallback");
     return null;
   }
 }

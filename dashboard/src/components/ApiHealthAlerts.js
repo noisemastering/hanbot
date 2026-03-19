@@ -26,8 +26,10 @@ function ApiHealthAlerts() {
   const [dismissed, setDismissed] = useState({});
   const [loading, setLoading] = useState(true);
 
+  const isSuperAdmin = user?.role === 'super_admin' || user?.role === 'admin';
+
   const fetchAlerts = useCallback(async () => {
-    if (!user) return;
+    if (!user || !isSuperAdmin) return;
 
     try {
       const token = localStorage.getItem('token');
@@ -51,7 +53,7 @@ function ApiHealthAlerts() {
     } finally {
       setLoading(false);
     }
-  }, [user]);
+  }, [user, isSuperAdmin]);
 
   useEffect(() => {
     fetchAlerts();
@@ -69,7 +71,7 @@ function ApiHealthAlerts() {
   // Filter out dismissed alerts
   const visibleAlerts = alerts.filter(alert => !dismissed[alert.service]);
 
-  if (loading || visibleAlerts.length === 0) {
+  if (!isSuperAdmin || loading || visibleAlerts.length === 0) {
     return null;
   }
 
