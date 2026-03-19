@@ -3,14 +3,12 @@
 // Uses existing product utilities for search and tree climbing
 
 const { updateConversation } = require("../../conversationManager");
-const { checkCommonHandlers } = require("./commonHandlers");
 const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
 const { INTENTS } = require("../classifier");
 
-// AI escalation for unrecognized messages
-const { OpenAI } = require("openai");
-const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
+// AI fallback for flow dead-ends
+const { resolveWithAI } = require("../utils/flowFallback");
 
 // Dimension shape classifier — detects when dimensions suggest a different product
 const { classifyDimensionShape } = require("../utils/dimensionParsers");
@@ -70,110 +68,6 @@ async function getBordeWidth() {
   } catch (err) {
     console.error("Error fetching borde width:", err.message);
     return 13; // fallback
-  }
-}
-
-/**
- * AI escalation — handles questions/messages that regex can't parse.
- * Returns { length: N } if customer requested a specific length,
- *         { response: "..." } for answered questions,
- *         or null on failure.
- */
-async function escalateToAI(userMessage, convo) {
-  try {
-    const widthCm = await getBordeWidth();
-    const userName = convo?.userName || null;
-    const lastBotMsg = convo?.lastBotResponse || null;
-
-    // Gather available lengths + prices from DB
-    let catalogLines = '';
-    try {
-      const products = await findAllBordeProducts();
-      if (products.length > 0) {
-        catalogLines = products.map(p => {
-          const lenMatch = `${p.name || ''} ${p.size || ''}`.match(/(\d+)\s*m/i);
-          const len = lenMatch ? lenMatch[1] : '?';
-          return p.price ? `Rollo de ${len}m: $${Math.round(p.price)}` : `Rollo de ${len}m`;
-        }).join(', ');
-      }
-    } catch (e) { /* ignore */ }
-
-    let contextLines = [];
-    if (userName) contextLines.push(`Nombre del cliente: ${userName}`);
-    if (lastBotMsg) contextLines.push(`Último mensaje del bot: "${lastBotMsg.slice(0, 150)}"`);
-    if (catalogLines) contextLines.push(`Catálogo: ${catalogLines}`);
-    if (convo?.productSpecs?.borde_length) contextLines.push(`Largo seleccionado: ${convo.productSpecs.borde_length}m`);
-    const contextBlock = contextLines.length > 0 ? `\nCONTEXTO:\n${contextLines.join('\n')}\n` : '';
-
-    const response = await _openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: `Eres asesora de ventas de Hanlob, empresa mexicana fabricante de borde separador de jardín.
-${contextBlock}
-PRODUCTO: Borde separador de jardín.
-- Cinta plástica gruesa de ${widthCm}cm de alto para delimitar áreas de jardín
-- Sirve para delimitar pasto, crear caminos, separar zonas y contener grava
-- Resistente a la intemperie, de alta durabilidad
-- Se fija al suelo con estacas o clavos (se venden por separado)
-- Compra por Mercado Libre, envío incluido a todo México
-- Compra protegida: si no llega o llega diferente, Mercado Libre devuelve el dinero
-
-DATOS DEL NEGOCIO:
-- Somos fabricantes en Querétaro, más de 5 años vendiendo en Mercado Libre
-- WhatsApp: +52 442 595 7432
-- Horario: Lunes a Viernes 8am-6pm
-
-INSTRUCCIONES:
-1. Si el cliente PIDE un largo específico (18m, 54m, metros):
-   → { "type": "length", "length": <metros> }
-
-2. Si el cliente quiere hablar con una persona real, un especialista, asesor, o pide atención personalizada:
-   → { "type": "handoff" }
-
-3. Para cualquier otra cosa (pregunta, duda, confirmación, etc.):
-   → { "type": "response", "text": "<tu respuesta>" }
-   - Usa los datos de CONTEXTO y PRODUCTO para dar respuestas precisas
-   - Si preguntan precio: usa los precios del CATÁLOGO en CONTEXTO
-   - Si preguntan cómo se instala: estacas/clavos al suelo
-   - Si preguntan algo que no sabes: ofrece conectar con un especialista
-   - Siempre guía al siguiente paso (elegir largo, comprar)
-
-REGLAS:
-- Español mexicano, amable y conciso (2-4 oraciones)
-- USA los precios reales del CONTEXTO, NUNCA inventes
-- NUNCA incluyas URLs/links (el sistema los agrega después)
-- Solo devuelve JSON`
-        },
-        { role: "user", content: userMessage }
-      ],
-      temperature: 0.3,
-      max_tokens: 250,
-      response_format: { type: "json_object" }
-    });
-
-    const result = JSON.parse(response.choices[0].message.content);
-
-    if (result.type === 'length' && result.length) {
-      const len = parseInt(result.length);
-      if (len > 0 && len <= 200) {
-        return { length: len };
-      }
-    }
-
-    if (result.type === 'handoff') {
-      return { handoff: true };
-    }
-
-    if (result.type === 'response' && result.text) {
-      return { response: result.text };
-    }
-
-    return null;
-  } catch (err) {
-    console.error("❌ borde escalateToAI error:", err.message);
-    return null;
   }
 }
 
@@ -537,21 +431,10 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     };
   }
 
-  // ====== COMMON HANDLERS (inherited from master flow) ======
-  const commonResponse = await checkCommonHandlers(userMessage, convo, psid, {
-    flowType: 'borde_separador',
-    salesChannel: 'mercado_libre',
-    productName: 'borde separador de jardín',
-    installationNote: 'El borde separador se fija al suelo con estacas o clavos (se venden por separado).'
-  });
-  if (commonResponse) return commonResponse;
-
   // AD ENTRY CONFIRMATION — customer clicked ad, got greeting, says "me interesa" / "sí" / etc.
   // Look up the ad's main product directly and quote it.
-  // Exclude info requests ("quiero más información") — those should get product description, not a blind quote.
   if (convo?.adId && !convo?.lastQuotedProducts?.length) {
-    const isInfoRequest = /\b(informaci[oó]n|info|saber\s+m[aá]s|conocer|detalles)\b/i.test(userMessage);
-    const isInterest = !isInfoRequest && /\b(quiero|lo\s*quiero|la\s*quiero|me\s*interesa|s[ií]|ok|dale|va|esa|eso|mand[ae]|lo\s*llevo|compro|claro|perfecto|[oó]rale|sim[oó]n)\b/i.test(userMessage);
+    const isInterest = /\b(quiero|lo\s*quiero|la\s*quiero|me\s*interesa|s[ií]|ok|dale|va|esa|eso|mand[ae]|lo\s*llevo|compro|claro|perfecto|[oó]rale|sim[oó]n)\b/i.test(userMessage);
     if (isInterest && (convo?.lastIntent === 'ad_entry' || convo?.lastIntent === 'greeting' || convo?.lastIntent === 'borde_start')) {
       try {
         const { resolveByAdId } = require("../../utils/campaignResolver");
@@ -711,8 +594,6 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     };
   }
 
-  // Trust, pay-on-delivery, phone, location, farewell — handled by commonHandlers (master flow)
-
   // HEIGHT / WIDTH DIMENSION QUESTIONS — "De qué alto es?", "Qué ancho tiene?"
   if (userMessage && /\b(alto|altura|ancho|anchura|grosor|qu[eé]\s+mide|medida\s+de\s+(alto|ancho)|qu[eé]\s+tan\s+(alto|ancho)|de\s+qu[eé]\s+(alto|ancho)|cu[aá]nto\s+mide\s+de\s+(alto|ancho))\b/i.test(userMessage) &&
       !/\b(largo|longitud|metros?\s+lineal|rollo)\b/i.test(userMessage)) {
@@ -734,9 +615,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   }
 
   // PRODUCT INQUIRY / DESCRIPTION — what is borde separador?
-  // Also catch "más información", "quiero info", "qué es", etc. regardless of classified intent
-  const isProductInfoRequest = /\b(m[aá]s\s+informaci[oó]n|informaci[oó]n|info|saber\s+m[aá]s|qu[eé]\s+es|de\s+qu[eé]\s+se\s+trata|quiero\s+(?:m[aá]s\s+)?(?:info|informaci[oó]n|saber|conocer)|c[oó]mo\s+(?:es|funciona)|para\s+qu[eé]\s+(?:es|sirve)|detalles)\b/i.test(userMessage);
-  if (intent === INTENTS.PRODUCT_INQUIRY || intent === INTENTS.DETAILS_REQUEST || isProductInfoRequest) {
+  if (intent === INTENTS.PRODUCT_INQUIRY || intent === INTENTS.DETAILS_REQUEST) {
     const widthCm = await getBordeWidth();
     const products = await findMatchingProducts(null, adProductIds);
     const lengthsWithPrices = availableLengths.map(l => {
@@ -1028,55 +907,37 @@ async function handleAwaitingLength(intent, state, sourceContext, availableLengt
     };
   }
 
-  // ====== AI ESCALATION before static response ======
-  if (userMessage && psid) {
-    const aiResult = await escalateToAI(userMessage, convo);
+  // ====== AI FALLBACK before static response ======
+  if (userMessage && psid && convo?.lastQuotedProducts?.length > 0) {
+    const aiResult = await resolveWithAI({
+      psid,
+      userMessage,
+      flowType: 'borde',
+      stage: 'awaiting_length',
+      basket: convo?.productSpecs,
+      lastQuotedProducts: convo.lastQuotedProducts
+    });
 
-    if (aiResult?.handoff) {
-      const { executeHandoff } = require('../utils/executeHandoff');
-      return await executeHandoff(psid, convo, userMessage, {
-        reason: `Cliente en flujo borde pidió hablar con especialista: "${userMessage.substring(0, 80)}"`,
-        responsePrefix: 'Con gusto te comunico con un especialista.',
-        lastIntent: 'human_escalation',
-        timingStyle: 'elaborate'
-      });
-    }
-
-    if (aiResult?.length) {
-      // AI parsed a length — set it and let stage handler continue
-      if (availableLengths.includes(aiResult.length)) {
-        console.log(`🌱 Borde AI escalation parsed length: ${aiResult.length}m`);
-        // Return null to fall through — caller will re-determine stage with new length
-        // Instead, build the quote directly
-        const matchProducts = await findMatchingProducts(aiResult.length, adProductIds);
-        const matchProduct = matchProducts[0];
-        if (matchProduct?.price) {
-          const productUrl = matchProduct.onlineStoreLinks?.find(l => l.isPreferred)?.url || matchProduct.onlineStoreLinks?.[0]?.url;
-          if (productUrl) {
-            const trackedLink = await generateClickLink(psid, productUrl, {
-              productName: matchProduct.name, productId: matchProduct._id,
-              city: convo?.city, stateMx: convo?.stateMx
-            });
-            await updateConversation(psid, {
-              lastIntent: 'borde_complete',
-              lastSharedProductId: matchProduct._id?.toString(),
-              lastSharedProductLink: productUrl,
-              lastQuotedProducts: [{ displayText: `Borde ${aiResult.length}m`, price: matchProduct.price, productId: matchProduct._id?.toString(), productUrl, productName: matchProduct.name }],
-              unknownCount: 0,
-              productSpecs: { productType: 'borde_separador', borde_length: aiResult.length, quantity: 1, flowCompleted: true, updatedAt: new Date() }
-            });
-            return {
-              type: "text",
-              text: `¡Con gusto! Rollo de ${aiResult.length}m a ${formatMoney(matchProduct.price)} con envío incluido.\n\n🛒 Cómpralo aquí:\n${trackedLink}`
-            };
-          }
+    if (aiResult.confidence >= 0.7) {
+      if (aiResult.action === 'select_one' && convo.lastQuotedProducts[aiResult.selectedIndex]) {
+        const prod = convo.lastQuotedProducts[aiResult.selectedIndex];
+        if (prod.productUrl) {
+          const trackedLink = await generateClickLink(psid, prod.productUrl, {
+            productName: prod.productName || prod.displayText,
+            productId: prod.productId
+          });
+          await updateConversation(psid, { lastIntent: 'borde_complete', unknownCount: 0, lastQuotedProducts: null });
+          return {
+            type: "text",
+            text: `¡Perfecto! Aquí tienes el link de compra:\n\n• ${prod.displayText} — ${formatMoney(prod.price)}\n  🛒 ${trackedLink}\n\nEl envío está incluido.`
+          };
         }
       }
-    }
 
-    if (aiResult?.response) {
-      await updateConversation(psid, { lastIntent: 'borde_ai_answered', unknownCount: 0 });
-      return { type: "text", text: aiResult.response };
+      if (aiResult.action === 'answer_question' && aiResult.text) {
+        await updateConversation(psid, { lastIntent: 'borde_ai_answered', unknownCount: 0 });
+        return { type: "text", text: aiResult.text };
+      }
     }
   }
 

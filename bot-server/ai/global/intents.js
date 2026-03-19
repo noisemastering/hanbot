@@ -976,10 +976,9 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   // 📞 PHONE NUMBER REQUEST - "tienes teléfono?", "número para llamar", "me pueden llamar"
   // Simple contact info request - just give them the phone!
-  if ((/\b(tel[eé]fon\w*|whatsapp|celular)\b/i.test(msg) ||
-       /\b(nu?m(ero)?)\s*(de\s*)?(tel[eé]fon\w*|contacto|celular)\b/i.test(msg)) &&
-      (/\b(tienen|tendr[aá]n?|hay|cu[aá]l|dame|p[aá]same|me\s+(dan|das|pasan?|compartes?)|mandar?|mand[ae]|env[ií]a)\b/i.test(msg) ||
-       /\b(para\s*(llamar|contactar|hablar|comunicar|ver|aber))\b/i.test(msg) ||
+  if (/\b(tel[eé]fono|n[uú]mero|llamar|contacto|whatsapp|celular)\b/i.test(msg) &&
+      (/\b(tienen|tendr[aá]n?|hay|cu[aá]l|dame|p[aá]same|me\s+(dan|das|pasan?|compartes?))\b/i.test(msg) ||
+       /\b(para\s+(llamar|contactar|hablar|comunicar))\b/i.test(msg) ||
        /\b(me\s+pueden\s+llamar|pueden\s+llamar|ll[aá]m[ae]me)\b/i.test(msg) ||
        /\bno\s+tendr[aá]/i.test(msg))) {  // "No tendrá un número de teléfono"
 

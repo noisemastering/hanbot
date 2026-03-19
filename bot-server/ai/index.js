@@ -392,8 +392,31 @@ async function generateReply(userMessage, psid, referral = null) {
     convo.adMainProductName = sourceContext.ad.productName;
     console.log(`🎯 Ad main product name stored: ${sourceContext.ad.productName}`);
   }
+  // Set currentFlow from ad context so the ad's flow governs the whole conversation
+  // Skip if already in reseller flow (wholesale inquiry takes priority over product flow)
+  if ((!convo.currentFlow || convo.currentFlow === 'default') && !convo.isWholesaleInquiry) {
+    const adProduct = sourceContext?.ad?.product || '';
+    let adFlow = null;
+    if (adProduct.startsWith('malla_sombra') || adProduct === 'confeccionada') {
+      adFlow = 'malla_sombra';
+    } else if (adProduct.startsWith('rollo')) {
+      adFlow = 'rollo';
+    } else if (adProduct.startsWith('borde')) {
+      adFlow = 'borde_separador';
+    } else if (adProduct.startsWith('ground') || adProduct === 'groundcover') {
+      adFlow = 'groundcover';
+    } else if (adProduct.startsWith('mono')) {
+      adFlow = 'monofilamento';
+    }
+    if (adFlow) {
+      await updateConversation(psid, { currentFlow: adFlow });
+      convo.currentFlow = adFlow;
+      console.log(`🎯 currentFlow set from ad product: ${adProduct} → ${adFlow}`);
+    }
+  }
+  // ====== END LAYER 0 ======
+
   // ====== LOAD CAMPAIGN CONTEXT ======
-  // Load campaign BEFORE setting currentFlow — audience type (reseller) must be known first
   let campaign = null;
   let campaignContext = null;
 
@@ -441,8 +464,8 @@ async function generateReply(userMessage, psid, referral = null) {
   // ====== END CAMPAIGN CONTEXT ======
 
   // ====== AUTO-FLAG WHOLESALE FROM AD/CAMPAIGN AUDIENCE ======
-  // Must run BEFORE ad product flow assignment — reseller audience overrides product-based routing
   if (!convo.isWholesaleInquiry && campaign) {
+    // Check campaign audience (inherits: Ad > AdSet > Campaign)
     const audienceType = sourceContext?.ad?.campaignAudience?.type || campaign.audience?.type;
     if (audienceType === 'reseller') {
       await updateConversation(psid, { isWholesaleInquiry: true, currentFlow: 'reseller' });
@@ -451,30 +474,6 @@ async function generateReply(userMessage, psid, referral = null) {
       console.log(`🏪 Reseller audience detected from campaign "${campaign.name}" — routing to reseller flow`);
     }
   }
-
-  // Set currentFlow from ad context so the ad's flow governs the whole conversation
-  // Skip if already set (reseller audience takes priority over product flow)
-  if ((!convo.currentFlow || convo.currentFlow === 'default') && !convo.isWholesaleInquiry) {
-    const adProduct = sourceContext?.ad?.product || '';
-    let adFlow = null;
-    if (adProduct.startsWith('malla_sombra') || adProduct === 'confeccionada') {
-      adFlow = 'malla_sombra';
-    } else if (adProduct.startsWith('rollo')) {
-      adFlow = 'rollo';
-    } else if (adProduct.startsWith('borde')) {
-      adFlow = 'borde_separador';
-    } else if (adProduct.startsWith('ground') || adProduct === 'groundcover') {
-      adFlow = 'groundcover';
-    } else if (adProduct.startsWith('mono')) {
-      adFlow = 'monofilamento';
-    }
-    if (adFlow) {
-      await updateConversation(psid, { currentFlow: adFlow });
-      convo.currentFlow = adFlow;
-      console.log(`🎯 currentFlow set from ad product: ${adProduct} → ${adFlow}`);
-    }
-  }
-  // ====== END LAYER 0 ======
 
   // ====== PRODUCT IDENTIFICATION & POI LOCK ======
   // Try to identify product from message content
@@ -573,16 +572,10 @@ async function generateReply(userMessage, psid, referral = null) {
   }
   // ====== END LINK NOT WORKING DETECTION ======
 
-  // When conversation is in an active product flow, the flow handles everything —
-  // skip generic pre-checks that would bypass flow-specific responses.
-  const hasActiveFlow = convo?.currentFlow && convo.currentFlow !== 'default';
-
   // ====== TRUST / SCAM CONCERN PRE-CHECK ======
-  // When a customer expresses fear of being scammed, reassure with ML buyer protection.
-  // Skip when in a product flow — the flow's AI escalation gives a product-aware trust response
-  // (e.g. rollos are direct sales, not ML, so the generic ML response would be wrong).
+  // When a customer expresses fear of being scammed, reassure with ML buyer protection
   const trustConcernPattern = /\b(estaf\w*|me\s+robaron|fraude|timo|enga[ñn]\w*|desconfian\w*|no\s+conf[ií]\w*|conf[ií]ar|conf[ií]able|miedo|me\s+da\s+pendiente|es\s+segur[oa]|ser[áa]\s+segur[oa]|le\s+pienso|le\s+pienzo)\b/i;
-  if (!hasActiveFlow && trustConcernPattern.test(userMessage)) {
+  if (trustConcernPattern.test(userMessage)) {
     console.log(`🛡️ Trust/scam concern detected, reassuring with ML buyer protection`);
     const { updateConversation } = require("../conversationManager");
     await updateConversation(psid, { lastIntent: "trust_concern_addressed" });
@@ -595,9 +588,9 @@ async function generateReply(userMessage, psid, referral = null) {
 
   // ====== PAY ON DELIVERY PRE-CHECK ======
   // Regex safety net: if user clearly asks about cash-on-delivery, force pay_on_delivery_query
-  // Skip when in a product flow — flows have their own payment handlers with product-aware responses
+  // This prevents misclassification as generic payment_query (which doesn't say NO)
   const payOnDeliveryPattern = /\b(pago\s+(al\s+)?(recibir|entregar?)|contra\s*entrega|contraentrega|cuando\s+llegue\s+pago|al\s+recibir|la\s+pago\s+al\s+entregar|se\s+paga\s+al\s+(recibir|entregar?)|cobr[ao]\s+al\s+(recibir|entregar?))\b/i;
-  if (!hasActiveFlow && payOnDeliveryPattern.test(userMessage) && classification.intent !== INTENTS.MULTI_QUESTION) {
+  if (payOnDeliveryPattern.test(userMessage) && classification.intent !== INTENTS.MULTI_QUESTION) {
     // For multi-question messages, let the multi-question handler combine contra-entrega
     // with other responses (e.g., confirmation + payment). Only intercept single-intent messages.
     console.log(`💳 Pay-on-delivery question detected via regex, forcing explicit NO`);
@@ -609,13 +602,10 @@ async function generateReply(userMessage, psid, referral = null) {
 
   // ====== INTENT DB HANDLING ======
   // Check if intent has a DB-configured response (auto_response, human_handoff, or ai_generate guidance)
-  // Skip when in a product flow — the flow is the primary handler, DB intents should not intercept
-  if (!hasActiveFlow) {
-    const intentResponse = await handleIntentFromDB(classification.intent, classification, psid, convo, userMessage);
-    if (intentResponse) {
-      console.log(`✅ Intent handled by DB config (${intentResponse.handledBy})`);
-      return await checkForRepetition(intentResponse, psid, convo);
-    }
+  const intentResponse = await handleIntentFromDB(classification.intent, classification, psid, convo, userMessage);
+  if (intentResponse) {
+    console.log(`✅ Intent handled by DB config (${intentResponse.handledBy})`);
+    return await checkForRepetition(intentResponse, psid, convo);
   }
   // ====== END INTENT DB HANDLING ======
 

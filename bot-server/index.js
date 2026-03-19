@@ -115,7 +115,6 @@ const intentsRoutes = require('./routes/intentsRoutes');
 const intentCategoriesRoutes = require('./routes/intentCategoriesRoutes');
 const flowsRoutes = require('./routes/flowsRoutes');
 const uploadsRoutes = require('./routes/uploadsRoutes');
-const crmRoutes = require('./routes/crmRoutes');
 
 // Auth routes (no prefix, will be /auth/login, /auth/me, etc.)
 app.use('/auth', authRoutes);
@@ -146,7 +145,6 @@ app.use('/intents', intentsRoutes);
 app.use('/intent-categories', intentCategoriesRoutes);
 app.use('/flows', flowsRoutes);
 app.use('/uploads', uploadsRoutes);
-app.use('/crm', crmRoutes);
 
 // ============================================
 // Global Error Handler (returns JSON, not HTML)
@@ -1215,26 +1213,6 @@ app.post("/webhook", async (req, res) => {
         const adFlowRef = resolvedSettings?.flowRef;
         const adCurrentFlow = isResellerAd ? 'reseller' : (adFlowRef || adProductInterest);
         if (adProductInterest) {
-          // Guard: if the bot already greeted/responded recently (concurrent webhook from
-          // the same ad/post reply), skip the greeting to avoid double-responding
-          const freshConvo = await getConversation(senderPsid);
-          const msSinceGreet = freshConvo?.lastGreetTime
-            ? (Date.now() - new Date(freshConvo.lastGreetTime).getTime())
-            : Infinity;
-          const msSinceMessage = freshConvo?.lastMessageAt
-            ? (Date.now() - new Date(freshConvo.lastMessageAt).getTime())
-            : Infinity;
-          // If greeted in last 2 min OR a message exchange happened in last 2 min, skip greeting
-          if (msSinceGreet < 120000 || (msSinceMessage < 120000 && freshConvo?.lastIntent && freshConvo.lastIntent !== 'ad_entry')) {
-            console.log(`🛡️ Bot already active (greet=${(msSinceGreet / 1000).toFixed(0)}s, msg=${(msSinceMessage / 1000).toFixed(0)}s, intent=${freshConvo?.lastIntent}), skipping ad greeting for ${senderPsid}`);
-            // Still set product interest / flow context, just don't send the greeting
-            const adConvoUpdate = { productInterest: adProductInterest, currentFlow: adCurrentFlow, adFlowRef: adFlowRef || null, greeted: true, lastGreetTime: Date.now() };
-            if (adMainProductName) adConvoUpdate.adMainProductName = adMainProductName;
-            const adMainProductId = resolvedSettings?.mainProductId || resolvedSettings?.productIds?.[0];
-            if (adMainProductId) adConvoUpdate.adMainProductId = adMainProductId.toString();
-            await updateConversation(senderPsid, adConvoUpdate);
-            adGreetingSent = true;
-          } else {
           const adConvoUpdate = { productInterest: adProductInterest, currentFlow: adCurrentFlow, adFlowRef: adFlowRef || null, greeted: true, lastGreetTime: Date.now() };
           if (adMainProductName) adConvoUpdate.adMainProductName = adMainProductName;
           const adMainProductId = resolvedSettings?.mainProductId || resolvedSettings?.productIds?.[0];
@@ -1242,7 +1220,6 @@ app.post("/webhook", async (req, res) => {
           await updateConversation(senderPsid, adConvoUpdate);
           await callSendAPI(senderPsid, { text: adGreeting });
           adGreetingSent = true;
-          }
         } else if (referral.ad_id) {
           // Ad click but couldn't determine product - generic greeting
           console.log(`⚠️ Could not determine product for ad_id: ${referral.ad_id}`);

@@ -3,15 +3,13 @@
 // Uses existing product utilities for search and tree climbing
 
 const { updateConversation } = require("../../conversationManager");
-const { checkCommonHandlers } = require("./commonHandlers");
 const ProductFamily = require("../../models/ProductFamily");
 const ZipCode = require("../../models/ZipCode");
 const { INTENTS } = require("../classifier");
 const { parseAndLookupZipCode: sharedParseAndLookupZipCode } = require("../utils/preHandoffCheck");
 
-// AI escalation for unrecognized messages
-const { OpenAI } = require("openai");
-const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
+// AI fallback for flow dead-ends
+const { resolveWithAI } = require("../utils/flowFallback");
 
 // Dimension shape classifier — detects when dimensions suggest a different product
 const { classifyDimensionShape } = require("../utils/dimensionParsers");
@@ -130,130 +128,6 @@ function buildTypeFilter(rolloType) {
         size: /\d+x100/i,
         name: { $not: /groundcover|antimaleza|monofilamento/i }
       };
-  }
-}
-
-/**
- * AI escalation — handles questions/messages that regex can't parse.
- * Returns { width: N } or { percentage: N } or { response: "..." } or null.
- */
-async function escalateToAI(userMessage, convo) {
-  try {
-    const rolloType = convo?.productSpecs?.rolloType || ROLLO_TYPES.MALLA_SOMBRA;
-    const typeInfo = TYPE_DISPLAY[rolloType] || TYPE_DISPLAY.malla_sombra;
-    const userName = convo?.userName || null;
-    const lastBotMsg = convo?.lastBotResponse || null;
-
-    // Gather available widths and percentages for context
-    let catalogInfo = '';
-    try {
-      const widths = await getAvailableWidths(rolloType);
-      const pcts = typeInfo.hasPercentage ? await getAvailablePercentages(rolloType) : [];
-      catalogInfo = `Anchos disponibles: ${widths.join(', ')}m.`;
-      if (pcts.length > 0) catalogInfo += ` Porcentajes de sombra: ${pcts.join(', ')}%.`;
-      catalogInfo += ' Todos los rollos son de 100 metros lineales.';
-    } catch (e) { /* ignore */ }
-
-    let contextLines = [];
-    if (userName) contextLines.push(`Nombre del cliente: ${userName}`);
-    if (lastBotMsg) contextLines.push(`Último mensaje del bot: "${lastBotMsg.slice(0, 150)}"`);
-    if (catalogInfo) contextLines.push(catalogInfo);
-    if (convo?.productSpecs?.width) contextLines.push(`Ancho seleccionado: ${convo.productSpecs.width}m`);
-    if (convo?.productSpecs?.percentage) contextLines.push(`Porcentaje seleccionado: ${convo.productSpecs.percentage}%`);
-    if (convo?.productSpecs?.quantity) contextLines.push(`Cantidad: ${convo.productSpecs.quantity} rollo(s)`);
-    const contextBlock = contextLines.length > 0 ? `\nCONTEXTO:\n${contextLines.join('\n')}\n` : '';
-
-    const productBlock = rolloType === ROLLO_TYPES.GROUNDCOVER
-      ? `PRODUCTO: Malla antimaleza (groundcover).
-- Tela tejida para control de maleza en jardines, invernaderos y cultivos
-- Permite el paso del agua pero bloquea la luz solar para evitar el crecimiento de hierba
-- Rollos de 100 metros lineales
-- La compra es directa con nosotros (no por Mercado Libre), se requiere código postal para cotizar envío`
-      : rolloType === ROLLO_TYPES.MONOFILAMENTO
-      ? `PRODUCTO: Malla monofilamento.
-- Malla tejida de hilo monofilamento para protección y sombreado
-- Rollos de 100 metros lineales
-- La compra es directa con nosotros (no por Mercado Libre), se requiere código postal para cotizar envío`
-      : `PRODUCTO: Rollo de malla sombra raschel.
-- Malla sombra para uso agrícola, industrial o de proyecto a gran escala
-- Diferentes porcentajes de sombra según necesidad (35% a 90%)
-- Protección UV, alta durabilidad
-- Rollos de 100 metros lineales
-- La compra es directa con nosotros (no por Mercado Libre), se requiere código postal para cotizar envío
-- Somos fabricantes en Querétaro`;
-
-    const response = await _openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: `Eres asesora de ventas de Hanlob, empresa mexicana fabricante de malla sombra.
-${contextBlock}
-${productBlock}
-
-DATOS DEL NEGOCIO:
-- Somos fabricantes en Querétaro, más de 5 años en el mercado
-- WhatsApp: +52 442 595 7432
-- Horario: Lunes a Viernes 8am-6pm
-
-INSTRUCCIONES:
-1. Si el cliente PIDE un ancho específico (2m, 4m, etc.):
-   → { "type": "width", "width": <metros> }
-
-2. Si el cliente PIDE un porcentaje de sombra:
-   → { "type": "percentage", "percentage": <número> }
-
-3. Si el cliente quiere hablar con una persona real, un especialista, asesor, o pide atención personalizada:
-   → { "type": "handoff" }
-
-4. Para cualquier otra cosa (pregunta, duda, confirmación, etc.):
-   → { "type": "response", "text": "<tu respuesta>" }
-   - Usa los datos de CONTEXTO y PRODUCTO
-   - Si preguntan precio: explica que necesitas saber el ancho, porcentaje y código postal para cotizar
-   - Si preguntan algo que no sabes: ofrece conectar con un especialista
-   - Siempre guía al siguiente paso (elegir ancho, porcentaje, dar código postal)
-
-REGLAS:
-- Español mexicano, amable y conciso (2-4 oraciones)
-- NUNCA inventes precios (rollos se cotizan, no tienen precio fijo en línea)
-- NUNCA incluyas URLs/links (el sistema los agrega después)
-- Solo devuelve JSON`
-        },
-        { role: "user", content: userMessage }
-      ],
-      temperature: 0.3,
-      max_tokens: 250,
-      response_format: { type: "json_object" }
-    });
-
-    const result = JSON.parse(response.choices[0].message.content);
-
-    if (result.type === 'width' && result.width) {
-      const w = parseFloat(result.width);
-      if (w > 0 && w <= 20) {
-        return { width: w };
-      }
-    }
-
-    if (result.type === 'percentage' && result.percentage) {
-      const pct = parseInt(result.percentage);
-      if (pct > 0 && pct <= 100) {
-        return { percentage: pct };
-      }
-    }
-
-    if (result.type === 'handoff') {
-      return { handoff: true };
-    }
-
-    if (result.type === 'response' && result.text) {
-      return { response: result.text };
-    }
-
-    return null;
-  } catch (err) {
-    console.error("❌ rollo escalateToAI error:", err.message);
-    return null;
   }
 }
 
@@ -486,7 +360,6 @@ function getFlowState(convo) {
     rolloType,
     width: specs.width || null,
     percentage: specs.percentage || null,
-    percentages: specs.percentages || (specs.percentage ? [specs.percentage] : null),
     quantity: specs.quantity || null,
     color: specs.color || null,
     zipCode: convo?.zipCode || null
@@ -528,15 +401,6 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       text: "La compra es directa con nosotros (no por Mercado Libre). Para cotizarte necesito el ancho del rollo y tu código postal. ¿Qué medida te interesa?"
     };
   }
-
-  // ====== COMMON HANDLERS (inherited from master flow) ======
-  const commonResponse = await checkCommonHandlers(userMessage, convo, psid, {
-    flowType: 'rollo',
-    salesChannel: 'direct',
-    productName: 'rollo de malla sombra',
-    installationNote: null
-  });
-  if (commonResponse) return commonResponse;
 
   let state = getFlowState(convo);
 
@@ -619,41 +483,32 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     }
   }
 
-  // Extract percentage(s) — supports single ("del 90") and multiple ("70% y 90%")
-  // state.percentage = primary (first) percentage, state.percentages = array of all requested
+  // Extract percentage — classifier entities first, regex fallback
   if (!state.percentage && entities.percentage) {
     state.percentage = entities.percentage;
-    state.percentages = [entities.percentage];
     console.log(`📦 Rollo flow - Using classifier entity percentage: ${entities.percentage}%`);
   }
-  // Regex fallback: parse percentage(s) from user message
+  // Regex fallback: parse percentage from user message - both numeric and natural language
   if (!state.percentage && userMessage) {
-    const parsedPcts = [];
-
-    // Extract ALL numbers that look like percentages from the message
-    // "70% y 90%", "del 70 al 90", "70, 80 y 90", "de 70 a 90%"
-    const allNumbers = [...userMessage.matchAll(/\b(\d{2,3})\s*(%|porciento|por\s*ciento)?\b/gi)];
-    for (const m of allNumbers) {
-      const pct = parseInt(m[1]);
-      if (VALID_PERCENTAGES.includes(pct) && !parsedPcts.includes(pct)) {
-        parsedPcts.push(pct);
+    // "del 90", "al 70", "del 50" — common natural phrasing without % suffix
+    const delMatch = userMessage.match(/\b(?:del|al)\s+(\d{2,3})\b/i);
+    if (delMatch) {
+      const pct = parseInt(delMatch[1]);
+      if (VALID_PERCENTAGES.includes(pct)) {
+        console.log(`📦 Rollo flow - Parsed "del/al" percentage: ${pct}%`);
+        state.percentage = pct;
       }
     }
 
-    // Also try "del/al X" patterns without % suffix
-    const delMatches = [...userMessage.matchAll(/\b(?:del|al)\s+(\d{2,3})\b/gi)];
-    for (const m of delMatches) {
-      const pct = parseInt(m[1]);
-      if (VALID_PERCENTAGES.includes(pct) && !parsedPcts.includes(pct)) {
-        parsedPcts.push(pct);
+    // Try numeric percentage: "35%", "al 50%", "50 porciento"
+    // IMPORTANT: Require % or porciento suffix to avoid matching dimensions like "4.20"
+    const numericMatch = !state.percentage && userMessage.match(/\b(\d{2,3})\s*(%|porciento|por\s*ciento)/i);
+    if (numericMatch) {
+      const pct = parseInt(numericMatch[1]);
+      if (pct >= 10 && pct <= 100) {
+        console.log(`📦 Rollo flow - Parsed percentage from message: ${pct}%`);
+        state.percentage = pct;
       }
-    }
-
-    if (parsedPcts.length > 0) {
-      parsedPcts.sort((a, b) => a - b);
-      state.percentage = parsedPcts[0];
-      state.percentages = parsedPcts;
-      console.log(`📦 Rollo flow - Parsed percentage(s): ${parsedPcts.map(p => p + '%').join(', ')}`);
     }
 
     // When awaiting percentage, accept bare numbers (e.g., "50", "35", "90")
@@ -664,7 +519,6 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
         if (pct >= 10 && pct <= 100) {
           console.log(`📦 Rollo flow - Bare number accepted as percentage (awaiting): ${pct}%`);
           state.percentage = pct;
-          state.percentages = [pct];
         }
       }
     }
@@ -675,13 +529,11 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       if (/\b(menos\s*sombra|menor\s*sombra|poca\s*sombra|m[aá]s\s*delgad[oa]|delgad[oa]|m[aá]s\s*fin[oa]|fin[oa])\b/i.test(userMessage)) {
         console.log(`📦 Rollo flow - Natural language "menos sombra/delgado" → 35%`);
         state.percentage = 35;
-        state.percentages = [35];
       }
       // "mas sombra", "mas grueso", "mayor", "mucha sombra" → 90%
       else if (/\b(m[aá]s\s*sombra|mayor\s*sombra|mucha\s*sombra|m[aá]s\s*grues[oa]|grues[oa]|m[aá]s\s*denso|denso)\b/i.test(userMessage)) {
         console.log(`📦 Rollo flow - Natural language "mas sombra/grueso" → 90%`);
         state.percentage = 90;
-        state.percentages = [90];
       }
     }
   }
@@ -873,10 +725,8 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
   // ====== AD ENTRY CONFIRMATION: customer clicked ad, says "me interesa" / "sí" ======
   // Look up the ad's main product and show price, then ask for zip code.
-  // Exclude info requests ("quiero más información") — those should get product description, not a blind quote.
   if (convo?.adId && !convo?.lastQuotedProducts?.length && userMessage) {
-    const isInfoRequest = /\b(informaci[oó]n|info|saber\s+m[aá]s|conocer|detalles)\b/i.test(userMessage);
-    const isInterest = !isInfoRequest && /\b(quiero|lo\s*quiero|la\s*quiero|me\s*interesa|s[ií]|ok|dale|va|esa|eso|mand[ae]|compro|claro|perfecto|[oó]rale|sim[oó]n)\b/i.test(userMessage);
+    const isInterest = /\b(quiero|lo\s*quiero|la\s*quiero|me\s*interesa|s[ií]|ok|dale|va|esa|eso|mand[ae]|compro|claro|perfecto|[oó]rale|sim[oó]n)\b/i.test(userMessage);
     if (isInterest && (convo?.lastIntent === 'ad_entry' || convo?.lastIntent === 'greeting' || convo?.lastIntent === 'roll_start')) {
       try {
         const { resolveByAdId } = require("../../utils/campaignResolver");
@@ -929,31 +779,30 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     }
   }
 
-  // Trust, pay-on-delivery, phone, location, farewell — handled by commonHandlers (master flow)
+  // ====== AI FALLBACK: when quoted products exist and regex couldn't parse ======
+  if (!confirmationHandled && convo?.lastQuotedProducts?.length > 0 && userMessage) {
+    const aiResult = await resolveWithAI({
+      psid,
+      userMessage,
+      flowType: 'rollo',
+      stage: convo?.lastIntent || stage,
+      basket: convo?.productSpecs,
+      lastQuotedProducts: convo.lastQuotedProducts
+    });
 
-  // ====== AI ESCALATION: when regex couldn't parse the message ======
-  if (!confirmationHandled && userMessage) {
-    const aiResult = await escalateToAI(userMessage, convo);
+    if (aiResult.confidence >= 0.7) {
+      if (aiResult.action === 'select_one' && convo.lastQuotedProducts[aiResult.selectedIndex]) {
+        // Customer confirmed a product — default quantity to 1 if not set, clear quoted products
+        // so the stage handler advances (asks for zip, then hands off)
+        if (!state.quantity) state.quantity = 1;
+        await updateConversation(psid, { unknownCount: 0, lastQuotedProducts: null });
+        // Fall through to stage handler below
+      }
 
-    if (aiResult?.handoff) {
-      const { executeHandoff } = require('../utils/executeHandoff');
-      return await executeHandoff(psid, convo, userMessage, {
-        reason: `Cliente en flujo rollo pidió hablar con especialista: "${userMessage.substring(0, 80)}"`,
-        responsePrefix: 'Con gusto te comunico con un especialista.',
-        lastIntent: 'human_escalation',
-        timingStyle: 'elaborate'
-      });
-    } else if (aiResult?.width) {
-      console.log(`🔄 Rollo AI escalation parsed width: ${aiResult.width}m`);
-      state.width = aiResult.width;
-      // Fall through to stage handler which will ask for percentage/quantity/zip
-    } else if (aiResult?.percentage) {
-      console.log(`🔄 Rollo AI escalation parsed percentage: ${aiResult.percentage}%`);
-      state.percentage = aiResult.percentage;
-      // Fall through to stage handler
-    } else if (aiResult?.response) {
-      await updateConversation(psid, { lastIntent: 'roll_ai_answered', unknownCount: 0 });
-      return { type: "text", text: aiResult.response };
+      if (aiResult.action === 'answer_question' && aiResult.text) {
+        await updateConversation(psid, { lastIntent: 'roll_ai_answered', unknownCount: 0 });
+        return { type: "text", text: aiResult.text };
+      }
     }
   }
 
@@ -1001,7 +850,6 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
       width: state.width,
       length: 100,
       percentage: state.percentage,
-      percentages: state.percentages || (state.percentage ? [state.percentage] : []),
       quantity: state.quantity,
       color: state.color,
       updatedAt: new Date()
@@ -1187,14 +1035,12 @@ async function handleAwaitingPercentage(intent, state, sourceContext) {
   const rolloType = state.rolloType || ROLLO_TYPES.MALLA_SOMBRA;
   const typeInfo = TYPE_DISPLAY[rolloType] || TYPE_DISPLAY.malla_sombra;
 
-  const sizeDisplay = `${state.width}m x 100m`;
-
   try {
     const catalog = await buildRolloCatalog(rolloType, state.width);
     if (catalog) {
       return {
         type: "text",
-        text: `Para el rollo de ${sizeDisplay} te ofrecemos diferentes porcentajes de sombra:\n\n${catalog}\n\n¿Qué porcentaje(s) necesitas?`
+        text: `Rollo de ${typeInfo.name} de ${state.width}m x 100m disponible en:\n\n${catalog}\n\n¿Cuál porcentaje te interesa?`
       };
     }
   } catch (err) {
@@ -1202,16 +1048,15 @@ async function handleAwaitingPercentage(intent, state, sourceContext) {
   }
 
   const percentages = await getAvailablePercentages(rolloType, state.width);
-  const pctList = percentages.map(p => `${p}%`).join(', ');
+  const pctBullets = percentages.map(p => `• ${p}%`).join('\n');
   return {
     type: "text",
-    text: `Para el rollo de ${sizeDisplay} te ofrecemos diferentes porcentajes de sombra: ${pctList}.\n\n¿Qué porcentaje(s) necesitas?`
+    text: `Perfecto, rollo de ${typeInfo.name} de ${state.width}m x 100m.\n\nLo tenemos en:\n${pctBullets}\n\n¿Qué porcentaje necesitas?`
   };
 }
 
 /**
  * Handle awaiting quantity stage - show price + ask how many rolls
- * Supports multiple percentages: shows price for each and asks quantities per percentage
  */
 async function handleAwaitingQuantity(intent, state, sourceContext) {
   const rolloType = state.rolloType || ROLLO_TYPES.MALLA_SOMBRA;
@@ -1219,31 +1064,6 @@ async function handleAwaitingQuantity(intent, state, sourceContext) {
 
   // If we already have the zip, only ask for quantity (not both)
   const hasZip = !!state.zipCode;
-  const pcts = state.percentages || (state.percentage ? [state.percentage] : []);
-
-  // Multiple percentages — show price breakdown and ask for quantities per percentage
-  if (pcts.length > 1) {
-    const lines = [];
-    for (const pct of pcts) {
-      const products = await findMatchingProducts(state.width, pct, rolloType);
-      if (products.length > 0 && products[0].price) {
-        lines.push(`• ${pct}% — ${formatMoney(products[0].price)} + IVA`);
-      } else {
-        lines.push(`• ${pct}%`);
-      }
-    }
-
-    const askSuffix = hasZip
-      ? `\n\n¿Cuántos rollos necesitas de cada uno?`
-      : `\n\n📍 Estamos en Querétaro, pero realizamos envíos a toda la República. 📦✈️\n\nPara cotizarte por favor indícanos cuántos rollos de cada porcentaje y tu código postal.`;
-
-    return {
-      type: "text",
-      text: `Rollo de ${state.width}m x 100m:\n\n${lines.join('\n')}${askSuffix}`
-    };
-  }
-
-  // Single percentage
   const askSuffix = hasZip
     ? `\n\n¿Cuántos rollos necesitas?`
     : `\n\n📍 Estamos en Querétaro, pero realizamos envíos a toda la República. 📦✈️\n\nPara cotizarte por favor indícanos cuántas unidades y tu código postal para calcular el envío.`;
@@ -1302,11 +1122,8 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
 
   // Build specs summary for handoff
   let specsText = `rollo de ${typeInfo.name} de ${state.width}m x 100m`;
-  const pcts = state.percentages || (state.percentage ? [state.percentage] : []);
-  if (pcts.length > 1) {
-    specsText += ` al ${pcts.map(p => p + '%').join(' y ')}`;
-  } else if (pcts.length === 1) {
-    specsText += ` al ${pcts[0]}%`;
+  if (state.percentage) {
+    specsText += ` al ${state.percentage}%`;
   }
 
   const handoffLabel = typeInfo.short.charAt(0).toUpperCase() + typeInfo.short.slice(1);

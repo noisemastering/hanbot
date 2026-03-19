@@ -5,7 +5,6 @@
 // Unrecognized messages escalate to AI instead of dumping to handoff.
 
 const { updateConversation } = require("../../conversationManager");
-const { checkCommonHandlers } = require("./commonHandlers");
 const { executeHandoff } = require("../utils/executeHandoff");
 const { parseConfeccionadaDimensions: parseDimensions } = require("../utils/dimensionParsers");
 const { MAPS_URL } = require("../../businessInfoManager");
@@ -36,10 +35,9 @@ function getPitchMessage(productInterest) {
 }
 
 // Singular-unit language → retail signal
-// "quiero una", "quiero comprar una", "solo quiero comprar una", "busco uno", "una malla",
-// "un rollo", "solo una", "nada más una", "para mi casa", "comprar una"
+// "quiero una", "busco uno", "una malla", "un rollo", "solo una", "nada más una", "para mi casa"
 // But NOT plural: "unas mallas", "mallas", "las de 3x4"
-const SINGULAR_RETAIL = /\b((?:quiero|busco|necesito|ocupo|llevo|me\s+llevo)(?:\s+\w+){0,2}\s+un[oa]?\b|(?:solo|solamente|nada\s*m[aá]s|nadamas|nomas|nom[aá]s)(?:\s+\w+){0,3}\s+un[oa]\b|comprar\s+un[oa]\b|un[oa]\s+(?:malla|pieza|rollo|borde|unidad)\b|un[oa]\s+(?:nada\s*m[aá]s|nadamas|nomas|nom[aá]s|sol[oa])\b|solo\s+(?:quiero|busco|necesito|ocupo)\s+comprar\b|para\s+mi\s+(?:casa|jard[ií]n|patio|terreno|propiedad)|uso\s+personal|para\s+uso\s+propio|de\s+a\s+un[oa])\b/i;
+const SINGULAR_RETAIL = /\b((?:quiero|busco|necesito|ocupo|llevo|me\s+llevo)\s+un[oa]?\b|(?:solo|solamente|nada\s*m[aá]s|nadamas|nomas|nom[aá]s)\s+un[oa]\b|un[oa]\s+(?:malla|pieza|rollo|borde|unidad)\b|un[oa]\s+(?:nada\s*m[aá]s|nadamas|nomas|nom[aá]s|sol[oa])\b|para\s+mi\s+(?:casa|jard[ií]n|patio|terreno|propiedad)|uso\s+personal|para\s+uso\s+propio|de\s+a\s+un[oa])\b/i;
 
 /**
  * Should this flow handle the message?
@@ -163,13 +161,11 @@ INSTRUCCIONES:
 1. Si el cliente PIDE una medida específica:
    → { "type": "dimensions", "width": <menor lado>, "height": <mayor lado> }
 
-2. Si el cliente quiere hablar con una persona real, un especialista, asesor, o pide atención personalizada:
-   → { "type": "handoff" }
-
-3. Para cualquier otra cosa (pregunta sobre el negocio, cómo funciona, dudas, etc.):
+2. Para cualquier otra cosa (pregunta sobre el negocio, cómo funciona, dudas, etc.):
    → { "type": "response", "text": "<tu respuesta>" }
    - Explica el modelo de negocio de forma clara y atractiva
    - Si preguntan "cómo se gana", "de qué se trata", "cómo funciona": explica que compran a mayoreo y revenden
+   - Si preguntan algo que no sabes: di que con gusto un especialista le puede ayudar
    - Siempre guía al cliente a dar el siguiente paso (pedir medida o cantidad)
 
 REGLAS:
@@ -193,10 +189,6 @@ REGLAS:
       if (w > 0 && h > 0 && w <= 100 && h <= 100) {
         return { dimensions: { width: w, height: h } };
       }
-    }
-
-    if (result.type === 'handoff') {
-      return { handoff: true };
     }
 
     if (result.type === 'response' && result.text) {
@@ -259,14 +251,14 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     };
   }
 
-  // ====== COMMON HANDLERS (inherited from master flow) ======
-  const commonResponse = await checkCommonHandlers(userMessage, convo, psid, {
-    flowType: 'reseller',
-    salesChannel: 'mercado_libre',
-    productName: 'malla sombra',
-    installationNote: null
-  });
-  if (commonResponse) return commonResponse;
+  // ── LOCATION QUESTION (any stage) ──
+  if (/\b(ubicaci[oó]n|direcci[oó]n|d[oó]nde\s+(est[aá]n|est[aá]s|se\s+ubica|queda)|tienda\s+f[ií]sica|pueden?\s+ir|puedo\s+ir|recoger|pasar\s+a\s+recoger|visitar(los|les)?|showroom|local|bodega|sucursal)\b/i.test(msg)) {
+    console.log(`📍 Reseller flow — location question`);
+    return {
+      type: "text",
+      text: `Estamos en Querétaro. Te comparto nuestra ubicación:\n\n${MAPS_URL}\n\nTambién enviamos a todo México con envío incluido.`
+    };
+  }
 
   // ── AWAITING QUANTITY ──
   if (lastIntent === 'reseller_awaiting_quantity') {
@@ -334,15 +326,6 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     console.log(`🏪 Reseller flow (awaiting_quantity) — escalating to AI: "${msg.substring(0, 60)}"`);
     const aiResult = await escalateToAI(msg, convo);
 
-    if (aiResult?.handoff) {
-      return await executeHandoff(psid, convo, userMessage, {
-        reason: `Mayoreo — cliente pide hablar con especialista: "${msg.substring(0, 80)}"`,
-        responsePrefix: 'Con gusto te comunico con un especialista.',
-        lastIntent: 'human_escalation',
-        timingStyle: 'elaborate'
-      });
-    }
-
     if (aiResult?.dimensions) {
       const { width, height } = aiResult.dimensions;
       const sizeStr = `${width}x${height}m`;
@@ -393,15 +376,6 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     // Not a zip or dimensions — escalate to AI
     console.log(`🏪 Reseller flow (awaiting_zip) — escalating to AI: "${msg.substring(0, 60)}"`);
     const aiResult = await escalateToAI(msg, convo);
-
-    if (aiResult?.handoff) {
-      return await executeHandoff(psid, convo, userMessage, {
-        reason: `Mayoreo — cliente pide hablar con especialista: "${msg.substring(0, 80)}"`,
-        responsePrefix: 'Con gusto te comunico con un especialista.',
-        lastIntent: 'human_escalation',
-        timingStyle: 'elaborate'
-      });
-    }
 
     if (aiResult?.dimensions) {
       const { width, height } = aiResult.dimensions;
@@ -456,15 +430,6 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   // ── NO DIMENSIONS — escalate to AI instead of dumping to handoff ──
   console.log(`🏪 Reseller flow — no dimensions, escalating to AI: "${msg.substring(0, 60)}"`);
   const aiResult = await escalateToAI(msg, convo);
-
-  if (aiResult?.handoff) {
-    return await executeHandoff(psid, convo, userMessage, {
-      reason: `Mayoreo — cliente pide hablar con especialista: "${msg.substring(0, 80)}"`,
-      responsePrefix: 'Con gusto te comunico con un especialista.',
-      lastIntent: 'human_escalation',
-      timingStyle: 'elaborate'
-    });
-  }
 
   if (aiResult?.dimensions) {
     const { width, height } = aiResult.dimensions;

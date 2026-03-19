@@ -4,7 +4,6 @@
 
 const { updateConversation } = require("../../conversationManager");
 const { getBusinessInfo, MAPS_URL } = require("../../businessInfoManager");
-const { checkCommonHandlers } = require("./commonHandlers");
 const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
 const { INTENTS } = require("../classifier");
@@ -43,7 +42,7 @@ const {
 const { generateBotResponse } = require("../responseGenerator");
 
 // AI fallback for flow dead-ends
-// resolveWithAI removed — all AI fallback now uses escalateToAI
+const { resolveWithAI } = require("../utils/flowFallback");
 
 // Location detection
 const { detectMexicanLocation, detectZipCode } = require("../../mexicanLocations");
@@ -156,16 +155,14 @@ INSTRUCCIONES:
 1. Si el cliente PIDE una medida específica (incluso con formato desordenado como "8 X. 6. Mtrs"):
    → { "type": "dimensions", "width": <menor lado>, "height": <mayor lado> }
 
-2. Si el cliente quiere hablar con una persona real, un especialista, asesor, o pide atención personalizada:
-   → { "type": "handoff" }
-
-3. Para cualquier otra cosa (pregunta, duda, queja, confirmación, etc.):
+2. Para cualquier otra cosa (pregunta, duda, queja, confirmación, etc.):
    → { "type": "response", "text": "<tu respuesta>" }
    - Usa los datos de CONTEXTO y PRODUCTO para dar respuestas precisas con precios reales
    - Si preguntan si el anuncio/oferta es real: confirma, somos fabricantes, compra protegida por ML
    - Si confirman que quieren una medida: cotiza con el precio real del CONTEXTO
    - Si piden un color: confirma si lo tenemos (negro y beige)
    - Si preguntan hasta cuándo dura la oferta/promoción: "Hasta agotar existencias"
+   - Si preguntan algo que no sabes: di que con gusto un especialista le puede ayudar
 
 REGLAS:
 - Español mexicano, amable y conciso (2-4 oraciones)
@@ -189,10 +186,6 @@ REGLAS:
       if (w > 0 && h > 0 && w <= 100 && h <= 100) {
         return { dimensions: { width: w, height: h } };
       }
-    }
-
-    if (result.type === 'handoff') {
-      return { handoff: true };
     }
 
     if (result.type === 'response' && result.text) {
@@ -909,15 +902,6 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     };
   }
 
-  // ====== COMMON HANDLERS (inherited from master flow) ======
-  const commonResponse = await checkCommonHandlers(userMessage, convo, psid, {
-    flowType: 'malla_sombra',
-    salesChannel: 'mercado_libre',
-    productName: 'malla sombra confeccionada',
-    installationNote: 'Nuestra malla confeccionada viene lista para instalar con ojillos cada 80 cm para fácil sujeción.'
-  });
-  if (commonResponse) return commonResponse;
-
   // Get current state and merge classifier entities
   let state = getFlowState(convo);
   if (entities.color) state.color = entities.color;
@@ -1193,10 +1177,6 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     };
   }
 
-  // CHECK FOR PHONE / CONTACT REQUEST
-  // "num telefonico", "teléfono", "número para llamar", "whatsapp", "me pueden llamar"
-  // Phone/contact — handled by commonHandlers (master flow)
-
   // CHECK FOR ACCESSORY QUESTIONS (arnés, cuerda, lazo, kit de instalación)
   // Only match specific accessory keywords — NOT generic "viene con" / "trae" which cause false positives
   const isAccessoryQuestion = /\b(arn[eé]s|cuerda|lazo|amarre|kit\s*(de\s+)?instalaci|incluye.*para\s*(colgar|instalar|sujetar|amarrar))\b/i.test(userMessage);
@@ -1217,9 +1197,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   // CHECK FOR CONFIRMATION of recommended size
   // When user says "Claro", "Sí", "Ok" etc. OR asks about price/that size after we recommended
   // Patterns: "ese tamaño", "esa medida", "la que me dices", "cuánto cuesta", "qué precio"
-  // BUT NOT when the message contains its own dimensions (e.g. "El precio de la de 6x4")
-  const messageDims = parseDimensions(userMessage);
-  const isReferringToRecommendation = convo?.recommendedSize && !messageDims && (
+  const isReferringToRecommendation = convo?.recommendedSize && (
     intent === INTENTS.CONFIRMATION ||
     intent === INTENTS.PRICE_QUERY ||
     /\b(es[ea]\s*(tamaño|medida)|la\s*que\s*(me\s*)?(dices|recomiendas)|cu[aá]nto\s*(cuesta|sale|es)|qu[eé]\s*precio)\b/i.test(userMessage)
@@ -1377,24 +1355,10 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
           state.originalCmStr = dimsFromMessage.originalCmStr;
         }
       }
-    } else {
-      // Message may contain dimensions + extra content — still capture dimensions
-      // AI escalation below will handle any extra questions/context
-      const dimsFromMessage = parseDimensions(userMessage);
-      if (dimsFromMessage) {
-        console.log(`🌐 Malla flow - [REGEX+AI] Dimensions captured from mixed message: "${userMessage.slice(0, 60)}" → ${dimsFromMessage.width}x${dimsFromMessage.height}`);
-        state.width = dimsFromMessage.width;
-        state.height = dimsFromMessage.height;
-        state.userExpressedSize = dimsFromMessage.userExpressed;
-        if (dimsFromMessage.convertedFromFeet) {
-          state.convertedFromFeet = true;
-          state.originalFeetStr = dimsFromMessage.originalFeetStr;
-        }
-        if (dimsFromMessage.convertedFromCentimeters) {
-          state.convertedFromCentimeters = true;
-          state.originalCmStr = dimsFromMessage.originalCmStr;
-        }
-      }
+    } else if (parseDimensions(userMessage)) {
+      // Message contains dimensions but also other content — escalate to AI
+      console.log(`🌐 Malla flow - [AI ESCALATION] Dimensions found but message has extra content, escalating: "${userMessage.slice(0, 60)}"`);
+      // Don't extract dimensions — let AI handle the full message
     }
   }
 
@@ -1408,15 +1372,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     console.log(`🌐 Malla flow - [AI ESCALATION] Escalating to AI: "${userMessage.slice(0, 60)}"`);
     try {
       const aiResult = await escalateToAI(userMessage, convo);
-      if (aiResult?.handoff) {
-        const { executeHandoff } = require('../utils/executeHandoff');
-        return await executeHandoff(psid, convo, userMessage, {
-          reason: `Cliente en flujo malla pidió hablar con especialista: "${userMessage.substring(0, 80)}"`,
-          responsePrefix: 'Con gusto te comunico con un especialista.',
-          lastIntent: 'human_escalation',
-          timingStyle: 'elaborate'
-        });
-      } else if (aiResult?.dimensions) {
+      if (aiResult?.dimensions) {
         state.width = aiResult.dimensions.width;
         state.height = aiResult.dimensions.height;
         state.userExpressedSize = `${aiResult.dimensions.width} x ${aiResult.dimensions.height}`;
@@ -1631,36 +1587,43 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   let response;
   let aiFallbackHandled = false;
 
-  if (stage === STAGES.AWAITING_DIMENSIONS && userMessage) {
-    const aiResult = await escalateToAI(userMessage, convo);
+  if (stage === STAGES.AWAITING_DIMENSIONS &&
+      convo?.lastQuotedProducts?.length > 0 &&
+      userMessage) {
+    const aiResult = await resolveWithAI({
+      psid,
+      userMessage,
+      flowType: 'malla',
+      stage: convo?.lastIntent || 'awaiting_dimensions',
+      basket: convo?.productSpecs,
+      lastQuotedProducts: convo.lastQuotedProducts
+    });
 
-    if (aiResult?.handoff) {
-      const { executeHandoff } = require('../utils/executeHandoff');
-      return await executeHandoff(psid, convo, userMessage, {
-        reason: `Cliente en flujo malla pidió hablar con especialista: "${userMessage.substring(0, 80)}"`,
-        responsePrefix: 'Con gusto te comunico con un especialista.',
-        lastIntent: 'human_escalation',
-        timingStyle: 'elaborate'
-      });
-    }
-
-    if (aiResult?.dimensions) {
-      state.width = aiResult.dimensions.width;
-      state.height = aiResult.dimensions.height;
-      response = await handleComplete(intent, state, sourceContext, psid, convo, userMessage);
-      aiFallbackHandled = true;
-    }
-
-    if (!aiFallbackHandled && aiResult?.response) {
-      await updateConversation(psid, { lastIntent: 'malla_ai_answered', unknownCount: 0 });
-      let answerText = aiResult.response;
-      if (convo?.lastQuotedProducts?.length > 0) {
-        answerText += '\n\n¿Quieres que te pase los enlaces para comprar?';
+    if (aiResult.confidence >= 0.7) {
+      if ((aiResult.action === 'select_products' || aiResult.action === 'select_one') &&
+          convo.lastQuotedProducts.length > 0) {
+        const selectionResponse = await handleQuoteSelection(aiResult, convo.lastQuotedProducts, psid, convo);
+        if (selectionResponse) { response = selectionResponse; aiFallbackHandled = true; }
       }
-      response = { type: "text", text: answerText };
-      aiFallbackHandled = true;
+
+      if (!aiFallbackHandled && aiResult.action === 'provide_dimensions' && aiResult.dimensions) {
+        state.width = aiResult.dimensions.width;
+        state.height = aiResult.dimensions.height;
+        response = await handleComplete(intent, state, sourceContext, psid, convo, userMessage);
+        aiFallbackHandled = true;
+      }
+
+      if (!aiFallbackHandled && aiResult.action === 'answer_question' && aiResult.text) {
+        await updateConversation(psid, { lastIntent: 'malla_ai_answered', unknownCount: 0 });
+        let answerText = aiResult.text;
+        if (convo.lastQuotedProducts?.length > 0) {
+          answerText += '\n\n¿Quieres que te pase los enlaces para comprar?';
+        }
+        response = { type: "text", text: answerText };
+        aiFallbackHandled = true;
+      }
     }
-    // If AI returned null, fall through to normal flow
+    // If AI returned "none" or low confidence, fall through to normal flow
   }
 
   // Generate response based on stage (if AI fallback didn't handle it)
@@ -2033,7 +1996,8 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
 
       return {
         type: "text",
-        text: `¡Sí! Enviamos a ${cityForDisplay}. El envío está incluido en todas las compras por Mercado Libre.\n\n` +
+        text: `¡Sí! Enviamos a ${cityForDisplay} a través de Mercado Libre.\n\n` +
+              `El envío tarda entre 3-5 días hábiles. El costo lo calcula ML según tu código postal exacto.\n\n` +
               `¿Te paso el link de compra?`
       };
     }
@@ -2042,7 +2006,7 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
     const cityName = locationInfo?.normalized || 'tu zona';
     return {
       type: "text",
-      text: `Perfecto, sí enviamos a ${cityName}. El envío está incluido en todas las compras por Mercado Libre.\n\n¿Qué medida necesitas?`
+      text: `Perfecto, sí enviamos a ${cityName}.\n\n¿Qué medida necesitas?`
     };
   }
 
@@ -2146,30 +2110,36 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
     return await handleProductInfo(userMessage, convo);
   }
 
-  // ====== AI ESCALATION at end of handleAwaitingDimensions ======
-  if (userMessage) {
-    const aiResult = await escalateToAI(userMessage, convo);
+  // ====== AI FALLBACK at end of handleAwaitingDimensions ======
+  // Before giving up with static text, try AI if we have quoted products
+  if (userMessage && convo?.lastQuotedProducts?.length > 0) {
+    const aiResult = await resolveWithAI({
+      psid,
+      userMessage,
+      flowType: 'malla',
+      stage: 'awaiting_dimensions_end',
+      basket: convo?.productSpecs,
+      lastQuotedProducts: convo.lastQuotedProducts
+    });
 
-    if (aiResult?.handoff) {
-      const { executeHandoff } = require('../utils/executeHandoff');
-      return await executeHandoff(psid, convo, userMessage, {
-        reason: `Cliente en flujo malla pidió hablar con especialista: "${userMessage.substring(0, 80)}"`,
-        responsePrefix: 'Con gusto te comunico con un especialista.',
-        lastIntent: 'human_escalation',
-        timingStyle: 'elaborate'
-      });
-    }
+    if (aiResult.confidence >= 0.7) {
+      if ((aiResult.action === 'select_products' || aiResult.action === 'select_one') &&
+          convo.lastQuotedProducts.length > 0) {
+        const selectionResponse = await handleQuoteSelection(aiResult, convo.lastQuotedProducts, psid, convo);
+        if (selectionResponse) return selectionResponse;
+      }
 
-    if (aiResult?.dimensions) {
-      const newState = getFlowState(convo);
-      newState.width = aiResult.dimensions.width;
-      newState.height = aiResult.dimensions.height;
-      return await handleComplete(null, newState, null, psid, convo, userMessage);
-    }
+      if (aiResult.action === 'provide_dimensions' && aiResult.dimensions) {
+        const newState = getFlowState(convo);
+        newState.width = aiResult.dimensions.width;
+        newState.height = aiResult.dimensions.height;
+        return await handleComplete(null, newState, null, psid, convo, userMessage);
+      }
 
-    if (aiResult?.response) {
-      await updateConversation(psid, { lastIntent: 'malla_ai_answered', unknownCount: 0 });
-      return { type: "text", text: aiResult.response };
+      if (aiResult.action === 'answer_question' && aiResult.text) {
+        await updateConversation(psid, { lastIntent: 'malla_ai_answered', unknownCount: 0 });
+        return { type: "text", text: aiResult.text };
+      }
     }
   }
 
@@ -2186,8 +2156,15 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
   const { width, height, percentage, color, quantity, userExpressedSize, concerns, convertedFromFeet, originalFeetStr } = state;
 
   // ====== WHOLESALE → HANDOFF ======
-  // Only explicit "mayoreo" / "por mayor" language. Buying multiple units on ML is normal retail.
-  const isWholesaleAsk = userMessage && /\b(mayoreo|mayorist|al\s+por\s+mayor)\b/i.test(userMessage);
+  // Any wholesale inquiry in confeccionada flow = hand off to human
+  const hasWholesaleKeyword = /\b(mayoreo|mayorist|al\s+por\s+mayor)\b/i.test(userMessage);
+  // "pedido de 5", "si pido 5 piezas", "compro 5 cuánto", "ago pedido de 5"
+  const multiPiecePrice = userMessage && /\b(pedido|pido|compro|ordeno|[ah]ago?\s*pedido)\s+(de\s+)?\d+/i.test(userMessage);
+  // "5 piezas precio", "5 piezas cuánto" — quantity + price question after product was just quoted
+  const qtyPriceAsk = userMessage && convo?.lastSharedProductId &&
+    /\b\d+\s*(piezas?|unidades?|mallas?)\b/i.test(userMessage) &&
+    /\b(precio|presio|costo|cu[aá]nto|cotiza)\b/i.test(userMessage);
+  const isWholesaleAsk = userMessage && (hasWholesaleKeyword || multiPiecePrice || qtyPriceAsk);
   if (isWholesaleAsk) {
     const sizeDisplay = `${Math.min(width, height)}x${Math.max(width, height)}`;
     console.log(`🏪 handleComplete: wholesale inquiry for ${sizeDisplay}m — handing off`);
@@ -2200,9 +2177,6 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
       timingStyle: 'elaborate'
     });
   }
-
-  // Farewell, trust, pay-on-delivery, phone, location, shipping, payment, installation
-  // are all handled by commonHandlers (master flow) before handleComplete is called.
 
   // ====== GENERAL QUESTIONS GUARD ======
   // If the customer is asking a general question (not about dimensions/pricing),
@@ -2237,33 +2211,102 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
         };
       }
 
+      // Shipping / delivery questions
+      if (/\b(entreg|env[ií]|llega|domicilio|paqueter[ií]a|mensajer[ií]a|recib[oi]|tarda|demora|d[ií]as\s+h[aá]biles)\b/i.test(msg)) {
+        await updateConversation(psid, { lastIntent: 'shipping_question', unknownCount: 0 });
+
+        // Specific concern about delivery schedule (weekends, not home, pickup, etc.)
+        if (/\b(fin\s*de\s*semana|s[aá]bado|domingo|no\s+(hay\s+)?nadie|no\s+est[oéa]y|entre\s*semana|lunes\s+a\s+viernes|horario|d[ií]a\s+espec[ií]fico|recoger|punto\s+de\s+entrega)\b/i.test(msg)) {
+          return {
+            type: "text",
+            text: "El envío depende de Mercado Libre, nosotros no tenemos control sobre los días ni horarios de entrega. Sin embargo, ellos cuentan con un servicio muy eficiente e incluso puedes recogerlo en alguna de sus oficinas o puntos de entrega cercanos. ¡Tienen muchas opciones!\n\n¿Te puedo ayudar con algo más?"
+          };
+        }
+
+        return {
+          type: "text",
+          text: "La compra se realiza a través de Mercado Libre y el envío está incluido. Normalmente tarda de 3 a 5 días hábiles.\n\n¿Necesitas algo más?"
+        };
+      }
+
+      // Pay on delivery — crystal clear NO
+      if (/\b(contra\s*entrega|pag[oa]\s+(al\s+)?(recibir|entreg)|cuando\s+(me\s+)?lleg|al\s+recibir|cobr[ao]\s+al)\b/i.test(msg)) {
+        await updateConversation(psid, { lastIntent: 'pay_on_delivery_query', unknownCount: 0 });
+        return {
+          type: "text",
+          text: "No manejamos pago contra entrega. El pago es 100% por adelantado al momento de ordenar en Mercado Libre. Tu compra está protegida: si no te llega o llega diferente, se te devuelve tu dinero."
+        };
+      }
+
+      // Address / location questions
+      const locationIntent = classifyLocationIntent(msg);
+      if (locationIntent === 'asking_ours') {
+        await updateConversation(psid, { lastIntent: 'address_question', unknownCount: 0 });
+        return {
+          type: "text",
+          text: `Nuestra tienda física está en Querétaro:\n${MAPS_URL}\n\nTambién puedes comprar en línea a través de Mercado Libre con envío incluido a todo México.`
+        };
+      }
+      if (locationIntent === 'sending_theirs') {
+        return {
+          type: "text",
+          text: "¡Perfecto! Mándanos tu ubicación por WhatsApp: https://wa.me/524425957432"
+        };
+      }
+
+      // Payment questions
+      if (/\b(pag[oa]|tarjeta|efectivo|transfer|meses|oxxo|dep[oó]sito|forma\s+de\s+pago|m[eé]todo\s+de\s+pago)\b/i.test(msg)) {
+        await updateConversation(psid, { lastIntent: 'payment_question', unknownCount: 0 });
+        return {
+          type: "text",
+          text: "En compras a través de Mercado Libre el pago es 100% por adelantado al momento de ordenar (tarjeta, efectivo en OXXO, o meses sin intereses). Tu compra está protegida: si no te llega o llega diferente, se te devuelve tu dinero."
+        };
+      }
+
+      // Installation / service questions
+      if (/\b(instalaci[oó]n|instal[ae]n?|ponen|colocan|pasan?\s+a\s+medir)\b/i.test(msg)) {
+        await updateConversation(psid, { lastIntent: 'installation_query', unknownCount: 0 });
+        return {
+          type: "text",
+          text: "No contamos con servicio de instalación, pero nuestra malla confeccionada viene lista para instalar con ojillos cada 80 cm para fácil sujeción.\n\n¿Tienes alguna otra duda?"
+        };
+      }
+
       // No regex matched — ask AI to interpret the question
-      const aiResult = await escalateToAI(userMessage, convo);
+      const lastQuoted = convo?.lastQuotedProducts || [];
+      const aiResult = await resolveWithAI({
+        psid,
+        userMessage,
+        flowType: 'malla',
+        stage: 'complete_question',
+        basket: convo?.productSpecs || {},
+        lastQuotedProducts: lastQuoted
+      });
 
-      if (aiResult?.handoff) {
-        const { executeHandoff } = require('../utils/executeHandoff');
-        return await executeHandoff(psid, convo, userMessage, {
-          reason: `Cliente en flujo malla pidió hablar con especialista: "${userMessage.substring(0, 80)}"`,
-          responsePrefix: 'Con gusto te comunico con un especialista.',
-          lastIntent: 'human_escalation',
-          timingStyle: 'elaborate'
-        });
-      }
-
-      if (aiResult?.dimensions) {
-        // AI parsed new dimensions from the question — re-quote
-        const newState = getFlowState(convo);
-        newState.width = aiResult.dimensions.width;
-        newState.height = aiResult.dimensions.height;
-        return await handleComplete(null, newState, null, psid, convo, userMessage);
-      }
-
-      if (aiResult?.response) {
-        console.log(`🧠 General question AI escalation: "${userMessage}" → answered`);
+      if (aiResult?.action === 'answer_question' && aiResult.confidence >= 0.7) {
+        console.log(`🧠 General question AI fallback: "${userMessage}" → answered`);
         await updateConversation(psid, { lastIntent: 'malla_ai_answered', unknownCount: 0 });
-        return { type: "text", text: aiResult.response };
+        return { type: "text", text: aiResult.text };
       }
-
+      if (aiResult?.action === 'select_one' && aiResult.confidence >= 0.7 && lastQuoted.length > 0) {
+        const idx = aiResult.selectedIndex || 0;
+        const prod = lastQuoted[idx];
+        if (prod?.productUrl) {
+          const trackedLink = await generateClickLink(psid, prod.productUrl, {
+            productName: prod.productName,
+            productId: prod.productId
+          });
+          await updateConversation(psid, {
+            lastSharedProductLink: trackedLink,
+            lastIntent: 'malla_link_shared',
+            unknownCount: 0
+          });
+          return {
+            type: "text",
+            text: `🛒 Aquí está el enlace para comprarla:\n${trackedLink}`
+          };
+        }
+      }
       // AI couldn't answer either — give a helpful nudge instead of re-quoting
       const link = convo.lastSharedProductLink;
       const specs = convo?.productSpecs || {};
@@ -2398,11 +2441,11 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
     });
   }
 
-  // Check if this is a custom order (both sides > 8m)
+  // Check if this is a custom order (both sides >= 8m)
   const minSide = Math.min(width, height);
   const maxSide = Math.max(width, height);
 
-  if (minSide > 8 && maxSide > 8) {
+  if (minSide >= 8 && maxSide >= 8) {
     // Custom order - hand off to specialist immediately
     console.log(`🏭 Custom order detected in mallaFlow (${width}x${height}m), handing off to specialist`);
 
@@ -2850,10 +2893,6 @@ function shouldHandle(classification, sourceContext, convo, userMessage = '') {
   if (currentFlow && currentFlow !== 'default' && currentFlow !== 'malla_sombra') {
     return false;
   }
-
-  // Explicitly locked into malla flow (e.g. retail pivot from reseller)
-  // But NOT right after ad greeting — let the dispatcher handle confirmations first
-  if (currentFlow === 'malla_sombra' && convo?.lastIntent !== 'ad_entry') return true;
 
   // Explicitly about malla sombra (not rolls)
   if (product === "malla_sombra") return true;
