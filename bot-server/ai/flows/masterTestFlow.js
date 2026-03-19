@@ -3,12 +3,9 @@
 // Default product: malla sombra confeccionada reforzada 6x4m.
 // Common questions handled by embedded AI (no regex), product logic from mallaFlow.
 
-const { OpenAI } = require("openai");
 const { updateConversation } = require("../../conversationManager");
 const { getBusinessInfo, MAPS_URL, STORE_ADDRESS } = require("../../businessInfoManager");
 const { isBusinessHours } = require("../utils/businessHours");
-
-const _masterAI = new OpenAI({ apiKey: process.env.AI_API_KEY });
 const { generateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
 const { INTENTS } = require("../classifier");
@@ -3091,7 +3088,7 @@ REGLAS:
     if (convo?.lastBotResponse) userContext.push(`Último mensaje del bot: "${convo.lastBotResponse.slice(0, 120)}"`);
     const contextStr = userContext.length > 0 ? `\n[Contexto: ${userContext.join(' | ')}]` : '';
 
-    const response = await _masterAI.chat.completions.create({
+    const response = await _openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
