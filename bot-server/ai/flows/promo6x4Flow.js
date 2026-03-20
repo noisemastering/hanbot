@@ -338,11 +338,84 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   if (dims) {
     const w = Math.min(dims.width, dims.height);
     const h = Math.max(dims.width, dims.height);
+    const hasFractions = (w % 1 !== 0) || (h % 1 !== 0);
 
-    // Fractional → round to nearest standard size
-    const rw = Math.ceil(w);
-    const rh = Math.ceil(h);
+    if (hasFractions) {
+      const fractionalKey = `${w}x${h}`;
+      const isInsisting = convo?.lastFractionalSize === fractionalKey;
 
+      // Customer insists on exact fractional size → hand off to human
+      if (isInsisting) {
+        console.log(`📏 [6x4_promo] Customer insists on ${fractionalKey}m, handing off`);
+        return await executeHandoff(psid, convo, userMessage, {
+          reason: `Medida con decimales: ${w}x${h}m (insiste en medida exacta)`,
+          responsePrefix: `La medida exacta de ${w}x${h}m requiere fabricación especial. Te comunico con un especialista para cotizarte.`,
+          lastIntent: 'fractional_meters_handoff',
+          timingStyle: 'elaborate'
+        });
+      }
+
+      // Round to nearest standard size
+      const rw = (w % 1 !== 0) ? Math.round(w) : w;
+      const rh = (h % 1 !== 0) ? Math.round(h) : h;
+      console.log(`📏 [6x4_promo] Fractional ${w}x${h}m → offering ${rw}x${rh}m`);
+
+      const products = await findMatchingProducts(rw, rh);
+
+      if (products.length > 0) {
+        const product = products[0];
+        const productUrl = product.onlineStoreLinks?.find(l => l.isPreferred)?.url
+          || product.onlineStoreLinks?.[0]?.url;
+
+        if (productUrl) {
+          const trackedLink = await generateClickLink(psid, productUrl, {
+            productName: product.name,
+            productId: product._id
+          });
+
+          await updateConversation(psid, {
+            lastIntent: 'promo_size_quoted',
+            lastSharedProductId: product._id?.toString(),
+            lastSharedProductLink: trackedLink,
+            lastFractionalSize: fractionalKey,
+            lastQuotedProducts: [{
+              width: rw, height: rh,
+              displayText: `${rw}x${rh}m`,
+              price: product.price,
+              productId: product._id?.toString(),
+              productUrl,
+              productName: product.name
+            }],
+            productSpecs: { productType: 'malla', width: rw, height: rh, updatedAt: new Date() },
+            unknownCount: 0
+          });
+
+          let explanation;
+          if (dims.convertedFromFeet) {
+            explanation = `Tu medida de ${dims.originalFeetStr} equivale a aproximadamente ${w}x${h} metros.\n\nLa medida más cercana que manejamos es ${rw}x${rh}m:`;
+          } else {
+            explanation = `La medida más cercana que manejamos es ${rw}x${rh}m:`;
+          }
+
+          return {
+            type: "text",
+            text: `${explanation}\n\nLa malla de ${rw}x${rh}m está en ${formatMoney(product.price)} con envío incluido.\n\n🛒 Cómprala aquí:\n${trackedLink}`
+          };
+        }
+      }
+
+      // No standard size found for fractional → hand off
+      return await executeHandoff(psid, convo, userMessage, {
+        reason: `Medida con decimales: ${w}x${h}m — no hay tamaño estándar cercano`,
+        responsePrefix: `La medida ${w}x${h}m no la tenemos en nuestro catálogo estándar. Te comunico con un especialista para cotizarte.`,
+        lastIntent: 'fractional_meters_handoff',
+        timingStyle: 'elaborate'
+      });
+    }
+
+    // Integer dimensions — direct lookup
+    const rw = w;
+    const rh = h;
     const products = await findMatchingProducts(rw, rh);
 
     if (products.length > 0) {
@@ -372,13 +445,9 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
           unknownCount: 0
         });
 
-        const sizeNote = (w !== rw || h !== rh)
-          ? `La medida más cercana que manejamos es ${rw}x${rh}m:\n\n`
-          : '';
-
         return {
           type: "text",
-          text: `${sizeNote}La malla de ${rw}x${rh}m está en ${formatMoney(product.price)} con envío incluido.\n\n🛒 Cómprala aquí:\n${trackedLink}`
+          text: `La malla de ${rw}x${rh}m está en ${formatMoney(product.price)} con envío incluido.\n\n🛒 Cómprala aquí:\n${trackedLink}`
         };
       }
     }
@@ -397,29 +466,42 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   if (allDims.length >= 2) {
     const parts = [];
     const quotedProducts = [];
+    let hasFractionalDims = false;
 
     for (const dim of allDims) {
-      const w = Math.min(Math.round(dim.width), Math.round(dim.height));
-      const h = Math.max(Math.round(dim.width), Math.round(dim.height));
-      const products = await findMatchingProducts(w, h);
+      const w = Math.min(dim.width, dim.height);
+      const h = Math.max(dim.width, dim.height);
+      const dimFractional = (w % 1 !== 0) || (h % 1 !== 0);
+      if (dimFractional) hasFractionalDims = true;
+
+      const rw = (w % 1 !== 0) ? Math.round(w) : w;
+      const rh = (h % 1 !== 0) ? Math.round(h) : h;
+      const products = await findMatchingProducts(rw, rh);
 
       if (products.length > 0) {
         const product = products[0];
-        parts.push(`• ${w}x${h}m: ${formatMoney(product.price)}`);
         const productUrl = product.onlineStoreLinks?.find(l => l.isPreferred)?.url
           || product.onlineStoreLinks?.[0]?.url;
+        const label = dimFractional
+          ? `• ${dim.width}x${dim.height}m → te ofrecemos ${rw}x${rh}m: ${formatMoney(product.price)}`
+          : `• ${rw}x${rh}m: ${formatMoney(product.price)}`;
+        parts.push(label);
         quotedProducts.push({
-          width: w, height: h,
-          displayText: `${w}x${h}m`,
+          width: rw, height: rh,
+          displayText: `${rw}x${rh}m`,
           price: product.price,
           productId: product._id?.toString(),
           productUrl,
           productName: product.name
         });
       } else {
-        parts.push(`• ${w}x${h}m: No disponible`);
+        parts.push(`• ${rw}x${rh}m: No disponible`);
       }
     }
+
+    const fractionalNote = hasFractionalDims
+      ? '\n\nLas medidas con decimales se ajustan al tamaño estándar inmediato inferior para dar espacio a los tensores o soga sujetadora.'
+      : '';
 
     await updateConversation(psid, {
       lastIntent: 'promo_multiple_sizes',
@@ -430,7 +512,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
 
     return {
       type: "text",
-      text: `Aquí te van los precios:\n\n${parts.join('\n')}\n\n¿Quieres los enlaces para comprar?`
+      text: `Aquí te van los precios:\n\n${parts.join('\n')}${fractionalNote}\n\n¿Quieres los enlaces para comprar?`
     };
   }
 
