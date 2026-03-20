@@ -194,6 +194,8 @@ REGLAS DE PAGO:
 - SIEMPRE di "100% por adelantado", nunca frases ambiguas.
 
 INSTALACIÓN: No contamos con servicio de instalación. Viene con ojillos para sujeción cada 80 cm, lista para instalar.
+- Si el cliente INSISTE en instalación (pide "con instalación", "requiero instalación", "la necesito instalada", o ya se le explicó antes que no hay instalación): responde EXACTAMENTE "Disculpa, no ofrecemos instalación, solo la malla sombra."
+- REGLA: Cualquier mensaje que mencione "instalación"/"instalar"/"instalen"/"instalada" como servicio solicitado SIEMPRE es tipo "response" con intent "installation", NUNCA product_specific — aunque diga "requiero", "quiero", "necesito".
 
 INSTRUCCIONES:
 Clasifica el mensaje y responde con JSON:
