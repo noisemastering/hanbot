@@ -222,8 +222,12 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   const isBorde = convo?.productInterest === 'borde_separador';
 
   // ── PITCH ──
-  if (!lastIntent.startsWith('reseller_')) {
-    console.log(`🏪 Reseller flow — sending pitch`);
+  // Send the pitch if it hasn't been sent, or if the flag says it was sent but
+  // the last bot response doesn't contain pitch content (greeting got sent instead).
+  const pitchNeeded = !lastIntent.startsWith('reseller_') ||
+    (lastIntent === 'reseller_pitch_sent' && convo?.lastBotResponse && !convo.lastBotResponse.includes('revendedores'));
+  if (pitchNeeded) {
+    console.log(`🏪 Reseller flow — sending pitch (lastIntent=${lastIntent}, hadPitch=${!pitchNeeded})`);
     await updateConversation(psid, { lastIntent: 'reseller_pitch_sent', currentFlow: 'reseller' });
     return { type: "text", text: getPitchMessage(convo?.productInterest) };
   }
