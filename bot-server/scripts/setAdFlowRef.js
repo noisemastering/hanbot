@@ -11,8 +11,8 @@ const Ad = require("../models/Ad");
   }
   console.log("Found ad:", ad.name);
   console.log("Current flowRef:", ad.flowRef || "none");
-  ad.flowRef = "master_test";
+  ad.flowRef = null;
   await ad.save();
-  console.log("Updated flowRef to: master_test");
+  console.log("Cleared flowRef (back to default routing)");
   await mongoose.disconnect();
 })();
