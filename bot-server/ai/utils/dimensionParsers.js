@@ -61,6 +61,9 @@ function parseConfeccionadaDimensions(str) {
     return match;
   });
 
+  // Strip "lineales" — "metros lineales" = "metros" for dimension parsing
+  s = s.replace(/\blineales?\b/gi, '');
+
   // Convert "y medio" to .5 (e.g., "2 y medio" -> "2.5")
   s = s.replace(/(\d+)\s*y\s*medio/gi, (_, num) => `${num}.5`);
 
