@@ -114,7 +114,14 @@ const adSchema = new mongoose.Schema(
     initialMessage: String,
 
     // Specific flow to use (overrides default flow selection)
-    flowRef: String,  // e.g., "rolloFlow", "mallaFlow", "bordeFlow"
+    flowRef: String,  // e.g., "malla_sombra", "rollo", "master_flow"
+
+    // Promo flow: featured products to pitch upfront.
+    // Does NOT limit the flow — other products from the same family can still be offered.
+    promoProducts: [{
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "ProductFamily"
+    }],
 
     // Catalog override (inherits from AdSet/Campaign if not set)
     catalog: {

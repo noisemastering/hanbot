@@ -26,6 +26,7 @@ const generalFlow = require("./flows/generalFlow");
 const leadCaptureFlow = require("./flows/leadCaptureFlow");
 const resellerFlow = require("./flows/resellerFlow");
 const masterFlow = require("./flows/masterFlow");
+const promo6x4Flow = require("./flows/promo6x4Flow");
 
 /**
  * Cache for product-based flow inference
@@ -126,11 +127,12 @@ const FLOWS = {
   groundcover: rolloFlow,       // unified: handled by rolloFlow
   monofilamento: rolloFlow,     // unified: handled by rolloFlow
   lead_capture: leadCaptureFlow,
-  master_flow: masterFlow
+  master_flow: masterFlow,
+  '6x4_promo': promo6x4Flow
 };
 
 /** Valid flow names — flowRef values in the DB must match one of these */
-const VALID_FLOWS = ['reseller', 'malla_sombra', 'rollo', 'borde_separador', 'groundcover', 'monofilamento', 'master_flow'];
+const VALID_FLOWS = ['reseller', 'malla_sombra', 'rollo', 'borde_separador', 'groundcover', 'monofilamento', 'master_flow', '6x4_promo'];
 
 /**
  * Product-type keywords we don't sell — used to detect "unknown product" questions
