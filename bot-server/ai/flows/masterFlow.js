@@ -1,9 +1,9 @@
 // ai/flows/masterFlow.js
-// Base "class" for all product flows — 100% AI-driven, no regex.
+// Blueprint flow — 100% AI-driven, no regex.
+// Used standalone for COLD STARTS only (no product detected yet).
 //
-// Product flows call masterFlow.handle() first. The AI classifies the message
-// and either answers it (common question) or returns null (product-specific,
-// let the product flow handle it).
+// Product flows EMBED a copy of this logic (_handleCommonQuestions) directly
+// in their own file. They do NOT import this module.
 //
 // flowContext = {
 //   salesChannel: 'mercado_libre' | 'direct',

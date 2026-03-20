@@ -370,7 +370,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   }
 
   // ====== RESELLER/DISTRIBUTOR INTENT: let dispatcher handle it (sends catalog + handoff) ======
-  if (userMessage && /\b(distribui[rd]|revend|quiero\s+vender|ser\s+distribuid|ampliar\s*(mi\s+)?cat[aá]logo)\b/i.test(userMessage)) {
+  if (userMessage && /\b(distribui[rd]|revend|quiero\s+vender|ser\s+distribuid|ampliar\s*(mi\s+)?cat[aá]logo|proveed|para\s+(ofrecer|vender)\w*\s+(a\s+)?(mis|sus)\s+clientes)\b/i.test(userMessage)) {
     console.log(`🏪 Reseller intent detected in borde flow — deferring to dispatcher`);
     return null;
   }

@@ -263,7 +263,7 @@ function isWholesaleInquiry(message, convo = {}) {
   const wholesalePatterns = /\b(mayoreo|distribuidor|grandes\s+cantidades|por\s+mayor|compra\s+grande|100\s*(piezas|rollos|unidades)|volumen|reventa|negocio|tienda|ferreteria|ferreter[ií]a)\b/i;
 
   // Reseller intent — "quiero vender", "para vender", "empezar a vender"
-  const resellerPatterns = /\b(para\s+vender|quiero\s+vender|empezar\s+a\s+vender|vender\s+en\s+mi|incursionar.*vender|ser\s+distribuid|hacerme\s+distribuid|busco\s+proveed|soy\s+(vendedor|comerciante))\b/i;
+  const resellerPatterns = /\b(para\s+vender|quiero\s+vender|empezar\s+a\s+vender|vender\s+en\s+mi|incursionar.*vender|ser\s+distribuid|hacerme\s+distribuid|proveed|soy\s+(vendedor|comerciante)|para\s+(ofrecer|vender)\w*\s+(a\s+)?(mis|sus)\s+clientes)\b/i;
 
   return wholesalePatterns.test(cleanMsg) || resellerPatterns.test(cleanMsg) || convo.isWholesaleInquiry === true;
 }

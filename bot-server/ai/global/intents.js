@@ -940,9 +940,10 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   // 🏪 RESELLER / "PARA VENDER" - User wants to resell our products
   // "para vender sería", "para reventa", "para mi negocio", "para mi tienda", "para mi ferretería"
   // Immediate handoff — wholesale clients need human attention
-  if (/\bpara\s+(vender|revender|reventa|mi\s+(negocio|tienda|local|ferreter[ií]a|comercio))\b/i.test(msg) ||
-      /\b(quiero\s+vender|soy\s+(vendedor|comerciante)|tengo\s+(un\s+)?(negocio|tienda|ferreter[ií]a|local))\b/i.test(msg) ||
-      /\b(ser\s+distribuid|hacerme\s+distribuid|quiero\s+distribui|busco\s+proveed)\b/i.test(msg)) {
+  if (/\bpara\s+(vender|revender|reventa|mi\s+(negocio|tienda|local|ferreter[ií]a|comercio|vivero))\b/i.test(msg) ||
+      /\b(quiero\s+vender|soy\s+(vendedor|comerciante)|tengo\s+(un\s+)?(negocio|tienda|ferreter[ií]a|local|vivero))\b/i.test(msg) ||
+      /\b(para\s+(ofrecer|vender)\w*\s+(a\s+)?(mis|sus)\s+clientes)\b/i.test(msg) ||
+      /\b(ser\s+distribuid|hacerme\s+distribuid|quiero\s+distribui|proveed)\b/i.test(msg)) {
 
     console.log("🏪 Reseller/wholesale intent detected — triggering handoff");
 

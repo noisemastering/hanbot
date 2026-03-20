@@ -1379,6 +1379,64 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     }
   }
 
+  // CHECK FOR AREA (metros cuadrados) — must run BEFORE AI escalation
+  // so AI doesn't intercept "42 m cuadrados" and respond without offering size options
+  if (!state.width || !state.height) {
+    const areaMatch = userMessage.match(/(\d+(?:\.\d+)?)\s*(?:metros?\s*cuadrados?|m2|m²)/i);
+    if (areaMatch) {
+      const requestedArea = parseFloat(areaMatch[1]);
+      console.log(`📐 Area detected: ${requestedArea}m² - finding closest standard sizes`);
+
+      const closestSizes = await findSizesNearArea(requestedArea, convo);
+
+      if (closestSizes.length > 0) {
+        const optionsList = closestSizes.map(s =>
+          `• ${s.width}x${s.height}m (${s.area}m²) → $${s.price}`
+        ).join('\n');
+
+        await updateConversation(psid, {
+          lastIntent: 'malla_area_options_shown',
+          requestedArea: requestedArea,
+          productInterest: 'malla_sombra'
+        });
+
+        return {
+          type: "text",
+          text: `${requestedArea} metros cuadrados puede ser varias medidas. Te muestro las más cercanas:\n\n${optionsList}\n\n¿Quieres los enlaces para comprar?`
+        };
+      }
+    }
+  }
+
+  // ====== RESELLER / DISTRIBUTOR INTENT (any stage) — must run BEFORE AI escalation ======
+  // "para vender", "quiero revender", "ser distribuidor", "proveedor", etc.
+  // AI escalation would swallow these messages and give a generic response instead of handing off.
+  if (userMessage && (
+    /\b(para\s+vender|incursionar.*vender|quiero\s+vender|empezar\s+a\s+vender|vender\s+en\s+mi)\b/i.test(userMessage) ||
+    /\b(distribuid|mayorist|revend|mayoreo|distribuc|ser\s+distribuid|hacerme\s+distribuid|proveed)\b/i.test(userMessage) ||
+    /\b(paquetes?.*para\s+vend|para\s+mi\s+(negocio|tienda|local|ferreter[ií]a|comercio|vivero))\b/i.test(userMessage) ||
+    /\b(para\s+(ofrecer|vender)\w*\s+(a\s+)?(mis|sus)\s+clientes)\b/i.test(userMessage) ||
+    /\b(quiero\s+distribui|soy\s+(vendedor|comerciante)|tengo\s+(un\s+)?(negocio|tienda|ferreter[ií]a|local|vivero))\b/i.test(userMessage)
+  )) {
+    console.log(`🏪 Reseller/distributor intent detected in malla flow (pre-AI-escalation)`);
+    const { getBusinessInfo } = require("../../businessInfoManager");
+    const info = await getBusinessInfo();
+
+    const { executeHandoff } = require('../utils/executeHandoff');
+    return await executeHandoff(psid, convo, userMessage, {
+      reason: `Cliente quiere revender/distribuir: "${userMessage.substring(0, 80)}"`,
+      responsePrefix: "¡Excelente! Somos fabricantes y trabajamos con distribuidores en todo México.\n\n" +
+            "Un especialista te contactará para darte información sobre paquetes y precios de mayoreo.\n\n" +
+            `📞 ${info?.phones?.[0] || "442 352 1646"}\n` +
+            `🕓 ${info?.hours || "Lun-Vie 8am-6pm"}`,
+      lastIntent: 'reseller_inquiry',
+      notificationText: `Cliente quiere revender: "${userMessage.substring(0, 60)}"`,
+      extraState: { isWholesaleInquiry: true, productInterest: convo?.productInterest || "wholesale" },
+      timingStyle: 'none',
+      includeQueretaro: false
+    });
+  }
+
   // AI ESCALATION: When regex didn't fully handle the message.
   // This covers: messages with dimensions + extra content, messages with no dimensions,
   // questions, concerns, complaints, confirmations — anything the regex can't handle in full.
@@ -1411,35 +1469,6 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     console.log(`✅ Malla flow - Dimensions resolved: ${state.width}x${state.height} (source: ${source})`);
   } else if (/\d/.test(userMessage)) {
     console.warn(`❌ Malla flow - NO dimensions extracted from "${userMessage.slice(0, 60)}" — all 4 layers failed`);
-  }
-
-  // CHECK FOR AREA (metros cuadrados) - offer closest standard sizes
-  if (!state.width || !state.height) {
-    const areaMatch = userMessage.match(/(\d+(?:\.\d+)?)\s*(?:metros?\s*cuadrados?|m2|m²)/i);
-    if (areaMatch) {
-      const requestedArea = parseFloat(areaMatch[1]);
-      console.log(`📐 Area detected: ${requestedArea}m² - finding closest standard sizes`);
-
-      // Find standard sizes close to this area (±2m²)
-      const closestSizes = await findSizesNearArea(requestedArea, convo);
-
-      if (closestSizes.length > 0) {
-        const optionsList = closestSizes.map(s =>
-          `• ${s.width}x${s.height}m (${s.area}m²) → $${s.price}`
-        ).join('\n');
-
-        await updateConversation(psid, {
-          lastIntent: 'malla_area_options_shown',
-          requestedArea: requestedArea,
-          productInterest: 'malla_sombra'
-        });
-
-        return {
-          type: "text",
-          text: `${requestedArea} metros cuadrados puede ser varias medidas. Te muestro las más cercanas:\n\n${optionsList}\n\n¿Quieres los enlaces para comprar?`
-        };
-      }
-    }
   }
   if (entities.percentage) {
     state.percentage = entities.percentage;
@@ -1491,32 +1520,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
     return await handleProductInfo(userMessage, convo);
   }
 
-  // ====== RESELLER / DISTRIBUTOR INTENT (any stage) ======
-  // "para vender", "incursionar para vender", "quiero revender", "ser distribuidor", etc.
-  if (userMessage && (
-    /\b(para\s+vender|incursionar.*vender|quiero\s+vender|empezar\s+a\s+vender|vender\s+en\s+mi)\b/i.test(userMessage) ||
-    /\b(distribuid|mayorist|revend|mayoreo|distribuc|ser\s+distribuid|hacerme\s+distribuid|busco\s+proveed)\b/i.test(userMessage) ||
-    /\b(paquetes?.*para\s+vend|para\s+mi\s+(negocio|tienda|local|ferreter[ií]a|comercio))\b/i.test(userMessage) ||
-    /\b(quiero\s+distribui|soy\s+(vendedor|comerciante)|tengo\s+(un\s+)?(negocio|tienda|ferreter[ií]a|local))\b/i.test(userMessage)
-  )) {
-    console.log(`🏪 Reseller/distributor intent detected in malla flow (any stage)`);
-    const { getBusinessInfo } = require("../../businessInfoManager");
-    const info = await getBusinessInfo();
-
-    const { executeHandoff } = require('../utils/executeHandoff');
-    return await executeHandoff(psid, convo, userMessage, {
-      reason: `Cliente quiere revender/distribuir: "${userMessage.substring(0, 80)}"`,
-      responsePrefix: "¡Excelente! Somos fabricantes y trabajamos con distribuidores en todo México.\n\n" +
-            "Un especialista te contactará para darte información sobre paquetes y precios de mayoreo.\n\n" +
-            `📞 ${info?.phones?.[0] || "442 352 1646"}\n` +
-            `🕓 ${info?.hours || "Lun-Vie 8am-6pm"}`,
-      lastIntent: 'reseller_inquiry',
-      notificationText: `Cliente quiere revender: "${userMessage.substring(0, 60)}"`,
-      extraState: { isWholesaleInquiry: true, productInterest: convo?.productInterest || "wholesale" },
-      timingStyle: 'none',
-      includeQueretaro: false
-    });
-  }
+  // (Reseller/distributor check moved to before AI escalation — see above)
 
   // ====== OVERSIZE / ROLL-SIZE DETECTION (any stage) ======
   if (state.width && state.height && Math.max(state.width, state.height) > 12) {
@@ -1586,7 +1590,7 @@ async function handle(classification, sourceContext, convo, psid, campaign = nul
   const stage = determineStage(state);
 
   // ====== RESELLER/DISTRIBUTOR INTENT: let dispatcher handle it, not AI fallback ======
-  if (userMessage && /\b(distribui[rd]|revend|quiero\s+vender|ser\s+distribuid|ampliar\s*(mi\s+)?cat[aá]logo)\b/i.test(userMessage)) {
+  if (userMessage && /\b(distribui[rd]|revend|quiero\s+vender|ser\s+distribuid|ampliar\s*(mi\s+)?cat[aá]logo|proveed|para\s+(ofrecer|vender)\w*\s+(a\s+)?(mis|sus)\s+clientes)\b/i.test(userMessage)) {
     console.log(`🏪 Reseller intent detected in malla flow — deferring to dispatcher`);
     return null;
   }
@@ -1964,7 +1968,7 @@ async function handleAwaitingDimensions(intent, state, sourceContext, userMessag
   }
 
   // Check if user is asking about wholesale/distributor
-  const distributorPattern = /\b(distribuid|mayorist|revend|mayoreo|distribuc|publicidad.*distribui)\b/i;
+  const distributorPattern = /\b(distribuid|mayorist|revend|mayoreo|distribuc|proveed|publicidad.*distribui)\b/i;
   if (userMessage && distributorPattern.test(userMessage)) {
     console.log(`🏪 Distributor/wholesale question detected in malla flow`);
     const info = await getBusinessInfo();
