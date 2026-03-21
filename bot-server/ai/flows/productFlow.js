@@ -47,29 +47,44 @@ async function loadProducts(familyIds) {
   if (!familyIds || familyIds.length === 0) return [];
 
   try {
-    // Get all active, sellable descendants of the given families
-    const families = await ProductFamily.find({
-      $or: [
-        { _id: { $in: familyIds } },
-        { parentId: { $in: familyIds } }
-      ],
+    // Get the specified families first
+    const roots = await ProductFamily.find({
+      _id: { $in: familyIds },
       active: true
     }).lean();
 
-    // Recursively find all descendants
-    const allFamilyIds = families.map(f => f._id);
-    const descendants = await ProductFamily.find({
-      parentId: { $in: allFamilyIds },
-      active: true
-    }).lean();
+    // Recursively find all descendants (breadth-first)
+    const seen = new Set(roots.map(f => String(f._id)));
+    let queue = [...roots];
+    const allFamilies = [...roots];
 
-    const allFamilies = [...families, ...descendants];
+    while (queue.length > 0) {
+      const parentIds = queue.map(f => f._id);
+      const children = await ProductFamily.find({
+        parentId: { $in: parentIds },
+        active: true
+      }).lean();
+
+      queue = [];
+      for (const child of children) {
+        const id = String(child._id);
+        if (!seen.has(id)) {
+          seen.add(id);
+          allFamilies.push(child);
+          queue.push(child);
+        }
+      }
+    }
+
     const sellable = allFamilies.filter(f => f.sellable);
 
     // Also load Product documents linked to these families
     const products = await Product.find({
       familyId: { $in: allFamilies.map(f => f._id) }
     }).lean();
+
+    // Build a map of family IDs to their names for parent context
+    const familyMap = new Map(allFamilies.map(f => [String(f._id), f]));
 
     // Build normalized product list
     return sellable.map(fam => {
@@ -78,9 +93,22 @@ async function loadProducts(familyIds) {
         || fam.onlineStoreLinks?.[0]?.url
         || null;
 
+      // Walk up the tree to build family context (e.g. "Borde Separador > Rollo de 9 m")
+      const familyPath = [];
+      let current = fam;
+      while (current?.parentId) {
+        const parent = familyMap.get(String(current.parentId));
+        if (parent) {
+          familyPath.unshift(parent.name);
+          current = parent;
+        } else break;
+      }
+      const familyContext = familyPath.length > 0 ? familyPath.join(' > ') : null;
+
       return {
         productId: String(fam._id),
         name: fam.name,
+        familyName: familyContext,  // e.g. "Borde Separador"
         description: fam.description || fam.marketingDescription || null,
         price: fam.price || null,
         mlPrice: fam.mlPrice || null,
@@ -112,14 +140,38 @@ async function loadProducts(familyIds) {
  * Find a product by name/description using AI matching.
  * @param {string} userMessage - What the customer asked for
  * @param {Array} products - Loaded products from loadProducts()
+ * @param {Object} conversationContext - { basket, lastBotResponse, customerName, lastQuotedProducts }
  * @returns {Promise<Array>} Matching products
  */
-async function findProduct(userMessage, products) {
+async function findProduct(userMessage, products, conversationContext = {}) {
   if (!userMessage || !products.length) return [];
 
-  const productSummary = products.map((p, i) =>
-    `${i}: ${p.name}${p.size ? ` (${p.size})` : ''}${p.description ? ` — ${p.description}` : ''}`
-  ).join('\n');
+  const { basket = [], lastBotResponse = null, customerName = null, lastQuotedProducts = [] } = conversationContext;
+
+  const productSummary = products.map((p, i) => {
+    let entry = `${i}: `;
+    if (p.familyName) entry += `[${p.familyName}] `;
+    entry += p.name;
+    if (p.size) entry += ` (${p.size})`;
+    if (p.price) entry += ` $${p.price}`;
+    if (p.description) entry += ` — ${p.description}`;
+    return entry;
+  }).join('\n');
+
+  // Build conversation context block
+  const contextParts = [];
+  if (customerName) contextParts.push(`Cliente: ${customerName}`);
+  if (lastQuotedProducts.length > 0) {
+    contextParts.push(`Productos recién cotizados: ${lastQuotedProducts.map(p => p.description || p.name).join(', ')}`);
+  } else if (basket.length > 0) {
+    contextParts.push(`Productos en el carrito: ${basket.map(b => b.description).join(', ')}`);
+  }
+  if (lastBotResponse) {
+    contextParts.push(`Último mensaje del bot: "${lastBotResponse.slice(0, 200)}"`);
+  }
+  const contextBlock = contextParts.length > 0
+    ? `\nCONTEXTO DE LA CONVERSACIÓN:\n${contextParts.join('\n')}\n`
+    : '';
 
   try {
     const response = await _openai.chat.completions.create({
@@ -129,14 +181,18 @@ async function findProduct(userMessage, products) {
           role: "system",
           content: `Eres un sistema de búsqueda de productos. Dado el mensaje del cliente, identifica cuál(es) producto(s) de la lista corresponden a lo que busca.
 
+Los productos tienen un nombre de familia entre corchetes [Familia] que indica a qué categoría pertenecen. Si el cliente pide la familia por nombre (ej: "borde separador"), TODOS los productos de esa familia coinciden. Si pide una medida específica, solo el producto que coincida.
+${contextBlock}
 PRODUCTOS DISPONIBLES:
 ${productSummary}
 
 Responde con JSON:
-{ "matches": [<índices de productos que coinciden>], "confidence": "high"|"medium"|"low", "outsideRealm": <true si el cliente pide algo que NO está en la lista> }
+{ "matches": [<índices de productos que coinciden>], "confidence": "high"|"medium"|"low", "outsideRealm": <true si el cliente pide algo que NO está en la lista ni en sus familias> }
 
 REGLAS:
-- Si el cliente pide algo que claramente NO está en la lista, pon outsideRealm: true y matches: []
+- Si el cliente pide la familia por nombre, devuelve TODOS los productos de esa familia
+- Si el cliente hace una pregunta de seguimiento (ej: "¿cuánto cuesta?", "me interesa", "ese") usa el CONTEXTO para identificar a qué producto se refiere. Si se acaban de cotizar productos, se refiere a esos.
+- Si el cliente pide algo que claramente NO está en la lista ni en sus familias, pon outsideRealm: true y matches: []
 - Si hay duda, pon confidence: "low"
 - Solo devuelve JSON`
         },
@@ -237,10 +293,12 @@ Solo devuelve JSON.`
  *   familyIds: array of ProductFamily ObjectIds from manifest
  *   products: pre-loaded products (if already initialized, avoids re-querying)
  *   manifests: other convo_flow manifests for flow switching
+ *   basket: current product basket from convo_flow state
+ *   lastQuotedProducts: products from the last quote
  * @returns {{ type: string, products?: Array, action?: string }|null}
  */
 async function handle(userMessage, convo, psid, context = {}) {
-  const { familyIds = [], products: preloaded = null, manifests = [] } = context;
+  const { familyIds = [], products: preloaded = null, manifests = [], basket = [], lastQuotedProducts = [] } = context;
 
   // ── LOAD PRODUCTS (once, then cache in convo_flow) ──
   const products = preloaded || await loadProducts(familyIds);
@@ -256,8 +314,14 @@ async function handle(userMessage, convo, psid, context = {}) {
     };
   }
 
-  // ── FIND MATCHING PRODUCT ──
-  const search = await findProduct(userMessage, products);
+  // ── FIND MATCHING PRODUCT (with conversation context) ──
+  const conversationContext = {
+    basket,
+    lastBotResponse: convo?.lastBotResponse || null,
+    customerName: convo?.userName || null,
+    lastQuotedProducts
+  };
+  const search = await findProduct(userMessage, products, conversationContext);
 
   // ── OUT OF REALM — check other manifests ──
   if (search.outsideRealm) {

@@ -397,7 +397,9 @@ function create(manifest) {
     const productResult = await productFlow.handle(userMessage, convo, psid, {
       familyIds: manifest.products,
       products: productCache,
-      manifests: otherManifests
+      manifests: otherManifests,
+      basket: flowState.basket,
+      lastQuotedProducts: flowState.lastQuotedProducts || []
     });
 
     if (productResult) {
@@ -413,6 +415,8 @@ function create(manifest) {
 
       // Products found — pass to sales flow
       if (productResult.type === 'products_found' && productResult.products.length > 0) {
+        // Track what products we're about to quote (for follow-up context)
+        flowState.lastQuotedProducts = productResult.products;
         const personaInstructions = buyerFlow.getPersonaInstructions(flowState.profile);
 
         const salesResult = await salesFlow.handle(userMessage, convo, psid, {
@@ -431,8 +435,9 @@ function create(manifest) {
             return await resolveFlowSwitch(salesResult, manifest, flowState, userMessage, convo, psid);
           }
 
-          // Update basket
+          // Update basket + track quoted products for follow-up context
           if (salesResult.products) {
+            flowState.lastQuotedProducts = salesResult.products;
             for (const p of salesResult.products) {
               const existing = flowState.basket.find(b => b.productId === p.productId);
               if (!existing) {
