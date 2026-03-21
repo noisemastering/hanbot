@@ -1,15 +1,11 @@
 // ai/flows/masterFlow.js
-// Blueprint flow — 100% AI-driven, no regex.
-// Used standalone for COLD STARTS only (no product detected yet).
+// Model flow — 100% AI-driven, no regex.
+// Handles general questions: location, schedule, payment, generic store link, etc.
+// Sits above everything else. Called by convo_flows, never drives a conversation alone.
 //
-// Product flows EMBED a copy of this logic (_handleCommonQuestions) directly
-// in their own file. They do NOT import this module.
-//
-// flowContext = {
-//   salesChannel: 'mercado_libre' | 'direct',
-//   flowType: string,           // e.g. 'malla_sombra', 'rollo', 'borde_separador'
-//   productName: string,        // e.g. 'malla sombra confeccionada'
-//   installationNote: string|null,
+// context = {
+//   salesChannel: 'mercado_libre' | 'direct',   // determines payment/shipping details
+//   installationNote: string|null,               // optional extra note for installation answers
 // }
 
 const { OpenAI } = require("openai");
@@ -21,17 +17,17 @@ const { isBusinessHours } = require("../utils/businessHours");
 const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 
 /**
- * Main handler — sends the message to AI to classify and respond.
- * Returns a response object or null (let product flow handle it).
+ * Classify and respond to general questions.
+ * Returns a response object or null (let the calling flow handle it).
  */
-async function handle(userMessage, convo, psid, flowContext) {
+async function handle(userMessage, convo, psid, context = {}) {
   if (!userMessage) return null;
 
   try {
     const info = await getBusinessInfo();
     const afterHours = !isBusinessHours();
 
-    const channelBlock = flowContext.salesChannel === 'direct'
+    const channelBlock = context.salesChannel === 'direct'
       ? `CANAL DE VENTA: Venta directa (NO Mercado Libre).
 - Pago: 100% por adelantado mediante transferencia o depósito bancario.
 - Envío: por paquetería a todo México, costo depende de la ubicación del cliente.
@@ -44,9 +40,7 @@ async function handle(userMessage, convo, psid, flowContext) {
 
     const systemPrompt = `Eres asesora de ventas de Hanlob, empresa mexicana fabricante de malla sombra.
 Tu trabajo es clasificar el mensaje del cliente y responder SI es una pregunta general.
-Si el mensaje es sobre un PRODUCTO ESPECÍFICO (medidas, cotización, colores, porcentaje de sombra, comparación de productos), NO respondas — devuelve null para que el flujo de producto lo maneje.
-
-PRODUCTO ACTUAL: ${flowContext.productName || 'No especificado'}
+Si el mensaje es sobre un PRODUCTO ESPECÍFICO (medidas, cotización, colores, porcentaje de sombra, comparación de productos), NO respondas — devuelve product_specific para que otro flujo lo maneje.
 
 ${channelBlock}
 
@@ -65,7 +59,7 @@ REGLAS DE PAGO:
 - NUNCA digas que tenemos pago contra entrega — NO lo manejamos.
 - SIEMPRE di "100% por adelantado", nunca frases ambiguas.
 
-INSTALACIÓN: No contamos con servicio de instalación.${flowContext.installationNote ? ' ' + flowContext.installationNote : ''}
+INSTALACIÓN: No contamos con servicio de instalación.${context.installationNote ? ' ' + context.installationNote : ''}
 
 INSTRUCCIONES:
 Clasifica el mensaje y responde con JSON:
@@ -120,7 +114,7 @@ REGLAS:
       });
     }
 
-    // ── RESPONSE: AI answered a common question ──
+    // ── RESPONSE: AI answered a general question ──
     if (result.type === 'response' && result.text) {
       await updateConversation(psid, {
         lastIntent: result.intent || 'master_flow_response',
@@ -129,12 +123,12 @@ REGLAS:
       return { type: "text", text: result.text };
     }
 
-    // ── PRODUCT-SPECIFIC: let the product flow handle it ──
+    // ── PRODUCT-SPECIFIC: let the calling flow handle it ──
     return null;
 
   } catch (err) {
     console.error(`❌ [master] AI error:`, err.message);
-    return null; // On error, fall through to product flow
+    return null; // On error, fall through to calling flow
   }
 }
 
