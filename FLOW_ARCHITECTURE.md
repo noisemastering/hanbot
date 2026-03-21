@@ -18,8 +18,13 @@ There are three types of flows. Not all flows can drive a conversation.
 
 - A convo_flow file name must start with `convo_` (e.g. `convo_mallaRetail.js`, `convo_promo6x4.js`).
 - A convo_flow's manifest must state `type: 'convo_flow'`.
-- A convo_flow is made of **at least 1 master flow + 1 model flow**.
-- Exception: the **master_convo flow** contains ONLY the master flow. There can be only 1 master_convo flow in the entire system.
+- A convo_flow **must** contain:
+  1. A **manifest**
+  2. A **master_flow**
+  3. A **product_flow**
+  4. Either a **retail_flow** or a **wholesale_flow** (or both)
+  5. Either a **buyer_flow** or a **reseller_flow** (or both)
+- There is no master_convo exception. The general/cold-start flow is `convo_general`, which has the same structure as any other convo_flow.
 - All convo_flows can **call another convo_flow** if the situation requires it. Once the new flow takes over, it can call another flow or go back to the previous one.
 - A convo_flow contains a **manifest** which describes: which products it handles, client profile, and whether it's retail or wholesale. When a product_flow detects the need to change to another flow, it checks the others' manifests to determine the best flow to hand over to.
 - A convo_flow maintains a **product basket** (shopping cart). It is an array of items the client has asked for. Usually 1 item, sometimes 2-3. The basket must never lose track of items across flow transitions or message handling. Each item in the basket:
@@ -87,10 +92,13 @@ The manifest allows product_flow to determine the best convo_flow to hand over t
 All flows are like legos. They must communicate with each other once they're put together into a convo_flow.
 
 ```
-convo_flow = master_flow + one or more model_flows
+convo_flow = manifest + master_flow + product_flow + (retail_flow | wholesale_flow) + (buyer_flow | reseller_flow) + [optional: promo_flow]
 ```
 
-Example: a convo_flow for selling malla sombra confeccionada to retail customers might be:
+Examples:
 ```
-malla_retail_convo = master_flow + product_flow(malla) + retail_flow + buyer_flow(casual)
+convo_mallaRetail   = manifest + master_flow + product_flow(malla) + retail_flow + buyer_flow(casual)
+convo_rolloReseller = manifest + master_flow + product_flow(rollo) + wholesale_flow + reseller_flow
+convo_promo6x4      = manifest + master_flow + product_flow(malla) + retail_flow + buyer_flow(casual) + promo_flow
+convo_general       = manifest + master_flow + product_flow(all) + retail_flow + buyer_flow(casual)
 ```
