@@ -14,8 +14,14 @@ Flows must be registered here to be used. If a flow is not listed below, it cann
 | product_flow | `bot-server/ai/flows/productFlow.js` | Active |
 | promo_flow | `bot-server/ai/flows/promoFlow.js` | Active |
 
+## convo_flow Shell
+
+| File | Description |
+|------|-------------|
+| `bot-server/ai/flows/convoFlow.js` | Base shell — `create(manifest)` returns a convo_flow instance |
+
 ## Convo Flows
 
 | Flow | File | Status | Manifest |
 |------|------|--------|----------|
-| — | — | — | — |
+| convo_bordeSeparadorRetail | `bot-server/ai/flows/convo_bordeSeparadorRetail.js` | Active | Borde Separador, retail, casual buyer |

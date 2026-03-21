@@ -24,6 +24,7 @@ Optional:
   clientProfile: 'buyer' | 'reseller',
   salesChannel: 'retail' | 'wholesale',
   voice: 'casual' | 'professional' | 'technical',
+  endpointOfSale: 'online_store' | 'human',  // how the sale concludes
   // ... additional config per flow
 }
 ```
@@ -45,6 +46,14 @@ Every convo_flow maintains a product basket (shopping cart):
 ## Flow switching
 - All convo_flows can call another convo_flow if the situation requires it
 - Once the new flow takes over, it can call another flow or go back to the previous one
+- When a convo_flow receives control from another convo_flow, `comesFromFlowSwitch` is set to `true` in its state. The flow must skip the greeting and continue the conversation directly.
+- Full protocol details: see `FLOW_SWITCHING_PROTOCOL.md`
+
+### Flow registry
+All convo_flows must register themselves via `convoFlow.registerFlow(name, module)` so they can be found during flow switches. The registry is used to:
+- Load other manifests for out-of-realm product detection
+- Find flows with matching products but different voice/channel
+- Resolve switch targets
 
 ## convo_general
 The general/cold-start flow. Same structure as any other convo_flow — no exceptions. Replaces the old master_convo concept.
