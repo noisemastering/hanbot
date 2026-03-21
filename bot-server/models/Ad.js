@@ -114,7 +114,12 @@ const adSchema = new mongoose.Schema(
     initialMessage: String,
 
     // Specific flow to use (overrides default flow selection)
-    flowRef: String,  // e.g., "malla_sombra", "rollo", "master_flow"
+    flowRef: String,  // e.g., "malla_sombra", "rollo", "master_flow" (legacy)
+
+    // New convo_flow system — takes priority over flowRef when set.
+    // References a convo_flow name (e.g., "convo_bordeSeparadorRetail").
+    // During transition both coexist; convoFlowRef wins if set.
+    convoFlowRef: { type: String, default: null },
 
     // Promo flow: featured products to pitch upfront.
     // Does NOT limit the flow — other products from the same family can still be offered.

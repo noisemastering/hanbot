@@ -1210,10 +1210,14 @@ app.post("/webhook", async (req, res) => {
         // Set product interest and send greeting
         // Use flowRef for currentFlow (explicitly configured on ads/campaigns), fall back to adProductInterest
         // Reseller ads use 'reseller' flow — same currentFlow governance as all other flows
+        const adConvoFlowRef = resolvedSettings?.convoFlowRef;
         const adFlowRef = resolvedSettings?.flowRef;
-        const adCurrentFlow = isResellerAd ? 'reseller' : (adFlowRef || adProductInterest);
+        // New convo_flow system takes priority over legacy flowRef
+        const adCurrentFlow = adConvoFlowRef
+          ? `convo:${adConvoFlowRef}`
+          : (isResellerAd ? 'reseller' : (adFlowRef || adProductInterest));
         if (adProductInterest) {
-          const adConvoUpdate = { productInterest: adProductInterest, currentFlow: adCurrentFlow, adFlowRef: adFlowRef || null, greeted: true, lastGreetTime: Date.now() };
+          const adConvoUpdate = { productInterest: adProductInterest, currentFlow: adCurrentFlow, adFlowRef: adFlowRef || null, convoFlowRef: adConvoFlowRef || null, greeted: true, lastGreetTime: Date.now() };
           if (adMainProductName) adConvoUpdate.adMainProductName = adMainProductName;
           const adMainProductId = resolvedSettings?.mainProductId || resolvedSettings?.productIds?.[0];
           if (adMainProductId) adConvoUpdate.adMainProductId = adMainProductId.toString();

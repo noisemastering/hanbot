@@ -13,6 +13,15 @@ There are three types of flows. Not all flows can drive a conversation.
 ## General Rules
 
 - **All flows must be stored in the database.** Flow definitions, manifests, and configuration live in the DB, not hardcoded.
+- **All ads must have a convo_flow attached.** An ad without an assigned convo_flow is ignored by the bot. The convo_flow is what drives the conversation — the ad just triggers it.
+
+## Transition Rules (temporary)
+
+During the transition from the old flow system to the new convo_flow architecture:
+- Both systems coexist. An ad can point to either a legacy flow (via `flowRef`) or a new convo_flow (via `convoFlowRef`).
+- If `convoFlowRef` is set, the new system takes priority.
+- If only `flowRef` is set, the legacy flow handles the conversation.
+- This allows migrating ads one at a time without breaking existing conversations.
 
 ## convo_flow Rules
 

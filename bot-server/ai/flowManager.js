@@ -28,6 +28,13 @@ const resellerFlow = require("./flows/resellerFlow");
 const masterFlow = require("./flows/masterFlow");
 const promo6x4Flow = require("./flows/promo6x4Flow");
 
+// New convo_flow system
+const convoFlow = require("./flows/convoFlow");
+const convo_bordeSeparadorRetail = require("./flows/convo_bordeSeparadorRetail");
+
+// Register convo_flows so they can find each other during flow switches
+convoFlow.registerFlow('convo_bordeSeparadorRetail', convo_bordeSeparadorRetail);
+
 /**
  * Cache for product-based flow inference
  */
@@ -447,8 +454,17 @@ async function detectFlow(classification, convo, userMessage, sourceContext) {
     return convo.currentFlow;
   }
 
-  // 2. FLOWREF: Explicitly configured on ads/campaigns — highest priority for ad context.
-  // This is set manually and is the most reliable indicator of which flow an ad belongs to.
+  // 2a. CONVO_FLOW: New system — takes priority over legacy flowRef.
+  const adConvoFlowRef = sourceContext?.ad?.convoFlowRef || convo?.convoFlowRef;
+  if (adConvoFlowRef) {
+    const convoFlowInstance = convoFlow.getFlow(adConvoFlowRef);
+    if (convoFlowInstance) {
+      console.log(`🎯 ConvoFlow from ad: ${adConvoFlowRef}`);
+      return `convo:${adConvoFlowRef}`;
+    }
+  }
+
+  // 2b. FLOWREF (legacy): Explicitly configured on ads/campaigns.
   const adFlowRef = sourceContext?.ad?.flowRef || convo?.adFlowRef;
   if (adFlowRef && VALID_FLOWS.includes(adFlowRef)) {
     console.log(`🎯 Flow from ad/campaign flowRef: ${adFlowRef}`);
@@ -1067,10 +1083,62 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
   // ===== END USE CASE FIT CHECK =====
 
   // ===== STEP 4: ROUTE TO ACTIVE FLOW =====
+
+  // ── NEW CONVO_FLOW SYSTEM ──
+  if (activeFlow.startsWith('convo:')) {
+    const convoFlowName = activeFlow.slice(6); // strip "convo:" prefix
+    const convoFlowInstance = convoFlow.getFlow(convoFlowName);
+
+    if (!convoFlowInstance) {
+      console.error(`❌ Unknown convo_flow: ${convoFlowName}`);
+      return null;
+    }
+
+    console.log(`✅ Routing to convo_flow: ${convoFlowName}`);
+
+    try {
+      // Load convo_flow state from conversation
+      const convoFlowState = convo?.convoFlowState || {};
+
+      const { response, state, switchTo, switchState } = await convoFlowInstance.handle(
+        userMessage, convo, psid, convoFlowState
+      );
+
+      // Persist updated state
+      const stateUpdate = { convoFlowState: state };
+
+      // Handle seamless flow switch
+      if (switchTo) {
+        stateUpdate.convoFlowRef = switchTo;
+        stateUpdate.currentFlow = `convo:${switchTo}`;
+        stateUpdate.convoFlowState = switchState || {};
+        console.log(`🔀 Seamless switch → ${switchTo}`);
+      }
+
+      await updateConversation(psid, stateUpdate);
+
+      if (response) {
+        console.log(`🎯 ===== END FLOW MANAGER (handled by convo_flow:${convoFlowName}) =====\n`);
+        return {
+          ...response,
+          handledBy: `convo_flow:${convoFlowName}`,
+          purchaseIntent: intentScore?.intent
+        };
+      }
+    } catch (error) {
+      console.error(`❌ Error in convo_flow ${convoFlowName}:`, error.message);
+    }
+
+    // Convo_flow returned null — fall through to general flow fallback
+  }
+
+  // ── LEGACY FLOW SYSTEM ──
   const flow = FLOWS[activeFlow];
 
   if (!flow) {
-    console.error(`❌ Unknown flow: ${activeFlow}`);
+    if (!activeFlow.startsWith('convo:')) {
+      console.error(`❌ Unknown flow: ${activeFlow}`);
+    }
     return null;
   }
 
