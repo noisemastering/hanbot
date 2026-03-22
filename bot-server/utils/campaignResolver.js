@@ -263,6 +263,7 @@ function mergeSettings(campaign, adSet, ad) {
 
     // Override flow
     if (ad.flowRef) settings.flowRef = ad.flowRef;
+    if (ad.convoFlowRef) settings.convoFlowRef = ad.convoFlowRef;
 
     // Merge ad context
     if (ad.adContext?.angle) settings.adContext.angle = ad.adContext.angle;
