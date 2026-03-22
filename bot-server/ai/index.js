@@ -376,6 +376,12 @@ async function generateReply(userMessage, psid, referral = null) {
     convo.adFlowRef = sourceContext.ad.flowRef;
     console.log(`🎯 Ad flowRef stored on conversation: ${sourceContext.ad.flowRef}`);
   }
+  if (sourceContext?.ad?.convoFlowRef && !convo.convoFlowRef) {
+    await updateConversation(psid, { convoFlowRef: sourceContext.ad.convoFlowRef, currentFlow: `convo:${sourceContext.ad.convoFlowRef}` });
+    convo.convoFlowRef = sourceContext.ad.convoFlowRef;
+    convo.currentFlow = `convo:${sourceContext.ad.convoFlowRef}`;
+    console.log(`🎯 ConvoFlowRef stored on conversation: ${sourceContext.ad.convoFlowRef}`);
+  }
   if (sourceContext?.ad?.productIds?.length && !convo.adProductIds?.length) {
     await updateConversation(psid, { adProductIds: sourceContext.ad.productIds });
     convo.adProductIds = sourceContext.ad.productIds;

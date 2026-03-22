@@ -55,9 +55,12 @@ async function enrichAdContext(source) {
         }
       }
 
-      // Store cascaded flowRef
+      // Store cascaded flowRef and convoFlowRef
       if (resolvedSettings.flowRef) {
         source.ad.flowRef = resolvedSettings.flowRef;
+      }
+      if (resolvedSettings.convoFlowRef) {
+        source.ad.convoFlowRef = resolvedSettings.convoFlowRef;
       }
 
       // Store cascaded productIds so flows can filter by ad-specific items
