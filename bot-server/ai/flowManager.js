@@ -449,12 +449,8 @@ async function detectExplicitProductSwitch(userMessage, rawCurrentFlow, classifi
 async function detectFlow(classification, convo, userMessage, sourceContext) {
   const msg = (userMessage || '').toLowerCase();
 
-  // 1. CONVERSATION CONTINUITY: Already in a product flow
-  if (convo?.currentFlow && convo.currentFlow !== 'default') {
-    return convo.currentFlow;
-  }
-
-  // 2a. CONVO_FLOW: New system — takes priority over legacy flowRef.
+  // 1. CONVO_FLOW: New system — takes priority over everything, including legacy currentFlow.
+  // If a convoFlowRef exists (from ad or conversation), always use it.
   const adConvoFlowRef = sourceContext?.ad?.convoFlowRef || convo?.convoFlowRef;
   if (adConvoFlowRef) {
     const convoFlowInstance = convoFlow.getFlow(adConvoFlowRef);
@@ -462,6 +458,11 @@ async function detectFlow(classification, convo, userMessage, sourceContext) {
       console.log(`🎯 ConvoFlow from ad: ${adConvoFlowRef}`);
       return `convo:${adConvoFlowRef}`;
     }
+  }
+
+  // 2. CONVERSATION CONTINUITY: Already in a product flow
+  if (convo?.currentFlow && convo.currentFlow !== 'default') {
+    return convo.currentFlow;
   }
 
   // 2b. FLOWREF (legacy): Explicitly configured on ads/campaigns.
