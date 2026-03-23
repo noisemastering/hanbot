@@ -1222,6 +1222,12 @@ app.post("/webhook", async (req, res) => {
           const adMainProductId = resolvedSettings?.mainProductId || resolvedSettings?.productIds?.[0];
           if (adMainProductId) adConvoUpdate.adMainProductId = adMainProductId.toString();
           await updateConversation(senderPsid, adConvoUpdate);
+          // Log flow history for convo_flows
+          if (adCurrentFlow.startsWith('convo:')) {
+            await updateConversation(senderPsid, {
+              $push: { flowHistory: { flow: adCurrentFlow, at: new Date(), trigger: 'fb_ad_entry' } }
+            });
+          }
           await callSendAPI(senderPsid, { text: adGreeting });
           adGreetingSent = true;
         } else if (referral.ad_id) {

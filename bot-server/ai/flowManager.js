@@ -31,9 +31,11 @@ const promo6x4Flow = require("./flows/promo6x4Flow");
 // New convo_flow system
 const convoFlow = require("./flows/convoFlow");
 const convo_bordeSeparadorRetail = require("./flows/convo_bordeSeparadorRetail");
+const convo_vende_malla = require("./flows/convo_vende_malla");
 
 // Register convo_flows so they can find each other during flow switches
 convoFlow.registerFlow('convo_bordeSeparadorRetail', convo_bordeSeparadorRetail);
+convoFlow.registerFlow('convo_vende_malla', convo_vende_malla);
 
 /**
  * Cache for product-based flow inference
@@ -855,8 +857,9 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
 
   // ===== STEP 0.5: CHECK FOR EXPLICIT PRODUCT SWITCH =====
   // If user is in a product flow and explicitly asks for a different product we sell, switch directly
+  // Skip for convo_flows — they handle product switching internally via seamless switch
   const currentFlow = normalizeFlow(convo?.currentFlow) || 'default';
-  if (currentFlow !== 'default' && !convo?.pendingFlowChange) {
+  if (currentFlow !== 'default' && !currentFlow.startsWith('convo:') && !convo?.pendingFlowChange) {
     const switchToFlow = await detectExplicitProductSwitch(userMessage, currentFlow, classification);
 
     if (switchToFlow) {
@@ -1032,10 +1035,12 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
   // Skip when message contains explicit dimensions — the customer already knows what they want,
   // so let the flow handler parse sizes + quote directly instead of suggesting alternatives.
   // Also skip when customer is deferring (will come back later) — use case keyword is incidental context.
+  // Skip for convo_flows — they handle use case logic via masterFlow classification
   const hasDimensions = /\d+\s*[x×X]\s*\d+/.test(userMessage);
   const isDeferral = /\b(despu[eé]s|m[aá]s\s+tarde|luego|ma[nñ]ana|lunes|martes|mi[eé]rcoles|jueves|viernes|s[aá]bado|domingo|la\s+pr[oó]xima|al\s+rato|ahorita\s+no|todav[ií]a\s+no|no\s+s[eé]|a[uú]n\s+no|cuando\s+tenga|cuando\s+pueda|saco\s+las\s+medidas|tomo\s+las\s+medidas|checo|reviso)\b/i.test(userMessage);
   const productInterest = convo?.productInterest || activeFlow;
-  const skipUseCaseCheck = hasDimensions || isDeferral;
+  const isConvoFlowActive = activeFlow.startsWith('convo:');
+  const skipUseCaseCheck = hasDimensions || isDeferral || isConvoFlowActive;
   const useCaseAnalysis = skipUseCaseCheck
     ? { detected: false, keywords: [], fits: true, bestUso: null, suggestedProducts: [], shouldSuggestChange: false }
     : await analyzeUseCaseFit(userMessage, productInterest);
@@ -1097,6 +1102,18 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
 
     console.log(`✅ Routing to convo_flow: ${convoFlowName}`);
 
+    // Clear stale flags from old sessions that would hijack responses in ai/index.js
+    const staleFlags = {};
+    if (convo?.pendingHandoff) staleFlags.pendingHandoff = false;
+    if (convo?.pendingLocationResponse) staleFlags.pendingLocationResponse = false;
+    if (convo?.pendingShippingLocation) staleFlags.pendingShippingLocation = false;
+    if (Object.keys(staleFlags).length > 0) {
+      console.log(`🧹 Clearing stale flags for convo_flow:`, Object.keys(staleFlags).join(', '));
+      await updateConversation(psid, staleFlags);
+      // Also clear on local object so ai/index.js post-checks don't see them
+      Object.assign(convo, staleFlags);
+    }
+
     try {
       // Load convo_flow state from conversation
       const convoFlowState = convo?.convoFlowState || {};
@@ -1117,6 +1134,13 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
       }
 
       await updateConversation(psid, stateUpdate);
+
+      // Log flow history on seamless switch
+      if (switchTo) {
+        await updateConversation(psid, {
+          $push: { flowHistory: { flow: `convo:${switchTo}`, at: new Date(), trigger: 'seamless_switch', from: activeFlow } }
+        });
+      }
 
       if (response) {
         console.log(`🎯 ===== END FLOW MANAGER (handled by convo_flow:${convoFlowName}) =====\n`);

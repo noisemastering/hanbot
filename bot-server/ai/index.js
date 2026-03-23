@@ -772,7 +772,9 @@ async function generateReply(userMessage, psid, referral = null) {
 
   // ====== LOCATION STATS QUESTION ======
   // Append zip code question to price quotes (responses with ML link)
-  if (response && response.text) {
+  // Skip for convo_flow — it handles location gathering via its own retailFlow
+  const isConvoFlow = response?.handledBy?.startsWith('convo_flow:');
+  if (response && response.text && !isConvoFlow) {
     const statsResult = await appendStatsQuestionIfNeeded(response.text, convo, psid);
     if (statsResult.askedStats) {
       response.text = statsResult.text;

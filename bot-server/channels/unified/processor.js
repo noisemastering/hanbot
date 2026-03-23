@@ -324,6 +324,14 @@ async function processMessage(normalizedMessage, io = null) {
       }
 
       await updateConversation(unifiedId, waAdUpdate);
+
+      // Log flow history for convo_flows
+      if (waAdUpdate.currentFlow?.startsWith('convo:')) {
+        await Conversation.findOneAndUpdate(
+          { psid: unifiedId },
+          { $push: { flowHistory: { flow: waAdUpdate.currentFlow, at: new Date(), trigger: 'wa_ad_entry' } } }
+        );
+      }
     }
   }
 
