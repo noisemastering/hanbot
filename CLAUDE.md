@@ -48,6 +48,15 @@
 
 Follow these documents exactly. Do not deviate, simplify, or merge architectures described in them.
 
+## Dual Channel Rule
+
+**This bot runs on TWO channels: Facebook Messenger AND WhatsApp.** When wiring any ad-related feature, flow routing, or conversation field, you MUST update BOTH entry paths:
+
+- **Facebook Messenger**: `bot-server/index.js` (referral/webhook handling)
+- **WhatsApp CTWA**: `bot-server/channels/unified/processor.js` (WhatsApp ad-entry handling)
+
+Never say a feature is "wired up" until both paths are verified. Grep for all places that set the relevant field to ensure nothing is missed.
+
 ## Deployment Rules
 
 **CRITICAL: The user NEVER changes configuration on Railway or Vercel.**
