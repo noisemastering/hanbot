@@ -276,6 +276,49 @@ router.get("/daily", async (req, res) => {
   }
 });
 
+// GET /click-logs/daily-manual - Daily manual sales for chart
+router.get("/daily-manual", async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    const dateFilter = {};
+    if (startDate) dateFilter.$gte = new Date(startDate + 'T00:00:00');
+    if (endDate) dateFilter.$lte = new Date(endDate + 'T23:59:59.999');
+
+    const pipeline = [
+      { $match: {
+        converted: true,
+        correlationMethod: 'manual',
+        ...(dateFilter.$gte ? { convertedAt: dateFilter } : {})
+      }},
+      { $group: {
+        _id: { $dateToString: { format: "%Y-%m-%d", date: "$convertedAt", timezone: "America/Mexico_City" } },
+        sales: { $sum: 1 },
+        revenue: { $sum: { $ifNull: ['$conversionData.totalAmount', 0] } }
+      }},
+      { $sort: { _id: 1 } }
+    ];
+
+    const daily = await ClickLog.aggregate(pipeline);
+
+    const chartData = daily.map(d => ({
+      date: d._id,
+      dateLabel: new Date(d._id + 'T12:00:00').toLocaleDateString('es-MX', { month: 'short', day: 'numeric' }),
+      sales: d.sales,
+      revenue: Math.round(d.revenue)
+    }));
+
+    // Also compute totals for the period
+    const totalSales = chartData.reduce((sum, d) => sum + d.sales, 0);
+    const totalRevenue = chartData.reduce((sum, d) => sum + d.revenue, 0);
+
+    res.json({ success: true, chartData, totalSales, totalRevenue });
+  } catch (error) {
+    console.error("Error fetching daily manual sales:", error);
+    res.status(500).json({ success: false, error: "Error fetching daily manual sales" });
+  }
+});
+
 // Background correlation function - runs without blocking the response
 async function runBackgroundCorrelation() {
   try {

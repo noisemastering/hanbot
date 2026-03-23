@@ -98,6 +98,8 @@ function Home() {
   const [topProducts, setTopProducts] = useState([]);
   const [topRegions, setTopRegions] = useState([]);
   const [adData, setAdData] = useState([]);
+  const [manualSalesData, setManualSalesData] = useState([]);
+  const [manualTotals, setManualTotals] = useState({ totalSales: 0, totalRevenue: 0 });
 
   const dateFrom = useMemo(() => getDaysAgo(range), [range]);
   const dateTo = useMemo(() => new Date().toISOString().split("T")[0], []);
@@ -117,7 +119,7 @@ function Home() {
       const dateFromISO = `${dateFrom}T00:00:00.000Z`;
       const dateToISO = `${dateTo}T23:59:59.999Z`;
 
-      const [analyticsRes, convRes, clicksRes, productsRes, regionsRes, adsRes] =
+      const [analyticsRes, convRes, clicksRes, productsRes, regionsRes, adsRes, manualRes] =
         await Promise.all([
           API.get(`/analytics/?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
           API.get(`/analytics/conversions?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
@@ -125,6 +127,7 @@ function Home() {
           API.get(`/analytics/top-products?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
           API.get(`/analytics/top-region?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
           API.get(`/analytics/clicks-by-ad?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
+          API.get(`/click-logs/daily-manual?startDate=${dateFrom}&endDate=${dateTo}`),
         ]);
 
       setAnalytics(analyticsRes.data);
@@ -137,6 +140,8 @@ function Home() {
           .sort((a, b) => (b.clicks || 0) - (a.clicks || 0))
           .slice(0, 3)
       );
+      setManualSalesData(manualRes.data?.chartData || []);
+      setManualTotals({ totalSales: manualRes.data?.totalSales || 0, totalRevenue: manualRes.data?.totalRevenue || 0 });
     } catch (err) {
       console.error("Error fetching dashboard data:", err);
     } finally {
@@ -501,6 +506,67 @@ function Home() {
                   stroke={COLORS.purple}
                   strokeWidth={2}
                   dot={{ fill: COLORS.purple, strokeWidth: 2, r: 3 }}
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* Row 2b: Manual Sales Chart */}
+      {manualSalesData.length > 0 && (
+        <div onClick={() => navigate('/crm/sales')} className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6 cursor-pointer hover:border-gray-600/70 hover:scale-[1.005] transition-all">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-white">Ventas registradas manualmente</h2>
+            <div className="flex gap-4 text-sm">
+              <span className="text-gray-400">{manualTotals.totalSales} ventas</span>
+              <span className="text-green-400 font-medium">{formatCurrency(manualTotals.totalRevenue)}</span>
+            </div>
+          </div>
+          <div className="h-56">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={manualSalesData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis
+                  dataKey="dateLabel"
+                  tick={{ fill: "#9CA3AF", fontSize: 11 }}
+                  axisLine={{ stroke: "#374151" }}
+                />
+                <YAxis
+                  yAxisId="left"
+                  tick={{ fill: "#9CA3AF", fontSize: 11 }}
+                  axisLine={{ stroke: "#374151" }}
+                  allowDecimals={false}
+                />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  tick={{ fill: "#9CA3AF", fontSize: 11 }}
+                  axisLine={{ stroke: "#374151" }}
+                  tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`}
+                />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  labelStyle={{ color: "#9CA3AF" }}
+                  formatter={(value, name) => name === 'Ingreso' ? formatCurrency(value) : value}
+                />
+                <Legend wrapperStyle={{ color: "#9CA3AF" }} />
+                <Bar
+                  yAxisId="left"
+                  dataKey="sales"
+                  name="Ventas"
+                  fill={COLORS.amber}
+                  fillOpacity={0.7}
+                  radius={[4, 4, 0, 0]}
+                />
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="revenue"
+                  name="Ingreso"
+                  stroke={COLORS.green}
+                  strokeWidth={2}
+                  dot={{ fill: COLORS.green, strokeWidth: 2, r: 3 }}
                 />
               </ComposedChart>
             </ResponsiveContainer>
