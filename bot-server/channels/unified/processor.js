@@ -292,8 +292,15 @@ async function processMessage(normalizedMessage, io = null) {
             // Set flow and product context
             if (adProductInterest) {
               const adFlowRef = resolved.flowRef;
+              const adConvoFlowRef = resolved.convoFlowRef;
               waAdUpdate.productInterest = adProductInterest;
-              waAdUpdate.currentFlow = isResellerAd ? 'reseller' : (adFlowRef || adProductInterest);
+              // convoFlowRef takes priority over legacy flowRef
+              if (adConvoFlowRef) {
+                waAdUpdate.currentFlow = `convo:${adConvoFlowRef}`;
+                waAdUpdate.convoFlowRef = adConvoFlowRef;
+              } else {
+                waAdUpdate.currentFlow = isResellerAd ? 'reseller' : (adFlowRef || adProductInterest);
+              }
               waAdUpdate.greeted = true;
               waAdUpdate.lastGreetTime = Date.now();
             }
