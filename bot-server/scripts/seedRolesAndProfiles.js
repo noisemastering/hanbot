@@ -101,8 +101,8 @@ async function seedRolesAndProfiles() {
         label: "Administrador de Campaña",
         description: "Gestión de conversaciones, campañas y productos.",
         role: createdRoles.user._id,
-        permissions: ["conversations", "campaigns", "adsets", "ads", "products"],
-        landingPage: "/conversations",
+        permissions: ["campaign-overview", "conversations", "campaigns", "adsets", "ads", "products"],
+        landingPage: "/",
         isSystem: true
       },
       {

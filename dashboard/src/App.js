@@ -61,6 +61,7 @@ import ManualSalesView from "./pages/ManualSalesView";
 import CRMView from "./pages/CRMView";
 import CustomerDetailView from "./pages/CustomerDetailView";
 import CRMSalesView from "./pages/CRMSalesView";
+import CampaignHome from "./pages/CampaignHome";
 import MLImporterView from "./pages/MLImporterView";
 import MLPlaygroundView from "./pages/MLPlaygroundView";
 import IntentsView from "./components/IntentsView";
@@ -1751,7 +1752,7 @@ function App() {
           <Route path="/reset-password" element={<ResetPassword />} />
 
           {/* Overview Route */}
-          <Route path="/" element={canAccess('overview') ? <Home /> : <Navigate to={getLandingPage()} replace />} />
+          <Route path="/" element={canAccess('overview') ? <Home /> : canAccess('campaign-overview') ? <CampaignHome /> : <Navigate to={getLandingPage()} replace />} />
 
           {/* Conversaciones Route */}
           <Route path="/conversations" element={<Messages />} />
