@@ -1155,10 +1155,13 @@ app.post("/webhook", async (req, res) => {
         if (isResellerAd) {
           console.log(`🏪 Reseller ad detected — using reseller pitch as greeting`);
           adProductInterest = adProductInterest || 'malla_sombra';
-          const { getPitchMessage } = require("./ai/flows/resellerFlow");
-          adGreeting = getPitchMessage(adProductInterest);
-          // Mark as wholesale + set lastIntent so resellerFlow activates on next message
-          await updateConversation(senderPsid, { isWholesaleInquiry: true, lastIntent: 'reseller_pitch_sent' });
+          // Skip legacy reseller greeting + state for convo_flows — the convo_flow handles its own pitch
+          if (!resolvedSettings?.convoFlowRef) {
+            const { getPitchMessage } = require("./ai/flows/resellerFlow");
+            adGreeting = getPitchMessage(adProductInterest);
+            // Mark as wholesale + set lastIntent so resellerFlow activates on next message
+            await updateConversation(senderPsid, { isWholesaleInquiry: true, lastIntent: 'reseller_pitch_sent' });
+          }
         }
 
         // Fallback to ref-based detection if no ad products found
@@ -1173,8 +1176,8 @@ app.post("/webhook", async (req, res) => {
           }
         }
 
-        // Override greeting for recent returning users (but NOT reseller ads — the pitch IS the greeting)
-        if (isRecentReturn && convo?.userName && !isResellerAd) {
+        // Override greeting for recent returning users (but NOT reseller ads or convo_flows)
+        if (isRecentReturn && convo?.userName && !isResellerAd && !resolvedSettings?.convoFlowRef) {
           const prevProduct = convo.previousSession?.productInterest || convo.productInterest;
           const productNames = {
             malla_sombra: 'malla sombra',
@@ -1228,7 +1231,16 @@ app.post("/webhook", async (req, res) => {
               $push: { flowHistory: { flow: adCurrentFlow, at: new Date(), trigger: 'fb_ad_entry' } }
             });
           }
-          await callSendAPI(senderPsid, { text: adGreeting });
+          // Skip legacy greeting for convo_flows — the convo_flow handles the first response
+          if (adConvoFlowRef) {
+            console.log(`🎯 convo_flow ad entry — skipping legacy greeting, convo_flow will handle first response`);
+            // If pure referral (no user message), send a neutral opener so user isn't left in silence
+            if (!webhookEvent.message?.text) {
+              await callSendAPI(senderPsid, { text: "👋 ¡Hola! ¿En qué te puedo ayudar?" });
+            }
+          } else {
+            await callSendAPI(senderPsid, { text: adGreeting });
+          }
           adGreetingSent = true;
         } else if (referral.ad_id) {
           // Ad click but couldn't determine product - generic greeting
