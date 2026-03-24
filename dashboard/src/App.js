@@ -1367,6 +1367,11 @@ function App() {
       return item.children.some(child => canAccess(child.id));
     }
 
+    // Overview is also visible for campaign-overview permission
+    if (item.id === 'overview') {
+      return canAccess('overview') || canAccess('campaign-overview');
+    }
+
     // Filter other sections based on canAccess
     return canAccess(item.id);
   }).map(item => {
