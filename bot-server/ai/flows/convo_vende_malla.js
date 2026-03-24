@@ -14,7 +14,8 @@ const manifest = {
   voice: 'professional',
   allowListing: true,
   offersCatalog: true,
-  promo: null
+  promo: null,
+  greeting: '¡Hola! Somos Hanlob, fabricantes de malla sombra raschel confeccionada con refuerzo. Si buscas ampliar tu catálogo o revender malla sombra, tenemos precios de mayoreo directo de fábrica. ¿Te gustaría conocer nuestras opciones?'
 };
 
 const instance = convoFlow.create(manifest);

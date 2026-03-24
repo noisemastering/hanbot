@@ -1231,13 +1231,20 @@ app.post("/webhook", async (req, res) => {
               $push: { flowHistory: { flow: adCurrentFlow, at: new Date(), trigger: 'fb_ad_entry' } }
             });
           }
-          // Skip legacy greeting for convo_flows — the convo_flow handles the first response
+          // Skip legacy greeting for convo_flows — use manifest greeting or let the flow handle first message
           if (adConvoFlowRef) {
-            console.log(`🎯 convo_flow ad entry — skipping legacy greeting, convo_flow will handle first response`);
-            // If pure referral (no user message), send a neutral opener so user isn't left in silence
-            if (!webhookEvent.message?.text) {
+            console.log(`🎯 convo_flow ad entry — skipping legacy greeting`);
+            // Look up the convo_flow's manifest greeting
+            const convoFlowModule = require("./ai/flows/convoFlow").getFlow(adConvoFlowRef);
+            const manifestGreeting = convoFlowModule?.manifest?.greeting;
+            if (manifestGreeting) {
+              // Manifest has a greeting — send it (e.g. reseller pitch)
+              await callSendAPI(senderPsid, { text: manifestGreeting });
+            } else if (!webhookEvent.message?.text) {
+              // No manifest greeting and no user message — neutral opener
               await callSendAPI(senderPsid, { text: "👋 ¡Hola! ¿En qué te puedo ayudar?" });
             }
+            // If there IS a user message but no manifest greeting, skip greeting — the flow handles it
           } else {
             await callSendAPI(senderPsid, { text: adGreeting });
           }

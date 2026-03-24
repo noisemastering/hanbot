@@ -333,8 +333,13 @@ function create(manifest) {
 
     // ── PROMO FLOW (presents right away, before anything else) ──
     if (hasPromo) {
+      // Filter to promo-specific products if configured, otherwise pitch all
+      const promoProducts = manifest.promo.promoProductIds
+        ? productCache.filter(p => manifest.promo.promoProductIds.includes(String(p.productId)))
+        : productCache;
+
       const promoResult = await promoFlow.handle(userMessage, convo, psid, {
-        products: productCache,
+        products: promoProducts,
         voice: manifest.voice || 'casual',
         salesChannel: manifest.salesChannel === 'retail' ? 'mercado_libre' : 'direct',
         customerName,

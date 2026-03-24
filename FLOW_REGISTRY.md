@@ -26,3 +26,4 @@ Flows must be registered here to be used. If a flow is not listed below, it cann
 |------|------|--------|----------|
 | convo_bordeSeparadorRetail | `bot-server/ai/flows/convo_bordeSeparadorRetail.js` | Active | Borde Separador, retail, casual buyer |
 | convo_vende_malla | `bot-server/ai/flows/convo_vende_malla.js` | Active | Confeccionada Reforzada Rectangular, wholesale, reseller |
+| convo_promo6x4 | `bot-server/ai/flows/convo_promo6x4.js` | Active | Confeccionada Reforzada Rectangular, retail, buyer, promo 6x4 |
