@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import API from "../api";
 import {
   ComposedChart,
@@ -48,6 +48,11 @@ function CampaignHome() {
   const [range, setRange] = useState(30);
   const [loading, setLoading] = useState(true);
 
+  const [correlating, setCorrelating] = useState(false);
+  const [syncProgress, setSyncProgress] = useState(0);
+  const [lastSync, setLastSync] = useState(null);
+  const progressRef = useRef(null);
+
   const [analytics, setAnalytics] = useState(null);
   const [adPerf, setAdPerf] = useState([]);
   const [dailyData, setDailyData] = useState([]);
@@ -63,30 +68,68 @@ function CampaignHome() {
     return `${fmt(dateFrom)} – ${fmt(dateTo)}`;
   }, [dateFrom, dateTo]);
 
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    try {
+      const dateFromISO = `${dateFrom}T00:00:00.000Z`;
+      const dateToISO = `${dateTo}T23:59:59.999Z`;
+
+      const [analyticsRes, adPerfRes, clicksRes] = await Promise.all([
+        API.get(`/analytics/?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
+        API.get(`/analytics/ad-performance?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
+        API.get(`/click-logs/daily?startDate=${dateFrom}&endDate=${dateTo}`),
+      ]);
+
+      setAnalytics(analyticsRes.data);
+      setAdPerf(adPerfRes.data?.ads || []);
+      setDailyData(clicksRes.data?.chartData || []);
+    } catch (err) {
+      console.error("Error fetching campaign dashboard:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [dateFrom, dateTo]);
+
+  const startProgress = useCallback(() => {
+    setSyncProgress(0);
+    let progress = 0;
+    progressRef.current = setInterval(() => {
+      const remaining = 90 - progress;
+      progress += remaining * 0.08;
+      setSyncProgress(Math.min(Math.round(progress), 90));
+    }, 300);
+  }, []);
+
+  const stopProgress = useCallback(() => {
+    if (progressRef.current) clearInterval(progressRef.current);
+    progressRef.current = null;
+    setSyncProgress(100);
+    setTimeout(() => setSyncProgress(0), 800);
+  }, []);
+
+  const runCorrelation = async () => {
+    setCorrelating(true);
+    startProgress();
+    try {
+      await API.post('/analytics/correlate-conversions', { sellerId: '482595248', dateFrom, dateTo });
+      setLastSync(new Date());
+      stopProgress();
+      await fetchAll();
+    } catch (err) {
+      console.error('Correlation failed:', err);
+      stopProgress();
+    } finally {
+      setCorrelating(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchAll = async () => {
-      setLoading(true);
-      try {
-        const dateFromISO = `${dateFrom}T00:00:00.000Z`;
-        const dateToISO = `${dateTo}T23:59:59.999Z`;
-
-        const [analyticsRes, adPerfRes, clicksRes] = await Promise.all([
-          API.get(`/analytics/?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
-          API.get(`/analytics/ad-performance?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
-          API.get(`/click-logs/daily?startDate=${dateFrom}&endDate=${dateTo}`),
-        ]);
-
-        setAnalytics(analyticsRes.data);
-        setAdPerf(adPerfRes.data?.ads || []);
-        setDailyData(clicksRes.data?.chartData || []);
-      } catch (err) {
-        console.error("Error fetching campaign dashboard:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
     fetchAll();
-  }, [range, dateFrom, dateTo]);
+    API.post('/analytics/correlate-conversions', { sellerId: '482595248', dateFrom, dateTo })
+      .then(() => { setLastSync(new Date()); return fetchAll(); })
+      .catch(err => console.error('Auto-sync failed:', err));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [range]);
 
   // Aggregated totals from ad performance data
   const totals = useMemo(() => {
@@ -281,6 +324,30 @@ function CampaignHome() {
           </div>
         </div>
       )}
+
+      {/* Correlate button */}
+      <div className="flex items-center justify-end gap-3">
+        {lastSync && (
+          <span className="text-xs text-gray-500">
+            Última sync: {lastSync.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+          </span>
+        )}
+        {correlating && (
+          <div className="w-48 h-2 bg-gray-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-purple-500 rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${syncProgress}%` }}
+            />
+          </div>
+        )}
+        <button
+          onClick={runCorrelation}
+          disabled={correlating}
+          className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50 transition-all"
+        >
+          {correlating ? `${syncProgress}%` : "Correlacionar"}
+        </button>
+      </div>
 
       {/* Bottom row: Ad Donut + Ad Table */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
