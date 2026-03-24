@@ -1047,11 +1047,27 @@ app.post("/webhook", async (req, res) => {
         try {
         if (referral.ad_id) {
           const { resolveByAdId } = require("./utils/campaignResolver");
-          const { getProductInterest } = require("./ai/utils/productEnricher");
-          const ProductFamily = require("./models/ProductFamily");
 
           // Use campaign resolver for proper inheritance
           resolvedSettings = await resolveByAdId(referral.ad_id);
+
+          // ── convo_flow: set state, skip ALL legacy ad-entry logic ──
+          if (resolvedSettings?.convoFlowRef) {
+            const cfRef = resolvedSettings.convoFlowRef;
+            await updateConversation(senderPsid, {
+              currentFlow: `convo:${cfRef}`,
+              convoFlowRef: cfRef,
+            });
+            await updateConversation(senderPsid, {
+              $push: { flowHistory: { flow: `convo:${cfRef}`, at: new Date(), trigger: 'fb_ad_entry' } }
+            });
+            console.log(`🎯 convo_flow ad entry: ${cfRef} — legacy dormant`);
+          }
+
+          if (!resolvedSettings?.convoFlowRef) {
+          // ── Legacy ad-entry logic (greetings, reseller detection, etc.) ──
+          const { getProductInterest } = require("./ai/utils/productEnricher");
+          const ProductFamily = require("./models/ProductFamily");
 
           // Dynamic borde greeting from DB
           const { getAvailableLengths: getBordeLengthsForGreeting, getBordeWidth: getBordeWidthForGreeting } = require("./ai/flows/bordeFlow");
@@ -1155,13 +1171,10 @@ app.post("/webhook", async (req, res) => {
         if (isResellerAd) {
           console.log(`🏪 Reseller ad detected — using reseller pitch as greeting`);
           adProductInterest = adProductInterest || 'malla_sombra';
-          // Skip legacy reseller greeting + state for convo_flows — the convo_flow handles its own pitch
-          if (!resolvedSettings?.convoFlowRef) {
-            const { getPitchMessage } = require("./ai/flows/resellerFlow");
-            adGreeting = getPitchMessage(adProductInterest);
-            // Mark as wholesale + set lastIntent so resellerFlow activates on next message
-            await updateConversation(senderPsid, { isWholesaleInquiry: true, lastIntent: 'reseller_pitch_sent' });
-          }
+          const { getPitchMessage } = require("./ai/flows/resellerFlow");
+          adGreeting = getPitchMessage(adProductInterest);
+          // Mark as wholesale + set lastIntent so resellerFlow activates on next message
+          await updateConversation(senderPsid, { isWholesaleInquiry: true, lastIntent: 'reseller_pitch_sent' });
         }
 
         // Fallback to ref-based detection if no ad products found
@@ -1176,8 +1189,8 @@ app.post("/webhook", async (req, res) => {
           }
         }
 
-        // Override greeting for recent returning users (but NOT reseller ads or convo_flows)
-        if (isRecentReturn && convo?.userName && !isResellerAd && !resolvedSettings?.convoFlowRef) {
+        // Override greeting for recent returning users (but NOT reseller ads — the pitch IS the greeting)
+        if (isRecentReturn && convo?.userName && !isResellerAd) {
           const prevProduct = convo.previousSession?.productInterest || convo.productInterest;
           const productNames = {
             malla_sombra: 'malla sombra',
@@ -1210,33 +1223,16 @@ app.post("/webhook", async (req, res) => {
           }
         }
 
-        // Set product interest and send greeting
-        // Use flowRef for currentFlow (explicitly configured on ads/campaigns), fall back to adProductInterest
-        // Reseller ads use 'reseller' flow — same currentFlow governance as all other flows
-        const adConvoFlowRef = resolvedSettings?.convoFlowRef;
+        // Set product interest and send greeting (legacy flows only — convo_flows short-circuited above)
         const adFlowRef = resolvedSettings?.flowRef;
-        // New convo_flow system takes priority over legacy flowRef
-        const adCurrentFlow = adConvoFlowRef
-          ? `convo:${adConvoFlowRef}`
-          : (isResellerAd ? 'reseller' : (adFlowRef || adProductInterest));
+        const adCurrentFlow = isResellerAd ? 'reseller' : (adFlowRef || adProductInterest);
         if (adProductInterest) {
-          const adConvoUpdate = { productInterest: adProductInterest, currentFlow: adCurrentFlow, adFlowRef: adFlowRef || null, convoFlowRef: adConvoFlowRef || null, greeted: true, lastGreetTime: Date.now() };
+          const adConvoUpdate = { productInterest: adProductInterest, currentFlow: adCurrentFlow, adFlowRef: adFlowRef || null, greeted: true, lastGreetTime: Date.now() };
           if (adMainProductName) adConvoUpdate.adMainProductName = adMainProductName;
           const adMainProductId = resolvedSettings?.mainProductId || resolvedSettings?.productIds?.[0];
           if (adMainProductId) adConvoUpdate.adMainProductId = adMainProductId.toString();
           await updateConversation(senderPsid, adConvoUpdate);
-          // Log flow history for convo_flows
-          if (adCurrentFlow.startsWith('convo:')) {
-            await updateConversation(senderPsid, {
-              $push: { flowHistory: { flow: adCurrentFlow, at: new Date(), trigger: 'fb_ad_entry' } }
-            });
-          }
-          // convo_flows handle their own greeting via the flow pipeline — don't send anything here
-          if (adConvoFlowRef) {
-            console.log(`🎯 convo_flow ad entry — no legacy greeting, flow handles first response`);
-          } else {
-            await callSendAPI(senderPsid, { text: adGreeting });
-          }
+          await callSendAPI(senderPsid, { text: adGreeting });
           adGreetingSent = true;
         } else if (referral.ad_id) {
           // Ad click but couldn't determine product - generic greeting
@@ -1248,6 +1244,7 @@ app.post("/webhook", async (req, res) => {
           await callSendAPI(senderPsid, { text: genericGreeting });
           adGreetingSent = true;
         }
+        } // close if (!convoFlowRef) — legacy ad-entry guard
         } catch (adResolutionErr) {
           console.error(`❌ Error in ad resolution/greeting for ${senderPsid}:`, adResolutionErr.message);
           // Still send a generic greeting so the user isn't left in silence
