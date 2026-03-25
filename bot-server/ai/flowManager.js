@@ -640,6 +640,35 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
       const newFlow = convo.pendingWholesaleRetailChoice;
       console.log(`🛒 Retail choice confirmed, switching to flow: ${newFlow}`);
 
+      // Check if this legacy flow has a convo_flow counterpart
+      const RETAIL_TO_CONVO = {
+        'malla_sombra': 'convo_confeccionadaRetail',
+        'borde_separador': 'convo_bordeSeparadorRetail'
+      };
+      const convoName = RETAIL_TO_CONVO[newFlow];
+      if (convoName) {
+        await updateConversation(psid, {
+          currentFlow: `convo:${convoName}`,
+          convoFlowRef: convoName,
+          productInterest: newFlow,
+          pendingWholesaleRetailChoice: null,
+          flowTransferredFrom: convo.currentFlow,
+          flowTransferredAt: new Date(),
+          convoFlowState: {}
+        });
+        convo.currentFlow = `convo:${convoName}`;
+
+        console.log(`🎯 ===== END FLOW MANAGER (retail → convo:${convoName}) =====\n`);
+        return {
+          type: "text",
+          text: newFlow === 'borde_separador'
+            ? '¡Perfecto! Para el borde separador, ¿qué largo necesitas?'
+            : '¡Perfecto! Para la malla sombra confeccionada, ¿qué medida necesitas?',
+          handledBy: `convo_flow:${convoName}`,
+          purchaseIntent: 'medium'
+        };
+      }
+
       await updateConversation(psid, {
         currentFlow: newFlow,
         productInterest: newFlow,
@@ -667,15 +696,10 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
         }
       }
 
-      const flowGreetings = {
-        'malla_sombra': '¡Perfecto! Para la malla sombra confeccionada, ¿qué medida necesitas?',
-        'borde_separador': '¡Perfecto! Para el borde separador, ¿qué largo necesitas?'
-      };
-
       console.log(`🎯 ===== END FLOW MANAGER (retail → ${newFlow}) =====\n`);
       return {
         type: "text",
-        text: flowGreetings[newFlow] || '¡Perfecto! ¿Qué medida necesitas?',
+        text: '¡Perfecto! ¿Qué medida necesitas?',
         handledBy: `flow:${newFlow}`,
         purchaseIntent: 'medium'
       };
@@ -784,6 +808,36 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
         // Continue with normal flow switch on error
       }
 
+      // Check if this legacy flow has a convo_flow counterpart
+      const SWITCH_TO_CONVO = {
+        'malla_sombra': 'convo_confeccionadaRetail',
+        'borde_separador': 'convo_bordeSeparadorRetail'
+      };
+      const switchConvoName = SWITCH_TO_CONVO[newFlow];
+      if (switchConvoName) {
+        await updateConversation(psid, {
+          currentFlow: `convo:${switchConvoName}`,
+          convoFlowRef: switchConvoName,
+          productInterest: newFlow,
+          pendingFlowChange: null,
+          pendingUseCaseProducts: null,
+          flowTransferredFrom: convo.currentFlow,
+          flowTransferredAt: new Date(),
+          convoFlowState: {}
+        });
+        convo.currentFlow = `convo:${switchConvoName}`;
+
+        console.log(`🎯 ===== END FLOW MANAGER (flow changed to convo:${switchConvoName}) =====\n`);
+        return {
+          type: "text",
+          text: newFlow === 'borde_separador'
+            ? '¡Perfecto! Para el borde separador, ¿qué largo necesitas?'
+            : '¡Perfecto! Para la malla sombra confeccionada, ¿qué medida necesitas?',
+          handledBy: `convo_flow:${switchConvoName}`,
+          purchaseIntent: 'medium'
+        };
+      }
+
       // Clear pending and switch flow (retail only, or no wholesale/retail distinction found)
       await updateConversation(psid, {
         currentFlow: newFlow,
@@ -814,16 +868,10 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
         }
       }
 
-      // Route to new flow with a greeting
-      const flowGreetings = {
-        'malla_sombra': '¡Perfecto! Para la malla sombra confeccionada, ¿qué medida necesitas?',
-        'borde_separador': '¡Perfecto! Para el borde separador, ¿qué largo necesitas?'
-      };
-
       console.log(`🎯 ===== END FLOW MANAGER (flow changed to ${newFlow}) =====\n`);
       return {
         type: "text",
-        text: flowGreetings[newFlow] || `¡Perfecto! ¿Qué medida necesitas?`,
+        text: '¡Perfecto! ¿Qué medida necesitas?',
         handledBy: `flow:${newFlow}`,
         purchaseIntent: 'medium'
       };
@@ -1095,6 +1143,25 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
   // ===== END USE CASE FIT CHECK =====
 
   // ===== STEP 4: ROUTE TO ACTIVE FLOW =====
+
+  // ── LEGACY → CONVO_FLOW UPGRADE ──
+  // Route legacy flows to their convo_flow counterparts when available.
+  const LEGACY_TO_CONVO = {
+    'malla_sombra': 'convo_confeccionadaRetail',
+    'borde_separador': 'convo_bordeSeparadorRetail'
+  };
+  if (LEGACY_TO_CONVO[activeFlow]) {
+    const convoName = LEGACY_TO_CONVO[activeFlow];
+    console.log(`🔀 Legacy flow ${activeFlow} → convo_flow ${convoName}`);
+    activeFlow = `convo:${convoName}`;
+
+    // Persist so future messages go directly to convo_flow
+    await updateConversation(psid, {
+      currentFlow: activeFlow,
+      convoFlowRef: convoName
+    });
+    convo.currentFlow = activeFlow;
+  }
 
   // ── NEW CONVO_FLOW SYSTEM ──
   if (activeFlow.startsWith('convo:')) {
