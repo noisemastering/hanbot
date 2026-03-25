@@ -47,14 +47,32 @@ function checkHandoffRules(product) {
 }
 
 /**
- * Detect if the customer is asking for wholesale.
+ * AI-driven: detect if the customer is asking for wholesale.
  * @param {string} userMessage
- * @returns {boolean}
+ * @param {Object} options - { conversationHistory }
+ * @returns {Promise<boolean>}
  */
-function detectWholesale(userMessage) {
+async function detectWholesale(userMessage, options = {}) {
   if (!userMessage) return false;
-  const wholesalePatterns = /\b(mayoreo|al\s*por\s*mayor|distribuidor|lote|grandes\s*cantidades|precio\s*por\s*volumen|revend|negocio|tienda|local\s*comercial)\b/i;
-  return wholesalePatterns.test(userMessage);
+  const { conversationHistory = '' } = options;
+
+  try {
+    const response = await _openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: `¿El cliente está preguntando por compra al mayoreo, distribución, reventa, o grandes cantidades? Responde con JSON: { "isWholesale": true/false }` },
+        { role: 'user', content: `${conversationHistory ? `${conversationHistory}\n\n` : ''}Mensaje del cliente: ${userMessage}` }
+      ],
+      temperature: 0,
+      max_tokens: 30,
+      response_format: { type: 'json_object' }
+    });
+    const parsed = JSON.parse(response.choices[0].message.content);
+    return parsed.isWholesale === true;
+  } catch (err) {
+    console.error('❌ [retail] Wholesale detection error:', err.message);
+    return false;
+  }
 }
 
 /**
@@ -146,8 +164,8 @@ Genera el mensaje de cotización.`;
 async function handle(userMessage, convo, psid, context = {}) {
   const { products = [], voice = 'casual', salesChannel = 'mercado_libre', customerName = null, colorNote = null, conversationHistory = '' } = context;
 
-  // ── WHOLESALE DETECTION ──
-  if (detectWholesale(userMessage)) {
+  // ── WHOLESALE DETECTION (AI) ──
+  if (await detectWholesale(userMessage, { conversationHistory })) {
     console.log('🏛️ [retail] Wholesale inquiry detected');
     return { type: 'flow_switch', action: 'wholesale', reason: 'Cliente pregunta por mayoreo' };
   }

@@ -17,30 +17,45 @@ const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 const PROFILES = ['casual', 'technical'];
 
 /**
- * Detect if the buyer is actually looking to resell.
- * @param {string} userMessage
- * @returns {boolean}
- */
-function detectReseller(userMessage) {
-  if (!userMessage) return false;
-  const resellerPatterns = /\b(revender|reventa|para\s*vender|mi\s*negocio|mi\s*tienda|distribuir|cliente[s]?\s*me\s*piden|para\s*ofrecer|margen|utilidad|ganancia)\b/i;
-  return resellerPatterns.test(userMessage);
-}
-
-/**
- * Evaluate if the buyer profile should adjust based on conversation.
+ * AI-driven: classify buyer intent and profile.
+ * Detects reseller intent and adjusts casual/technical profile.
  * @param {string} userMessage
  * @param {string} currentProfile - 'casual' or 'technical'
- * @returns {string} adjusted profile
+ * @param {Object} options - { conversationHistory }
+ * @returns {Promise<{ isReseller: boolean, profile: string }>}
  */
-function evaluateProfile(userMessage, currentProfile) {
-  if (!userMessage) return currentProfile;
-  const technicalSignals = /\b(especificaciones|densidad|gramaje|denier|UV|tensión|resistencia|norma|certificad|ficha\s*técnica|dato[s]?\s*técnico|protección\s*solar|factor\s*de\s*sombra)\b/i;
-  const casualSignals = /\b(bonit[ao]|que\s*tal\s*sale|sirve\s*para|aguanta|jala|funciona|para\s*mi\s*patio|para\s*mi\s*casa|mi\s*cochera|mi\s*terraza)\b/i;
+async function classifyBuyerIntent(userMessage, currentProfile = 'casual', options = {}) {
+  if (!userMessage) return { isReseller: false, profile: currentProfile };
+  const { conversationHistory = '' } = options;
 
-  if (technicalSignals.test(userMessage) && currentProfile === 'casual') return 'technical';
-  if (casualSignals.test(userMessage) && currentProfile === 'technical') return 'casual';
-  return currentProfile;
+  try {
+    const response = await _openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `Analiza el mensaje de un cliente de malla sombra. Responde con JSON:
+{ "isReseller": true/false, "profile": "casual"|"technical" }
+
+- isReseller: true si el cliente quiere revender, distribuir, tiene un negocio/tienda y busca vender a sus clientes, o pregunta por márgenes/utilidad.
+- profile: "technical" si usa lenguaje técnico (especificaciones, densidad, gramaje, UV, resistencia, fichas técnicas, normas). "casual" si habla de forma cotidiana (para mi casa, mi patio, sirve para, aguanta).
+- Perfil actual del cliente: ${currentProfile}. Solo cambia si hay señales claras.`
+        },
+        { role: 'user', content: `${conversationHistory ? `${conversationHistory}\n\n` : ''}Mensaje del cliente: ${userMessage}` }
+      ],
+      temperature: 0,
+      max_tokens: 30,
+      response_format: { type: 'json_object' }
+    });
+    const parsed = JSON.parse(response.choices[0].message.content);
+    return {
+      isReseller: parsed.isReseller === true,
+      profile: PROFILES.includes(parsed.profile) ? parsed.profile : currentProfile
+    };
+  } catch (err) {
+    console.error('❌ [buyer] Intent classification error:', err.message);
+    return { isReseller: false, profile: currentProfile };
+  }
 }
 
 /**
@@ -72,16 +87,18 @@ OBJETIVO: El cliente quiere resolver una necesidad. Ayúdale a elegir sin abruma
  * @returns {{ type: string, action?: string, profile: string, personaInstructions: string }|null}
  */
 async function handle(userMessage, convo, psid, context = {}) {
-  const { profile: initialProfile = 'casual' } = context;
+  const { profile: initialProfile = 'casual', conversationHistory = '' } = context;
 
-  // ── RESELLER DETECTION ──
-  if (detectReseller(userMessage)) {
-    console.log('🏛️ [buyer] Reseller intent detected');
+  // ── AI CLASSIFICATION (reseller detection + profile adjustment) ──
+  const { isReseller, profile: adjustedProfile } = await classifyBuyerIntent(
+    userMessage, initialProfile, { conversationHistory }
+  );
+
+  if (isReseller) {
+    console.log('🏛️ [buyer] Reseller intent detected (AI)');
     return { type: 'flow_switch', action: 'reseller', reason: 'Cliente busca revender' };
   }
 
-  // ── PROFILE ADJUSTMENT ──
-  const adjustedProfile = evaluateProfile(userMessage, initialProfile);
   if (adjustedProfile !== initialProfile) {
     console.log(`🏛️ [buyer] Profile adjusted: ${initialProfile} → ${adjustedProfile}`);
   }
@@ -96,8 +113,7 @@ async function handle(userMessage, convo, psid, context = {}) {
 
 module.exports = {
   handle,
-  detectReseller,
-  evaluateProfile,
+  classifyBuyerIntent,
   getPersonaInstructions,
   PROFILES
 };

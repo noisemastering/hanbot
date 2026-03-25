@@ -12,32 +12,6 @@ const Product = require("../../models/Product");
 const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 
 /**
- * Products people frequently ask for that we don't offer.
- * Used for early exit before checking other flow manifests.
- */
-const NOT_OFFERED = [
-  { pattern: /\b(lona|lonaria)\b/i, name: 'lonas' },
-  { pattern: /\b(pasto\s*(sintético|artificial))\b/i, name: 'pasto sintético' },
-  { pattern: /\b(malla\s*ciclón(ica)?|ciclónica)\b/i, name: 'malla ciclónica' },
-  { pattern: /\b(tela?\s*mosquiter[oa])\b/i, name: 'tela mosquitera' }
-];
-
-/**
- * Check if the user is asking for a product we don't offer.
- * @param {string} userMessage
- * @returns {{ notOffered: boolean, productName: string }|null}
- */
-function checkNotOffered(userMessage) {
-  if (!userMessage) return null;
-  for (const item of NOT_OFFERED) {
-    if (item.pattern.test(userMessage)) {
-      return { notOffered: true, productName: item.name };
-    }
-  }
-  return null;
-}
-
-/**
  * Load products for a given set of family IDs from the DB.
  * Only returns active families with sellable leaf nodes.
  * @param {Array<string>} familyIds - ProductFamily ObjectIds from manifest
@@ -305,17 +279,6 @@ async function handle(userMessage, convo, psid, context = {}) {
   // ── LOAD PRODUCTS (once, then cache in convo_flow) ──
   const products = preloaded || await loadProducts(familyIds);
 
-  // ── CHECK "WE DON'T OFFER" LIST (early exit) ──
-  const notOffered = checkNotOffered(userMessage);
-  if (notOffered) {
-    console.log(`🏛️ [product] Not offered: ${notOffered.productName}`);
-    return {
-      type: 'not_offered',
-      productName: notOffered.productName,
-      text: `Disculpa, no manejamos ${notOffered.productName}.`
-    };
-  }
-
   // ── FIND MATCHING PRODUCT (with conversation context) ──
   const conversationContext = {
     basket,
@@ -361,7 +324,5 @@ module.exports = {
   loadProducts,
   findProduct,
   findFlowForProduct,
-  checkWholesaleThreshold,
-  checkNotOffered,
-  NOT_OFFERED
+  checkWholesaleThreshold
 };

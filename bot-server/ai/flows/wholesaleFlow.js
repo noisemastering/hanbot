@@ -26,14 +26,32 @@ const CLIENT_FIELDS = [
 ];
 
 /**
- * Detect if the customer is asking for retail (not wholesale).
+ * AI-driven: detect if the customer is asking for retail (not wholesale).
  * @param {string} userMessage
- * @returns {boolean}
+ * @param {Object} options - { conversationHistory }
+ * @returns {Promise<boolean>}
  */
-function detectRetail(userMessage) {
+async function detectRetail(userMessage, options = {}) {
   if (!userMessage) return false;
-  const retailPatterns = /\b(menudeo|una\s*sola|solo\s*una|para\s*mi\s*casa|uso\s*personal|particular|individual)\b/i;
-  return retailPatterns.test(userMessage);
+  const { conversationHistory = '' } = options;
+
+  try {
+    const response = await _openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        { role: 'system', content: `¿El cliente es comprador final (uso personal, una sola pieza, para su casa/patio/cochera)? Responde con JSON: { "isRetail": true/false }` },
+        { role: 'user', content: `${conversationHistory ? `${conversationHistory}\n\n` : ''}Mensaje del cliente: ${userMessage}` }
+      ],
+      temperature: 0,
+      max_tokens: 30,
+      response_format: { type: 'json_object' }
+    });
+    const parsed = JSON.parse(response.choices[0].message.content);
+    return parsed.isRetail === true;
+  } catch (err) {
+    console.error('❌ [wholesale] Retail detection error:', err.message);
+    return false;
+  }
 }
 
 /**
@@ -197,8 +215,8 @@ async function handle(userMessage, convo, psid, context = {}) {
     conversationHistory = ''
   } = context;
 
-  // ── RETAIL DETECTION ──
-  if (detectRetail(userMessage)) {
+  // ── RETAIL DETECTION (AI) ──
+  if (await detectRetail(userMessage, { conversationHistory })) {
     console.log('🏛️ [wholesale] Retail inquiry detected');
     return { type: 'flow_switch', action: 'retail', reason: 'Cliente pregunta por menudeo' };
   }

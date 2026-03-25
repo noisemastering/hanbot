@@ -72,14 +72,39 @@ function applyPromoPrices(products, promoPrices = []) {
 }
 
 /**
- * Detect if the client is not interested in the promo.
+ * AI-driven: classify if the client is interested, asking about terms, or not interested.
  * @param {string} userMessage
- * @returns {boolean}
+ * @param {Object} options - { conversationHistory }
+ * @returns {Promise<'interested'|'not_interested'|'terms_request'>}
  */
-function detectNotInterested(userMessage) {
-  if (!userMessage) return false;
-  const patterns = /\b(no\s*(me\s*)?interesa|no\s*gracias|otra\s*cosa|algo\s*diferente|no\s*es\s*lo\s*que\s*busco|busco\s*otra|no\s*quiero\s*eso|no\s*necesito\s*eso)\b/i;
-  return patterns.test(userMessage);
+async function classifyPromoIntent(userMessage, options = {}) {
+  if (!userMessage) return 'interested';
+  const { conversationHistory = '' } = options;
+
+  try {
+    const response = await _openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `El cliente ya vio una promoción de malla sombra. Clasifica su respuesta. Responde con JSON: { "intent": "<interested|not_interested|terms_request>" }
+
+- "not_interested": El cliente rechaza la promo, pide otra cosa, o dice que no le interesa.
+- "terms_request": El cliente pregunta por términos, condiciones, restricciones, o vigencia de la promo.
+- "interested": Cualquier otra cosa (pregunta, quiere comprar, pide más info, etc.)`
+        },
+        { role: 'user', content: `${conversationHistory ? `${conversationHistory}\n\n` : ''}Mensaje del cliente: ${userMessage}` }
+      ],
+      temperature: 0,
+      max_tokens: 30,
+      response_format: { type: 'json_object' }
+    });
+    const parsed = JSON.parse(response.choices[0].message.content);
+    return parsed.intent || 'interested';
+  } catch (err) {
+    console.error('❌ [promo] Intent classification error:', err.message);
+    return 'interested';
+  }
 }
 
 /**
@@ -207,21 +232,24 @@ async function handle(userMessage, convo, psid, context = {}) {
     return null; // Promo expired/not started — let convo_flow continue normally
   }
 
-  // ── NOT INTERESTED — switch off ──
-  if (pitchSent && detectNotInterested(userMessage)) {
-    console.log('🏛️ [promo] Client not interested — switching off');
-    return null; // Let the convo_flow continue with other flows
-  }
+  // ── CLASSIFY INTENT (AI — not interested / terms / interested) ──
+  if (pitchSent) {
+    const promoIntent = await classifyPromoIntent(userMessage, { conversationHistory });
 
-  // ── TERMS & CONDITIONS REQUEST ──
-  if (pitchSent && /\b(términos|condiciones|letra\s*chica|restriccion|aplica)\b/i.test(userMessage)) {
-    const activeTerms = terms || DEFAULT_TERMS;
-    const termsWithExpiry = activeTerms.replace(
-      'Válida hasta agotar existencias',
-      expiryText
-    );
-    console.log('🏛️ [promo] Terms requested');
-    return { type: 'text', text: termsWithExpiry };
+    if (promoIntent === 'not_interested') {
+      console.log('🏛️ [promo] Client not interested (AI) — switching off');
+      return null;
+    }
+
+    if (promoIntent === 'terms_request') {
+      const activeTerms = terms || DEFAULT_TERMS;
+      const termsWithExpiry = activeTerms.replace(
+        'Válida hasta agotar existencias',
+        expiryText
+      );
+      console.log('🏛️ [promo] Terms requested (AI)');
+      return { type: 'text', text: termsWithExpiry };
+    }
   }
 
   // ── PRESENT PROMO (first interaction) ──
@@ -250,7 +278,7 @@ module.exports = {
   handle,
   checkTimeframe,
   applyPromoPrices,
-  detectNotInterested,
+  classifyPromoIntent,
   buildPromoPitch,
   DEFAULT_TERMS
 };

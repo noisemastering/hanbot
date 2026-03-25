@@ -304,30 +304,43 @@ function create(manifest) {
 
     // ── PENDING SWITCH CONFIRMATION (Protocol #1 — different product) ──
     if (flowState.pendingSwitch) {
-      const confirmed = /\b(s[ií]|ok|dale|va|por\s*favor|xfavor|claro|adelante|eso|ese|esa)\b/i.test(userMessage);
-      const declined = /\b(no|nel|nah|mejor\s*no|ninguno|nada)\b/i.test(userMessage);
+      try {
+        const switchCheck = await _openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: `Se le ofreció al cliente cambiar a otro producto/flujo. ¿Acepta o rechaza? Responde con JSON: { "decision": "confirmed"|"declined"|"ambiguous" }` },
+            { role: 'user', content: userMessage }
+          ],
+          temperature: 0,
+          max_tokens: 30,
+          response_format: { type: 'json_object' }
+        });
+        const { decision } = JSON.parse(switchCheck.choices[0].message.content);
 
-      if (confirmed) {
-        const target = flowState.pendingSwitch.targetFlow;
-        const carryState = flowState.pendingSwitch.carryState;
-        flowState.pendingSwitch = null;
-        console.log(`🔀 [switch] Client confirmed → ${target}`);
-        return {
-          response: null,
-          state: flowState,
-          switchTo: target,
-          switchState: carryState
-        };
-      }
+        if (decision === 'confirmed') {
+          const target = flowState.pendingSwitch.targetFlow;
+          const carryState = flowState.pendingSwitch.carryState;
+          flowState.pendingSwitch = null;
+          console.log(`🔀 [switch] Client confirmed → ${target}`);
+          return {
+            response: null,
+            state: flowState,
+            switchTo: target,
+            switchState: carryState
+          };
+        }
 
-      if (declined) {
-        flowState.pendingSwitch = null;
-        return {
-          response: { type: 'text', text: '¡Claro! ¿En qué más te puedo ayudar?' },
-          state: flowState
-        };
+        if (decision === 'declined') {
+          flowState.pendingSwitch = null;
+          return {
+            response: { type: 'text', text: '¡Claro! ¿En qué más te puedo ayudar?' },
+            state: flowState
+          };
+        }
+      } catch (err) {
+        console.error('❌ [convo] Switch confirmation error:', err.message);
       }
-      // Ambiguous — keep pending, let the rest of the flow try to handle the message
+      // Ambiguous or error — clear pending, let the rest of the flow handle the message
       flowState.pendingSwitch = null;
     }
 
