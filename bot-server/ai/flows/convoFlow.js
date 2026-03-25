@@ -364,6 +364,7 @@ function create(manifest) {
         promoPrices: manifest.promo.promoPrices || [],
         timeframe: manifest.promo.timeframe || null,
         terms: manifest.promo.terms || null,
+        colorNote: manifest.promo.colorNote || null,
         pitchSent: flowState.pitchSent,
         conversationHistory
       });
@@ -388,16 +389,31 @@ function create(manifest) {
       }
     }
 
-    // ── PURCHASE CONFIRMATION (link already shared — don't re-pitch) ──
+    // ── PURCHASE INTENT (convoFlow layer — AI, not regex) ──
     const lastLink = convo?.lastSharedProductLink;
     if (lastLink) {
-      const wantsToBuy = /\b(concretar|comprar|realizo?\s*(una\s*)?compra|lo\s*quiero|la\s*quiero|me\s*lo\s*llevo|me\s*la\s*llevo|hacer\s*la\s*compra|realizar\s*la\s*compra|d[oó]nde\s*pago|c[oó]mo\s*(pago|compro|realizo)|quiero\s*pagar|link\s*de\s*compra|pas[ae]\s*(el\s*)?link|s[ií]\s*lo\s*quiero|listo|va\s*va|órale)\b/i;
-      if (wantsToBuy.test(userMessage)) {
-        console.log('🛒 [convo] Purchase confirmation — re-sharing existing link');
-        return {
-          response: { type: 'text', text: `Puedes hacer tu compra directamente aquí:\n\n${lastLink}\n\nSi tienes cualquier duda, aquí estoy.` },
-          state: flowState
-        };
+      try {
+        const intentCheck = await _openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: `¿El cliente quiere comprar, concretar la compra, o está pidiendo el link de compra? Responde solo con JSON: { "wantsToBuy": true/false }` },
+            { role: 'user', content: `${conversationHistory ? `${conversationHistory}\n\n` : ''}Mensaje del cliente: ${userMessage}` }
+          ],
+          temperature: 0,
+          max_tokens: 30,
+          response_format: { type: 'json_object' }
+        });
+        const parsed = JSON.parse(intentCheck.choices[0].message.content);
+        if (parsed.wantsToBuy) {
+          console.log('🛒 [convo] Purchase intent detected — re-sharing link');
+          await updateConversation(psid, { lastIntent: 'purchase_intent', unknownCount: 0 });
+          return {
+            response: { type: 'text', text: `Puedes hacer tu compra directamente aquí:\n\n${lastLink}\n\nSi tienes cualquier duda, aquí estoy.` },
+            state: flowState
+          };
+        }
+      } catch (err) {
+        console.error('❌ [convo] Purchase intent check error:', err.message);
       }
     }
 
@@ -405,6 +421,7 @@ function create(manifest) {
     const masterResult = await masterFlow.handle(userMessage, convo, psid, {
       salesChannel: manifest.salesChannel === 'retail' ? 'mercado_libre' : 'direct',
       installationNote: manifest.installationNote || null,
+      colorNote: manifest.promo?.colorNote || null,
       conversationHistory
     });
 
@@ -471,18 +488,33 @@ function create(manifest) {
 
       // Products found — pass to sales flow
       if (productResult.type === 'products_found' && productResult.products.length > 0) {
+        // Generate tracked links for retail products before quoting
+        let quotableProducts = productResult.products;
+        if (manifest.salesChannel === 'retail') {
+          quotableProducts = await Promise.all(productResult.products.map(async p => {
+            if (p.link) {
+              const tracked = await generateClickLink(psid, p.link, {
+                productName: p.name, productId: p.productId, reason: 'retail_quote'
+              });
+              return { ...p, link: tracked };
+            }
+            return p;
+          }));
+        }
+
         // Track what products we're about to quote (for follow-up context)
-        flowState.lastQuotedProducts = productResult.products;
+        flowState.lastQuotedProducts = quotableProducts;
         const personaInstructions = buyerFlow.getPersonaInstructions(flowState.profile);
 
         const salesResult = await salesFlow.handle(userMessage, convo, psid, {
-          products: productResult.products,
+          products: quotableProducts,
           voice: manifest.voice || 'casual',
           salesChannel: manifest.salesChannel === 'retail' ? 'mercado_libre' : 'direct',
           customerName,
           clientData: flowState.clientData,
           allowListing: manifest.allowListing || false,
           offersCatalog: manifest.offersCatalog || false,
+          colorNote: manifest.promo?.colorNote || null,
           conversationHistory
         });
 
@@ -510,6 +542,15 @@ function create(manifest) {
 
           if (salesResult.clientData) {
             flowState.clientData = salesResult.clientData;
+          }
+
+          // Store the shared link so purchase intent can re-share it later
+          const sharedProduct = quotableProducts.find(p => p.link);
+          if (sharedProduct) {
+            await updateConversation(psid, {
+              lastSharedProductId: sharedProduct.productId,
+              lastSharedProductLink: sharedProduct.link
+            });
           }
 
           return { response: salesResult, state: flowState };

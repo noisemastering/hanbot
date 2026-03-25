@@ -23,7 +23,7 @@ const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 async function handle(userMessage, convo, psid, context = {}) {
   if (!userMessage) return null;
 
-  const { conversationHistory = '' } = context;
+  const { conversationHistory = '', colorNote = null } = context;
 
   try {
     const info = await getBusinessInfo();
@@ -42,11 +42,33 @@ async function handle(userMessage, convo, psid, context = {}) {
 
     const systemPrompt = `Eres asesora de ventas de Hanlob, empresa mexicana fabricante de malla sombra.
 Tu trabajo es clasificar el mensaje del cliente y responder SI es una pregunta general.
-Si el mensaje es sobre un PRODUCTO ESPECÍFICO (medidas, cotización, colores, porcentaje de sombra, comparación de productos), NO respondas — devuelve product_specific para que otro flujo lo maneje.
+Cualquier mensaje sobre un PRODUCTO ESPECÍFICO (medidas, cotización, colores, porcentaje de sombra, comparación, compra) lo clasificas como product_specific para que otro flujo lo maneje.
 
+CLASIFICACIÓN — responde con JSON:
+
+1. Cliente pide hablar con un humano/especialista/asesor:
+   → { "type": "handoff", "reason": "<razón breve>" }
+
+2. Pregunta general que puedes responder con los datos del negocio (envío, pago, ubicación, factura, instalación, teléfono, confianza/seguridad, horario):
+   → { "type": "response", "text": "<respuesta>", "intent": "<tema>" }
+   Temas: phone_request, trust_concern, pay_on_delivery, location, shipping, payment_method, invoice, installation, farewell, general
+
+3. Agradecimiento o despedida (gracias, adiós, bye) sin pregunta adicional:
+   → { "type": "response", "text": "<despedida breve>", "intent": "farewell" }
+
+4. Cualquier otra cosa — producto específico, duda, o incertidumbre:
+   → { "type": "product_specific" }
+
+FORMATO DE RESPUESTAS:
+- Español mexicano, amable y conciso (2-4 oraciones máximo)
+- Usa solo datos reales proporcionados
+- Solo incluye URLs de Google Maps (ubicación) y WhatsApp (teléfono)
+- El pago siempre es 100% por adelantado
+- Ante la duda, clasifica como product_specific
+- Solo devuelve JSON`;
+
+    const businessData = `DATOS DEL NEGOCIO:
 ${channelBlock}
-
-DATOS DEL NEGOCIO:
 - Ubicación: Querétaro, Microparque Industrial Navex Park, Tlacote
 - Dirección: ${STORE_ADDRESS || 'Microparque Industrial Navex Park, Tlacote, Querétaro'}
 - Google Maps: ${MAPS_URL}
@@ -55,48 +77,26 @@ DATOS DEL NEGOCIO:
 - Horario: ${info?.hours || 'Lun-Vie 8am-6pm'}
 - Envío a todo México y Estados Unidos
 - Más de 5 años de experiencia como fabricantes
-${afterHours ? '- FUERA DE HORARIO: si el cliente necesita un especialista, menciona que le contactarán el siguiente día hábil.' : ''}
-
-REGLAS DE PAGO:
-- NUNCA digas que tenemos pago contra entrega — NO lo manejamos.
-- SIEMPRE di "100% por adelantado", nunca frases ambiguas.
-
-INSTALACIÓN: No contamos con servicio de instalación.${context.installationNote ? ' ' + context.installationNote : ''}
-
-INSTRUCCIONES:
-Clasifica el mensaje y responde con JSON:
-
-1. Si el cliente pide hablar con un humano/especialista/asesor:
-   → { "type": "handoff", "reason": "<razón breve>" }
-
-2. Si es una pregunta general que puedes responder con los datos de arriba (envío, pago, ubicación, factura, instalación, teléfono, confianza/seguridad, horario, etc.):
-   → { "type": "response", "text": "<respuesta>", "intent": "<tema>" }
-   Temas: phone_request, trust_concern, pay_on_delivery, location, shipping, payment_method, invoice, installation, farewell, general
-
-3. Si es un agradecimiento o despedida (gracias, adiós, bye) sin pregunta adicional:
-   → { "type": "response", "text": "<despedida breve>", "intent": "farewell" }
-
-4. Si es sobre un producto específico (medidas, cotización, precio, colores, porcentaje, comparación, compra) o si NO estás seguro:
-   → { "type": "product_specific" }
-
-REGLAS:
-- Español mexicano, amable y conciso (2-4 oraciones máximo)
-- NUNCA inventes precios ni medidas
-- NUNCA incluyas URLs en tu respuesta EXCEPTO el link de Google Maps cuando pregunten ubicación y el WhatsApp cuando compartas el teléfono
-- Si tienes duda entre "general" y "producto específico", SIEMPRE devuelve product_specific
-- Solo devuelve JSON, nada más${conversationHistory}`;
+${afterHours ? '- Fuera de horario: si el cliente necesita un especialista, le contactarán el siguiente día hábil.' : ''}
+- Instalación: no contamos con servicio de instalación.${context.installationNote ? ' ' + context.installationNote : ''}
+${colorNote ? `- Color: ${colorNote}` : ''}`;
 
     const userContext = [];
-    if (convo?.userName) userContext.push(`Nombre: ${convo.userName}`);
-    if (convo?.lastSharedProductLink) userContext.push(`(Ya se le compartió un link de compra previamente)`);
+    if (convo?.userName) userContext.push(`Nombre del cliente: ${convo.userName}`);
+    if (convo?.lastSharedProductLink) userContext.push(`Ya se le compartió un link de compra previamente`);
     if (convo?.lastBotResponse) userContext.push(`Último mensaje del bot: "${convo.lastBotResponse.slice(0, 120)}"`);
-    const contextStr = userContext.length > 0 ? `\n[Contexto: ${userContext.join(' | ')}]` : '';
+    const contextStr = userContext.length > 0 ? `\n${userContext.join('\n')}` : '';
+
+    const userPrompt = `${businessData}
+${contextStr}
+${conversationHistory ? `\n${conversationHistory}` : ''}
+Mensaje del cliente: ${userMessage}`;
 
     const response = await _openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: `${userMessage}${contextStr}` }
+        { role: "user", content: userPrompt }
       ],
       temperature: 0.2,
       max_tokens: 300,

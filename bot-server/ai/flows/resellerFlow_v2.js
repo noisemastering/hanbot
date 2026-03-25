@@ -26,25 +26,42 @@ const CLIENT_FIELDS = [
 ];
 
 /**
- * Detect if the person is actually an end buyer, not a reseller.
+ * AI-driven intent classification for the reseller flow.
+ * Detects: buyer (end-customer, not reseller), catalog interest, or reseller continuing.
  * @param {string} userMessage
- * @returns {boolean}
+ * @param {Object} options - { conversationHistory }
+ * @returns {Promise<{ intent: 'buyer'|'catalog_interest'|'reseller' }>}
  */
-function detectBuyer(userMessage) {
-  if (!userMessage) return false;
-  const buyerPatterns = /\b(para\s*mi\s*casa|uso\s*personal|para\s*mi\s*patio|mi\s*cochera|mi\s*terraza|solo\s*una|una\s*sola|particular|no\s*es\s*para\s*vender|no\s*revendo)\b/i;
-  return buyerPatterns.test(userMessage);
-}
+async function classifyResellerIntent(userMessage, options = {}) {
+  if (!userMessage) return { intent: 'reseller' };
+  const { conversationHistory = '' } = options;
 
-/**
- * Detect if the user wants to see the catalog or is showing interest.
- * @param {string} userMessage
- * @returns {boolean}
- */
-function detectCatalogInterest(userMessage) {
-  if (!userMessage) return false;
-  const patterns = /\b(cat[áa]logo|env[ií]a(me|lo|r)|mand(a|ame)|ver\s*(los\s*)?productos|lista\s*de\s*precios|precios|medidas\s*y\s*precios|s[ií](\s*por\s*favor)?|ok|dale|va|claro|me\s*interesa|xfavor|por\s*favor|adelante)\b/i;
-  return patterns.test(userMessage);
+  try {
+    const response = await _openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `Clasifica el mensaje del cliente en el contexto de un flujo de REVENDEDORES de malla sombra. Responde solo con JSON: { "intent": "<buyer|catalog_interest|reseller>" }
+
+- "buyer": El cliente es comprador final, NO revendedor. Señales: pide una medida específica para uso propio, menciona su casa/patio/cochera/terraza, quiere solo una pieza, da medidas personales. Alguien que dice "busco una de 3x4" o "necesito para mi cochera" es comprador final.
+- "catalog_interest": El cliente quiere ver el catálogo, productos, medidas, precios, o muestra interés/aceptación (sí, ok, dale, mándame, me interesa, etc.)
+- "reseller": El cliente habla como revendedor — pregunta por mayoreo, cantidades, márgenes, programa de distribución, o da datos de negocio.
+
+En caso de duda entre buyer y reseller, elige buyer — es más común que un comprador final llegue por anuncios.${conversationHistory}`
+        },
+        { role: 'user', content: userMessage }
+      ],
+      temperature: 0,
+      max_tokens: 30,
+      response_format: { type: 'json_object' }
+    });
+
+    return JSON.parse(response.choices[0].message.content);
+  } catch (err) {
+    console.error('❌ [reseller] Intent classification error:', err.message);
+    return { intent: 'reseller' };
+  }
 }
 
 /**
@@ -75,16 +92,10 @@ async function extractClientData(userMessage, existingData = {}, options = {}) {
   const systemPrompt = `Eres asesora de ventas de Hanlob (programa de revendedores).
 ${voiceInstructions[voice] || voiceInstructions.professional}
 
-Tu trabajo es extraer datos del cliente de su mensaje y pedir los que falten.
+Extrae datos del cliente de su mensaje y pide los que falten.
 Trata al cliente como alguien que busca hacer negocio — es un revendedor potencial.
 
-DATOS YA RECOLECTADOS:
-${collectedSummary}
-
-DATOS QUE FALTAN (obligatorios):
-${missingFields.length > 0 ? missingFields.join(', ') : 'Todos recolectados'}
-
-Analiza el mensaje del cliente y responde con JSON:
+Responde con JSON:
 {
   "extracted": {
     "name": "<nombre si lo mencionó o null>",
@@ -98,19 +109,26 @@ Analiza el mensaje del cliente y responde con JSON:
   "allCollected": <true si ya tenemos todos los obligatorios, false si no>
 }
 
-REGLAS:
+FORMATO:
 - Solo extrae datos que el cliente CLARAMENTE proporcionó
-- NO inventes datos
-- Pide TODOS los datos faltantes en un solo mensaje, un dato por línea
+- Pide todos los datos faltantes en un solo mensaje, un dato por línea
 - Si ya tienes todos los obligatorios, pon allCollected: true
-- Solo devuelve JSON, nada más${conversationHistory}`;
+- Solo devuelve JSON`;
+
+  const userPrompt = `DATOS YA RECOLECTADOS:
+${collectedSummary}
+
+DATOS QUE FALTAN (obligatorios):
+${missingFields.length > 0 ? missingFields.join(', ') : 'Todos recolectados'}
+${conversationHistory ? `\n${conversationHistory}` : ''}
+Mensaje del cliente: ${userMessage}`;
 
   try {
     const response = await _openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage }
+        { role: "user", content: userPrompt }
       ],
       temperature: 0.2,
       max_tokens: 300,
@@ -155,19 +173,20 @@ ${voiceInstructions[voice] || voiceInstructions.professional}
 Presenta brevemente la oportunidad de negocio. Somos FABRICANTES de malla sombra — mejores precios para el revendedor.
 ${customerName ? `El cliente se llama ${customerName}.` : ''}
 
-REGLAS:
-- Máximo 2-3 oraciones — ve al grano, nada de párrafos
-- NO inventes precios ni márgenes
-- NO uses lenguaje de infomercial ni exageres
+FORMATO:
+- Máximo 2-3 oraciones — ve al grano
+- Usa solo datos reales, tono directo y profesional
 - Ofrece enviar el catálogo con medidas y precios
-- Solo devuelve el mensaje, nada más${conversationHistory}`;
+- Solo devuelve el mensaje, nada más`;
+
+  const userPrompt = `${conversationHistory ? `${conversationHistory}\n\n` : ''}Presenta la oportunidad de negocio.`;
 
   try {
     const response = await _openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: "Presenta la oportunidad de negocio." }
+        { role: "user", content: userPrompt }
       ],
       temperature: 0.4,
       max_tokens: 500
@@ -208,9 +227,11 @@ async function handle(userMessage, convo, psid, context = {}) {
     conversationHistory = ''
   } = context;
 
-  // ── BUYER DETECTION ──
-  if (detectBuyer(userMessage)) {
-    console.log('🏛️ [reseller] End-buyer intent detected');
+  // ── AI INTENT CLASSIFICATION (buyer vs catalog interest vs reseller) ──
+  const { intent } = await classifyResellerIntent(userMessage, { conversationHistory });
+
+  if (intent === 'buyer') {
+    console.log('🏛️ [reseller] End-buyer intent detected (AI)');
     return { type: 'flow_switch', action: 'buyer', reason: 'Cliente es comprador final, no revendedor' };
   }
 
@@ -228,7 +249,7 @@ async function handle(userMessage, convo, psid, context = {}) {
   }
 
   // ── CATALOG DELIVERY (when user shows interest — never gated behind data) ──
-  if (pitchSent && !catalogSent && detectCatalogInterest(userMessage)) {
+  if (pitchSent && !catalogSent && intent === 'catalog_interest') {
     console.log('🏛️ [reseller] Catalog interest detected — sending catalog');
 
     // Try to send the PDF catalog
@@ -311,7 +332,7 @@ async function handle(userMessage, convo, psid, context = {}) {
 module.exports = {
   handle,
   extractClientData,
-  detectBuyer,
+  classifyResellerIntent,
   buildResellerPitch,
   CLIENT_FIELDS
 };

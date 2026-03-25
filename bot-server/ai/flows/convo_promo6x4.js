@@ -27,7 +27,8 @@ const manifest = {
     promoProductIds: ['6943123eed2d4185ba47052f'],  // 6m x 4m
     promoPrices: [],
     timeframe: null,
-    terms: null
+    terms: null,
+    colorNote: 'Esta promoción es únicamente en color BEIGE. También manejamos negro pero no está incluido en esta promoción.'
   }
 };
 

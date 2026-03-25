@@ -174,29 +174,31 @@ async function findProduct(userMessage, products, conversationContext = {}) {
     : '';
 
   try {
-    const response = await _openai.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: `Eres un sistema de búsqueda de productos. Dado el mensaje del cliente, identifica cuál(es) producto(s) de la lista corresponden a lo que busca.
+    const systemContent = `Eres un sistema de búsqueda de productos. Identifica cuál(es) producto(s) de la lista corresponden a lo que el cliente busca.
 
-Los productos tienen un nombre de familia entre corchetes [Familia] que indica a qué categoría pertenecen. Si el cliente pide la familia por nombre (ej: "borde separador"), TODOS los productos de esa familia coinciden. Si pide una medida específica, solo el producto que coincida.
-${contextBlock}
-PRODUCTOS DISPONIBLES:
-${productSummary}
+Los productos tienen un nombre de familia entre corchetes [Familia]. Si el cliente pide la familia por nombre (ej: "borde separador"), TODOS los productos de esa familia coinciden. Si pide una medida específica, solo el producto que coincida.
 
 Responde con JSON:
 { "matches": [<índices de productos que coinciden>], "confidence": "high"|"medium"|"low", "outsideRealm": <true si el cliente pide algo que NO está en la lista ni en sus familias> }
 
-REGLAS:
-- Si el cliente pide la familia por nombre, devuelve TODOS los productos de esa familia
-- Si el cliente hace una pregunta de seguimiento (ej: "¿cuánto cuesta?", "me interesa", "ese") usa el CONTEXTO para identificar a qué producto se refiere. Si se acaban de cotizar productos, se refiere a esos.
-- Si el cliente pide algo que claramente NO está en la lista ni en sus familias, pon outsideRealm: true y matches: []
-- Si hay duda, pon confidence: "low"
-- Solo devuelve JSON${conversationHistory}`
-        },
-        { role: "user", content: userMessage }
+FORMATO:
+- Familia por nombre → devuelve TODOS los productos de esa familia
+- Pregunta de seguimiento ("¿cuánto cuesta?", "me interesa", "ese") → usa el CONTEXTO para identificar el producto referido
+- Producto fuera de la lista → outsideRealm: true, matches: []
+- Ante la duda → confidence: "low"
+- Solo devuelve JSON`;
+
+    const userContent = `${contextBlock}
+PRODUCTOS DISPONIBLES:
+${productSummary}
+${conversationHistory ? `\n${conversationHistory}` : ''}
+Mensaje del cliente: ${userMessage}`;
+
+    const response = await _openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      messages: [
+        { role: "system", content: systemContent },
+        { role: "user", content: userContent }
       ],
       temperature: 0.1,
       max_tokens: 200,

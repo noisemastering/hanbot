@@ -64,7 +64,7 @@ function detectWholesale(userMessage) {
  * @returns {Promise<string>} AI-generated quote message
  */
 async function buildQuoteMessage(products, options = {}) {
-  const { voice = 'casual', customerName = null, salesChannel = 'mercado_libre', conversationHistory = '' } = options;
+  const { voice = 'casual', customerName = null, salesChannel = 'mercado_libre', colorNote = null, conversationHistory = '' } = options;
 
   const voiceInstructions = {
     casual: 'Habla de manera amigable y relajada, como un vendedor joven y accesible. Usa "tú".',
@@ -88,29 +88,31 @@ async function buildQuoteMessage(products, options = {}) {
   const systemPrompt = `Eres asesora de ventas de Hanlob.
 ${voiceInstructions[voice] || voiceInstructions.casual}
 
-Genera un mensaje de cotización para el cliente con los siguientes productos. El mensaje debe:
-- Sonar natural, como si lo escribiera una persona
-- Incluir el precio y el link de compra
-- Mencionar brevemente las características relevantes
+Genera un mensaje de cotización natural, como si lo escribiera una persona.
 - ${channelNote}
 ${customerName ? `- El cliente se llama ${customerName}` : ''}
+${colorNote ? `- ${colorNote}` : ''}
 
-REGLAS:
-- NO inventes precios ni datos que no estén en la información proporcionada
-- NO agregues productos que no estén listados
+FORMATO:
 - Máximo 2-4 oraciones por producto
-- Si hay un link, SIEMPRE inclúyelo
-- Solo devuelve el mensaje, nada más
+- Incluye siempre el precio y el link de compra
+- Escribe las URLs como texto plano (ejemplo: https://ejemplo.com)
+- El envío ya está incluido — ve directo al precio y link
+- Usa solo los datos proporcionados, nada inventado
+- Solo menciona los productos proporcionados
+- Solo devuelve el mensaje, nada más`;
 
-PRODUCTOS:
-${productList}${conversationHistory}`;
+  const userPrompt = `PRODUCTOS:
+${productList}
+${conversationHistory ? `\n${conversationHistory}` : ''}
+Genera el mensaje de cotización.`;
 
   try {
     const response = await _openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: "Genera el mensaje de cotización." }
+        { role: "user", content: userPrompt }
       ],
       temperature: 0.4,
       max_tokens: 500
@@ -142,7 +144,7 @@ ${productList}${conversationHistory}`;
  * @returns {{ type: string, text?: string, action?: string, products?: Array }|null}
  */
 async function handle(userMessage, convo, psid, context = {}) {
-  const { products = [], voice = 'casual', salesChannel = 'mercado_libre', customerName = null, conversationHistory = '' } = context;
+  const { products = [], voice = 'casual', salesChannel = 'mercado_libre', customerName = null, colorNote = null, conversationHistory = '' } = context;
 
   // ── WHOLESALE DETECTION ──
   if (detectWholesale(userMessage)) {
@@ -176,7 +178,7 @@ async function handle(userMessage, convo, psid, context = {}) {
   }
 
   // ── QUOTE — build AI-generated message ──
-  const quoteText = await buildQuoteMessage(products, { voice, customerName, salesChannel, conversationHistory });
+  const quoteText = await buildQuoteMessage(products, { voice, customerName, salesChannel, colorNote, conversationHistory });
 
   await updateConversation(psid, {
     lastIntent: 'retail_quote',

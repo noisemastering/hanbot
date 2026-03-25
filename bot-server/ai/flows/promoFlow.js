@@ -95,6 +95,7 @@ async function buildPromoPitch(products, options = {}) {
     expiryText = 'Hasta agotar existencias',
     terms = null,
     salesChannel = 'mercado_libre',
+    colorNote = null,
     conversationHistory = ''
   } = options;
 
@@ -128,25 +129,29 @@ ${voiceInstructions[voice] || voiceInstructions.casual}
 Presenta el producto con su precio y link de compra. Sé breve y directa.
 - ${channelNote}
 ${customerName ? `- El cliente se llama ${customerName}` : ''}
+${colorNote ? `- ${colorNote}` : ''}
 
-REGLAS:
-- NO uses emojis excesivos (máximo 1, si acaso)
-- NO uses frases de infomercial ("no te lo pierdas", "increíble", "oferta imperdible", "aprovecha")
-- NO exageres ni uses signos de exclamación de más
+FORMATO:
 - Máximo 3-4 oraciones — ve al grano
-- Incluye el precio y el link de compra
-- Si hay precio promocional, menciónalo sin drama
-- Solo devuelve el mensaje, nada más
+- Incluye siempre el precio y el link de compra
+- Si hay precio promocional, menciónalo de forma natural
+- Escribe las URLs como texto plano (ejemplo: https://ejemplo.com)
+- El envío ya está incluido — ve directo al precio y link
+- Usa máximo 1 emoji, solo si es natural
+- Tono tranquilo y directo, como vendedora real por chat
+- Solo devuelve el mensaje, nada más`;
 
-PRODUCTOS EN PROMOCIÓN:
-${productList}${conversationHistory}`;
+  const userPrompt = `PRODUCTOS EN PROMOCIÓN:
+${productList}
+${conversationHistory ? `\n${conversationHistory}` : ''}
+Presenta la promoción.`;
 
   try {
     const response = await _openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: "Presenta la promoción." }
+        { role: "user", content: userPrompt }
       ],
       temperature: 0.4,
       max_tokens: 500
@@ -190,6 +195,7 @@ async function handle(userMessage, convo, psid, context = {}) {
     promoPrices = [],
     timeframe = null,
     terms = null,
+    colorNote = null,
     pitchSent = false,
     conversationHistory = ''
   } = context;
@@ -222,7 +228,7 @@ async function handle(userMessage, convo, psid, context = {}) {
   if (!pitchSent && products.length > 0) {
     const pricedProducts = applyPromoPrices(products, promoPrices);
     const pitchText = await buildPromoPitch(pricedProducts, {
-      voice, customerName, expiryText, terms, salesChannel, conversationHistory
+      voice, customerName, expiryText, terms, salesChannel, colorNote, conversationHistory
     });
 
     if (pitchText) {

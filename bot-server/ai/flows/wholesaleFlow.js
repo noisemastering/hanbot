@@ -64,15 +64,9 @@ async function extractClientData(userMessage, existingData = {}, options = {}) {
   const systemPrompt = `Eres asesora de ventas de Hanlob (venta al por mayor).
 ${voiceInstructions[voice] || voiceInstructions.professional}
 
-Tu trabajo es extraer datos del cliente de su mensaje y pedir los que falten.
+Extrae datos del cliente de su mensaje y pide los que falten.
 
-DATOS YA RECOLECTADOS:
-${collectedSummary}
-
-DATOS QUE FALTAN (obligatorios):
-${missingFields.length > 0 ? missingFields.join(', ') : 'Todos recolectados'}
-
-Analiza el mensaje del cliente y responde con JSON:
+Responde con JSON:
 {
   "extracted": {
     "name": "<nombre si lo mencionó o null>",
@@ -82,23 +76,30 @@ Analiza el mensaje del cliente y responde con JSON:
     "product": "<producto si lo mencionó o null>",
     "quantity": "<cantidad si la mencionó o null>"
   },
-  "nextQuestion": "<pregunta natural para el siguiente dato faltante, o null si ya tenemos todo>",
+  "nextQuestion": "<pregunta natural pidiendo TODOS los datos faltantes, un dato por línea, o null si ya tenemos todo>",
   "allCollected": <true si ya tenemos todos los obligatorios, false si no>
 }
 
-REGLAS:
+FORMATO:
 - Solo extrae datos que el cliente CLARAMENTE proporcionó
-- NO inventes datos
-- Pide TODOS los datos faltantes en un solo mensaje, un dato por línea
+- Pide todos los datos faltantes en un solo mensaje, un dato por línea
 - Si ya tienes todos los obligatorios, pon allCollected: true
-- Solo devuelve JSON, nada más${conversationHistory}`;
+- Solo devuelve JSON`;
+
+  const userPrompt = `DATOS YA RECOLECTADOS:
+${collectedSummary}
+
+DATOS QUE FALTAN (obligatorios):
+${missingFields.length > 0 ? missingFields.join(', ') : 'Todos recolectados'}
+${conversationHistory ? `\n${conversationHistory}` : ''}
+Mensaje del cliente: ${userMessage}`;
 
   try {
     const response = await _openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: userMessage }
+        { role: "user", content: userPrompt }
       ],
       temperature: 0.2,
       max_tokens: 300,
@@ -139,24 +140,25 @@ async function buildCatalogMessage(products, options = {}) {
   const systemPrompt = `Eres asesora de ventas de Hanlob (venta al por mayor).
 ${voiceInstructions[voice] || voiceInstructions.professional}
 
-Presenta el catálogo de productos disponibles al cliente. El mensaje debe:
-- Sonar natural, como si lo escribiera una persona
-- Listar los productos de forma clara
+Presenta el catálogo de productos disponibles al cliente de forma natural y clara.
+${customerName ? `El cliente se llama ${customerName}.` : ''}
+
+FORMATO:
 - Si hay más de 3 productos, muestra un rango "desde X hasta Y" en lugar de listar todos
-- Invitar al cliente a indicar cuál le interesa
-${customerName ? `- El cliente se llama ${customerName}` : ''}
+- Invita al cliente a indicar cuál le interesa
+- Solo devuelve el mensaje, nada más`;
 
-PRODUCTOS:
+  const userPrompt = `PRODUCTOS:
 ${productList}
-
-Solo devuelve el mensaje, nada más.${conversationHistory}`;
+${conversationHistory ? `\n${conversationHistory}` : ''}
+Presenta el catálogo.`;
 
   try {
     const response = await _openai.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: "Presenta el catálogo." }
+        { role: "user", content: userPrompt }
       ],
       temperature: 0.4,
       max_tokens: 400
