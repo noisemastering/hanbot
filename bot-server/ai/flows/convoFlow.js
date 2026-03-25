@@ -148,8 +148,8 @@ async function resolveFlowSwitch(switchResult, currentManifest, flowState, userM
     }
 
     if (candidates.length > 0) {
-      // Seamless switch — no confirmation needed
-      const target = candidates[0];
+      // Prefer non-promo flow for generic switches (promo flows are specialized)
+      const target = candidates.find(c => !c.promo) || candidates[0];
       console.log(`🔀 [switch] Voice change → ${target.name} (${targetProfile})`);
       return {
         response: null, // seamless, no message

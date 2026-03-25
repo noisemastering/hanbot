@@ -33,11 +33,13 @@ const convoFlow = require("./flows/convoFlow");
 const convo_bordeSeparadorRetail = require("./flows/convo_bordeSeparadorRetail");
 const convo_vende_malla = require("./flows/convo_vende_malla");
 const convo_promo6x4 = require("./flows/convo_promo6x4");
+const convo_confeccionadaRetail = require("./flows/convo_confeccionadaRetail");
 
 // Register convo_flows so they can find each other during flow switches
 convoFlow.registerFlow('convo_bordeSeparadorRetail', convo_bordeSeparadorRetail);
 convoFlow.registerFlow('convo_vende_malla', convo_vende_malla);
 convoFlow.registerFlow('convo_promo6x4', convo_promo6x4);
+convoFlow.registerFlow('convo_confeccionadaRetail', convo_confeccionadaRetail);
 
 /**
  * Cache for product-based flow inference
