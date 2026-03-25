@@ -396,7 +396,10 @@ function create(manifest) {
         const intentCheck = await _openai.chat.completions.create({
           model: 'gpt-4o-mini',
           messages: [
-            { role: 'system', content: `¿El cliente quiere comprar, concretar la compra, o está pidiendo el link de compra? Responde solo con JSON: { "wantsToBuy": true/false }` },
+            { role: 'system', content: `El cliente ya recibió un link de compra previamente. ¿Está EXPLÍCITAMENTE pidiendo el link de nuevo, o diciendo que quiere concretar/realizar la compra? Responde con JSON: { "wantsToBuy": true/false }
+
+wantsToBuy = true SOLO si el cliente dice algo como: "mándame el link", "quiero comprar", "lo quiero", "cómo realizo la compra", "pásame el link", "listo para comprar".
+wantsToBuy = false si hace una pregunta general (envío, colores, medidas, ubicación, pago, horario, instalación) o si está saludando, agradeciendo, o pidiendo información.` },
             { role: 'user', content: `${conversationHistory ? `${conversationHistory}\n\n` : ''}Mensaje del cliente: ${userMessage}` }
           ],
           temperature: 0,

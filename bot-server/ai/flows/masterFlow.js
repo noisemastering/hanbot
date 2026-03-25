@@ -56,7 +56,10 @@ CLASIFICACIÓN — responde con JSON:
 3. Agradecimiento o despedida (gracias, adiós, bye) sin pregunta adicional:
    → { "type": "response", "text": "<despedida breve>", "intent": "farewell" }
 
-4. Cualquier otra cosa — producto específico, duda, o incertidumbre:
+4. El cliente responde a algo que el bot le preguntó (código postal, ciudad, nombre, confirmación) y NO es una pregunta de producto. Usa el historial para detectar esto:
+   → { "type": "response", "text": "<acuse de recibo breve y natural>", "intent": "general" }
+
+5. Mensaje sobre un producto específico (medidas, cotización, colores, porcentaje, comparación, compra):
    → { "type": "product_specific" }
 
 FORMATO DE RESPUESTAS:
@@ -64,7 +67,7 @@ FORMATO DE RESPUESTAS:
 - Usa solo datos reales proporcionados
 - Solo incluye URLs de Google Maps (ubicación) y WhatsApp (teléfono)
 - El pago siempre es 100% por adelantado
-- Ante la duda, clasifica como product_specific
+- Usa el historial de conversación para entender el contexto del mensaje
 - Solo devuelve JSON`;
 
     const businessData = `DATOS DEL NEGOCIO:
