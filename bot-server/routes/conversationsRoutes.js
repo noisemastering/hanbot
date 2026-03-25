@@ -367,16 +367,31 @@ router.post('/:psid/resume-bot', async (req, res) => {
     console.log(`🔄 Resume bot for ${psid}: re-processing "${lastUserMsg.text.substring(0, 80)}..."`);
 
     // Clear needs_human / human_active state so generateReply doesn't bail
-    await Conversation.findOneAndUpdate(
-      { psid },
-      {
-        state: 'active',
-        lastIntent: 'bot_resumed',
-        handoffResolved: true,
-        handoffResolvedAt: new Date(),
-        handoffRequested: false
+    const resumeUpdate = {
+      state: 'active',
+      lastIntent: 'bot_resumed',
+      handoffResolved: true,
+      handoffResolvedAt: new Date(),
+      handoffRequested: false,
+      pendingHandoff: false
+    };
+
+    // Resolve convoFlowRef from the ad if the conversation doesn't have one yet
+    if (!conversation.convoFlowRef && conversation.adId) {
+      try {
+        const { resolveByAdId } = require('../utils/campaignResolver');
+        const resolved = await resolveByAdId(conversation.adId);
+        if (resolved?.convoFlowRef) {
+          resumeUpdate.convoFlowRef = resolved.convoFlowRef;
+          resumeUpdate.currentFlow = `convo:${resolved.convoFlowRef}`;
+          console.log(`🎯 resume-bot: set convoFlowRef=${resolved.convoFlowRef} from ad`);
+        }
+      } catch (err) {
+        console.error(`⚠️ resume-bot: error resolving convoFlowRef:`, err.message);
       }
-    );
+    }
+
+    await Conversation.findOneAndUpdate({ psid }, resumeUpdate);
 
     // Re-run the message through the AI pipeline
     const { generateReply } = require('../ai');

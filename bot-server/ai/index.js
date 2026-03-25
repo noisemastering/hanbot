@@ -400,7 +400,10 @@ async function generateReply(userMessage, psid, referral = null) {
   }
   // Set currentFlow from ad context so the ad's flow governs the whole conversation
   // Skip if already in reseller flow (wholesale inquiry takes priority over product flow)
-  if ((!convo.currentFlow || convo.currentFlow === 'default') && !convo.isWholesaleInquiry) {
+  // Skip if ad has flowRef or convoFlowRef — those are explicit routing and detectFlow() handles them
+  const hasExplicitFlowRef = sourceContext?.ad?.flowRef || convo?.adFlowRef ||
+    sourceContext?.ad?.convoFlowRef || convo?.convoFlowRef;
+  if ((!convo.currentFlow || convo.currentFlow === 'default') && !convo.isWholesaleInquiry && !hasExplicitFlowRef) {
     const adProduct = sourceContext?.ad?.product || '';
     let adFlow = null;
     if (adProduct.startsWith('malla_sombra') || adProduct === 'confeccionada') {
@@ -538,9 +541,13 @@ async function generateReply(userMessage, psid, referral = null) {
   logClassification(psid, userMessage, classification);
   // ====== END LAYER 1 ======
 
+  // ── convo_flow guard: when a convo_flow is active, ALL pre-flow interceptors are dormant.
+  // The convo_flow pipeline (promoFlow → masterFlow → buyerFlow → productFlow → retailFlow) handles everything.
+  const isConvoFlowActive = convo?.convoFlowRef || convo?.currentFlow?.startsWith('convo:');
+
   // ====== PHONE NUMBER DETECTION (HOT LEAD!) ======
   // This runs before flow manager because it's a special case that triggers immediate handoff
-  if (classification.intent === 'phone_shared' && classification.entities?.phone) {
+  if (!isConvoFlowActive && classification.intent === 'phone_shared' && classification.entities?.phone) {
     const phone = classification.entities.phone;
     console.log(`📱 HOT LEAD! Phone number captured: ${phone}`);
 
@@ -567,7 +574,7 @@ async function generateReply(userMessage, psid, referral = null) {
   // When user says a link doesn't work, re-share the ORIGINAL ML URL directly
   // (the tracking redirect itself might be the problem, so bypass it)
   const linkNotWorkingPattern = /\b(no\s+(me\s+)?(abr[eé]|habre|carga|funciona|jala|sirve|deja|abre)|link.*(roto|malo|error)|no\s+puedo\s+(abrir|entrar|acceder|ver\s+el\s+link)|no\s+(entr[oa]|abr[oeéi])\s+(al|el|en)\s+(link|enlace))\b/i;
-  if (linkNotWorkingPattern.test(userMessage) && (convo?.lastSharedProductLink || convo?.lastProductLink)) {
+  if (!isConvoFlowActive && linkNotWorkingPattern.test(userMessage) && (convo?.lastSharedProductLink || convo?.lastProductLink)) {
     console.log(`🔗 Link not working detected, sharing original ML URL directly`);
     const originalUrl = convo.lastSharedProductLink || convo.lastProductLink;
     await updateConversation(psid, { lastIntent: "link_reshared", unknownCount: 0 });
@@ -581,7 +588,7 @@ async function generateReply(userMessage, psid, referral = null) {
   // ====== TRUST / SCAM CONCERN PRE-CHECK ======
   // When a customer expresses fear of being scammed, reassure with ML buyer protection
   const trustConcernPattern = /\b(estaf\w*|me\s+robaron|fraude|timo|enga[ñn]\w*|desconfian\w*|no\s+conf[ií]\w*|conf[ií]ar|conf[ií]able|miedo|me\s+da\s+pendiente|es\s+segur[oa]|ser[áa]\s+segur[oa]|le\s+pienso|le\s+pienzo)\b/i;
-  if (trustConcernPattern.test(userMessage)) {
+  if (!isConvoFlowActive && trustConcernPattern.test(userMessage)) {
     console.log(`🛡️ Trust/scam concern detected, reassuring with ML buyer protection`);
     const { updateConversation } = require("../conversationManager");
     await updateConversation(psid, { lastIntent: "trust_concern_addressed" });
@@ -596,7 +603,7 @@ async function generateReply(userMessage, psid, referral = null) {
   // Regex safety net: if user clearly asks about cash-on-delivery, force pay_on_delivery_query
   // This prevents misclassification as generic payment_query (which doesn't say NO)
   const payOnDeliveryPattern = /\b(pago\s+(al\s+)?(recibir|entregar?)|contra\s*entrega|contraentrega|cuando\s+llegue\s+pago|al\s+recibir|la\s+pago\s+al\s+entregar|se\s+paga\s+al\s+(recibir|entregar?)|cobr[ao]\s+al\s+(recibir|entregar?))\b/i;
-  if (payOnDeliveryPattern.test(userMessage) && classification.intent !== INTENTS.MULTI_QUESTION) {
+  if (!isConvoFlowActive && payOnDeliveryPattern.test(userMessage) && classification.intent !== INTENTS.MULTI_QUESTION) {
     // For multi-question messages, let the multi-question handler combine contra-entrega
     // with other responses (e.g., confirmation + payment). Only intercept single-intent messages.
     console.log(`💳 Pay-on-delivery question detected via regex, forcing explicit NO`);
@@ -608,10 +615,12 @@ async function generateReply(userMessage, psid, referral = null) {
 
   // ====== INTENT DB HANDLING ======
   // Check if intent has a DB-configured response (auto_response, human_handoff, or ai_generate guidance)
-  const intentResponse = await handleIntentFromDB(classification.intent, classification, psid, convo, userMessage);
-  if (intentResponse) {
-    console.log(`✅ Intent handled by DB config (${intentResponse.handledBy})`);
-    return await checkForRepetition(intentResponse, psid, convo);
+  if (!isConvoFlowActive) {
+    const intentResponse = await handleIntentFromDB(classification.intent, classification, psid, convo, userMessage);
+    if (intentResponse) {
+      console.log(`✅ Intent handled by DB config (${intentResponse.handledBy})`);
+      return await checkForRepetition(intentResponse, psid, convo);
+    }
   }
   // ====== END INTENT DB HANDLING ======
 
@@ -630,7 +639,7 @@ async function generateReply(userMessage, psid, referral = null) {
       /\d+(?:\.\d+)?\s*(?:[xX×*]|(?:metros?\s*)?por)\s*\d+/i,
     ].filter(p => p.test(userMessage)).length >= 3;
 
-  if (isMultiQuestion) {
+  if (!isConvoFlowActive && isMultiQuestion) {
     console.log(`📎 Multi-question detected (${classification.intent === INTENTS.MULTI_QUESTION ? 'classifier' : 'heuristic'}), using AI splitter`);
     const { handleMultiQuestion } = require("./utils/multiQuestionHandler");
     const mqResponse = await handleMultiQuestion(
@@ -651,7 +660,7 @@ async function generateReply(userMessage, psid, referral = null) {
 
   const isLowConfidence = classification.confidence < 0.4 || classification.intent === 'unclear';
 
-  if (!isLowConfidence && ALWAYS_DISPATCH.has(classification?.intent)) {
+  if (!isConvoFlowActive && !isLowConfidence && ALWAYS_DISPATCH.has(classification?.intent)) {
     const urgentResponse = await dispatchToHandler(classification, { psid, convo, userMessage });
     if (urgentResponse) {
       console.log(`✅ Urgent intent handled by dispatcher (${urgentResponse.handledBy})`);

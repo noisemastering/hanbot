@@ -149,6 +149,10 @@ async function handle(userMessage, convo, psid, state = {}) {
   // ── STANDARD PIPELINE ──
   // Integer dimensions, product questions, promo pitch, general questions
   // all handled by: promoFlow → masterFlow → buyerFlow → productFlow → retailFlow
+  // If customer provided dimensions, skip the promo pitch — serve the requested size directly.
+  if (dims) {
+    state.pitchSent = true;
+  }
   return await instance.handle(userMessage, convo, psid, state);
 }
 

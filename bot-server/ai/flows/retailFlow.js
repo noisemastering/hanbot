@@ -64,7 +64,7 @@ function detectWholesale(userMessage) {
  * @returns {Promise<string>} AI-generated quote message
  */
 async function buildQuoteMessage(products, options = {}) {
-  const { voice = 'casual', customerName = null, salesChannel = 'mercado_libre' } = options;
+  const { voice = 'casual', customerName = null, salesChannel = 'mercado_libre', conversationHistory = '' } = options;
 
   const voiceInstructions = {
     casual: 'Habla de manera amigable y relajada, como un vendedor joven y accesible. Usa "tú".',
@@ -103,7 +103,7 @@ REGLAS:
 - Solo devuelve el mensaje, nada más
 
 PRODUCTOS:
-${productList}`;
+${productList}${conversationHistory}`;
 
   try {
     const response = await _openai.chat.completions.create({
@@ -142,7 +142,7 @@ ${productList}`;
  * @returns {{ type: string, text?: string, action?: string, products?: Array }|null}
  */
 async function handle(userMessage, convo, psid, context = {}) {
-  const { products = [], voice = 'casual', salesChannel = 'mercado_libre', customerName = null } = context;
+  const { products = [], voice = 'casual', salesChannel = 'mercado_libre', customerName = null, conversationHistory = '' } = context;
 
   // ── WHOLESALE DETECTION ──
   if (detectWholesale(userMessage)) {
@@ -176,7 +176,7 @@ async function handle(userMessage, convo, psid, context = {}) {
   }
 
   // ── QUOTE — build AI-generated message ──
-  const quoteText = await buildQuoteMessage(products, { voice, customerName, salesChannel });
+  const quoteText = await buildQuoteMessage(products, { voice, customerName, salesChannel, conversationHistory });
 
   await updateConversation(psid, {
     lastIntent: 'retail_quote',

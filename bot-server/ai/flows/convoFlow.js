@@ -15,6 +15,8 @@ const resellerFlow_v2 = require("./resellerFlow_v2");
 const promoFlow = require("./promoFlow");
 const { updateConversation } = require("../../conversationManager");
 const { executeHandoff } = require("../utils/executeHandoff");
+const { generateClickLink } = require("../../tracking");
+const { getConversationContext } = require("../middleware/contextManager");
 
 const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 
@@ -297,6 +299,9 @@ function create(manifest) {
 
     const customerName = convo?.userName || null;
 
+    // ── CONVERSATION CONTEXT (retrieved once, passed to all flows) ──
+    const conversationHistory = await getConversationContext(psid);
+
     // ── PENDING SWITCH CONFIRMATION (Protocol #1 — different product) ──
     if (flowState.pendingSwitch) {
       const confirmed = /\b(s[ií]|ok|dale|va|por\s*favor|xfavor|claro|adelante|eso|ese|esa)\b/i.test(userMessage);
@@ -334,9 +339,22 @@ function create(manifest) {
     // ── PROMO FLOW (presents right away, before anything else) ──
     if (hasPromo) {
       // Filter to promo-specific products if configured, otherwise pitch all
-      const promoProducts = manifest.promo.promoProductIds
+      let promoProducts = manifest.promo.promoProductIds
         ? productCache.filter(p => manifest.promo.promoProductIds.includes(String(p.productId)))
         : productCache;
+
+      // Generate tracked links for retail promo products (before first pitch)
+      if (!flowState.pitchSent && manifest.salesChannel === 'retail') {
+        promoProducts = await Promise.all(promoProducts.map(async p => {
+          if (p.link) {
+            const tracked = await generateClickLink(psid, p.link, {
+              productName: p.name, productId: p.productId, reason: 'promo_pitch'
+            });
+            return { ...p, link: tracked };
+          }
+          return p;
+        }));
+      }
 
       const promoResult = await promoFlow.handle(userMessage, convo, psid, {
         products: promoProducts,
@@ -346,19 +364,48 @@ function create(manifest) {
         promoPrices: manifest.promo.promoPrices || [],
         timeframe: manifest.promo.timeframe || null,
         terms: manifest.promo.terms || null,
-        pitchSent: flowState.pitchSent
+        pitchSent: flowState.pitchSent,
+        conversationHistory
       });
 
       if (promoResult) {
-        if (promoResult.pitchSent) flowState.pitchSent = true;
+        if (promoResult.pitchSent) {
+          flowState.pitchSent = true;
+          // Store quoted products so follow-ups can reference the shared link
+          await updateConversation(psid, {
+            lastQuotedProducts: promoProducts.map(p => ({
+              displayText: p.size || p.name,
+              price: p.price,
+              productId: p.productId,
+              productUrl: p.link,
+              productName: p.name
+            })),
+            lastSharedProductId: promoProducts[0]?.productId,
+            lastSharedProductLink: promoProducts[0]?.link
+          });
+        }
         return { response: promoResult, state: flowState };
+      }
+    }
+
+    // ── PURCHASE CONFIRMATION (link already shared — don't re-pitch) ──
+    const lastLink = convo?.lastSharedProductLink;
+    if (lastLink) {
+      const wantsToBuy = /\b(concretar|comprar|realizo?\s*(una\s*)?compra|lo\s*quiero|la\s*quiero|me\s*lo\s*llevo|me\s*la\s*llevo|hacer\s*la\s*compra|realizar\s*la\s*compra|d[oó]nde\s*pago|c[oó]mo\s*(pago|compro|realizo)|quiero\s*pagar|link\s*de\s*compra|pas[ae]\s*(el\s*)?link|s[ií]\s*lo\s*quiero|listo|va\s*va|órale)\b/i;
+      if (wantsToBuy.test(userMessage)) {
+        console.log('🛒 [convo] Purchase confirmation — re-sharing existing link');
+        return {
+          response: { type: 'text', text: `Puedes hacer tu compra directamente aquí:\n\n${lastLink}\n\nSi tienes cualquier duda, aquí estoy.` },
+          state: flowState
+        };
       }
     }
 
     // ── MASTER FLOW (general questions) ──
     const masterResult = await masterFlow.handle(userMessage, convo, psid, {
       salesChannel: manifest.salesChannel === 'retail' ? 'mercado_libre' : 'direct',
-      installationNote: manifest.installationNote || null
+      installationNote: manifest.installationNote || null,
+      conversationHistory
     });
 
     if (masterResult) {
@@ -374,7 +421,9 @@ function create(manifest) {
       clientData: flowState.clientData,
       allowListing: manifest.allowListing || false,
       offersCatalog: manifest.offersCatalog || false,
-      pitchSent: flowState.resellerPitchSent
+      pitchSent: flowState.resellerPitchSent,
+      catalogSent: flowState.catalogSent || false,
+      conversationHistory
     });
 
     if (personaResult) {
@@ -388,9 +437,10 @@ function create(manifest) {
         flowState.profile = personaResult.profile;
       }
 
-      // Reseller pitch or data gathering
+      // Reseller pitch, catalog delivery, or data gathering
       if (personaResult.type === 'text') {
         if (personaResult.pitchSent) flowState.resellerPitchSent = true;
+        if (personaResult.catalogSent) flowState.catalogSent = true;
         if (personaResult.clientData) flowState.clientData = personaResult.clientData;
         return { response: personaResult, state: flowState };
       }
@@ -404,7 +454,8 @@ function create(manifest) {
       products: productCache,
       manifests: otherManifests,
       basket: flowState.basket,
-      lastQuotedProducts: flowState.lastQuotedProducts || []
+      lastQuotedProducts: flowState.lastQuotedProducts || [],
+      conversationHistory
     });
 
     if (productResult) {
@@ -431,7 +482,8 @@ function create(manifest) {
           customerName,
           clientData: flowState.clientData,
           allowListing: manifest.allowListing || false,
-          offersCatalog: manifest.offersCatalog || false
+          offersCatalog: manifest.offersCatalog || false,
+          conversationHistory
         });
 
         if (salesResult) {

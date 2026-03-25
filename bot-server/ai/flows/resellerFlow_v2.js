@@ -8,6 +8,8 @@
 const { OpenAI } = require("openai");
 const { updateConversation } = require("../../conversationManager");
 const { executeHandoff } = require("../utils/executeHandoff");
+const { getCatalogUrl } = require("../flowManager");
+const { sendCatalog } = require("../../utils/sendCatalog");
 
 const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 
@@ -35,6 +37,17 @@ function detectBuyer(userMessage) {
 }
 
 /**
+ * Detect if the user wants to see the catalog or is showing interest.
+ * @param {string} userMessage
+ * @returns {boolean}
+ */
+function detectCatalogInterest(userMessage) {
+  if (!userMessage) return false;
+  const patterns = /\b(cat[áa]logo|env[ií]a(me|lo|r)|mand(a|ame)|ver\s*(los\s*)?productos|lista\s*de\s*precios|precios|medidas\s*y\s*precios|s[ií](\s*por\s*favor)?|ok|dale|va|claro|me\s*interesa|xfavor|por\s*favor|adelante)\b/i;
+  return patterns.test(userMessage);
+}
+
+/**
  * Extract client data from a message using AI.
  * @param {string} userMessage
  * @param {Object} existingData - Already collected fields
@@ -42,7 +55,7 @@ function detectBuyer(userMessage) {
  * @returns {Promise<{ extracted: Object, nextQuestion: string|null, allCollected: boolean }>}
  */
 async function extractClientData(userMessage, existingData = {}, options = {}) {
-  const { voice = 'professional' } = options;
+  const { voice = 'professional', conversationHistory = '' } = options;
 
   const voiceInstructions = {
     casual: 'Habla de manera amigable y relajada. Usa "tú".',
@@ -90,7 +103,7 @@ REGLAS:
 - NO inventes datos
 - Pide TODOS los datos faltantes en un solo mensaje, un dato por línea
 - Si ya tienes todos los obligatorios, pon allCollected: true
-- Solo devuelve JSON, nada más`;
+- Solo devuelve JSON, nada más${conversationHistory}`;
 
   try {
     const response = await _openai.chat.completions.create({
@@ -118,7 +131,7 @@ REGLAS:
  * @returns {Promise<string>}
  */
 async function buildResellerPitch(products, options = {}) {
-  const { voice = 'professional', customerName = null, allowListing = false, offersCatalog = false } = options;
+  const { voice = 'professional', customerName = null, allowListing = false, offersCatalog = false, conversationHistory = '' } = options;
 
   const voiceInstructions = {
     casual: 'Habla de manera amigable y relajada. Usa "tú".',
@@ -139,22 +152,15 @@ async function buildResellerPitch(products, options = {}) {
   const systemPrompt = `Eres asesora de ventas de Hanlob (programa de revendedores).
 ${voiceInstructions[voice] || voiceInstructions.professional}
 
-Presenta la oportunidad de negocio al cliente. El mensaje debe:
-- Sonar natural, como si lo escribiera una persona
-- Resaltar que es una buena INVERSIÓN y oportunidad de negocio
-- Mencionar la calidad del producto como ventaja competitiva para reventa
-- Somos fabricantes, lo que significa mejores precios para el revendedor
-- Invitar al cliente a indicar qué productos y cantidades le interesan
-${customerName ? `- El cliente se llama ${customerName}` : ''}${catalogNote}${listingNote}
+Presenta brevemente la oportunidad de negocio. Somos FABRICANTES de malla sombra — mejores precios para el revendedor.
+${customerName ? `El cliente se llama ${customerName}.` : ''}
 
 REGLAS:
-- NO inventes precios ni márgenes de ganancia específicos
-- NO prometas exclusividad ni territorios
-- Máximo 4-6 oraciones
-- Solo devuelve el mensaje, nada más
-
-PRODUCTOS DISPONIBLES:
-${productList}`;
+- Máximo 2-3 oraciones — ve al grano, nada de párrafos
+- NO inventes precios ni márgenes
+- NO uses lenguaje de infomercial ni exageres
+- Ofrece enviar el catálogo con medidas y precios
+- Solo devuelve el mensaje, nada más${conversationHistory}`;
 
   try {
     const response = await _openai.chat.completions.create({
@@ -197,7 +203,9 @@ async function handle(userMessage, convo, psid, context = {}) {
     clientData = {},
     allowListing = false,
     offersCatalog = false,
-    pitchSent = false
+    pitchSent = false,
+    catalogSent = false,
+    conversationHistory = ''
   } = context;
 
   // ── BUYER DETECTION ──
@@ -208,7 +216,7 @@ async function handle(userMessage, convo, psid, context = {}) {
 
   // ── RESELLER PITCH (first interaction) ──
   if (!pitchSent && products.length > 0) {
-    const pitchText = await buildResellerPitch(products, { voice, customerName, allowListing, offersCatalog });
+    const pitchText = await buildResellerPitch(products, { voice, customerName, allowListing, offersCatalog, conversationHistory });
     if (pitchText) {
       console.log(`🏛️ [reseller] Pitch delivered (${products.length} products)`);
       await updateConversation(psid, {
@@ -219,8 +227,47 @@ async function handle(userMessage, convo, psid, context = {}) {
     }
   }
 
-  // ── DATA GATHERING ──
-  const extraction = await extractClientData(userMessage, clientData, { voice });
+  // ── CATALOG DELIVERY (when user shows interest — never gated behind data) ──
+  if (pitchSent && !catalogSent && detectCatalogInterest(userMessage)) {
+    console.log('🏛️ [reseller] Catalog interest detected — sending catalog');
+
+    // Try to send the PDF catalog
+    const catalogUrl = await getCatalogUrl(convo, convo?.currentFlow);
+    if (catalogUrl) {
+      const rawPsid = psid.startsWith('fb:') ? psid.replace('fb:', '') : psid;
+      const result = await sendCatalog(rawPsid, catalogUrl);
+      if (result?.fileSent) {
+        console.log(`📄 [reseller] Catalog PDF sent`);
+        await updateConversation(psid, {
+          lastIntent: 'reseller_catalog_sent',
+          unknownCount: 0
+        });
+        return {
+          type: 'text',
+          text: 'Ahí te va el catálogo con medidas y precios. Cuando veas algo que te interese, dime y platicamos cantidades y precios de revendedor.',
+          catalogSent: true
+        };
+      }
+    }
+
+    // No PDF available — build a text product listing as fallback
+    const productList = products.length > 3
+      ? `Manejamos ${products.length} medidas, desde ${products[0]?.name} hasta ${products[products.length - 1]?.name}.`
+      : products.map(p => `- ${p.name}${p.price ? ` — $${p.price}` : ''}`).join('\n');
+
+    await updateConversation(psid, {
+      lastIntent: 'reseller_catalog_sent',
+      unknownCount: 0
+    });
+    return {
+      type: 'text',
+      text: `${productList}\n\nDime qué medidas y cantidades te interesan y te paso los precios de revendedor.`,
+      catalogSent: true
+    };
+  }
+
+  // ── DATA GATHERING (after catalog has been sent) ──
+  const extraction = await extractClientData(userMessage, clientData, { voice, conversationHistory });
 
   const updatedData = { ...clientData };
   if (extraction.extracted) {

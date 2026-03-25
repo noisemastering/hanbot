@@ -323,7 +323,8 @@ const FLOW_DISPLAY_NAMES = {
   'borde_separador': 'borde separador',
   'groundcover': 'ground cover (antimaleza)',
   'monofilamento': 'malla monofilamento',
-  'reseller': 'distribución'
+  'reseller': 'distribución',
+  '6x4_promo': 'malla sombra confeccionada'
 };
 
 /**
@@ -842,7 +843,8 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
         'malla_sombra': 'malla sombra confeccionada',
         'borde_separador': 'borde separador',
         'groundcover': 'ground cover',
-        'monofilamento': 'malla monofilamento'
+        'monofilamento': 'malla monofilamento',
+        '6x4_promo': 'malla sombra confeccionada'
       };
       const currentName = currentProductNames[convo.currentFlow] || 'producto actual';
 

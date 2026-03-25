@@ -94,13 +94,14 @@ async function buildPromoPitch(products, options = {}) {
     customerName = null,
     expiryText = 'Hasta agotar existencias',
     terms = null,
-    salesChannel = 'mercado_libre'
+    salesChannel = 'mercado_libre',
+    conversationHistory = ''
   } = options;
 
   const voiceInstructions = {
-    casual: 'Habla de manera amigable y entusiasta. Usa "tú".',
-    professional: 'Habla de manera profesional pero cálida.',
-    technical: 'Sé preciso con las especificaciones del producto.'
+    casual: 'Habla de manera directa y amigable, como un vendedor real por chat. Usa "tú". Sin exageraciones ni frases de infomercial.',
+    professional: 'Habla de manera profesional pero cálida. Sin exageraciones.',
+    technical: 'Sé preciso con las especificaciones del producto. Sin adornos.'
   };
 
   const channelNote = salesChannel === 'mercado_libre'
@@ -121,26 +122,24 @@ async function buildPromoPitch(products, options = {}) {
     return entry;
   }).join('\n\n');
 
-  const systemPrompt = `Eres asesora de ventas de Hanlob. Estás presentando una PROMOCIÓN ESPECIAL.
+  const systemPrompt = `Eres vendedora de Hanlob, fabricante mexicano de malla sombra. Escríbele al cliente por chat.
 ${voiceInstructions[voice] || voiceInstructions.casual}
 
-Genera un mensaje presentando la promoción. El mensaje debe:
-- Sonar natural y entusiasta, como si lo escribiera una persona
-- Presentar los productos con sus precios (si hay precio promocional, resaltarlo)
-- Incluir el link de compra si existe
-- Mencionar la vigencia: ${expiryText}
+Presenta el producto con su precio y link de compra. Sé breve y directa.
 - ${channelNote}
 ${customerName ? `- El cliente se llama ${customerName}` : ''}
 
 REGLAS:
-- NO inventes precios ni datos que no estén en la información proporcionada
-- NO agregues productos que no estén listados
-- Máximo 4-6 oraciones
-- Si hay un link, SIEMPRE inclúyelo
+- NO uses emojis excesivos (máximo 1, si acaso)
+- NO uses frases de infomercial ("no te lo pierdas", "increíble", "oferta imperdible", "aprovecha")
+- NO exageres ni uses signos de exclamación de más
+- Máximo 3-4 oraciones — ve al grano
+- Incluye el precio y el link de compra
+- Si hay precio promocional, menciónalo sin drama
 - Solo devuelve el mensaje, nada más
 
 PRODUCTOS EN PROMOCIÓN:
-${productList}`;
+${productList}${conversationHistory}`;
 
   try {
     const response = await _openai.chat.completions.create({
@@ -191,7 +190,8 @@ async function handle(userMessage, convo, psid, context = {}) {
     promoPrices = [],
     timeframe = null,
     terms = null,
-    pitchSent = false
+    pitchSent = false,
+    conversationHistory = ''
   } = context;
 
   // ── CHECK TIMEFRAME ──
@@ -222,7 +222,7 @@ async function handle(userMessage, convo, psid, context = {}) {
   if (!pitchSent && products.length > 0) {
     const pricedProducts = applyPromoPrices(products, promoPrices);
     const pitchText = await buildPromoPitch(pricedProducts, {
-      voice, customerName, expiryText, terms, salesChannel
+      voice, customerName, expiryText, terms, salesChannel, conversationHistory
     });
 
     if (pitchText) {

@@ -23,6 +23,8 @@ const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 async function handle(userMessage, convo, psid, context = {}) {
   if (!userMessage) return null;
 
+  const { conversationHistory = '' } = context;
+
   try {
     const info = await getBusinessInfo();
     const afterHours = !isBusinessHours();
@@ -82,7 +84,7 @@ REGLAS:
 - NUNCA inventes precios ni medidas
 - NUNCA incluyas URLs en tu respuesta EXCEPTO el link de Google Maps cuando pregunten ubicación y el WhatsApp cuando compartas el teléfono
 - Si tienes duda entre "general" y "producto específico", SIEMPRE devuelve product_specific
-- Solo devuelve JSON, nada más`;
+- Solo devuelve JSON, nada más${conversationHistory}`;
 
     const userContext = [];
     if (convo?.userName) userContext.push(`Nombre: ${convo.userName}`);

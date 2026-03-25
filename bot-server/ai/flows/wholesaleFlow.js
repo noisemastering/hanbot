@@ -44,7 +44,7 @@ function detectRetail(userMessage) {
  * @returns {Promise<{ extracted: Object, nextQuestion: string|null, allCollected: boolean }>}
  */
 async function extractClientData(userMessage, existingData = {}, options = {}) {
-  const { voice = 'professional' } = options;
+  const { voice = 'professional', conversationHistory = '' } = options;
 
   const voiceInstructions = {
     casual: 'Habla de manera amigable y relajada. Usa "tú".',
@@ -91,7 +91,7 @@ REGLAS:
 - NO inventes datos
 - Pide TODOS los datos faltantes en un solo mensaje, un dato por línea
 - Si ya tienes todos los obligatorios, pon allCollected: true
-- Solo devuelve JSON, nada más`;
+- Solo devuelve JSON, nada más${conversationHistory}`;
 
   try {
     const response = await _openai.chat.completions.create({
@@ -119,7 +119,7 @@ REGLAS:
  * @returns {Promise<string>}
  */
 async function buildCatalogMessage(products, options = {}) {
-  const { voice = 'professional', customerName = null, allowListing = false, offersCatalog = false } = options;
+  const { voice = 'professional', customerName = null, allowListing = false, offersCatalog = false, conversationHistory = '' } = options;
 
   if ((!allowListing && !offersCatalog) || !products.length) return null;
 
@@ -149,7 +149,7 @@ ${customerName ? `- El cliente se llama ${customerName}` : ''}
 PRODUCTOS:
 ${productList}
 
-Solo devuelve el mensaje, nada más.`;
+Solo devuelve el mensaje, nada más.${conversationHistory}`;
 
   try {
     const response = await _openai.chat.completions.create({
@@ -191,7 +191,8 @@ async function handle(userMessage, convo, psid, context = {}) {
     customerName = null,
     clientData = {},
     allowListing = false,
-    offersCatalog = false
+    offersCatalog = false,
+    conversationHistory = ''
   } = context;
 
   // ── RETAIL DETECTION ──
@@ -202,7 +203,7 @@ async function handle(userMessage, convo, psid, context = {}) {
 
   // ── CATALOG PRESENTATION (if applicable and not yet shown) ──
   if ((allowListing || offersCatalog) && products.length > 0 && !clientData.product) {
-    const catalogText = await buildCatalogMessage(products, { voice, customerName, allowListing, offersCatalog });
+    const catalogText = await buildCatalogMessage(products, { voice, customerName, allowListing, offersCatalog, conversationHistory });
     if (catalogText) {
       console.log(`🏛️ [wholesale] Catalog presented (${products.length} products)`);
       return { type: 'text', text: catalogText };
@@ -210,7 +211,7 @@ async function handle(userMessage, convo, psid, context = {}) {
   }
 
   // ── DATA GATHERING ──
-  const extraction = await extractClientData(userMessage, clientData, { voice });
+  const extraction = await extractClientData(userMessage, clientData, { voice, conversationHistory });
 
   // Merge extracted data with existing
   const updatedData = { ...clientData };

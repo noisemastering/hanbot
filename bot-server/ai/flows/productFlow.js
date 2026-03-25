@@ -146,7 +146,7 @@ async function loadProducts(familyIds) {
 async function findProduct(userMessage, products, conversationContext = {}) {
   if (!userMessage || !products.length) return [];
 
-  const { basket = [], lastBotResponse = null, customerName = null, lastQuotedProducts = [] } = conversationContext;
+  const { basket = [], lastBotResponse = null, customerName = null, lastQuotedProducts = [], conversationHistory = '' } = conversationContext;
 
   const productSummary = products.map((p, i) => {
     let entry = `${i}: `;
@@ -194,7 +194,7 @@ REGLAS:
 - Si el cliente hace una pregunta de seguimiento (ej: "¿cuánto cuesta?", "me interesa", "ese") usa el CONTEXTO para identificar a qué producto se refiere. Si se acaban de cotizar productos, se refiere a esos.
 - Si el cliente pide algo que claramente NO está en la lista ni en sus familias, pon outsideRealm: true y matches: []
 - Si hay duda, pon confidence: "low"
-- Solo devuelve JSON`
+- Solo devuelve JSON${conversationHistory}`
         },
         { role: "user", content: userMessage }
       ],
@@ -298,7 +298,7 @@ Solo devuelve JSON.`
  * @returns {{ type: string, products?: Array, action?: string }|null}
  */
 async function handle(userMessage, convo, psid, context = {}) {
-  const { familyIds = [], products: preloaded = null, manifests = [], basket = [], lastQuotedProducts = [] } = context;
+  const { familyIds = [], products: preloaded = null, manifests = [], basket = [], lastQuotedProducts = [], conversationHistory = '' } = context;
 
   // ── LOAD PRODUCTS (once, then cache in convo_flow) ──
   const products = preloaded || await loadProducts(familyIds);
@@ -319,7 +319,8 @@ async function handle(userMessage, convo, psid, context = {}) {
     basket,
     lastBotResponse: convo?.lastBotResponse || null,
     customerName: convo?.userName || null,
-    lastQuotedProducts
+    lastQuotedProducts,
+    conversationHistory
   };
   const search = await findProduct(userMessage, products, conversationContext);
 
