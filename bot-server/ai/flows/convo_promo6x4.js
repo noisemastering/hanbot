@@ -145,15 +145,63 @@ async function handle(userMessage, convo, psid, state = {}) {
       });
       return { response: handoffResp, state };
     }
+
+    // ── INTEGER DIMENSION LOOKUP ──
+    // Look up the exact size in the DB instead of relying on productFlow AI matching.
+    const products = await findBySize(w, h);
+
+    if (products.length > 0) {
+      const product = products[0];
+      const productUrl = product.onlineStoreLinks?.find(l => l.isPreferred)?.url
+        || product.onlineStoreLinks?.[0]?.url;
+
+      if (productUrl) {
+        const trackedLink = await generateClickLink(psid, productUrl, {
+          productName: product.name,
+          productId: product._id,
+          reason: 'retail_quote'
+        });
+
+        await updateConversation(psid, {
+          lastSharedProductId: product._id?.toString(),
+          lastSharedProductLink: trackedLink,
+          lastQuotedProducts: [{
+            width: w, height: h,
+            displayText: `${w}x${h}m`,
+            price: product.price,
+            productId: product._id?.toString(),
+            productUrl,
+            productName: product.name
+          }]
+        });
+
+        const sizeText = dims.convertedFromFeet
+          ? `Tu medida de ${dims.originalFeetStr} equivale a ${w}x${h} metros.\n\n`
+          : '';
+
+        return {
+          response: {
+            type: 'text',
+            text: `${sizeText}${product.name || `Malla de ${w}x${h}m`} — ${formatMoney(product.price)} con envío incluido.\n\nViene reforzada con ojillos y sujetadores, lista para instalar.\n\n🛒 Cómprala aquí:\n${trackedLink}`
+          },
+          state: { ...state, pitchSent: true }
+        };
+      }
+    }
+
+    // Size not in catalog → handoff
+    const handoffResp = await executeHandoff(psid, convo, userMessage, {
+      reason: `Medida ${w}x${h}m no encontrada en catálogo`,
+      responsePrefix: `La medida de ${w}x${h}m no la tenemos en catálogo estándar. Te comunico con un especialista para cotizarte.`,
+      lastIntent: 'size_not_found_handoff',
+      timingStyle: 'elaborate'
+    });
+    return { response: handoffResp, state };
   }
 
   // ── STANDARD PIPELINE ──
-  // Integer dimensions, product questions, promo pitch, general questions
-  // all handled by: promoFlow → masterFlow → buyerFlow → productFlow → retailFlow
-  // If customer provided dimensions, skip the promo pitch — serve the requested size directly.
-  if (dims) {
-    state.pitchSent = true;
-  }
+  // Non-dimension messages: product questions, promo pitch, general questions
+  // Handled by: promoFlow → masterFlow → buyerFlow → productFlow → retailFlow
   return await instance.handle(userMessage, convo, psid, state);
 }
 
