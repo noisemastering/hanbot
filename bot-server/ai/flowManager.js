@@ -1148,7 +1148,8 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
   // Route legacy flows to their convo_flow counterparts when available.
   const LEGACY_TO_CONVO = {
     'malla_sombra': 'convo_confeccionadaRetail',
-    'borde_separador': 'convo_bordeSeparadorRetail'
+    'borde_separador': 'convo_bordeSeparadorRetail',
+    '6x4_promo': 'convo_promo6x4'
   };
   if (LEGACY_TO_CONVO[activeFlow]) {
     const convoName = LEGACY_TO_CONVO[activeFlow];
@@ -1156,10 +1157,18 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
     activeFlow = `convo:${convoName}`;
 
     // Persist so future messages go directly to convo_flow
-    await updateConversation(psid, {
+    const updateFields = {
       currentFlow: activeFlow,
       convoFlowRef: convoName
-    });
+    };
+    // Seed convo_flow state for legacy conversations that don't have one yet.
+    // 6x4_promo conversations have already been pitched — preserve that.
+    if (!convo?.convoFlowState || Object.keys(convo.convoFlowState).length === 0) {
+      updateFields.convoFlowState = {
+        pitchSent: convoName === 'convo_promo6x4'
+      };
+    }
+    await updateConversation(psid, updateFields);
     convo.currentFlow = activeFlow;
   }
 
