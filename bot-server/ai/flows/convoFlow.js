@@ -421,8 +421,22 @@ wantsToBuy = false si hace una pregunta general (envío, colores, medidas, ubica
         });
         const parsed = JSON.parse(intentCheck.choices[0].message.content);
         if (parsed.wantsToBuy) {
-          console.log('🛒 [convo] Purchase intent detected — re-sharing link');
           await updateConversation(psid, { lastIntent: 'purchase_intent', unknownCount: 0 });
+
+          // Check if the link was already shared recently (last bot message or conversation history)
+          const lastBotMsg = convo?.lastBotResponse || '';
+          const linkAlreadyShared = lastBotMsg.includes(lastLink)
+            || (conversationHistory && conversationHistory.includes(lastLink));
+
+          if (linkAlreadyShared) {
+            console.log('🛒 [convo] Purchase confirmation — link already in last message');
+            return {
+              response: { type: 'text', text: '¡Perfecto! Puedes comprarlo directamente desde el link que te compartí. Si necesitas ayuda con algo más, aquí estoy.' },
+              state: flowState
+            };
+          }
+
+          console.log('🛒 [convo] Purchase intent detected — sharing link');
           return {
             response: { type: 'text', text: `Puedes hacer tu compra directamente aquí:\n\n${lastLink}\n\nSi tienes cualquier duda, aquí estoy.` },
             state: flowState
