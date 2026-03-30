@@ -56,6 +56,17 @@ function CampaignHome() {
   const [analytics, setAnalytics] = useState(null);
   const [adPerf, setAdPerf] = useState([]);
   const [dailyData, setDailyData] = useState([]);
+  const [sourceBreakdown, setSourceBreakdown] = useState([]);
+
+  // Link generator state
+  const [showLinkGen, setShowLinkGen] = useState(false);
+  const [linkUrl, setLinkUrl] = useState("");
+  const [linkProductName, setLinkProductName] = useState("");
+  const [selectedAdId, setSelectedAdId] = useState("");
+  const [adsList, setAdsList] = useState([]);
+  const [generatedLink, setGeneratedLink] = useState(null);
+  const [generating, setGenerating] = useState(false);
+  const [copySuccess, setCopySuccess] = useState(false);
 
   const dateFrom = useMemo(() => getDaysAgo(range), [range]);
   const dateTo = useMemo(() => new Date().toISOString().split("T")[0], []);
@@ -74,15 +85,17 @@ function CampaignHome() {
       const dateFromISO = `${dateFrom}T00:00:00.000Z`;
       const dateToISO = `${dateTo}T23:59:59.999Z`;
 
-      const [analyticsRes, adPerfRes, clicksRes] = await Promise.all([
+      const [analyticsRes, adPerfRes, clicksRes, sourceRes] = await Promise.all([
         API.get(`/analytics/?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/analytics/ad-performance?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/click-logs/daily?startDate=${dateFrom}&endDate=${dateTo}`),
+        API.get(`/click-logs/by-source?startDate=${dateFrom}&endDate=${dateTo}`),
       ]);
 
       setAnalytics(analyticsRes.data);
       setAdPerf(adPerfRes.data?.ads || []);
       setDailyData(clicksRes.data?.chartData || []);
+      setSourceBreakdown(sourceRes.data?.sources || []);
     } catch (err) {
       console.error("Error fetching campaign dashboard:", err);
     } finally {
@@ -120,6 +133,56 @@ function CampaignHome() {
       stopProgress();
     } finally {
       setCorrelating(false);
+    }
+  };
+
+  const fetchAds = useCallback(async () => {
+    try {
+      const res = await API.get("/ads?status=ACTIVE");
+      setAdsList(res.data?.data || []);
+    } catch (err) {
+      console.error("Error fetching ads:", err);
+    }
+  }, []);
+
+  const generateDirectAdLink = async () => {
+    if (!linkUrl) return;
+    setGenerating(true);
+    try {
+      const ad = adsList.find(a => a._id === selectedAdId);
+      const res = await API.post("/click-logs/generate", {
+        originalUrl: linkUrl,
+        productName: linkProductName || null,
+        adId: ad?.fbAdId || null,
+        adSetId: ad?.adSetId?.fbAdSetId || null,
+        campaignId: ad?.adSetId?.campaignId?.ref || null,
+        source: "direct_ad"
+      });
+      setGeneratedLink(res.data.clickLog.trackedUrl);
+      setCopySuccess(false);
+    } catch (err) {
+      console.error("Error generating link:", err);
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const copyToClipboard = async () => {
+    if (!generatedLink) return;
+    try {
+      await navigator.clipboard.writeText(generatedLink);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
+    } catch {
+      // Fallback
+      const ta = document.createElement("textarea");
+      ta.value = generatedLink;
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+      setCopySuccess(true);
+      setTimeout(() => setCopySuccess(false), 2000);
     }
   };
 
@@ -348,6 +411,145 @@ function CampaignHome() {
           {correlating ? `${syncProgress}%` : "Correlacionar"}
         </button>
       </div>
+
+      {/* Link Generator for Direct Ads */}
+      <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-lg font-semibold text-white">Generar link de seguimiento</h2>
+            <p className="text-sm text-gray-500">Para anuncios con CTA directo (sin Messenger)</p>
+          </div>
+          <button
+            onClick={() => {
+              const next = !showLinkGen;
+              setShowLinkGen(next);
+              setGeneratedLink(null);
+              if (next && adsList.length === 0) fetchAds();
+            }}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 transition-all"
+          >
+            {showLinkGen ? "Cerrar" : "Nuevo link"}
+          </button>
+        </div>
+
+        {showLinkGen && (
+          <div className="space-y-4">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">URL destino *</label>
+                <input
+                  type="url"
+                  value={linkUrl}
+                  onChange={e => setLinkUrl(e.target.value)}
+                  placeholder="https://articulo.mercadolibre.com.mx/..."
+                  className="w-full bg-gray-900/50 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Producto (opcional)</label>
+                <input
+                  type="text"
+                  value={linkProductName}
+                  onChange={e => setLinkProductName(e.target.value)}
+                  placeholder="Malla sombra 90%"
+                  className="w-full bg-gray-900/50 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:border-blue-500 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-sm text-gray-400 mb-1">Anuncio (opcional)</label>
+                <select
+                  value={selectedAdId}
+                  onChange={e => setSelectedAdId(e.target.value)}
+                  className="w-full bg-gray-900/50 border border-gray-600 rounded-lg px-3 py-2 text-white text-sm focus:border-blue-500 focus:outline-none"
+                >
+                  <option value="">Sin anuncio</option>
+                  {adsList.map(ad => (
+                    <option key={ad._id} value={ad._id}>
+                      {ad.name}{ad.adSetId?.campaignId?.name ? ` — ${ad.adSetId.campaignId.name}` : ""}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-3">
+              <button
+                onClick={generateDirectAdLink}
+                disabled={!linkUrl || generating}
+                className="bg-green-600 text-white px-5 py-2 rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-all"
+              >
+                {generating ? "Generando..." : "Generar link"}
+              </button>
+
+              {generatedLink && (
+                <div className="flex items-center gap-2 flex-1">
+                  <input
+                    type="text"
+                    value={generatedLink}
+                    readOnly
+                    className="flex-1 bg-gray-900 border border-green-500/50 rounded-lg px-3 py-2 text-green-400 text-sm font-mono"
+                  />
+                  <button
+                    onClick={copyToClipboard}
+                    className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                      copySuccess
+                        ? "bg-green-600 text-white"
+                        : "bg-gray-700 text-gray-300 hover:bg-gray-600"
+                    }`}
+                  >
+                    {copySuccess ? "Copiado" : "Copiar"}
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Source Breakdown */}
+      {sourceBreakdown.length > 0 && (
+        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl">
+          <div className="px-6 py-4 border-b border-gray-700/50">
+            <h2 className="text-lg font-semibold text-white">Ventas por canal</h2>
+            <p className="text-sm text-gray-500">Messenger vs WhatsApp vs Anuncios directos</p>
+          </div>
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead className="bg-gray-900/50">
+                <tr className="text-left text-xs text-gray-400 uppercase">
+                  <th className="px-6 py-3">Canal</th>
+                  <th className="px-4 py-3 text-right">Links</th>
+                  <th className="px-4 py-3 text-right">Clicks</th>
+                  <th className="px-4 py-3 text-right">Click Rate</th>
+                  <th className="px-4 py-3 text-right">Conv.</th>
+                  <th className="px-4 py-3 text-right">Conv. Rate</th>
+                  <th className="px-4 py-3 text-right">Revenue</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-700/50">
+                {sourceBreakdown.map(s => (
+                  <tr key={s.source} className="hover:bg-gray-700/20">
+                    <td className="px-6 py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{
+                          backgroundColor: s.source === "direct_ad" ? COLORS.amber : s.source === "whatsapp" ? COLORS.green : COLORS.blue
+                        }} />
+                        <span className="text-sm text-white font-medium">{s.label}</span>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm text-gray-300">{s.links.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right text-sm text-white font-medium">{s.clicks.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right text-sm text-gray-300">{s.clickRate}%</td>
+                    <td className="px-4 py-3 text-right text-sm text-green-400 font-medium">{s.conversions}</td>
+                    <td className="px-4 py-3 text-right text-sm text-gray-300">{s.conversionRate}%</td>
+                    <td className="px-4 py-3 text-right text-sm text-white">${s.revenue.toLocaleString()}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       {/* Bottom row: Ad Donut + Ad Table */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
