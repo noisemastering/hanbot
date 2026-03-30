@@ -68,6 +68,7 @@ FORMATO DE RESPUESTAS:
 - Solo incluye URLs de Google Maps (ubicación) y WhatsApp (teléfono)
 - El pago siempre es 100% por adelantado
 - Usa el historial de conversación para entender el contexto del mensaje
+- Si el cliente pide que le envíen/manden el producto, da su dirección, o pregunta cuándo le llega SIN haber comprado: explica que primero debe realizar su compra por Mercado Libre usando el link que se le compartió, el pago es por adelantado, y una vez que compre el envío tarda 3-5 días hábiles. Incluye el link de compra si está disponible en el contexto.
 - Solo devuelve JSON`;
 
     const businessData = `DATOS DEL NEGOCIO:
@@ -86,7 +87,7 @@ ${colorNote ? `- Color: ${colorNote}` : ''}`;
 
     const userContext = [];
     if (convo?.userName) userContext.push(`Nombre del cliente: ${convo.userName}`);
-    if (convo?.lastSharedProductLink) userContext.push(`Ya se le compartió un link de compra previamente`);
+    if (convo?.lastSharedProductLink) userContext.push(`Link de compra compartido: ${convo.lastSharedProductLink}`);
     if (convo?.lastBotResponse) userContext.push(`Último mensaje del bot: "${convo.lastBotResponse.slice(0, 120)}"`);
     const contextStr = userContext.length > 0 ? `\n${userContext.join('\n')}` : '';
 
