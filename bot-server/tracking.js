@@ -25,7 +25,7 @@ function extractMLItemId(url) {
 
 /**
  * Generate a trackable click link
- * @param {string} psid - User's PSID
+ * @param {string|null} psid - User's PSID (null for direct ad links)
  * @param {string} originalUrl - The actual destination URL
  * @param {object} options - Additional tracking data
  * @returns {Promise<string>} - The trackable link
@@ -36,15 +36,18 @@ async function generateClickLink(psid, originalUrl, options = {}) {
   // Extract ML Item ID from URL for exact matching
   const mlItemId = extractMLItemId(originalUrl);
 
-  // Auto-populate adId and campaignId from conversation if not provided
-  if (psid && (!options.adId || !options.campaignId)) {
+  // Auto-populate adId, campaignId, and source from conversation if not provided
+  if (psid && (!options.adId || !options.campaignId || !options.source)) {
     try {
       const convo = await Conversation.findOne({ psid })
-        .select('adId campaignRef')
+        .select('adId campaignRef channel')
         .lean();
       if (convo) {
         if (!options.adId && convo.adId) options.adId = convo.adId;
         if (!options.campaignId && convo.campaignRef) options.campaignId = convo.campaignRef;
+        if (!options.source && convo.channel) {
+          options.source = convo.channel === 'whatsapp' ? 'whatsapp' : 'messenger';
+        }
       }
     } catch (err) {
       // Non-critical — continue without attribution
@@ -53,9 +56,10 @@ async function generateClickLink(psid, originalUrl, options = {}) {
 
   const clickLog = new ClickLog({
     clickId,
-    psid,
+    psid: psid || null,
     originalUrl,
     mlItemId,  // Store extracted ML Item ID
+    source: options.source || null,
     productName: options.productName,
     productId: options.productId,
     campaignId: options.campaignId,

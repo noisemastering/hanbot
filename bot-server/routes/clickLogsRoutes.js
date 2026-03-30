@@ -45,6 +45,7 @@ router.get("/", async (req, res) => {
       campaignId,
       adSetId,
       adId,
+      source,
       correlationMethod,
       startDate,
       endDate
@@ -59,6 +60,7 @@ router.get("/", async (req, res) => {
     if (campaignId) filter.campaignId = campaignId;
     if (adSetId) filter.adSetId = adSetId;
     if (adId) filter.adId = adId;
+    if (source) filter.source = source;
     if (correlationMethod) filter.correlationMethod = correlationMethod;
 
     // Date range filter
@@ -463,16 +465,16 @@ router.post("/:clickId/conversion", async (req, res) => {
   }
 });
 
-// POST /click-logs/generate - Generate a tracked link for human agents
+// POST /click-logs/generate - Generate a tracked link (for agents or campaign managers)
 router.post("/generate", async (req, res) => {
   try {
-    const { psid, productId, productName, originalUrl, campaignId, adSetId, adId } = req.body;
+    const { psid, productId, productName, originalUrl, campaignId, adSetId, adId, source } = req.body;
 
-    // Validate required fields
-    if (!psid || !originalUrl) {
+    // Validate required fields — psid is optional for direct_ad links
+    if (!originalUrl) {
       return res.status(400).json({
         success: false,
-        error: "PSID and original URL are required"
+        error: "Original URL is required"
       });
     }
 
@@ -482,8 +484,9 @@ router.post("/generate", async (req, res) => {
     // Create the click log entry
     const clickLog = new ClickLog({
       clickId,
-      psid,
+      psid: psid || null,
       originalUrl,
+      source: source || null,
       productName: productName || "Manual link",
       productId: productId || null,
       campaignId: campaignId || null,
@@ -497,7 +500,7 @@ router.post("/generate", async (req, res) => {
     const baseUrl = process.env.BASE_URL || 'https://agente.hanlob.com.mx';
     const trackedUrl = `${baseUrl}/r/${clickId}`;
 
-    console.log(`🔗 Generated tracked link for agent: ${trackedUrl} -> ${originalUrl}`);
+    console.log(`🔗 Generated tracked link${source === 'direct_ad' ? ' (direct ad)' : ''}: ${trackedUrl} -> ${originalUrl}`);
 
     res.json({
       success: true,
@@ -506,7 +509,7 @@ router.post("/generate", async (req, res) => {
         trackedUrl,
         originalUrl,
         productName,
-        psid
+        source: source || null
       }
     });
   } catch (error) {
@@ -515,6 +518,49 @@ router.post("/generate", async (req, res) => {
       success: false,
       error: "Error generating tracked link"
     });
+  }
+});
+
+// GET /click-logs/by-source - Breakdown of clicks/conversions by source channel
+router.get("/by-source", async (req, res) => {
+  try {
+    const { startDate, endDate } = req.query;
+
+    const dateFilter = {};
+    if (startDate) dateFilter.$gte = new Date(startDate + 'T00:00:00');
+    if (endDate) dateFilter.$lte = new Date(endDate + 'T23:59:59.999');
+
+    const matchStage = dateFilter.$gte ? { createdAt: dateFilter } : {};
+
+    const breakdown = await ClickLog.aggregate([
+      { $match: matchStage },
+      {
+        $group: {
+          _id: { $ifNull: ["$source", "messenger"] },
+          links: { $sum: 1 },
+          clicks: { $sum: { $cond: ["$clicked", 1, 0] } },
+          conversions: { $sum: { $cond: ["$converted", 1, 0] } },
+          revenue: { $sum: { $ifNull: ["$conversionData.totalAmount", 0] } }
+        }
+      },
+      { $sort: { clicks: -1 } }
+    ]);
+
+    const sources = breakdown.map(s => ({
+      source: s._id,
+      label: { messenger: "Messenger", whatsapp: "WhatsApp", direct_ad: "Anuncios directos" }[s._id] || s._id,
+      links: s.links,
+      clicks: s.clicks,
+      conversions: s.conversions,
+      revenue: Math.round(s.revenue),
+      clickRate: s.links > 0 ? ((s.clicks / s.links) * 100).toFixed(1) : "0",
+      conversionRate: s.clicks > 0 ? ((s.conversions / s.clicks) * 100).toFixed(1) : "0"
+    }));
+
+    res.json({ success: true, sources });
+  } catch (error) {
+    console.error("Error fetching by-source breakdown:", error);
+    res.status(500).json({ success: false, error: "Error fetching source breakdown" });
   }
 });
 

@@ -11,10 +11,18 @@ const clickLogSchema = new mongoose.Schema(
       index: true
     },
 
-    // User identifier (PSID from Facebook)
+    // User identifier (PSID from Facebook, null for direct ad links)
     psid: {
       type: String,
-      required: true,
+      default: null,
+      index: true
+    },
+
+    // Source channel
+    source: {
+      type: String,
+      enum: ['messenger', 'whatsapp', 'direct_ad', null],
+      default: null,
       index: true
     },
 
