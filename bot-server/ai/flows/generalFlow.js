@@ -290,8 +290,8 @@ async function handleMultiQuestion(entities, convo, psid, userMessage = '') {
     'location_query': `📍 ¡Enviamos a todo México y Estados Unidos! Nuestra tienda está en ${BUSINESS_INFO.city}, pero te lo enviamos a domicilio.`,
     'shipping_query': `📦 Enviamos a todo México y también a Estados Unidos. El envío está incluido en la mayoría de nuestros productos.`,
     'payment_query': isNonML
-      ? `El pago es 100% por adelantado a través de transferencia o depósito bancario.`
-      : `En compras a través de Mercado Libre el pago es 100% por adelantado al momento de ordenar (tarjeta, efectivo en OXXO, o meses sin intereses). Tu compra está protegida: si no te llega, llega defectuoso o es diferente a lo solicitado, se te devuelve tu dinero.`,
+      ? `El pago se realiza al ordenar, mediante transferencia o depósito bancario.`
+      : `El pago se realiza al ordenar en Mercado Libre (tarjeta, efectivo en OXXO, o meses sin intereses). Tu compra es segura: si no recibes tu artículo, se devuelve tu dinero.`,
     'availability_query': `✅ Manejamos malla sombra confeccionada desde ${sizeRange.smallest} hasta ${sizeRange.largest}, lista para instalar.`,
     'delivery_time_query': `🚚 Normalmente de 3 a 5 días hábiles dependiendo de tu ubicación.`,
     'installation_query': `En Hanlob no contamos con servicio de instalación, pero nuestra malla sombra confeccionada es muy fácil de instalar. Para saber la medida te sugiero medir el área y restar un metro por lado, por ejemplo si tu área mide 4x5, la malla sombra que ocupas sería la de 3x4 metros.`,
@@ -305,8 +305,8 @@ async function handleMultiQuestion(entities, convo, psid, userMessage = '') {
 
   if (payOnDeliveryDetected) {
     intentResponses['payment_query'] = isNonML
-      ? `No manejamos pago contra entrega. El pago es 100% por adelantado a través de transferencia o depósito bancario.`
-      : `No manejamos pago contra entrega. El pago es 100% por adelantado al momento de ordenar en Mercado Libre. Tu compra está protegida: si no te llega o llega diferente, se te devuelve tu dinero.`;
+      ? `No manejamos pago contra entrega. El pago se realiza al ordenar, mediante transferencia o depósito bancario.`
+      : `No manejamos pago contra entrega. El pago se realiza al ordenar en Mercado Libre y tu compra es segura: si no recibes tu artículo, se devuelve tu dinero.`;
     // Ensure payment_query is in subIntents so the response actually gets included
     if (!subIntents.includes('payment_query')) {
       subIntents.push('payment_query');
@@ -348,12 +348,12 @@ async function handlePayment(entities, convo, psid) {
     if (isWholesale) {
       return {
         type: "text",
-        text: "No manejamos pago contra entrega. El pago es 100% por adelantado a través de transferencia o depósito bancario."
+        text: "No manejamos pago contra entrega. El pago se realiza al ordenar, mediante transferencia o depósito bancario."
       };
     }
     return {
       type: "text",
-      text: "No manejamos pago contra entrega. El pago es 100% por adelantado al momento de ordenar en Mercado Libre. Tu compra está protegida: si no te llega o llega diferente, se te devuelve tu dinero."
+      text: "No manejamos pago contra entrega. El pago se realiza al ordenar en Mercado Libre y tu compra es segura: si no recibes tu artículo, se devuelve tu dinero."
     };
   }
 
@@ -379,7 +379,7 @@ async function handlePayment(entities, convo, psid) {
 
   return {
     type: "text",
-    text: "En compras a través de Mercado Libre el pago es 100% por adelantado al momento de ordenar (tarjeta, efectivo en OXXO, o meses sin intereses). Tu compra está protegida: si no te llega, llega defectuoso o es diferente a lo solicitado, se te devuelve tu dinero."
+    text: "El pago se realiza al ordenar en Mercado Libre (tarjeta, efectivo en OXXO, o meses sin intereses). Tu compra es segura: si no recibes tu artículo, se devuelve tu dinero."
   };
 }
 

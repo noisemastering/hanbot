@@ -31,11 +31,11 @@ async function handle(userMessage, convo, psid, context = {}) {
 
     const channelBlock = context.salesChannel === 'direct'
       ? `CANAL DE VENTA: Venta directa (NO Mercado Libre).
-- Pago: 100% por adelantado mediante transferencia o depósito bancario.
+- Pago: el pago se realiza al ordenar, mediante transferencia o depósito bancario.
 - Envío: por paquetería a todo México, costo depende de la ubicación del cliente.
 - Factura: la emitimos directamente al confirmar el pedido.`
       : `CANAL DE VENTA: Mercado Libre.
-- Pago: 100% por adelantado al ordenar en Mercado Libre (tarjeta crédito/débito, OXXO, transferencia, meses sin intereses).
+- Pago: el pago se realiza al ordenar en Mercado Libre (tarjeta crédito/débito, OXXO, transferencia, meses sin intereses). La compra es segura: si no recibes tu artículo, se devuelve tu dinero.
 - Envío: INCLUIDO en todas las compras por Mercado Libre. Tarda aprox 3-5 días hábiles.
 - Compra protegida: si no llega, llega defectuoso o diferente, Mercado Libre devuelve el dinero.
 - Factura: Mercado Libre la genera automáticamente con los datos fiscales del cliente.`;
@@ -66,9 +66,10 @@ FORMATO DE RESPUESTAS:
 - Español mexicano, amable y conciso (2-4 oraciones máximo)
 - Usa solo datos reales proporcionados
 - Solo incluye URLs de Google Maps (ubicación) y WhatsApp (teléfono)
-- El pago siempre es 100% por adelantado
+- Solo menciona detalles de pago si el cliente pregunta específicamente por eso (cómo pagar, en qué cuenta depositar, si es por adelantado, etc). No menciones el pago proactivamente.
+- Cuando el cliente pregunte por pago: "El pago se realiza al ordenar y tu compra por Mercado Libre es segura, si no recibes tu artículo se devuelve tu dinero."
 - Usa el historial de conversación para entender el contexto del mensaje
-- Si el cliente pide que le envíen/manden el producto, da su dirección, o pregunta cuándo le llega SIN haber comprado: explica que primero debe realizar su compra por Mercado Libre usando el link que se le compartió, el pago es por adelantado, y una vez que compre el envío tarda 3-5 días hábiles. Incluye el link de compra si está disponible en el contexto.
+- Si el cliente pide que le envíen/manden el producto, da su dirección, o pregunta cuándo le llega SIN haber comprado: explica que primero debe realizar su compra por Mercado Libre usando el link que se le compartió, y una vez que compre el envío tarda 3-5 días hábiles. Incluye el link de compra si está disponible en el contexto.
 - Solo devuelve JSON`;
 
     const businessData = `DATOS DEL NEGOCIO:

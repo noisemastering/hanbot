@@ -126,11 +126,11 @@ async function tryRegexAnswer(segment, convo = null) {
   }
 
   if (intent === "payment_query") {
-    return { type: 'text', text: "El pago es 100% por adelantado al momento de ordenar en Mercado Libre (tarjeta, efectivo en OXXO, o meses sin intereses). Tu compra está protegida." };
+    return { type: 'text', text: "El pago se realiza al ordenar en Mercado Libre (tarjeta, efectivo en OXXO, o meses sin intereses). Tu compra es segura: si no recibes tu artículo, se devuelve tu dinero." };
   }
 
   if (intent === "pay_on_delivery_query") {
-    return { type: 'text', text: "No manejamos pago contra entrega. El pago es 100% por adelantado en Mercado Libre. Tu compra está protegida: si no te llega o llega diferente, se te devuelve tu dinero." };
+    return { type: 'text', text: "No manejamos pago contra entrega. El pago se realiza al ordenar en Mercado Libre y tu compra es segura: si no recibes tu artículo, se devuelve tu dinero." };
   }
 
   if (intent === "location_query") {
@@ -188,7 +188,7 @@ PRODUCTO: Malla sombra raschel confeccionada, 90% cobertura, refuerzo en esquina
 COLORES: beige y negro.
 MEDIDAS: Solo medidas estándar en números enteros (ej: 2x4, 3x5, 4x6). NO manejamos medidas con decimales (ej: 2.50, 3.50). Si preguntan por una medida con decimales, explicar que solo manejamos medidas enteras y que se recomienda la medida inmediata inferior para dar espacio a los tensores o soga sujetadora.
 ENVÍO: incluido a todo México vía Mercado Libre.
-PAGO: 100% por adelantado en Mercado Libre (tarjeta, OXXO, meses sin intereses). NO contra entrega.
+PAGO: El pago se realiza al ordenar en Mercado Libre (tarjeta, OXXO, meses sin intereses). NO contra entrega. Tu compra es segura.
 UBICACIÓN: Querétaro, Microparque Industrial Navex Park, Tlacote.
 MAYOREO: a partir de 5 piezas.
 WhatsApp: https://wa.me/524425957432

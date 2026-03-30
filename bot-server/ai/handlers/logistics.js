@@ -207,10 +207,10 @@ async function handlePayment({ psid, convo }) {
 
   let response;
   if (isNonML) {
-    response = "El pago es 100% por adelantado a través de transferencia o depósito bancario.";
+    response = "El pago se realiza al ordenar, mediante transferencia o depósito bancario.";
   } else {
     // Confeccionada / borde (retail) - Mercado Libre payment options
-    response = "En compras a través de Mercado Libre el pago es 100% por adelantado al momento de ordenar (tarjeta, efectivo en OXXO, o meses sin intereses). Tu compra está protegida: si no te llega, llega defectuoso o es diferente a lo solicitado, se te devuelve tu dinero.";
+    response = "El pago se realiza al ordenar en Mercado Libre (tarjeta, efectivo en OXXO, o meses sin intereses). Tu compra es segura: si no recibes tu artículo, se devuelve tu dinero.";
   }
 
   return { type: "text", text: response };
@@ -237,10 +237,10 @@ async function handlePayOnDelivery({ psid, convo }) {
 
   let response;
   if (isNonML) {
-    response = "No manejamos pago contra entrega. El pago es 100% por adelantado a través de transferencia o depósito bancario.";
+    response = "No manejamos pago contra entrega. El pago se realiza al ordenar, mediante transferencia o depósito bancario.";
   } else {
     // Confeccionada / borde (retail) - Mercado Libre protected purchase
-    response = "No manejamos pago contra entrega. El pago es 100% por adelantado al momento de ordenar en Mercado Libre. Tu compra está protegida: si no te llega o llega diferente, se te devuelve tu dinero.";
+    response = "No manejamos pago contra entrega. El pago se realiza al ordenar en Mercado Libre y tu compra es segura: si no recibes tu artículo, se devuelve tu dinero.";
   }
 
   return { type: "text", text: response };

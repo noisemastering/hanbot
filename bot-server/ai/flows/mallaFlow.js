@@ -2267,7 +2267,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
         await updateConversation(psid, { lastIntent: 'pay_on_delivery_query', unknownCount: 0 });
         return {
           type: "text",
-          text: "No manejamos pago contra entrega. El pago es 100% por adelantado al momento de ordenar en Mercado Libre. Tu compra está protegida: si no te llega o llega diferente, se te devuelve tu dinero."
+          text: "No manejamos pago contra entrega. El pago se realiza al ordenar en Mercado Libre y tu compra es segura: si no recibes tu artículo, se devuelve tu dinero."
         };
       }
 
@@ -2292,7 +2292,7 @@ async function handleComplete(intent, state, sourceContext, psid, convo, userMes
         await updateConversation(psid, { lastIntent: 'payment_question', unknownCount: 0 });
         return {
           type: "text",
-          text: "En compras a través de Mercado Libre el pago es 100% por adelantado al momento de ordenar (tarjeta, efectivo en OXXO, o meses sin intereses). Tu compra está protegida: si no te llega o llega diferente, se te devuelve tu dinero."
+          text: "El pago se realiza al ordenar en Mercado Libre (tarjeta, efectivo en OXXO, o meses sin intereses). Tu compra es segura: si no recibes tu artículo, se devuelve tu dinero."
         };
       }
 
