@@ -34,12 +34,14 @@ const convo_bordeSeparadorRetail = require("./flows/convo_bordeSeparadorRetail")
 const convo_vende_malla = require("./flows/convo_vende_malla");
 const convo_promo6x4 = require("./flows/convo_promo6x4");
 const convo_confeccionadaRetail = require("./flows/convo_confeccionadaRetail");
+const convo_groundcoverWholesale = require("./flows/convo_groundcoverWholesale");
 
 // Register convo_flows so they can find each other during flow switches
 convoFlow.registerFlow('convo_bordeSeparadorRetail', convo_bordeSeparadorRetail);
 convoFlow.registerFlow('convo_vende_malla', convo_vende_malla);
 convoFlow.registerFlow('convo_promo6x4', convo_promo6x4);
 convoFlow.registerFlow('convo_confeccionadaRetail', convo_confeccionadaRetail);
+convoFlow.registerFlow('convo_groundcoverWholesale', convo_groundcoverWholesale);
 
 /**
  * Cache for product-based flow inference
@@ -811,7 +813,8 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
       // Check if this legacy flow has a convo_flow counterpart
       const SWITCH_TO_CONVO = {
         'malla_sombra': 'convo_confeccionadaRetail',
-        'borde_separador': 'convo_bordeSeparadorRetail'
+        'borde_separador': 'convo_bordeSeparadorRetail',
+        'groundcover': 'convo_groundcoverWholesale'
       };
       const switchConvoName = SWITCH_TO_CONVO[newFlow];
       if (switchConvoName) {
@@ -1149,7 +1152,8 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
   const LEGACY_TO_CONVO = {
     'malla_sombra': 'convo_confeccionadaRetail',
     'borde_separador': 'convo_bordeSeparadorRetail',
-    '6x4_promo': 'convo_promo6x4'
+    '6x4_promo': 'convo_promo6x4',
+    'groundcover': 'convo_groundcoverWholesale'
   };
   if (LEGACY_TO_CONVO[activeFlow]) {
     const convoName = LEGACY_TO_CONVO[activeFlow];

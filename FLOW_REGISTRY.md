@@ -28,3 +28,4 @@ Flows must be registered here to be used. If a flow is not listed below, it cann
 | convo_vende_malla | `bot-server/ai/flows/convo_vende_malla.js` | Active | Confeccionada Reforzada Rectangular, wholesale, reseller |
 | convo_promo6x4 | `bot-server/ai/flows/convo_promo6x4.js` | Active | Confeccionada Reforzada Rectangular, retail, buyer, promo 6x4 |
 | convo_confeccionadaRetail | `bot-server/ai/flows/convo_confeccionadaRetail.js` | Active | Confeccionada Reforzada Rectangular, retail, buyer |
+| convo_groundcoverWholesale | `bot-server/ai/flows/convo_groundcoverWholesale.js` | Active | Ground Cover, wholesale, buyer (professional) |
