@@ -62,6 +62,7 @@ import CRMView from "./pages/CRMView";
 import CustomerDetailView from "./pages/CustomerDetailView";
 import CRMSalesView from "./pages/CRMSalesView";
 import CampaignHome from "./pages/CampaignHome";
+import TrackedLinksView from "./pages/TrackedLinksView";
 import MLImporterView from "./pages/MLImporterView";
 import MLPlaygroundView from "./pages/MLPlaygroundView";
 import IntentsView from "./components/IntentsView";
@@ -257,6 +258,14 @@ const menuItems = [
         path: "/ads",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+        )
+      },
+      {
+        id: "tracked-links",
+        labelKey: "menu.trackedLinks",
+        path: "/tracked-links",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
         )
       }
     ]
@@ -2068,6 +2077,9 @@ function App() {
 
           {/* Ads Route */}
           <Route path="/ads" element={<AdsView />} />
+
+          {/* Tracked Links Route */}
+          <Route path="/tracked-links" element={<TrackedLinksView />} />
 
           {/* Master Catalog Route */}
           <Route path="/master-catalog" element={

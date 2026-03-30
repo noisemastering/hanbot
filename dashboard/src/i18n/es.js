@@ -19,6 +19,7 @@ const es = {
   "menu.campaignsSub": "Campañas",
   "menu.adSets": "Ad Sets",
   "menu.ads": "Anuncios",
+  "menu.trackedLinks": "Links de seguimiento",
   "menu.users": "Usuarios",
   "menu.usersSub": "Usuarios",
   "menu.roles": "Roles",
