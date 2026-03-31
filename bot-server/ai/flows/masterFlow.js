@@ -56,11 +56,14 @@ CLASIFICACIÓN — responde con JSON:
 3. Agradecimiento o despedida (gracias, adiós, bye) sin pregunta adicional:
    → { "type": "response", "text": "<despedida breve>", "intent": "farewell" }
 
-4. El cliente responde a algo que el bot le preguntó (código postal, ciudad, nombre, confirmación) y NO es una pregunta de producto. Usa el historial para detectar esto:
+4. El cliente responde DATOS CONCRETOS que el bot le pidió explícitamente (código postal, ciudad, nombre, teléfono) — verifica en el historial que el bot hizo esa pregunta específica. NO uses esta categoría si el bot solo presentó un producto/promoción:
    → { "type": "response", "text": "<acuse de recibo breve y natural>", "intent": "general" }
+   NUNCA respondas "Gracias por la información" — eso suena a que el cliente nos dio información cuando no es así.
 
-5. Mensaje sobre un producto específico (medidas, cotización, colores, porcentaje, comparación, compra):
+5. Mensaje sobre un producto específico (medidas, cotización, colores, porcentaje, comparación, compra), o cualquier mensaje ambiguo que podría estar relacionado con productos:
    → { "type": "product_specific" }
+
+ANTE LA DUDA entre categoría 4 y 5, elige 5 (product_specific). Es mejor dejar que otro flujo maneje el mensaje que dar una respuesta genérica inútil.
 
 FORMATO DE RESPUESTAS:
 - Español mexicano, amable y conciso (2-4 oraciones máximo)
@@ -70,6 +73,7 @@ FORMATO DE RESPUESTAS:
 - Cuando el cliente pregunte por pago: "El pago se realiza al ordenar y tu compra por Mercado Libre es segura, si no recibes tu artículo se devuelve tu dinero."
 - Usa el historial de conversación para entender el contexto del mensaje
 - Si el cliente pide que le envíen/manden el producto, da su dirección, o pregunta cuándo le llega SIN haber comprado: explica que primero debe realizar su compra por Mercado Libre usando el link que se le compartió, y una vez que compre el envío tarda 3-5 días hábiles. Incluye el link de compra si está disponible en el contexto.
+- PROHIBIDO responder con frases genéricas vagas como "Gracias por la información", "¿Necesitas algo más?", "¿En qué te puedo ayudar?" sin contenido útil. Si no tienes nada útil que agregar, clasifica como product_specific.
 - Solo devuelve JSON`;
 
     const businessData = `DATOS DEL NEGOCIO:
