@@ -402,17 +402,20 @@ function create(manifest) {
       }
     }
 
-    // ── PURCHASE INTENT (convoFlow layer — AI, not regex) ──
+    // ── PURCHASE / DELIVERY INTENT (convoFlow layer — AI, not regex) ──
     const lastLink = convo?.lastSharedProductLink;
     if (lastLink) {
       try {
         const intentCheck = await _openai.chat.completions.create({
           model: 'gpt-4o-mini',
           messages: [
-            { role: 'system', content: `El cliente ya recibió un link de compra previamente. ¿Está EXPLÍCITAMENTE pidiendo el link de nuevo, o diciendo que quiere concretar/realizar la compra? Responde con JSON: { "wantsToBuy": true/false }
+            { role: 'system', content: `El cliente ya recibió un link de compra de Mercado Libre previamente. Clasifica su mensaje. Responde con JSON: { "intent": "wants_to_buy"|"thinks_ordered"|"none" }
 
-wantsToBuy = true SOLO si el cliente dice algo como: "mándame el link", "quiero comprar", "lo quiero", "cómo realizo la compra", "pásame el link", "listo para comprar".
-wantsToBuy = false si hace una pregunta general (envío, colores, medidas, ubicación, pago, horario, instalación) o si está saludando, agradeciendo, o pidiendo información.` },
+"wants_to_buy": El cliente QUIERE comprar o pide el link de compra. Ej: "mándame el link", "quiero comprar", "lo quiero", "cómo realizo la compra", "pásame el link", "listo", "sí lo quiero".
+"thinks_ordered": El cliente CREE que ya compró o pide que le envíen/manden el producto SIN haber comprado en Mercado Libre. Señales: da su dirección, pregunta cuándo le llega/traen, dice "mándenlo/mándenmelo", "me lo envían", "me la traen", "ya lo pedí", "cuándo llega". También si da datos de entrega (dirección, colonia, CP para envío) como si fuera un pedido.
+"none": Pregunta general (colores, medidas, pago, instalación, ubicación), saludo, despedida, o cualquier otra cosa.
+
+IMPORTANTE: si el cliente da una dirección completa (calle, número, colonia) o pide que se lo manden/envíen/traigan, es "thinks_ordered" — NO es "none".` },
             { role: 'user', content: `${conversationHistory ? `${conversationHistory}\n\n` : ''}Mensaje del cliente: ${userMessage}` }
           ],
           temperature: 0,
@@ -420,7 +423,20 @@ wantsToBuy = false si hace una pregunta general (envío, colores, medidas, ubica
           response_format: { type: 'json_object' }
         });
         const parsed = JSON.parse(intentCheck.choices[0].message.content);
-        if (parsed.wantsToBuy) {
+
+        if (parsed.intent === 'thinks_ordered') {
+          console.log('📦 [convo] Customer thinks they ordered — clarifying purchase process');
+          await updateConversation(psid, { lastIntent: 'delivery_without_purchase', unknownCount: 0 });
+          return {
+            response: {
+              type: 'text',
+              text: `Para recibir tu malla, primero necesitas realizar la compra a través de Mercado Libre en este enlace:\n\n${lastLink}\n\nUna vez que compres, el envío va incluido y tarda de 3 a 5 días hábiles. Mercado Libre se encarga de la entrega a tu domicilio. Tu compra está protegida: si no llega o llega diferente, te devuelven tu dinero.`
+            },
+            state: flowState
+          };
+        }
+
+        if (parsed.intent === 'wants_to_buy') {
           await updateConversation(psid, { lastIntent: 'purchase_intent', unknownCount: 0 });
 
           // Check if the link was already shared recently (last bot message or conversation history)

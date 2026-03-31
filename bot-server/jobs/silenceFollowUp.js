@@ -99,6 +99,17 @@ async function runSilenceFollowUpJob() {
 
     for (const convo of conversations) {
       try {
+        // Atomically claim this conversation to prevent duplicate sends
+        const claimed = await Conversation.findOneAndUpdate(
+          { psid: convo.psid, silenceFollowUpSent: { $ne: true } },
+          { $set: { silenceFollowUpSent: true, silenceFollowUpAt: null } },
+          { new: true }
+        );
+        if (!claimed) {
+          console.log(`⏭️ Silence follow-up already claimed for ${convo.psid}`);
+          continue;
+        }
+
         // Verify user hasn't replied since the follow-up was scheduled
         const lastUserMessage = await Message.findOne({
           psid: convo.psid,
@@ -190,21 +201,9 @@ async function runSilenceFollowUpJob() {
           senderType: 'bot'
         });
 
-        // Mark as sent
-        await Conversation.updateOne({ psid: convo.psid }, {
-          $set: {
-            silenceFollowUpSent: true,
-            silenceFollowUpAt: null
-          }
-        });
-
         console.log(`✅ Silence follow-up sent to ${convo.psid} (${WHOLESALE_FLOWS.includes(convo.currentFlow) ? 'wholesale' : 'contextual'})`);
       } catch (err) {
         console.error(`❌ Error sending silence follow-up to ${convo.psid}:`, err.message);
-        // Clear the timer so we don't retry endlessly on a broken conversation
-        await Conversation.updateOne({ psid: convo.psid }, {
-          $set: { silenceFollowUpAt: null }
-        });
       }
     }
   } catch (err) {
@@ -231,6 +230,17 @@ async function runLinkFollowUpJob() {
 
     for (const convo of conversations) {
       try {
+        // Atomically claim to prevent duplicate sends
+        const claimed = await Conversation.findOneAndUpdate(
+          { psid: convo.psid, linkFollowUpAt: { $ne: null } },
+          { $set: { linkFollowUpAt: null } },
+          { new: true }
+        );
+        if (!claimed) {
+          console.log(`⏭️ Link follow-up already claimed for ${convo.psid}`);
+          continue;
+        }
+
         // Check if user replied after the bot asked about links — if so, skip
         const lastUserMessage = await Message.findOne({
           psid: convo.psid,
@@ -304,10 +314,9 @@ async function runLinkFollowUpJob() {
           senderType: 'bot'
         });
 
-        // Clear the timer and update intent
+        // Update intent
         await Conversation.updateOne({ psid: convo.psid }, {
           $set: {
-            linkFollowUpAt: null,
             lastIntent: 'link_follow_up_sent',
             lastQuotedProducts: []
           }
@@ -316,9 +325,6 @@ async function runLinkFollowUpJob() {
         console.log(`✅ Link follow-up sent to ${convo.psid} (${linkParts.length} product(s))`);
       } catch (err) {
         console.error(`❌ Error sending link follow-up to ${convo.psid}:`, err.message);
-        await Conversation.updateOne({ psid: convo.psid }, {
-          $set: { linkFollowUpAt: null }
-        });
       }
     }
   } catch (err) {
