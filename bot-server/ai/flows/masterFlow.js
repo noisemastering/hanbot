@@ -123,6 +123,15 @@ Mensaje del cliente: ${userMessage}`;
 
     // ── RESPONSE: AI answered a general question ──
     if (result.type === 'response' && result.text) {
+      // Farewell dedup: don't repeat farewell on consecutive thanks/goodbye
+      const isFarewell = result.intent === 'farewell';
+      const alreadyClosing = convo?.lastIntent === 'farewell' || convo?.lastIntent === 'thanks' || convo?.lastIntent === 'goodbye';
+      if (isFarewell && alreadyClosing) {
+        console.log('🏛️ [master] Consecutive farewell — short reply');
+        await updateConversation(psid, { lastIntent: 'farewell', unknownCount: 0 });
+        return { type: "text", text: "¡Con gusto! Aquí estamos para cuando necesites." };
+      }
+
       await updateConversation(psid, {
         lastIntent: result.intent || 'master_flow_response',
         unknownCount: 0
