@@ -158,7 +158,8 @@ Responde con JSON:
 FORMATO:
 - Familia por nombre → devuelve TODOS los productos de esa familia
 - Pregunta de seguimiento ("¿cuánto cuesta?", "me interesa", "ese") → usa el CONTEXTO para identificar el producto referido
-- Producto fuera de la lista → outsideRealm: true, matches: []
+- Producto fuera de la lista (ej: "quiero un toldo", "tienen lonas?") → outsideRealm: true, matches: []
+- Preguntas generales de precio, interés o información sobre los productos de la lista (ej: "pongan los precios", "cuánto cuestan", "me interesan", "precios?") → outsideRealm: false, matches: [], confidence: "low" (NO son outsideRealm — el cliente pregunta por nuestros productos pero sin especificar cuál)
 - Ante la duda → confidence: "low"
 - Solo devuelve JSON`;
 

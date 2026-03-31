@@ -42,9 +42,6 @@ async function scheduleFollowUpIfNeeded(psid, botResponseText) {
   // Skip if conversation is not in a bot-active state
   if (['closed', 'needs_human', 'human_active'].includes(convo.state)) return;
 
-  // Skip if the customer already said goodbye — don't re-engage after farewell
-  if (['farewell', 'thanks', 'goodbye'].includes(convo.lastIntent)) return;
-
   const updateFields = {
     silenceFollowUpAt: new Date(Date.now() + FOLLOW_UP_DELAY_MS),
     linkFollowUpAt: null  // Clear by default — only set if bot asks for links

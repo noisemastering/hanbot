@@ -588,7 +588,20 @@ wantsToBuy = false si hace una pregunta general (envío, colores, medidas, ubica
       }
     }
 
-    // ── NOTHING HANDLED ──
+    // ── NOTHING HANDLED — ask what they need ──
+    // If we have products loaded, nudge the customer to specify
+    if (productCache && productCache.length > 0) {
+      console.log('🏛️ [convo] Nothing handled — asking customer to specify');
+      const smallest = productCache[0]?.name;
+      const largest = productCache[productCache.length - 1]?.name;
+      const rangeHint = smallest && largest && smallest !== largest
+        ? ` Manejamos desde ${smallest} hasta ${largest}.`
+        : '';
+      return {
+        response: { type: 'text', text: `¿Qué medida te interesa?${rangeHint}` },
+        state: flowState
+      };
+    }
     return { response: null, state: flowState };
   }
 
