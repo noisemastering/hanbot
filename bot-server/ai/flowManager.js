@@ -739,7 +739,7 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
   // If we suggested a product change and user confirms, execute the switch
   if (convo?.pendingFlowChange) {
     const msg = userMessage.toLowerCase();
-    const isConfirmation = /\b(s[ií]|ok|claro|dale|va|me\s*interesa|esa|ese|la\s*quiero|lo\s*quiero)\b/i.test(msg);
+    const isConfirmation = /\b(s[ií]|ok|claro|dale|va|me\s*interesa|esa|ese|la\s*quiero|lo\s*quiero|comprar|solo\s*comprar)\b/i.test(msg);
     const isRejection = /\b(no|mejor\s*no|as[ií]\s*est[aá]|el\s*que\s*te\s*dije|la\s*que\s*te\s*dije|la\s*confeccionada|el\s*original)\b/i.test(msg);
 
     if (isConfirmation) {
@@ -1199,6 +1199,8 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
     if (convo?.pendingHandoff) staleFlags.pendingHandoff = false;
     if (convo?.pendingLocationResponse) staleFlags.pendingLocationResponse = false;
     if (convo?.pendingShippingLocation) staleFlags.pendingShippingLocation = false;
+    if (convo?.pendingFlowChange) { staleFlags.pendingFlowChange = null; staleFlags.pendingFlowChangeReason = null; }
+    if (convo?.pendingWholesaleRetailChoice) staleFlags.pendingWholesaleRetailChoice = null;
     if (Object.keys(staleFlags).length > 0) {
       console.log(`🧹 Clearing stale flags for convo_flow:`, Object.keys(staleFlags).join(', '));
       await updateConversation(psid, staleFlags);
@@ -1232,6 +1234,27 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
         await updateConversation(psid, {
           $push: { flowHistory: { flow: `convo:${switchTo}`, at: new Date(), trigger: 'seamless_switch', from: activeFlow } }
         });
+      }
+
+      // Seamless switch with no response — re-invoke the TARGET flow so user gets an immediate answer
+      if (switchTo && !response) {
+        const targetFlowInstance = convoFlow.getFlow(switchTo);
+        if (targetFlowInstance) {
+          console.log(`🔀 Re-invoking target flow ${switchTo} with current message`);
+          // Update local convo object so target flow sees correct state
+          convo.currentFlow = `convo:${switchTo}`;
+          convo.convoFlowRef = switchTo;
+          const targetResult = await targetFlowInstance.handle(userMessage, convo, psid, switchState || {});
+          if (targetResult?.response) {
+            await updateConversation(psid, { convoFlowState: targetResult.state });
+            console.log(`🎯 ===== END FLOW MANAGER (handled by convo_flow:${switchTo} after switch) =====\n`);
+            return {
+              ...targetResult.response,
+              handledBy: `convo_flow:${switchTo}`,
+              purchaseIntent: intentScore?.intent
+            };
+          }
+        }
       }
 
       if (response) {

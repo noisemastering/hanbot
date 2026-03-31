@@ -44,7 +44,7 @@ async function classifyResellerIntent(userMessage, options = {}) {
           role: 'system',
           content: `Clasifica el mensaje del cliente en el contexto de un flujo de REVENDEDORES de malla sombra. Responde solo con JSON: { "intent": "<buyer|catalog_interest|reseller>" }
 
-- "buyer": El cliente es comprador final, NO revendedor. Señales: pide una medida específica para uso propio, menciona su casa/patio/cochera/terraza, quiere solo una pieza, da medidas personales. Alguien que dice "busco una de 3x4" o "necesito para mi cochera" es comprador final.
+- "buyer": El cliente es comprador final, NO revendedor. Señales: pide una medida específica para uso propio, menciona su casa/patio/cochera/terraza, quiere solo una pieza, da medidas personales, o dice "comprar"/"solo comprar"/"nada más comprar" (en respuesta a si quiere ser distribuidor o solo comprar). Alguien que dice "busco una de 3x4" o "necesito para mi cochera" es comprador final.
 - "catalog_interest": El cliente quiere ver el catálogo, productos, medidas, precios, o muestra interés/aceptación (sí, ok, dale, mándame, me interesa, etc.)
 - "reseller": El cliente habla como revendedor — pregunta por mayoreo, cantidades, márgenes, programa de distribución, o da datos de negocio.
 
