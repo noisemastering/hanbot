@@ -488,7 +488,7 @@ function AdsView() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('common.ad')}</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Ad Set</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('common.campaign')}</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Convo Flow</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Flujo</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Link Directo</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase w-32">{t('common.status')}</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase w-28">{t('common.actions')}</th>
@@ -517,9 +517,9 @@ function AdsView() {
                     <td className="px-4 py-3">
                       <span className="text-sm text-gray-300">{ad.adSetId?.campaignId?.name || '-'}</span>
                     </td>
-                    <td className="px-4 py-3">
+                    <td className="px-4 py-3 whitespace-nowrap">
                       {ad.convoFlowRef ? (
-                        <span className="text-xs font-medium px-2 py-1 rounded bg-indigo-500/10 border border-indigo-500/30 text-indigo-300">
+                        <span className="text-xs font-medium px-2 py-1 rounded bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 whitespace-nowrap">
                           {CONVO_FLOW_NAMES[ad.convoFlowRef] || ad.convoFlowRef}
                         </span>
                       ) : (
