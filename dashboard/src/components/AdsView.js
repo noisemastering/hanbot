@@ -34,6 +34,8 @@ function AdsView() {
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
   const [selectedIds, setSelectedIds] = useState(new Set());
+  const [directLinkInput, setDirectLinkInput] = useState('');
+  const [settingDirectLink, setSettingDirectLink] = useState(null); // ad._id being edited
 
   useEffect(() => {
     fetchAds();
@@ -210,6 +212,58 @@ function AdsView() {
     } else {
       setSelectedIds(new Set(filteredAds.map(a => a._id)));
     }
+  };
+
+  // Direct link handlers
+  const handleSetDirectLink = async (adId) => {
+    if (!directLinkInput.trim()) return;
+    try {
+      const res = await fetch(`${API_URL}/ads/${adId}/direct-link`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ url: directLinkInput.trim() })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setAds(prev => prev.map(a => a._id === adId
+          ? { ...a, directLink: { url: directLinkInput.trim(), trackCode: data.data.trackCode } }
+          : a
+        ));
+        if (selectedAd?._id === adId) {
+          setSelectedAd(prev => ({ ...prev, directLink: { url: directLinkInput.trim(), trackCode: data.data.trackCode } }));
+        }
+        navigator.clipboard.writeText(data.data.trackedUrl);
+        toast.success('Link guardado y copiado');
+        setSettingDirectLink(null);
+        setDirectLinkInput('');
+      } else {
+        toast.error(data.error || 'Error');
+      }
+    } catch (err) {
+      toast.error('Error al guardar el link');
+    }
+  };
+
+  const handleRemoveDirectLink = async (adId) => {
+    try {
+      const res = await fetch(`${API_URL}/ads/${adId}/direct-link`, { method: "DELETE" });
+      const data = await res.json();
+      if (data.success) {
+        setAds(prev => prev.map(a => a._id === adId ? { ...a, directLink: undefined } : a));
+        if (selectedAd?._id === adId) {
+          setSelectedAd(prev => ({ ...prev, directLink: undefined }));
+        }
+        toast.success('Link eliminado');
+      }
+    } catch (err) {
+      toast.error('Error al eliminar el link');
+    }
+  };
+
+  const copyTrackedUrl = (trackCode) => {
+    const baseUrl = process.env.REACT_APP_BASE_URL || 'https://agente.hanlob.com.mx';
+    navigator.clipboard.writeText(`${baseUrl}/r/d/${trackCode}`);
+    toast.success('Link copiado');
   };
 
   // Filter ads by search query, status, and date
@@ -435,6 +489,7 @@ function AdsView() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Ad Set</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('common.campaign')}</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Convo Flow</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Link Directo</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase w-32">{t('common.status')}</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase w-28">{t('common.actions')}</th>
                 </tr>
@@ -469,6 +524,57 @@ function AdsView() {
                         </span>
                       ) : (
                         <span className="text-xs text-gray-600">—</span>
+                      )}
+                    </td>
+                    <td className="px-4 py-3">
+                      {settingDirectLink === ad._id ? (
+                        <div className="flex items-center gap-1">
+                          <input
+                            type="text"
+                            value={directLinkInput}
+                            onChange={(e) => setDirectLinkInput(e.target.value)}
+                            placeholder="URL destino..."
+                            className="w-40 px-2 py-1 text-xs bg-gray-900/50 border border-gray-600 rounded text-white"
+                            onKeyDown={(e) => e.key === 'Enter' && handleSetDirectLink(ad._id)}
+                          />
+                          <button onClick={() => handleSetDirectLink(ad._id)} className="p-1 text-green-400 hover:bg-green-500/20 rounded" title="Guardar">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
+                          </button>
+                          <button onClick={() => { setSettingDirectLink(null); setDirectLinkInput(''); }} className="p-1 text-gray-400 hover:bg-gray-500/20 rounded" title="Cancelar">
+                            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+                          </button>
+                        </div>
+                      ) : ad.directLink?.trackCode ? (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => copyTrackedUrl(ad.directLink.trackCode)}
+                            className="text-xs font-medium px-2 py-1 rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-300 hover:bg-cyan-500/20 transition-colors"
+                            title={ad.directLink.url}
+                          >
+                            Copiar link
+                          </button>
+                          <button
+                            onClick={() => { setSettingDirectLink(ad._id); setDirectLinkInput(ad.directLink.url || ''); }}
+                            className="p-1 text-gray-500 hover:text-white rounded"
+                            title="Editar"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                          </button>
+                          <button
+                            onClick={() => handleRemoveDirectLink(ad._id)}
+                            className="p-1 text-gray-500 hover:text-red-400 rounded"
+                            title="Eliminar link"
+                          >
+                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => { setSettingDirectLink(ad._id); setDirectLinkInput(''); }}
+                          className="text-xs text-gray-500 hover:text-cyan-300 transition-colors"
+                        >
+                          + Asignar
+                        </button>
                       )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
@@ -607,6 +713,87 @@ function AdsView() {
                       </p>
                     </div>
                   </div>
+                </div>
+
+                {/* Direct Link */}
+                <div>
+                  <h3 className="text-lg font-semibold text-white mb-3 pb-2 border-b border-gray-700">
+                    Link Directo
+                  </h3>
+                  {selectedAd.directLink?.trackCode ? (
+                    <div className="space-y-3">
+                      <div>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">URL Destino</p>
+                        <a href={selectedAd.directLink.url} target="_blank" rel="noopener noreferrer"
+                          className="text-sm text-blue-400 hover:text-blue-300 mt-1 block truncate">
+                          {selectedAd.directLink.url}
+                        </a>
+                      </div>
+                      <div>
+                        <p className="text-xs text-gray-500 uppercase tracking-wide">Link de Seguimiento</p>
+                        <div className="flex items-center gap-2 mt-1">
+                          <code className="text-sm text-cyan-400 bg-cyan-500/10 px-3 py-1.5 rounded flex-1 truncate">
+                            {(process.env.REACT_APP_BASE_URL || 'https://agente.hanlob.com.mx') + '/r/d/' + selectedAd.directLink.trackCode}
+                          </code>
+                          <button
+                            onClick={() => copyTrackedUrl(selectedAd.directLink.trackCode)}
+                            className="px-3 py-1.5 text-xs font-medium bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-lg hover:bg-cyan-500/30 transition-colors whitespace-nowrap"
+                          >
+                            Copiar
+                          </button>
+                        </div>
+                      </div>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => { setSettingDirectLink(selectedAd._id); setDirectLinkInput(selectedAd.directLink.url); }}
+                          className="px-3 py-1.5 text-xs text-gray-400 border border-gray-700 rounded-lg hover:bg-gray-700/30"
+                        >
+                          Cambiar URL
+                        </button>
+                        <button
+                          onClick={() => handleRemoveDirectLink(selectedAd._id)}
+                          className="px-3 py-1.5 text-xs text-red-400 border border-red-500/30 rounded-lg hover:bg-red-500/10"
+                        >
+                          Eliminar link
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div>
+                      <p className="text-sm text-gray-400 mb-3">Este anuncio no tiene un link directo asignado.</p>
+                      {settingDirectLink === selectedAd._id ? (
+                        <div className="flex items-center gap-2">
+                          <input
+                            type="text"
+                            value={directLinkInput}
+                            onChange={(e) => setDirectLinkInput(e.target.value)}
+                            placeholder="URL destino (ej: mercadolibre.com.mx/...)"
+                            className="flex-1 px-3 py-2 text-sm bg-gray-900/50 border border-gray-600 rounded-lg text-white"
+                            onKeyDown={(e) => e.key === 'Enter' && handleSetDirectLink(selectedAd._id)}
+                          />
+                          <button
+                            onClick={() => handleSetDirectLink(selectedAd._id)}
+                            className="px-4 py-2 text-xs font-medium bg-cyan-500/20 text-cyan-300 border border-cyan-500/30 rounded-lg hover:bg-cyan-500/30"
+                          >
+                            Guardar
+                          </button>
+                          <button
+                            onClick={() => { setSettingDirectLink(null); setDirectLinkInput(''); }}
+                            className="px-3 py-2 text-xs text-gray-400 hover:text-white"
+                          >
+                            Cancelar
+                          </button>
+                        </div>
+                      ) : (
+                        <button
+                          onClick={() => { setSettingDirectLink(selectedAd._id); setDirectLinkInput(''); }}
+                          className="px-4 py-2 text-xs font-medium bg-cyan-500/10 text-cyan-300 border border-cyan-500/30 rounded-lg hover:bg-cyan-500/20"
+                        >
+                          + Asignar link directo
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 {/* Creative */}

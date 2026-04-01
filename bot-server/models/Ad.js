@@ -147,6 +147,13 @@ const adSchema = new mongoose.Schema(
       offerHook: String
     },
 
+    // Direct ad link — a reusable tracked link for the ad's CTA
+    // Each click creates a new ClickLog with source: 'direct_ad'
+    directLink: {
+      url: { type: String },         // Original destination URL (e.g., ML product page)
+      trackCode: { type: String, index: true }  // Short 8-char code for /r/d/:trackCode
+    },
+
     // Tracking
     tracking: {
       utmSource: String,

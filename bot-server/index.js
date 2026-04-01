@@ -689,6 +689,39 @@ app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok", timestamp: Date.now() });
 });
 
+// GET /r/d/:trackCode - Direct ad link redirect (creates new ClickLog per click)
+// Must be registered BEFORE /r/:clickId to avoid matching "d" as a clickId
+app.get("/r/d/:trackCode", async (req, res) => {
+  try {
+    const { trackCode } = req.params;
+    const { recordDirectAdClick } = require('./tracking');
+
+    const userAgent = req.get('user-agent') || '';
+    const isCrawler = /facebookexternalhit|Facebot|facebookcatalog|WhatsApp|Twitterbot|Slackbot|LinkedInBot|Googlebot|bingbot|Pinterestbot/i.test(userAgent);
+
+    if (isCrawler) {
+      // Still redirect crawlers but don't log
+      const Ad = require('./models/Ad');
+      const ad = await Ad.findOne({ 'directLink.trackCode': trackCode });
+      if (!ad?.directLink?.url) return res.status(404).send("Link not found");
+      return res.redirect(302, ad.directLink.url);
+    }
+
+    const result = await recordDirectAdClick(trackCode, {
+      userAgent,
+      ipAddress: req.ip || req.connection.remoteAddress,
+      referrer: req.get('referrer')
+    });
+
+    if (!result) return res.status(404).send("Link not found");
+    console.log(`📊 Direct ad click: ${trackCode} -> ${result.originalUrl}`);
+    res.redirect(302, result.originalUrl);
+  } catch (error) {
+    console.error("❌ Error processing direct ad click:", error);
+    res.status(500).send("Error processing redirect");
+  }
+});
+
 // GET /r/:clickId - Click tracking redirect
 app.get("/r/:clickId", async (req, res) => {
   try {

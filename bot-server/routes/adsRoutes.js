@@ -219,4 +219,61 @@ router.patch("/:id/metrics", async (req, res) => {
   }
 });
 
+// Set direct tracked link on an ad
+router.put("/:id/direct-link", async (req, res) => {
+  try {
+    const { url } = req.body;
+    if (!url) return res.status(400).json({ success: false, error: "URL is required" });
+
+    const { setDirectLink } = require("../tracking");
+    const result = await setDirectLink(req.params.id, url);
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// Remove direct tracked link from an ad
+router.delete("/:id/direct-link", async (req, res) => {
+  try {
+    const { removeDirectLink } = require("../tracking");
+    await removeDirectLink(req.params.id);
+    res.json({ success: true });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// Get direct ad click stats for an ad
+router.get("/:id/direct-clicks", async (req, res) => {
+  try {
+    const ad = await Ad.findById(req.params.id);
+    if (!ad) return res.status(404).json({ success: false, error: "Ad not found" });
+
+    const ClickLog = require("../models/ClickLog");
+    const filter = { source: "direct_ad", adId: ad.fbAdId };
+
+    const [totalClicks, conversions, revenue] = await Promise.all([
+      ClickLog.countDocuments(filter),
+      ClickLog.countDocuments({ ...filter, converted: true }),
+      ClickLog.aggregate([
+        { $match: { ...filter, converted: true, "conversionData.totalAmount": { $gt: 0 } } },
+        { $group: { _id: null, total: { $sum: "$conversionData.totalAmount" } } }
+      ])
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        totalClicks,
+        conversions,
+        revenue: revenue[0]?.total || 0,
+        conversionRate: totalClicks > 0 ? ((conversions / totalClicks) * 100).toFixed(1) : 0
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;

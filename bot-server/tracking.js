@@ -1,6 +1,7 @@
 const { randomUUID } = require('crypto');
 const ClickLog = require('./models/ClickLog');
 const Conversation = require('./models/Conversation');
+const Ad = require('./models/Ad');
 
 /**
  * Extract ML Item ID from a Mercado Libre URL
@@ -142,10 +143,79 @@ async function getClickStats(psid) {
   };
 }
 
+/**
+ * Set a direct tracked link on an ad.
+ * Generates a short trackCode; the redirect endpoint /r/d/:trackCode
+ * creates a new ClickLog on every click (anonymous, source: 'direct_ad').
+ * @param {string} adId - MongoDB _id of the Ad
+ * @param {string} url - Destination URL (e.g., ML product page)
+ * @returns {Promise<{ trackCode: string, trackedUrl: string }>}
+ */
+async function setDirectLink(adId, url) {
+  const ad = await Ad.findById(adId)
+    .populate({ path: 'adSetId', select: 'fbAdSetId campaignId', populate: { path: 'campaignId', select: 'ref' } });
+  if (!ad) throw new Error('Ad not found');
+
+  // Reuse existing trackCode if URL hasn't changed, otherwise generate new
+  const trackCode = (ad.directLink?.url === url && ad.directLink?.trackCode)
+    ? ad.directLink.trackCode
+    : randomUUID().slice(0, 8);
+
+  ad.directLink = { url, trackCode };
+  await ad.save();
+
+  const baseUrl = process.env.BASE_URL || 'https://agente.hanlob.com.mx';
+  return { trackCode, trackedUrl: `${baseUrl}/r/d/${trackCode}` };
+}
+
+/**
+ * Remove the direct tracked link from an ad.
+ */
+async function removeDirectLink(adId) {
+  await Ad.updateOne({ _id: adId }, { $unset: { directLink: 1 } });
+}
+
+/**
+ * Handle a click on a direct ad link.
+ * Creates a NEW ClickLog per click (anonymous — no psid).
+ * @param {string} trackCode - The ad's directLink.trackCode
+ * @param {object} metadata - { userAgent, ipAddress, referrer }
+ * @returns {Promise<{ originalUrl: string }|null>}
+ */
+async function recordDirectAdClick(trackCode, metadata = {}) {
+  const ad = await Ad.findOne({ 'directLink.trackCode': trackCode })
+    .populate({ path: 'adSetId', select: 'fbAdSetId campaignId', populate: { path: 'campaignId', select: 'ref' } });
+  if (!ad || !ad.directLink?.url) return null;
+
+  const mlItemId = extractMLItemId(ad.directLink.url);
+
+  const clickLog = new ClickLog({
+    clickId: randomUUID().slice(0, 8),
+    psid: null,
+    originalUrl: ad.directLink.url,
+    mlItemId,
+    source: 'direct_ad',
+    adId: ad.fbAdId,
+    adSetId: ad.adSetId?.fbAdSetId || null,
+    campaignId: ad.adSetId?.campaignId?.ref || null,
+    clicked: true,
+    clickedAt: new Date(),
+    userAgent: metadata.userAgent,
+    ipAddress: metadata.ipAddress,
+    referrer: metadata.referrer
+  });
+
+  await clickLog.save();
+  return { originalUrl: ad.directLink.url };
+}
+
 module.exports = {
   generateClickLink,
   getClickData,
   recordClick,
   recordConversion,
-  getClickStats
+  getClickStats,
+  setDirectLink,
+  removeDirectLink,
+  recordDirectAdClick
 };

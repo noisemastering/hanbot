@@ -607,4 +607,110 @@ router.get("/products", async (req, res) => {
   }
 });
 
+// Daily direct-ad click stats (for separate chart)
+router.get("/direct-ad/daily", async (req, res) => {
+  try {
+    const { days = 30 } = req.query;
+    const since = new Date();
+    since.setDate(since.getDate() - parseInt(days));
+
+    const pipeline = [
+      { $match: { source: "direct_ad", clickedAt: { $gte: since } } },
+      {
+        $group: {
+          _id: { $dateToString: { format: "%Y-%m-%d", date: "$clickedAt" } },
+          clicks: { $sum: 1 },
+          conversions: { $sum: { $cond: ["$converted", 1, 0] } },
+          revenue: { $sum: { $ifNull: ["$conversionData.totalAmount", 0] } },
+          uniqueAds: { $addToSet: "$adId" }
+        }
+      },
+      { $sort: { _id: 1 } },
+      {
+        $project: {
+          date: "$_id",
+          clicks: 1,
+          conversions: 1,
+          revenue: 1,
+          uniqueAds: { $size: "$uniqueAds" },
+          _id: 0
+        }
+      }
+    ];
+
+    const daily = await ClickLog.aggregate(pipeline);
+
+    // Also get totals
+    const totals = await ClickLog.aggregate([
+      { $match: { source: "direct_ad", clickedAt: { $gte: since } } },
+      {
+        $group: {
+          _id: null,
+          totalClicks: { $sum: 1 },
+          totalConversions: { $sum: { $cond: ["$converted", 1, 0] } },
+          totalRevenue: { $sum: { $ifNull: ["$conversionData.totalAmount", 0] } }
+        }
+      }
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        daily,
+        totals: totals[0] || { totalClicks: 0, totalConversions: 0, totalRevenue: 0 }
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Direct-ad clicks by ad (breakdown per ad)
+router.get("/direct-ad/by-ad", async (req, res) => {
+  try {
+    const { days = 30 } = req.query;
+    const since = new Date();
+    since.setDate(since.getDate() - parseInt(days));
+
+    const Ad = require("../models/Ad");
+
+    const pipeline = [
+      { $match: { source: "direct_ad", clickedAt: { $gte: since } } },
+      {
+        $group: {
+          _id: "$adId",
+          clicks: { $sum: 1 },
+          conversions: { $sum: { $cond: ["$converted", 1, 0] } },
+          revenue: { $sum: { $ifNull: ["$conversionData.totalAmount", 0] } },
+          lastClick: { $max: "$clickedAt" }
+        }
+      },
+      { $sort: { clicks: -1 } }
+    ];
+
+    const byAd = await ClickLog.aggregate(pipeline);
+
+    // Enrich with ad names
+    const fbAdIds = byAd.map(r => r._id).filter(Boolean);
+    const ads = await Ad.find({ fbAdId: { $in: fbAdIds } }, "name fbAdId directLink").lean();
+    const adMap = {};
+    for (const ad of ads) adMap[ad.fbAdId] = ad;
+
+    const enriched = byAd.map(row => ({
+      fbAdId: row._id,
+      adName: adMap[row._id]?.name || row._id,
+      directLinkUrl: adMap[row._id]?.directLink?.url || null,
+      clicks: row.clicks,
+      conversions: row.conversions,
+      revenue: row.revenue,
+      conversionRate: row.clicks > 0 ? ((row.conversions / row.clicks) * 100).toFixed(1) : 0,
+      lastClick: row.lastClick
+    }));
+
+    res.json({ success: true, data: enriched });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
