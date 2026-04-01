@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import AdModal from './AdModal';
+import API from '../api';
 import { useTranslation } from '../i18n';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
@@ -35,7 +36,8 @@ function AdsView() {
   const [dateTo, setDateTo] = useState('');
   const [selectedIds, setSelectedIds] = useState(new Set());
   const [directLinkInput, setDirectLinkInput] = useState('');
-  const [settingDirectLink, setSettingDirectLink] = useState(null); // ad._id being edited
+  const [settingDirectLink, setSettingDirectLink] = useState(null);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     fetchAds();
@@ -66,6 +68,21 @@ function AdsView() {
       }
     } catch (error) {
       console.error("Error fetching ad sets:", error);
+    }
+  };
+
+  const syncFromFacebook = async () => {
+    setSyncing(true);
+    try {
+      const res = await API.post('/campaigns/sync-facebook');
+      const r = res.data.results;
+      toast.success(`Sync: ${r.campaigns?.created || 0} campañas, ${r.adSets?.created || 0} ad sets, ${r.ads?.created || 0} anuncios nuevos`);
+      fetchAds();
+      fetchAdSets();
+    } catch (err) {
+      toast.error('Error: ' + (err.response?.data?.error || err.message));
+    } finally {
+      setSyncing(false);
     }
   };
 
@@ -311,18 +328,30 @@ function AdsView() {
           <h1 className="text-3xl font-bold text-white">{t('ads.title')}</h1>
           <p className="text-gray-400 mt-2">{ads.length} anuncios en total</p>
         </div>
-        <button
-          onClick={() => {
-            setEditingAd(null);
-            setShowAdModal(true);
-          }}
-          className="px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center space-x-2"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          <span>{t('ads.addAd')}</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={syncFromFacebook}
+            disabled={syncing}
+            className="px-4 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors flex items-center space-x-2 disabled:opacity-50"
+          >
+            <svg className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span>{syncing ? 'Sincronizando...' : 'Sync Facebook'}</span>
+          </button>
+          <button
+            onClick={() => {
+              setEditingAd(null);
+              setShowAdModal(true);
+            }}
+            className="px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center space-x-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span>{t('ads.addAd')}</span>
+          </button>
+        </div>
       </div>
 
       {/* Search Box */}
