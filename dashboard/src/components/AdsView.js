@@ -11,6 +11,16 @@ const STATUS_STYLE = {
   ARCHIVED: "bg-gray-500/10 border-gray-500/30 text-gray-400 hover:bg-gray-500/20"
 };
 
+const CONVO_FLOW_NAMES = {
+  convo_bordeSeparadorRetail: "Borde Separador (Menudeo)",
+  convo_bordeSeparadorWholesale: "Borde Separador (Mayoreo)",
+  convo_confeccionadaRetail: "Confeccionada (Menudeo)",
+  convo_groundcoverWholesale: "Ground Cover (Mayoreo)",
+  convo_promo6x4: "Promo 6x4",
+  convo_rolloRaschelWholesale: "Rollo Raschel (Mayoreo)",
+  convo_vende_malla: "Vende Malla (Distribuidor)"
+};
+
 function AdsView() {
   const { t, locale } = useTranslation();
   const [ads, setAds] = useState([]);
@@ -20,6 +30,9 @@ function AdsView() {
   const [showAdModal, setShowAdModal] = useState(false);
   const [editingAd, setEditingAd] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
+  const [dateFrom, setDateFrom] = useState('');
+  const [dateTo, setDateTo] = useState('');
   const [selectedIds, setSelectedIds] = useState(new Set());
 
   useEffect(() => {
@@ -199,18 +212,40 @@ function AdsView() {
     }
   };
 
-  // Filter ads by search query
+  // Filter ads by search query, status, and date
   const filteredAds = (() => {
-    if (!searchQuery.trim()) return ads;
-    const q = searchQuery.toLowerCase().trim();
-    return ads.filter(ad =>
-      ad.name?.toLowerCase().includes(q) ||
-      ad.fbAdId?.toLowerCase().includes(q) ||
-      ad.postId?.toLowerCase().includes(q) ||
-      ad.adSetId?.name?.toLowerCase().includes(q) ||
-      ad.adSetId?.fbAdSetId?.toLowerCase().includes(q) ||
-      ad.adSetId?.campaignId?.name?.toLowerCase().includes(q)
-    );
+    let result = ads;
+
+    // Status filter
+    if (statusFilter !== 'ALL') {
+      result = result.filter(ad => ad.status === statusFilter);
+    }
+
+    // Date range filter
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      result = result.filter(ad => ad.createdAt && new Date(ad.createdAt) >= from);
+    }
+    if (dateTo) {
+      const to = new Date(dateTo + 'T23:59:59');
+      result = result.filter(ad => ad.createdAt && new Date(ad.createdAt) <= to);
+    }
+
+    // Text search
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase().trim();
+      result = result.filter(ad =>
+        ad.name?.toLowerCase().includes(q) ||
+        ad.fbAdId?.toLowerCase().includes(q) ||
+        ad.postId?.toLowerCase().includes(q) ||
+        ad.adSetId?.name?.toLowerCase().includes(q) ||
+        ad.adSetId?.fbAdSetId?.toLowerCase().includes(q) ||
+        ad.adSetId?.campaignId?.name?.toLowerCase().includes(q) ||
+        (ad.convoFlowRef && (CONVO_FLOW_NAMES[ad.convoFlowRef] || ad.convoFlowRef).toLowerCase().includes(q))
+      );
+    }
+
+    return result;
   })();
 
   const allSelected = filteredAds.length > 0 && selectedIds.size === filteredAds.length;
@@ -260,6 +295,60 @@ function AdsView() {
             </button>
           )}
         </div>
+      </div>
+
+      {/* Filters Row */}
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        {/* Status Filter */}
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="px-3 py-2 bg-gray-800/50 border border-gray-700/50 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+        >
+          <option value="ALL">Todos los estados</option>
+          <option value="ACTIVE">Activo</option>
+          <option value="PAUSED">Pausado</option>
+          <option value="ARCHIVED">Archivado</option>
+        </select>
+
+        {/* Date From */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">Desde</span>
+          <input
+            type="date"
+            value={dateFrom}
+            onChange={(e) => setDateFrom(e.target.value)}
+            className="px-3 py-2 bg-gray-800/50 border border-gray-700/50 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary-500 [color-scheme:dark]"
+          />
+        </div>
+
+        {/* Date To */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs text-gray-500">Hasta</span>
+          <input
+            type="date"
+            value={dateTo}
+            onChange={(e) => setDateTo(e.target.value)}
+            className="px-3 py-2 bg-gray-800/50 border border-gray-700/50 rounded-lg text-sm text-white focus:outline-none focus:ring-2 focus:ring-primary-500 [color-scheme:dark]"
+          />
+        </div>
+
+        {/* Clear filters */}
+        {(statusFilter !== 'ALL' || dateFrom || dateTo) && (
+          <button
+            onClick={() => { setStatusFilter('ALL'); setDateFrom(''); setDateTo(''); }}
+            className="px-3 py-2 text-xs text-gray-400 hover:text-white border border-gray-700/50 rounded-lg hover:bg-gray-700/30 transition-colors"
+          >
+            Limpiar filtros
+          </button>
+        )}
+
+        {/* Result count */}
+        {(statusFilter !== 'ALL' || dateFrom || dateTo || searchQuery) && (
+          <span className="text-xs text-gray-500 ml-auto">
+            {filteredAds.length} de {ads.length} anuncios
+          </span>
+        )}
       </div>
 
       {/* Bulk Actions Bar */}
@@ -345,6 +434,7 @@ function AdsView() {
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('common.ad')}</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Ad Set</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('common.campaign')}</th>
+                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Convo Flow</th>
                   <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase w-32">{t('common.status')}</th>
                   <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase w-28">{t('common.actions')}</th>
                 </tr>
@@ -371,6 +461,15 @@ function AdsView() {
                     </td>
                     <td className="px-4 py-3">
                       <span className="text-sm text-gray-300">{ad.adSetId?.campaignId?.name || '-'}</span>
+                    </td>
+                    <td className="px-4 py-3">
+                      {ad.convoFlowRef ? (
+                        <span className="text-xs font-medium px-2 py-1 rounded bg-indigo-500/10 border border-indigo-500/30 text-indigo-300">
+                          {CONVO_FLOW_NAMES[ad.convoFlowRef] || ad.convoFlowRef}
+                        </span>
+                      ) : (
+                        <span className="text-xs text-gray-600">—</span>
+                      )}
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       <select
@@ -480,6 +579,18 @@ function AdsView() {
                     <div>
                       <p className="text-xs text-gray-500 uppercase tracking-wide">{t('common.campaign')}</p>
                       <p className="text-sm text-white mt-1">{selectedAd.adSetId?.campaignId?.name || 'N/A'}</p>
+                    </div>
+                    <div>
+                      <p className="text-xs text-gray-500 uppercase tracking-wide">Convo Flow</p>
+                      <p className="text-sm text-white mt-1">
+                        {selectedAd.convoFlowRef ? (
+                          <span className="bg-indigo-500/10 text-indigo-300 px-2 py-1 rounded">
+                            {CONVO_FLOW_NAMES[selectedAd.convoFlowRef] || selectedAd.convoFlowRef}
+                          </span>
+                        ) : (
+                          <span className="text-gray-500">Sin asignar</span>
+                        )}
+                      </p>
                     </div>
                     <div>
                       <p className="text-xs text-gray-500 uppercase tracking-wide">{t('ads.associatedProducts')}</p>
