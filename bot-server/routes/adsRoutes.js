@@ -7,8 +7,8 @@ const AdSet = require("../models/AdSet");
 const Campaign = require("../models/Campaign");
 
 // Check flowRef exists in hierarchy: Ad → AdSet → Campaign
-async function validateFlowRefHierarchy(flowRef, adSetId) {
-  if (flowRef) return true;
+async function validateFlowRefHierarchy(flowRef, adSetId, convoFlowRef) {
+  if (flowRef || convoFlowRef) return true;
   const adSet = await AdSet.findById(adSetId).populate("campaignId", "flowRef");
   if (!adSet) return false;
   if (adSet.flowRef) return true;
@@ -100,7 +100,7 @@ router.post("/", async (req, res) => {
 
     // Validate flowRef hierarchy for ACTIVE ads
     if (req.body.status === 'ACTIVE') {
-      const hasFlow = await validateFlowRefHierarchy(req.body.flowRef, req.body.adSetId);
+      const hasFlow = await validateFlowRefHierarchy(req.body.flowRef, req.body.adSetId, req.body.convoFlowRef);
       if (!hasFlow) {
         return res.status(400).json({
           success: false,
@@ -136,7 +136,7 @@ router.put("/:id", async (req, res) => {
     if (req.body.status === 'ACTIVE') {
       const adSetId = req.body.adSetId || (await Ad.findById(req.params.id, 'adSetId'))?.adSetId;
       if (adSetId) {
-        const hasFlow = await validateFlowRefHierarchy(req.body.flowRef, adSetId);
+        const hasFlow = await validateFlowRefHierarchy(req.body.flowRef, adSetId, req.body.convoFlowRef);
         if (!hasFlow) {
           return res.status(400).json({
             success: false,

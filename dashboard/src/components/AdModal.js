@@ -20,6 +20,16 @@ const EXPERIENCE_LEVELS = [
   { value: 'expert', label: 'Experto' }
 ];
 
+const CONVO_FLOWS = [
+  { key: 'convo_bordeSeparadorRetail', name: 'Borde Separador (Menudeo)' },
+  { key: 'convo_bordeSeparadorWholesale', name: 'Borde Separador (Mayoreo)' },
+  { key: 'convo_confeccionadaRetail', name: 'Confeccionada (Menudeo)' },
+  { key: 'convo_groundcoverWholesale', name: 'Ground Cover (Mayoreo)' },
+  { key: 'convo_promo6x4', name: 'Promo 6x4' },
+  { key: 'convo_rolloRaschelWholesale', name: 'Rollo Raschel (Mayoreo)' },
+  { key: 'convo_vende_malla', name: 'Vende Malla (Distribuidor)' }
+];
+
 // Ad angles - same as CampaignModal for consistency
 const AD_ANGLES = [
   { value: 'problem_pain', label: '☀️ Problema/Dolor', desc: 'Resuelve un problema del cliente' },
@@ -106,7 +116,8 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
     utmContent: '',
     utmTerm: '',
     // Bot flow
-    flowRef: ''
+    flowRef: '',
+    convoFlowRef: ''
   });
 
   const [productFamilies, setProductFamilies] = useState([]);
@@ -199,7 +210,8 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
         utmCampaign: ad.tracking?.utmCampaign || '',
         utmContent: ad.tracking?.utmContent || '',
         utmTerm: ad.tracking?.utmTerm || '',
-        flowRef: ad.flowRef || ''
+        flowRef: ad.flowRef || '',
+        convoFlowRef: ad.convoFlowRef || ''
       });
       setCurrentCatalog(ad.catalog || null);
     }
@@ -248,7 +260,8 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
         utmContent: formData.utmContent || null,
         utmTerm: formData.utmTerm || null
       },
-      flowRef: formData.flowRef || null
+      flowRef: formData.flowRef || null,
+      convoFlowRef: formData.convoFlowRef || null
     };
 
     onSave(payload);
@@ -436,6 +449,29 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                   </p>
                 );
               })()}
+            </div>
+
+            {/* Convo Flow */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Flujo de conversación (convo_flow)
+              </label>
+              <select
+                name="convoFlowRef"
+                value={formData.convoFlowRef}
+                onChange={handleChange}
+                className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Sin asignar</option>
+                {CONVO_FLOWS.map(flow => (
+                  <option key={flow.key} value={flow.key}>
+                    {flow.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Asigna el flujo de conversación específico para este anuncio
+              </p>
             </div>
 
             {/* Audiencia */}
