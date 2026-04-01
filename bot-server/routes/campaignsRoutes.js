@@ -2,9 +2,36 @@
 const express = require("express");
 const router = express.Router();
 const mongoose = require("mongoose");
+const jwt = require("jsonwebtoken");
 const Campaign = require("../models/Campaign");
 const AdSet = require("../models/AdSet");
 const Ad = require("../models/Ad");
+const DashboardUser = require("../models/DashboardUser");
+const { syncAll } = require("../utils/facebookAdsSync");
+
+const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-jwt-key-change-in-production";
+
+// Authentication middleware (for protected routes)
+const authenticate = async (req, res, next) => {
+  try {
+    const token = req.headers.authorization?.replace("Bearer ", "");
+    if (!token) {
+      return res.status(401).json({ success: false, error: "No token provided" });
+    }
+
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const user = await DashboardUser.findById(decoded.id).select("-password");
+
+    if (!user || !user.active) {
+      return res.status(401).json({ success: false, error: "Invalid token or inactive user" });
+    }
+
+    req.user = user;
+    next();
+  } catch (error) {
+    return res.status(401).json({ success: false, error: "Invalid or expired token" });
+  }
+};
 
 // Get campaigns tree (campaigns with nested adsets and ads)
 router.get("/tree", async (req, res) => {
@@ -55,6 +82,30 @@ router.get("/", async (req, res) => {
     res.json({ success: true, data: campaigns });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Sync campaigns, ad sets, and ads from Facebook Marketing API
+router.post("/sync-facebook", authenticate, async (req, res) => {
+  try {
+    console.log("🔄 Facebook Ads sync triggered by user:", req.user.email || req.user.username);
+    const results = await syncAll();
+    console.log("✅ Facebook Ads sync complete:", JSON.stringify(results, null, 2));
+
+    res.json({
+      success: true,
+      results: {
+        campaigns: { created: results.campaigns.created, updated: results.campaigns.updated },
+        adSets: { created: results.adSets.created, updated: results.adSets.updated },
+        ads: { created: results.ads.created, updated: results.ads.updated }
+      }
+    });
+  } catch (err) {
+    console.error("❌ Facebook Ads sync error:", err.message);
+    res.status(500).json({
+      success: false,
+      error: `Facebook sync failed: ${err.message}`
+    });
   }
 });
 

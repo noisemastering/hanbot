@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import toast from 'react-hot-toast';
 import { useTranslation } from '../i18n';
+import API from '../api';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -261,13 +262,33 @@ function CampaignTreeView({
   onAddChild,
   onDetails,
   editingItem,
-  onUpdateCampaign
+  onUpdateCampaign,
+  onRefresh
 }) {
   const { t } = useTranslation();
   // Manage expanded nodes state (Set of item IDs)
   // Start with all trees collapsed
   const [expandedNodes, setExpandedNodes] = useState(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState(null);
+
+  const syncFromFacebook = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await API.post('/campaigns/sync-facebook');
+      setSyncResult(res.data.results);
+      toast.success('Sincronizado con Facebook');
+      if (onRefresh) onRefresh();
+    } catch (err) {
+      const msg = err.response?.data?.error || err.message;
+      setSyncResult({ error: msg });
+      toast.error('Error: ' + msg);
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   // Helper function to find path from item to root
   const findPathToRoot = (itemId, campaigns, path = []) => {
@@ -409,16 +430,44 @@ function CampaignTreeView({
           <h1 className="text-3xl font-bold text-white">{t('campaignTree.mainTitle')}</h1>
           <p className="text-gray-400 mt-2">{t('campaignTree.mainSubtitle')}</p>
         </div>
-        <button
-          onClick={onAdd}
-          className="px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center space-x-2"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          <span>{t('campaignTree.newCampaign')}</span>
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            onClick={syncFromFacebook}
+            disabled={syncing}
+            className="px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center space-x-2"
+          >
+            <svg className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+            </svg>
+            <span>{syncing ? 'Sincronizando...' : 'Sync Facebook'}</span>
+          </button>
+          <button
+            onClick={onAdd}
+            className="px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center space-x-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span>{t('campaignTree.newCampaign')}</span>
+          </button>
+        </div>
       </div>
+
+      {/* Sync Result Banner */}
+      {syncResult && (
+        <div className={`mb-4 px-4 py-3 rounded-lg text-sm flex items-center justify-between ${syncResult.error ? 'bg-red-500/20 border border-red-500/30 text-red-300' : 'bg-green-500/20 border border-green-500/30 text-green-300'}`}>
+          {syncResult.error ? (
+            <span>Error: {syncResult.error}</span>
+          ) : (
+            <span>
+              {syncResult.campaigns?.created || 0} campañas nuevas, {syncResult.campaigns?.updated || 0} actualizadas
+              {' / '}{syncResult.adSets?.created || 0} ad sets nuevos, {syncResult.adSets?.updated || 0} actualizados
+              {' / '}{syncResult.ads?.created || 0} anuncios nuevos, {syncResult.ads?.updated || 0} actualizados
+            </span>
+          )}
+          <button onClick={() => setSyncResult(null)} className="ml-3 text-gray-400 hover:text-white text-lg leading-none">&times;</button>
+        </div>
+      )}
 
       {/* Search Box */}
       <div className="mb-6">

@@ -2002,6 +2002,7 @@ function App() {
               campaigns={campaigns}
               loading={campaignsLoading}
               editingItem={editingCampaign}
+              onRefresh={fetchCampaigns}
               onAdd={() => {
                 setEditingCampaign(null);
                 setShowCampaignModal(true);
