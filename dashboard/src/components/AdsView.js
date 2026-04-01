@@ -474,10 +474,10 @@ function AdsView() {
       ) : (
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full">
+            <table className="w-full table-fixed">
               <thead className="bg-gray-900/50">
                 <tr>
-                  <th className="px-4 py-3 text-left w-10">
+                  <th className="px-3 py-3 text-left w-10">
                     <input
                       type="checkbox"
                       checked={allSelected}
@@ -485,13 +485,13 @@ function AdsView() {
                       className="w-4 h-4 rounded bg-gray-900/50 border-gray-600 text-primary-500 focus:ring-primary-500 cursor-pointer"
                     />
                   </th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('common.ad')}</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Ad Set</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">{t('common.campaign')}</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Flujo</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase">Link Directo</th>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-400 uppercase w-32">{t('common.status')}</th>
-                  <th className="px-4 py-3 text-right text-xs font-medium text-gray-400 uppercase w-28">{t('common.actions')}</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[18%]">{t('common.ad')}</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[13%]">Ad Set</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[16%]">{t('common.campaign')}</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[14%]">Flujo</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[12%]">Link Directo</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[10%]">{t('common.status')}</th>
+                  <th className="px-3 py-3 text-right text-xs font-medium text-gray-400 uppercase w-[7%]">{t('common.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-700/30">
@@ -505,17 +505,17 @@ function AdsView() {
                         className="w-4 h-4 rounded bg-gray-900/50 border-gray-600 text-primary-500 focus:ring-primary-500 cursor-pointer"
                       />
                     </td>
-                    <td className="px-4 py-3">
-                      <div className="text-sm font-medium text-white">{ad.name}</div>
-                      <code className="text-xs text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded mt-1 inline-block">
+                    <td className="px-4 py-3 max-w-[200px]">
+                      <div className="text-sm font-medium text-white truncate" title={ad.name}>{ad.name}</div>
+                      <code className="text-xs text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded mt-1 inline-block truncate max-w-full">
                         {ad.fbAdId}
                       </code>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-gray-300">{ad.adSetId?.name || '-'}</span>
+                    <td className="px-4 py-3 max-w-[150px]">
+                      <span className="text-sm text-gray-300 block truncate" title={ad.adSetId?.name || '-'}>{ad.adSetId?.name || '-'}</span>
                     </td>
-                    <td className="px-4 py-3">
-                      <span className="text-sm text-gray-300">{ad.adSetId?.campaignId?.name || '-'}</span>
+                    <td className="px-4 py-3 max-w-[180px]">
+                      <span className="text-sm text-gray-300 block truncate" title={ad.adSetId?.campaignId?.name || '-'}>{ad.adSetId?.campaignId?.name || '-'}</span>
                     </td>
                     <td className="px-4 py-3 whitespace-nowrap">
                       {ad.convoFlowRef ? (
