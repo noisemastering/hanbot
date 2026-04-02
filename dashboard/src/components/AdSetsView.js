@@ -16,6 +16,8 @@ function AdSetsView() {
   const [showAdSetModal, setShowAdSetModal] = useState(false);
   const [editingAdSet, setEditingAdSet] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
+  const [activeExpanded, setActiveExpanded] = useState(true);
+  const [pausedExpanded, setPausedExpanded] = useState(false);
   const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
@@ -219,15 +221,21 @@ function AdSetsView() {
           );
         };
 
-        const renderTable = (rows, label, count, borderClass) => (
-          <div>
-            <div className="flex items-center gap-3 mb-3">
+        const renderTable = (rows, label, count, borderClass, expanded, onToggle) => (
+          <div className={`bg-gray-800/50 border ${borderClass} rounded-xl overflow-hidden`}>
+            <button
+              onClick={onToggle}
+              className="w-full px-6 py-3 flex items-center gap-3 hover:bg-gray-700/30 transition-colors"
+            >
+              <svg className={`w-4 h-4 text-gray-400 transition-transform ${expanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
               <div className={`w-2 h-2 rounded-full ${borderClass === 'border-green-500/20' ? 'bg-green-400' : 'bg-gray-500'}`}></div>
               <h2 className={`text-lg font-bold ${borderClass === 'border-green-500/20' ? 'text-white' : 'text-gray-400'}`}>{label}</h2>
               <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">{count}</span>
-            </div>
-            <div className={`bg-gray-800/50 border ${borderClass} rounded-xl overflow-hidden`}>
-              <div className="overflow-x-auto">
+            </button>
+            {expanded && (
+              <div className="overflow-x-auto border-t border-gray-700/50">
                 <table className="w-full table-fixed">
                   <thead className="bg-gray-900/50">
                     <tr>
@@ -243,23 +251,27 @@ function AdSetsView() {
                   </tbody>
                 </table>
               </div>
-            </div>
+            )}
           </div>
         );
 
         return (
-          <div className="space-y-8">
+          <div className="space-y-6">
             {activeAdSets.length > 0 && renderTable(
               activeAdSets.map(renderRow),
               'Activos',
               activeAdSets.length,
-              'border-green-500/20'
+              'border-green-500/20',
+              activeExpanded,
+              () => setActiveExpanded(p => !p)
             )}
             {pausedAdSets.length > 0 && renderTable(
               pausedAdSets.map(renderRow),
               'Pausados / Inactivos',
               pausedAdSets.length,
-              'border-gray-700/50'
+              'border-gray-700/50',
+              pausedExpanded,
+              () => setPausedExpanded(p => !p)
             )}
           </div>
         );
