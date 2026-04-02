@@ -158,16 +158,17 @@ function AdSetsView() {
     adsBySet[setId].push(ad);
   }
 
-  // Group ad sets by campaign
+  // Group ad sets by campaign, tracking campaign status
   const buildHierarchy = () => {
     const campaignGroups = {};
 
     for (const adSet of adSets) {
       const campId = adSet.campaignId?._id || 'no-campaign';
       const campName = adSet.campaignId?.name || t('adSets.noCampaign');
+      const campStatus = adSet.campaignId?.status || 'ACTIVE';
 
       if (!campaignGroups[campId]) {
-        campaignGroups[campId] = { name: campName, adSets: [] };
+        campaignGroups[campId] = { name: campName, status: campStatus, adSets: [] };
       }
       campaignGroups[campId].adSets.push(adSet);
     }
@@ -201,6 +202,102 @@ function AdSetsView() {
 
     return result;
   })();
+
+  // Split into active and inactive campaigns
+  const activeCampaigns = Object.entries(filteredHierarchy).filter(([, c]) => c.status === 'ACTIVE');
+  const inactiveCampaigns = Object.entries(filteredHierarchy).filter(([, c]) => c.status !== 'ACTIVE');
+
+  const renderAdSet = (adSet) => {
+    const isExpanded = expandedSets.has(adSet._id);
+    const setAds = adsBySet[adSet._id] || [];
+    const activeAds = setAds.filter(a => a.status === 'ACTIVE').length;
+
+    return (
+      <div key={adSet._id} className="bg-gray-800/50 border border-gray-700/50 rounded-lg overflow-hidden">
+        <button
+          onClick={() => toggleSet(adSet._id)}
+          className="w-full flex items-center justify-between px-4 py-3 bg-gray-800/80 hover:bg-gray-700/50 transition-colors"
+        >
+          <div className="flex items-center gap-3">
+            <svg className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+            </svg>
+            <span className="font-semibold text-white text-sm">{adSet.name}</span>
+            <code className="text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded">{adSet.fbAdSetId}</code>
+            <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
+              adSet.status === 'ACTIVE' ? "bg-green-500/20 text-green-300"
+                : adSet.status === 'PAUSED' ? "bg-yellow-500/20 text-yellow-300"
+                : "bg-gray-500/20 text-gray-400"
+            }`}>
+              {adSet.status === 'ACTIVE' ? t('adSets.statusActive') : adSet.status === 'PAUSED' ? t('adSets.statusPaused') : adSet.status}
+            </span>
+          </div>
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">
+              {activeAds}/{setAds.length} {t('adSets.activeAds')}
+            </span>
+            <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+              <button onClick={() => setSelectedAdSet(adSet)} className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors" title={t('adSets.viewDetails')}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              </button>
+              <button onClick={() => { setEditingAdSet(adSet); setShowAdSetModal(true); }} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors" title={t('common.edit')}>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+              </button>
+            </div>
+          </div>
+        </button>
+        {isExpanded && (
+          <div className="overflow-x-auto">
+            {setAds.length === 0 ? (
+              <div className="px-4 py-6 text-center text-gray-500 text-sm">{t('adSets.noAdsInSet')}</div>
+            ) : (
+              <table className="w-full">
+                <thead className="bg-gray-900/50">
+                  <tr>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">{t('common.ad')}</th>
+                    <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase w-32">{t('common.status')}</th>
+                    <th className="px-4 py-2 text-right text-xs font-medium text-gray-400 uppercase w-28">{t('common.actions')}</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700/30">
+                  {setAds.map((ad) => (
+                    <tr key={ad._id} className="hover:bg-gray-700/20 transition-colors">
+                      <td className="px-4 py-3">
+                        <div className="text-sm font-medium text-white">{ad.name}</div>
+                        <code className="text-xs text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded mt-1 inline-block">{ad.fbAdId}</code>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <select
+                          value={ad.status}
+                          onChange={(e) => handleAdStatusChange(ad._id, e.target.value)}
+                          className={`text-xs font-medium px-2.5 py-1.5 rounded-lg border-2 transition-colors cursor-pointer ${STATUS_STYLE[ad.status] || STATUS_STYLE.ARCHIVED}`}
+                        >
+                          <option value="ACTIVE">{t('ads.statusActive')}</option>
+                          <option value="PAUSED">{t('ads.statusPaused')}</option>
+                          <option value="ARCHIVED">{t('ads.statusArchived')}</option>
+                        </select>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-right">
+                        <button onClick={() => { setEditingAd(ad); setShowAdModal(true); }} className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors" title={t('common.edit')}>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                          </svg>
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -286,149 +383,69 @@ function AdSetsView() {
         </div>
       ) : (
         <div className="space-y-8">
-          {Object.entries(filteredHierarchy).map(([campId, campaign]) => (
-            <div key={campId}>
-              {/* Campaign Header */}
-              <div className="flex items-center gap-3 mb-3">
-                <div className="w-2 h-2 rounded-full bg-blue-400"></div>
-                <h2 className="text-lg font-bold text-white">{campaign.name}</h2>
-                <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">
-                  {campaign.adSets.length} ad set{campaign.adSets.length !== 1 ? 's' : ''}
-                </span>
+          {/* Active Campaigns */}
+          {activeCampaigns.length > 0 && (
+            <div>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-2.5 h-2.5 rounded-full bg-green-400"></div>
+                <h2 className="text-lg font-bold text-white">Campañas Activas</h2>
+                <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">{activeCampaigns.length}</span>
               </div>
-
-              {/* Ad Sets under this campaign */}
-              <div className="space-y-3 ml-2">
-                {campaign.adSets.map((adSet) => {
-                  const isExpanded = expandedSets.has(adSet._id);
-                  const setAds = adsBySet[adSet._id] || [];
-                  const activeAds = setAds.filter(a => a.status === 'ACTIVE').length;
-
+              <div className="space-y-6">
+                {activeCampaigns.map(([campId, campaign]) => {
+                  const activeAdSets = campaign.adSets.filter(s => s.status === 'ACTIVE');
+                  const inactiveAdSets = campaign.adSets.filter(s => s.status !== 'ACTIVE');
                   return (
-                    <div key={adSet._id} className="bg-gray-800/50 border border-gray-700/50 rounded-lg overflow-hidden">
-                      {/* Ad Set Header */}
-                      <button
-                        onClick={() => toggleSet(adSet._id)}
-                        className="w-full flex items-center justify-between px-4 py-3 bg-gray-800/80 hover:bg-gray-700/50 transition-colors"
-                      >
-                        <div className="flex items-center gap-3">
-                          <svg
-                            className={`w-4 h-4 text-gray-400 transition-transform ${isExpanded ? 'rotate-90' : ''}`}
-                            fill="none"
-                            stroke="currentColor"
-                            viewBox="0 0 24 24"
-                          >
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                          </svg>
-                          <span className="font-semibold text-white text-sm">{adSet.name}</span>
-                          <code className="text-xs text-blue-400 bg-blue-500/10 px-2 py-0.5 rounded">
-                            {adSet.fbAdSetId}
-                          </code>
-                          <span className={`inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium ${
-                            adSet.status === 'ACTIVE'
-                              ? "bg-green-500/20 text-green-300"
-                              : adSet.status === 'PAUSED'
-                                ? "bg-yellow-500/20 text-yellow-300"
-                                : "bg-gray-500/20 text-gray-400"
-                          }`}>
-                            {adSet.status === 'ACTIVE' ? t('adSets.statusActive') : adSet.status === 'PAUSED' ? t('adSets.statusPaused') : adSet.status}
-                          </span>
-                        </div>
-                        <div className="flex items-center gap-3">
-                          <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">
-                            {activeAds}/{setAds.length} {t('adSets.activeAds')}
-                          </span>
-                          <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
-                            <button
-                              onClick={() => setSelectedAdSet(adSet)}
-                              className="p-1.5 text-purple-400 hover:bg-purple-500/20 rounded-lg transition-colors"
-                              title={t('adSets.viewDetails')}
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                              </svg>
-                            </button>
-                            <button
-                              onClick={() => {
-                                setEditingAdSet(adSet);
-                                setShowAdSetModal(true);
-                              }}
-                              className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
-                              title={t('common.edit')}
-                            >
-                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                              </svg>
-                            </button>
+                    <div key={campId}>
+                      <div className="flex items-center gap-3 mb-3 ml-2">
+                        <div className="w-2 h-2 rounded-full bg-blue-400"></div>
+                        <h3 className="text-base font-bold text-white">{campaign.name}</h3>
+                        <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">
+                          {campaign.adSets.length} ad set{campaign.adSets.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+                      <div className="space-y-3 ml-4">
+                        {activeAdSets.map((adSet) => renderAdSet(adSet))}
+                        {inactiveAdSets.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-gray-700/30">
+                            <p className="text-xs text-gray-500 mb-2 ml-1">Pausados / Archivados ({inactiveAdSets.length})</p>
+                            {inactiveAdSets.map((adSet) => renderAdSet(adSet))}
                           </div>
-                        </div>
-                      </button>
-
-                      {/* Ads Table */}
-                      {isExpanded && (
-                        <div className="overflow-x-auto">
-                          {setAds.length === 0 ? (
-                            <div className="px-4 py-6 text-center text-gray-500 text-sm">
-                              {t('adSets.noAdsInSet')}
-                            </div>
-                          ) : (
-                            <table className="w-full">
-                              <thead className="bg-gray-900/50">
-                                <tr>
-                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase">{t('common.ad')}</th>
-                                  <th className="px-4 py-2 text-left text-xs font-medium text-gray-400 uppercase w-32">{t('common.status')}</th>
-                                  <th className="px-4 py-2 text-right text-xs font-medium text-gray-400 uppercase w-28">{t('common.actions')}</th>
-                                </tr>
-                              </thead>
-                              <tbody className="divide-y divide-gray-700/30">
-                                {setAds.map((ad) => (
-                                  <tr key={ad._id} className="hover:bg-gray-700/20 transition-colors">
-                                    <td className="px-4 py-3">
-                                      <div className="text-sm font-medium text-white">{ad.name}</div>
-                                      <code className="text-xs text-purple-400 bg-purple-500/10 px-2 py-0.5 rounded mt-1 inline-block">
-                                        {ad.fbAdId}
-                                      </code>
-                                    </td>
-                                    <td className="px-4 py-3 whitespace-nowrap">
-                                      <select
-                                        value={ad.status}
-                                        onChange={(e) => handleAdStatusChange(ad._id, e.target.value)}
-                                        className={`text-xs font-medium px-2.5 py-1.5 rounded-lg border-2 transition-colors cursor-pointer ${STATUS_STYLE[ad.status] || STATUS_STYLE.ARCHIVED}`}
-                                      >
-                                        <option value="ACTIVE">{t('ads.statusActive')}</option>
-                                        <option value="PAUSED">{t('ads.statusPaused')}</option>
-                                        <option value="ARCHIVED">{t('ads.statusArchived')}</option>
-                                      </select>
-                                    </td>
-                                    <td className="px-4 py-3 whitespace-nowrap text-right">
-                                      <div className="flex items-center justify-end space-x-1">
-                                        <button
-                                          onClick={() => {
-                                            setEditingAd(ad);
-                                            setShowAdModal(true);
-                                          }}
-                                          className="p-1.5 text-blue-400 hover:bg-blue-500/20 rounded-lg transition-colors"
-                                          title={t('common.edit')}
-                                        >
-                                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                                          </svg>
-                                        </button>
-                                      </div>
-                                    </td>
-                                  </tr>
-                                ))}
-                              </tbody>
-                            </table>
-                          )}
-                        </div>
-                      )}
+                        )}
+                      </div>
                     </div>
                   );
                 })}
               </div>
             </div>
-          ))}
+          )}
+
+          {/* Inactive Campaigns */}
+          {inactiveCampaigns.length > 0 && (
+            <div>
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-2.5 h-2.5 rounded-full bg-gray-500"></div>
+                <h2 className="text-lg font-bold text-gray-400">Campañas Inactivas</h2>
+                <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">{inactiveCampaigns.length}</span>
+              </div>
+              <div className="space-y-6">
+                {inactiveCampaigns.map(([campId, campaign]) => (
+                  <div key={campId}>
+                    <div className="flex items-center gap-3 mb-3 ml-2">
+                      <div className="w-2 h-2 rounded-full bg-gray-500"></div>
+                      <h3 className="text-base font-bold text-gray-400">{campaign.name}</h3>
+                      <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">
+                        {campaign.adSets.length} ad set{campaign.adSets.length !== 1 ? 's' : ''}
+                      </span>
+                    </div>
+                    <div className="space-y-3 ml-4">
+                      {campaign.adSets.map((adSet) => renderAdSet(adSet))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
