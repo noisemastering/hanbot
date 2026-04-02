@@ -1,17 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import AdSetModal from './AdSetModal';
-import AdModal from './AdModal';
 import { useTranslation } from '../i18n';
 import API from '../api';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
-
-const STATUS_STYLE = {
-  ACTIVE: "bg-green-500/10 border-green-500/30 text-green-300 hover:bg-green-500/20",
-  PAUSED: "bg-yellow-500/10 border-yellow-500/30 text-yellow-300 hover:bg-yellow-500/20",
-  ARCHIVED: "bg-gray-500/10 border-gray-500/30 text-gray-400 hover:bg-gray-500/20"
-};
 
 function AdSetsView() {
   const { t } = useTranslation();
@@ -22,8 +15,6 @@ function AdSetsView() {
   const [selectedAdSet, setSelectedAdSet] = useState(null);
   const [showAdSetModal, setShowAdSetModal] = useState(false);
   const [editingAdSet, setEditingAdSet] = useState(null);
-  const [showAdModal, setShowAdModal] = useState(false);
-  const [editingAd, setEditingAd] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [syncing, setSyncing] = useState(false);
 
@@ -91,54 +82,6 @@ function AdSetsView() {
     }
   };
 
-  const handleSaveAd = async (adData) => {
-    try {
-      const url = editingAd
-        ? `${API_URL}/ads/${editingAd._id}`
-        : `${API_URL}/ads`;
-      const method = editingAd ? "PUT" : "POST";
-
-      const res = await fetch(url, {
-        method,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(adData)
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        await fetchAll();
-        setShowAdModal(false);
-        setEditingAd(null);
-        toast.success(editingAd ? t('adSets.adUpdatedSuccess') : t('adSets.adCreatedSuccess'));
-      } else {
-        toast.error(t('adSets.adErrorSaveDetail') + (data.error || t('ads.errorUnknown')));
-      }
-    } catch (error) {
-      console.error("Error saving ad:", error);
-      toast.error(t('adSets.adErrorSave'));
-    }
-  };
-
-  const handleAdStatusChange = async (adId, newStatus) => {
-    try {
-      const res = await fetch(`${API_URL}/ads/${adId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus })
-      });
-
-      const data = await res.json();
-      if (data.success) {
-        await fetchAll();
-        toast.success(t('adSets.statusUpdated'));
-      } else {
-        toast.error(t('adSets.errorUpdateStatus'));
-      }
-    } catch (error) {
-      console.error("Error updating ad status:", error);
-      toast.error(t('adSets.errorUpdateStatus'));
-    }
-  };
 
   // Build ads lookup by adSetId
   const adsBySet = {};
@@ -487,18 +430,6 @@ function AdSetsView() {
         />
       )}
 
-      {/* Ad Modal */}
-      {showAdModal && (
-        <AdModal
-          ad={editingAd}
-          adSets={adSets}
-          onSave={handleSaveAd}
-          onClose={() => {
-            setShowAdModal(false);
-            setEditingAd(null);
-          }}
-        />
-      )}
     </div>
   );
 }
