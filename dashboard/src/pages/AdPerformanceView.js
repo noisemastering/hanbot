@@ -35,6 +35,8 @@ function AdPerformanceView() {
   const [directDaily, setDirectDaily] = useState([]);
   const [directByAd, setDirectByAd] = useState([]);
   const [directTotals, setDirectTotals] = useState({ totalClicks: 0, totalConversions: 0, totalRevenue: 0 });
+  const [manualDaily, setManualDaily] = useState([]);
+  const [manualTotals, setManualTotals] = useState({ totalSales: 0, totalRevenue: 0 });
 
   const dateFrom = useMemo(() => getDaysAgo(range), [range]);
   const dateTo = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -44,15 +46,18 @@ function AdPerformanceView() {
     try {
       const dateFromISO = `${dateFrom}T00:00:00.000Z`;
       const dateToISO = `${dateTo}T23:59:59.999Z`;
-      const [res, directDailyRes, directByAdRes] = await Promise.all([
+      const [res, directDailyRes, directByAdRes, manualRes] = await Promise.all([
         API.get(`/analytics/ad-performance?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/click-logs/direct-ad/daily?days=${range}`),
-        API.get(`/click-logs/direct-ad/by-ad?days=${range}`)
+        API.get(`/click-logs/direct-ad/by-ad?days=${range}`),
+        API.get(`/click-logs/daily-manual?startDate=${dateFrom}&endDate=${dateTo}`)
       ]);
       setAds(res.data?.ads || []);
       setDirectDaily(directDailyRes.data?.data?.daily || []);
       setDirectTotals(directDailyRes.data?.data?.totals || { totalClicks: 0, totalConversions: 0, totalRevenue: 0 });
       setDirectByAd(directByAdRes.data?.data || []);
+      setManualDaily(manualRes.data?.chartData || []);
+      setManualTotals({ totalSales: manualRes.data?.totalSales || 0, totalRevenue: manualRes.data?.totalRevenue || 0 });
     } catch (err) {
       console.error('Error fetching ad performance:', err);
     } finally {
@@ -219,6 +224,32 @@ function AdPerformanceView() {
                 <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#9CA3AF' }} />
                 <Bar dataKey="conversions" name="Conversiones" fill="#10B981" fillOpacity={0.7} radius={[3, 3, 0, 0]} />
                 <Line type="monotone" dataKey="clicks" name="Clicks" stroke="#3B82F6" strokeWidth={2} dot={{ fill: '#3B82F6', r: 2 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
+      {/* Manual Sales Chart */}
+      {manualDaily.length > 0 && (
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-white">Ventas Manuales</h2>
+            <div className="flex items-center gap-4 text-xs text-gray-400">
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-amber-500 inline-block"></span> Ventas ({manualTotals.totalSales})</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-500 inline-block"></span> Ingresos ({formatCurrency(manualTotals.totalRevenue)})</span>
+            </div>
+          </div>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={manualDaily} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis dataKey="dateLabel" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} />
+                <YAxis yAxisId="left" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} allowDecimals={false} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#9CA3AF' }} formatter={(value, name) => name === 'Ingresos' ? formatCurrency(value) : value} />
+                <Bar yAxisId="left" dataKey="sales" name="Ventas" fill="#F59E0B" fillOpacity={0.7} radius={[3, 3, 0, 0]} />
+                <Line yAxisId="right" type="monotone" dataKey="revenue" name="Ingresos" stroke="#10B981" strokeWidth={2} dot={{ fill: '#10B981', r: 2 }} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
