@@ -179,9 +179,9 @@ function AdPerformanceView() {
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-white">Actividad diaria</h2>
             <div className="flex items-center gap-4 text-xs text-gray-400">
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-blue-500 inline-block"></span> Links</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-purple-500 inline-block"></span> Clicks</span>
-              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-500 inline-block"></span> Conversiones</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-purple-500 inline-block"></span> Links</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-blue-500 inline-block"></span> Clicks</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block"></span> Conversiones</span>
             </div>
           </div>
           <div className="h-72">
@@ -191,9 +191,9 @@ function AdPerformanceView() {
                 <XAxis dataKey="dateLabel" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} />
                 <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} allowDecimals={false} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#9CA3AF' }} />
-                <Bar dataKey="links" name="Links" fill="#3B82F6" fillOpacity={0.7} radius={[3, 3, 0, 0]} />
-                <Line type="monotone" dataKey="clicks" name="Clicks" stroke="#8B5CF6" strokeWidth={2} dot={{ fill: '#8B5CF6', r: 2 }} />
-                <Line type="monotone" dataKey="conversions" name="Conversiones" stroke="#10B981" strokeWidth={2} dot={{ fill: '#10B981', r: 2 }} />
+                <Bar dataKey="conversions" name="Conversiones" fill="#10B981" fillOpacity={0.7} radius={[3, 3, 0, 0]} />
+                <Line type="monotone" dataKey="links" name="Links" stroke="#8B5CF6" strokeWidth={2} dot={{ fill: '#8B5CF6', r: 2 }} />
+                <Line type="monotone" dataKey="clicks" name="Clicks" stroke="#3B82F6" strokeWidth={2} dot={{ fill: '#3B82F6', r: 2 }} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
