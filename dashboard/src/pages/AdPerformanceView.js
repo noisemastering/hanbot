@@ -32,7 +32,6 @@ function AdPerformanceView() {
   const [range, setRange] = useState(30);
   const [loading, setLoading] = useState(true);
   const [ads, setAds] = useState([]);
-  const [metric, setMetric] = useState('clicks'); // clicks | links | conversions
   const [directDaily, setDirectDaily] = useState([]);
   const [directByAd, setDirectByAd] = useState([]);
   const [directTotals, setDirectTotals] = useState({ totalClicks: 0, totalConversions: 0, totalRevenue: 0 });
@@ -179,24 +178,10 @@ function AdPerformanceView() {
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold text-white">Actividad diaria</h2>
-            <div className="flex gap-1">
-              {[
-                { key: 'clicks', label: 'Clicks', color: '#8B5CF6' },
-                { key: 'links', label: 'Links', color: '#3B82F6' },
-                { key: 'conversions', label: 'Conversiones', color: '#10B981' },
-              ].map(m => (
-                <button
-                  key={m.key}
-                  onClick={() => setMetric(m.key)}
-                  className={`px-3 py-1 rounded text-xs font-medium transition-all ${
-                    metric === m.key
-                      ? 'bg-purple-600 text-white'
-                      : 'bg-gray-700/50 text-gray-400 hover:bg-gray-600/50'
-                  }`}
-                >
-                  {m.label}
-                </button>
-              ))}
+            <div className="flex items-center gap-4 text-xs text-gray-400">
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-blue-500 inline-block"></span> Links</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-purple-500 inline-block"></span> Clicks</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-green-500 inline-block"></span> Conversiones</span>
             </div>
           </div>
           <div className="h-72">
@@ -206,13 +191,9 @@ function AdPerformanceView() {
                 <XAxis dataKey="dateLabel" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} />
                 <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} allowDecimals={false} />
                 <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#9CA3AF' }} />
-                <Bar
-                  dataKey={metric}
-                  name={metric === 'clicks' ? 'Clicks' : metric === 'links' ? 'Links' : 'Conversiones'}
-                  fill={metric === 'clicks' ? '#8B5CF6' : metric === 'links' ? '#3B82F6' : '#10B981'}
-                  fillOpacity={0.8}
-                  radius={[4, 4, 0, 0]}
-                />
+                <Bar dataKey="links" name="Links" fill="#3B82F6" fillOpacity={0.7} radius={[3, 3, 0, 0]} />
+                <Line type="monotone" dataKey="clicks" name="Clicks" stroke="#8B5CF6" strokeWidth={2} dot={{ fill: '#8B5CF6', r: 2 }} />
+                <Line type="monotone" dataKey="conversions" name="Conversiones" stroke="#10B981" strokeWidth={2} dot={{ fill: '#10B981', r: 2 }} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
