@@ -34,6 +34,9 @@ function AdPerformanceView() {
   const [loading, setLoading] = useState(true);
   const [ads, setAds] = useState([]);
   const [metric, setMetric] = useState('clicks'); // clicks | links | conversions
+  const [directDaily, setDirectDaily] = useState([]);
+  const [directByAd, setDirectByAd] = useState([]);
+  const [directTotals, setDirectTotals] = useState({ totalClicks: 0, totalConversions: 0, totalRevenue: 0 });
 
   const dateFrom = useMemo(() => getDaysAgo(range), [range]);
   const dateTo = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -43,8 +46,15 @@ function AdPerformanceView() {
     try {
       const dateFromISO = `${dateFrom}T00:00:00.000Z`;
       const dateToISO = `${dateTo}T23:59:59.999Z`;
-      const res = await API.get(`/analytics/ad-performance?dateFrom=${dateFromISO}&dateTo=${dateToISO}`);
+      const [res, directDailyRes, directByAdRes] = await Promise.all([
+        API.get(`/analytics/ad-performance?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
+        API.get(`/click-logs/direct-ad/daily?days=${range}`),
+        API.get(`/click-logs/direct-ad/by-ad?days=${range}`)
+      ]);
       setAds(res.data?.ads || []);
+      setDirectDaily(directDailyRes.data?.data?.daily || []);
+      setDirectTotals(directDailyRes.data?.data?.totals || { totalClicks: 0, totalConversions: 0, totalRevenue: 0 });
+      setDirectByAd(directByAdRes.data?.data || []);
     } catch (err) {
       console.error('Error fetching ad performance:', err);
     } finally {
@@ -80,6 +90,15 @@ function AdPerformanceView() {
     });
     return Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
   }, [ads, metric]);
+
+  // Direct-ad chart data
+  const directChartData = useMemo(() => {
+    return directDaily.map(d => {
+      const dateObj = new Date(d.date + 'T12:00:00');
+      const label = dateObj.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
+      return { date: d.date, dateLabel: label, clicks: d.clicks, conversions: d.conversions, revenue: d.revenue };
+    });
+  }, [directDaily]);
 
   // Totals row
   const grandTotals = useMemo(() => {
@@ -292,6 +311,89 @@ function AdPerformanceView() {
           )}
         </div>
       </div>
+
+      {/* ── DIRECT AD LINKS SECTION ── */}
+      {(directChartData.length > 0 || directByAd.length > 0) && (
+        <>
+          <div className="border-t border-gray-700/50 pt-6">
+            <h2 className="text-xl font-bold text-white mb-4">Links Directos</h2>
+            <p className="text-sm text-gray-400 mb-4">Clicks desde links directos (sin conversación). Correlación por tiempo.</p>
+          </div>
+
+          {/* Direct-ad summary cards */}
+          <div className="grid grid-cols-3 gap-4">
+            <div className="bg-gray-800/50 border border-cyan-500/20 rounded-xl p-4">
+              <p className="text-sm text-gray-400">Clicks directos</p>
+              <p className="text-2xl font-bold text-cyan-400">{directTotals.totalClicks.toLocaleString()}</p>
+            </div>
+            <div className="bg-gray-800/50 border border-cyan-500/20 rounded-xl p-4">
+              <p className="text-sm text-gray-400">Conversiones</p>
+              <p className="text-2xl font-bold text-green-400">{directTotals.totalConversions}</p>
+            </div>
+            <div className="bg-gray-800/50 border border-cyan-500/20 rounded-xl p-4">
+              <p className="text-sm text-gray-400">Ingresos</p>
+              <p className="text-2xl font-bold text-green-400">{formatCurrency(directTotals.totalRevenue)}</p>
+            </div>
+          </div>
+
+          {/* Direct-ad chart */}
+          {directChartData.length > 0 && (
+            <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+              <h3 className="text-lg font-semibold text-white mb-4">Clicks directos por día</h3>
+              <div className="h-64">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={directChartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis dataKey="dateLabel" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} />
+                    <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} allowDecimals={false} />
+                    <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#9CA3AF' }} />
+                    <Bar dataKey="clicks" name="Clicks" fill="#06B6D4" fillOpacity={0.8} radius={[2, 2, 0, 0]} />
+                    <Line type="monotone" dataKey="conversions" name="Conversiones" stroke="#10B981" strokeWidth={2} dot={{ fill: '#10B981', r: 3 }} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* Direct-ad table */}
+          {directByAd.length > 0 && (
+            <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl">
+              <div className="px-6 py-4 border-b border-gray-700/50">
+                <h3 className="text-lg font-semibold text-white">Detalle por anuncio (links directos)</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full">
+                  <thead className="bg-gray-900/50">
+                    <tr className="text-left text-xs text-gray-400 uppercase">
+                      <th className="px-6 py-3">Anuncio</th>
+                      <th className="px-6 py-3 text-right">Clicks</th>
+                      <th className="px-6 py-3 text-right">Conversiones</th>
+                      <th className="px-6 py-3 text-right">Conv. Rate</th>
+                      <th className="px-6 py-3 text-right">Ingresos</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-700/50">
+                    {directByAd.map((row) => (
+                      <tr key={row.fbAdId} className="hover:bg-gray-700/20">
+                        <td className="px-6 py-4">
+                          <p className="text-sm text-white font-medium">{row.adName}</p>
+                          {row.directLinkUrl && (
+                            <p className="text-xs text-cyan-400 truncate max-w-xs" title={row.directLinkUrl}>{row.directLinkUrl}</p>
+                          )}
+                        </td>
+                        <td className="px-6 py-4 text-right text-sm text-white font-medium">{row.clicks.toLocaleString()}</td>
+                        <td className="px-6 py-4 text-right text-sm text-green-400 font-medium">{row.conversions}</td>
+                        <td className="px-6 py-4 text-right text-sm text-gray-300">{row.conversionRate}%</td>
+                        <td className="px-6 py-4 text-right text-sm text-green-400 font-semibold">{formatCurrency(row.revenue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
