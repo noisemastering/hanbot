@@ -9,8 +9,7 @@ import {
   YAxis,
   CartesianGrid,
   Tooltip,
-  ResponsiveContainer,
-  Legend
+  ResponsiveContainer
 } from 'recharts';
 
 const AD_COLORS = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#06B6D4', '#EC4899', '#84CC16'];
@@ -77,19 +76,21 @@ function AdPerformanceView() {
     }).format(amount);
   };
 
-  // Build unified chart data: one row per date, one column per ad
+  // Build aggregated chart data: one total per date
   const chartData = useMemo(() => {
     const dateMap = {};
-    ads.forEach((ad, i) => {
+    ads.forEach(ad => {
       ad.daily.forEach(day => {
         if (!dateMap[day.date]) {
-          dateMap[day.date] = { date: day.date, dateLabel: day.dateLabel };
+          dateMap[day.date] = { date: day.date, dateLabel: day.dateLabel, clicks: 0, links: 0, conversions: 0 };
         }
-        dateMap[day.date][`ad_${i}`] = day[metric] || 0;
+        dateMap[day.date].clicks += day.clicks || 0;
+        dateMap[day.date].links += day.links || 0;
+        dateMap[day.date].conversions += day.conversions || 0;
       });
     });
     return Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
-  }, [ads, metric]);
+  }, [ads]);
 
   // Direct-ad chart data
   const directChartData = useMemo(() => {
@@ -177,12 +178,12 @@ function AdPerformanceView() {
       {ads.length > 0 && chartData.length > 0 && (
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold text-white">Actividad diaria por anuncio</h2>
+            <h2 className="text-lg font-semibold text-white">Actividad diaria</h2>
             <div className="flex gap-1">
               {[
-                { key: 'clicks', label: 'Clicks' },
-                { key: 'links', label: 'Links' },
-                { key: 'conversions', label: 'Conversiones' },
+                { key: 'clicks', label: 'Clicks', color: '#8B5CF6' },
+                { key: 'links', label: 'Links', color: '#3B82F6' },
+                { key: 'conversions', label: 'Conversiones', color: '#10B981' },
               ].map(m => (
                 <button
                   key={m.key}
@@ -198,50 +199,20 @@ function AdPerformanceView() {
               ))}
             </div>
           </div>
-          <div className="h-80">
+          <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis
-                  dataKey="dateLabel"
-                  tick={{ fill: '#9CA3AF', fontSize: 11 }}
-                  axisLine={{ stroke: '#374151' }}
+                <XAxis dataKey="dateLabel" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} />
+                <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} allowDecimals={false} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#9CA3AF' }} />
+                <Bar
+                  dataKey={metric}
+                  name={metric === 'clicks' ? 'Clicks' : metric === 'links' ? 'Links' : 'Conversiones'}
+                  fill={metric === 'clicks' ? '#8B5CF6' : metric === 'links' ? '#3B82F6' : '#10B981'}
+                  fillOpacity={0.8}
+                  radius={[4, 4, 0, 0]}
                 />
-                <YAxis
-                  tick={{ fill: '#9CA3AF', fontSize: 11 }}
-                  axisLine={{ stroke: '#374151' }}
-                  allowDecimals={false}
-                />
-                <Tooltip
-                  contentStyle={tooltipStyle}
-                  labelStyle={{ color: '#9CA3AF' }}
-                />
-                <Legend wrapperStyle={{ color: '#9CA3AF' }} />
-                {ads.map((ad, i) => {
-                  const color = AD_COLORS[i % AD_COLORS.length];
-                  const shortName = ad.name.length > 25 ? ad.name.substring(0, 25) + '...' : ad.name;
-                  return ads.length <= 3 ? (
-                    <Bar
-                      key={ad.adId}
-                      dataKey={`ad_${i}`}
-                      name={shortName}
-                      fill={color}
-                      fillOpacity={0.8}
-                      radius={[2, 2, 0, 0]}
-                      stackId="stack"
-                    />
-                  ) : (
-                    <Line
-                      key={ad.adId}
-                      type="monotone"
-                      dataKey={`ad_${i}`}
-                      name={shortName}
-                      stroke={color}
-                      strokeWidth={2}
-                      dot={{ fill: color, r: 2 }}
-                    />
-                  );
-                })}
               </ComposedChart>
             </ResponsiveContainer>
           </div>
