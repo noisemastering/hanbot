@@ -22,17 +22,6 @@ const CONVO_FLOW_NAMES = {
   convo_vende_malla: "Vende Malla (Distribuidor)"
 };
 
-const LEGACY_FLOW_NAMES = {
-  borde_separador: "Borde Separador",
-  lead_capture: "Leads/Distribuidores",
-  distributor_flow: "Distribuidores",
-  groundcover: "Ground Cover",
-  malla_confeccionada_distribuidores: "Confeccionada (Dist.)",
-  malla_sombra: "Confeccionada (Menudeo)",
-  rollo: "Rollo (Mayoreo)",
-  custom_size_handler: "Medidas Especiales",
-  monofilamento: "Monofilamento"
-};
 
 function AdsView() {
   const { t, locale } = useTranslation();
@@ -324,8 +313,7 @@ function AdsView() {
         ad.adSetId?.name?.toLowerCase().includes(q) ||
         ad.adSetId?.fbAdSetId?.toLowerCase().includes(q) ||
         ad.adSetId?.campaignId?.name?.toLowerCase().includes(q) ||
-        (ad.convoFlowRef && (CONVO_FLOW_NAMES[ad.convoFlowRef] || ad.convoFlowRef).toLowerCase().includes(q)) ||
-        (ad.flowRef && (LEGACY_FLOW_NAMES[ad.flowRef] || ad.flowRef).toLowerCase().includes(q))
+        (ad.convoFlowRef && (CONVO_FLOW_NAMES[ad.convoFlowRef] || ad.convoFlowRef).toLowerCase().includes(q))
       );
     }
 
@@ -564,10 +552,6 @@ function AdsView() {
                         <span className="text-xs font-medium px-2 py-1 rounded bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 whitespace-nowrap">
                           {CONVO_FLOW_NAMES[ad.convoFlowRef] || ad.convoFlowRef}
                         </span>
-                      ) : ad.flowRef ? (
-                        <span className="text-xs font-medium px-2 py-1 rounded bg-gray-500/10 border border-gray-500/30 text-gray-400 whitespace-nowrap">
-                          {LEGACY_FLOW_NAMES[ad.flowRef] || ad.flowRef}
-                        </span>
                       ) : (
                         <span className="text-xs text-gray-600">—</span>
                       )}
@@ -738,10 +722,6 @@ function AdsView() {
                         {selectedAd.convoFlowRef ? (
                           <span className="bg-indigo-500/10 text-indigo-300 px-2 py-1 rounded">
                             {CONVO_FLOW_NAMES[selectedAd.convoFlowRef] || selectedAd.convoFlowRef}
-                          </span>
-                        ) : selectedAd.flowRef ? (
-                          <span className="bg-gray-500/10 text-gray-400 px-2 py-1 rounded">
-                            {LEGACY_FLOW_NAMES[selectedAd.flowRef] || selectedAd.flowRef}
                           </span>
                         ) : (
                           <span className="text-gray-500">Sin asignar</span>
