@@ -546,19 +546,21 @@ function AdsView() {
                     <td className="px-4 py-3 max-w-[180px]">
                       <span className="text-sm text-gray-300 block truncate" title={ad.adSetId?.campaignId?.name || '-'}>{ad.adSetId?.campaignId?.name || '-'}</span>
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {ad.convoFlowRef ? (
-                        <span className="text-xs font-medium px-2 py-1 rounded bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 whitespace-nowrap">
-                          {CONVO_FLOW_NAMES[ad.convoFlowRef] || ad.convoFlowRef}
-                        </span>
-                      ) : (
-                        <span className="text-xs text-gray-600">—</span>
-                      )}
-                      {ad.promoId && (
-                        <span className="text-xs font-medium px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 whitespace-nowrap ml-1">
-                          {ad.promoId.name || 'Promo'}
-                        </span>
-                      )}
+                    <td className="px-4 py-2">
+                      <div className="flex flex-col gap-1">
+                        {ad.convoFlowRef ? (
+                          <span className="text-xs font-medium px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 whitespace-nowrap w-fit">
+                            {CONVO_FLOW_NAMES[ad.convoFlowRef] || ad.convoFlowRef}
+                          </span>
+                        ) : (
+                          <span className="text-xs text-gray-600">—</span>
+                        )}
+                        {ad.promoId && (
+                          <span className="text-xs font-medium px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 whitespace-nowrap w-fit">
+                            {ad.promoId.name || 'Promo'}
+                          </span>
+                        )}
+                      </div>
                     </td>
                     <td className="px-4 py-3">
                       {settingDirectLink === ad._id ? (
