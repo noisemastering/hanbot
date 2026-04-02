@@ -264,8 +264,7 @@ function create(manifest) {
   // Select persona flow based on manifest
   const personaFlow = manifest.clientProfile === 'reseller' ? resellerFlow_v2 : buyerFlow;
 
-  // Has promo?
-  const hasPromo = !!manifest.promo;
+  // Promo checked dynamically — can be injected at runtime via manifest.promo
 
   // Product cache (loaded once, reused)
   let productCache = null;
@@ -350,10 +349,12 @@ function create(manifest) {
     }
 
     // ── PROMO FLOW (presents right away, before anything else) ──
-    if (hasPromo) {
+    // Promo can come from manifest (hardcoded) or state._adPromo (plugin from ad)
+    const activePromo = flowState._adPromo || manifest.promo;
+    if (activePromo) {
       // Filter to promo-specific products if configured, otherwise pitch all
-      let promoProducts = manifest.promo.promoProductIds
-        ? productCache.filter(p => manifest.promo.promoProductIds.includes(String(p.productId)))
+      let promoProducts = activePromo.promoProductIds
+        ? productCache.filter(p => activePromo.promoProductIds.includes(String(p.productId)))
         : productCache;
 
       // Generate tracked links for retail promo products (before first pitch)
@@ -374,10 +375,10 @@ function create(manifest) {
         voice: manifest.voice || 'casual',
         salesChannel: manifest.salesChannel === 'retail' ? 'mercado_libre' : 'direct',
         customerName,
-        promoPrices: manifest.promo.promoPrices || [],
-        timeframe: manifest.promo.timeframe || null,
-        terms: manifest.promo.terms || null,
-        colorNote: manifest.promo.colorNote || null,
+        promoPrices: activePromo.promoPrices || [],
+        timeframe: activePromo.timeframe || null,
+        terms: activePromo.terms || null,
+        colorNote: activePromo.colorNote || null,
         pitchSent: flowState.pitchSent,
         conversationHistory
       });

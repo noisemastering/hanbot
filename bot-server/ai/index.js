@@ -382,6 +382,12 @@ async function generateReply(userMessage, psid, referral = null) {
     convo.currentFlow = `convo:${sourceContext.ad.convoFlowRef}`;
     console.log(`🎯 ConvoFlowRef stored on conversation: ${sourceContext.ad.convoFlowRef}`);
   }
+  // Persist promo plugin from ad onto conversation
+  if (sourceContext?.ad?.promo && !convo.adPromo) {
+    await updateConversation(psid, { adPromo: sourceContext.ad.promo });
+    convo.adPromo = sourceContext.ad.promo;
+    console.log(`🎁 Promo plugin stored on conversation`);
+  }
   if (sourceContext?.ad?.productIds?.length && !convo.adProductIds?.length) {
     await updateConversation(psid, { adProductIds: sourceContext.ad.productIds });
     convo.adProductIds = sourceContext.ad.productIds;

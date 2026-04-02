@@ -121,12 +121,9 @@ const adSchema = new mongoose.Schema(
     // During transition both coexist; convoFlowRef wins if set.
     convoFlowRef: { type: String, default: null },
 
-    // Promo flow: featured products to pitch upfront.
-    // Does NOT limit the flow — other products from the same family can still be offered.
-    promoProducts: [{
-      type: mongoose.Schema.Types.ObjectId,
-      ref: "ProductFamily"
-    }],
+    // Promo plugin: optional promo attached to this ad.
+    // When set, the promo config is injected into the convo_flow's manifest.promo at runtime.
+    promoId: { type: mongoose.Schema.Types.ObjectId, ref: "Promo", default: null },
 
     // Catalog override (inherits from AdSet/Campaign if not set)
     catalog: {

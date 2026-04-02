@@ -34,7 +34,8 @@ async function enrichAdContext(source) {
   try {
     const ad = await Ad.findOne({ fbAdId: source.ad.id })
       .populate("productIds")
-      .populate("mainProductId");
+      .populate("mainProductId")
+      .populate("promoId");
 
     if (!ad) {
       console.log(`⚠️ Ad ${source.ad.id} not found in database`);
@@ -61,6 +62,18 @@ async function enrichAdContext(source) {
       }
       if (resolvedSettings.convoFlowRef) {
         source.ad.convoFlowRef = resolvedSettings.convoFlowRef;
+      }
+
+      // Store promo plugin if attached to ad
+      if (ad.promoId && ad.promoId.active) {
+        source.ad.promo = {
+          promoProductIds: (ad.promoId.promoProductIds || []).map(String),
+          promoPrices: ad.promoId.promoPrices || [],
+          timeframe: ad.promoId.timeframe || null,
+          terms: ad.promoId.terms || null,
+          colorNote: ad.promoId.colorNote || null
+        };
+        console.log(`🎁 Promo plugin loaded: ${ad.promoId.name}`);
       }
 
       // Store cascaded productIds so flows can filter by ad-specific items

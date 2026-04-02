@@ -32,7 +32,6 @@ const promo6x4Flow = require("./flows/promo6x4Flow");
 const convoFlow = require("./flows/convoFlow");
 const convo_bordeSeparadorRetail = require("./flows/convo_bordeSeparadorRetail");
 const convo_vende_malla = require("./flows/convo_vende_malla");
-const convo_promo6x4 = require("./flows/convo_promo6x4");
 const convo_confeccionadaRetail = require("./flows/convo_confeccionadaRetail");
 const convo_groundcoverWholesale = require("./flows/convo_groundcoverWholesale");
 const convo_rolloRaschelWholesale = require("./flows/convo_rolloRaschelWholesale");
@@ -42,7 +41,6 @@ const convo_bordeSeparadorWholesale = require("./flows/convo_bordeSeparadorWhole
 convoFlow.registerFlow('convo_bordeSeparadorRetail', convo_bordeSeparadorRetail);
 convoFlow.registerFlow('convo_bordeSeparadorWholesale', convo_bordeSeparadorWholesale);
 convoFlow.registerFlow('convo_vende_malla', convo_vende_malla);
-convoFlow.registerFlow('convo_promo6x4', convo_promo6x4);
 convoFlow.registerFlow('convo_confeccionadaRetail', convo_confeccionadaRetail);
 convoFlow.registerFlow('convo_groundcoverWholesale', convo_groundcoverWholesale);
 convoFlow.registerFlow('convo_rolloRaschelWholesale', convo_rolloRaschelWholesale);
@@ -1157,7 +1155,7 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
   const LEGACY_TO_CONVO = {
     'malla_sombra': 'convo_confeccionadaRetail',
     'borde_separador': 'convo_bordeSeparadorRetail',
-    '6x4_promo': 'convo_promo6x4',
+    '6x4_promo': 'convo_confeccionadaRetail',
     'groundcover': 'convo_groundcoverWholesale',
     'rollo': 'convo_rolloRaschelWholesale'
   };
@@ -1175,7 +1173,7 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
     // 6x4_promo conversations have already been pitched — preserve that.
     if (!convo?.convoFlowState || Object.keys(convo.convoFlowState).length === 0) {
       updateFields.convoFlowState = {
-        pitchSent: convoName === 'convo_promo6x4'
+        pitchSent: false
       };
     }
     await updateConversation(psid, updateFields);
@@ -1211,6 +1209,14 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
     try {
       // Load convo_flow state from conversation
       const convoFlowState = convo?.convoFlowState || {};
+
+      // ── PROMO PLUGIN INJECTION ──
+      // If the ad (or conversation) has a promo attached, carry it in state
+      // so the convo_flow's promo pipeline activates for this conversation only.
+      const adPromo = sourceContext?.ad?.promo || convo?.adPromo;
+      if (adPromo) {
+        convoFlowState._adPromo = adPromo;
+      }
 
       const { response, state, switchTo, switchState } = await convoFlowInstance.handle(
         userMessage, convo, psid, convoFlowState

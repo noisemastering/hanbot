@@ -17,7 +17,6 @@ const CONVO_FLOW_NAMES = {
   convo_bordeSeparadorWholesale: "Borde Separador (Mayoreo)",
   convo_confeccionadaRetail: "Confeccionada (Menudeo)",
   convo_groundcoverWholesale: "Ground Cover (Mayoreo)",
-  convo_promo6x4: "Promo 6x4",
   convo_rolloRaschelWholesale: "Rollo Raschel (Mayoreo)",
   convo_vende_malla: "Vende Malla (Distribuidor)"
 };
@@ -554,6 +553,11 @@ function AdsView() {
                         </span>
                       ) : (
                         <span className="text-xs text-gray-600">—</span>
+                      )}
+                      {ad.promoId && (
+                        <span className="text-xs font-medium px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 whitespace-nowrap ml-1">
+                          {ad.promoId.name || 'Promo'}
+                        </span>
                       )}
                     </td>
                     <td className="px-4 py-3">

@@ -42,6 +42,7 @@ router.get("/", async (req, res) => {
         }
       })
       .populate("productIds", "name description sellable")
+      .populate("promoId", "name active")
       .sort({ createdAt: -1 });
 
     res.json({ success: true, data: ads });
@@ -62,7 +63,8 @@ router.get("/:id", async (req, res) => {
           select: "name ref catalog flowRef audience ad conversationGoal"
         }
       })
-      .populate("productIds", "name description sellable");
+      .populate("productIds", "name description sellable")
+      .populate("promoId", "name active");
 
     if (!ad) {
       return res.status(404).json({ success: false, error: "Ad no encontrado" });
@@ -162,7 +164,8 @@ router.put("/:id", async (req, res) => {
         path: "campaignId",
         select: "name ref catalog flowRef audience ad conversationGoal"
       }
-    }).populate("productIds", "name description sellable");
+    }).populate("productIds", "name description sellable")
+      .populate("promoId", "name active");
 
     if (!ad) {
       return res.status(404).json({ success: false, error: "Ad no encontrado" });

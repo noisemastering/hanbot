@@ -25,7 +25,6 @@ const CONVO_FLOWS = [
   { key: 'convo_bordeSeparadorWholesale', name: 'Borde Separador (Mayoreo)' },
   { key: 'convo_confeccionadaRetail', name: 'Confeccionada (Menudeo)' },
   { key: 'convo_groundcoverWholesale', name: 'Ground Cover (Mayoreo)' },
-  { key: 'convo_promo6x4', name: 'Promo 6x4' },
   { key: 'convo_rolloRaschelWholesale', name: 'Rollo Raschel (Mayoreo)' },
   { key: 'convo_vende_malla', name: 'Vende Malla (Distribuidor)' }
 ];
@@ -116,10 +115,12 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
     utmContent: '',
     utmTerm: '',
     // Bot flow
-    convoFlowRef: ''
+    convoFlowRef: '',
+    promoId: ''
   });
 
   const [productFamilies, setProductFamilies] = useState([]);
+  const [promos, setPromos] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const [currentCatalog, setCurrentCatalog] = useState(null);
   const [existingCatalogs, setExistingCatalogs] = useState([]);
@@ -160,9 +161,19 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
         console.error('Error fetching global catalog:', error);
       }
     };
+    const fetchPromos = async () => {
+      try {
+        const response = await fetch(`${API_URL}/promos?active=true`);
+        const data = await response.json();
+        if (data.success) setPromos(data.data || []);
+      } catch (error) {
+        console.error('Error fetching promos:', error);
+      }
+    };
     fetchProductFamilies();
     fetchExistingCatalogs();
     fetchGlobalCatalog();
+    fetchPromos();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -198,7 +209,8 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
         utmCampaign: ad.tracking?.utmCampaign || '',
         utmContent: ad.tracking?.utmContent || '',
         utmTerm: ad.tracking?.utmTerm || '',
-        convoFlowRef: ad.convoFlowRef || ''
+        convoFlowRef: ad.convoFlowRef || '',
+        promoId: ad.promoId?._id || ad.promoId || ''
       });
       setCurrentCatalog(ad.catalog || null);
     }
@@ -247,7 +259,8 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
         utmContent: formData.utmContent || null,
         utmTerm: formData.utmTerm || null
       },
-      convoFlowRef: formData.convoFlowRef || null
+      convoFlowRef: formData.convoFlowRef || null,
+      promoId: formData.promoId || null
     };
 
     onSave(payload);
@@ -405,6 +418,26 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                 {CONVO_FLOWS.map(flow => (
                   <option key={flow.key} value={flow.key}>
                     {flow.name}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Promo plugin */}
+            <div>
+              <label className="block text-sm font-medium text-gray-300 mb-2">
+                Promo (opcional)
+              </label>
+              <select
+                name="promoId"
+                value={formData.promoId}
+                onChange={handleChange}
+                className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+              >
+                <option value="">Sin promo</option>
+                {promos.map(p => (
+                  <option key={p._id} value={p._id}>
+                    {p.name}
                   </option>
                 ))}
               </select>
