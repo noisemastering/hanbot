@@ -200,6 +200,31 @@ function AdPerformanceView() {
         </div>
       )}
 
+      {/* Direct Links Chart — right below main chart */}
+      {directChartData.length > 0 && (
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold text-white">Links Directos</h2>
+            <div className="flex items-center gap-4 text-xs text-gray-400">
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-blue-500 inline-block"></span> Clicks</span>
+              <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block"></span> Conversiones</span>
+            </div>
+          </div>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={directChartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis dataKey="dateLabel" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} />
+                <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} allowDecimals={false} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#9CA3AF' }} />
+                <Bar dataKey="conversions" name="Conversiones" fill="#10B981" fillOpacity={0.7} radius={[3, 3, 0, 0]} />
+                <Line type="monotone" dataKey="clicks" name="Clicks" stroke="#3B82F6" strokeWidth={2} dot={{ fill: '#3B82F6', r: 2 }} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
+
       {/* Table */}
       <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl">
         <div className="px-6 py-4 border-b border-gray-700/50">
@@ -287,25 +312,6 @@ function AdPerformanceView() {
               <p className="text-2xl font-bold text-green-400">{formatCurrency(directTotals.totalRevenue)}</p>
             </div>
           </div>
-
-          {/* Direct-ad chart */}
-          {directChartData.length > 0 && (
-            <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
-              <h3 className="text-lg font-semibold text-white mb-4">Clicks directos por día</h3>
-              <div className="h-64">
-                <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={directChartData} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis dataKey="dateLabel" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} />
-                    <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} allowDecimals={false} />
-                    <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#9CA3AF' }} />
-                    <Bar dataKey="clicks" name="Clicks" fill="#06B6D4" fillOpacity={0.8} radius={[2, 2, 0, 0]} />
-                    <Line type="monotone" dataKey="conversions" name="Conversiones" stroke="#10B981" strokeWidth={2} dot={{ fill: '#10B981', r: 3 }} />
-                  </ComposedChart>
-                </ResponsiveContainer>
-              </div>
-            </div>
-          )}
 
           {/* Direct-ad table */}
           {directByAd.length > 0 && (
