@@ -495,7 +495,7 @@ const en = {
   "campaignTree.startAdding": "Start by adding your first ad campaign",
   "campaignTree.addCampaignBtn": "Add Campaign",
   "campaignTree.activeCampaigns": "Active",
-  "campaignTree.inactiveCampaigns": "Inactive",
+  "campaignTree.inactiveCampaigns": "Paused / Inactive",
   "campaignTree.typeCampaign": "Campaign",
   "campaignTree.typeAdSet": "Ad Set",
   "campaignTree.typeAd": "Ad",

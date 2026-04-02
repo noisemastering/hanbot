@@ -382,22 +382,22 @@ function AdSetsView() {
           </p>
         </div>
       ) : (
-        <div className="space-y-8">
+        <div className="space-y-6">
           {/* Active Campaigns */}
           {activeCampaigns.length > 0 && (
-            <div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-2.5 h-2.5 rounded-full bg-green-400"></div>
+            <div className="bg-gray-800/50 backdrop-blur-lg border border-green-500/20 rounded-xl overflow-hidden">
+              <div className="px-6 py-3 border-b border-gray-700/50 flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-green-400"></div>
                 <h2 className="text-lg font-bold text-white">Campañas Activas</h2>
                 <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">{activeCampaigns.length}</span>
               </div>
-              <div className="space-y-6">
+              <div className="divide-y divide-gray-700/30">
                 {activeCampaigns.map(([campId, campaign]) => {
                   const activeAdSets = campaign.adSets.filter(s => s.status === 'ACTIVE');
-                  const inactiveAdSets = campaign.adSets.filter(s => s.status !== 'ACTIVE');
+                  const pausedAdSets = campaign.adSets.filter(s => s.status !== 'ACTIVE');
                   return (
-                    <div key={campId}>
-                      <div className="flex items-center gap-3 mb-3 ml-2">
+                    <div key={campId} className="px-6 py-4">
+                      <div className="flex items-center gap-3 mb-3">
                         <div className="w-2 h-2 rounded-full bg-blue-400"></div>
                         <h3 className="text-base font-bold text-white">{campaign.name}</h3>
                         <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">
@@ -406,10 +406,10 @@ function AdSetsView() {
                       </div>
                       <div className="space-y-3 ml-4">
                         {activeAdSets.map((adSet) => renderAdSet(adSet))}
-                        {inactiveAdSets.length > 0 && (
+                        {pausedAdSets.length > 0 && (
                           <div className="mt-2 pt-2 border-t border-gray-700/30">
-                            <p className="text-xs text-gray-500 mb-2 ml-1">Pausados / Archivados ({inactiveAdSets.length})</p>
-                            {inactiveAdSets.map((adSet) => renderAdSet(adSet))}
+                            <p className="text-xs text-gray-500 mb-2 ml-1">Pausados / Archivados ({pausedAdSets.length})</p>
+                            {pausedAdSets.map((adSet) => renderAdSet(adSet))}
                           </div>
                         )}
                       </div>
@@ -420,18 +420,18 @@ function AdSetsView() {
             </div>
           )}
 
-          {/* Inactive Campaigns */}
+          {/* Paused / Inactive Campaigns */}
           {inactiveCampaigns.length > 0 && (
-            <div>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="w-2.5 h-2.5 rounded-full bg-gray-500"></div>
-                <h2 className="text-lg font-bold text-gray-400">Campañas Inactivas</h2>
+            <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl overflow-hidden">
+              <div className="px-6 py-3 border-b border-gray-700/50 flex items-center gap-3">
+                <div className="w-2 h-2 rounded-full bg-gray-500"></div>
+                <h2 className="text-lg font-bold text-gray-400">Campañas Pausadas / Inactivas</h2>
                 <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">{inactiveCampaigns.length}</span>
               </div>
-              <div className="space-y-6">
+              <div className="divide-y divide-gray-700/30">
                 {inactiveCampaigns.map(([campId, campaign]) => (
-                  <div key={campId}>
-                    <div className="flex items-center gap-3 mb-3 ml-2">
+                  <div key={campId} className="px-6 py-4">
+                    <div className="flex items-center gap-3 mb-3">
                       <div className="w-2 h-2 rounded-full bg-gray-500"></div>
                       <h3 className="text-base font-bold text-gray-400">{campaign.name}</h3>
                       <span className="text-xs text-gray-500 bg-gray-700 px-2 py-0.5 rounded">

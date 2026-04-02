@@ -1528,7 +1528,7 @@ const es = {
   "campaignTree.startAdding": "Comienza agregando tu primera campaña publicitaria",
   "campaignTree.addCampaignBtn": "Agregar Campaña",
   "campaignTree.activeCampaigns": "Activas",
-  "campaignTree.inactiveCampaigns": "Inactivas",
+  "campaignTree.inactiveCampaigns": "Pausadas / Inactivas",
   "campaignTree.typeCampaign": "Campaña",
   "campaignTree.typeAdSet": "Conjunto",
   "campaignTree.typeAd": "Anuncio",
