@@ -67,6 +67,7 @@ import MLImporterView from "./pages/MLImporterView";
 import MLPlaygroundView from "./pages/MLPlaygroundView";
 import IntentsView from "./components/IntentsView";
 import FlowsView from "./components/FlowsView";
+import FlujosView from "./components/FlujosView";
 import ApiHealthAlerts from "./components/ApiHealthAlerts";
 import SimulationModeSelector from "./components/SimulationModeSelector";
 import useNewVersionCheck from "./hooks/useNewVersionCheck";
@@ -258,6 +259,14 @@ const menuItems = [
         path: "/ads",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 4v16M17 4v16M3 8h4m10 0h4M3 12h18M3 16h4m10 0h4M4 20h16a1 1 0 001-1V5a1 1 0 00-1-1H4a1 1 0 00-1 1v14a1 1 0 001 1z" />
+        )
+      },
+      {
+        id: "flujos",
+        labelKey: "menu.flujos",
+        path: "/flujos",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
         )
       },
       {
@@ -2081,6 +2090,9 @@ function App() {
 
           {/* Tracked Links Route */}
           <Route path="/tracked-links" element={<TrackedLinksView />} />
+
+          {/* Flujos Route */}
+          <Route path="/flujos" element={<FlujosView />} />
 
           {/* Master Catalog Route */}
           <Route path="/master-catalog" element={

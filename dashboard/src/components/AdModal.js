@@ -20,14 +20,7 @@ const EXPERIENCE_LEVELS = [
   { value: 'expert', label: 'Experto' }
 ];
 
-const CONVO_FLOWS = [
-  { key: 'convo_bordeSeparadorRetail', name: 'Borde Separador (Menudeo)' },
-  { key: 'convo_bordeSeparadorWholesale', name: 'Borde Separador (Mayoreo)' },
-  { key: 'convo_confeccionadaRetail', name: 'Confeccionada (Menudeo)' },
-  { key: 'convo_groundcoverWholesale', name: 'Ground Cover (Mayoreo)' },
-  { key: 'convo_rolloRaschelWholesale', name: 'Rollo Raschel (Mayoreo)' },
-  { key: 'convo_vende_malla', name: 'Vende Malla (Distribuidor)' }
-];
+// Loaded dynamically from API in useEffect
 
 // Ad angles - same as CampaignModal for consistency
 const AD_ANGLES = [
@@ -121,6 +114,7 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
 
   const [productFamilies, setProductFamilies] = useState([]);
   const [promos, setPromos] = useState([]);
+  const [convoFlows, setConvoFlows] = useState([]);
   const [productsLoading, setProductsLoading] = useState(false);
   const [currentCatalog, setCurrentCatalog] = useState(null);
   const [existingCatalogs, setExistingCatalogs] = useState([]);
@@ -170,10 +164,20 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
         console.error('Error fetching promos:', error);
       }
     };
+    const fetchConvoFlows = async () => {
+      try {
+        const response = await fetch(`${API_URL}/convo-flows?active=true`);
+        const data = await response.json();
+        if (data.success) setConvoFlows(data.data || []);
+      } catch (error) {
+        console.error('Error fetching convo flows:', error);
+      }
+    };
     fetchProductFamilies();
     fetchExistingCatalogs();
     fetchGlobalCatalog();
     fetchPromos();
+    fetchConvoFlows();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -415,9 +419,9 @@ function AdModal({ ad, adSets, parentAdSetId, onSave, onClose }) {
                 className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
               >
                 <option value="">Sin asignar</option>
-                {CONVO_FLOWS.map(flow => (
-                  <option key={flow.key} value={flow.key}>
-                    {flow.name}
+                {convoFlows.map(flow => (
+                  <option key={flow.name} value={flow.name}>
+                    {flow.displayName}
                   </option>
                 ))}
               </select>

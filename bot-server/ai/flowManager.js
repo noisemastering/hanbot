@@ -37,13 +37,48 @@ const convo_groundcoverWholesale = require("./flows/convo_groundcoverWholesale")
 const convo_rolloRaschelWholesale = require("./flows/convo_rolloRaschelWholesale");
 const convo_bordeSeparadorWholesale = require("./flows/convo_bordeSeparadorWholesale");
 
-// Register convo_flows so they can find each other during flow switches
+// Register JS-based convo_flows (these have custom handlers like dimension parsing)
 convoFlow.registerFlow('convo_bordeSeparadorRetail', convo_bordeSeparadorRetail);
 convoFlow.registerFlow('convo_bordeSeparadorWholesale', convo_bordeSeparadorWholesale);
 convoFlow.registerFlow('convo_vende_malla', convo_vende_malla);
 convoFlow.registerFlow('convo_confeccionadaRetail', convo_confeccionadaRetail);
 convoFlow.registerFlow('convo_groundcoverWholesale', convo_groundcoverWholesale);
 convoFlow.registerFlow('convo_rolloRaschelWholesale', convo_rolloRaschelWholesale);
+
+// Load DB-based convo_flows (new flows created from dashboard)
+const ConvoFlowManifest = require("../models/ConvoFlowManifest");
+
+async function loadConvoFlowsFromDB() {
+  try {
+    const manifests = await ConvoFlowManifest.find({ active: true });
+    let loaded = 0;
+    for (const doc of manifests) {
+      // Skip if JS handler already registered (hasCustomHandler flows)
+      if (doc.hasCustomHandler && convoFlow.getFlow(doc.name)) continue;
+      const manifest = doc.toObject();
+      const instance = convoFlow.create(manifest);
+      convoFlow.registerFlow(doc.name, {
+        manifest,
+        handle: instance.handle,
+        getProductCache: instance.getProductCache
+      });
+      loaded++;
+    }
+    if (loaded > 0) console.log(`✅ Loaded ${loaded} convo_flows from DB`);
+  } catch (err) {
+    console.error('❌ Failed to load convo_flows from DB:', err.message);
+  }
+}
+
+// Load DB flows once MongoDB is connected
+const mongoose = require("mongoose");
+mongoose.connection.once('open', () => {
+  loadConvoFlowsFromDB();
+});
+// If already connected (e.g., hot reload)
+if (mongoose.connection.readyState === 1) {
+  loadConvoFlowsFromDB();
+}
 
 /**
  * Cache for product-based flow inference
