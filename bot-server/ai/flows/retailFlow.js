@@ -97,6 +97,11 @@ async function buildQuoteMessage(products, options = {}) {
   const productList = products.map((p, i) => {
     let entry = `Producto ${i + 1}: ${p.name}`;
     if (p.description) entry += `\nDescripción: ${p.description}`;
+    if (p.attributes && Object.keys(p.attributes).length > 0) {
+      const attrs = Object.entries(p.attributes instanceof Map ? Object.fromEntries(p.attributes) : p.attributes)
+        .map(([k, v]) => `${k}: ${v}`).join(', ');
+      entry += `\nEspecificaciones: ${attrs}`;
+    }
     if (p.price) entry += `\nPrecio: $${p.price}`;
     if (p.link) entry += `\nLink de compra: ${p.link}`;
     if (p.colors?.length) entry += `\nColores: ${p.colors.join(', ')}`;

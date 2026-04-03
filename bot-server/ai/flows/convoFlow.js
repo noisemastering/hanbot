@@ -605,19 +605,62 @@ IMPORTANTE: si el cliente da una dirección completa (calle, número, colonia) o
       }
     }
 
-    // ── NOTHING HANDLED — ask what they need ──
-    // If we have products loaded, nudge the customer to specify
+    // ── NOTHING HANDLED — let AI respond with full product context ──
     if (productCache && productCache.length > 0) {
-      console.log('🏛️ [convo] Nothing handled — asking customer to specify');
-      const smallest = productCache[0]?.name;
-      const largest = productCache[productCache.length - 1]?.name;
-      const rangeHint = smallest && largest && smallest !== largest
-        ? ` Manejamos desde ${smallest} hasta ${largest}.`
-        : '';
-      return {
-        response: { type: 'text', text: `¿Qué medida te interesa?${rangeHint}` },
-        state: flowState
+      console.log('🏛️ [convo] Nothing handled — escalating to AI with product context');
+
+      const productContext = productCache.map((p, i) => {
+        let entry = `${i + 1}. ${p.name}`;
+        if (p.familyName) entry += ` (${p.familyName})`;
+        if (p.description) entry += `\n   Descripción: ${p.description}`;
+        if (p.size) entry += `\n   Tamaño: ${p.size}`;
+        if (p.price) entry += `\n   Precio: $${p.price}`;
+        if (p.attributes && Object.keys(p.attributes).length > 0) {
+          const attrs = Object.entries(p.attributes instanceof Map ? Object.fromEntries(p.attributes) : p.attributes)
+            .map(([k, v]) => `${k}: ${v}`).join(', ');
+          entry += `\n   Especificaciones: ${attrs}`;
+        }
+        if (p.colors?.length) entry += `\n   Colores: ${p.colors.join(', ')}`;
+        return entry;
+      }).join('\n');
+
+      const voiceInstructions = {
+        casual: 'Habla de manera amigable y relajada, como un vendedor joven. Usa "tú".',
+        professional: 'Habla de manera profesional pero cálida.',
+        technical: 'Sé preciso y detallado en las especificaciones técnicas.'
       };
+
+      try {
+        const aiResponse = await _openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            { role: 'system', content: `Eres asesora de ventas de Hanlob. ${voiceInstructions[manifest.voice] || voiceInstructions.casual}
+
+PRODUCTOS QUE MANEJAS:
+${productContext}
+${manifest.installationNote ? `\nNota de instalación: ${manifest.installationNote}` : ''}
+
+REGLAS:
+- Responde la pregunta del cliente usando SOLO los datos de producto proporcionados
+- Si preguntan por especificaciones (grosor, ancho, material, etc.), responde con los datos que tienes
+- Si no tienes la info para responder, di que no cuentas con ese dato y ofrece lo que sí sabes
+- Máximo 2-3 oraciones, natural, como mensaje de WhatsApp
+- No inventes datos que no están en la lista
+- Solo devuelve el mensaje` },
+            { role: 'user', content: `${conversationHistory ? `${conversationHistory}\n\n` : ''}Mensaje del cliente: ${userMessage}` }
+          ],
+          temperature: 0.3,
+          max_tokens: 300
+        });
+
+        const text = aiResponse.choices[0].message.content.trim();
+        return {
+          response: { type: 'text', text },
+          state: flowState
+        };
+      } catch (err) {
+        console.error('❌ [convo] AI fallback error:', err.message);
+      }
     }
     return { response: null, state: flowState };
   }
