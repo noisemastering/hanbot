@@ -30,8 +30,9 @@ function getDaysAgo(days) {
 
 function AdPerformanceView() {
   const navigate = useNavigate();
-  const { user } = useAuth();
-  const canSeeSales = user?.role === 'super_admin' || user?.role === 'admin' || user?.permissions?.includes('*');
+  const { user, simulationMode } = useAuth();
+  const effectiveRole = simulationMode?.role || user?.role;
+  const canSeeSales = effectiveRole === 'super_admin' || effectiveRole === 'admin' || (!simulationMode && user?.permissions?.includes('*'));
   const [range, setRange] = useState(30);
   const [loading, setLoading] = useState(true);
   const [ads, setAds] = useState([]);
