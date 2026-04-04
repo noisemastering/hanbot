@@ -19,6 +19,7 @@ const en = {
   "menu.campaignsSub": "Campaigns",
   "menu.adSets": "Ad Sets",
   "menu.ads": "Ads",
+  "menu.desempeno": "Performance",
   "menu.flujos": "Flows",
   "menu.trackedLinks": "Tracked Links",
   "menu.users": "Users",

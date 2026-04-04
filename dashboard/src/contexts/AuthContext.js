@@ -150,11 +150,11 @@ export const AuthProvider = ({ children }) => {
       super_admin: ['*'],
       admin: ['*'],
       super_user: {
-        accounting: ['conversations', 'campaigns', 'adsets', 'ads', 'products', 'analytics', 'families', 'master-catalog', 'usos'],
-        sales: ['conversations', 'campaigns', 'adsets', 'ads', 'products', 'analytics', 'families', 'master-catalog', 'usos']
+        accounting: ['conversations', 'campaigns', 'adsets', 'ads', 'ad-performance', 'products', 'analytics', 'families', 'master-catalog', 'usos'],
+        sales: ['conversations', 'campaigns', 'adsets', 'ads', 'ad-performance', 'products', 'analytics', 'families', 'master-catalog', 'usos']
       },
       user: {
-        campaign_manager: ['campaign-overview', 'conversations', 'campaigns', 'adsets', 'ads', 'products', 'tracked-links'],
+        campaign_manager: ['campaign-overview', 'conversations', 'campaigns', 'adsets', 'ads', 'ad-performance', 'products', 'tracked-links'],
         salesman: ['conversations']
       }
     };
