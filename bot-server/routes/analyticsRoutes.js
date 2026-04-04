@@ -1323,4 +1323,74 @@ router.get('/ad-performance', async (req, res) => {
   }
 });
 
+// GET /analytics/daily-handoffs-sales — handoffs + manual sales per day
+router.get('/daily-handoffs-sales', async (req, res) => {
+  try {
+    const { dateFrom, dateTo } = req.query;
+    const match = {};
+    if (dateFrom || dateTo) {
+      match.handoffTimestamp = {};
+      if (dateFrom) match.handoffTimestamp.$gte = new Date(dateFrom);
+      if (dateTo) match.handoffTimestamp.$lte = new Date(dateTo);
+    }
+
+    // Daily handoffs
+    const handoffs = await Conversation.aggregate([
+      { $match: { handoffRequested: true, ...match } },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$handoffTimestamp', timezone: 'America/Mexico_City' } },
+          handoffs: { $sum: 1 }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // Daily manual sales
+    const salesMatch = {};
+    if (dateFrom || dateTo) {
+      salesMatch.convertedAt = {};
+      if (dateFrom) salesMatch.convertedAt.$gte = new Date(dateFrom);
+      if (dateTo) salesMatch.convertedAt.$lte = new Date(dateTo);
+    }
+
+    const sales = await ClickLog.aggregate([
+      { $match: { correlationMethod: 'manual', converted: true, ...salesMatch } },
+      {
+        $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$convertedAt', timezone: 'America/Mexico_City' } },
+          sales: { $sum: 1 },
+          revenue: { $sum: { $ifNull: ['$conversionData.totalAmount', 0] } }
+        }
+      },
+      { $sort: { _id: 1 } }
+    ]);
+
+    // Merge into single daily array
+    const dateMap = {};
+    for (const h of handoffs) {
+      dateMap[h._id] = { date: h._id, handoffs: h.handoffs, sales: 0, revenue: 0 };
+    }
+    for (const s of sales) {
+      if (!dateMap[s._id]) dateMap[s._id] = { date: s._id, handoffs: 0, sales: 0, revenue: 0 };
+      dateMap[s._id].sales = s.sales;
+      dateMap[s._id].revenue = Math.round(s.revenue);
+    }
+
+    const daily = Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date)).map(d => ({
+      ...d,
+      dateLabel: new Date(d.date + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
+    }));
+
+    const totalHandoffs = daily.reduce((s, d) => s + d.handoffs, 0);
+    const totalSales = daily.reduce((s, d) => s + d.sales, 0);
+    const totalRevenue = daily.reduce((s, d) => s + d.revenue, 0);
+
+    res.json({ success: true, data: { daily, totalHandoffs, totalSales, totalRevenue } });
+  } catch (err) {
+    console.error('❌ Error fetching daily handoffs/sales:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
