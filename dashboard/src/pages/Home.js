@@ -631,9 +631,9 @@ function Home() {
       </div>
 
       {/* Row 4: Top Products + Ad Performance Donut */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-5 gap-6">
         {/* Top Products */}
-        <div onClick={() => navigate('/conversions')} className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6 cursor-pointer hover:border-gray-600/70 hover:scale-[1.01] transition-all">
+        <div onClick={() => navigate('/conversions')} className="lg:col-span-2 bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6 cursor-pointer hover:border-gray-600/70 hover:scale-[1.01] transition-all">
           <h2 className="text-lg font-semibold text-white mb-1">{t("home.topProducts")}</h2>
           <p className="text-sm text-gray-500 mb-4">{t("home.byRevenue")}</p>
           {topProducts.length > 0 ? (
@@ -675,7 +675,7 @@ function Home() {
         </div>
 
         {/* Ad Performance Donut */}
-        <div onClick={() => navigate('/ad-performance')} className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6 cursor-pointer hover:border-gray-600/70 hover:scale-[1.01] transition-all">
+        <div onClick={() => navigate('/ad-performance')} className="lg:col-span-3 bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6 cursor-pointer hover:border-gray-600/70 hover:scale-[1.01] transition-all">
           <h2 className="text-lg font-semibold text-white mb-1">{t("home.adPerformance")}</h2>
           <p className="text-sm text-gray-500 mb-4">{t("home.byClicks")}</p>
           {adData.length > 0 ? (
@@ -684,11 +684,11 @@ function Home() {
                 <PieChart>
                   <Pie
                     data={adData.map((ad) => ({
-                      name: ad.name || ad.adId,
+                      name: (ad.name || ad.adId).length > 18 ? (ad.name || ad.adId).substring(0, 18) + '...' : (ad.name || ad.adId),
                       value: ad.clicks || 0,
                       conversions: ad.conversions || 0,
                     }))}
-                    cx="50%"
+                    cx="40%"
                     cy="55%"
                     innerRadius={55}
                     outerRadius={85}
