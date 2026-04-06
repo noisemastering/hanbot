@@ -4,6 +4,26 @@ import TrackedLinkGenerator from "../components/TrackedLinkGenerator";
 import ManualSaleForm from "../components/ManualSaleForm";
 import { useTranslation } from '../i18n';
 
+const PRODUCT_LABELS = {
+  malla_sombra_raschel: "Malla Raschel",
+  malla_sombra: "Malla Confeccionada",
+  rollo: "Rollo Raschel",
+  borde_separador: "Borde Separador",
+  groundcover: "Ground Cover",
+  monofilamento: "Monofilamento",
+  confeccionada: "Malla Confeccionada",
+  default: "—",
+  master_flow: "—",
+  general: "—"
+};
+
+function friendlyProduct(value) {
+  if (!value) return '—';
+  if (PRODUCT_LABELS[value]) return PRODUCT_LABELS[value];
+  // Convert snake_case to Title Case
+  return value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
 function Messages() {
   const { t, locale } = useTranslation();
   const [quickActions, setQuickActions] = useState([]);
@@ -611,7 +631,7 @@ function Messages() {
                       </div>
                     </td>
                     <td style={{ padding: "10px", color: "#e0e0e0", fontSize: "0.85rem" }}>
-                      {handoff.productInterest || handoff.currentFlow || '—'}
+                      {friendlyProduct(handoff.productInterest || handoff.currentFlow)}
                     </td>
                     <td style={{ padding: "10px", color: "#e0e0e0", fontSize: "0.85rem" }}>
                       {[handoff.city, handoff.stateMx].filter(Boolean).join(', ') || '—'}
