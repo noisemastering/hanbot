@@ -157,6 +157,7 @@ ${customerName ? `- El cliente se llama ${customerName}` : ''}
 ${colorNote ? `- ${colorNote}` : ''}
 
 FORMATO:
+- Si el mensaje del cliente contiene una pregunta, respóndela naturalmente al inicio antes de presentar la promoción
 - Máximo 3-4 oraciones — ve al grano
 - Incluye siempre el precio y el link de compra
 - Si hay precio promocional, menciónalo de forma natural

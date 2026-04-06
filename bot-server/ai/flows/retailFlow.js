@@ -117,6 +117,7 @@ ${customerName ? `- El cliente se llama ${customerName}` : ''}
 ${colorNote ? `- ${colorNote}` : ''}
 
 FORMATO:
+- Si el mensaje del cliente contiene una pregunta, respóndela naturalmente al inicio antes de dar la cotización
 - Máximo 2-4 oraciones por producto
 - Incluye siempre el precio y el link de compra
 - Escribe las URLs como texto plano (ejemplo: https://ejemplo.com)
