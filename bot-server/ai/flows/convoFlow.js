@@ -348,7 +348,21 @@ function create(manifest) {
       productCache = await productFlow.loadProducts(manifest.products);
     }
 
-    // ── PROMO FLOW (presents right away, before anything else) ──
+    // ── MASTER FLOW (general questions — sits above everything per architecture) ──
+    // Per MASTER_FLOW.md: masterFlow is the SOURCE OF TRUTH for general questions
+    // (location, schedule, payment, etc.) and must run before any sales/promo logic.
+    const masterResultEarly = await masterFlow.handle(userMessage, convo, psid, {
+      salesChannel: manifest.salesChannel === 'retail' ? 'mercado_libre' : 'direct',
+      installationNote: manifest.installationNote || null,
+      colorNote: manifest.promo?.colorNote || null,
+      conversationHistory
+    });
+
+    if (masterResultEarly) {
+      return { response: masterResultEarly, state: flowState };
+    }
+
+    // ── PROMO FLOW (presents right away if customer didn't ask a general question) ──
     // Promo can come from manifest (hardcoded) or state._adPromo (plugin from ad)
     const activePromo = flowState._adPromo || manifest.promo;
     if (activePromo) {
@@ -462,18 +476,6 @@ IMPORTANTE: si el cliente da una dirección completa (calle, número, colonia) o
       } catch (err) {
         console.error('❌ [convo] Purchase intent check error:', err.message);
       }
-    }
-
-    // ── MASTER FLOW (general questions) ──
-    const masterResult = await masterFlow.handle(userMessage, convo, psid, {
-      salesChannel: manifest.salesChannel === 'retail' ? 'mercado_libre' : 'direct',
-      installationNote: manifest.installationNote || null,
-      colorNote: manifest.promo?.colorNote || null,
-      conversationHistory
-    });
-
-    if (masterResult) {
-      return { response: masterResult, state: flowState };
     }
 
     // ── PERSONA FLOW (buyer/reseller — evaluate profile, detect switches) ──
