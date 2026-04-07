@@ -94,8 +94,8 @@ async function resolveFlowSwitch(switchResult, currentManifest, flowState, userM
 
   // ── DIFFERENT PRODUCT (Protocol #1) ──
   if (action === 'product_redirect') {
-    // product_flow already identified the target flow
-    if (switchResult.targetFlow) {
+    // product_flow already identified the target flow by name
+    if (switchResult.targetFlowName) {
       const targetName = switchResult.targetFlowName;
       const targetFlow = getFlow(targetName);
 
@@ -300,6 +300,17 @@ function create(manifest) {
 
     // ── CONVERSATION CONTEXT (retrieved once, passed to all flows) ──
     const conversationHistory = await getConversationContext(psid);
+
+    // ── CLEAR STUCK LEGACY pendingHandoff ──
+    // The convo_flow system does not use the legacy pre-handoff zip-collection state.
+    // If a previous flow set pendingHandoff and the conversation has since been routed
+    // to a convo_flow, clear it so we don't ask "Para calcular el envío..." in a loop.
+    if (convo?.pendingHandoff) {
+      console.log(`🧹 [convo] Clearing stuck legacy pendingHandoff`);
+      await updateConversation(psid, { pendingHandoff: false, pendingHandoffInfo: null });
+      convo.pendingHandoff = false;
+      convo.pendingHandoffInfo = null;
+    }
 
     // ── PENDING SWITCH CONFIRMATION (Protocol #1 — different product) ──
     if (flowState.pendingSwitch) {
@@ -527,7 +538,31 @@ IMPORTANTE: si el cliente da una dirección completa (calle, número, colonia) o
     if (productResult) {
       // Not offered
       if (productResult.type === 'not_offered') {
-        return { response: { type: 'text', text: productResult.text }, state: flowState };
+        // Generate a helpful response that acknowledges we don't have what they asked for
+        // but mentions what this convo_flow DOES handle, so the customer isn't left empty-handed.
+        try {
+          const ourProductsSummary = productCache.map(p => {
+            let s = p.name;
+            if (p.familyName) s = `${p.familyName} ${p.name}`;
+            if (p.size) s += ` (${p.size})`;
+            return s;
+          }).join(', ');
+
+          const aiResponse = await _openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: `Eres asesora de ventas de Hanlob. El cliente preguntó por un producto que NO manejamos. Responde con honestidad: dile que ese producto no lo tenemos, pero menciona brevemente lo que SÍ manejamos en este flujo y pregunta si le interesa. Máximo 2-3 oraciones, natural, como mensaje de WhatsApp. No inventes nada.` },
+              { role: 'user', content: `Productos que SÍ manejamos: ${ourProductsSummary}\n\nMensaje del cliente: ${userMessage}` }
+            ],
+            temperature: 0.4,
+            max_tokens: 200
+          });
+          const text = aiResponse.choices[0].message.content.trim();
+          return { response: { type: 'text', text }, state: flowState };
+        } catch (err) {
+          console.error('❌ [convo] not_offered AI response error:', err.message);
+          return { response: { type: 'text', text: productResult.text }, state: flowState };
+        }
       }
 
       // Flow switch — resolve through protocol

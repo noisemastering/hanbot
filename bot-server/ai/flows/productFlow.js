@@ -232,15 +232,20 @@ async function findFlowForProduct(userMessage, manifests) {
       messages: [
         {
           role: "system",
-          content: `Identifica cuál flujo puede manejar el producto que pide el cliente.
+          content: `Identifica cuál flujo maneja EXACTAMENTE el producto que pide el cliente.
 
-FLUJOS DISPONIBLES:
+FLUJOS DISPONIBLES (cada uno maneja una familia de productos específica):
 ${manifestSummary}
 
 Responde con JSON:
-{ "matchIndex": <índice del flujo que mejor corresponde, o -1 si ninguno> }
+{ "matchIndex": <índice del flujo que MANEJA EXACTAMENTE ese producto, o -1 si ninguno lo maneja> }
 
-Solo devuelve JSON.`
+REGLAS CRÍTICAS:
+- Solo devuelve un matchIndex >= 0 si el flujo realmente maneja ese producto específico
+- NO emparejes por palabra clave parcial (ej. "malla pájaros" NO es lo mismo que "malla sombra" ni "malla raschel")
+- NO supongas. Si no tienes certeza absoluta de que el flujo maneja exactamente ese producto, devuelve -1
+- ANTE LA DUDA → -1
+- Solo devuelve JSON`
         },
         { role: "user", content: userMessage }
       ],
@@ -252,7 +257,7 @@ Solo devuelve JSON.`
     const result = JSON.parse(response.choices[0].message.content);
     if (result.matchIndex >= 0 && result.matchIndex < manifests.length) {
       const matched = manifests[result.matchIndex];
-      return { flowId: matched._id || matched.id, flowName: matched.name };
+      return { flowName: matched.name };
     }
     return null;
   } catch (err) {
@@ -295,7 +300,7 @@ async function handle(userMessage, convo, psid, context = {}) {
     console.log('🏛️ [product] Product outside realm — checking other flows');
     const otherFlow = await findFlowForProduct(userMessage, manifests);
     if (otherFlow) {
-      return { type: 'flow_switch', action: 'product_redirect', targetFlow: otherFlow.flowId, targetFlowName: otherFlow.flowName };
+      return { type: 'flow_switch', action: 'product_redirect', targetFlowName: otherFlow.flowName };
     }
     // No other flow handles it either
     return {
