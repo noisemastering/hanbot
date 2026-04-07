@@ -474,7 +474,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   const bordeSeparadorPattern = /\b(borde|separador|bordes?|delineador|delimitar|orilla)\s*(de\s+)?(jard[ií]n|pasto|c[eé]sped)?/i;
 
   // Lazy-load bordeFlow functions for dynamic data
-  const { getAvailableLengths: getBordeLengths, getBordeWidth: getBordeWidthFn } = require("../flows/bordeFlow");
+  const { getAvailableLengths: getBordeLengths, getBordeWidth: getBordeWidthFn } = require("../utils/bordeInfo");
 
   // Detect borde-specific lengths in rollo context (dynamically from DB, not hardcoded)
   // BUT EXCLUDE when it's part of a dimension pattern like "4x6", "4 mts x 6", "ancho x largo"

@@ -1107,7 +1107,7 @@ app.post("/webhook", async (req, res) => {
           const ProductFamily = require("./models/ProductFamily");
 
           // Dynamic borde greeting from DB
-          const { getAvailableLengths: getBordeLengthsForGreeting, getBordeWidth: getBordeWidthForGreeting } = require("./ai/flows/bordeFlow");
+          const { getAvailableLengths: getBordeLengthsForGreeting, getBordeWidth: getBordeWidthForGreeting } = require("./ai/utils/bordeInfo");
           let bordeLengthGreeting;
           try {
             const bordeLens = await getBordeLengthsForGreeting({}, {});
@@ -1208,7 +1208,7 @@ app.post("/webhook", async (req, res) => {
         if (isResellerAd) {
           console.log(`🏪 Reseller ad detected — using reseller pitch as greeting`);
           adProductInterest = adProductInterest || 'malla_sombra';
-          const { getPitchMessage } = require("./ai/flows/resellerFlow");
+          const { getPitchMessage } = require("./ai/utils/resellerPitch");
           adGreeting = getPitchMessage(adProductInterest);
           // Mark as wholesale + set lastIntent so resellerFlow activates on next message
           await updateConversation(senderPsid, { isWholesaleInquiry: true, lastIntent: 'reseller_pitch_sent' });

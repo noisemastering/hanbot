@@ -8,7 +8,7 @@
 const { OpenAI } = require("openai");
 const { updateConversation } = require("../../conversationManager");
 const { executeHandoff } = require("../utils/executeHandoff");
-const { getCatalogUrl } = require("../flowManager");
+// getCatalogUrl required lazily inside handler to avoid circular dependency with flowManager
 const { sendCatalog } = require("../../utils/sendCatalog");
 
 const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
@@ -252,7 +252,8 @@ async function handle(userMessage, convo, psid, context = {}) {
   if (pitchSent && !catalogSent && intent === 'catalog_interest') {
     console.log('🏛️ [reseller] Catalog interest detected — sending catalog');
 
-    // Try to send the PDF catalog
+    // Try to send the PDF catalog (lazy require to break circular dep)
+    const { getCatalogUrl } = require("../flowManager");
     const catalogUrl = await getCatalogUrl(convo, convo?.currentFlow);
     if (catalogUrl) {
       const rawPsid = psid.startsWith('fb:') ? psid.replace('fb:', '') : psid;

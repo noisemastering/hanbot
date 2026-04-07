@@ -34,7 +34,6 @@ const intentDispatcher = require("./middleware/intentDispatcher");
 const flowManager = require("./middleware/flowManager");
 // Post-flow dispatcher: handles intents the flow manager didn't handle
 const intentDispatcherFallback = require("./middleware/intentDispatcherFallback");
-const legacyFlows = require("./middleware/legacyFlows");
 const pendingHandoff = require("./middleware/pendingHandoff");
 
 // --- Group E: Fallback ---
@@ -76,7 +75,6 @@ function getMiddleware() {
     // Group D: Flow Routing
     { name: "flowManager",      fn: flowManager },
     { name: "intentDispatcherFallback", fn: intentDispatcherFallback },  // post-flow fallback
-    { name: "legacyFlows",      fn: legacyFlows },
     { name: "pendingHandoff",   fn: pendingHandoff },
 
     // Group E: Fallback

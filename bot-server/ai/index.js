@@ -28,10 +28,7 @@ const { classify, logClassification, INTENTS } = require("./classifier");
 // This runs BEFORE flows - handles intents that don't need multi-step flow processing
 const { dispatch: dispatchToHandler } = require("./intentDispatcher");
 
-// Layer 2-3: Flow Router (legacy - being replaced by flowManager)
-const { processMessage: processWithFlows } = require("./flows");
-
-// NEW: Central Flow Manager - ALL messages go through here
+// Central Flow Manager — ALL messages go through here
 const { processMessage: processWithFlowManager } = require("./flowManager");
 
 // Flow executor for DB-driven conversation flows
@@ -722,18 +719,6 @@ async function generateReply(userMessage, psid, referral = null) {
     }
   }
   // ====== END INTENT DISPATCHER FALLBACK ======
-
-  // ====== FALLBACK: Legacy flows if nothing handled ======
-  if (!response) {
-    try {
-      response = await processWithFlows(classification, sourceContext, convo, psid, userMessage, campaign);
-      if (response) {
-        console.log(`✅ Legacy flow system handled message (${response.handledBy})`);
-      }
-    } catch (legacyError) {
-      console.error(`❌ Error in legacy flows:`, legacyError.message);
-    }
-  }
 
   // ====== CATCH-ALL PENDING HANDOFF (zip response from fallback-triggered handoffs) ======
   if (!response && convo?.pendingHandoff) {
