@@ -41,6 +41,7 @@ function AdPerformanceView() {
   const [directTotals, setDirectTotals] = useState({ totalClicks: 0, totalConversions: 0, totalRevenue: 0 });
   const [handoffData, setHandoffData] = useState([]);
   const [handoffTotals, setHandoffTotals] = useState({ totalHandoffs: 0, totalSales: 0, totalRevenue: 0 });
+  const [deviceBreakdown, setDeviceBreakdown] = useState([]);
 
   const dateFrom = useMemo(() => getDaysAgo(range), [range]);
   const dateTo = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -50,11 +51,12 @@ function AdPerformanceView() {
     try {
       const dateFromISO = `${dateFrom}T00:00:00.000Z`;
       const dateToISO = `${dateTo}T23:59:59.999Z`;
-      const [res, directDailyRes, directByAdRes, handoffRes] = await Promise.all([
+      const [res, directDailyRes, directByAdRes, handoffRes, deviceRes] = await Promise.all([
         API.get(`/analytics/ad-performance?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/click-logs/direct-ad/daily?days=${range}`),
         API.get(`/click-logs/direct-ad/by-ad?days=${range}`),
-        API.get(`/analytics/daily-handoffs-sales?dateFrom=${dateFromISO}&dateTo=${dateToISO}`)
+        API.get(`/analytics/daily-handoffs-sales?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
+        API.get(`/analytics/device-breakdown?dateFrom=${dateFromISO}&dateTo=${dateToISO}`)
       ]);
       setAds(res.data?.ads || []);
       setDirectDaily(directDailyRes.data?.data?.daily || []);
@@ -63,6 +65,7 @@ function AdPerformanceView() {
       const hd = handoffRes.data?.data || {};
       setHandoffData(hd.daily || []);
       setHandoffTotals({ totalHandoffs: hd.totalHandoffs || 0, totalSales: hd.totalSales || 0, totalRevenue: hd.totalRevenue || 0 });
+      setDeviceBreakdown(deviceRes.data?.data || []);
     } catch (err) {
       console.error('Error fetching ad performance:', err);
     } finally {
@@ -184,6 +187,26 @@ function AdPerformanceView() {
           </div>
         )}
       </div>
+
+      {/* Device Breakdown */}
+      {deviceBreakdown.length > 0 && (
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-4">Dispositivos</h2>
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            {deviceBreakdown.filter(d => d.device !== 'bot').map(d => {
+              const labels = { mobile: '📱 Móvil', tablet: '📱 Tablet', desktop: '💻 Escritorio', unknown: '❓ Desconocido' };
+              const colors = { mobile: 'text-purple-400', tablet: 'text-cyan-400', desktop: 'text-blue-400', unknown: 'text-gray-400' };
+              return (
+                <div key={d.device} className="bg-gray-900/50 border border-gray-700/30 rounded-lg p-3">
+                  <p className="text-xs text-gray-400">{labels[d.device] || d.device}</p>
+                  <p className={`text-xl font-bold ${colors[d.device] || 'text-white'}`}>{d.count.toLocaleString()}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{d.percentage}%</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       {/* Chart */}
       {ads.length > 0 && chartData.length > 0 && (

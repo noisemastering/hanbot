@@ -1393,4 +1393,40 @@ router.get('/daily-handoffs-sales', async (req, res) => {
   }
 });
 
+// GET /analytics/device-breakdown — clicks by device type
+router.get('/device-breakdown', async (req, res) => {
+  try {
+    const { dateFrom, dateTo } = req.query;
+    const match = { clicked: true };
+    if (dateFrom || dateTo) {
+      match.clickedAt = {};
+      if (dateFrom) match.clickedAt.$gte = new Date(dateFrom);
+      if (dateTo) match.clickedAt.$lte = new Date(dateTo);
+    }
+
+    const breakdown = await ClickLog.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: { $ifNull: ['$device', 'unknown'] },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    const total = breakdown.reduce((s, b) => s + b.count, 0);
+    const data = breakdown.map(b => ({
+      device: b._id,
+      count: b.count,
+      percentage: total > 0 ? +((b.count / total) * 100).toFixed(1) : 0
+    }));
+
+    res.json({ success: true, data, total });
+  } catch (err) {
+    console.error('❌ Error fetching device breakdown:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;

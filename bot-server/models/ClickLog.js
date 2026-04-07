@@ -125,6 +125,7 @@ const clickLogSchema = new mongoose.Schema(
 
     // Metadata
     userAgent: String,
+    device: { type: String, enum: ['mobile', 'tablet', 'desktop', 'bot', 'unknown'], default: 'unknown', index: true },
     ipAddress: String,
     referrer: String
   },

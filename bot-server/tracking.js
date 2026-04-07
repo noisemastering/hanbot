@@ -4,6 +4,19 @@ const Conversation = require('./models/Conversation');
 const Ad = require('./models/Ad');
 
 /**
+ * Detect device type from a User-Agent string.
+ * Returns: 'mobile' | 'tablet' | 'desktop' | 'bot' | 'unknown'
+ */
+function detectDevice(userAgent) {
+  if (!userAgent) return 'unknown';
+  const ua = userAgent.toLowerCase();
+  if (/bot|crawler|spider|facebookexternalhit|whatsapp|slackbot|googlebot|bingbot/i.test(ua)) return 'bot';
+  if (/ipad|tablet|kindle|playbook|silk|(android(?!.*mobile))/i.test(ua)) return 'tablet';
+  if (/mobi|iphone|ipod|android|blackberry|opera mini|iemobile/i.test(ua)) return 'mobile';
+  return 'desktop';
+}
+
+/**
  * Extract ML Item ID from a Mercado Libre URL
  * Handles formats like:
  * - https://articulo.mercadolibre.com.mx/MLM-1234567890-titulo
@@ -99,6 +112,7 @@ async function recordClick(clickId, metadata = {}) {
       clicked: true,
       clickedAt: new Date(),
       userAgent: metadata.userAgent,
+      device: detectDevice(metadata.userAgent),
       ipAddress: metadata.ipAddress,
       referrer: metadata.referrer
     },
@@ -201,6 +215,7 @@ async function recordDirectAdClick(trackCode, metadata = {}) {
     clicked: true,
     clickedAt: new Date(),
     userAgent: metadata.userAgent,
+    device: detectDevice(metadata.userAgent),
     ipAddress: metadata.ipAddress,
     referrer: metadata.referrer
   });
