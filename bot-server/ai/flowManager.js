@@ -669,6 +669,27 @@ function checkFlowTransfer(currentFlow, detectedFlow, convo) {
 async function processMessage(userMessage, psid, convo, classification, sourceContext, campaign = null) {
   console.log(`\n🎯 ===== FLOW MANAGER =====`);
 
+  // ===== STEP 0: NORMALIZE convo_flow CONTEXT =====
+  // If the conversation has a convoFlowRef (set by ad routing or migration) and the flow is
+  // registered, force currentFlow to match BEFORE any legacy logic runs. Without this,
+  // stale legacy currentFlow values (e.g. 'reseller') intercept messages and run legacy
+  // product-switch heuristics that have no business operating on convo_flow conversations.
+  //
+  // Only upgrade LEGACY currentFlow values — if the conversation is already on a different
+  // convo:* flow, leave it alone (customer is mid-conversation, flow switching is handled
+  // by the seamless switch protocol inside convoFlow).
+  const refFromAdOrConvo = sourceContext?.ad?.convoFlowRef || convo?.convoFlowRef;
+  if (refFromAdOrConvo && convoFlow.getFlow(refFromAdOrConvo)) {
+    const expected = `convo:${refFromAdOrConvo}`;
+    const currentIsLegacy = !convo?.currentFlow || !convo.currentFlow.startsWith('convo:');
+    if (currentIsLegacy && convo?.currentFlow !== expected) {
+      console.log(`🔧 Upgrading legacy currentFlow: ${convo?.currentFlow || 'null'} → ${expected} (convoFlowRef=${refFromAdOrConvo})`);
+      await updateConversation(psid, { currentFlow: expected, convoFlowRef: refFromAdOrConvo });
+      convo.currentFlow = expected;
+      convo.convoFlowRef = refFromAdOrConvo;
+    }
+  }
+
   // ===== STEP 0a: CHECK FOR PENDING WHOLESALE/RETAIL CHOICE =====
   if (convo?.pendingWholesaleRetailChoice) {
     const msg = userMessage.toLowerCase();
