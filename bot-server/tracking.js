@@ -91,6 +91,51 @@ async function generateClickLink(psid, originalUrl, options = {}) {
 }
 
 /**
+ * Reuse an existing tracked link for this conversation/product if one exists
+ * (and hasn't been clicked yet), otherwise create a new one. Prevents
+ * regenerating tracked links every time the customer asks about the same
+ * product within the same conversation.
+ *
+ * @param {string|null} psid - User's PSID
+ * @param {string} originalUrl - The actual destination URL
+ * @param {object} options - Same as generateClickLink. productId is recommended.
+ * @returns {Promise<string>} - The trackable link (reused or new)
+ */
+async function getOrCreateClickLink(psid, originalUrl, options = {}) {
+  if (!psid || !originalUrl) {
+    return await generateClickLink(psid, originalUrl, options);
+  }
+
+  try {
+    // Match by (psid, originalUrl) and optionally productId. Don't reuse a
+    // ClickLog that has already been clicked — once the customer hit it, the
+    // next presentation should be a fresh tracked link so we can attribute
+    // the new click independently.
+    const query = {
+      psid,
+      originalUrl,
+      clicked: { $ne: true }
+    };
+    if (options.productId) query.productId = options.productId;
+
+    const existing = await ClickLog.findOne(query)
+      .sort({ createdAt: -1 })
+      .select('clickId')
+      .lean();
+
+    if (existing?.clickId) {
+      const baseUrl = process.env.BASE_URL || 'https://agente.hanlob.com.mx';
+      return `${baseUrl}/r/${existing.clickId}`;
+    }
+  } catch (err) {
+    // Non-critical — fall through to creating a new link
+    console.error('⚠️ getOrCreateClickLink lookup failed:', err.message);
+  }
+
+  return await generateClickLink(psid, originalUrl, options);
+}
+
+/**
  * Get click data by click ID
  * @param {string} clickId - The click ID
  * @returns {Promise<object|null>} - The click log entry
@@ -226,6 +271,7 @@ async function recordDirectAdClick(trackCode, metadata = {}) {
 
 module.exports = {
   generateClickLink,
+  getOrCreateClickLink,
   getClickData,
   recordClick,
   recordConversion,

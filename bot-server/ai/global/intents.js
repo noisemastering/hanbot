@@ -29,7 +29,7 @@ function getProductLink(product) {
          product.onlineStoreLinks?.[0]?.url || null;
 }
 const { detectMexicanLocation, detectLocationEnhanced, isLikelyLocationName, detectZipCode } = require("../../mexicanLocations");
-const { generateClickLink } = require("../../tracking");
+const { getOrCreateClickLink } = require("../../tracking");
 const { sendHandoffNotification } = require("../../services/pushNotifications");
 const { selectRelevantAsset, trackAssetMention, insertAssetIntoResponse } = require("../assetManager");
 const { handleRollQuery } = require("../core/rollQuery");
@@ -144,7 +144,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   let _trackedStoreLink = null;
   const getTrackedStoreLink = async () => {
     if (!_trackedStoreLink) {
-      _trackedStoreLink = await generateClickLink(psid, STORE_URL, {
+      _trackedStoreLink = await getOrCreateClickLink(psid, STORE_URL, {
         productName: "Tienda Hanlob",
         campaignId: convo.campaignId
       });
@@ -269,7 +269,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
                          product.onlineStoreLinks?.[0]?.url ||
                          product.mLink;
             if (link) {
-              const trackedLink = await generateClickLink(psid, link, {
+              const trackedLink = await getOrCreateClickLink(psid, link, {
                 productName: product.name,
                 productId: product._id,
                 campaignId: convo?.campaignId
@@ -535,7 +535,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
           await updateConversation(psid, { city: cityMatch[1] });
         }
 
-        const trackedLink = await generateClickLink(psid, productUrl, {
+        const trackedLink = await getOrCreateClickLink(psid, productUrl, {
           productName: `Borde Separador ${length}m`,
           productId: product._id,
           city: convo.city || cityMatch?.[1],
@@ -626,7 +626,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         const productUrl = getProductLink(product);
 
         if (productUrl) {
-          const trackedLink = await generateClickLink(psid, productUrl, {
+          const trackedLink = await getOrCreateClickLink(psid, productUrl, {
             productName: `Borde Separador ${length}m`,
             productId: product._id,
             city: convo.city,
@@ -810,7 +810,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     await updateConversation(psid, { lastIntent: "store_link_requested" });
 
     const storeUrl = "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob";
-    const trackedLink = await generateClickLink(psid, storeUrl, {
+    const trackedLink = await getOrCreateClickLink(psid, storeUrl, {
       productName: "Tienda Oficial",
       campaignId: convo.campaignId,
       adSetId: convo.adSetId,
@@ -878,7 +878,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     await updateConversation(psid, { lastIntent: "purchase_process" });
 
     const storeUrl = "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob";
-    const trackedLink = await generateClickLink(psid, storeUrl, {
+    const trackedLink = await getOrCreateClickLink(psid, storeUrl, {
       productName: "Tienda Oficial",
       campaignId: convo.campaignId,
       adSetId: convo.adSetId,
@@ -1251,7 +1251,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
                                product.onlineStoreLinks?.[0]?.url;
 
           if (preferredLink) {
-            const trackedLink = await generateClickLink(psid, preferredLink, {
+            const trackedLink = await getOrCreateClickLink(psid, preferredLink, {
               productName: product.name,
               productId: product._id,
               city: convo?.city,
@@ -1529,7 +1529,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       if (productLink) {
         await updateConversation(psid, { lastIntent: "affirmative_link_provided", unknownCount: 0 });
 
-        const trackedLink = await generateClickLink(psid, productLink, {
+        const trackedLink = await getOrCreateClickLink(psid, productLink, {
           productName: product.name,
           productId: product._id,
           campaignId: convo.campaignId,
@@ -1846,7 +1846,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         if (product) {
           const productLink = getProductLink(product);
           if (productLink) {
-            const trackedLink = await generateClickLink(psid, productLink, {
+            const trackedLink = await getOrCreateClickLink(psid, productLink, {
               productName: product.name,
               productId: product._id,
               campaignId: convo.campaignId,
@@ -2136,7 +2136,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
       const productLink = getProductLink(product);
       if (productLink) {
-        const trackedLink = await generateClickLink(psid, productLink, {
+        const trackedLink = await getOrCreateClickLink(psid, productLink, {
           productName: product.name,
           productId: product._id,
           campaignId: convo.campaignId,
@@ -2358,7 +2358,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
       const productLink = getProductLink(product);
       if (productLink) {
-        const trackedLink = await generateClickLink(psid, productLink, {
+        const trackedLink = await getOrCreateClickLink(psid, productLink, {
           productName: product.name,
           productId: product._id,
           campaignId: convo.campaignId,
@@ -2540,7 +2540,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     if (productLink) {
       await updateConversation(psid, { lastIntent: "size_reference_confirmed", unknownCount: 0 });
 
-      const trackedLink = await generateClickLink(psid, productLink, {
+      const trackedLink = await getOrCreateClickLink(psid, productLink, {
         productName: product.name,
         productId: product._id,
         campaignId: convo.campaignId,
@@ -2721,7 +2721,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
           if (product) {
             const productLink = getProductLink(product);
             if (productLink) {
-              const trackedLink = await generateClickLink(psid, productLink, {
+              const trackedLink = await getOrCreateClickLink(psid, productLink, {
                 productName: product.name,
                 productId: product._id,
                 campaignId: convo.campaignId,
@@ -2783,7 +2783,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
             lastUnavailableSize: null
           });
 
-          const trackedLink = await generateClickLink(psid, productLink, {
+          const trackedLink = await getOrCreateClickLink(psid, productLink, {
             productName: product.name,
             productId: product._id,
             campaignId: convo.campaignId,
@@ -2957,7 +2957,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
         if (productLink) {
           await updateConversation(psid, { lastIntent: "specific_measure_context", unknownCount: 0 });
 
-          const trackedLink = await generateClickLink(psid, productLink, {
+          const trackedLink = await getOrCreateClickLink(psid, productLink, {
             productName: product.name,
             productId: product._id,
             campaignId: convo.campaignId,

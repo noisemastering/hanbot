@@ -2,7 +2,7 @@
 // Handlers for purchase-related intents: store link, how to buy, bulk discount, phone
 
 const { updateConversation } = require("../../conversationManager");
-const { generateClickLink } = require("../../tracking");
+const { getOrCreateClickLink } = require("../../tracking");
 const { getBusinessInfo } = require("../../businessInfoManager");
 const { generateBotResponse } = require("../responseGenerator");
 const { getCatalogUrl } = require("../flowManager");
@@ -30,7 +30,7 @@ async function handleStoreLinkRequest({ psid, convo }) {
     });
   }
 
-  const trackedLink = await generateClickLink(psid, STORE_URL, {
+  const trackedLink = await getOrCreateClickLink(psid, STORE_URL, {
     productName: "Tienda Oficial",
     campaignId: convo?.campaignId,
     adSetId: convo?.adSetId,
@@ -64,7 +64,7 @@ async function handleStoreLinkRequest({ psid, convo }) {
  * Handle how to buy - "Cómo compro?", "Proceso de compra?"
  */
 async function handleHowToBuy({ psid, convo }) {
-  const trackedLink = await generateClickLink(psid, STORE_URL, {
+  const trackedLink = await getOrCreateClickLink(psid, STORE_URL, {
     productName: "Tienda Oficial",
     campaignId: convo?.campaignId,
     city: convo?.city,

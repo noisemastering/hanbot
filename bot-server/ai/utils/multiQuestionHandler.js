@@ -10,7 +10,7 @@ const { OpenAI } = require("openai");
 const openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 const { INTENTS } = require("../classifier");
 const ProductFamily = require("../../models/ProductFamily");
-const { generateClickLink } = require("../../tracking");
+const { getOrCreateClickLink } = require("../../tracking");
 const { MAPS_URL } = require("../../businessInfoManager");
 
 const AVAILABLE_INTENTS = Object.values(INTENTS).join(", ");
@@ -254,7 +254,7 @@ async function combineWithAI(segments, userMessage, psid, convo) {
   let trackedLink = null;
   if (productQuote?.productUrl) {
     try {
-      trackedLink = await generateClickLink(psid, productQuote.productUrl, {
+      trackedLink = await getOrCreateClickLink(psid, productQuote.productUrl, {
         productName: productQuote.productName,
         productId: productQuote.productId,
         city: convo?.city,
@@ -286,7 +286,7 @@ async function combineWithAI(segments, userMessage, psid, convo) {
   // Fallback: always have a store link when no specific product link
   if (!trackedLink) {
     try {
-      trackedLink = await generateClickLink(psid, STORE_URL, {
+      trackedLink = await getOrCreateClickLink(psid, STORE_URL, {
         productName: 'Tienda Hanlob',
         city: convo?.city,
         stateMx: convo?.stateMx

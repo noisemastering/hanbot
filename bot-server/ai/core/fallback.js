@@ -2,7 +2,7 @@
 const { getBusinessInfo } = require("../../businessInfoManager");
 const { updateConversation } = require("../../conversationManager");
 const { getAngleMessaging } = require("../utils/adContextHelper");
-const { generateClickLink } = require("../../tracking");
+const { getOrCreateClickLink } = require("../../tracking");
 const ProductFamily = require("../../models/ProductFamily");
 const { isBusinessHours } = require("../utils/businessHours");
 
@@ -47,7 +47,7 @@ async function appendProductLinkIfAvailable(responseText, convo, psid) {
     if (product) {
       const productUrl = product.mlLink || product.onlineStoreLinks?.[0]?.url;
       if (productUrl) {
-        const trackedLink = await generateClickLink(psid, productUrl, {
+        const trackedLink = await getOrCreateClickLink(psid, productUrl, {
           productName: product.name,
           productId: product._id
         });

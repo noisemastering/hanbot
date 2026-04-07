@@ -3,7 +3,7 @@
 
 const Product = require("../../models/Product");
 const { parseDimensions, suggestsRoll, inferProductType, formatDimensions } = require("../utils/sizeParser");
-const { generateClickLink } = require("../../tracking");
+const { getOrCreateClickLink } = require("../../tracking");
 
 const STORE_URL = "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob";
 
@@ -266,7 +266,7 @@ async function processUserChoice(userChoice, collectedData, convo, psid) {
   }
 
   if (userChoice === 'see_catalog') {
-    const trackedLink = psid ? await generateClickLink(psid, STORE_URL, { productName: 'Catálogo completo' }) : STORE_URL;
+    const trackedLink = psid ? await getOrCreateClickLink(psid, STORE_URL, { productName: 'Catálogo completo' }) : STORE_URL;
     return {
       action: 'message',
       message: `Puedes ver todas nuestras medidas disponibles en nuestra tienda:\n${trackedLink}\n\n¿Hay algo más en lo que te pueda ayudar?`
@@ -274,7 +274,7 @@ async function processUserChoice(userChoice, collectedData, convo, psid) {
   }
 
   if (userChoice === 'rollo') {
-    const trackedLink = psid ? await generateClickLink(psid, STORE_URL, { productName: 'Rollos malla sombra' }) : STORE_URL;
+    const trackedLink = psid ? await getOrCreateClickLink(psid, STORE_URL, { productName: 'Rollos malla sombra' }) : STORE_URL;
     return {
       action: 'message',
       message: `Tenemos rollos de malla sombra en 4x50m y 4x100m. Puedes verlos aquí:\n${trackedLink}\n\n¿Te interesa alguno en específico?`
@@ -287,7 +287,7 @@ async function processUserChoice(userChoice, collectedData, convo, psid) {
     const product = await Product.findById(userChoice);
     if (product) {
       const rawLink = product.mlLink || STORE_URL;
-      const trackedLink = psid ? await generateClickLink(psid, rawLink, { productName: product.name || 'Producto', productId: product._id }) : rawLink;
+      const trackedLink = psid ? await getOrCreateClickLink(psid, rawLink, { productName: product.name || 'Producto', productId: product._id }) : rawLink;
       return {
         action: 'message',
         message: `¡Excelente elección! Aquí está el link para ordenar:\n${trackedLink}\n\n¿Necesitas algo más?`
@@ -298,7 +298,7 @@ async function processUserChoice(userChoice, collectedData, convo, psid) {
   }
 
   // Generic response
-  const trackedLink = psid ? await generateClickLink(psid, STORE_URL, { productName: 'Tienda ML' }) : STORE_URL;
+  const trackedLink = psid ? await getOrCreateClickLink(psid, STORE_URL, { productName: 'Tienda ML' }) : STORE_URL;
   return {
     action: 'message',
     message: `Puedes ordenar directamente en nuestra tienda de Mercado Libre:\n${trackedLink}\n\n¿Hay algo más en lo que te pueda ayudar?`

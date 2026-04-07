@@ -15,7 +15,7 @@ const resellerFlow_v2 = require("./resellerFlow_v2");
 const promoFlow = require("./promoFlow");
 const { updateConversation } = require("../../conversationManager");
 const { executeHandoff } = require("../utils/executeHandoff");
-const { generateClickLink } = require("../../tracking");
+const { getOrCreateClickLink } = require("../../tracking");
 const { getConversationContext } = require("../middleware/contextManager");
 
 const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
@@ -382,11 +382,11 @@ function create(manifest) {
         ? productCache.filter(p => activePromo.promoProductIds.includes(String(p.productId)))
         : productCache;
 
-      // Generate tracked links for retail promo products (before first pitch)
+      // Generate (or reuse) tracked links for retail promo products (before first pitch)
       if (!flowState.pitchSent && manifest.salesChannel === 'retail') {
         promoProducts = await Promise.all(promoProducts.map(async p => {
           if (p.link) {
-            const tracked = await generateClickLink(psid, p.link, {
+            const tracked = await getOrCreateClickLink(psid, p.link, {
               productName: p.name, productId: p.productId, reason: 'promo_pitch'
             });
             return { ...p, link: tracked };
@@ -572,12 +572,12 @@ IMPORTANTE: si el cliente da una dirección completa (calle, número, colonia) o
 
       // Products found — pass to sales flow with the matched products
       if (productResult.type === 'products_found' && productResult.products.length > 0) {
-        // Generate tracked links for retail products before quoting
+        // Generate (or reuse) tracked links for retail products before quoting
         let quotableProducts = productResult.products;
         if (manifest.salesChannel === 'retail') {
           quotableProducts = await Promise.all(productResult.products.map(async p => {
             if (p.link) {
-              const tracked = await generateClickLink(psid, p.link, {
+              const tracked = await getOrCreateClickLink(psid, p.link, {
                 productName: p.name, productId: p.productId, reason: 'retail_quote'
               });
               return { ...p, link: tracked };
@@ -650,12 +650,12 @@ IMPORTANTE: si el cliente da una dirección completa (calle, número, colonia) o
     if (productCache && productCache.length > 0) {
       console.log(`🏛️ [convo] No specific product match — invoking ${manifest.salesChannel} flow with full product cache`);
 
-      // For retail with tracked links, generate them up front
+      // For retail with tracked links, generate (or reuse) them up front
       let availableProducts = productCache;
       if (manifest.salesChannel === 'retail') {
         availableProducts = await Promise.all(productCache.map(async p => {
           if (p.link) {
-            const tracked = await generateClickLink(psid, p.link, {
+            const tracked = await getOrCreateClickLink(psid, p.link, {
               productName: p.name, productId: p.productId, reason: 'retail_intro'
             });
             return { ...p, link: tracked };

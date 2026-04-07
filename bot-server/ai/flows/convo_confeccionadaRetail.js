@@ -8,7 +8,7 @@ const { executeHandoff } = require("../utils/executeHandoff");
 const {
   parseConfeccionadaDimensions: parseDimensions
 } = require("../utils/dimensionParsers");
-const { generateClickLink } = require("../../tracking");
+const { getOrCreateClickLink } = require("../../tracking");
 const { updateConversation } = require("../../conversationManager");
 const ProductFamily = require("../../models/ProductFamily");
 
@@ -93,7 +93,7 @@ async function handle(userMessage, convo, psid, state = {}) {
           || product.onlineStoreLinks?.[0]?.url;
 
         if (productUrl) {
-          const trackedLink = await generateClickLink(psid, productUrl, {
+          const trackedLink = await getOrCreateClickLink(psid, productUrl, {
             productName: product.name,
             productId: product._id,
             reason: 'retail_fractional_round'
@@ -145,7 +145,7 @@ async function handle(userMessage, convo, psid, state = {}) {
         || product.onlineStoreLinks?.[0]?.url;
 
       if (productUrl) {
-        const trackedLink = await generateClickLink(psid, productUrl, {
+        const trackedLink = await getOrCreateClickLink(psid, productUrl, {
           productName: product.name,
           productId: product._id,
           reason: 'retail_quote'

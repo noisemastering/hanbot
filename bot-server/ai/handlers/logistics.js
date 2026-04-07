@@ -5,7 +5,7 @@ const { updateConversation } = require("../../conversationManager");
 const { getBusinessInfo, MAPS_URL, STORE_ADDRESS } = require("../../businessInfoManager");
 const { detectMexicanLocation } = require("../../mexicanLocations");
 const { generateBotResponse } = require("../responseGenerator");
-const { generateClickLink } = require("../../tracking");
+const { getOrCreateClickLink } = require("../../tracking");
 const { classifyLocationIntent } = require("../utils/locationIntent");
 
 const STORE_URL = "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob";
@@ -116,7 +116,7 @@ async function handleLocation({ psid, userMessage, convo }) {
       unknownCount: 0
     });
 
-    const trackedLink = await generateClickLink(psid, STORE_URL, {
+    const trackedLink = await getOrCreateClickLink(psid, STORE_URL, {
       productName: "Tienda Oficial",
       campaignId: convo?.campaignId,
       adId: convo?.adId,

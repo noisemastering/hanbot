@@ -64,7 +64,7 @@ async function handleConfirmation({ psid, convo, userMessage }) {
     try {
       const Ad = require("../../models/Ad");
       const ProductFamily = require("../../models/ProductFamily");
-      const { generateClickLink } = require("../../tracking");
+      const { getOrCreateClickLink } = require("../../tracking");
       const { resolveByAdId } = require("../../utils/campaignResolver");
 
       const resolved = await resolveByAdId(convo.adId);
@@ -77,7 +77,7 @@ async function handleConfirmation({ psid, convo, userMessage }) {
           const productUrl = preferredLink?.url || product.onlineStoreLinks?.[0]?.url;
 
           if (productUrl) {
-            const trackedLink = await generateClickLink(psid, productUrl, {
+            const trackedLink = await getOrCreateClickLink(psid, productUrl, {
               reason: 'ad_confirmation',
               productName: product.name,
               productId: product._id,
@@ -125,10 +125,10 @@ async function handleConfirmation({ psid, convo, userMessage }) {
 
   // Customer confirming after receiving a price quote — re-share the product link
   if (convo?.lastIntent?.endsWith('_complete') && convo?.lastSharedProductLink) {
-    const { generateClickLink } = require("../../tracking");
+    const { getOrCreateClickLink } = require("../../tracking");
     await updateConversation(psid, { lastIntent: "confirmation", unknownCount: 0 });
     try {
-      const trackedLink = await generateClickLink(psid, convo.lastSharedProductLink, {
+      const trackedLink = await getOrCreateClickLink(psid, convo.lastSharedProductLink, {
         reason: 'post_quote_confirmation',
         productId: convo.lastSharedProductId,
         userName: convo?.userName

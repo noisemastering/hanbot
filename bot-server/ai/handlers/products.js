@@ -3,7 +3,7 @@
 
 const { updateConversation } = require("../../conversationManager");
 const { getAvailableSizes, getMallaSizeRange } = require("../../measureHandler");
-const { generateClickLink } = require("../../tracking");
+const { getOrCreateClickLink } = require("../../tracking");
 const { generateBotResponse } = require("../responseGenerator");
 const ProductFamily = require("../../models/ProductFamily");
 
@@ -108,7 +108,7 @@ async function handleLargestProduct({ psid, convo }) {
                              product.onlineStoreLinks?.[0]?.url;
 
         if (preferredLink) {
-          const trackedLink = await generateClickLink(psid, preferredLink, {
+          const trackedLink = await getOrCreateClickLink(psid, preferredLink, {
             productName: product.name,
             productId: product._id,
             city: convo?.city,
@@ -267,7 +267,7 @@ async function handleProductInquiry({ entities, psid, convo, userMessage }) {
 
         let trackedLink = null;
         if (preferredLink) {
-          trackedLink = await generateClickLink(psid, preferredLink, {
+          trackedLink = await getOrCreateClickLink(psid, preferredLink, {
             productName: product.name,
             productId: product._id,
             city: convo?.city || location,
@@ -350,7 +350,7 @@ async function handleProductInquiry({ entities, psid, convo, userMessage }) {
           const altLink = altProduct.onlineStoreLinks?.find(l => l.isPreferred)?.url ||
                          altProduct.onlineStoreLinks?.[0]?.url;
           if (altLink) {
-            responseData.alternativeLink = await generateClickLink(psid, altLink, {
+            responseData.alternativeLink = await getOrCreateClickLink(psid, altLink, {
               productName: altProduct.name,
               productId: altProduct._id
             });
@@ -446,7 +446,7 @@ async function handlePhotoRequest({ psid, convo }) {
   }
 
   // No catalog found - share tracked store link
-  const trackedStoreLink = await generateClickLink(psid, "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob", {
+  const trackedStoreLink = await getOrCreateClickLink(psid, "https://www.mercadolibre.com.mx/tienda/distribuidora-hanlob", {
     productName: "Catálogo fotos"
   });
   return {
