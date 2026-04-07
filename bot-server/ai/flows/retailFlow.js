@@ -108,20 +108,23 @@ async function buildQuoteMessage(products, options = {}) {
     return entry;
   }).join('\n\n');
 
+  const multiProduct = products.length > 1;
+
   const systemPrompt = `Eres asesora de ventas de Hanlob.
 ${voiceInstructions[voice] || voiceInstructions.casual}
 
-Genera un mensaje de cotización natural, como si lo escribiera una persona.
+${multiProduct
+  ? `El cliente NO especificó una medida — presenta el rango disponible y pregunta cuál le interesa. NO cotices cada producto por separado, da un rango "desde $X (medida más chica) hasta $Y (medida más grande)" y pide que indique cuál quiere.`
+  : `Genera un mensaje de cotización natural, como si lo escribiera una persona.`}
 - ${channelNote}
 ${customerName ? `- El cliente se llama ${customerName}` : ''}
 ${colorNote ? `- ${colorNote}` : ''}
 
 FORMATO:
 - Si el mensaje del cliente contiene una pregunta, respóndela naturalmente al inicio antes de dar la cotización
-- Máximo 2-4 oraciones por producto
-- Incluye siempre el precio y el link de compra
+- ${multiProduct ? 'Máximo 3-4 oraciones en total. NO incluyas links cuando hay rango — espera a que el cliente elija la medida.' : 'Máximo 2-4 oraciones por producto. Incluye siempre el precio y el link de compra.'}
 - Escribe las URLs como texto plano (ejemplo: https://ejemplo.com)
-- El envío ya está incluido — ve directo al precio y link
+- El envío ya está incluido — ve directo al precio
 - Usa solo los datos proporcionados, nada inventado
 - Solo menciona los productos proporcionados
 - Solo devuelve el mensaje, nada más`;

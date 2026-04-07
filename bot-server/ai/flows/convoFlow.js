@@ -535,7 +535,7 @@ IMPORTANTE: si el cliente da una dirección completa (calle, número, colonia) o
         return await resolveFlowSwitch(productResult, manifest, flowState, userMessage, convo, psid);
       }
 
-      // Products found — pass to sales flow
+      // Products found — pass to sales flow with the matched products
       if (productResult.type === 'products_found' && productResult.products.length > 0) {
         // Generate tracked links for retail products before quoting
         let quotableProducts = productResult.products;
@@ -604,6 +604,56 @@ IMPORTANTE: si el cliente da una dirección completa (calle, número, colonia) o
 
           return { response: salesResult, state: flowState };
         }
+      }
+    }
+
+    // ── PRODUCT FLOW returned no specific match ──
+    // The customer arrived with convo_flow context — they expect a sales touch, not a generic answer.
+    // Call the sales flow with the FULL product cache so wholesale_flow can present its catalog
+    // (gated by manifest.allowListing/offersCatalog) or gather lead data, and retail_flow can
+    // present the available range. The convo_flow context is the customer's existing context.
+    if (productCache && productCache.length > 0) {
+      console.log(`🏛️ [convo] No specific product match — invoking ${manifest.salesChannel} flow with full product cache`);
+
+      // For retail with tracked links, generate them up front
+      let availableProducts = productCache;
+      if (manifest.salesChannel === 'retail') {
+        availableProducts = await Promise.all(productCache.map(async p => {
+          if (p.link) {
+            const tracked = await generateClickLink(psid, p.link, {
+              productName: p.name, productId: p.productId, reason: 'retail_intro'
+            });
+            return { ...p, link: tracked };
+          }
+          return p;
+        }));
+      }
+
+      const salesResult = await salesFlow.handle(userMessage, convo, psid, {
+        products: availableProducts,
+        voice: manifest.voice || 'casual',
+        salesChannel: manifest.salesChannel === 'retail' ? 'mercado_libre' : 'direct',
+        customerName,
+        clientData: flowState.clientData,
+        allowListing: manifest.allowListing || false,
+        offersCatalog: manifest.offersCatalog || false,
+        colorNote: manifest.promo?.colorNote || null,
+        conversationHistory
+      });
+
+      if (salesResult) {
+        if (salesResult.type === 'flow_switch') {
+          return await resolveFlowSwitch(salesResult, manifest, flowState, userMessage, convo, psid);
+        }
+
+        if (salesResult.products) {
+          flowState.lastQuotedProducts = salesResult.products;
+        }
+        if (salesResult.clientData) {
+          flowState.clientData = salesResult.clientData;
+        }
+
+        return { response: salesResult, state: flowState };
       }
     }
 
