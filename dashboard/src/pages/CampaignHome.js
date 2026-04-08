@@ -57,6 +57,8 @@ function CampaignHome() {
   const [adPerf, setAdPerf] = useState([]);
   const [dailyData, setDailyData] = useState([]);
   const [sourceBreakdown, setSourceBreakdown] = useState([]);
+  const [geoData, setGeoData] = useState([]);
+  const [genderData, setGenderData] = useState([]);
 
   // Link generator state
   const [showLinkGen, setShowLinkGen] = useState(false);
@@ -85,17 +87,21 @@ function CampaignHome() {
       const dateFromISO = `${dateFrom}T00:00:00.000Z`;
       const dateToISO = `${dateTo}T23:59:59.999Z`;
 
-      const [analyticsRes, adPerfRes, clicksRes, sourceRes] = await Promise.all([
+      const [analyticsRes, adPerfRes, clicksRes, sourceRes, geoRes, genderRes] = await Promise.all([
         API.get(`/analytics/?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/analytics/ad-performance?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/click-logs/daily?startDate=${dateFrom}&endDate=${dateTo}`),
         API.get(`/click-logs/by-source?startDate=${dateFrom}&endDate=${dateTo}`),
+        API.get(`/analytics/conversions-by-geography?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
+        API.get(`/analytics/conversions-by-gender?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
       ]);
 
       setAnalytics(analyticsRes.data);
       setAdPerf(adPerfRes.data?.ads || []);
       setDailyData(clicksRes.data?.chartData || []);
       setSourceBreakdown(sourceRes.data?.sources || []);
+      setGeoData(geoRes.data?.data || []);
+      setGenderData(genderRes.data?.data || []);
     } catch (err) {
       console.error("Error fetching campaign dashboard:", err);
     } finally {
@@ -387,6 +393,69 @@ function CampaignHome() {
           </div>
         </div>
       )}
+
+      {/* Geography + Gender of conversions */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Geography (top states) — spans 2 cols */}
+        <div className="lg:col-span-2 bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-1">Distribución geográfica</h2>
+          <p className="text-sm text-gray-500 mb-4">Top estados por conversiones</p>
+          {geoData.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">Sin datos en este periodo</p>
+          ) : (
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <ComposedChart data={geoData} layout="vertical" margin={{ top: 5, right: 20, bottom: 5, left: 80 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis type="number" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} allowDecimals={false} />
+                  <YAxis type="category" dataKey="state" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} width={80} />
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v, n, p) => [`${v} (${p.payload.percentage}%)`, 'Conversiones']} />
+                  <Bar dataKey="count" fill={COLORS.cyan} radius={[0, 4, 4, 0]} />
+                </ComposedChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+
+        {/* Gender breakdown */}
+        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-1">Género</h2>
+          <p className="text-sm text-gray-500 mb-4">Compradores por género</p>
+          {genderData.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">Sin datos</p>
+          ) : (
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={genderData.map(g => ({
+                      name: g.gender === 'male' ? 'Hombres' : g.gender === 'female' ? 'Mujeres' : 'Desconocido',
+                      value: g.count,
+                      percentage: g.percentage
+                    }))}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={85}
+                    paddingAngle={4}
+                    dataKey="value"
+                    label={({ name, percentage }) => `${name}: ${percentage}%`}
+                  >
+                    {genderData.map((g, i) => (
+                      <Cell
+                        key={i}
+                        fill={g.gender === 'male' ? COLORS.blue : g.gender === 'female' ? '#EC4899' : '#6B7280'}
+                        stroke="transparent"
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={tooltipStyle} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      </div>
 
       {/* Correlate button */}
       <div className="flex items-center justify-end gap-3">

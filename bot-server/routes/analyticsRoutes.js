@@ -1393,6 +1393,79 @@ router.get('/daily-handoffs-sales', async (req, res) => {
   }
 });
 
+// GET /analytics/conversions-by-geography — conversion counts by Mexican state
+router.get('/conversions-by-geography', async (req, res) => {
+  try {
+    const { dateFrom, dateTo } = req.query;
+    const match = { converted: true };
+    if (dateFrom || dateTo) {
+      match.convertedAt = {};
+      if (dateFrom) match.convertedAt.$gte = new Date(dateFrom);
+      if (dateTo) match.convertedAt.$lte = new Date(dateTo);
+    }
+
+    const breakdown = await ClickLog.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: { $ifNull: ['$conversionData.shippingState', 'Desconocido'] },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } },
+      { $limit: 15 }
+    ]);
+
+    const total = breakdown.reduce((s, b) => s + b.count, 0);
+    const data = breakdown.map(b => ({
+      state: b._id,
+      count: b.count,
+      percentage: total > 0 ? +((b.count / total) * 100).toFixed(1) : 0
+    }));
+
+    res.json({ success: true, data, total });
+  } catch (err) {
+    console.error('❌ Error fetching geography breakdown:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /analytics/conversions-by-gender — conversion counts by inferred gender
+router.get('/conversions-by-gender', async (req, res) => {
+  try {
+    const { dateFrom, dateTo } = req.query;
+    const match = { converted: true };
+    if (dateFrom || dateTo) {
+      match.convertedAt = {};
+      if (dateFrom) match.convertedAt.$gte = new Date(dateFrom);
+      if (dateTo) match.convertedAt.$lte = new Date(dateTo);
+    }
+
+    const breakdown = await ClickLog.aggregate([
+      { $match: match },
+      {
+        $group: {
+          _id: { $ifNull: ['$conversionData.buyerGender', 'unknown'] },
+          count: { $sum: 1 }
+        }
+      },
+      { $sort: { count: -1 } }
+    ]);
+
+    const total = breakdown.reduce((s, b) => s + b.count, 0);
+    const data = breakdown.map(b => ({
+      gender: b._id,
+      count: b.count,
+      percentage: total > 0 ? +((b.count / total) * 100).toFixed(1) : 0
+    }));
+
+    res.json({ success: true, data, total });
+  } catch (err) {
+    console.error('❌ Error fetching gender breakdown:', err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // GET /analytics/device-breakdown — clicks by device type
 router.get('/device-breakdown', async (req, res) => {
   try {
