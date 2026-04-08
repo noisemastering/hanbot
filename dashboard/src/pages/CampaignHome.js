@@ -395,6 +395,30 @@ function CampaignHome() {
         </div>
       )}
 
+      {/* Correlate button */}
+      <div className="flex items-center justify-end gap-3">
+        {lastSync && (
+          <span className="text-xs text-gray-500">
+            Última sync: {lastSync.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
+          </span>
+        )}
+        {correlating && (
+          <div className="w-48 h-2 bg-gray-700 rounded-full overflow-hidden">
+            <div
+              className="h-full bg-purple-500 rounded-full transition-all duration-300 ease-out"
+              style={{ width: `${syncProgress}%` }}
+            />
+          </div>
+        )}
+        <button
+          onClick={runCorrelation}
+          disabled={correlating}
+          className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50 transition-all"
+        >
+          {correlating ? `${syncProgress}%` : "Correlacionar"}
+        </button>
+      </div>
+
       {/* Geography + Gender + Channel donuts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Geography (top states) donut */}
@@ -507,28 +531,95 @@ function CampaignHome() {
         </div>
       </div>
 
-      {/* Correlate button */}
-      <div className="flex items-center justify-end gap-3">
-        {lastSync && (
-          <span className="text-xs text-gray-500">
-            Última sync: {lastSync.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
-          </span>
-        )}
-        {correlating && (
-          <div className="w-48 h-2 bg-gray-700 rounded-full overflow-hidden">
-            <div
-              className="h-full bg-purple-500 rounded-full transition-all duration-300 ease-out"
-              style={{ width: `${syncProgress}%` }}
-            />
+      {/* Bottom row: Ad Donut + Ad Table */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        {/* Ad Donut */}
+        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-1">Top anuncios</h2>
+          <p className="text-sm text-gray-500 mb-4">Por clicks</p>
+          {adDonutData.length > 0 ? (
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={adDonutData}
+                    cx="50%"
+                    cy="55%"
+                    innerRadius={55}
+                    outerRadius={85}
+                    paddingAngle={4}
+                    dataKey="value"
+                    label={({ name, value }) => `${name}: ${value}`}
+                  >
+                    {adDonutData.map((_, i) => (
+                      <Cell key={i} fill={AD_COLORS[i % AD_COLORS.length]} stroke="transparent" />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={tooltipStyle}
+                    formatter={(value, name, props) => [
+                      `${value} clicks / ${props.payload.conversions} conv.`,
+                      props.payload.name
+                    ]}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          ) : (
+            <p className="text-gray-500 text-center py-8">Sin datos</p>
+          )}
+        </div>
+
+        {/* Ad Table */}
+        <div className="lg:col-span-2 bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl">
+          <div className="px-6 py-4 border-b border-gray-700/50">
+            <h2 className="text-lg font-semibold text-white">Rendimiento por anuncio</h2>
           </div>
-        )}
-        <button
-          onClick={runCorrelation}
-          disabled={correlating}
-          className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50 transition-all"
-        >
-          {correlating ? `${syncProgress}%` : "Correlacionar"}
-        </button>
+          <div className="overflow-x-auto">
+            {adPerf.length === 0 ? (
+              <p className="text-gray-500 text-center py-8">No hay datos de anuncios en este periodo</p>
+            ) : (
+              <table className="w-full">
+                <thead className="bg-gray-900/50">
+                  <tr className="text-left text-xs text-gray-400 uppercase">
+                    <th className="px-6 py-3">Anuncio</th>
+                    <th className="px-4 py-3 text-right">Links</th>
+                    <th className="px-4 py-3 text-right">Clicks</th>
+                    <th className="px-4 py-3 text-right">Click Rate</th>
+                    <th className="px-4 py-3 text-right">Conv.</th>
+                    <th className="px-4 py-3 text-right">Conv. Rate</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700/50">
+                  {adPerf.map((ad, i) => (
+                    <tr key={ad.adId} className="hover:bg-gray-700/20">
+                      <td className="px-6 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: AD_COLORS[i % AD_COLORS.length] }} />
+                          <span className="text-sm text-white font-medium truncate max-w-[200px]">{ad.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-300">{ad.totals?.links?.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right text-sm text-white font-medium">{ad.totals?.clicks?.toLocaleString()}</td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-300">{ad.totals?.clickRate}%</td>
+                      <td className="px-4 py-3 text-right text-sm text-green-400 font-medium">{ad.totals?.conversions}</td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-300">{ad.totals?.conversionRate}%</td>
+                    </tr>
+                  ))}
+                  {/* Totals */}
+                  <tr className="bg-gray-900/30 font-semibold">
+                    <td className="px-6 py-3 text-sm text-white">Total</td>
+                    <td className="px-4 py-3 text-right text-sm text-white">{totals.links.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right text-sm text-white">{totals.clicks.toLocaleString()}</td>
+                    <td className="px-4 py-3 text-right text-sm text-white">{clickRate}%</td>
+                    <td className="px-4 py-3 text-right text-sm text-green-400">{totals.conversions}</td>
+                    <td className="px-4 py-3 text-right text-sm text-white">{convRate}%</td>
+                  </tr>
+                </tbody>
+              </table>
+            )}
+          </div>
+        </div>
       </div>
 
       {/* Link Generator for Direct Ads */}
@@ -623,97 +714,6 @@ function CampaignHome() {
             </div>
           </div>
         )}
-      </div>
-
-      {/* Bottom row: Ad Donut + Ad Table */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Ad Donut */}
-        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-1">Top anuncios</h2>
-          <p className="text-sm text-gray-500 mb-4">Por clicks</p>
-          {adDonutData.length > 0 ? (
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={adDonutData}
-                    cx="50%"
-                    cy="55%"
-                    innerRadius={55}
-                    outerRadius={85}
-                    paddingAngle={4}
-                    dataKey="value"
-                    label={({ name, value }) => `${name}: ${value}`}
-                  >
-                    {adDonutData.map((_, i) => (
-                      <Cell key={i} fill={AD_COLORS[i % AD_COLORS.length]} stroke="transparent" />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={tooltipStyle}
-                    formatter={(value, name, props) => [
-                      `${value} clicks / ${props.payload.conversions} conv.`,
-                      props.payload.name
-                    ]}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <p className="text-gray-500 text-center py-8">Sin datos</p>
-          )}
-        </div>
-
-        {/* Ad Table */}
-        <div className="lg:col-span-2 bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl">
-          <div className="px-6 py-4 border-b border-gray-700/50">
-            <h2 className="text-lg font-semibold text-white">Rendimiento por anuncio</h2>
-          </div>
-          <div className="overflow-x-auto">
-            {adPerf.length === 0 ? (
-              <p className="text-gray-500 text-center py-8">No hay datos de anuncios en este periodo</p>
-            ) : (
-              <table className="w-full">
-                <thead className="bg-gray-900/50">
-                  <tr className="text-left text-xs text-gray-400 uppercase">
-                    <th className="px-6 py-3">Anuncio</th>
-                    <th className="px-4 py-3 text-right">Links</th>
-                    <th className="px-4 py-3 text-right">Clicks</th>
-                    <th className="px-4 py-3 text-right">Click Rate</th>
-                    <th className="px-4 py-3 text-right">Conv.</th>
-                    <th className="px-4 py-3 text-right">Conv. Rate</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-700/50">
-                  {adPerf.map((ad, i) => (
-                    <tr key={ad.adId} className="hover:bg-gray-700/20">
-                      <td className="px-6 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: AD_COLORS[i % AD_COLORS.length] }} />
-                          <span className="text-sm text-white font-medium truncate max-w-[200px]">{ad.name}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-right text-sm text-gray-300">{ad.totals?.links?.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-right text-sm text-white font-medium">{ad.totals?.clicks?.toLocaleString()}</td>
-                      <td className="px-4 py-3 text-right text-sm text-gray-300">{ad.totals?.clickRate}%</td>
-                      <td className="px-4 py-3 text-right text-sm text-green-400 font-medium">{ad.totals?.conversions}</td>
-                      <td className="px-4 py-3 text-right text-sm text-gray-300">{ad.totals?.conversionRate}%</td>
-                    </tr>
-                  ))}
-                  {/* Totals */}
-                  <tr className="bg-gray-900/30 font-semibold">
-                    <td className="px-6 py-3 text-sm text-white">Total</td>
-                    <td className="px-4 py-3 text-right text-sm text-white">{totals.links.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right text-sm text-white">{totals.clicks.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right text-sm text-white">{clickRate}%</td>
-                    <td className="px-4 py-3 text-right text-sm text-green-400">{totals.conversions}</td>
-                    <td className="px-4 py-3 text-right text-sm text-white">{convRate}%</td>
-                  </tr>
-                </tbody>
-              </table>
-            )}
-          </div>
-        </div>
       </div>
     </div>
   );
