@@ -394,10 +394,10 @@ function CampaignHome() {
         </div>
       )}
 
-      {/* Geography + Gender of conversions */}
+      {/* Geography + Gender + Channel donuts */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Geography (top states) — spans 2 cols */}
-        <div className="lg:col-span-2 bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
+        {/* Geography (top states) donut */}
+        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
           <h2 className="text-lg font-semibold text-white mb-1">Distribución geográfica</h2>
           <p className="text-sm text-gray-500 mb-4">Top estados por conversiones</p>
           {geoData.length === 0 ? (
@@ -405,19 +405,29 @@ function CampaignHome() {
           ) : (
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <ComposedChart data={geoData} layout="vertical" margin={{ top: 5, right: 20, bottom: 5, left: 80 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis type="number" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} allowDecimals={false} />
-                  <YAxis type="category" dataKey="state" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} width={80} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={(v, n, p) => [`${v} (${p.payload.percentage}%)`, 'Conversiones']} />
-                  <Bar dataKey="count" fill={COLORS.cyan} radius={[0, 4, 4, 0]} />
-                </ComposedChart>
+                <PieChart>
+                  <Pie
+                    data={geoData.slice(0, 8).map(g => ({ name: g.state, value: g.count, percentage: g.percentage }))}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={85}
+                    paddingAngle={3}
+                    dataKey="value"
+                    label={({ name, percentage }) => `${name}: ${percentage}%`}
+                  >
+                    {geoData.slice(0, 8).map((_, i) => (
+                      <Cell key={i} fill={AD_COLORS[i % AD_COLORS.length]} stroke="transparent" />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v, n, p) => [`${v} (${p.payload.percentage}%)`, p.payload.name]} />
+                </PieChart>
               </ResponsiveContainer>
             </div>
           )}
         </div>
 
-        {/* Gender breakdown */}
+        {/* Gender donut */}
         <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
           <h2 className="text-lg font-semibold text-white mb-1">Género</h2>
           <p className="text-sm text-gray-500 mb-4">Compradores por género</p>
@@ -445,6 +455,45 @@ function CampaignHome() {
                       <Cell
                         key={i}
                         fill={g.gender === 'male' ? COLORS.blue : g.gender === 'female' ? '#EC4899' : '#6B7280'}
+                        stroke="transparent"
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={tooltipStyle} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+
+        {/* Channel breakdown donut */}
+        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-1">Ventas por canal</h2>
+          <p className="text-sm text-gray-500 mb-4">Messenger vs WhatsApp vs Anuncios</p>
+          {sourceBreakdown.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">Sin datos</p>
+          ) : (
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={sourceBreakdown.map(s => {
+                      const total = sourceBreakdown.reduce((sum, x) => sum + (x.conversions || 0), 0);
+                      const pct = total > 0 ? +((s.conversions / total) * 100).toFixed(1) : 0;
+                      return { name: s.label, value: s.conversions || 0, percentage: pct, source: s.source };
+                    })}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={50}
+                    outerRadius={85}
+                    paddingAngle={4}
+                    dataKey="value"
+                    label={({ name, percentage }) => `${name}: ${percentage}%`}
+                  >
+                    {sourceBreakdown.map((s, i) => (
+                      <Cell
+                        key={i}
+                        fill={s.source === 'direct_ad' ? COLORS.amber : s.source === 'whatsapp' ? COLORS.green : COLORS.blue}
                         stroke="transparent"
                       />
                     ))}
@@ -574,51 +623,6 @@ function CampaignHome() {
           </div>
         )}
       </div>
-
-      {/* Source Breakdown */}
-      {sourceBreakdown.length > 0 && (
-        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl">
-          <div className="px-6 py-4 border-b border-gray-700/50">
-            <h2 className="text-lg font-semibold text-white">Ventas por canal</h2>
-            <p className="text-sm text-gray-500">Messenger vs WhatsApp vs Anuncios directos</p>
-          </div>
-          <div className="overflow-x-auto">
-            <table className="w-full">
-              <thead className="bg-gray-900/50">
-                <tr className="text-left text-xs text-gray-400 uppercase">
-                  <th className="px-6 py-3">Canal</th>
-                  <th className="px-4 py-3 text-right">Links</th>
-                  <th className="px-4 py-3 text-right">Clicks</th>
-                  <th className="px-4 py-3 text-right">Click Rate</th>
-                  <th className="px-4 py-3 text-right">Conv.</th>
-                  <th className="px-4 py-3 text-right">Conv. Rate</th>
-                  <th className="px-4 py-3 text-right">Revenue</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-700/50">
-                {sourceBreakdown.map(s => (
-                  <tr key={s.source} className="hover:bg-gray-700/20">
-                    <td className="px-6 py-3">
-                      <div className="flex items-center gap-2">
-                        <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{
-                          backgroundColor: s.source === "direct_ad" ? COLORS.amber : s.source === "whatsapp" ? COLORS.green : COLORS.blue
-                        }} />
-                        <span className="text-sm text-white font-medium">{s.label}</span>
-                      </div>
-                    </td>
-                    <td className="px-4 py-3 text-right text-sm text-gray-300">{s.links.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right text-sm text-white font-medium">{s.clicks.toLocaleString()}</td>
-                    <td className="px-4 py-3 text-right text-sm text-gray-300">{s.clickRate}%</td>
-                    <td className="px-4 py-3 text-right text-sm text-green-400 font-medium">{s.conversions}</td>
-                    <td className="px-4 py-3 text-right text-sm text-gray-300">{s.conversionRate}%</td>
-                    <td className="px-4 py-3 text-right text-sm text-white">${s.revenue.toLocaleString()}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
 
       {/* Bottom row: Ad Donut + Ad Table */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
