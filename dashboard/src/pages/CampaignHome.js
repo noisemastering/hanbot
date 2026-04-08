@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import API from "../api";
+import { abbrState } from "../utils/stateAbbr";
 import {
   ComposedChart,
   Bar,
@@ -407,7 +408,7 @@ function CampaignHome() {
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
-                    data={geoData.slice(0, 8).map(g => ({ name: g.state, value: g.count, percentage: g.percentage }))}
+                    data={geoData.slice(0, 8).map(g => ({ name: abbrState(g.state), value: g.count, percentage: g.percentage }))}
                     cx="50%"
                     cy="50%"
                     innerRadius={50}
