@@ -18,6 +18,11 @@ const conversationSchema = new mongoose.Schema({
   lastMessageAt: { type: Date, default: Date.now },
   lastBotResponse: { type: String, default: null },  // Track last bot response to detect repetition
 
+  // Name harvested from FB Page Instant Reply ("¡Hola, {First Name}!")
+  // Set once on the first message and never updated again.
+  extractedName: { type: String, default: null },
+  nameHarvested: { type: Boolean, default: false },
+
   // Campaign & context tracking
   campaignRef: { type: String, default: null },
   adId: { type: String, default: null },           // Facebook Ad ID (referral.ad_id) or WhatsApp CTWA source_id

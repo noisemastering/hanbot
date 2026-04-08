@@ -2,6 +2,64 @@
 const mongoose = require("mongoose");
 const Conversation = require("./models/Conversation");
 const User = require("./models/User");
+const Message = require("./models/Message");
+
+// Match the FB Page Instant Reply opener "¡Hola, Felipe!" / "Hola, Salvador!" / "¡Hola Acacia!"
+// Must be at the very start of the message. Captures the first name.
+// Excludes generic words like "Hola gracias" / "Hola buenos" that could be normal user replies.
+const INSTANT_REPLY_NAME_RE = /^¡?\s*[Hh]ola[,!]?\s+([A-ZÁÉÍÓÚÑ][a-záéíóúñ]{1,20})\b[!,.]/;
+
+const NOT_NAMES = new Set([
+  'Buenos','Buenas','Hola','Saludos','Mucho','Muy','Gracias','Perfecto','Bien',
+  'Necesito','Quiero','Hoy','Hola','Para','Con','Sin','Disculpa','Disculpe'
+]);
+
+/**
+ * Harvest the first name from a FB Page Instant Reply ("¡Hola, X!") that
+ * appears in the very early messages of a conversation. The Instant Reply is
+ * sent automatically by Facebook when an ad CTA is clicked and contains the
+ * user's first name from their public FB profile.
+ *
+ * Scans the first 5 messages only — if no match by then, the conversation
+ * doesn't have an Instant Reply and we mark it harvested permanently.
+ *
+ * @param {string} psid
+ */
+async function harvestExtractedName(psid) {
+  try {
+    const firstMessages = await Message.find({ psid })
+      .sort({ timestamp: 1 })
+      .limit(5)
+      .select('text')
+      .lean();
+
+    for (const msg of firstMessages) {
+      if (!msg?.text) continue;
+      const m = msg.text.match(INSTANT_REPLY_NAME_RE);
+      const candidate = m?.[1];
+      if (candidate && !NOT_NAMES.has(candidate)) {
+        await Conversation.updateOne(
+          { psid },
+          { $set: { extractedName: candidate, nameHarvested: true } }
+        );
+        console.log(`👤 Harvested name for ${psid}: ${candidate}`);
+        return candidate;
+      }
+    }
+
+    // No Instant Reply pattern found in first 5 messages — mark harvested so
+    // we never check again (per requirement: "if at first glance is not there
+    // then it'll never be there").
+    await Conversation.updateOne(
+      { psid },
+      { $set: { nameHarvested: true } }
+    );
+    return null;
+  } catch (err) {
+    console.error('❌ Error harvesting extractedName:', err.message);
+    return null;
+  }
+}
 
 const ConversationSchema = new mongoose.Schema({
   psid: { type: String, required: true, unique: true },
@@ -41,6 +99,21 @@ async function getConversation(psid) {
       }
     } catch (userErr) {
       console.log("⚠️ Could not fetch user name:", userErr.message);
+    }
+
+    // Harvest first-message name (e.g. from FB Page Instant Reply) — runs at
+    // most once per conversation. After this, nameHarvested=true and we never
+    // try again, even if the field came back null.
+    if (!convoObj.nameHarvested) {
+      const harvested = await harvestExtractedName(psid);
+      if (harvested) {
+        convoObj.extractedName = harvested;
+      }
+      convoObj.nameHarvested = true;
+    }
+    // Prefer extractedName for downstream userName usage if present
+    if (convoObj.extractedName && !convoObj.userName) {
+      convoObj.userName = convoObj.extractedName;
     }
 
     return convoObj; // 🔥 devuelve snapshot limpio del documento actualizado
