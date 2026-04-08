@@ -2,6 +2,7 @@
 const ClickLog = require("../models/ClickLog");
 const User = require("../models/User");
 const { getShipmentById } = require("./mercadoLibreOrders");
+const { detectGender } = require("./genderDetector");
 
 // Correlation time windows (in hours)
 const HIGH_CONFIDENCE_HOURS = 24;
@@ -529,6 +530,7 @@ async function saveCorrelation(click, order, confidence, method, details) {
       buyerNickname: buyerInfo.nickname,
       buyerFirstName: details.buyerFirstName || null,
       buyerLastName: details.buyerLastName || null,
+      buyerGender: detectGender(details.buyerFirstName || ''),
       receiverName: details.receiverName || null,
       totalAmount: order.total_amount,
       paidAmount: order.paid_amount,
@@ -590,6 +592,7 @@ async function saveOrphanCorrelation(user, order, confidence, matchDetails, ship
       buyerNickname: buyerInfo.nickname,
       buyerFirstName: shippingInfo.buyerFirstName || null,
       buyerLastName: shippingInfo.buyerLastName || null,
+      buyerGender: detectGender(shippingInfo.buyerFirstName || ''),
       receiverName: shippingInfo.receiverName || null,
       totalAmount: order.total_amount,
       paidAmount: order.paid_amount,

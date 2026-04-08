@@ -109,6 +109,7 @@ const clickLogSchema = new mongoose.Schema(
       buyerNickname: String,
       buyerFirstName: String,
       buyerLastName: String,
+      buyerGender: { type: String, enum: ['male', 'female', 'unknown'], default: 'unknown' },
       totalAmount: Number,
       paidAmount: Number,
       currency: String,
