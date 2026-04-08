@@ -328,7 +328,7 @@ function CampaignHome() {
           return (
             <div className="bg-gradient-to-br from-green-500/10 to-green-600/5 backdrop-blur-lg border border-green-500/20 rounded-xl p-5">
               <p className="text-sm text-gray-400 mb-1">Conversiones</p>
-              <h3 className="text-2xl font-bold text-green-400">{totals.conversions} <span className="text-lg text-gray-500">({convRate}%)</span></h3>
+              <h3 className="text-2xl font-bold text-green-400">{convRate}% <span className="text-lg text-gray-500">({totals.conversions.toLocaleString()})</span></h3>
               <div className="mt-2 flex flex-col gap-0.5">
                 {[
                   { min: b.green, color: "#10B981", label: `≥${b.green}%` },
