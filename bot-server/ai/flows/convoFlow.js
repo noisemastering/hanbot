@@ -572,9 +572,12 @@ IMPORTANTE: si el cliente da una dirección completa (calle, número, colonia) o
 
       // Products found — pass to sales flow with the matched products
       if (productResult.type === 'products_found' && productResult.products.length > 0) {
-        // Generate (or reuse) tracked links for retail products before quoting
+        // Generate (or reuse) tracked links ONLY for the single-product retail quote case.
+        // When the match is multiple products, the sales flow presents a "desde X hasta Y"
+        // range with no links — generating tracked links here would create N stale ClickLogs
+        // the customer never sees.
         let quotableProducts = productResult.products;
-        if (manifest.salesChannel === 'retail') {
+        if (manifest.salesChannel === 'retail' && productResult.products.length === 1) {
           quotableProducts = await Promise.all(productResult.products.map(async p => {
             if (p.link) {
               const tracked = await getOrCreateClickLink(psid, p.link, {
@@ -650,19 +653,11 @@ IMPORTANTE: si el cliente da una dirección completa (calle, número, colonia) o
     if (productCache && productCache.length > 0) {
       console.log(`🏛️ [convo] No specific product match — invoking ${manifest.salesChannel} flow with full product cache`);
 
-      // For retail with tracked links, generate (or reuse) them up front
-      let availableProducts = productCache;
-      if (manifest.salesChannel === 'retail') {
-        availableProducts = await Promise.all(productCache.map(async p => {
-          if (p.link) {
-            const tracked = await getOrCreateClickLink(psid, p.link, {
-              productName: p.name, productId: p.productId, reason: 'retail_intro'
-            });
-            return { ...p, link: tracked };
-          }
-          return p;
-        }));
-      }
+      // Don't generate tracked links here. The fall-through case is "no specific product"
+      // (intro/range), so the sales flow will present "desde X hasta Y" without per-product
+      // links. Generating N tracked links upfront created N stale ClickLogs the customer
+      // never sees. Tracked links are minted on demand when the customer picks a specific size.
+      const availableProducts = productCache;
 
       const salesResult = await salesFlow.handle(userMessage, convo, psid, {
         products: availableProducts,
