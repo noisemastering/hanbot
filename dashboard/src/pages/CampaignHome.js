@@ -609,7 +609,7 @@ function CampaignHome() {
                       <td className="px-4 py-3 text-right text-sm text-gray-300">{ad.totals?.conversionRate}%</td>
                       <td className="px-4 py-3 text-right">
                         <button
-                          onClick={() => navigate(`/ads?search=${encodeURIComponent(ad.adId)}`)}
+                          onClick={() => navigate(`/ad-performance/${ad.adId}`)}
                           className="px-2 py-1 text-xs text-green-400 hover:bg-green-500/20 rounded-lg transition-colors"
                         >
                           Detalle

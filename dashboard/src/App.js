@@ -55,6 +55,7 @@ import RolesView from "./components/RolesView";
 import ProfilesView from "./components/ProfilesView";
 import ClickLogsView from "./components/ClickLogsView";
 import AdPerformanceView from "./pages/AdPerformanceView";
+import AdDetailView from "./pages/AdDetailView";
 import GeoDetailView from "./pages/GeoDetailView";
 import ConversionsView from "./pages/ConversionsView";
 import ManualSalesView from "./pages/ManualSalesView";
@@ -2203,6 +2204,7 @@ function App() {
           <Route path="/profiles" element={<ProfilesView />} />
           <Route path="/click-logs" element={<ClickLogsView />} />
           <Route path="/ad-performance" element={<AdPerformanceView />} />
+          <Route path="/ad-performance/:fbAdId" element={<AdDetailView />} />
           <Route path="/geo" element={<GeoDetailView />} />
           <Route path="/conversions" element={<ConversionsView />} />
           <Route path="/manual-sales" element={<ManualSalesView />} />

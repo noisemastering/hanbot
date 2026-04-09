@@ -610,12 +610,15 @@ router.get("/products", async (req, res) => {
 // Daily direct-ad click stats (for separate chart)
 router.get("/direct-ad/daily", async (req, res) => {
   try {
-    const { days = 30 } = req.query;
+    const { days = 30, adId } = req.query;
     const since = new Date();
     since.setDate(since.getDate() - parseInt(days));
 
+    const matchFilter = { source: "direct_ad", clickedAt: { $gte: since } };
+    if (adId) matchFilter.adId = adId;
+
     const pipeline = [
-      { $match: { source: "direct_ad", clickedAt: { $gte: since } } },
+      { $match: matchFilter },
       {
         $group: {
           _id: { $dateToString: { format: "%Y-%m-%d", date: "$clickedAt" } },
@@ -642,7 +645,7 @@ router.get("/direct-ad/daily", async (req, res) => {
 
     // Also get totals
     const totals = await ClickLog.aggregate([
-      { $match: { source: "direct_ad", clickedAt: { $gte: since } } },
+      { $match: matchFilter },
       {
         $group: {
           _id: null,
