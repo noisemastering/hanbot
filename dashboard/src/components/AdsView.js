@@ -628,12 +628,9 @@ function AdsView() {
                       <div className="flex items-center justify-end space-x-1">
                         <button
                           onClick={() => setSelectedAd(ad)}
-                          className="p-1.5 text-green-400 hover:bg-green-500/20 rounded-lg transition-colors"
-                          title={t('ads.viewDetails')}
+                          className="px-2 py-1 text-xs text-green-400 hover:bg-green-500/20 rounded-lg transition-colors"
                         >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                          </svg>
+                          Detalle
                         </button>
                         <button
                           onClick={() => {
