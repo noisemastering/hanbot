@@ -310,6 +310,7 @@ function AdPerformanceView() {
                   <th className="px-6 py-3 text-right">Conversiones</th>
                   <th className="px-6 py-3 text-right">Conv. Rate</th>
                   {canSeeSales && <th className="px-6 py-3 text-right">Ingresos</th>}
+                  <th className="px-6 py-3 text-right"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-700/50">
@@ -333,6 +334,14 @@ function AdPerformanceView() {
                     <td className="px-6 py-4 text-right text-sm text-green-400 font-medium">{ad.totals.conversions}</td>
                     <td className="px-6 py-4 text-right text-sm text-gray-300">{ad.totals.conversionRate}%</td>
                     {canSeeSales && <td className="px-6 py-4 text-right text-sm text-green-400 font-semibold">{formatCurrency(ad.totals.revenue)}</td>}
+                    <td className="px-6 py-4 text-right">
+                      <button
+                        onClick={() => navigate(`/ads?search=${encodeURIComponent(ad.adId)}`)}
+                        className="px-2 py-1 text-xs text-green-400 hover:bg-green-500/20 rounded-lg transition-colors"
+                      >
+                        Detalle
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {/* Totals row */}
@@ -348,6 +357,7 @@ function AdPerformanceView() {
                     {grandTotals.clicks > 0 ? ((grandTotals.conversions / grandTotals.clicks) * 100).toFixed(1) : '0'}%
                   </td>
                   {canSeeSales && <td className="px-6 py-4 text-right text-sm text-green-400">{formatCurrency(grandTotals.revenue)}</td>}
+                  <td></td>
                 </tr>
               </tbody>
             </table>
