@@ -1326,13 +1326,14 @@ router.get('/ad-performance', async (req, res) => {
 // GET /analytics/daily-handoffs-sales — handoffs + manual sales per day
 router.get('/daily-handoffs-sales', async (req, res) => {
   try {
-    const { dateFrom, dateTo } = req.query;
+    const { dateFrom, dateTo, adId } = req.query;
     const match = {};
     if (dateFrom || dateTo) {
       match.handoffTimestamp = {};
       if (dateFrom) match.handoffTimestamp.$gte = new Date(dateFrom);
       if (dateTo) match.handoffTimestamp.$lte = new Date(dateTo);
     }
+    if (adId) match.adId = adId;
 
     // Daily handoffs
     const handoffs = await Conversation.aggregate([
@@ -1353,6 +1354,7 @@ router.get('/daily-handoffs-sales', async (req, res) => {
       if (dateFrom) salesMatch.convertedAt.$gte = new Date(dateFrom);
       if (dateTo) salesMatch.convertedAt.$lte = new Date(dateTo);
     }
+    if (adId) salesMatch.adId = adId;
 
     const sales = await ClickLog.aggregate([
       { $match: { correlationMethod: 'manual', converted: true, ...salesMatch } },
