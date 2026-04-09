@@ -1,9 +1,13 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import API from '../api';
+import { abbrState } from '../utils/stateAbbr';
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
+  ComposedChart, Bar, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
+
+const AD_COLORS = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#06B6D4', '#EC4899', '#84CC16'];
+const COLORS = { blue: '#3B82F6', green: '#10B981', amber: '#F59E0B', pink: '#EC4899' };
 
 const tooltipStyle = {
   backgroundColor: '#1F2937',
@@ -29,6 +33,9 @@ function AdDetailView() {
   const [directTotals, setDirectTotals] = useState({ totalClicks: 0, totalConversions: 0, totalRevenue: 0 });
   const [handoffData, setHandoffData] = useState([]);
   const [handoffTotals, setHandoffTotals] = useState({ totalHandoffs: 0, totalSales: 0, totalRevenue: 0 });
+  const [geoData, setGeoData] = useState([]);
+  const [genderData, setGenderData] = useState([]);
+  const [deviceData, setDeviceData] = useState([]);
 
   const dateFrom = useMemo(() => getDaysAgo(range), [range]);
   const dateTo = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -47,11 +54,14 @@ function AdDetailView() {
         const dateFromISO = `${dateFrom}T00:00:00.000Z`;
         const dateToISO = `${dateTo}T23:59:59.999Z`;
 
-        const [perfRes, adInfoRes, directRes, handoffRes] = await Promise.all([
+        const [perfRes, adInfoRes, directRes, handoffRes, geoRes, genderRes, deviceRes] = await Promise.all([
           API.get(`/analytics/ad-performance?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
           API.get(`/ads?search=${fbAdId}`),
           API.get(`/click-logs/direct-ad/daily?days=${range}&adId=${fbAdId}`),
           API.get(`/analytics/daily-handoffs-sales?dateFrom=${dateFromISO}&dateTo=${dateToISO}&adId=${fbAdId}`),
+          API.get(`/analytics/conversions-by-geography?dateFrom=${dateFromISO}&dateTo=${dateToISO}&adId=${fbAdId}`),
+          API.get(`/analytics/conversions-by-gender?dateFrom=${dateFromISO}&dateTo=${dateToISO}&adId=${fbAdId}`),
+          API.get(`/analytics/device-breakdown?dateFrom=${dateFromISO}&dateTo=${dateToISO}&adId=${fbAdId}`),
         ]);
 
         const allAds = perfRes.data?.ads || [];
@@ -67,6 +77,9 @@ function AdDetailView() {
         const hd = handoffRes.data?.data || {};
         setHandoffData(hd.daily || []);
         setHandoffTotals({ totalHandoffs: hd.totalHandoffs || 0, totalSales: hd.totalSales || 0, totalRevenue: hd.totalRevenue || 0 });
+        setGeoData(geoRes.data?.data || []);
+        setGenderData(genderRes.data?.data || []);
+        setDeviceData(deviceRes.data?.data || []);
       } catch (err) {
         console.error('Error fetching ad detail:', err);
       } finally {
@@ -271,6 +284,82 @@ function AdDetailView() {
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+        </div>
+      )}
+
+      {/* Device Breakdown */}
+      {deviceData.length > 0 && (
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-4">Dispositivos</h2>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            {deviceData.filter(d => d.device !== 'bot').map(d => {
+              const labels = { mobile: 'Móvil', tablet: 'Tablet', desktop: 'Escritorio', unknown: 'Desconocido' };
+              const colors = { mobile: 'text-purple-400', tablet: 'text-cyan-400', desktop: 'text-blue-400', unknown: 'text-gray-400' };
+              return (
+                <div key={d.device} className="bg-gray-900/50 border border-gray-700/30 rounded-lg p-3">
+                  <p className="text-xs text-gray-400">{labels[d.device] || d.device}</p>
+                  <p className={`text-xl font-bold ${colors[d.device] || 'text-white'}`}>{d.count.toLocaleString()}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">{d.percentage}%</p>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Geography + Gender donuts */}
+      {(geoData.length > 0 || genderData.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          {/* Geography donut */}
+          {geoData.length > 0 && (
+            <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+              <h2 className="text-lg font-semibold text-white mb-1">Distribución geográfica</h2>
+              <p className="text-sm text-gray-500 mb-4">Top estados por conversiones</p>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={geoData.slice(0, 8).map(g => ({ name: abbrState(g.state), value: g.count, percentage: g.percentage }))}
+                      cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={3} dataKey="value"
+                      label={({ name, percentage }) => `${name}: ${percentage}%`}
+                    >
+                      {geoData.slice(0, 8).map((_, i) => (
+                        <Cell key={i} fill={AD_COLORS[i % AD_COLORS.length]} stroke="transparent" />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={tooltipStyle} formatter={(v, n, p) => [`${v} (${p.payload.percentage}%)`, p.payload.name]} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* Gender donut */}
+          {genderData.length > 0 && (
+            <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+              <h2 className="text-lg font-semibold text-white mb-1">Género</h2>
+              <p className="text-sm text-gray-500 mb-4">Compradores por género</p>
+              <div className="h-72">
+                <ResponsiveContainer width="100%" height="100%">
+                  <PieChart>
+                    <Pie
+                      data={genderData.map(g => ({
+                        name: g.gender === 'male' ? 'Hombres' : g.gender === 'female' ? 'Mujeres' : 'Desconocido',
+                        value: g.count, percentage: g.percentage
+                      }))}
+                      cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={4} dataKey="value"
+                      label={({ name, percentage }) => `${name}: ${percentage}%`}
+                    >
+                      {genderData.map((g, i) => (
+                        <Cell key={i} fill={g.gender === 'male' ? COLORS.blue : g.gender === 'female' ? COLORS.pink : '#6B7280'} stroke="transparent" />
+                      ))}
+                    </Pie>
+                    <Tooltip contentStyle={tooltipStyle} />
+                  </PieChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

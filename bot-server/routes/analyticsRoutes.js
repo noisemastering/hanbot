@@ -1398,13 +1398,14 @@ router.get('/daily-handoffs-sales', async (req, res) => {
 // GET /analytics/conversions-by-geography — conversion counts by Mexican state
 router.get('/conversions-by-geography', async (req, res) => {
   try {
-    const { dateFrom, dateTo } = req.query;
+    const { dateFrom, dateTo, adId } = req.query;
     const match = { converted: true };
     if (dateFrom || dateTo) {
       match.convertedAt = {};
       if (dateFrom) match.convertedAt.$gte = new Date(dateFrom);
       if (dateTo) match.convertedAt.$lte = new Date(dateTo);
     }
+    if (adId) match.adId = adId;
 
     const breakdown = await ClickLog.aggregate([
       { $match: match },
@@ -1435,13 +1436,14 @@ router.get('/conversions-by-geography', async (req, res) => {
 // GET /analytics/conversions-by-gender — conversion counts by inferred gender
 router.get('/conversions-by-gender', async (req, res) => {
   try {
-    const { dateFrom, dateTo } = req.query;
+    const { dateFrom, dateTo, adId } = req.query;
     const match = { converted: true };
     if (dateFrom || dateTo) {
       match.convertedAt = {};
       if (dateFrom) match.convertedAt.$gte = new Date(dateFrom);
       if (dateTo) match.convertedAt.$lte = new Date(dateTo);
     }
+    if (adId) match.adId = adId;
 
     const breakdown = await ClickLog.aggregate([
       { $match: match },
@@ -1471,13 +1473,14 @@ router.get('/conversions-by-gender', async (req, res) => {
 // GET /analytics/device-breakdown — clicks by device type
 router.get('/device-breakdown', async (req, res) => {
   try {
-    const { dateFrom, dateTo } = req.query;
+    const { dateFrom, dateTo, adId } = req.query;
     const match = { clicked: true };
     if (dateFrom || dateTo) {
       match.clickedAt = {};
       if (dateFrom) match.clickedAt.$gte = new Date(dateFrom);
       if (dateTo) match.clickedAt.$lte = new Date(dateTo);
     }
+    if (adId) match.adId = adId;
 
     const breakdown = await ClickLog.aggregate([
       { $match: match },
