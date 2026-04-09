@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useNavigate } from "react-router-dom";
 import API from "../api";
 import { abbrState } from "../utils/stateAbbr";
 import {
@@ -46,6 +47,7 @@ function getDaysAgo(days) {
 }
 
 function CampaignHome() {
+  const navigate = useNavigate();
   const [range, setRange] = useState(30);
   const [loading, setLoading] = useState(true);
 
@@ -588,6 +590,7 @@ function CampaignHome() {
                     <th className="px-4 py-3 text-right">Click Rate</th>
                     <th className="px-4 py-3 text-right">Conv.</th>
                     <th className="px-4 py-3 text-right">Conv. Rate</th>
+                    <th className="px-4 py-3 text-right"></th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700/50">
@@ -604,6 +607,14 @@ function CampaignHome() {
                       <td className="px-4 py-3 text-right text-sm text-gray-300">{ad.totals?.clickRate}%</td>
                       <td className="px-4 py-3 text-right text-sm text-green-400 font-medium">{ad.totals?.conversions}</td>
                       <td className="px-4 py-3 text-right text-sm text-gray-300">{ad.totals?.conversionRate}%</td>
+                      <td className="px-4 py-3 text-right">
+                        <button
+                          onClick={() => navigate(`/ads?search=${encodeURIComponent(ad.adId)}`)}
+                          className="px-2 py-1 text-xs text-green-400 hover:bg-green-500/20 rounded-lg transition-colors"
+                        >
+                          Detalle
+                        </button>
+                      </td>
                     </tr>
                   ))}
                   {/* Totals */}
@@ -614,6 +625,7 @@ function CampaignHome() {
                     <td className="px-4 py-3 text-right text-sm text-white">{clickRate}%</td>
                     <td className="px-4 py-3 text-right text-sm text-green-400">{totals.conversions}</td>
                     <td className="px-4 py-3 text-right text-sm text-white">{convRate}%</td>
+                    <td></td>
                   </tr>
                 </tbody>
               </table>
