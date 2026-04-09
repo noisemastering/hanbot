@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import API from '../api';
-import { useAuth } from '../contexts/AuthContext';
 import {
   ComposedChart,
   Bar,
@@ -30,9 +29,7 @@ function getDaysAgo(days) {
 
 function AdPerformanceView() {
   const navigate = useNavigate();
-  const { user, simulationMode } = useAuth();
-  const effectiveRole = simulationMode?.role || user?.role;
-  const canSeeSales = effectiveRole === 'super_admin' || effectiveRole === 'admin' || (!simulationMode && user?.permissions?.includes('*'));
+  const canSeeSales = true;
   const [range, setRange] = useState(30);
   const [loading, setLoading] = useState(true);
   const [ads, setAds] = useState([]);
