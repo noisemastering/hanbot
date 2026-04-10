@@ -241,17 +241,7 @@ function CampaignHome() {
     [dailyData]
   );
 
-  // Ad donut: top 5 by clicks
-  const adDonutData = useMemo(() => {
-    return adPerf
-      .sort((a, b) => (b.totals?.clicks || 0) - (a.totals?.clicks || 0))
-      .slice(0, 5)
-      .map(ad => ({
-        name: ad.name?.length > 22 ? ad.name.substring(0, 22) + "..." : ad.name,
-        value: ad.totals?.clicks || 0,
-        conversions: ad.totals?.conversions || 0,
-      }));
-  }, [adPerf]);
+
 
   if (loading) {
     return (
