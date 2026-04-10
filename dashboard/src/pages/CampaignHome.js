@@ -62,6 +62,8 @@ function CampaignHome() {
   const [sourceBreakdown, setSourceBreakdown] = useState([]);
   const [geoData, setGeoData] = useState([]);
   const [genderData, setGenderData] = useState([]);
+  const [fbSpend, setFbSpend] = useState([]);
+  const [fbSpendTotals, setFbSpendTotals] = useState({ spend: 0, impressions: 0, clicks: 0 });
 
   // Link generator state
   const [showLinkGen, setShowLinkGen] = useState(false);
@@ -90,13 +92,14 @@ function CampaignHome() {
       const dateFromISO = `${dateFrom}T00:00:00.000Z`;
       const dateToISO = `${dateTo}T23:59:59.999Z`;
 
-      const [analyticsRes, adPerfRes, clicksRes, sourceRes, geoRes, genderRes] = await Promise.all([
+      const [analyticsRes, adPerfRes, clicksRes, sourceRes, geoRes, genderRes, spendRes] = await Promise.all([
         API.get(`/analytics/?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/analytics/ad-performance?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/click-logs/daily?startDate=${dateFrom}&endDate=${dateTo}`),
         API.get(`/click-logs/by-source?startDate=${dateFrom}&endDate=${dateTo}`),
         API.get(`/analytics/conversions-by-geography?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/analytics/conversions-by-gender?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
+        API.get(`/analytics/fb-spend?dateFrom=${dateFrom}&dateTo=${dateTo}&level=ad`),
       ]);
 
       setAnalytics(analyticsRes.data);
@@ -105,6 +108,8 @@ function CampaignHome() {
       setSourceBreakdown(sourceRes.data?.sources || []);
       setGeoData(geoRes.data?.data || []);
       setGenderData(genderRes.data?.data || []);
+      setFbSpend(spendRes.data?.data || []);
+      setFbSpendTotals(spendRes.data?.totals || { spend: 0, impressions: 0, clicks: 0 });
     } catch (err) {
       console.error("Error fetching campaign dashboard:", err);
     } finally {
@@ -215,6 +220,13 @@ function CampaignHome() {
   const clickRate = totals.links > 0 ? ((totals.clicks / totals.links) * 100).toFixed(1) : "0";
   const convRate = totals.clicks > 0 ? ((totals.conversions / totals.clicks) * 100).toFixed(1) : "0";
 
+  // Spend lookup by ad_id
+  const spendByAd = useMemo(() => {
+    const map = {};
+    fbSpend.forEach(r => { if (r.adId) map[r.adId] = r; });
+    return map;
+  }, [fbSpend]);
+
   // Main chart: daily links, clicks, conversions
   const chartData = useMemo(
     () => dailyData.map((day) => ({
@@ -272,7 +284,7 @@ function CampaignHome() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-7 gap-4">
         {/* Conversations */}
         <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 backdrop-blur-lg border border-purple-500/20 rounded-xl p-5">
           <p className="text-sm text-gray-400 mb-1">Conversaciones</p>
@@ -351,6 +363,22 @@ function CampaignHome() {
             </div>
           );
         })()}
+
+        {/* Inversión FB */}
+        <div className="bg-gradient-to-br from-red-500/10 to-red-600/5 backdrop-blur-lg border border-red-500/20 rounded-xl p-5">
+          <p className="text-sm text-gray-400 mb-1">Inversión FB</p>
+          <h3 className="text-2xl font-bold text-red-400">${fbSpendTotals.spend.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</h3>
+          <p className="text-xs text-gray-500 mt-1">
+            CPA: ${totals.conversions > 0 ? (fbSpendTotals.spend / totals.conversions).toFixed(0) : '—'}
+          </p>
+        </div>
+
+        {/* Impresiones */}
+        <div className="bg-gradient-to-br from-gray-500/10 to-gray-600/5 backdrop-blur-lg border border-gray-500/20 rounded-xl p-5">
+          <p className="text-sm text-gray-400 mb-1">Impresiones</p>
+          <h3 className="text-2xl font-bold text-gray-300">{fbSpendTotals.impressions.toLocaleString()}</h3>
+          <p className="text-xs text-gray-500 mt-1">{periodLabel}</p>
+        </div>
       </div>
 
       {/* Daily Chart: Links, Clicks, Conversions */}
@@ -585,6 +613,8 @@ function CampaignHome() {
                 <thead className="bg-gray-900/50">
                   <tr className="text-left text-xs text-gray-400 uppercase">
                     <th className="px-6 py-3">Anuncio</th>
+                    <th className="px-4 py-3 text-right">Inversión</th>
+                    <th className="px-4 py-3 text-right">Impresiones</th>
                     <th className="px-4 py-3 text-right">Links</th>
                     <th className="px-4 py-3 text-right">Clicks</th>
                     <th className="px-4 py-3 text-right">Click Rate</th>
@@ -602,6 +632,8 @@ function CampaignHome() {
                           <span className="text-sm text-white font-medium truncate max-w-[200px]">{ad.name}</span>
                         </div>
                       </td>
+                      <td className="px-4 py-3 text-right text-sm text-red-400">${(spendByAd[ad.adId]?.spend || 0).toLocaleString('es-MX', { maximumFractionDigits: 0 })}</td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-300">{(spendByAd[ad.adId]?.impressions || 0).toLocaleString()}</td>
                       <td className="px-4 py-3 text-right text-sm text-gray-300">{ad.totals?.links?.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right text-sm text-white font-medium">{ad.totals?.clicks?.toLocaleString()}</td>
                       <td className="px-4 py-3 text-right text-sm text-gray-300">{ad.totals?.clickRate}%</td>
@@ -620,6 +652,8 @@ function CampaignHome() {
                   {/* Totals */}
                   <tr className="bg-gray-900/30 font-semibold">
                     <td className="px-6 py-3 text-sm text-white">Total</td>
+                    <td className="px-4 py-3 text-right text-sm text-red-400">${fbSpendTotals.spend.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</td>
+                    <td className="px-4 py-3 text-right text-sm text-white">{fbSpendTotals.impressions.toLocaleString()}</td>
                     <td className="px-4 py-3 text-right text-sm text-white">{totals.links.toLocaleString()}</td>
                     <td className="px-4 py-3 text-right text-sm text-white">{totals.clicks.toLocaleString()}</td>
                     <td className="px-4 py-3 text-right text-sm text-white">{clickRate}%</td>

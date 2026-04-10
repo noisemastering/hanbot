@@ -39,6 +39,8 @@ function AdPerformanceView() {
   const [handoffData, setHandoffData] = useState([]);
   const [handoffTotals, setHandoffTotals] = useState({ totalHandoffs: 0, totalSales: 0, totalRevenue: 0 });
   const [deviceBreakdown, setDeviceBreakdown] = useState([]);
+  const [fbSpend, setFbSpend] = useState([]);
+  const [fbSpendTotals, setFbSpendTotals] = useState({ spend: 0, impressions: 0, clicks: 0 });
 
   const dateFrom = useMemo(() => getDaysAgo(range), [range]);
   const dateTo = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -48,12 +50,13 @@ function AdPerformanceView() {
     try {
       const dateFromISO = `${dateFrom}T00:00:00.000Z`;
       const dateToISO = `${dateTo}T23:59:59.999Z`;
-      const [res, directDailyRes, directByAdRes, handoffRes, deviceRes] = await Promise.all([
+      const [res, directDailyRes, directByAdRes, handoffRes, deviceRes, spendRes] = await Promise.all([
         API.get(`/analytics/ad-performance?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/click-logs/direct-ad/daily?days=${range}`),
         API.get(`/click-logs/direct-ad/by-ad?days=${range}`),
         API.get(`/analytics/daily-handoffs-sales?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
-        API.get(`/analytics/device-breakdown?dateFrom=${dateFromISO}&dateTo=${dateToISO}`)
+        API.get(`/analytics/device-breakdown?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
+        API.get(`/analytics/fb-spend?dateFrom=${dateFrom}&dateTo=${dateTo}&level=ad`)
       ]);
       setAds(res.data?.ads || []);
       setDirectDaily(directDailyRes.data?.data?.daily || []);
@@ -63,6 +66,8 @@ function AdPerformanceView() {
       setHandoffData(hd.daily || []);
       setHandoffTotals({ totalHandoffs: hd.totalHandoffs || 0, totalSales: hd.totalSales || 0, totalRevenue: hd.totalRevenue || 0 });
       setDeviceBreakdown(deviceRes.data?.data || []);
+      setFbSpend(spendRes.data?.data || []);
+      setFbSpendTotals(spendRes.data?.totals || { spend: 0, impressions: 0, clicks: 0 });
     } catch (err) {
       console.error('Error fetching ad performance:', err);
     } finally {
@@ -100,6 +105,13 @@ function AdPerformanceView() {
     });
     return Object.values(dateMap).sort((a, b) => a.date.localeCompare(b.date));
   }, [ads]);
+
+  // Spend lookup by ad_id
+  const spendByAd = useMemo(() => {
+    const map = {};
+    fbSpend.forEach(r => { if (r.adId) map[r.adId] = r; });
+    return map;
+  }, [fbSpend]);
 
   // Direct-ad chart data
   const directChartData = useMemo(() => {
@@ -164,10 +176,15 @@ function AdPerformanceView() {
       </div>
 
       {/* Summary Cards */}
-      <div className={`grid grid-cols-2 ${canSeeSales ? 'md:grid-cols-4' : 'md:grid-cols-3'} gap-4`}>
+      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+        <div className="bg-gray-800/50 border border-red-500/20 rounded-xl p-4">
+          <p className="text-sm text-gray-400">Inversión FB</p>
+          <p className="text-2xl font-bold text-red-400">${fbSpendTotals.spend.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
+          <p className="text-xs text-gray-500 mt-0.5">CPA: ${grandTotals.conversions > 0 ? (fbSpendTotals.spend / grandTotals.conversions).toFixed(0) : '—'}</p>
+        </div>
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-          <p className="text-sm text-gray-400">Anuncios activos</p>
-          <p className="text-2xl font-bold text-white">{ads.length}</p>
+          <p className="text-sm text-gray-400">Impresiones</p>
+          <p className="text-2xl font-bold text-gray-300">{fbSpendTotals.impressions.toLocaleString()}</p>
         </div>
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
           <p className="text-sm text-gray-400">Links generados</p>
@@ -177,12 +194,14 @@ function AdPerformanceView() {
           <p className="text-sm text-gray-400">Clicks</p>
           <p className="text-2xl font-bold text-purple-400">{grandTotals.clicks.toLocaleString()}</p>
         </div>
-        {canSeeSales && (
-          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-            <p className="text-sm text-gray-400">Ingresos atribuidos</p>
-            <p className="text-2xl font-bold text-green-400">{formatCurrency(grandTotals.revenue)}</p>
-          </div>
-        )}
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+          <p className="text-sm text-gray-400">Conversiones</p>
+          <p className="text-2xl font-bold text-green-400">{grandTotals.conversions.toLocaleString()}</p>
+        </div>
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+          <p className="text-sm text-gray-400">Ingresos</p>
+          <p className="text-2xl font-bold text-green-400">{formatCurrency(grandTotals.revenue)}</p>
+        </div>
       </div>
 
       {/* Device Breakdown */}
@@ -304,13 +323,15 @@ function AdPerformanceView() {
               <thead className="bg-gray-900/50">
                 <tr className="text-left text-xs text-gray-400 uppercase">
                   <th className="px-6 py-3">Anuncio</th>
-                  <th className="px-6 py-3 text-right">Links</th>
-                  <th className="px-6 py-3 text-right">Clicks</th>
-                  <th className="px-6 py-3 text-right">Click Rate</th>
-                  <th className="px-6 py-3 text-right">Conversiones</th>
-                  <th className="px-6 py-3 text-right">Conv. Rate</th>
-                  {canSeeSales && <th className="px-6 py-3 text-right">Ingresos</th>}
-                  <th className="px-6 py-3 text-right"></th>
+                  <th className="px-4 py-3 text-right">Inversión</th>
+                  <th className="px-4 py-3 text-right">Impresiones</th>
+                  <th className="px-4 py-3 text-right">Links</th>
+                  <th className="px-4 py-3 text-right">Clicks</th>
+                  <th className="px-4 py-3 text-right">Click Rate</th>
+                  <th className="px-4 py-3 text-right">Conv.</th>
+                  <th className="px-4 py-3 text-right">Conv. Rate</th>
+                  {canSeeSales && <th className="px-4 py-3 text-right">Ingresos</th>}
+                  <th className="px-4 py-3 text-right"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-700/50">
@@ -328,8 +349,10 @@ function AdPerformanceView() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-6 py-4 text-right text-sm text-gray-300">{ad.totals.links.toLocaleString()}</td>
-                    <td className="px-6 py-4 text-right text-sm text-white font-medium">{ad.totals.clicks.toLocaleString()}</td>
+                    <td className="px-4 py-4 text-right text-sm text-red-400">${(spendByAd[ad.adId]?.spend || 0).toLocaleString('es-MX', { maximumFractionDigits: 0 })}</td>
+                    <td className="px-4 py-4 text-right text-sm text-gray-300">{(spendByAd[ad.adId]?.impressions || 0).toLocaleString()}</td>
+                    <td className="px-4 py-4 text-right text-sm text-gray-300">{ad.totals.links.toLocaleString()}</td>
+                    <td className="px-4 py-4 text-right text-sm text-white font-medium">{ad.totals.clicks.toLocaleString()}</td>
                     <td className="px-6 py-4 text-right text-sm text-gray-300">{ad.totals.clickRate}%</td>
                     <td className="px-6 py-4 text-right text-sm text-green-400 font-medium">{ad.totals.conversions}</td>
                     <td className="px-6 py-4 text-right text-sm text-gray-300">{ad.totals.conversionRate}%</td>
@@ -347,8 +370,10 @@ function AdPerformanceView() {
                 {/* Totals row */}
                 <tr className="bg-gray-900/30 font-semibold">
                   <td className="px-6 py-4 text-sm text-white">Total</td>
-                  <td className="px-6 py-4 text-right text-sm text-white">{grandTotals.links.toLocaleString()}</td>
-                  <td className="px-6 py-4 text-right text-sm text-white">{grandTotals.clicks.toLocaleString()}</td>
+                  <td className="px-4 py-4 text-right text-sm text-red-400">${fbSpendTotals.spend.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</td>
+                  <td className="px-4 py-4 text-right text-sm text-white">{fbSpendTotals.impressions.toLocaleString()}</td>
+                  <td className="px-4 py-4 text-right text-sm text-white">{grandTotals.links.toLocaleString()}</td>
+                  <td className="px-4 py-4 text-right text-sm text-white">{grandTotals.clicks.toLocaleString()}</td>
                   <td className="px-6 py-4 text-right text-sm text-white">
                     {grandTotals.links > 0 ? ((grandTotals.clicks / grandTotals.links) * 100).toFixed(1) : '0'}%
                   </td>
