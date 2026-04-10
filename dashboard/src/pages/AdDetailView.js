@@ -169,38 +169,38 @@ function AdDetailView() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
-        <div className="bg-gray-800/50 border border-red-500/20 rounded-xl p-4">
-          <p className="text-sm text-gray-400">Inversión</p>
-          <p className="text-2xl font-bold text-red-400">${(adSpend?.spend || 0).toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+        <div className="bg-gray-800/50 border border-red-500/20 rounded-xl p-3">
+          <p className="text-xs text-gray-400">Inversión</p>
+          <p className="text-xl font-bold text-red-400">${(adSpend?.spend || 0).toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
         </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-          <p className="text-sm text-gray-400">Impresiones</p>
-          <p className="text-2xl font-bold text-gray-300">{(adSpend?.impressions || 0).toLocaleString()}</p>
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3">
+          <p className="text-xs text-gray-400">Impresiones</p>
+          <p className="text-xl font-bold text-gray-300">{(adSpend?.impressions || 0).toLocaleString()}</p>
         </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-          <p className="text-sm text-gray-400">Links</p>
-          <p className="text-2xl font-bold text-purple-400">{t.links.toLocaleString()}</p>
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3">
+          <p className="text-xs text-gray-400">Links</p>
+          <p className="text-xl font-bold text-purple-400">{t.links.toLocaleString()}</p>
         </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-          <p className="text-sm text-gray-400">Clicks</p>
-          <p className="text-2xl font-bold text-blue-400">{t.clicks.toLocaleString()}</p>
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3">
+          <p className="text-xs text-gray-400">Clicks</p>
+          <p className="text-xl font-bold text-blue-400">{t.clicks.toLocaleString()}</p>
         </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-          <p className="text-sm text-gray-400">Conversiones</p>
-          <p className="text-2xl font-bold text-green-400">{t.conversions}</p>
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3">
+          <p className="text-xs text-gray-400">Conversiones</p>
+          <p className="text-xl font-bold text-green-400">{t.conversions}</p>
         </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-          <p className="text-sm text-gray-400">Ingresos</p>
-          <p className="text-2xl font-bold text-green-400">{formatCurrency(t.revenue)}</p>
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3">
+          <p className="text-xs text-gray-400">Ingresos</p>
+          <p className="text-xl font-bold text-green-400">{formatCurrency(t.revenue)}</p>
         </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-          <p className="text-sm text-gray-400">Click Rate</p>
-          <p className="text-2xl font-bold text-white">{clickRate}%</p>
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3">
+          <p className="text-xs text-gray-400">Click Rate</p>
+          <p className="text-xl font-bold text-white">{clickRate}%</p>
         </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-          <p className="text-sm text-gray-400">CPA</p>
-          <p className="text-2xl font-bold text-white">${t.conversions > 0 ? ((adSpend?.spend || 0) / t.conversions).toFixed(0) : '—'}</p>
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3">
+          <p className="text-xs text-gray-400">CPA</p>
+          <p className="text-xl font-bold text-white">${t.conversions > 0 ? ((adSpend?.spend || 0) / t.conversions).toFixed(0) : '—'}</p>
         </div>
       </div>
 
