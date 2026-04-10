@@ -36,6 +36,7 @@ function AdDetailView() {
   const [geoData, setGeoData] = useState([]);
   const [genderData, setGenderData] = useState([]);
   const [deviceData, setDeviceData] = useState([]);
+  const [adSpend, setAdSpend] = useState(null);
 
   const dateFrom = useMemo(() => getDaysAgo(range), [range]);
   const dateTo = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -54,7 +55,7 @@ function AdDetailView() {
         const dateFromISO = `${dateFrom}T00:00:00.000Z`;
         const dateToISO = `${dateTo}T23:59:59.999Z`;
 
-        const [perfRes, adInfoRes, directRes, handoffRes, geoRes, genderRes, deviceRes] = await Promise.all([
+        const [perfRes, adInfoRes, directRes, handoffRes, geoRes, genderRes, deviceRes, spendRes] = await Promise.all([
           API.get(`/analytics/ad-performance?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
           API.get(`/ads?search=${fbAdId}`),
           API.get(`/click-logs/direct-ad/daily?days=${range}&adId=${fbAdId}`),
@@ -62,6 +63,7 @@ function AdDetailView() {
           API.get(`/analytics/conversions-by-geography?dateFrom=${dateFromISO}&dateTo=${dateToISO}&adId=${fbAdId}`),
           API.get(`/analytics/conversions-by-gender?dateFrom=${dateFromISO}&dateTo=${dateToISO}&adId=${fbAdId}`),
           API.get(`/analytics/device-breakdown?dateFrom=${dateFromISO}&dateTo=${dateToISO}&adId=${fbAdId}`),
+          API.get(`/analytics/fb-spend?dateFrom=${dateFrom}&dateTo=${dateTo}&level=ad`),
         ]);
 
         const allAds = perfRes.data?.ads || [];
@@ -80,6 +82,8 @@ function AdDetailView() {
         setGeoData(geoRes.data?.data || []);
         setGenderData(genderRes.data?.data || []);
         setDeviceData(deviceRes.data?.data || []);
+        const spendRow = (spendRes.data?.data || []).find(r => r.adId === fbAdId);
+        setAdSpend(spendRow || null);
       } catch (err) {
         console.error('Error fetching ad detail:', err);
       } finally {
@@ -166,7 +170,15 @@ function AdDetailView() {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-4">
+        <div className="bg-gray-800/50 border border-red-500/20 rounded-xl p-4">
+          <p className="text-sm text-gray-400">Inversión</p>
+          <p className="text-2xl font-bold text-red-400">${(adSpend?.spend || 0).toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
+        </div>
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+          <p className="text-sm text-gray-400">Impresiones</p>
+          <p className="text-2xl font-bold text-gray-300">{(adSpend?.impressions || 0).toLocaleString()}</p>
+        </div>
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
           <p className="text-sm text-gray-400">Links</p>
           <p className="text-2xl font-bold text-purple-400">{t.links.toLocaleString()}</p>
@@ -176,20 +188,20 @@ function AdDetailView() {
           <p className="text-2xl font-bold text-blue-400">{t.clicks.toLocaleString()}</p>
         </div>
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-          <p className="text-sm text-gray-400">Click Rate</p>
-          <p className="text-2xl font-bold text-white">{clickRate}%</p>
-        </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
           <p className="text-sm text-gray-400">Conversiones</p>
           <p className="text-2xl font-bold text-green-400">{t.conversions}</p>
         </div>
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-          <p className="text-sm text-gray-400">Conv. Rate</p>
-          <p className="text-2xl font-bold text-white">{convRate}%</p>
-        </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
           <p className="text-sm text-gray-400">Ingresos</p>
           <p className="text-2xl font-bold text-green-400">{formatCurrency(t.revenue)}</p>
+        </div>
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+          <p className="text-sm text-gray-400">Click Rate</p>
+          <p className="text-2xl font-bold text-white">{clickRate}%</p>
+        </div>
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+          <p className="text-sm text-gray-400">CPA</p>
+          <p className="text-2xl font-bold text-white">${t.conversions > 0 ? ((adSpend?.spend || 0) / t.conversions).toFixed(0) : '—'}</p>
         </div>
       </div>
 
