@@ -277,26 +277,24 @@ function CampaignHome() {
       </div>
 
       {/* KPI Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-7 gap-4">
-        {/* Conversations */}
-        <div className="bg-gradient-to-br from-purple-500/10 to-purple-600/5 backdrop-blur-lg border border-purple-500/20 rounded-xl p-5">
-          <p className="text-sm text-gray-400 mb-1">Conversaciones</p>
-          <h3 className="text-2xl font-bold text-white">{analytics?.totalUsers || 0}</h3>
-          <p className="text-xs text-gray-500 mt-1">{periodLabel}</p>
-        </div>
-
-        {/* Links */}
-        <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 backdrop-blur-lg border border-blue-500/20 rounded-xl p-5">
-          <p className="text-sm text-gray-400 mb-1">Links generados</p>
-          <h3 className="text-2xl font-bold text-blue-400">{totals.links.toLocaleString()}</h3>
-          <p className="text-xs text-gray-500 mt-1">{periodLabel}</p>
-        </div>
-
-        {/* Clicks */}
-        <div className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 backdrop-blur-lg border border-amber-500/20 rounded-xl p-5">
-          <p className="text-sm text-gray-400 mb-1">Clicks</p>
-          <h3 className="text-2xl font-bold text-amber-400">{totals.clicks.toLocaleString()}</h3>
-          <p className="text-xs text-gray-500 mt-1">{periodLabel}</p>
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+        {/* Funnel: Conversations → Links → Clicks */}
+        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-5">
+          <div className="grid grid-cols-3 divide-x divide-gray-700/50">
+            <div className="pr-3">
+              <p className="text-xs text-gray-400 mb-1">Conversaciones</p>
+              <h3 className="text-xl font-bold text-white">{(analytics?.totalUsers || 0).toLocaleString()}</h3>
+            </div>
+            <div className="px-3">
+              <p className="text-xs text-gray-400 mb-1">Links</p>
+              <h3 className="text-xl font-bold text-blue-400">{totals.links.toLocaleString()}</h3>
+            </div>
+            <div className="pl-3">
+              <p className="text-xs text-gray-400 mb-1">Clicks</p>
+              <h3 className="text-xl font-bold text-amber-400">{totals.clicks.toLocaleString()}</h3>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 mt-2">{periodLabel}</p>
         </div>
 
         {/* Click Rate + semaphore */}
