@@ -217,7 +217,8 @@ function CampaignHome() {
       links: acc.links + (ad.totals?.links || 0),
       clicks: acc.clicks + (ad.totals?.clicks || 0),
       conversions: acc.conversions + (ad.totals?.conversions || 0),
-    }), { links: 0, clicks: 0, conversions: 0 });
+      revenue: acc.revenue + (ad.totals?.revenue || 0),
+    }), { links: 0, clicks: 0, conversions: 0, revenue: 0 });
   }, [adPerf]);
 
   const clickRate = totals.links > 0 ? ((totals.clicks / totals.links) * 100).toFixed(1) : "0";
@@ -353,13 +354,20 @@ function CampaignHome() {
           );
         })()}
 
-        {/* Inversión FB */}
-        <div className="bg-gradient-to-br from-red-500/10 to-red-600/5 backdrop-blur-lg border border-red-500/20 rounded-xl p-5">
-          <p className="text-sm text-gray-400 mb-1">Inversión FB</p>
-          <h3 className="text-2xl font-bold text-red-400">${fbSpendTotals.spend.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</h3>
-          <p className="text-xs text-gray-500 mt-1">
-            CPA: ${totals.conversions > 0 ? (fbSpendTotals.spend / totals.conversions).toFixed(0) : '—'}
-          </p>
+        {/* Inversión + Ingresos */}
+        <div className="bg-gradient-to-br from-red-500/10 to-red-600/5 backdrop-blur-lg border border-red-500/20 rounded-xl p-5 space-y-3">
+          <div>
+            <p className="text-xs text-gray-400 mb-1">Inversión FB</p>
+            <h3 className="text-2xl font-bold text-red-400">${fbSpendTotals.spend.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</h3>
+          </div>
+          <div className="border-t border-gray-700/50 pt-3">
+            <p className="text-xs text-gray-400 mb-1">Ingresos</p>
+            <h3 className="text-2xl font-bold text-green-400">${totals.revenue.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</h3>
+          </div>
+          <div className="border-t border-gray-700/50 pt-3">
+            <p className="text-xs text-gray-400 mb-1">CPA</p>
+            <h3 className="text-lg font-bold text-white">${totals.conversions > 0 ? (fbSpendTotals.spend / totals.conversions).toFixed(0) : '—'}</h3>
+          </div>
         </div>
 
         {/* Impresiones */}
