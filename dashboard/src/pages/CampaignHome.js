@@ -64,6 +64,7 @@ function CampaignHome() {
   const [genderData, setGenderData] = useState([]);
   const [fbSpend, setFbSpend] = useState([]);
   const [fbSpendTotals, setFbSpendTotals] = useState({ spend: 0, impressions: 0, clicks: 0 });
+  const [topProducts, setTopProducts] = useState([]);
 
   // Link generator state
   const [showLinkGen, setShowLinkGen] = useState(false);
@@ -92,7 +93,7 @@ function CampaignHome() {
       const dateFromISO = `${dateFrom}T00:00:00.000Z`;
       const dateToISO = `${dateTo}T23:59:59.999Z`;
 
-      const [analyticsRes, adPerfRes, clicksRes, sourceRes, geoRes, genderRes, spendRes] = await Promise.all([
+      const [analyticsRes, adPerfRes, clicksRes, sourceRes, geoRes, genderRes, spendRes, productsRes] = await Promise.all([
         API.get(`/analytics/?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/analytics/ad-performance?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/click-logs/daily?startDate=${dateFrom}&endDate=${dateTo}`),
@@ -100,6 +101,7 @@ function CampaignHome() {
         API.get(`/analytics/conversions-by-geography?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/analytics/conversions-by-gender?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/analytics/fb-spend?dateFrom=${dateFrom}&dateTo=${dateTo}&level=ad`),
+        API.get(`/analytics/top-products?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
       ]);
 
       setAnalytics(analyticsRes.data);
@@ -110,6 +112,7 @@ function CampaignHome() {
       setGenderData(genderRes.data?.data || []);
       setFbSpend(spendRes.data?.data || []);
       setFbSpendTotals(spendRes.data?.totals || { spend: 0, impressions: 0, clicks: 0 });
+      setTopProducts((productsRes.data?.allProducts || []).slice(0, 5));
     } catch (err) {
       console.error("Error fetching campaign dashboard:", err);
     } finally {
@@ -449,8 +452,8 @@ function CampaignHome() {
         </button>
       </div>
 
-      {/* Geography + Gender + Channel donuts */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+      {/* Geography + Gender + Channel + Products donuts */}
+      <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
         {/* Geography (top states) donut */}
         <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
           <h2 className="text-lg font-semibold text-white mb-1">Distribución geográfica</h2>
@@ -554,6 +557,40 @@ function CampaignHome() {
                     ))}
                   </Pie>
                   <Tooltip contentStyle={tooltipStyle} />
+                </PieChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+
+        {/* Top Products donut */}
+        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-1">Productos</h2>
+          <p className="text-sm text-gray-500 mb-4">Top por ingresos</p>
+          {topProducts.length === 0 ? (
+            <p className="text-gray-500 text-center py-8">Sin datos</p>
+          ) : (
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <PieChart>
+                  <Pie
+                    data={topProducts.map(p => {
+                      const total = topProducts.reduce((s, x) => s + (x.totalRevenue || 0), 0);
+                      const pct = total > 0 ? +((p.totalRevenue / total) * 100).toFixed(1) : 0;
+                      return {
+                        name: (p._id || 'Otro').length > 18 ? (p._id || 'Otro').substring(0, 18) + '...' : (p._id || 'Otro'),
+                        value: p.totalRevenue || 0,
+                        percentage: pct
+                      };
+                    })}
+                    cx="50%" cy="50%" innerRadius={50} outerRadius={85} paddingAngle={3} dataKey="value"
+                    label={({ name, percentage }) => `${name}: ${percentage}%`}
+                  >
+                    {topProducts.map((_, i) => (
+                      <Cell key={i} fill={['#10B981', '#34D399', '#6EE7B7', '#A7F3D0', '#065F46'][i % 5]} stroke="transparent" />
+                    ))}
+                  </Pie>
+                  <Tooltip contentStyle={tooltipStyle} formatter={(v) => `$${v.toLocaleString('es-MX')}`} />
                 </PieChart>
               </ResponsiveContainer>
             </div>
