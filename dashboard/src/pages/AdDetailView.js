@@ -137,7 +137,6 @@ function AdDetailView() {
 
   const t = ad.totals;
   const clickRate = t.links > 0 ? ((t.clicks / t.links) * 100).toFixed(1) : '0';
-  const convRate = t.clicks > 0 ? ((t.conversions / t.clicks) * 100).toFixed(1) : '0';
 
   return (
     <div className="p-6 space-y-6">
