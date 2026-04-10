@@ -279,22 +279,20 @@ function CampaignHome() {
       {/* KPI Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         {/* Funnel: Conversations → Links → Clicks */}
-        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-5">
-          <div className="grid grid-cols-3 divide-x divide-gray-700/50">
-            <div className="pr-3">
-              <p className="text-xs text-gray-400 mb-1">Conversaciones</p>
-              <h3 className="text-xl font-bold text-white">{(analytics?.totalUsers || 0).toLocaleString()}</h3>
-            </div>
-            <div className="px-3">
-              <p className="text-xs text-gray-400 mb-1">Links</p>
-              <h3 className="text-xl font-bold text-blue-400">{totals.links.toLocaleString()}</h3>
-            </div>
-            <div className="pl-3">
-              <p className="text-xs text-gray-400 mb-1">Clicks</p>
-              <h3 className="text-xl font-bold text-amber-400">{totals.clicks.toLocaleString()}</h3>
-            </div>
+        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-5 space-y-3">
+          <div>
+            <p className="text-xs text-gray-400 mb-1">Conversaciones</p>
+            <h3 className="text-2xl font-bold text-white">{(analytics?.totalUsers || 0).toLocaleString()}</h3>
           </div>
-          <p className="text-xs text-gray-500 mt-2">{periodLabel}</p>
+          <div className="border-t border-gray-700/50 pt-3">
+            <p className="text-xs text-gray-400 mb-1">Links generados</p>
+            <h3 className="text-2xl font-bold text-blue-400">{totals.links.toLocaleString()}</h3>
+          </div>
+          <div className="border-t border-gray-700/50 pt-3">
+            <p className="text-xs text-gray-400 mb-1">Clicks</p>
+            <h3 className="text-2xl font-bold text-amber-400">{totals.clicks.toLocaleString()}</h3>
+          </div>
+          <p className="text-xs text-gray-500 pt-1">{periodLabel}</p>
         </div>
 
         {/* Click Rate + semaphore */}
