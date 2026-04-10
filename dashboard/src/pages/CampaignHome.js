@@ -598,47 +598,8 @@ function CampaignHome() {
         </div>
       </div>
 
-      {/* Bottom row: Ad Donut + Ad Table */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Ad Donut */}
-        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-1">Top anuncios</h2>
-          <p className="text-sm text-gray-500 mb-4">Por clicks</p>
-          {adDonutData.length > 0 ? (
-            <div className="h-72">
-              <ResponsiveContainer width="100%" height="100%">
-                <PieChart>
-                  <Pie
-                    data={adDonutData}
-                    cx="50%"
-                    cy="55%"
-                    innerRadius={55}
-                    outerRadius={85}
-                    paddingAngle={4}
-                    dataKey="value"
-                    label={({ name, value }) => `${name}: ${value}`}
-                  >
-                    {adDonutData.map((_, i) => (
-                      <Cell key={i} fill={AD_COLORS[i % AD_COLORS.length]} stroke="transparent" />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    contentStyle={tooltipStyle}
-                    formatter={(value, name, props) => [
-                      `${value} clicks / ${props.payload.conversions} conv.`,
-                      props.payload.name
-                    ]}
-                  />
-                </PieChart>
-              </ResponsiveContainer>
-            </div>
-          ) : (
-            <p className="text-gray-500 text-center py-8">Sin datos</p>
-          )}
-        </div>
-
-        {/* Ad Table */}
-        <div className="lg:col-span-2 bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl">
+      {/* Ad Table */}
+      <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl">
           <div className="px-6 py-4 border-b border-gray-700/50">
             <h2 className="text-lg font-semibold text-white">Rendimiento por anuncio</h2>
           </div>
@@ -702,7 +663,6 @@ function CampaignHome() {
               </table>
             )}
           </div>
-        </div>
       </div>
 
       {/* Link Generator for Direct Ads */}
