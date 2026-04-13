@@ -53,9 +53,13 @@ CLASIFICACIÓN — responde con JSON:
    → { "type": "handoff", "reason": "<razón breve>" }
 
 2. Pregunta CONCRETA y EXPLÍCITA sobre uno de estos temas del negocio:
-   ubicación/dónde están, horario, teléfono/contacto, cómo pagar, factura, envío (costo/tiempos),
-   compra protegida/seguridad, instalación.
+   ubicación/dónde están, horario, teléfono/contacto, métodos de pago (tarjeta, OXXO, transferencia),
+   factura, envío (costo/tiempos), compra protegida/seguridad, instalación.
    La pregunta debe ser identificable sin ambigüedad. No basta con que el mensaje "podría" ser sobre esto.
+   EXCEPCIÓN CRÍTICA: "¿Cómo compro?", "¿Cómo realizo una compra?", "Quiero comprar", "Mándame el link",
+   "Pásame el enlace" y cualquier intención de COMPRA son product_specific (categoría 5), NO categoría 2.
+   Solo es categoría 2 si preguntan específicamente por el MÉTODO de pago ("aceptan tarjeta?",
+   "puedo pagar en OXXO?", "tienen meses sin intereses?"), NO si quieren comprar.
    → { "type": "response", "text": "<respuesta>", "intent": "<tema>" }
    Temas: phone_request, trust_concern, pay_on_delivery, location, shipping, payment_method, invoice, installation, farewell, general
 
@@ -66,12 +70,16 @@ CLASIFICACIÓN — responde con JSON:
    → { "type": "response", "text": "<acuse de recibo breve y natural>", "intent": "general" }
    NUNCA respondas "Gracias por la información" — eso suena a que el cliente nos dio información cuando no es así.
 
-5. CUALQUIER OTRA COSA — saludos, expresiones vagas de interés, preguntas ambiguas, mensajes sobre el producto:
+5. CUALQUIER OTRA COSA — saludos, expresiones vagas de interés, preguntas ambiguas, mensajes sobre el producto,
+   intención de compra:
    → { "type": "product_specific" }
    Ejemplos que SIEMPRE son product_specific: "Hola", "Qué tal", "Buen día", "Quiero información",
    "Quiero más info", "Me interesa", "Cuéntame", "Información", "Info", "Buenas", "Hola buen día",
-   "Quiero saber más", "Dime", "Qué tienen", "A la orden", "Buenas tardes". Estos son saludos o
-   expresiones de interés ambiguas — NO son preguntas generales del negocio. Déjalas pasar.
+   "Quiero saber más", "Dime", "Qué tienen", "A la orden", "Buenas tardes",
+   "¿Cómo compro?", "¿Cómo realizo una compra?", "Quiero comprar", "Lo quiero",
+   "Mándame el link", "Pásame el enlace", "Me lo llevo", "Sí lo quiero", "Listo".
+   Estos son saludos, expresiones de interés, o intención de compra — NO son preguntas generales
+   del negocio. Déjalas pasar.
 
 REGLA DE ORO: Si el mensaje no menciona EXPLÍCITAMENTE uno de los temas de la categoría 2
 (ubicación, horario, teléfono, pago, factura, envío, seguridad, instalación), es product_specific.
