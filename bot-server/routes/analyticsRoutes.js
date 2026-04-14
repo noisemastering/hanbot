@@ -1203,8 +1203,8 @@ router.get('/ad-performance', async (req, res) => {
     if (dateTo) dateMatch.$lte = new Date(dateTo);
     const hasDate = Object.keys(dateMatch).length > 0;
 
-    // Aggregate daily links, clicks, conversions per adId
-    const daily = await ClickLog.aggregate([
+    // Aggregate daily links & clicks per adId
+    const dailyLinksClicks = await ClickLog.aggregate([
       {
         $match: {
           adId: { $ne: null },
@@ -1218,16 +1218,59 @@ router.get('/ad-performance', async (req, res) => {
             date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'America/Mexico_City' } }
           },
           links: { $sum: 1 },
-          clicks: { $sum: { $cond: ['$clicked', 1, 0] } },
-          conversions: { $sum: { $cond: ['$converted', 1, 0] } },
-          revenue: { $sum: { $cond: ['$converted', { $ifNull: ['$conversionData.totalAmount', 0] }, 0] } }
+          clicks: { $sum: { $cond: ['$clicked', 1, 0] } }
         }
       },
       { $sort: { '_id.date': 1 } }
     ]);
 
-    // Aggregate totals per ad
-    const totals = await ClickLog.aggregate([
+    // Deduplicated daily conversions & revenue (unique orders per ad per day)
+    const dailyConvRaw = await ClickLog.aggregate([
+      {
+        $match: {
+          adId: { $ne: null },
+          converted: true,
+          ...(hasDate ? { createdAt: dateMatch } : {})
+        }
+      },
+      // Deduplicate by orderId per ad per day
+      {
+        $group: {
+          _id: {
+            orderId: '$conversionData.orderId',
+            adId: '$adId',
+            date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'America/Mexico_City' } }
+          },
+          revenue: { $first: '$conversionData.totalAmount' }
+        }
+      },
+      {
+        $group: {
+          _id: { adId: '$_id.adId', date: '$_id.date' },
+          conversions: { $sum: 1 },
+          revenue: { $sum: { $ifNull: ['$revenue', 0] } }
+        }
+      }
+    ]);
+
+    // Merge daily data
+    const dailyConvMap = {};
+    for (const d of dailyConvRaw) {
+      dailyConvMap[`${d._id.adId}:${d._id.date}`] = d;
+    }
+    const daily = dailyLinksClicks.map(d => {
+      const conv = dailyConvMap[`${d._id.adId}:${d._id.date}`];
+      return {
+        _id: d._id,
+        links: d.links,
+        clicks: d.clicks,
+        conversions: conv?.conversions || 0,
+        revenue: conv?.revenue || 0
+      };
+    });
+
+    // Aggregate totals per ad (links & clicks from all ClickLogs)
+    const linkClickTotals = await ClickLog.aggregate([
       {
         $match: {
           adId: { $ne: null },
@@ -1239,14 +1282,50 @@ router.get('/ad-performance', async (req, res) => {
           _id: '$adId',
           links: { $sum: 1 },
           clicks: { $sum: { $cond: ['$clicked', 1, 0] } },
-          conversions: { $sum: { $cond: ['$converted', 1, 0] } },
-          revenue: { $sum: { $cond: ['$converted', { $ifNull: ['$conversionData.totalAmount', 0] }, 0] } },
           firstSeen: { $min: '$createdAt' },
           lastSeen: { $max: '$createdAt' }
         }
-      },
-      { $sort: { clicks: -1 } }
+      }
     ]);
+
+    // Deduplicated conversions & revenue per ad (unique orders only)
+    const convTotals = await ClickLog.aggregate([
+      {
+        $match: {
+          adId: { $ne: null },
+          converted: true,
+          ...(hasDate ? { createdAt: dateMatch } : {})
+        }
+      },
+      // First deduplicate by orderId — keep one ClickLog per order
+      {
+        $group: {
+          _id: { orderId: '$conversionData.orderId', adId: '$adId' },
+          revenue: { $first: '$conversionData.totalAmount' }
+        }
+      },
+      // Then aggregate per ad
+      {
+        $group: {
+          _id: '$_id.adId',
+          conversions: { $sum: 1 },
+          revenue: { $sum: { $ifNull: ['$revenue', 0] } }
+        }
+      }
+    ]);
+
+    // Merge into totals
+    const convMap = {};
+    for (const c of convTotals) convMap[c._id] = c;
+    const totals = linkClickTotals.map(t => ({
+      _id: t._id,
+      links: t.links,
+      clicks: t.clicks,
+      conversions: convMap[t._id]?.conversions || 0,
+      revenue: convMap[t._id]?.revenue || 0,
+      firstSeen: t.firstSeen,
+      lastSeen: t.lastSeen
+    })).sort((a, b) => b.clicks - a.clicks);
 
     // Resolve ad names (same pattern as clicks-by-ad)
     const Ad = require('../models/Ad');

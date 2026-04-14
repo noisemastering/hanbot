@@ -240,12 +240,21 @@ router.get("/daily", async (req, res) => {
       { $sort: { _id: 1 } }
     ]);
 
-    // Conversions grouped by click/link date (attribution date — when the lead was generated)
+    // Conversions grouped by click/link date — deduplicated by orderId
     const conversionsPerDay = await ClickLog.aggregate([
       { $match: { converted: true, ...(dateFilter.$gte ? { createdAt: dateFilter } : {}) } },
+      // Deduplicate: one conversion per unique orderId per day
       {
         $group: {
-          _id: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "America/Mexico_City" } },
+          _id: {
+            orderId: '$conversionData.orderId',
+            date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "America/Mexico_City" } }
+          }
+        }
+      },
+      {
+        $group: {
+          _id: '$_id.date',
           conversions: { $sum: 1 }
         }
       }
