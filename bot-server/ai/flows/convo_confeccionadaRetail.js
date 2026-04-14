@@ -60,7 +60,8 @@ async function handle(userMessage, convo, psid, state = {}) {
         reason: `Medida grande: ${w}x${h}m (ambos lados >8m)`,
         responsePrefix: `Esa medida (${w}x${h}m) requiere cotización especial ya que es más grande que nuestro catálogo estándar. Te comunico con un especialista para cotizarte.`,
         lastIntent: 'oversize_handoff',
-        timingStyle: 'elaborate'
+        timingStyle: 'elaborate',
+        includeVideo: true
       });
       return { response: handoffResp, state };
     }
@@ -131,7 +132,8 @@ async function handle(userMessage, convo, psid, state = {}) {
         reason: `Medida con decimales: ${w}x${h}m — sin tamaño estándar cercano`,
         responsePrefix: `La medida ${w}x${h}m no la tenemos en catálogo estándar. Te comunico con un especialista.`,
         lastIntent: 'fractional_meters_handoff',
-        timingStyle: 'elaborate'
+        timingStyle: 'elaborate',
+        includeVideo: true
       });
       return { response: handoffResp, state };
     }

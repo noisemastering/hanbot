@@ -370,6 +370,13 @@ function create(manifest) {
     });
 
     if (masterResultEarly) {
+      // Append malla sombra video on farewell for confeccionada flows
+      if (masterResultEarly.intent === 'farewell' && (manifest.name?.includes('confeccionada') || manifest.name?.includes('promo6x4'))) {
+        const VIDEO_LINK = 'https://youtube.com/shorts/XLGydjdE7mY';
+        if (masterResultEarly.text && !masterResultEarly.text.includes(VIDEO_LINK)) {
+          masterResultEarly.text += `\n\n📽️ Conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`;
+        }
+      }
       return { response: masterResultEarly, state: flowState };
     }
 
