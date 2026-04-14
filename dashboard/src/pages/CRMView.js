@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import API from '../api';
 import { useAuth } from '../contexts/AuthContext';
+import ManualSaleForm from '../components/ManualSaleForm';
 
 const inputClass = "w-full px-3 py-1.5 bg-gray-900/50 border border-gray-600/50 rounded text-white text-sm focus:outline-none focus:border-purple-500/50";
 
@@ -21,6 +22,7 @@ function CRMView() {
   const [addForm, setAddForm] = useState({ crmName: '', crmPhone: '', crmEmail: '', zipCode: '' });
   const [saving, setSaving] = useState(false);
   const [deletingPsid, setDeletingPsid] = useState(null);
+  const [salePsid, setSalePsid] = useState(null);
 
   const fetchCustomers = useCallback(async () => {
     try {
@@ -214,7 +216,8 @@ function CRMView() {
                     </td>
                   </tr>
                 ) : (
-                  <tr key={c.psid} className="hover:bg-gray-700/20">
+                  <React.Fragment key={c.psid}>
+                  <tr className="hover:bg-gray-700/20">
                     <td className="px-6 py-3 text-sm text-white font-medium">{toTitleCase(c.crmName) || '-'}</td>
                     <td className="px-6 py-3 text-sm text-gray-300">{c.crmPhone || '-'}</td>
                     <td className="px-6 py-3 text-sm text-gray-300">{c.crmEmail || '-'}</td>
@@ -223,6 +226,12 @@ function CRMView() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
+                        <button onClick={() => setSalePsid(salePsid === c.psid ? null : c.psid)} title="Registrar venta"
+                          className={`p-1.5 rounded hover:bg-green-500/20 ${salePsid === c.psid ? 'text-green-300 bg-green-500/20' : 'text-green-400'}`}>
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                          </svg>
+                        </button>
                         <button onClick={() => startEdit(c)} title="Editar"
                           className="p-1.5 rounded hover:bg-blue-500/20 text-blue-400">
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -240,6 +249,18 @@ function CRMView() {
                       </div>
                     </td>
                   </tr>
+                  {salePsid === c.psid && (
+                    <tr key={`${c.psid}-sale`}>
+                      <td colSpan={5} className="px-6 py-4 bg-gray-800/80">
+                        <ManualSaleForm
+                          psid={c.psid}
+                          channel={c.channel || 'facebook'}
+                          onClose={() => setSalePsid(null)}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
                 )
               ))}
             </tbody>
