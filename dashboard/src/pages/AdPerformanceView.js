@@ -41,6 +41,7 @@ function AdPerformanceView() {
   const [deviceBreakdown, setDeviceBreakdown] = useState([]);
   const [fbSpend, setFbSpend] = useState([]);
   const [fbSpendTotals, setFbSpendTotals] = useState({ spend: 0, impressions: 0, clicks: 0 });
+  const [correlating, setCorrelating] = useState(false);
 
   const dateFrom = useMemo(() => getDaysAgo(range), [range]);
   const dateTo = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -79,6 +80,30 @@ function AdPerformanceView() {
     fetchData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range]);
+
+  const runCorrelation = async () => {
+    setCorrelating(true);
+    try {
+      await API.post('/analytics/correlate-conversions', { sellerId: '482595248', dateFrom, dateTo });
+      await fetchData();
+    } catch (err) {
+      console.error('Correlation failed:', err);
+    } finally {
+      setCorrelating(false);
+    }
+  };
+
+  const CorrelateButton = () => (
+    <div className="flex justify-end mt-3">
+      <button
+        onClick={runCorrelation}
+        disabled={correlating}
+        className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50 transition-all"
+      >
+        {correlating ? "Correlacionando..." : "Correlacionar"}
+      </button>
+    </div>
+  );
 
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return '$0';
@@ -248,6 +273,7 @@ function AdPerformanceView() {
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+          <CorrelateButton />
         </div>
       )}
 
@@ -273,6 +299,7 @@ function AdPerformanceView() {
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+          <CorrelateButton />
         </div>
       )}
 
@@ -307,6 +334,7 @@ function AdPerformanceView() {
               </ComposedChart>
             </ResponsiveContainer>
           </div>
+          <CorrelateButton />
         </div>
       )}
 
