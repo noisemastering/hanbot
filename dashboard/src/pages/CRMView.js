@@ -9,7 +9,7 @@ function CRMView() {
   const isSuperAdmin = user?.role === 'super_admin';
 
   const [customers, setCustomers] = useState([]);
-  const [loading, setLoading] = useState(true);
+  const [initialLoad, setInitialLoad] = useState(true);
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, pages: 1 });
   const [search, setSearch] = useState('');
@@ -23,7 +23,6 @@ function CRMView() {
   const [deletingPsid, setDeletingPsid] = useState(null);
 
   const fetchCustomers = useCallback(async () => {
-    setLoading(true);
     try {
       const params = new URLSearchParams({ page, limit: 30 });
       if (search) params.set('search', search);
@@ -33,7 +32,7 @@ function CRMView() {
     } catch (err) {
       console.error('Error fetching CRM customers:', err);
     } finally {
-      setLoading(false);
+      setInitialLoad(false);
     }
   }, [page, search]);
 
@@ -100,7 +99,7 @@ function CRMView() {
     }
   };
 
-  if (loading && customers.length === 0) {
+  if (initialLoad) {
     return (
       <div className="p-6 flex items-center justify-center min-h-[60vh]">
         <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-400" />
@@ -184,11 +183,7 @@ function CRMView() {
               </tr>
             </thead>
             <tbody className="divide-y divide-gray-700/50">
-              {loading ? (
-                <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-500">
-                  <div className="inline-block animate-spin rounded-full h-6 w-6 border-b-2 border-purple-400" />
-                </td></tr>
-              ) : customers.length === 0 ? (
+              {customers.length === 0 ? (
                 <tr><td colSpan={5} className="px-6 py-12 text-center text-gray-500">No hay clientes registrados</td></tr>
               ) : customers.map((c) => (
                 editingPsid === c.psid ? (
