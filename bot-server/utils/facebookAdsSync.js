@@ -7,7 +7,7 @@ const Campaign = require("../models/Campaign");
 const AdSet = require("../models/AdSet");
 const Ad = require("../models/Ad");
 
-const FB_API_VERSION = "v21.0";
+const FB_API_VERSION = "v25.0";
 const FB_GRAPH_URL = `https://graph.facebook.com/${FB_API_VERSION}`;
 const AD_ACCOUNT_ID = process.env.FB_AD_ACCOUNT_ID;
 const ACCESS_TOKEN = process.env.FB_MARKETING_TOKEN;

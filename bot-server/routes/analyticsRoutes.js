@@ -1522,7 +1522,7 @@ router.get('/fb-spend', async (req, res) => {
     const since = dateFrom ? dateFrom.split('T')[0] : new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
     const until = dateTo ? dateTo.split('T')[0] : new Date().toISOString().split('T')[0];
 
-    const url = `https://graph.facebook.com/v21.0/${AD_ACCOUNT_ID}/insights`;
+    const url = `https://graph.facebook.com/v25.0/${AD_ACCOUNT_ID}/insights`;
     const { data } = await axios.get(url, {
       params: {
         access_token: ACCESS_TOKEN,
