@@ -146,6 +146,7 @@ const SimulationModeSelector = () => {
                 <button
                   onClick={handleStopSimulation}
                   className="w-full px-4 py-3 text-left text-sm text-red-400 hover:bg-red-500/10 border-b border-gray-700 flex items-center space-x-2"
+                  title="Detener simulación"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

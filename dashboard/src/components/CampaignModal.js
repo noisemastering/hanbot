@@ -439,7 +439,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
           <h2 className="text-xl font-bold text-white">
             {campaign ? t('campaignModal.edit') : t('campaigns.addCampaign')}
           </h2>
-          <button onClick={onClose} className="p-2 rounded-lg text-gray-400 hover:bg-gray-700/50 hover:text-white transition-colors">
+          <button onClick={onClose} title="Cerrar" className="p-2 rounded-lg text-gray-400 hover:bg-gray-700/50 hover:text-white transition-colors">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -778,7 +778,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
                   {formData.responseGuidelines.mustNot.map((rule, idx) => (
                     <div key={idx} className="flex items-center justify-between p-2 bg-red-900/20 border border-red-800/30 rounded">
                       <span className="text-red-300 text-sm">{MUST_NOT_OPTIONS.find(o => o.value === rule)?.label || rule}</span>
-                      <button type="button" onClick={() => removeMustNot(idx)} className="text-red-400 hover:text-red-300">
+                      <button type="button" onClick={() => removeMustNot(idx)} title="Eliminar" className="text-red-400 hover:text-red-300">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>
@@ -810,7 +810,7 @@ function CampaignModal({ campaign, onSave, onClose }) {
                   {formData.responseGuidelines.shouldDo.map((rule, idx) => (
                     <div key={idx} className="flex items-center justify-between p-2 bg-green-900/20 border border-green-800/30 rounded">
                       <span className="text-green-300 text-sm">{SHOULD_DO_OPTIONS.find(o => o.value === rule)?.label || rule}</span>
-                      <button type="button" onClick={() => removeShouldDo(idx)} className="text-green-400 hover:text-green-300">
+                      <button type="button" onClick={() => removeShouldDo(idx)} title="Eliminar" className="text-green-400 hover:text-green-300">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                         </svg>

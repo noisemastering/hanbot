@@ -131,6 +131,7 @@ function ProfileModal({ profile, roles, onClose, onSave }) {
           </h3>
           <button
             onClick={onClose}
+            title="Cerrar"
             className="text-gray-400 hover:text-white transition-colors"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

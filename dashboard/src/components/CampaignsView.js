@@ -44,6 +44,7 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete, onRefresh 
           <button
             onClick={onAdd}
             className="px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center space-x-2"
+            title="Agregar campaña"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -65,7 +66,7 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete, onRefresh 
               {' / '}{syncResult.ads?.created || 0} anuncios nuevos, {syncResult.ads?.updated || 0} actualizados
             </span>
           )}
-          <button onClick={() => setSyncResult(null)} className="ml-3 text-gray-400 hover:text-white">x</button>
+          <button onClick={() => setSyncResult(null)} className="ml-3 text-gray-400 hover:text-white" title="Cerrar">x</button>
         </div>
       )}
 
@@ -92,6 +93,7 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete, onRefresh 
             <button
               onClick={onAdd}
               className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors inline-flex items-center space-x-2"
+              title="Agregar campaña"
             >
               <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
@@ -219,6 +221,7 @@ function CampaignsView({ campaigns, loading, onAdd, onEdit, onDelete, onRefresh 
               <button
                 onClick={() => setSelectedCampaign(null)}
                 className="p-2 rounded-lg text-gray-400 hover:bg-gray-700/50 hover:text-white transition-colors"
+                title="Cerrar"
               >
                 <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />

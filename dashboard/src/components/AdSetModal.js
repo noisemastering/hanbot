@@ -277,6 +277,7 @@ function AdSetModal({ adSet, campaigns, parentCampaignId, onSave, onClose }) {
           </h2>
           <button
             onClick={onClose}
+            title="Cerrar"
             className="p-2 rounded-lg text-gray-400 hover:bg-gray-700/50 hover:text-white transition-colors"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">

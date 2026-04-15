@@ -158,7 +158,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
           <h3 className="text-xl font-semibold text-white">
             {flow ? t('flowModal.edit') : t('flows.addFlow')}
           </h3>
-          <button onClick={onClose} className="text-gray-400 hover:text-white transition-colors">
+          <button onClick={onClose} title="Cerrar" className="text-gray-400 hover:text-white transition-colors">
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
             </svg>
@@ -449,6 +449,7 @@ function FlowModal({ flow, intents, onClose, onSave }) {
                                   <button
                                     type="button"
                                     onClick={() => deleteOption(step.stepId, optIdx)}
+                                    title="Eliminar"
                                     className="p-1.5 text-gray-400 hover:text-red-400"
                                   >
                                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

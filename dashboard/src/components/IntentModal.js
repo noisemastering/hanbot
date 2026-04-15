@@ -127,6 +127,7 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
           </h3>
           <button
             onClick={onClose}
+            title="Cerrar"
             className="text-gray-400 hover:text-white transition-colors"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -300,6 +301,7 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
                         <button
                           type="button"
                           onClick={() => removeKeyword(keyword)}
+                          title="Eliminar"
                           className="ml-2 text-blue-400 hover:text-blue-200"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -348,6 +350,7 @@ function IntentModal({ intent, categories = [], flows = [], onClose, onSave }) {
                         <button
                           type="button"
                           onClick={() => removePattern(pattern)}
+                          title="Eliminar"
                           className="ml-2 text-purple-400 hover:text-purple-200"
                         >
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

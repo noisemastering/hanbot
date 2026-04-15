@@ -64,6 +64,7 @@ function ProductTreeNode({ product, selectedProducts, inheritedProducts = [], on
             type="button"
             onClick={toggleExpand}
             className="mr-2 p-0.5 hover:bg-gray-600/50 rounded transition-colors"
+            title={isExpanded ? 'Contraer' : 'Expandir'}
           >
             <svg
               className={`w-4 h-4 text-gray-400 transition-transform ${
@@ -209,6 +210,7 @@ function ProductTreeSelector({ selectedProducts, inheritedProducts = [], inherit
         <button
           onClick={handleExpandAll}
           className="px-3 py-2 bg-gray-700/50 text-gray-300 rounded-lg hover:bg-gray-600/50 transition-colors text-sm whitespace-nowrap"
+          title={expandAll ? 'Contraer todo' : 'Expandir todo'}
         >
           {expandAll ? 'Contraer todo' : 'Expandir todo'}
         </button>

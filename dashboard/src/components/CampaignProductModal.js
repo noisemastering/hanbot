@@ -115,6 +115,7 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
           </h2>
           <button
             onClick={onClose}
+            title="Cerrar"
             className="p-2 rounded-lg text-gray-400 hover:bg-gray-700/50 hover:text-white transition-colors"
           >
             <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -237,6 +238,7 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
                     <button
                       type="button"
                       onClick={() => handleRemoveFeature(index)}
+                      title="Eliminar"
                       className="p-1 text-red-400 hover:bg-red-500/20 rounded transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -340,6 +342,7 @@ function CampaignProductModal({ campaignProduct, campaigns, onSave, onClose }) {
                     <button
                       type="button"
                       onClick={() => handleRemoveVariant(index)}
+                      title="Eliminar"
                       className="p-1 text-red-400 hover:bg-red-500/20 rounded transition-colors"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">

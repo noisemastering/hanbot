@@ -1009,6 +1009,7 @@ function InventarioView() {
                                 className={`w-8 h-5 rounded-full transition-colors ${
                                   (product.active ?? true) ? 'bg-green-500' : 'bg-gray-600'
                                 }`}
+                                title={(product.active ?? true) ? 'Desactivar' : 'Activar'}
                               >
                                 <span className={`block w-3 h-3 rounded-full bg-white transition-transform ${
                                   (product.active ?? true) ? 'translate-x-4' : 'translate-x-1'
