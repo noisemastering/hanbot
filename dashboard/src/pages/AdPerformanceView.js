@@ -176,6 +176,7 @@ function AdPerformanceView() {
           <button
             onClick={() => navigate('/')}
             className="text-gray-400 hover:text-white transition-colors"
+            title="Volver"
           >
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
@@ -202,28 +203,28 @@ function AdPerformanceView() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
-        <div className="bg-gray-800/50 border border-red-500/20 rounded-xl p-4">
+        <div className="bg-gray-800/50 border border-red-500/20 rounded-xl p-4" title="Gasto total en Facebook Ads">
           <p className="text-sm text-gray-400">Inversión FB</p>
           <p className="text-2xl font-bold text-red-400">${fbSpendTotals.spend.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
           <p className="text-xs text-gray-500 mt-0.5">CPA: ${grandTotals.conversions > 0 ? (fbSpendTotals.spend / grandTotals.conversions).toFixed(0) : '—'}</p>
         </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4" title="Personas que vieron el anuncio">
           <p className="text-sm text-gray-400">Impresiones</p>
           <p className="text-2xl font-bold text-gray-300">{fbSpendTotals.impressions.toLocaleString()}</p>
         </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4" title="Links de compra enviados por el bot">
           <p className="text-sm text-gray-400">Links generados</p>
           <p className="text-2xl font-bold text-blue-400">{grandTotals.links.toLocaleString()}</p>
         </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4" title="Clicks en los links de compra">
           <p className="text-sm text-gray-400">Clicks</p>
           <p className="text-2xl font-bold text-purple-400">{grandTotals.clicks.toLocaleString()}</p>
         </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4" title="Compras realizadas en Mercado Libre">
           <p className="text-sm text-gray-400">Conversiones</p>
           <p className="text-2xl font-bold text-green-400">{grandTotals.conversions.toLocaleString()}</p>
         </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4" title="Ingresos por ventas atribuidas a anuncios">
           <p className="text-sm text-gray-400">Ingresos</p>
           <p className="text-2xl font-bold text-green-400">{formatCurrency(grandTotals.revenue)}</p>
         </div>

@@ -126,7 +126,7 @@ function AdDetailView() {
   if (!ad) {
     return (
       <div className="p-6">
-        <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-white mb-4 flex items-center gap-2">
+        <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-white mb-4 flex items-center gap-2" title="Volver">
           <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
           Volver
         </button>
@@ -143,7 +143,7 @@ function AdDetailView() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
-          <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-white transition-colors">
+          <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-white transition-colors" title="Volver">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
           </button>
           <div>
@@ -170,35 +170,35 @@ function AdDetailView() {
 
       {/* Summary Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
-        <div className="bg-gray-800/50 border border-red-500/20 rounded-xl p-3">
+        <div className="bg-gray-800/50 border border-red-500/20 rounded-xl p-3" title="Gasto en Facebook Ads para este anuncio">
           <p className="text-xs text-gray-400">Inversión</p>
           <p className="text-xl font-bold text-red-400">${(adSpend?.spend || 0).toLocaleString('es-MX', { maximumFractionDigits: 0 })}</p>
         </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3">
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3" title="Personas que vieron este anuncio">
           <p className="text-xs text-gray-400">Impresiones</p>
           <p className="text-xl font-bold text-gray-300">{(adSpend?.impressions || 0).toLocaleString()}</p>
         </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3">
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3" title="Links de compra generados">
           <p className="text-xs text-gray-400">Links</p>
           <p className="text-xl font-bold text-purple-400">{t.links.toLocaleString()}</p>
         </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3">
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3" title="Clicks en links de compra">
           <p className="text-xs text-gray-400">Clicks</p>
           <p className="text-xl font-bold text-blue-400">{t.clicks.toLocaleString()}</p>
         </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3">
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3" title="Compras en Mercado Libre">
           <p className="text-xs text-gray-400">Conversiones</p>
           <p className="text-xl font-bold text-green-400">{t.conversions}</p>
         </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3">
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3" title="Ingresos por ventas">
           <p className="text-xs text-gray-400">Ingresos</p>
           <p className="text-xl font-bold text-green-400">{formatCurrency(t.revenue)}</p>
         </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3">
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3" title="Porcentaje de links que recibieron click">
           <p className="text-xs text-gray-400">Click Rate</p>
           <p className="text-xl font-bold text-white">{clickRate}%</p>
         </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3">
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-3" title="Costo por adquisición (inversión ÷ conversiones)">
           <p className="text-xs text-gray-400">CPA</p>
           <p className="text-xl font-bold text-white">${t.conversions > 0 ? ((adSpend?.spend || 0) / t.conversions).toFixed(0) : '—'}</p>
         </div>
