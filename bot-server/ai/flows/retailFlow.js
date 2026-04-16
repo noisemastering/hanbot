@@ -207,9 +207,10 @@ async function handle(userMessage, convo, psid, context = {}) {
   // ── QUOTE — build AI-generated message ──
   const quoteText = await buildQuoteMessage(products, { voice, customerName, salesChannel, colorNote, conversationHistory });
 
+  const firstProductLink = products.find(p => p.link)?.link;
   await updateConversation(psid, {
     lastIntent: 'retail_quote',
-    lastSharedProductLink: products.some(p => p.link) ? true : undefined,
+    ...(firstProductLink ? { lastSharedProductLink: firstProductLink } : {}),
     unknownCount: 0
   });
 
