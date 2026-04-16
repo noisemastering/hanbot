@@ -53,7 +53,6 @@ function CampaignHome() {
 
   const [correlating, setCorrelating] = useState(false);
   const [syncProgress, setSyncProgress] = useState(0);
-  const [lastSync, setLastSync] = useState(null);
   const progressRef = useRef(null);
 
   const [analytics, setAnalytics] = useState(null);
@@ -148,7 +147,6 @@ function CampaignHome() {
     startProgress();
     try {
       await API.post('/analytics/correlate-conversions', { sellerId: '482595248', dateFrom, dateTo });
-      setLastSync(new Date());
       stopProgress();
       await fetchAll();
     } catch (err) {
@@ -212,7 +210,7 @@ function CampaignHome() {
   useEffect(() => {
     fetchAll();
     API.post('/analytics/correlate-conversions', { sellerId: '482595248', dateFrom, dateTo })
-      .then(() => { setLastSync(new Date()); return fetchAll(); })
+      .then(() => fetchAll())
       .catch(err => console.error('Auto-sync failed:', err));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range]);
