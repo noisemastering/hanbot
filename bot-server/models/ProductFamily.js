@@ -80,7 +80,7 @@ const productFamilySchema = new mongoose.Schema({
     },
     store: {
       type: String,  // e.g., "Mercado Libre", "Amazon", "Website"
-      required: true
+      default: 'Mercado Libre'
     },
     isPreferred: {
       type: Boolean,
