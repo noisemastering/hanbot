@@ -1586,6 +1586,64 @@ router.get('/device-breakdown', async (req, res) => {
   }
 });
 
+// GET /analytics/fb-spend-daily — daily spend breakdown for timeline charts
+router.get('/fb-spend-daily', async (req, res) => {
+  try {
+    const { dateFrom, dateTo } = req.query;
+    const axios = require('axios');
+
+    const AD_ACCOUNT_ID = process.env.FB_AD_ACCOUNT_ID;
+    const ACCESS_TOKEN = process.env.FB_MARKETING_TOKEN;
+    if (!AD_ACCOUNT_ID || !ACCESS_TOKEN) {
+      return res.status(500).json({ success: false, error: 'FB_AD_ACCOUNT_ID or FB_MARKETING_TOKEN not configured' });
+    }
+
+    const since = dateFrom ? dateFrom.split('T')[0] : new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0];
+    const until = dateTo ? dateTo.split('T')[0] : new Date().toISOString().split('T')[0];
+
+    const url = `https://graph.facebook.com/v25.0/${AD_ACCOUNT_ID}/insights`;
+    const { data } = await axios.get(url, {
+      params: {
+        access_token: ACCESS_TOKEN,
+        fields: 'spend,impressions,clicks',
+        level: 'account',
+        time_increment: 1,
+        time_range: JSON.stringify({ since, until }),
+        limit: 500
+      }
+    });
+
+    const daily = (data.data || []).map(row => ({
+      date: row.date_start,
+      spend: parseFloat(row.spend || 0),
+      impressions: parseInt(row.impressions || 0),
+      clicks: parseInt(row.clicks || 0)
+    }));
+
+    res.json({ success: true, data: daily });
+  } catch (err) {
+    console.error('❌ Error fetching FB daily spend:', err.response?.data?.error?.message || err.message);
+    res.status(500).json({ success: false, error: err.response?.data?.error?.message || err.message });
+  }
+});
+
+// GET /analytics/last-correlation — timestamp of the last conversion correlation run
+router.get('/last-correlation', async (req, res) => {
+  try {
+    const last = await ClickLog.findOne(
+      { converted: true, convertedAt: { $ne: null } },
+      { convertedAt: 1 }
+    ).sort({ convertedAt: -1 }).lean();
+
+    res.json({
+      success: true,
+      lastCorrelatedAt: last?.convertedAt || null
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // GET /analytics/fb-spend — Facebook ad spend from Insights API
 router.get('/fb-spend', async (req, res) => {
   try {

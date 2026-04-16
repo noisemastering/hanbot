@@ -240,30 +240,36 @@ router.get("/daily", async (req, res) => {
       { $sort: { _id: 1 } }
     ]);
 
-    // Conversions grouped by click/link date — deduplicated by orderId
+    // Conversions + revenue grouped by click/link date — deduplicated by orderId
     const conversionsPerDay = await ClickLog.aggregate([
       { $match: { converted: true, ...(dateFilter.$gte ? { createdAt: dateFilter } : {}) } },
-      // Deduplicate: one conversion per unique orderId per day
+      // Deduplicate: one row per unique orderId per day, keep revenue once
       {
         $group: {
           _id: {
             orderId: '$conversionData.orderId',
             date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "America/Mexico_City" } }
-          }
+          },
+          revenue: { $first: '$conversionData.totalAmount' }
         }
       },
       {
         $group: {
           _id: '$_id.date',
-          conversions: { $sum: 1 }
+          conversions: { $sum: 1 },
+          revenue: { $sum: { $ifNull: ['$revenue', 0] } }
         }
       }
     ]);
 
-    // Merge conversions into linksPerDay
+    // Merge conversions + revenue into linksPerDay
     const conversionMap = {};
-    conversionsPerDay.forEach(d => { conversionMap[d._id] = d.conversions; });
-    linksPerDay.forEach(day => { day.conversions = conversionMap[day._id] || 0; });
+    conversionsPerDay.forEach(d => { conversionMap[d._id] = { conversions: d.conversions, revenue: d.revenue }; });
+    linksPerDay.forEach(day => {
+      const c = conversionMap[day._id] || { conversions: 0, revenue: 0 };
+      day.conversions = c.conversions;
+      day.revenue = c.revenue;
+    });
 
     // Format for chart
     const chartData = linksPerDay.map(day => ({
@@ -271,7 +277,8 @@ router.get("/daily", async (req, res) => {
       dateLabel: new Date(day._id + 'T12:00:00').toLocaleDateString('es-MX', { month: 'short', day: 'numeric' }),
       links: day.links,
       clicks: day.clicks,
-      conversions: day.conversions
+      conversions: day.conversions,
+      revenue: Math.round(day.revenue || 0)
     }));
 
     res.json({

@@ -64,7 +64,9 @@ function CampaignHome() {
   const [genderData, setGenderData] = useState([]);
   const [fbSpend, setFbSpend] = useState([]);
   const [fbSpendTotals, setFbSpendTotals] = useState({ spend: 0, impressions: 0, clicks: 0 });
+  const [fbSpendDaily, setFbSpendDaily] = useState([]);
   const [topProducts, setTopProducts] = useState([]);
+  const [lastCorrelatedAt, setLastCorrelatedAt] = useState(null);
 
   // Link generator state
   const [showLinkGen, setShowLinkGen] = useState(false);
@@ -93,7 +95,7 @@ function CampaignHome() {
       const dateFromISO = `${dateFrom}T00:00:00.000Z`;
       const dateToISO = `${dateTo}T23:59:59.999Z`;
 
-      const [analyticsRes, adPerfRes, clicksRes, sourceRes, geoRes, genderRes, spendRes, productsRes] = await Promise.all([
+      const [analyticsRes, adPerfRes, clicksRes, sourceRes, geoRes, genderRes, spendRes, productsRes, spendDailyRes, lastCorrRes] = await Promise.all([
         API.get(`/analytics/?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/analytics/ad-performance?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/click-logs/daily?startDate=${dateFrom}&endDate=${dateTo}`),
@@ -102,6 +104,8 @@ function CampaignHome() {
         API.get(`/analytics/conversions-by-gender?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/analytics/fb-spend?dateFrom=${dateFrom}&dateTo=${dateTo}&level=ad`),
         API.get(`/analytics/top-products?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
+        API.get(`/analytics/fb-spend-daily?dateFrom=${dateFrom}&dateTo=${dateTo}`),
+        API.get(`/analytics/last-correlation`),
       ]);
 
       setAnalytics(analyticsRes.data);
@@ -113,6 +117,8 @@ function CampaignHome() {
       setFbSpend(spendRes.data?.data || []);
       setFbSpendTotals(spendRes.data?.totals || { spend: 0, impressions: 0, clicks: 0 });
       setTopProducts((productsRes.data?.allProducts || []).slice(0, 5));
+      setFbSpendDaily(spendDailyRes.data?.data || []);
+      setLastCorrelatedAt(lastCorrRes.data?.lastCorrelatedAt || null);
     } catch (err) {
       console.error("Error fetching campaign dashboard:", err);
     } finally {
@@ -232,15 +238,32 @@ function CampaignHome() {
   }, [fbSpend]);
 
   // Main chart: daily links, clicks, conversions
-  const chartData = useMemo(
-    () => dailyData.map((day) => ({
+  const chartData = useMemo(() => {
+    const spendMap = {};
+    fbSpendDaily.forEach(d => { spendMap[d.date] = d.spend; });
+    return dailyData.map((day) => ({
       dateLabel: day.dateLabel,
+      date: day.date,
       clicks: day.clicks || 0,
       conversions: day.conversions || 0,
       links: day.links || 0,
-    })),
-    [dailyData]
-  );
+      revenue: day.revenue || 0,
+      spend: Math.round(spendMap[day.date] || 0),
+    }));
+  }, [dailyData, fbSpendDaily]);
+
+  // "Time since last correlation" label
+  const lastCorrLabel = useMemo(() => {
+    if (!lastCorrelatedAt) return "Sin correlación aún";
+    const diffMs = Date.now() - new Date(lastCorrelatedAt).getTime();
+    const mins = Math.floor(diffMs / 60000);
+    if (mins < 1) return "Hace menos de un minuto";
+    if (mins < 60) return `Hace ${mins} ${mins === 1 ? 'minuto' : 'minutos'}`;
+    const hours = Math.floor(mins / 60);
+    if (hours < 24) return `Hace ${hours} ${hours === 1 ? 'hora' : 'horas'}`;
+    const days = Math.floor(hours / 24);
+    return `Hace ${days} ${days === 1 ? 'día' : 'días'}`;
+  }, [lastCorrelatedAt]);
 
 
 
@@ -393,17 +416,27 @@ function CampaignHome() {
                   labelStyle={{ color: "#9CA3AF" }}
                   content={({ active, payload, label }) => {
                     if (!active || !payload?.length) return null;
-                    const clicks = payload.find(p => p.dataKey === "clicks")?.value || 0;
-                    const conversions = payload.find(p => p.dataKey === "conversions")?.value || 0;
-                    const links = payload.find(p => p.dataKey === "links")?.value || 0;
+                    const row = payload[0].payload || {};
+                    const clicks = row.clicks || 0;
+                    const conversions = row.conversions || 0;
+                    const links = row.links || 0;
+                    const spend = row.spend || 0;
+                    const revenue = row.revenue || 0;
                     const cr = links > 0 ? ((clicks / links) * 100).toFixed(1) : "0";
                     const cvr = clicks > 0 ? ((conversions / clicks) * 100).toFixed(1) : "0";
+                    const roi = spend > 0 ? (revenue / spend).toFixed(1) : null;
+                    const fmtMoney = (n) => '$' + Math.round(n).toLocaleString('es-MX');
                     return (
                       <div style={tooltipStyle} className="p-3 text-sm">
                         <p style={{ color: "#9CA3AF" }} className="mb-1">{label}</p>
-                        {payload.map(p => (
-                          <p key={p.dataKey} style={{ color: p.color }}>{p.name}: {p.value}</p>
-                        ))}
+                        <p style={{ color: COLORS.blue }}>Clicks: {clicks}</p>
+                        <p style={{ color: COLORS.green }}>Conversiones: {conversions}</p>
+                        <p style={{ color: COLORS.purple }}>Links: {links}</p>
+                        <div className="mt-1 pt-1 border-t border-gray-600">
+                          <p style={{ color: "#EF4444" }}>Inversión: {fmtMoney(spend)}</p>
+                          <p style={{ color: COLORS.green }}>Ventas: {fmtMoney(revenue)}</p>
+                          {roi && <p style={{ color: "#FBBF24" }}>ROI: {roi}x</p>}
+                        </div>
                         <div className="mt-1 pt-1 border-t border-gray-600">
                           <p style={{ color: "#9CA3AF" }}>Click rate: {cr}%</p>
                           <p style={{ color: "#9CA3AF" }}>Conv. rate: {cvr}%</p>
@@ -424,11 +457,9 @@ function CampaignHome() {
 
       {/* Correlate button */}
       <div className="flex items-center justify-end gap-3">
-        {lastSync && (
-          <span className="text-xs text-gray-500">
-            Última sync: {lastSync.toLocaleTimeString("es-MX", { hour: "2-digit", minute: "2-digit" })}
-          </span>
-        )}
+        <span className="text-xs text-gray-500" title={lastCorrelatedAt ? new Date(lastCorrelatedAt).toLocaleString('es-MX') : ''}>
+          Última correlación: {lastCorrLabel}
+        </span>
         {correlating && (
           <div className="w-48 h-2 bg-gray-700 rounded-full overflow-hidden">
             <div
