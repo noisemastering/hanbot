@@ -554,7 +554,9 @@ function AdsView() {
                             {CONVO_FLOW_NAMES[ad.convoFlowRef] || ad.convoFlowRef}
                           </span>
                         ) : (
-                          <span className="text-xs text-gray-600">—</span>
+                          <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 whitespace-nowrap w-fit flex items-center gap-1" title="Sin flujo asignado — el bot tratará esta entrada como genérica">
+                            ⚠️ Genérico
+                          </span>
                         )}
                         {ad.promoId && (
                           <span className="text-xs font-medium px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 whitespace-nowrap w-fit">
