@@ -1,80 +1,92 @@
-import React, { useMemo } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import API from '../api';
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ScatterChart, Scatter, ZAxis } from 'recharts';
 
 const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6' };
-const COLORS = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#06B6D4'];
+const COLORS = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#06B6D4', '#EC4899', '#84CC16'];
+
+function getDaysAgo(d) { const dt = new Date(); dt.setDate(dt.getDate() - d); return dt.toISOString().split('T')[0]; }
 
 function AdSpendOptimizationView() {
   const navigate = useNavigate();
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState(30);
 
-  const ads = useMemo(() => [
-    { name: 'pROMO 4X6', spend: 5680, conversions: 1685, revenue: 1227193, cpa: 3.37, roi: 216, efficiency: 'optimal' },
-    { name: 'Distribuidores', spend: 2884, conversions: 48, revenue: 38463, cpa: 60, roi: 13, efficiency: 'moderate' },
-    { name: 'Comparativa', spend: 1200, conversions: 25, revenue: 13390, cpa: 48, roi: 11, efficiency: 'moderate' },
-    { name: 'Como llega reel', spend: 850, conversions: 15, revenue: 12054, cpa: 57, roi: 14, efficiency: 'moderate' },
-    { name: 'Carrusel', spend: 720, conversions: 14, revenue: 10698, cpa: 51, roi: 15, efficiency: 'moderate' },
-    { name: 'Borde Separador', spend: 2100, conversions: 2, revenue: 960, cpa: 1050, roi: 0.5, efficiency: 'diminishing' },
-  ], []);
+  const dateFrom = useMemo(() => getDaysAgo(range), [range]);
+  const dateTo = useMemo(() => new Date().toISOString().split('T')[0], []);
 
-  const cpaChart = useMemo(() => ads.map(a => ({
-    name: a.name.length > 15 ? a.name.substring(0, 15) + '...' : a.name,
-    spend: a.spend,
-    cpa: Math.round(a.cpa),
-    conversions: a.conversions,
-    color: a.efficiency === 'optimal' ? '#10B981' : a.efficiency === 'moderate' ? '#F59E0B' : '#EF4444'
-  })), [ads]);
+  useEffect(() => {
+    setLoading(true);
+    API.get(`/ml/spend-optimization?dateFrom=${dateFrom}&dateTo=${dateTo}`).then(res => {
+      setData(res.data?.data || null);
+    }).catch(err => console.error('Spend opt error:', err)).finally(() => setLoading(false));
+  }, [dateFrom, dateTo]);
 
-  const scatterData = useMemo(() => ads.map((a, i) => ({
-    name: a.name,
-    x: a.spend,
-    y: a.conversions,
-    z: a.revenue,
-    color: COLORS[i % COLORS.length]
-  })), [ads]);
+  const fmt = (n) => '$' + Math.round(n).toLocaleString('es-MX');
+
+  const effLabel = { optimal: 'Óptimo', good: 'Bueno', moderate: 'Moderado', diminishing: 'Decreciente', no_conversions: 'Sin conv.', no_data: 'Sin datos' };
+  const effColor = { optimal: 'bg-green-500/10 border-green-500/30 text-green-400', good: 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400', moderate: 'bg-amber-500/10 border-amber-500/30 text-amber-400', diminishing: 'bg-red-500/10 border-red-500/30 text-red-400', no_conversions: 'bg-gray-500/10 border-gray-500/30 text-gray-400', no_data: 'bg-gray-500/10 border-gray-500/30 text-gray-400' };
+
+  if (loading) return <div className="p-6 flex justify-center min-h-[60vh]"><div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-400"></div></div>;
+
+  const ads = data?.ads || [];
+  const totals = data?.totals || {};
+  const eff = data?.efficiency || {};
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-white" title="Volver">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold text-white">Optimización de Gasto</h1>
-          <p className="text-sm text-gray-400">Análisis de rendimientos decrecientes por anuncio</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-white" title="Volver">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-white">Optimización de Gasto</h1>
+            <p className="text-sm text-gray-400">Análisis de rendimientos por anuncio — ROI total: {totals.roi}x</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          {[7, 30, 90].map(d => (
+            <button key={d} onClick={() => setRange(d)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${range === d ? 'bg-purple-600 text-white' : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700/50'}`}>{d}d</button>
+          ))}
         </div>
       </div>
 
-      <div className="grid grid-cols-4 gap-4">
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+        <div className="bg-gray-800/50 border border-red-500/20 rounded-xl p-4">
           <p className="text-xs text-gray-400">Gasto total</p>
-          <p className="text-2xl font-bold text-red-400">$30,863</p>
+          <p className="text-xl font-bold text-red-400">{fmt(totals.spend || 0)}</p>
         </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5">
+        <div className="bg-gray-800/50 border border-green-500/20 rounded-xl p-4">
+          <p className="text-xs text-gray-400">Ingresos</p>
+          <p className="text-xl font-bold text-green-400">{fmt(totals.revenue || 0)}</p>
+        </div>
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
           <p className="text-xs text-gray-400">CPA promedio</p>
-          <p className="text-2xl font-bold text-white">$17.80</p>
+          <p className="text-xl font-bold text-white">{totals.avgCpa ? fmt(totals.avgCpa) : '—'}</p>
         </div>
-        <div className="bg-gray-800/50 border border-green-500/20 rounded-xl p-5">
-          <p className="text-xs text-gray-400">Ads eficientes</p>
-          <p className="text-2xl font-bold text-green-400">1</p>
+        <div className="bg-gray-800/50 border border-green-500/20 rounded-xl p-4">
+          <p className="text-xs text-gray-400">Eficientes</p>
+          <p className="text-xl font-bold text-green-400">{(eff.optimal || 0) + (eff.good || 0)}</p>
         </div>
-        <div className="bg-gray-800/50 border border-red-500/20 rounded-xl p-5">
-          <p className="text-xs text-gray-400">Ads con rendimiento decreciente</p>
-          <p className="text-2xl font-bold text-red-400">1</p>
+        <div className="bg-gray-800/50 border border-red-500/20 rounded-xl p-4">
+          <p className="text-xs text-gray-400">Decrecientes</p>
+          <p className="text-xl font-bold text-red-400">{(eff.diminishing || 0) + (eff.no_conversions || 0)}</p>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* CPA per ad */}
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
           <h2 className="text-lg font-semibold text-white mb-4">CPA por anuncio</h2>
           <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={cpaChart} margin={{ left: 10 }}>
+              <ComposedChart data={ads.filter(a => a.cpa !== null).slice(0, 10).map(a => ({ name: a.name.length > 15 ? a.name.substring(0, 15) + '...' : a.name, cpa: a.cpa, conversions: a.conversions }))} margin={{ left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="name" tick={{ fill: '#9CA3AF', fontSize: 10 }} axisLine={{ stroke: '#374151' }} />
-                <YAxis yAxisId="left" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} tickFormatter={v => `$${v}`} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} />
+                <XAxis dataKey="name" tick={{ fill: '#9CA3AF', fontSize: 10 }} />
+                <YAxis yAxisId="left" tick={{ fill: '#9CA3AF', fontSize: 11 }} tickFormatter={v => `$${v}`} />
+                <YAxis yAxisId="right" orientation="right" tick={{ fill: '#9CA3AF', fontSize: 11 }} />
                 <Tooltip contentStyle={tooltipStyle} />
                 <Bar yAxisId="left" dataKey="cpa" name="CPA" fill="#EF4444" fillOpacity={0.7} radius={[3, 3, 0, 0]} />
                 <Line yAxisId="right" type="monotone" dataKey="conversions" name="Conversiones" stroke="#10B981" strokeWidth={2} dot={{ fill: '#10B981', r: 3 }} />
@@ -82,8 +94,6 @@ function AdSpendOptimizationView() {
             </ResponsiveContainer>
           </div>
         </div>
-
-        {/* Spend vs Conversions scatter */}
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
           <h2 className="text-lg font-semibold text-white mb-4">Gasto vs Conversiones</h2>
           <div className="h-72">
@@ -91,11 +101,11 @@ function AdSpendOptimizationView() {
               <ScatterChart margin={{ left: 10, right: 20 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                 <XAxis type="number" dataKey="x" name="Gasto" tick={{ fill: '#9CA3AF', fontSize: 11 }} tickFormatter={v => `$${v}`} />
-                <YAxis type="number" dataKey="y" name="Conversiones" tick={{ fill: '#9CA3AF', fontSize: 11 }} />
-                <ZAxis type="number" dataKey="z" range={[80, 800]} />
+                <YAxis type="number" dataKey="y" name="Conv." tick={{ fill: '#9CA3AF', fontSize: 11 }} />
+                <ZAxis type="number" dataKey="z" range={[60, 600]} />
                 <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => n === 'Gasto' ? `$${v.toLocaleString()}` : v.toLocaleString()} />
-                {scatterData.map((s, i) => (
-                  <Scatter key={i} name={s.name} data={[s]} fill={s.color} />
+                {ads.slice(0, 10).map((a, i) => (
+                  <Scatter key={i} name={a.name} data={[{ x: a.spend, y: a.conversions, z: a.revenue }]} fill={COLORS[i % COLORS.length]} />
                 ))}
               </ScatterChart>
             </ResponsiveContainer>
@@ -103,51 +113,40 @@ function AdSpendOptimizationView() {
         </div>
       </div>
 
-      {/* Recommendations */}
       <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl">
         <div className="px-6 py-4 border-b border-gray-700/50">
           <h2 className="text-lg font-semibold text-white">Recomendaciones</h2>
         </div>
-        <table className="w-full">
-          <thead className="bg-gray-900/50">
-            <tr className="text-left text-xs text-gray-400 uppercase">
-              <th className="px-6 py-3">Anuncio</th>
-              <th className="px-4 py-3 text-right">Gasto</th>
-              <th className="px-4 py-3 text-right">CPA</th>
-              <th className="px-4 py-3 text-right">ROI</th>
-              <th className="px-4 py-3">Eficiencia</th>
-              <th className="px-4 py-3">Recomendación</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-gray-700/50">
-            {ads.map((a, i) => (
-              <tr key={i} className="hover:bg-gray-700/20">
-                <td className="px-6 py-3 text-sm text-white font-medium">{a.name}</td>
-                <td className="px-4 py-3 text-right text-sm text-red-400">${a.spend.toLocaleString()}</td>
-                <td className="px-4 py-3 text-right text-sm text-white">${Math.round(a.cpa)}</td>
-                <td className="px-4 py-3 text-right text-sm text-green-400">{a.roi}x</td>
-                <td className="px-4 py-3">
-                  <span className={`text-xs px-2 py-0.5 rounded border ${
-                    a.efficiency === 'optimal' ? 'bg-green-500/10 border-green-500/30 text-green-400' :
-                    a.efficiency === 'moderate' ? 'bg-amber-500/10 border-amber-500/30 text-amber-400' :
-                    'bg-red-500/10 border-red-500/30 text-red-400'
-                  }`}>
-                    {a.efficiency === 'optimal' ? 'Óptimo' : a.efficiency === 'moderate' ? 'Moderado' : 'Decreciente'}
-                  </span>
-                </td>
-                <td className="px-4 py-3 text-sm text-gray-300">
-                  {a.efficiency === 'optimal' ? 'Escalar presupuesto ↑' :
-                   a.efficiency === 'moderate' ? 'Mantener y optimizar' :
-                   'Reducir o pausar ↓'}
-                </td>
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead className="bg-gray-900/50">
+              <tr className="text-left text-xs text-gray-400 uppercase">
+                <th className="px-6 py-3">Anuncio</th>
+                <th className="px-4 py-3 text-right">Gasto</th>
+                <th className="px-4 py-3 text-right">Conv.</th>
+                <th className="px-4 py-3 text-right">CPA</th>
+                <th className="px-4 py-3 text-right">ROI</th>
+                <th className="px-4 py-3">Eficiencia</th>
+                <th className="px-4 py-3">Recomendación</th>
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4 text-sm text-yellow-300">
-        ⚠️ Datos de ejemplo (mock). La implementación real analizará la curva de rendimiento de cada anuncio con regresión lineal sobre gasto vs conversiones diarias.
+            </thead>
+            <tbody className="divide-y divide-gray-700/50">
+              {ads.map((a, i) => (
+                <tr key={i} className="hover:bg-gray-700/20">
+                  <td className="px-6 py-3 text-sm text-white font-medium max-w-[200px] truncate" title={a.name}>{a.name}</td>
+                  <td className="px-4 py-3 text-right text-sm text-red-400">{fmt(a.spend)}</td>
+                  <td className="px-4 py-3 text-right text-sm text-green-400">{a.conversions}</td>
+                  <td className="px-4 py-3 text-right text-sm text-white">{a.cpa !== null ? fmt(a.cpa) : '—'}</td>
+                  <td className="px-4 py-3 text-right text-sm text-green-400">{a.roi}x</td>
+                  <td className="px-4 py-3">
+                    <span className={`text-xs px-2 py-0.5 rounded border ${effColor[a.efficiency]}`}>{effLabel[a.efficiency]}</span>
+                  </td>
+                  <td className="px-4 py-3 text-sm text-gray-300">{a.recommendation}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>
   );
