@@ -8,6 +8,43 @@ const ss = require('simple-statistics');
 const ClickLog = require('../models/ClickLog');
 const Conversation = require('../models/Conversation');
 
+// ─── HELPERS ────────────────────────────────────────────────────────────────
+
+const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
+
+async function getMonthlyBreakdown() {
+  const monthly = await ClickLog.aggregate([
+    { $match: { converted: true } },
+    { $group: { _id: { orderId: '$conversionData.orderId', month: { $dateToString: { format: '%Y-%m', date: '$createdAt', timezone: 'America/Mexico_City' } } }, revenue: { $first: '$conversionData.totalAmount' } } },
+    { $group: { _id: '$_id.month', revenue: { $sum: '$revenue' }, orders: { $sum: 1 } } },
+    { $sort: { _id: 1 } }
+  ]);
+
+  // For partial months, compute daily run rate and project full month
+  const now = new Date();
+  const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+  const dayOfMonth = now.getDate();
+  const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+
+  return monthly.map(m => {
+    const [year, monthNum] = m._id.split('-');
+    const isCurrentMonth = m._id === currentMonth;
+    const dailyRate = isCurrentMonth && dayOfMonth > 0 ? m.revenue / dayOfMonth : null;
+    const projected = isCurrentMonth ? Math.round(dailyRate * daysInMonth) : null;
+
+    return {
+      month: m._id,
+      label: `${MONTH_NAMES[parseInt(monthNum) - 1]} ${year}`,
+      revenue: Math.round(m.revenue),
+      orders: m.orders,
+      avgOrder: m.orders > 0 ? Math.round(m.revenue / m.orders) : 0,
+      isPartial: isCurrentMonth,
+      projected,
+      dailyRate: dailyRate ? Math.round(dailyRate) : null
+    };
+  });
+}
+
 // ─── 1. SALES FORECAST ─────────────────────────────────────────────────────
 // Linear regression on daily revenue, projects 7 days forward.
 router.get('/forecast', async (req, res) => {
@@ -77,7 +114,8 @@ router.get('/forecast', async (req, res) => {
         slope: Math.round(regression.m),
         totalHistoryRevenue: Math.round(totalHistoryRevenue),
         totalForecastRevenue: Math.round(totalForecastRevenue),
-        avgDailyRevenue: Math.round(ss.mean(daily.map(d => d.revenue)))
+        avgDailyRevenue: Math.round(ss.mean(daily.map(d => d.revenue))),
+        monthly: await getMonthlyBreakdown()
       }
     });
   } catch (err) {
