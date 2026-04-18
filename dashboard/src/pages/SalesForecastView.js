@@ -5,7 +5,7 @@ import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
 } from 'recharts';
 
-const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6' };
+const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6', fontSize: '13px' };
 
 function SalesForecastView() {
   const navigate = useNavigate();
@@ -84,18 +84,32 @@ function SalesForecastView() {
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-purple-500 inline-block"></span> Proyección</span>
               </div>
             </div>
-            <div className="h-80">
-              <ResponsiveContainer width="100%" height="100%">
+            <div className="h-80 overflow-x-auto">
+              <div style={{ minWidth: Math.max(800, chartData.length * 28) }}>
+              <ResponsiveContainer width="100%" height={320}>
                 <ComposedChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis dataKey="dateLabel" tick={{ fill: '#9CA3AF', fontSize: 10 }} axisLine={{ stroke: '#374151' }} />
                   <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-                  <Tooltip contentStyle={tooltipStyle} formatter={v => v ? fmt(v) : '—'} />
+                  <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#F3F4F6' }} itemStyle={{ color: '#F3F4F6' }} formatter={v => v ? fmt(v) : '—'} />
                   <ReferenceLine x={todayLabel} stroke="#6B7280" strokeDasharray="4 4" label={{ value: 'Hoy', fill: '#9CA3AF', fontSize: 11 }} />
                   <Bar dataKey="revenue" name="Ingresos" fill="#10B981" fillOpacity={0.7} radius={[3, 3, 0, 0]} />
                   <Line type="monotone" dataKey="forecast" name="Proyección" stroke="#8B5CF6" strokeWidth={2} strokeDasharray="6 3" dot={{ fill: '#8B5CF6', r: 3 }} connectNulls={false} />
                 </ComposedChart>
               </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          {/* Methodology */}
+          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+            <h2 className="text-lg font-semibold text-white mb-3">Metodología</h2>
+            <div className="space-y-2 text-sm text-gray-300">
+              <p><span className="text-white font-medium">Modelo:</span> Regresión lineal simple (y = mx + b) sobre ingresos diarios históricos.</p>
+              <p><span className="text-white font-medium">R² = {data?.r2 || 0}:</span> {data?.r2 >= 0.7 ? 'Ajuste alto — el modelo explica bien la variación en ingresos.' : data?.r2 >= 0.4 ? 'Ajuste moderado — hay factores no capturados por el modelo (promos, estacionalidad).' : 'Ajuste bajo — los ingresos tienen mucha variación diaria. La proyección es orientativa.'}</p>
+              <p><span className="text-white font-medium">Pendiente:</span> {data?.slope > 0 ? `+$${data.slope}/día — los ingresos están creciendo.` : data?.slope < 0 ? `$${data.slope}/día — los ingresos están decreciendo.` : 'Estable.'}</p>
+              <p><span className="text-white font-medium">Datos:</span> {data?.history?.length || 0} días de historia, {data?.totalHistoryRevenue ? (data.history.reduce((s,d) => s + d.orders, 0)).toLocaleString() : 0} órdenes únicas (deduplicadas por orderId).</p>
+              <p><span className="text-white font-medium">Limitaciones:</span> No incorpora estacionalidad, promos futuras ni cambios en presupuesto de ads. Usar como referencia, no como garantía.</p>
             </div>
           </div>
         </>

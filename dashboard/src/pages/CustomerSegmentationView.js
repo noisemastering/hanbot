@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import API from '../api';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer, ScatterChart, Scatter, XAxis, YAxis, CartesianGrid, ZAxis } from 'recharts';
 
-const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6' };
+const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6', fontSize: '13px' };
 const COLORS = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#06B6D4', '#EC4899', '#84CC16'];
 
 function CustomerSegmentationView() {
@@ -57,7 +57,7 @@ function CustomerSegmentationView() {
                       label={({ name, value }) => `${name}: ${value}`}>
                       {segments.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} stroke="transparent" />)}
                     </Pie>
-                    <Tooltip contentStyle={tooltipStyle} />
+                    <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: "#F3F4F6" }} itemStyle={{ color: "#F3F4F6" }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
@@ -71,7 +71,7 @@ function CustomerSegmentationView() {
                     <XAxis type="number" dataKey="x" name="Ticket" tick={{ fill: '#9CA3AF', fontSize: 11 }} tickFormatter={v => `$${v}`} />
                     <YAxis type="number" dataKey="y" name="Clientes" tick={{ fill: '#9CA3AF', fontSize: 11 }} />
                     <ZAxis type="number" dataKey="z" range={[100, 800]} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => n === 'Ticket' ? `$${v}` : v} />
+                    <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#F3F4F6' }} itemStyle={{ color: '#F3F4F6' }} formatter={(v, n) => n === 'Ticket' ? `$${v}` : v} />
                     {segments.map((s, i) => (
                       <Scatter key={i} name={s.label} data={[{ x: s.avgOrder, y: s.count, z: s.totalRevenue }]} fill={COLORS[i % COLORS.length]} />
                     ))}
@@ -111,6 +111,16 @@ function CustomerSegmentationView() {
                 ))}
               </tbody>
             </table>
+          </div>
+          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+            <h2 className="text-lg font-semibold text-white mb-3">Metodología</h2>
+            <div className="space-y-2 text-sm text-gray-300">
+              <p><span className="text-white font-medium">Modelo:</span> K-Means clustering (K={k}) sobre órdenes de compra reales.</p>
+              <p><span className="text-white font-medium">Variables:</span> Monto de compra, género del comprador, estado de envío, categoría de producto.</p>
+              <p><span className="text-white font-medium">Datos:</span> {data?.totalCustomers?.toLocaleString() || 0} órdenes únicas (deduplicadas por orderId de Mercado Libre).</p>
+              <p><span className="text-white font-medium">Etiquetas:</span> Asignadas automáticamente según el ticket promedio y producto dominante del cluster.</p>
+              <p><span className="text-white font-medium">Uso:</span> Identificar perfiles de compradores para segmentar campañas, ajustar mensajes del bot, y priorizar productos por segmento.</p>
+            </div>
           </div>
         </>
       )}

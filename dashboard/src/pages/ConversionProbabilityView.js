@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import API from '../api';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
-const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6' };
+const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6', fontSize: '13px' };
 
 function ConversionProbabilityView() {
   const navigate = useNavigate();
@@ -75,7 +75,7 @@ function ConversionProbabilityView() {
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                 <XAxis type="number" tick={{ fill: '#9CA3AF', fontSize: 11 }} tickFormatter={v => `${v}%`} />
                 <YAxis type="category" dataKey="name" tick={{ fill: '#9CA3AF', fontSize: 11 }} width={120} />
-                <Tooltip contentStyle={tooltipStyle} formatter={v => `${v}%`} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#F3F4F6' }} itemStyle={{ color: '#F3F4F6' }} formatter={v => `${v}%`} />
                 <Bar dataKey="importance" fill="#8B5CF6" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
@@ -90,7 +90,7 @@ function ConversionProbabilityView() {
                   label={({ name }) => name}>
                   {distro.map((d, i) => <Cell key={i} fill={d.color} stroke="transparent" />)}
                 </Pie>
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: "#F3F4F6" }} itemStyle={{ color: "#F3F4F6" }} />
               </PieChart>
             </ResponsiveContainer>
           </div>
@@ -136,6 +136,17 @@ function ConversionProbabilityView() {
           </div>
         </div>
       )}
+
+      <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-white mb-3">Metodología</h2>
+        <div className="space-y-2 text-sm text-gray-300">
+          <p><span className="text-white font-medium">Modelo:</span> Scoring basado en pesos de actividad (similar a regresión logística simplificada).</p>
+          <p><span className="text-white font-medium">Variables:</span> Si hizo click en link (+25%), actividad reciente &lt;24h (+15%), múltiples links (+10-15%), tasa base histórica.</p>
+          <p><span className="text-white font-medium">Tasa base:</span> {summary.baseRate}% — porcentaje histórico de leads que compran.</p>
+          <p><span className="text-white font-medium">Clasificación:</span> Caliente (&gt;70%), Tibio (40-70%), Frío (&lt;40%).</p>
+          <p><span className="text-white font-medium">Uso:</span> Priorizar handoffs humanos hacia leads calientes y optimizar el seguimiento del bot.</p>
+        </div>
+      </div>
     </div>
   );
 }

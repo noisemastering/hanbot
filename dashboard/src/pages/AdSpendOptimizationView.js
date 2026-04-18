@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import API from '../api';
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ScatterChart, Scatter, ZAxis } from 'recharts';
 
-const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6' };
+const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6', fontSize: '13px' };
 const COLORS = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#06B6D4', '#EC4899', '#84CC16'];
 
 function getDaysAgo(d) { const dt = new Date(); dt.setDate(dt.getDate() - d); return dt.toISOString().split('T')[0]; }
@@ -87,7 +87,7 @@ function AdSpendOptimizationView() {
                 <XAxis dataKey="name" tick={{ fill: '#9CA3AF', fontSize: 10 }} />
                 <YAxis yAxisId="left" tick={{ fill: '#9CA3AF', fontSize: 11 }} tickFormatter={v => `$${v}`} />
                 <YAxis yAxisId="right" orientation="right" tick={{ fill: '#9CA3AF', fontSize: 11 }} />
-                <Tooltip contentStyle={tooltipStyle} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: "#F3F4F6" }} itemStyle={{ color: "#F3F4F6" }} />
                 <Bar yAxisId="left" dataKey="cpa" name="CPA" fill="#EF4444" fillOpacity={0.7} radius={[3, 3, 0, 0]} />
                 <Line yAxisId="right" type="monotone" dataKey="conversions" name="Conversiones" stroke="#10B981" strokeWidth={2} dot={{ fill: '#10B981', r: 3 }} />
               </ComposedChart>
@@ -103,7 +103,7 @@ function AdSpendOptimizationView() {
                 <XAxis type="number" dataKey="x" name="Gasto" tick={{ fill: '#9CA3AF', fontSize: 11 }} tickFormatter={v => `$${v}`} />
                 <YAxis type="number" dataKey="y" name="Conv." tick={{ fill: '#9CA3AF', fontSize: 11 }} />
                 <ZAxis type="number" dataKey="z" range={[60, 600]} />
-                <Tooltip contentStyle={tooltipStyle} formatter={(v, n) => n === 'Gasto' ? `$${v.toLocaleString()}` : v.toLocaleString()} />
+                <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#F3F4F6' }} itemStyle={{ color: '#F3F4F6' }} formatter={(v, n) => n === 'Gasto' ? `$${v.toLocaleString()}` : v.toLocaleString()} />
                 {ads.slice(0, 10).map((a, i) => (
                   <Scatter key={i} name={a.name} data={[{ x: a.spend, y: a.conversions, z: a.revenue }]} fill={COLORS[i % COLORS.length]} />
                 ))}
@@ -146,6 +146,17 @@ function AdSpendOptimizationView() {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-white mb-3">Metodología</h2>
+        <div className="space-y-2 text-sm text-gray-300">
+          <p><span className="text-white font-medium">Fuentes:</span> Gasto e impresiones de Facebook Insights API; conversiones e ingresos del sistema de tracking (deduplicados por orderId).</p>
+          <p><span className="text-white font-medium">ROI:</span> Ingresos atribuidos al anuncio ÷ Gasto en Facebook. Solo cuenta ventas de clientes que entraron por ese anuncio.</p>
+          <p><span className="text-white font-medium">CPA:</span> Gasto ÷ Conversiones. Costo para adquirir un cliente que compra.</p>
+          <p><span className="text-white font-medium">Clasificación:</span> Óptimo (ROI ≥ 20x), Bueno (≥ 5x), Moderado (≥ 1x), Decreciente (&lt; 1x).</p>
+          <p><span className="text-white font-medium">Uso:</span> Escalar presupuesto en anuncios óptimos, revisar targeting en moderados, pausar los que tienen rendimiento decreciente.</p>
         </div>
       </div>
     </div>
