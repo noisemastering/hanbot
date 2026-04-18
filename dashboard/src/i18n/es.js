@@ -34,6 +34,10 @@ const es = {
   "menu.flows": "Flows",
   "menu.playground": "Playground",
   "menu.playgroundML": "Mercado Libre",
+  "menu.playgroundForecast": "Pronóstico de Ventas",
+  "menu.playgroundSegments": "Segmentación",
+  "menu.playgroundConversion": "Prob. Conversión",
+  "menu.playgroundSpend": "Optimización de Gasto",
   "menu.settings": "Configuración",
 
   // ── Common ───────────────────────────────────────────────
