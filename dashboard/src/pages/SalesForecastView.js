@@ -73,9 +73,62 @@ function SalesForecastView() {
       </div>
 
       {/* ─── PRODUCT TAB ─── */}
-      {tab === 'products' && productData && (
+      {tab === 'products' && productData && (() => {
+        const top3 = productData.products.slice(0, 3);
+        // Build unified chart data for top 3: merge all dates
+        const dateSet = new Set();
+        top3.forEach(p => {
+          p.daily.forEach(d => dateSet.add(d.date));
+          p.forecast.forEach(d => dateSet.add(d.date));
+        });
+        const allDates = [...dateSet].sort();
+        const top3ChartData = allDates.map(date => {
+          const row = { date, dateLabel: new Date(date + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }) };
+          top3.forEach((p, i) => {
+            const hist = p.daily.find(d => d.date === date);
+            const fc = p.forecast.find(d => d.date === date);
+            row[`p${i}`] = hist?.revenue || null;
+            row[`f${i}`] = fc?.revenue || null;
+          });
+          return row;
+        });
+
+        return (
         <>
-          {/* Product selector + summary table */}
+          {/* Top 3 products chart — lines */}
+          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+            <div className="flex items-center justify-between mb-4">
+              <h2 className="text-lg font-semibold text-white">Top 3 productos</h2>
+              <div className="flex items-center gap-4 text-xs text-gray-400">
+                {top3.map((p, i) => (
+                  <span key={i} className="flex items-center gap-1.5">
+                    <span className="w-3 h-3 rounded-full inline-block" style={{ backgroundColor: PRODUCT_COLORS[i] }}></span> {p.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+            <div className="h-80 overflow-x-auto">
+              <div style={{ minWidth: Math.max(700, top3ChartData.length * 22) }}>
+                <ResponsiveContainer width="100%" height={320}>
+                  <ComposedChart data={top3ChartData} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis dataKey="dateLabel" tick={{ fill: '#9CA3AF', fontSize: 10 }} axisLine={{ stroke: '#374151' }} />
+                    <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                    <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#F3F4F6' }} itemStyle={{ color: '#F3F4F6' }} formatter={v => v ? fmt(v) : '—'} />
+                    <ReferenceLine x={todayLabel} stroke="#6B7280" strokeDasharray="4 4" label={{ value: 'Hoy', fill: '#9CA3AF', fontSize: 11 }} />
+                    {top3.map((p, i) => (
+                      <Line key={`h${i}`} type="monotone" dataKey={`p${i}`} name={p.name} stroke={PRODUCT_COLORS[i]} strokeWidth={2} dot={{ fill: PRODUCT_COLORS[i], r: 2 }} connectNulls={false} />
+                    ))}
+                    {top3.map((p, i) => (
+                      <Line key={`f${i}`} type="monotone" dataKey={`f${i}`} name={`${p.name} (proy.)`} stroke={PRODUCT_COLORS[i]} strokeWidth={2} strokeDasharray="6 3" dot={{ fill: PRODUCT_COLORS[i], r: 3 }} connectNulls={false} />
+                    ))}
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+
+          {/* Product summary table */}
           <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl">
             <div className="px-6 py-4 border-b border-gray-700/50">
               <h2 className="text-lg font-semibold text-white">Pronóstico por producto (top 10)</h2>
@@ -117,7 +170,7 @@ function SalesForecastView() {
             </div>
           </div>
 
-          {/* Selected product chart */}
+          {/* Selected product detail chart */}
           {(() => {
             const p = productData.products.find(pr => pr.name === selectedProduct);
             if (!p || p.daily.length < 3) return null;
@@ -135,7 +188,7 @@ function SalesForecastView() {
                     <span className="text-sm text-gray-400">R² = {p.r2}</span>
                   </div>
                   <div className="flex items-center gap-4 text-xs text-gray-400">
-                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block"></span> Real</span>
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm inline-block" style={{ backgroundColor: PRODUCT_COLORS[pIdx % PRODUCT_COLORS.length] }}></span> Real</span>
                     <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-purple-500 inline-block"></span> Proyección</span>
                   </div>
                 </div>
@@ -157,7 +210,8 @@ function SalesForecastView() {
             );
           })()}
         </>
-      )}
+        );
+      })()}
 
       {/* ─── GLOBAL TAB ─── */}
       {tab === 'global' && data && (
