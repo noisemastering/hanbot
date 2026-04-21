@@ -193,14 +193,21 @@ router.get('/forecast-by-product', async (req, res) => {
         }
       }
 
-      // Shorten product name
-      const shortName = (pt._id || '')
-        .replace(/Malla Sombra 90% Raschell? Beige De /i, '')
-        .replace(/Lona Sombra 90% Raschel Beige De /i, '')
-        .replace(/Lona Sombra /i, 'Lona ')
-        .replace(/ Reforzada?$/i, '')
-        .replace(/Malla Sombra /i, '')
-        .trim();
+      // Normalize product name to just the size (e.g., "6mx4m")
+      const title = pt._id || '';
+      const sizeMatch = title.match(/(\d+)\s*m?\s*[xX×]\s*(\d+)\s*m/);
+      let shortName;
+      if (sizeMatch) {
+        shortName = `${sizeMatch[1]}x${sizeMatch[2]}m`;
+      } else {
+        shortName = title
+          .replace(/Malla Sombra 90%\s*Raschell?\s*Beige\s*(De\s*)?/i, '')
+          .replace(/Lona Sombra\s*(90%\s*Raschel\s*Beige\s*(De\s*)?)?/i, 'Lona ')
+          .replace(/\s*Reforzada\s*Hanlob\s*$/i, '')
+          .replace(/\s*Reforzada?\s*$/i, '')
+          .replace(/\s*Lista Para Instalar\s*/i, '')
+          .trim();
+      }
 
       return {
         name: shortName || pt._id,
