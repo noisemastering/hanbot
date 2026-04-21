@@ -138,12 +138,13 @@ function SalesForecastView() {
                 <thead className="bg-gray-900/50">
                   <tr className="text-left text-xs text-gray-400 uppercase">
                     <th className="px-6 py-3">Producto</th>
-                    <th className="px-4 py-3 text-right">Órdenes</th>
+                    <th className="px-4 py-3">Driver</th>
+                    <th className="px-4 py-3 text-right">Inversión</th>
                     <th className="px-4 py-3 text-right">Ingresos</th>
-                    <th className="px-4 py-3 text-right">Ticket</th>
+                    <th className="px-4 py-3 text-right">ROI</th>
+                    <th className="px-4 py-3 text-right">Órdenes</th>
                     <th className="px-4 py-3 text-right">Tendencia</th>
-                    <th className="px-4 py-3 text-right">R²</th>
-                    <th className="px-4 py-3 text-right">Proyección 7d</th>
+                    <th className="px-4 py-3 text-right">Proy. 7d</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700/50">
@@ -155,13 +156,25 @@ function SalesForecastView() {
                           <span className="text-sm text-white font-medium">{p.name}</span>
                         </div>
                       </td>
-                      <td className="px-4 py-3 text-right text-sm text-gray-300">{p.totalOrders}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex flex-col gap-1">
+                          <span className={`text-xs px-2 py-0.5 rounded w-fit ${
+                            p.driver === 'promo_paid' ? 'bg-amber-500/10 border border-amber-500/30 text-amber-300'
+                            : p.driver === 'paid' ? 'bg-blue-500/10 border border-blue-500/30 text-blue-300'
+                            : 'bg-green-500/10 border border-green-500/30 text-green-300'
+                          }`}>{p.driverLabel}</span>
+                          {p.promos?.length > 0 && p.promos.map((pr, j) => (
+                            <span key={j} className="text-xs text-amber-400/70">{pr}</span>
+                          ))}
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-red-400">{p.adSpend > 0 ? fmt(p.adSpend) : '—'}</td>
                       <td className="px-4 py-3 text-right text-sm text-green-400">{fmt(p.totalRevenue)}</td>
-                      <td className="px-4 py-3 text-right text-sm text-gray-300">{fmt(p.avgOrder)}</td>
+                      <td className="px-4 py-3 text-right text-sm text-white">{p.roi ? `${p.roi}x` : '—'}</td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-300">{p.totalOrders}</td>
                       <td className={`px-4 py-3 text-right text-sm font-medium ${p.trend >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                         {p.trend >= 0 ? '↗' : '↘'} {p.trend > 0 ? '+' : ''}{p.trend}%
                       </td>
-                      <td className="px-4 py-3 text-right text-sm text-gray-400">{p.r2}</td>
                       <td className="px-4 py-3 text-right text-sm text-purple-400">{p.forecastRevenue > 0 ? fmt(p.forecastRevenue) : '—'}</td>
                     </tr>
                   ))}
@@ -185,6 +198,11 @@ function SalesForecastView() {
                   <div className="flex items-center gap-3">
                     <span className="w-4 h-4 rounded-full" style={{ backgroundColor: PRODUCT_COLORS[pIdx % PRODUCT_COLORS.length] }}></span>
                     <h2 className="text-lg font-semibold text-white">{p.name}</h2>
+                    <span className={`text-xs px-2 py-0.5 rounded ${
+                      p.driver === 'promo_paid' ? 'bg-amber-500/10 border border-amber-500/30 text-amber-300'
+                      : p.driver === 'paid' ? 'bg-blue-500/10 border border-blue-500/30 text-blue-300'
+                      : 'bg-green-500/10 border border-green-500/30 text-green-300'
+                    }`}>{p.driverLabel}</span>
                     <span className="text-sm text-gray-400">R² = {p.r2}</span>
                   </div>
                   <div className="flex items-center gap-4 text-xs text-gray-400">

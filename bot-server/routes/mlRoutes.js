@@ -227,6 +227,79 @@ router.get('/forecast-by-product', async (req, res) => {
       };
     });
 
+    // Enrich with ad spend + promo info per product
+    // Link: product title → adId (from ClickLogs) → Ad (promoId, name) → FB spend
+    const Ad = require('../models/Ad');
+    require('../models/Promo');
+    const axios = require('axios');
+
+    // Get FB spend per ad
+    let spendByAd = {};
+    try {
+      const AD_ACCOUNT_ID = process.env.FB_AD_ACCOUNT_ID;
+      const ACCESS_TOKEN = process.env.FB_MARKETING_TOKEN;
+      if (AD_ACCOUNT_ID && ACCESS_TOKEN) {
+        const sinceStr = since.toISOString().split('T')[0];
+        const untilStr = new Date().toISOString().split('T')[0];
+        const { data: fbData } = await axios.get(`https://graph.facebook.com/v25.0/${AD_ACCOUNT_ID}/insights`, {
+          params: {
+            access_token: ACCESS_TOKEN,
+            fields: 'ad_id,spend',
+            level: 'ad',
+            time_range: JSON.stringify({ since: sinceStr, until: untilStr }),
+            limit: 500
+          }
+        });
+        (fbData.data || []).forEach(r => { spendByAd[r.ad_id] = parseFloat(r.spend || 0); });
+      }
+    } catch (e) { console.error('FB spend lookup failed:', e.message); }
+
+    // Get ad info (promo, name) and link ads to products
+    const adDocs = await Ad.find({}, 'fbAdId name promoId').populate('promoId', 'name').lean();
+    const adInfoMap = {};
+    adDocs.forEach(a => { adInfoMap[a.fbAdId] = { name: a.name, promo: a.promoId?.name || null }; });
+
+    // Map: which adIds drove sales for each product title
+    const productAdMap = await ClickLog.aggregate([
+      { $match: { converted: true, createdAt: { $gte: since }, adId: { $ne: null }, 'conversionData.itemTitle': { $ne: null } } },
+      { $group: { _id: { item: '$conversionData.itemTitle', adId: '$adId' }, orders: { $sum: 1 } } },
+      { $sort: { orders: -1 } }
+    ]);
+
+    // Build per-product driver info
+    const productDrivers = {};
+    for (const row of productAdMap) {
+      const item = row._id.item;
+      const adId = row._id.adId;
+      if (!productDrivers[item]) productDrivers[item] = { totalSpend: 0, promos: new Set(), ads: [] };
+      const spend = spendByAd[adId] || 0;
+      const info = adInfoMap[adId] || {};
+      productDrivers[item].totalSpend += spend;
+      if (info.promo) productDrivers[item].promos.add(info.promo);
+      productDrivers[item].ads.push({ adId, name: info.name || adId, spend: Math.round(spend), orders: row.orders, promo: info.promo });
+    }
+
+    // Attach driver info to each product
+    products.forEach(p => {
+      const driver = productDrivers[p.fullName] || { totalSpend: 0, promos: new Set(), ads: [] };
+      const hasAdSpend = driver.totalSpend > 0;
+      const hasPromo = driver.promos.size > 0;
+
+      p.adSpend = Math.round(driver.totalSpend);
+      p.promos = [...driver.promos];
+      p.topAds = driver.ads.slice(0, 3);
+      p.roi = driver.totalSpend > 0 ? +(p.totalRevenue / driver.totalSpend).toFixed(1) : null;
+
+      // Growth driver classification
+      if (hasPromo && hasAdSpend) p.driver = 'promo_paid';
+      else if (hasAdSpend) p.driver = 'paid';
+      else p.driver = 'organic';
+
+      p.driverLabel = p.driver === 'promo_paid' ? 'Promo + Ads'
+        : p.driver === 'paid' ? 'Ads pagados'
+        : 'Orgánico';
+    });
+
     res.json({
       success: true,
       data: {
