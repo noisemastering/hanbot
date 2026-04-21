@@ -411,19 +411,31 @@ router.get('/segments', async (req, res) => {
       const total = genders.length || 1;
       const genderSplit = `${Math.round(maleCount / total * 100)}% M / ${Math.round(femaleCount / total * 100)}% F`;
 
-      // Auto-label based on avg revenue + product
+      // Auto-label using the most distinctive feature of this cluster
       const avgRev = revs.length > 0 ? ss.mean(revs) : 0;
-      let label = 'General';
-      if (avgRev > 3000) label = 'Mayoreo / Alto Valor';
-      else if (avgRev > 1200) label = 'Compra Grande';
-      else if (avgRev > 700) label = 'Compra Estándar';
-      else label = 'Compra Pequeña';
-      if (topProduct === 'Rollo Raschel' && avgRev > 2000) label = 'Agricultor / Mayoreo';
-      if (topProduct === 'Borde Separador') label = 'Jardín';
+      const maleRatio = maleCount / (total || 1);
+      const femaleRatio = femaleCount / (total || 1);
+
+      // Build a descriptive label from what makes this cluster unique
+      const parts = [];
+
+      // Gender signal (only if strongly skewed)
+      if (maleRatio > 0.75) parts.push('Hombres');
+      else if (femaleRatio > 0.75) parts.push('Mujeres');
+      else if (maleRatio > 0.55) parts.push('Mayoría hombres');
+      else if (femaleRatio > 0.55) parts.push('Mayoría mujeres');
+      else parts.push('Mixto');
+
+      // Geography signal
+      parts.push(topState);
+
+      // Revenue signal (only if distinctive)
+      if (avgRev > 2000) parts.push('Alto valor');
+      else if (avgRev < 500) parts.push('Bajo valor');
 
       return {
         id: idx,
-        label: `${label}`,
+        label: parts.join(' · '),
         count: clusterOrders.length,
         avgOrder: Math.round(avgRev),
         totalRevenue: Math.round(revs.reduce((s, r) => s + r, 0)),
