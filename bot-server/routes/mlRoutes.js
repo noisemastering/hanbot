@@ -259,24 +259,35 @@ router.get('/forecast-by-product', async (req, res) => {
     const adInfoMap = {};
     adDocs.forEach(a => { adInfoMap[a.fbAdId] = { name: a.name, promo: a.promoId?.name || null }; });
 
-    // Map: which adIds drove sales for each product title
+    // Map: which adIds drove sales for each product, with revenue per (ad, product)
     const productAdMap = await ClickLog.aggregate([
       { $match: { converted: true, createdAt: { $gte: since }, adId: { $ne: null }, 'conversionData.itemTitle': { $ne: null } } },
-      { $group: { _id: { item: '$conversionData.itemTitle', adId: '$adId' }, orders: { $sum: 1 } } },
-      { $sort: { orders: -1 } }
+      { $group: { _id: { orderId: '$conversionData.orderId', item: '$conversionData.itemTitle', adId: '$adId' }, revenue: { $first: '$conversionData.totalAmount' } } },
+      { $group: { _id: { item: '$_id.item', adId: '$_id.adId' }, revenue: { $sum: '$revenue' }, orders: { $sum: 1 } } },
+      { $sort: { revenue: -1 } }
     ]);
 
-    // Build per-product driver info
+    // Total revenue per ad (across all products) — used to split spend proportionally
+    const totalRevenueByAd = {};
+    for (const row of productAdMap) {
+      const adId = row._id.adId;
+      totalRevenueByAd[adId] = (totalRevenueByAd[adId] || 0) + (row.revenue || 0);
+    }
+
+    // Build per-product driver info with proportional spend allocation
     const productDrivers = {};
     for (const row of productAdMap) {
       const item = row._id.item;
       const adId = row._id.adId;
       if (!productDrivers[item]) productDrivers[item] = { totalSpend: 0, promos: new Set(), ads: [] };
-      const spend = spendByAd[adId] || 0;
+      const adTotalSpend = spendByAd[adId] || 0;
+      const adTotalRevenue = totalRevenueByAd[adId] || 1;
+      // Allocate spend proportionally: this product's revenue / total ad revenue * ad spend
+      const allocatedSpend = adTotalRevenue > 0 ? adTotalSpend * ((row.revenue || 0) / adTotalRevenue) : 0;
       const info = adInfoMap[adId] || {};
-      productDrivers[item].totalSpend += spend;
+      productDrivers[item].totalSpend += allocatedSpend;
       if (info.promo) productDrivers[item].promos.add(info.promo);
-      productDrivers[item].ads.push({ adId, name: info.name || adId, spend: Math.round(spend), orders: row.orders, promo: info.promo });
+      productDrivers[item].ads.push({ adId, name: info.name || adId, spend: Math.round(allocatedSpend), orders: row.orders, promo: info.promo });
     }
 
     // Attach driver info to each product
