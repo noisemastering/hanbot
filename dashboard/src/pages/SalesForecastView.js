@@ -7,17 +7,30 @@ import {
 
 const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6', fontSize: '13px' };
 
+const PRODUCT_COLORS = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#06B6D4', '#EC4899', '#84CC16', '#14B8A6', '#F97316'];
+
 function SalesForecastView() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [days, setDays] = useState(60);
+  const [tab, setTab] = useState('global'); // global | products
+  const [productData, setProductData] = useState(null);
+  const [selectedProduct, setSelectedProduct] = useState(null);
 
   useEffect(() => {
     setLoading(true);
-    API.get(`/ml/forecast?days=${days}`).then(res => {
+    Promise.all([
+      API.get(`/ml/forecast?days=${days}`),
+      API.get(`/ml/forecast-by-product?days=${days}`)
+    ]).then(([res, prodRes]) => {
       setData(res.data?.data || null);
+      setProductData(prodRes.data?.data || null);
+      if (!selectedProduct && prodRes.data?.data?.products?.length) {
+        setSelectedProduct(prodRes.data.data.products[0].name);
+      }
     }).catch(err => console.error('Forecast error:', err)).finally(() => setLoading(false));
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [days]);
 
   const chartData = useMemo(() => {
@@ -53,7 +66,101 @@ function SalesForecastView() {
         </div>
       </div>
 
-      {data && (
+      {/* Tab selector */}
+      <div className="flex gap-2">
+        <button onClick={() => setTab('global')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === 'global' ? 'bg-green-600 text-white' : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700/50'}`}>Global</button>
+        <button onClick={() => setTab('products')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === 'products' ? 'bg-green-600 text-white' : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700/50'}`}>Por Producto</button>
+      </div>
+
+      {/* ─── PRODUCT TAB ─── */}
+      {tab === 'products' && productData && (
+        <>
+          {/* Product selector + summary table */}
+          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl">
+            <div className="px-6 py-4 border-b border-gray-700/50">
+              <h2 className="text-lg font-semibold text-white">Pronóstico por producto (top 10)</h2>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-900/50">
+                  <tr className="text-left text-xs text-gray-400 uppercase">
+                    <th className="px-6 py-3">Producto</th>
+                    <th className="px-4 py-3 text-right">Órdenes</th>
+                    <th className="px-4 py-3 text-right">Ingresos</th>
+                    <th className="px-4 py-3 text-right">Ticket</th>
+                    <th className="px-4 py-3 text-right">Tendencia</th>
+                    <th className="px-4 py-3 text-right">R²</th>
+                    <th className="px-4 py-3 text-right">Proyección 7d</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-700/50">
+                  {productData.products.map((p, i) => (
+                    <tr key={i} className={`hover:bg-gray-700/20 cursor-pointer ${selectedProduct === p.name ? 'bg-gray-700/30' : ''}`} onClick={() => setSelectedProduct(p.name)}>
+                      <td className="px-6 py-3">
+                        <div className="flex items-center gap-2">
+                          <span className="w-3 h-3 rounded-full shrink-0" style={{ backgroundColor: PRODUCT_COLORS[i % PRODUCT_COLORS.length] }}></span>
+                          <span className="text-sm text-white font-medium">{p.name}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-300">{p.totalOrders}</td>
+                      <td className="px-4 py-3 text-right text-sm text-green-400">{fmt(p.totalRevenue)}</td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-300">{fmt(p.avgOrder)}</td>
+                      <td className={`px-4 py-3 text-right text-sm font-medium ${p.trend >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                        {p.trend >= 0 ? '↗' : '↘'} {p.trend > 0 ? '+' : ''}{p.trend}%
+                      </td>
+                      <td className="px-4 py-3 text-right text-sm text-gray-400">{p.r2}</td>
+                      <td className="px-4 py-3 text-right text-sm text-purple-400">{p.forecastRevenue > 0 ? fmt(p.forecastRevenue) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Selected product chart */}
+          {(() => {
+            const p = productData.products.find(pr => pr.name === selectedProduct);
+            if (!p || p.daily.length < 3) return null;
+            const pChartData = [
+              ...p.daily.map(d => ({ dateLabel: d.dateLabel, revenue: d.revenue, forecast: null })),
+              ...p.forecast.map(d => ({ dateLabel: d.dateLabel, revenue: null, forecast: d.revenue }))
+            ];
+            const pIdx = productData.products.indexOf(p);
+            return (
+              <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <span className="w-4 h-4 rounded-full" style={{ backgroundColor: PRODUCT_COLORS[pIdx % PRODUCT_COLORS.length] }}></span>
+                    <h2 className="text-lg font-semibold text-white">{p.name}</h2>
+                    <span className="text-sm text-gray-400">R² = {p.r2}</span>
+                  </div>
+                  <div className="flex items-center gap-4 text-xs text-gray-400">
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block"></span> Real</span>
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-purple-500 inline-block"></span> Proyección</span>
+                  </div>
+                </div>
+                <div className="h-72 overflow-x-auto">
+                  <div style={{ minWidth: Math.max(600, pChartData.length * 24) }}>
+                    <ResponsiveContainer width="100%" height={288}>
+                      <ComposedChart data={pChartData} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
+                        <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                        <XAxis dataKey="dateLabel" tick={{ fill: '#9CA3AF', fontSize: 10 }} axisLine={{ stroke: '#374151' }} />
+                        <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                        <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#F3F4F6' }} itemStyle={{ color: '#F3F4F6' }} formatter={v => v ? fmt(v) : '—'} />
+                        <Bar dataKey="revenue" name="Ingresos" fill={PRODUCT_COLORS[pIdx % PRODUCT_COLORS.length]} fillOpacity={0.7} radius={[3, 3, 0, 0]} />
+                        <Line type="monotone" dataKey="forecast" name="Proyección" stroke="#8B5CF6" strokeWidth={2} strokeDasharray="6 3" dot={{ fill: '#8B5CF6', r: 3 }} connectNulls={false} />
+                      </ComposedChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+        </>
+      )}
+
+      {/* ─── GLOBAL TAB ─── */}
+      {tab === 'global' && data && (
         <>
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5">

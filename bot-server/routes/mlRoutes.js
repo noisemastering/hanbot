@@ -124,6 +124,116 @@ router.get('/forecast', async (req, res) => {
   }
 });
 
+// ─── 1b. PRODUCT-LEVEL FORECAST ─────────────────────────────────────────────
+// Per-product daily revenue with individual linear regressions.
+router.get('/forecast-by-product', async (req, res) => {
+  try {
+    const { days = 60 } = req.query;
+    const since = new Date();
+    since.setDate(since.getDate() - parseInt(days));
+
+    // Daily revenue per product (deduplicated by orderId)
+    const raw = await ClickLog.aggregate([
+      { $match: { converted: true, createdAt: { $gte: since }, 'conversionData.itemTitle': { $ne: null } } },
+      { $group: {
+        _id: { orderId: '$conversionData.orderId', date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'America/Mexico_City' } } },
+        revenue: { $first: '$conversionData.totalAmount' },
+        item: { $first: '$conversionData.itemTitle' }
+      }},
+      { $group: {
+        _id: { item: '$item', date: '$_id.date' },
+        revenue: { $sum: '$revenue' },
+        orders: { $sum: 1 }
+      }},
+      { $sort: { '_id.date': 1 } }
+    ]);
+
+    // Also get totals per product for ranking
+    const productTotals = await ClickLog.aggregate([
+      { $match: { converted: true, createdAt: { $gte: since }, 'conversionData.itemTitle': { $ne: null } } },
+      { $group: { _id: '$conversionData.orderId', revenue: { $first: '$conversionData.totalAmount' }, item: { $first: '$conversionData.itemTitle' } } },
+      { $group: { _id: '$item', revenue: { $sum: '$revenue' }, orders: { $sum: 1 } } },
+      { $sort: { orders: -1 } },
+      { $limit: 10 }
+    ]);
+
+    // Build per-product forecasts
+    const products = productTotals.map(pt => {
+      const dailyData = raw
+        .filter(r => r._id.item === pt._id)
+        .map(r => ({ date: r._id.date, revenue: r.revenue, orders: r.orders }));
+
+      // Run regression if enough data
+      let forecast = [];
+      let trend = 0;
+      let r2 = 0;
+      let slope = 0;
+
+      if (dailyData.length >= 7) {
+        const points = dailyData.map((d, i) => [i, d.revenue]);
+        const regression = ss.linearRegression(points);
+        const line = ss.linearRegressionLine(regression);
+        r2 = +ss.rSquared(points, line).toFixed(3);
+        slope = Math.round(regression.m);
+
+        const firstWeekAvg = ss.mean(dailyData.slice(0, 7).map(d => d.revenue));
+        const lastWeekAvg = ss.mean(dailyData.slice(-7).map(d => d.revenue));
+        trend = firstWeekAvg > 0 ? +((lastWeekAvg - firstWeekAvg) / firstWeekAvg * 100).toFixed(1) : 0;
+
+        // 7-day forecast
+        const lastIdx = points.length;
+        for (let i = 0; i < 7; i++) {
+          const d = new Date();
+          d.setDate(d.getDate() + i + 1);
+          forecast.push({
+            date: d.toISOString().split('T')[0],
+            dateLabel: d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }),
+            revenue: Math.max(0, Math.round(line(lastIdx + i)))
+          });
+        }
+      }
+
+      // Shorten product name
+      const shortName = (pt._id || '')
+        .replace(/Malla Sombra 90% Raschell? Beige De /i, '')
+        .replace(/Lona Sombra 90% Raschel Beige De /i, '')
+        .replace(/Lona Sombra /i, 'Lona ')
+        .replace(/ Reforzada?$/i, '')
+        .replace(/Malla Sombra /i, '')
+        .trim();
+
+      return {
+        name: shortName || pt._id,
+        fullName: pt._id,
+        totalRevenue: Math.round(pt.revenue),
+        totalOrders: pt.orders,
+        avgOrder: pt.orders > 0 ? Math.round(pt.revenue / pt.orders) : 0,
+        daily: dailyData.map(d => ({
+          ...d,
+          dateLabel: new Date(d.date + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })
+        })),
+        forecast,
+        forecastRevenue: forecast.reduce((s, f) => s + f.revenue, 0),
+        trend,
+        r2,
+        slope
+      };
+    });
+
+    res.json({
+      success: true,
+      data: {
+        products,
+        period: parseInt(days),
+        totalProducts: productTotals.length
+      }
+    });
+  } catch (err) {
+    console.error('❌ ML product forecast error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ─── 2. CUSTOMER SEGMENTATION ───────────────────────────────────────────────
 // K-Means on (state, gender, product category, order value).
 router.get('/segments', async (req, res) => {
