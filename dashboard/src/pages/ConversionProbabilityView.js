@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import API from '../api';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 
 const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6', fontSize: '13px' };
 
@@ -25,7 +25,6 @@ function ConversionProbabilityView() {
 
   const summary = data?.summary || { hot: 0, warm: 0, cold: 0, baseRate: 0 };
   const leads = data?.leads || [];
-  const features = data?.featureImportance || [];
   const distro = [
     { name: `Alta (${summary.hot})`, value: summary.hot, color: '#10B981' },
     { name: `Media (${summary.warm})`, value: summary.warm, color: '#F59E0B' },
@@ -67,20 +66,40 @@ function ConversionProbabilityView() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Activity breakdown */}
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Importancia de variables</h2>
-          <div className="h-64">
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={features} layout="vertical" margin={{ left: 120 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis type="number" tick={{ fill: '#9CA3AF', fontSize: 11 }} tickFormatter={v => `${v}%`} />
-                <YAxis type="category" dataKey="name" tick={{ fill: '#9CA3AF', fontSize: 11 }} width={120} />
-                <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#F3F4F6' }} itemStyle={{ color: '#F3F4F6' }} formatter={v => `${v}%`} />
-                <Bar dataKey="importance" fill="#8B5CF6" radius={[0, 4, 4, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+          <h2 className="text-lg font-semibold text-white mb-4">Actividad de leads</h2>
+          <div className="space-y-4">
+            {(() => {
+              const withClicks = leads.filter(l => l.clicks > 0).length;
+              const noClicks = leads.filter(l => l.clicks === 0).length;
+              const recent24h = leads.filter(l => l.hoursAgo < 24).length;
+              const recent72h = leads.filter(l => l.hoursAgo >= 24 && l.hoursAgo < 72).length;
+              const older = leads.filter(l => l.hoursAgo >= 72).length;
+              const multiLink = leads.filter(l => l.links >= 3).length;
+              const stats = [
+                { label: 'Hicieron click en link', value: withClicks, total: leads.length, color: 'bg-green-500' },
+                { label: 'No hicieron click', value: noClicks, total: leads.length, color: 'bg-red-500' },
+                { label: 'Activos últimas 24h', value: recent24h, total: leads.length, color: 'bg-blue-500' },
+                { label: 'Activos hace 1-3 días', value: recent72h, total: leads.length, color: 'bg-amber-500' },
+                { label: 'Más de 3 días sin actividad', value: older, total: leads.length, color: 'bg-gray-500' },
+                { label: 'Revisaron 3+ productos', value: multiLink, total: leads.length, color: 'bg-purple-500' },
+              ];
+              return stats.map((s, i) => (
+                <div key={i}>
+                  <div className="flex justify-between text-sm mb-1">
+                    <span className="text-gray-300">{s.label}</span>
+                    <span className="text-white font-medium">{s.value} <span className="text-gray-500">({s.total > 0 ? Math.round(s.value / s.total * 100) : 0}%)</span></span>
+                  </div>
+                  <div className="w-full h-2 bg-gray-700 rounded-full">
+                    <div className={`h-full rounded-full ${s.color}`} style={{ width: `${s.total > 0 ? (s.value / s.total * 100) : 0}%` }}></div>
+                  </div>
+                </div>
+              ));
+            })()}
           </div>
         </div>
+        {/* Distribution donut */}
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
           <h2 className="text-lg font-semibold text-white mb-4">Distribución</h2>
           <div className="h-64">
