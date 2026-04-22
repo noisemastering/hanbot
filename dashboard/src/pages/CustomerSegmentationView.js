@@ -45,6 +45,41 @@ function CustomerSegmentationView() {
         </div>
       </div>
 
+      {/* Variables being cross-referenced */}
+      <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5">
+        <h2 className="text-sm font-semibold text-white mb-3">Variables cruzadas para segmentar</h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-purple-400"></span>
+            <div>
+              <p className="text-sm text-white font-medium">Género</p>
+              <p className="text-xs text-gray-400">Inferido del nombre del comprador</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+            <div>
+              <p className="text-sm text-white font-medium">Ubicación</p>
+              <p className="text-xs text-gray-400">Estado de envío (ML)</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-green-400"></span>
+            <div>
+              <p className="text-sm text-white font-medium">Monto de compra</p>
+              <p className="text-xs text-gray-400">Total de la orden</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-amber-400"></span>
+            <div>
+              <p className="text-sm text-white font-medium">Producto</p>
+              <p className="text-xs text-gray-400">Categoría del artículo</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {segments.length > 0 && (
         <>
           <div className="grid grid-cols-1 gap-6">
