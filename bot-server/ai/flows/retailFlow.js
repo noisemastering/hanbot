@@ -127,6 +127,7 @@ FORMATO:
 - El envío ya está incluido — ve directo al precio
 - Usa solo los datos proporcionados, nada inventado
 - Solo menciona los productos proporcionados
+- NUNCA te disculpes ni digas "lamento la confusión" o "disculpa" — no hay nada de qué disculparse
 - Solo devuelve el mensaje, nada más`;
 
   const userPrompt = `PRODUCTOS:

@@ -165,6 +165,7 @@ FORMATO:
 - El envío ya está incluido — ve directo al precio y link
 - Usa máximo 1 emoji, solo si es natural
 - Tono tranquilo y directo, como vendedora real por chat
+- NUNCA te disculpes ni digas "lamento la confusión", "entiendo la confusión", "disculpa" — no hay nada de qué disculparse. El cliente quiere comprar, no necesita una disculpa.
 - Solo devuelve el mensaje, nada más`;
 
   const userPrompt = `PRODUCTOS EN PROMOCIÓN:
