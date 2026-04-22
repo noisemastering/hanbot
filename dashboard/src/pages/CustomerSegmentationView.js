@@ -38,9 +38,14 @@ function CustomerSegmentationView() {
           </div>
         </div>
         <div className="flex gap-2 items-center">
-          <span className="text-sm text-gray-400">Clusters:</span>
-          {[3, 4, 5, 6].map(n => (
-            <button key={n} onClick={() => setK(n)} className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${k === n ? 'bg-purple-600 text-white' : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700/50'}`}>{n}</button>
+          <span className="text-sm text-gray-400">Detalle:</span>
+          {[
+            { n: 3, label: 'Amplio' },
+            { n: 4, label: 'Medio' },
+            { n: 5, label: 'Detallado' },
+            { n: 6, label: 'Granular' }
+          ].map(({ n, label }) => (
+            <button key={n} onClick={() => setK(n)} title={`${n} grupos`} className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${k === n ? 'bg-purple-600 text-white' : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700/50'}`}>{label}</button>
           ))}
         </div>
       </div>
