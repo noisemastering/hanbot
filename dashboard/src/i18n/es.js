@@ -20,6 +20,7 @@ const es = {
   "menu.adSets": "Ad Sets",
   "menu.ads": "Anuncios",
   "menu.desempeno": "Desempeño",
+  "menu.segmentacion": "Segmentación",
   "menu.flujos": "Flujos",
   "menu.trackedLinks": "Links de seguimiento",
   "menu.users": "Usuarios",

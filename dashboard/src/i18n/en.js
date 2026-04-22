@@ -20,6 +20,7 @@ const en = {
   "menu.adSets": "Ad Sets",
   "menu.ads": "Ads",
   "menu.desempeno": "Performance",
+  "menu.segmentacion": "Segmentation",
   "menu.flujos": "Flows",
   "menu.trackedLinks": "Tracked Links",
   "menu.users": "Users",
