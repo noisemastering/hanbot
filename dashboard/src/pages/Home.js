@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { useNavigate } from "react-router-dom";
 import API from "../api";
 import { useTranslation } from "../i18n";
+import { useAuth } from "../contexts/AuthContext";
 import {
   ComposedChart,
   Bar,
@@ -84,6 +85,9 @@ function getDaysAgo(days) {
 function Home() {
   const { t, locale } = useTranslation();
   const navigate = useNavigate();
+  const { user, simulationMode } = useAuth();
+  const effectiveRole = simulationMode?.role || user?.role;
+  const showSegmentation = effectiveRole === 'super_admin' || effectiveRole === 'admin' || ['sales', 'accounting'].includes(simulationMode?.profile || user?.profile);
   const [range, setRange] = useState(30);
   const [loading, setLoading] = useState(true);
   const [correlating, setCorrelating] = useState(false);
@@ -100,6 +104,7 @@ function Home() {
   const [adData, setAdData] = useState([]);
   const [manualSalesData, setManualSalesData] = useState([]);
   const [manualTotals, setManualTotals] = useState({ totalSales: 0, totalRevenue: 0 });
+  const [segData, setSegData] = useState(null);
 
   const dateFrom = useMemo(() => getDaysAgo(range), [range]);
   const dateTo = useMemo(() => new Date().toISOString().split("T")[0], []);
@@ -142,6 +147,14 @@ function Home() {
       );
       setManualSalesData(manualRes.data?.chartData || []);
       setManualTotals({ totalSales: manualRes.data?.totalSales || 0, totalRevenue: manualRes.data?.totalRevenue || 0 });
+
+      // Fetch segmentation data for higher-level users
+      if (showSegmentation) {
+        try {
+          const segRes = await API.get('/ml/segments');
+          setSegData(segRes.data?.data || null);
+        } catch (e) { console.error('Seg fetch failed:', e); }
+      }
     } catch (err) {
       console.error("Error fetching dashboard data:", err);
     } finally {
@@ -797,6 +810,42 @@ function Home() {
           )}
         </div>
       </div>
+
+      {/* Segmentation — State × Gender (higher-level users only) */}
+      {showSegmentation && segData?.stateGender?.length > 0 && (
+        <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6 cursor-pointer hover:border-gray-600/70 hover:scale-[1.005] transition-all" onClick={() => navigate('/segmentacion')}>
+          <h2 className="text-lg font-semibold text-white mb-1">Compradores por estado y género</h2>
+          <p className="text-sm text-gray-500 mb-4">Top 10 estados — click para ver detalle completo</p>
+          <div className="h-72">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart data={segData.stateGender.slice(0, 10).map(s => ({ ...s, state: abbrState(s.state) }))} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis dataKey="state" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} />
+                <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  labelStyle={{ color: '#F3F4F6' }}
+                  content={({ active, payload, label }) => {
+                    if (!active || !payload?.length) return null;
+                    const d = payload[0].payload;
+                    return (
+                      <div style={tooltipStyle} className="p-3 text-sm">
+                        <p className="text-white font-medium mb-1">{label}</p>
+                        <p style={{ color: '#3B82F6' }}>Hombres: {d.male} ({d.malePercent}%)</p>
+                        <p style={{ color: '#EC4899' }}>Mujeres: {d.female} ({d.femalePercent}%)</p>
+                        <p style={{ color: '#9CA3AF' }}>Total: {d.total}</p>
+                      </div>
+                    );
+                  }}
+                />
+                <Legend wrapperStyle={{ color: '#9CA3AF' }} />
+                <Bar dataKey="male" name="Hombres" stackId="gender" fill="#3B82F6" />
+                <Bar dataKey="female" name="Mujeres" stackId="gender" fill="#EC4899" radius={[4, 4, 0, 0]} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
