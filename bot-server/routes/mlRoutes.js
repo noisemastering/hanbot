@@ -326,12 +326,10 @@ router.get('/forecast-by-product', async (req, res) => {
 });
 
 // ─── 2. CUSTOMER SEGMENTATION ───────────────────────────────────────────────
-// K-Means on (state, gender, product category, order value).
+// Cross-tab analysis: State × Gender × Product Size breakdown.
 router.get('/segments', async (req, res) => {
   try {
-    const { k = 5 } = req.query;
-
-    // Get all converted ClickLogs with buyer data (deduplicated by orderId)
+    // Get all converted orders deduplicated
     const orders = await ClickLog.aggregate([
       { $match: { converted: true, 'conversionData.orderId': { $ne: null } } },
       { $group: {
@@ -339,118 +337,83 @@ router.get('/segments', async (req, res) => {
         revenue: { $first: '$conversionData.totalAmount' },
         state: { $first: '$conversionData.shippingState' },
         gender: { $first: '$conversionData.buyerGender' },
-        item: { $first: '$conversionData.itemTitle' },
-        adId: { $first: '$adId' },
-        date: { $first: '$createdAt' }
-      }},
+        item: { $first: '$conversionData.itemTitle' }
+      }}
     ]);
 
     if (orders.length < 20) {
-      return res.json({ success: true, data: { segments: [], totalCustomers: 0 } });
+      return res.json({ success: true, data: { stateGender: [], topSizes: [], totalCustomers: 0 } });
     }
 
-    // Encode features numerically
-    const states = [...new Set(orders.map(o => o.state).filter(Boolean))];
-    const stateMap = {};
-    states.forEach((s, i) => stateMap[s] = i);
-
-    const genderMap = { male: 0, female: 1, unknown: 0.5 };
-
-    // Infer product category from item title
-    const categorize = (title) => {
-      if (!title) return 2;
-      const t = title.toLowerCase();
-      if (/confeccionada|ojillo|refuerzo/.test(t)) return 0;
-      if (/rollo|raschel|4\.2/.test(t)) return 1;
-      if (/borde|separador|jardin/.test(t)) return 3;
-      if (/ground|antimaleza/.test(t)) return 4;
-      return 2;
+    // Extract size from item title
+    const getSize = (title) => {
+      if (!title) return 'Otro';
+      const m = title.match(/(\d+)\s*m?\s*[xX×]\s*(\d+)\s*m/);
+      return m ? `${m[1]}x${m[2]}m` : 'Otro';
     };
 
-    // Normalize: each feature to 0-1 range
-    const revenues = orders.map(o => o.revenue || 0);
-    const maxRev = Math.max(...revenues, 1);
-    const maxState = Math.max(states.length - 1, 1);
+    // 1. State × Gender cross-tab (top 10 states)
+    const stateGenderRaw = {};
+    orders.forEach(o => {
+      const state = o.state || 'Desconocido';
+      const gender = o.gender || 'unknown';
+      if (!stateGenderRaw[state]) stateGenderRaw[state] = { male: 0, female: 0, unknown: 0, total: 0, revenue: 0 };
+      stateGenderRaw[state][gender]++;
+      stateGenderRaw[state].total++;
+      stateGenderRaw[state].revenue += (o.revenue || 0);
+    });
 
-    const dataPoints = orders.map(o => ([
-      (o.revenue || 0) / maxRev,
-      genderMap[o.gender] ?? 0.5,
-      (stateMap[o.state] ?? 0) / maxState,
-      categorize(o.item) / 4
-    ]));
+    const stateGender = Object.entries(stateGenderRaw)
+      .sort((a, b) => b[1].total - a[1].total)
+      .slice(0, 12)
+      .map(([state, data]) => ({
+        state,
+        male: data.male,
+        female: data.female,
+        unknown: data.unknown,
+        total: data.total,
+        revenue: Math.round(data.revenue),
+        malePercent: Math.round(data.male / data.total * 100),
+        femalePercent: Math.round(data.female / data.total * 100),
+        avgOrder: Math.round(data.revenue / data.total)
+      }));
 
-    // K-Means implementation
-    const numK = Math.min(parseInt(k), 8);
-    const clusters = kMeans(dataPoints, numK, 50);
+    // 2. Top product sizes with gender split
+    const sizeGenderRaw = {};
+    orders.forEach(o => {
+      const size = getSize(o.item);
+      const gender = o.gender || 'unknown';
+      if (!sizeGenderRaw[size]) sizeGenderRaw[size] = { male: 0, female: 0, unknown: 0, total: 0, revenue: 0 };
+      sizeGenderRaw[size][gender]++;
+      sizeGenderRaw[size].total++;
+      sizeGenderRaw[size].revenue += (o.revenue || 0);
+    });
 
-    // Analyze each cluster
-    const segments = clusters.map((cluster, idx) => {
-      const clusterOrders = cluster.indices.map(i => orders[i]);
-      const revs = clusterOrders.map(o => o.revenue || 0);
-      const genders = clusterOrders.map(o => o.gender);
-      const statesInCluster = clusterOrders.map(o => o.state).filter(Boolean);
-      const items = clusterOrders.map(o => o.item).filter(Boolean);
+    const topSizes = Object.entries(sizeGenderRaw)
+      .sort((a, b) => b[1].total - a[1].total)
+      .slice(0, 10)
+      .map(([size, data]) => ({
+        size,
+        male: data.male,
+        female: data.female,
+        total: data.total,
+        revenue: Math.round(data.revenue),
+        malePercent: Math.round(data.male / data.total * 100),
+        femalePercent: Math.round(data.female / data.total * 100),
+        avgOrder: Math.round(data.revenue / data.total)
+      }));
 
-      // Top state
-      const stateFreq = {};
-      statesInCluster.forEach(s => stateFreq[s] = (stateFreq[s] || 0) + 1);
-      const topState = Object.entries(stateFreq).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
-
-      // Top product
-      const itemFreq = {};
-      items.forEach(t => {
-        const cat = categorize(t);
-        const label = ['Confeccionada', 'Rollo Raschel', 'General', 'Borde Separador', 'Ground Cover'][cat];
-        itemFreq[label] = (itemFreq[label] || 0) + 1;
-      });
-      const topProduct = Object.entries(itemFreq).sort((a, b) => b[1] - a[1])[0]?.[0] || 'N/A';
-
-      // Gender split
-      const maleCount = genders.filter(g => g === 'male').length;
-      const femaleCount = genders.filter(g => g === 'female').length;
-      const total = genders.length || 1;
-      const genderSplit = `${Math.round(maleCount / total * 100)}% M / ${Math.round(femaleCount / total * 100)}% F`;
-
-      // Auto-label using the most distinctive feature of this cluster
-      const avgRev = revs.length > 0 ? ss.mean(revs) : 0;
-      const maleRatio = maleCount / (total || 1);
-      const femaleRatio = femaleCount / (total || 1);
-
-      // Build a descriptive label from what makes this cluster unique
-      const parts = [];
-
-      // Gender signal (only if strongly skewed)
-      if (maleRatio > 0.75) parts.push('Hombres');
-      else if (femaleRatio > 0.75) parts.push('Mujeres');
-      else if (maleRatio > 0.55) parts.push('Mayoría hombres');
-      else if (femaleRatio > 0.55) parts.push('Mayoría mujeres');
-      else parts.push('Mixto');
-
-      // Geography signal
-      parts.push(topState);
-
-      // Revenue signal (only if distinctive)
-      if (avgRev > 2000) parts.push('Alto valor');
-      else if (avgRev < 500) parts.push('Bajo valor');
-
-      return {
-        id: idx,
-        label: parts.join(' · '),
-        count: clusterOrders.length,
-        avgOrder: Math.round(avgRev),
-        totalRevenue: Math.round(revs.reduce((s, r) => s + r, 0)),
-        topProduct,
-        topState,
-        genderSplit
-      };
-    }).sort((a, b) => b.totalRevenue - a.totalRevenue);
+    // 3. Global gender split
+    const genderTotals = { male: 0, female: 0, unknown: 0 };
+    orders.forEach(o => { genderTotals[o.gender || 'unknown']++; });
 
     res.json({
       success: true,
       data: {
-        segments,
-        totalCustomers: orders.length,
-        k: numK
+        stateGender,
+        topSizes,
+        genderTotals,
+        totalCustomers: orders.length
       }
     });
   } catch (err) {
