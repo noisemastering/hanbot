@@ -137,15 +137,52 @@ function ConversionProbabilityView() {
         </div>
       )}
 
+      {/* What is this */}
       <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-white mb-3">Metodología</h2>
-        <div className="space-y-2 text-sm text-gray-300">
-          <p><span className="text-white font-medium">Modelo:</span> Scoring basado en pesos de actividad (similar a regresión logística simplificada).</p>
-          <p><span className="text-white font-medium">Variables:</span> Si hizo click en link (+25%), actividad reciente &lt;24h (+15%), múltiples links (+10-15%), tasa base histórica.</p>
-          <p><span className="text-white font-medium">Tasa base:</span> {summary.baseRate}% — porcentaje histórico de leads que compran.</p>
-          <p><span className="text-white font-medium">Clasificación:</span> Caliente (&gt;70%), Tibio (40-70%), Frío (&lt;40%).</p>
-          <p><span className="text-white font-medium">Uso:</span> Priorizar handoffs humanos hacia leads calientes y optimizar el seguimiento del bot.</p>
+        <h2 className="text-lg font-semibold text-white mb-3">¿Qué es esto?</h2>
+        <p className="text-sm text-gray-300 mb-4">
+          Esta vista analiza a las personas que recibieron un link de compra del bot pero <span className="text-white font-medium">aún no han comprado</span>.
+          A cada una le asigna un puntaje de probabilidad de que termine comprando, basado en su comportamiento.
+        </p>
+        <h3 className="text-sm font-semibold text-white mb-2">¿Cómo se calcula?</h3>
+        <div className="overflow-x-auto mb-4">
+          <table className="w-full text-sm">
+            <thead className="bg-gray-900/50">
+              <tr className="text-left text-xs text-gray-400 uppercase">
+                <th className="px-4 py-2">Señal</th>
+                <th className="px-4 py-2">Peso</th>
+                <th className="px-4 py-2">Lógica</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-700/50">
+              <tr><td className="px-4 py-2 text-gray-300">Tasa base</td><td className="px-4 py-2 text-purple-400">{summary.baseRate}%</td><td className="px-4 py-2 text-gray-400">Porcentaje histórico de leads que compran</td></tr>
+              <tr><td className="px-4 py-2 text-gray-300">Hizo click en link</td><td className="px-4 py-2 text-green-400">+25%</td><td className="px-4 py-2 text-gray-400">Fue a Mercado Libre — intención de compra fuerte</td></tr>
+              <tr><td className="px-4 py-2 text-gray-300">3+ links generados</td><td className="px-4 py-2 text-green-400">+10%</td><td className="px-4 py-2 text-gray-400">Revisó varios productos — está comparando</td></tr>
+              <tr><td className="px-4 py-2 text-gray-300">5+ links generados</td><td className="px-4 py-2 text-green-400">+5%</td><td className="px-4 py-2 text-gray-400">Muy activo — probablemente va a comprar</td></tr>
+              <tr><td className="px-4 py-2 text-gray-300">Activo hace &lt;24h</td><td className="px-4 py-2 text-blue-400">+15%</td><td className="px-4 py-2 text-gray-400">Todavía está comprando</td></tr>
+              <tr><td className="px-4 py-2 text-gray-300">Activo hace 24-72h</td><td className="px-4 py-2 text-amber-400">+5%</td><td className="px-4 py-2 text-gray-400">Puede regresar</td></tr>
+            </tbody>
+          </table>
         </div>
+        <h3 className="text-sm font-semibold text-white mb-2">Clasificación</h3>
+        <div className="flex gap-4 mb-4">
+          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-green-500"></span><span className="text-sm text-gray-300"><span className="text-white">Caliente</span> (&gt;70%) — priorizar seguimiento</span></div>
+          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-amber-500"></span><span className="text-sm text-gray-300"><span className="text-white">Tibio</span> (40-70%) — podría comprar con un empujón</span></div>
+          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-red-500"></span><span className="text-sm text-gray-300"><span className="text-white">Frío</span> (&lt;40%) — probablemente ya no comprará</span></div>
+        </div>
+        <h3 className="text-sm font-semibold text-white mb-2">¿Para qué sirve?</h3>
+        <p className="text-sm text-gray-300 mb-2">
+          Si tienes un equipo de ventas que atiende handoffs, esta vista les dice <span className="text-white font-medium">a quién llamar primero</span>.
+          Un lead "Caliente" al 90% que hizo click hace 1 hora vale la pena contactarlo de inmediato.
+          Un lead "Frío" al 20% que recibió un link hace 5 días probablemente ya se fue.
+        </p>
+        <h3 className="text-sm font-semibold text-white mb-2">Limitaciones</h3>
+        <p className="text-sm text-gray-400">
+          No es un modelo de machine learning entrenado — es un sistema de scoring por pesos fijos.
+          Un modelo real (regresión logística) aprendería los pesos automáticamente de los datos históricos.
+          Con tu tasa de conversión actual del {summary.baseRate}%, la mayoría de leads con actividad reciente salen "Calientes".
+          Es más útil cuando la tasa de conversión es baja y hay que priorizar.
+        </p>
       </div>
     </div>
   );
