@@ -27,9 +27,9 @@ function ConversionProbabilityView() {
   const leads = data?.leads || [];
   const features = data?.featureImportance || [];
   const distro = [
-    { name: `Caliente (${summary.hot})`, value: summary.hot, color: '#10B981' },
-    { name: `Tibio (${summary.warm})`, value: summary.warm, color: '#F59E0B' },
-    { name: `Frío (${summary.cold})`, value: summary.cold, color: '#EF4444' },
+    { name: `Alta (${summary.hot})`, value: summary.hot, color: '#10B981' },
+    { name: `Media (${summary.warm})`, value: summary.warm, color: '#F59E0B' },
+    { name: `Baja (${summary.cold})`, value: summary.cold, color: '#EF4444' },
   ].filter(d => d.value > 0);
 
   return (
@@ -53,15 +53,15 @@ function ConversionProbabilityView() {
 
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-gray-800/50 border border-green-500/20 rounded-xl p-5">
-          <p className="text-xs text-gray-400">Calientes (&gt;70%)</p>
+          <p className="text-xs text-gray-400">Alta probabilidad (&gt;70%)</p>
           <p className="text-2xl font-bold text-green-400">{summary.hot}</p>
         </div>
         <div className="bg-gray-800/50 border border-amber-500/20 rounded-xl p-5">
-          <p className="text-xs text-gray-400">Tibios (40-70%)</p>
+          <p className="text-xs text-gray-400">Media probabilidad (40-70%)</p>
           <p className="text-2xl font-bold text-amber-400">{summary.warm}</p>
         </div>
         <div className="bg-gray-800/50 border border-red-500/20 rounded-xl p-5">
-          <p className="text-xs text-gray-400">Fríos (&lt;40%)</p>
+          <p className="text-xs text-gray-400">Baja probabilidad (&lt;40%)</p>
           <p className="text-2xl font-bold text-red-400">{summary.cold}</p>
         </div>
       </div>
@@ -126,7 +126,7 @@ function ConversionProbabilityView() {
                     <td className={`px-4 py-3 text-right text-sm font-bold ${statusColor(l.status)}`}>{l.probability}%</td>
                     <td className="px-4 py-3 text-center">
                       <span className={`text-xs px-2 py-0.5 rounded border ${statusBg(l.status)} ${statusColor(l.status)}`}>
-                        {l.status === 'hot' ? 'Caliente' : l.status === 'warm' ? 'Tibio' : 'Frío'}
+                        {l.status === 'hot' ? 'Alta' : l.status === 'warm' ? 'Media' : 'Baja'}
                       </span>
                     </td>
                   </tr>
@@ -166,21 +166,21 @@ function ConversionProbabilityView() {
         </div>
         <h3 className="text-sm font-semibold text-white mb-2">Clasificación</h3>
         <div className="flex gap-4 mb-4">
-          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-green-500"></span><span className="text-sm text-gray-300"><span className="text-white">Caliente</span> (&gt;70%) — priorizar seguimiento</span></div>
-          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-amber-500"></span><span className="text-sm text-gray-300"><span className="text-white">Tibio</span> (40-70%) — podría comprar con un empujón</span></div>
-          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-red-500"></span><span className="text-sm text-gray-300"><span className="text-white">Frío</span> (&lt;40%) — probablemente ya no comprará</span></div>
+          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-green-500"></span><span className="text-sm text-gray-300"><span className="text-white">Alta</span> (&gt;70%) — priorizar seguimiento</span></div>
+          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-amber-500"></span><span className="text-sm text-gray-300"><span className="text-white">Media</span> (40-70%) — podría comprar con seguimiento</span></div>
+          <div className="flex items-center gap-2"><span className="w-3 h-3 rounded-full bg-red-500"></span><span className="text-sm text-gray-300"><span className="text-white">Baja</span> (&lt;40%) — probablemente ya no comprará</span></div>
         </div>
         <h3 className="text-sm font-semibold text-white mb-2">¿Para qué sirve?</h3>
         <p className="text-sm text-gray-300 mb-2">
           Si tienes un equipo de ventas que atiende handoffs, esta vista les dice <span className="text-white font-medium">a quién llamar primero</span>.
-          Un lead "Caliente" al 90% que hizo click hace 1 hora vale la pena contactarlo de inmediato.
-          Un lead "Frío" al 20% que recibió un link hace 5 días probablemente ya se fue.
+          Un lead de "Alta" probabilidad al 90% que hizo click hace 1 hora vale la pena contactarlo de inmediato.
+          Un lead de "Baja" probabilidad al 20% que recibió un link hace 5 días probablemente ya se fue.
         </p>
         <h3 className="text-sm font-semibold text-white mb-2">Limitaciones</h3>
         <p className="text-sm text-gray-400">
           No es un modelo de machine learning entrenado — es un sistema de scoring por pesos fijos.
           Un modelo real (regresión logística) aprendería los pesos automáticamente de los datos históricos.
-          Con tu tasa de conversión actual del {summary.baseRate}%, la mayoría de leads con actividad reciente salen "Calientes".
+          Con tu tasa de conversión actual del {summary.baseRate}%, la mayoría de leads con actividad reciente salen como "Alta".
           Es más útil cuando la tasa de conversión es baja y hay que priorizar.
         </p>
       </div>
