@@ -47,7 +47,7 @@ function CustomerSegmentationView() {
 
       {segments.length > 0 && (
         <>
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6">
             <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
               <h2 className="text-lg font-semibold text-white mb-4">Distribución de segmentos</h2>
               <div className="h-72">
