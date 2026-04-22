@@ -151,7 +151,7 @@ function Home() {
       // Fetch segmentation data for higher-level users
       if (showSegmentation) {
         try {
-          const segRes = await API.get('/ml/segments');
+          const segRes = await API.get(`/ml/segments?dateFrom=${dateFromISO}&dateTo=${dateToISO}`);
           setSegData(segRes.data?.data || null);
         } catch (e) { console.error('Seg fetch failed:', e); }
       }

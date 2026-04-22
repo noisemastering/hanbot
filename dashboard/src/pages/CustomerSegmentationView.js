@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import API from '../api';
 import { abbrState } from '../utils/stateAbbr';
@@ -6,17 +6,25 @@ import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContaine
 
 const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6', fontSize: '13px' };
 
+function getDaysAgo(d) { const dt = new Date(); dt.setDate(dt.getDate() - d); return dt.toISOString().split('T')[0]; }
+
 function CustomerSegmentationView() {
   const navigate = useNavigate();
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [range, setRange] = useState(30);
+
+  const dateFrom = useMemo(() => getDaysAgo(range), [range]);
+  const dateTo = useMemo(() => new Date().toISOString().split('T')[0], []);
 
   useEffect(() => {
     setLoading(true);
-    API.get('/ml/segments').then(res => {
+    const dateFromISO = `${dateFrom}T00:00:00.000Z`;
+    const dateToISO = `${dateTo}T23:59:59.999Z`;
+    API.get(`/ml/segments?dateFrom=${dateFromISO}&dateTo=${dateToISO}`).then(res => {
       setData(res.data?.data || null);
     }).catch(err => console.error('Segments error:', err)).finally(() => setLoading(false));
-  }, []);
+  }, [dateFrom, dateTo]);
 
   const fmt = (n) => '$' + Math.round(n).toLocaleString('es-MX');
 
@@ -29,13 +37,20 @@ function CustomerSegmentationView() {
 
   return (
     <div className="p-6 space-y-6">
-      <div className="flex items-center gap-3">
-        <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-white" title="Volver">
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
-        </button>
-        <div>
-          <h1 className="text-2xl font-bold text-white">Segmentación de Clientes</h1>
-          <p className="text-sm text-gray-400">{data?.totalCustomers?.toLocaleString() || 0} órdenes únicas analizadas</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div className="flex items-center gap-3">
+          <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-white" title="Volver">
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
+          </button>
+          <div>
+            <h1 className="text-2xl font-bold text-white">Segmentación de Clientes</h1>
+            <p className="text-sm text-gray-400">{data?.totalCustomers?.toLocaleString() || 0} órdenes únicas analizadas</p>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          {[7, 30, 90].map(d => (
+            <button key={d} onClick={() => setRange(d)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${range === d ? 'bg-purple-600 text-white' : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700/50'}`}>{d}d</button>
+          ))}
         </div>
       </div>
 

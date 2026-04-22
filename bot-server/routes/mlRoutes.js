@@ -329,9 +329,15 @@ router.get('/forecast-by-product', async (req, res) => {
 // Cross-tab analysis: State × Gender × Product Size breakdown.
 router.get('/segments', async (req, res) => {
   try {
+    const { dateFrom, dateTo } = req.query;
+    const dateMatch = {};
+    if (dateFrom) dateMatch.$gte = new Date(dateFrom);
+    if (dateTo) dateMatch.$lte = new Date(dateTo);
+    const hasDate = Object.keys(dateMatch).length > 0;
+
     // Get all converted orders deduplicated
     const orders = await ClickLog.aggregate([
-      { $match: { converted: true, 'conversionData.orderId': { $ne: null } } },
+      { $match: { converted: true, 'conversionData.orderId': { $ne: null }, ...(hasDate ? { createdAt: dateMatch } : {}) } },
       { $group: {
         _id: '$conversionData.orderId',
         revenue: { $first: '$conversionData.totalAmount' },
