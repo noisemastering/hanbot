@@ -11,7 +11,9 @@ const INSTANT_REPLY_NAME_RE = /^¡?\s*[Hh]ola[,!]?\s+([A-ZÁÉÍÓÚÑ][a-záé�
 
 const NOT_NAMES = new Set([
   'Buenos','Buenas','Hola','Saludos','Mucho','Muy','Gracias','Perfecto','Bien',
-  'Necesito','Quiero','Hoy','Hola','Para','Con','Sin','Disculpa','Disculpe'
+  'Necesito','Quiero','Hoy','Hola','Para','Con','Sin','Disculpa','Disculpe',
+  'Claro','Precio','Precios','Buen','Bueno','Malla','Sombra','Envio','Envío',
+  'Costo','Costos','Medida','Medidas','Tiene','Tienen','Cuanto','Cuánto'
 ]);
 
 /**
