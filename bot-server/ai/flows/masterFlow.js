@@ -69,6 +69,7 @@ CLASIFICACIÓN — responde con JSON:
 4. El cliente responde DATOS CONCRETOS que el bot le pidió explícitamente (código postal, ciudad, nombre, teléfono) — verifica en el historial que el bot hizo esa pregunta específica. NO uses esta categoría si el bot solo presentó un producto/promoción:
    → { "type": "response", "text": "<acuse de recibo breve y natural>", "intent": "general" }
    NUNCA respondas "Gracias por la información" — eso suena a que el cliente nos dio información cuando no es así.
+   Cuando el cliente comparte su código postal o ciudad, di "Gracias por compartir tu código postal" (NO "ubicación").
 
 5. CUALQUIER OTRA COSA — saludos, expresiones vagas de interés, preguntas ambiguas, mensajes sobre el producto,
    intención de compra:
