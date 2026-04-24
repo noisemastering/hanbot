@@ -22,6 +22,12 @@ const TOPIC_PATTERNS = [
 module.exports = async function multiQuestion(ctx, next) {
   const { userMessage, psid, convo, classification, sourceContext, campaign, campaignContext } = ctx;
 
+  // Skip for convo_flow conversations — the convo_flow chain handles multi-intent
+  // messages natively through its AI pipeline (masterFlow → productFlow → salesFlow).
+  if (convo?.convoFlowRef) {
+    return await next();
+  }
+
   const isMultiQuestion =
     classification.intent === INTENTS.MULTI_QUESTION ||
     (userMessage.match(/\?/g) || []).length >= 2 ||

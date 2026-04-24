@@ -64,13 +64,22 @@ function getMiddleware() {
     { name: "intentClassifier",  fn: intentClassifier },
 
     // Group C: Intent Handlers (pre-flow)
-    { name: "phoneCapture",      fn: phoneCapture },
-    { name: "linkNotWorking",    fn: linkNotWorking },
-    { name: "trustConcern",      fn: trustConcern },
-    { name: "payOnDelivery",     fn: payOnDelivery },
-    { name: "intentDB",          fn: intentDB },
+    // For convo_flow conversations, skip ALL legacy intent handlers — the convo_flow
+    // chain (masterFlow → promoFlow → productFlow → salesFlow) handles everything.
+    { name: "convoFlowBypass", fn: async (ctx, next) => {
+      if (ctx.convo?.convoFlowRef) {
+        // Jump straight to Group D (flowManager)
+        ctx._skipToFlowManager = true;
+      }
+      await next();
+    }},
+    { name: "phoneCapture",      fn: async (ctx, next) => { if (ctx._skipToFlowManager) return await next(); return phoneCapture(ctx, next); }},
+    { name: "linkNotWorking",    fn: async (ctx, next) => { if (ctx._skipToFlowManager) return await next(); return linkNotWorking(ctx, next); }},
+    { name: "trustConcern",      fn: async (ctx, next) => { if (ctx._skipToFlowManager) return await next(); return trustConcern(ctx, next); }},
+    { name: "payOnDelivery",     fn: async (ctx, next) => { if (ctx._skipToFlowManager) return await next(); return payOnDelivery(ctx, next); }},
+    { name: "intentDB",          fn: async (ctx, next) => { if (ctx._skipToFlowManager) return await next(); return intentDB(ctx, next); }},
     { name: "multiQuestion",     fn: multiQuestion },
-    { name: "intentDispatcher",  fn: intentDispatcher },  // urgent-only when in product flow
+    { name: "intentDispatcher",  fn: async (ctx, next) => { if (ctx._skipToFlowManager) return await next(); return intentDispatcher(ctx, next); }},
 
     // Group D: Flow Routing
     { name: "flowManager",      fn: flowManager },
