@@ -23,7 +23,7 @@ const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 async function handle(userMessage, convo, psid, context = {}) {
   if (!userMessage) return null;
 
-  const { conversationHistory = '', colorNote = null } = context;
+  const { conversationHistory = '', colorNote = null, products = [] } = context;
 
   try {
     const info = await getBusinessInfo();
@@ -89,13 +89,22 @@ Saludos y expresiones de interés vagas SIEMPRE son product_specific, NUNCA cate
 FORMATO DE RESPUESTAS:
 - Español mexicano, amable y conciso (2-4 oraciones máximo)
 - Usa solo datos reales proporcionados
-- Solo incluye URLs de Google Maps (ubicación) y WhatsApp (teléfono)
+- Solo incluye URLs de Google Maps (ubicación), WhatsApp (teléfono), y links de compra de PRODUCTOS DE ESTA CONVERSACIÓN si están disponibles. NUNCA inventes URLs ni uses https://www.mercadolibre.com.mx genérico
 - Solo menciona detalles de pago si el cliente pregunta específicamente por eso (cómo pagar, en qué cuenta depositar, si es por adelantado, etc). No menciones el pago proactivamente.
 - Cuando el cliente pregunte por pago: "El pago se realiza al ordenar y tu compra por Mercado Libre es segura, si no recibes tu artículo se devuelve tu dinero."
 - Usa el historial de conversación para entender el contexto del mensaje
 - Si el cliente pide que le envíen/manden el producto, da su dirección, o pregunta cuándo le llega SIN haber comprado: explica que primero debe realizar su compra por Mercado Libre usando el link que se le compartió, y una vez que compre el envío tarda 3-5 días hábiles. Incluye el link de compra si está disponible en el contexto.
 - PROHIBIDO responder con frases genéricas vagas como "Gracias por la información", "¿Necesitas algo más?", "¿En qué te puedo ayudar?" sin contenido útil. Si no tienes nada útil que agregar, clasifica como product_specific.
 - Solo devuelve JSON`;
+
+    // Build product context so AI answers shipping/payment questions with specific product info
+    let productBlock = '';
+    if (products.length > 0) {
+      const summary = products.length <= 3
+        ? products.map(p => `${p.name} — $${p.price}${p.link ? ` (link: ${p.link})` : ''}`).join('\n')
+        : `${products.length} productos, desde ${products[0]?.name} ($${products[0]?.price}) hasta ${products[products.length - 1]?.name} ($${products[products.length - 1]?.price})`;
+      productBlock = `\nPRODUCTOS DE ESTA CONVERSACIÓN:\n${summary}\nCuando respondas preguntas sobre envío, pago, compra, etc., hazlo EN CONTEXTO de estos productos. Si el cliente pregunta cómo comprar, menciónales el producto y link concreto, no digas "visita Mercado Libre" de forma genérica.`;
+    }
 
     const businessData = `DATOS DEL NEGOCIO:
 ${channelBlock}
@@ -109,7 +118,8 @@ ${channelBlock}
 - Más de 5 años de experiencia como fabricantes
 ${afterHours ? '- Fuera de horario: si el cliente necesita un especialista, le contactarán el siguiente día hábil.' : ''}
 - Instalación: no contamos con servicio de instalación.${context.installationNote ? ' ' + context.installationNote : ''}
-${colorNote ? `- Color: ${colorNote}` : ''}`;
+${colorNote ? `- Color: ${colorNote}` : ''}
+${productBlock}`;
 
     const userContext = [];
     if (convo?.userName) userContext.push(`Nombre del cliente: ${convo.userName}`);

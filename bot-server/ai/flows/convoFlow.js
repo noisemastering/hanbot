@@ -362,10 +362,13 @@ function create(manifest) {
     // ── MASTER FLOW (general questions — sits above everything per architecture) ──
     // Per MASTER_FLOW.md: masterFlow is the SOURCE OF TRUTH for general questions
     // (location, schedule, payment, etc.) and must run before any sales/promo logic.
+    // Pass product context so the AI can reference the main product when answering
+    // shipping, payment, etc. — instead of giving generic "compra en ML" responses.
     const masterResultEarly = await masterFlow.handle(userMessage, convo, psid, {
       salesChannel: manifest.salesChannel === 'retail' ? 'mercado_libre' : 'direct',
       installationNote: manifest.installationNote || null,
       colorNote: manifest.promo?.colorNote || null,
+      products: productCache,
       conversationHistory
     });
 
