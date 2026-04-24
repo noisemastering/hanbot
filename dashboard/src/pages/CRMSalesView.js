@@ -18,6 +18,10 @@ const ManualIcon = () => (
 function CRMSalesView() {
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [showAddSale, setShowAddSale] = useState(false);
+  const [saleForm, setSaleForm] = useState({ crmName: '', crmPhone: '', crmEmail: '', zipCode: '', productName: '', totalAmount: '', quantity: '1', notes: '', saleDate: new Date().toISOString().split('T')[0] });
+  const [saving, setSaving] = useState(false);
+  const [saleSuccess, setSaleSuccess] = useState(null);
   const [totals, setTotals] = useState({ totalRevenue: 0, totalSales: 0, mlSales: 0, manualSales: 0 });
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, pages: 1 });
@@ -64,6 +68,35 @@ function CRMSalesView() {
     });
   };
 
+  const handleAddSale = async () => {
+    if (!saleForm.productName.trim() || !saleForm.totalAmount) return;
+    setSaving(true);
+    setSaleSuccess(null);
+    try {
+      const res = await API.post('/crm/standalone-sale', {
+        productName: saleForm.productName.trim(),
+        totalAmount: parseFloat(saleForm.totalAmount),
+        quantity: parseInt(saleForm.quantity) || 1,
+        notes: saleForm.notes.trim() || undefined,
+        crmName: saleForm.crmName.trim() || undefined,
+        crmPhone: saleForm.crmPhone.trim() || undefined,
+        crmEmail: saleForm.crmEmail.trim() || undefined,
+        zipCode: saleForm.zipCode.trim() || undefined,
+        saleDate: saleForm.saleDate ? new Date(saleForm.saleDate + 'T12:00:00').toISOString() : undefined
+      });
+      if (res.data.success) {
+        setSaleSuccess(`${saleForm.productName} — $${parseFloat(saleForm.totalAmount).toLocaleString()}`);
+        setSaleForm({ crmName: '', crmPhone: '', crmEmail: '', zipCode: '', productName: '', totalAmount: '', quantity: '1', notes: '', saleDate: new Date().toISOString().split('T')[0] });
+        fetchSales();
+        setTimeout(() => { setSaleSuccess(null); setShowAddSale(false); }, 2500);
+      }
+    } catch (err) {
+      console.error('Error adding sale:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   const isManual = (sale) => sale.correlationMethod === 'manual';
 
   const toTitleCase = (str) => {
@@ -92,7 +125,85 @@ function CRMSalesView() {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold text-white">Ventas</h1>
+      <div className="flex items-center justify-between">
+        <h1 className="text-2xl font-bold text-white">Ventas</h1>
+        <button
+          onClick={() => { setShowAddSale(!showAddSale); setSaleSuccess(null); }}
+          className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-all"
+        >
+          {showAddSale ? 'Cerrar' : '+ Registrar Venta'}
+        </button>
+      </div>
+
+      {/* Add Sale Form */}
+      {showAddSale && (
+        <div className="bg-gray-800/50 border border-green-500/20 rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-4">Registrar venta manual</h2>
+          {saleSuccess ? (
+            <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg text-green-400 text-center">
+              Venta registrada: {saleSuccess}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Nombre del cliente</label>
+                  <input type="text" value={saleForm.crmName} onChange={e => setSaleForm(f => ({ ...f, crmName: e.target.value }))}
+                    placeholder="Juan Pérez" className="w-full px-3 py-2 bg-gray-900/50 border border-gray-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-green-500/50" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Teléfono</label>
+                  <input type="text" value={saleForm.crmPhone} onChange={e => setSaleForm(f => ({ ...f, crmPhone: e.target.value }))}
+                    placeholder="4421234567" className="w-full px-3 py-2 bg-gray-900/50 border border-gray-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-green-500/50" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Email</label>
+                  <input type="email" value={saleForm.crmEmail} onChange={e => setSaleForm(f => ({ ...f, crmEmail: e.target.value }))}
+                    placeholder="cliente@email.com" className="w-full px-3 py-2 bg-gray-900/50 border border-gray-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-green-500/50" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Código postal</label>
+                  <input type="text" value={saleForm.zipCode} onChange={e => setSaleForm(f => ({ ...f, zipCode: e.target.value }))}
+                    placeholder="76900" className="w-full px-3 py-2 bg-gray-900/50 border border-gray-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-green-500/50" />
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Producto *</label>
+                  <input type="text" value={saleForm.productName} onChange={e => setSaleForm(f => ({ ...f, productName: e.target.value }))}
+                    placeholder="Malla sombra 6x4m" className="w-full px-3 py-2 bg-gray-900/50 border border-gray-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-green-500/50" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Monto total *</label>
+                  <input type="number" value={saleForm.totalAmount} onChange={e => setSaleForm(f => ({ ...f, totalAmount: e.target.value }))}
+                    placeholder="690" className="w-full px-3 py-2 bg-gray-900/50 border border-gray-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-green-500/50" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Cantidad</label>
+                  <input type="number" value={saleForm.quantity} onChange={e => setSaleForm(f => ({ ...f, quantity: e.target.value }))}
+                    min="1" className="w-full px-3 py-2 bg-gray-900/50 border border-gray-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-green-500/50" />
+                </div>
+                <div>
+                  <label className="block text-xs text-gray-400 mb-1">Fecha de venta</label>
+                  <input type="date" value={saleForm.saleDate} onChange={e => setSaleForm(f => ({ ...f, saleDate: e.target.value }))}
+                    max={new Date().toISOString().split('T')[0]}
+                    min={new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]}
+                    className="w-full px-3 py-2 bg-gray-900/50 border border-gray-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-green-500/50" />
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs text-gray-400 mb-1">Notas (opcional)</label>
+                <input type="text" value={saleForm.notes} onChange={e => setSaleForm(f => ({ ...f, notes: e.target.value }))}
+                  placeholder="Notas adicionales..." className="w-full px-3 py-2 bg-gray-900/50 border border-gray-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-green-500/50" />
+              </div>
+              <button onClick={handleAddSale} disabled={saving || !saleForm.productName.trim() || !saleForm.totalAmount}
+                className="px-5 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-all">
+                {saving ? 'Registrando...' : 'Registrar venta'}
+              </button>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* KPI Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

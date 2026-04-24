@@ -435,4 +435,109 @@ router.get('/products', async (req, res) => {
   }
 });
 
+// POST /crm/standalone-sale — Register a manual sale without requiring an existing conversation
+router.post('/standalone-sale', async (req, res) => {
+  try {
+    const { productName, totalAmount, quantity, notes, crmName, crmPhone, crmEmail, zipCode, saleDate } = req.body;
+
+    if (!productName || !totalAmount) {
+      return res.status(400).json({ success: false, error: 'Producto y monto son requeridos' });
+    }
+
+    // Validate saleDate is within 30 days
+    const now = new Date();
+    const saleDateObj = saleDate ? new Date(saleDate) : now;
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    if (saleDateObj > now) {
+      return res.status(400).json({ success: false, error: 'La fecha no puede ser en el futuro' });
+    }
+    if (saleDateObj < thirtyDaysAgo) {
+      return res.status(400).json({ success: false, error: 'La fecha no puede ser mayor a 30 días atrás' });
+    }
+
+    // Find or create a conversation for this customer
+    let psid = null;
+    if (crmPhone) {
+      // Try to find by phone
+      const existing = await Conversation.findOne({ crmPhone: crmPhone.trim() }).lean();
+      if (existing) psid = existing.psid;
+    }
+    if (!psid && crmEmail) {
+      const existing = await Conversation.findOne({ crmEmail: crmEmail.trim() }).lean();
+      if (existing) psid = existing.psid;
+    }
+
+    if (!psid) {
+      // Create a new conversation for this standalone customer
+      const { randomUUID } = require('crypto');
+      psid = `manual:${randomUUID().slice(0, 12)}`;
+      await Conversation.create({
+        psid,
+        state: 'active',
+        crmName: crmName?.trim() || null,
+        crmPhone: crmPhone?.trim() || null,
+        crmEmail: crmEmail?.trim() || null,
+        zipCode: zipCode?.trim() || null,
+        lastMessageAt: saleDateObj
+      });
+    } else {
+      // Update CRM info on existing conversation
+      const crmUpdate = {};
+      if (crmName?.trim()) crmUpdate.crmName = crmName.trim();
+      if (crmPhone?.trim()) crmUpdate.crmPhone = crmPhone.trim();
+      if (crmEmail?.trim()) crmUpdate.crmEmail = crmEmail.trim();
+      if (zipCode?.trim()) crmUpdate.zipCode = zipCode.trim();
+      if (Object.keys(crmUpdate).length > 0) {
+        await Conversation.updateOne({ psid }, { $set: crmUpdate });
+      }
+    }
+
+    // Create the ClickLog (sale record)
+    const { randomUUID } = require('crypto');
+    const { detectGender } = require('../utils/genderDetector');
+    const clickId = `manual-${randomUUID().slice(0, 8)}`;
+
+    const clickLog = new ClickLog({
+      clickId,
+      psid,
+      originalUrl: 'manual-sale',
+      productName,
+      clicked: true,
+      clickedAt: saleDateObj,
+      converted: true,
+      convertedAt: saleDateObj,
+      correlationMethod: 'manual',
+      correlationConfidence: 'high',
+      conversionData: {
+        totalAmount: parseFloat(totalAmount),
+        paidAmount: parseFloat(totalAmount),
+        itemTitle: productName,
+        itemQuantity: parseInt(quantity) || 1,
+        orderId: clickId,
+        orderDate: saleDateObj,
+        buyerFirstName: crmName?.trim()?.split(' ')[0]?.toLowerCase() || null,
+        buyerGender: detectGender(crmName?.trim()?.split(' ')[0] || ''),
+        manualNotes: notes || null
+      }
+    });
+
+    await clickLog.save();
+
+    res.json({
+      success: true,
+      clickLog: {
+        clickId: clickLog.clickId,
+        productName,
+        totalAmount: parseFloat(totalAmount),
+        psid
+      }
+    });
+  } catch (err) {
+    console.error('❌ Standalone sale error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 module.exports = router;
