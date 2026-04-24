@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import API from '../api';
 
 // ML icon (shopping cart)
@@ -22,6 +22,10 @@ function CRMSalesView() {
   const [saleForm, setSaleForm] = useState({ crmName: '', crmPhone: '', crmEmail: '', zipCode: '', productName: '', totalAmount: '', quantity: '1', notes: '', saleDate: new Date().toISOString().split('T')[0] });
   const [saving, setSaving] = useState(false);
   const [saleSuccess, setSaleSuccess] = useState(null);
+  const [productList, setProductList] = useState([]);
+  const [productSuggestions, setProductSuggestions] = useState([]);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const suggestionsRef = useRef(null);
   const [totals, setTotals] = useState({ totalRevenue: 0, totalSales: 0, mlSales: 0, manualSales: 0 });
   const [page, setPage] = useState(1);
   const [pagination, setPagination] = useState({ total: 0, pages: 1 });
@@ -67,6 +71,35 @@ function CRMSalesView() {
       day: 'numeric', month: 'short', year: 'numeric'
     });
   };
+
+  // Load product list for autocomplete
+  useEffect(() => {
+    API.get('/crm/products').then(res => {
+      if (res.data.success) setProductList(res.data.products || []);
+    }).catch(() => {});
+  }, []);
+
+  // Product suggestions
+  useEffect(() => {
+    if (saleForm.productName.length >= 1 && productList.length > 0) {
+      const q = saleForm.productName.toLowerCase();
+      const matches = productList.filter(p => p.toLowerCase().includes(q)).slice(0, 8);
+      setProductSuggestions(matches);
+      setShowSuggestions(matches.length > 0);
+    } else {
+      setProductSuggestions([]);
+      setShowSuggestions(false);
+    }
+  }, [saleForm.productName, productList]);
+
+  // Close suggestions on outside click
+  useEffect(() => {
+    const handleClick = (e) => {
+      if (suggestionsRef.current && !suggestionsRef.current.contains(e.target)) setShowSuggestions(false);
+    };
+    document.addEventListener('mousedown', handleClick);
+    return () => document.removeEventListener('mousedown', handleClick);
+  }, []);
 
   const handleAddSale = async () => {
     if (!saleForm.productName.trim() || !saleForm.totalAmount) return;
@@ -168,10 +201,24 @@ function CRMSalesView() {
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div>
+                <div className="relative" ref={suggestionsRef}>
                   <label className="block text-xs text-gray-400 mb-1">Producto *</label>
-                  <input type="text" value={saleForm.productName} onChange={e => setSaleForm(f => ({ ...f, productName: e.target.value }))}
-                    placeholder="Malla sombra 6x4m" className="w-full px-3 py-2 bg-gray-900/50 border border-gray-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-green-500/50" />
+                  <input type="text" value={saleForm.productName}
+                    onChange={e => setSaleForm(f => ({ ...f, productName: e.target.value }))}
+                    onFocus={() => { if (saleForm.productName.length >= 1 && productSuggestions.length > 0) setShowSuggestions(true); }}
+                    placeholder="Buscar producto..."
+                    className="w-full px-3 py-2 bg-gray-900/50 border border-gray-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-green-500/50" />
+                  {showSuggestions && productSuggestions.length > 0 && (
+                    <div className="absolute z-10 left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                      {productSuggestions.map((p, i) => (
+                        <button key={i} type="button"
+                          onClick={() => { setSaleForm(f => ({ ...f, productName: p })); setShowSuggestions(false); }}
+                          className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
+                          {p}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs text-gray-400 mb-1">Monto total *</label>
