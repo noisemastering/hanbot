@@ -440,18 +440,24 @@ function create(manifest) {
 
     // ── PURCHASE / DELIVERY INTENT (convoFlow layer — AI, not regex) ──
     const lastLink = convo?.lastSharedProductLink;
+    const lastProductName = convo?.lastQuotedProducts?.[0]?.productName
+      || convo?.lastQuotedProducts?.[0]?.displayText
+      || flowState.lastQuotedProducts?.[0]?.name
+      || null;
     if (lastLink) {
       try {
         const intentCheck = await _openai.chat.completions.create({
           model: 'gpt-4o-mini',
           messages: [
-            { role: 'system', content: `El cliente ya recibió un link de compra de Mercado Libre previamente. Clasifica su mensaje. Responde con JSON: { "intent": "wants_to_buy"|"thinks_ordered"|"none" }
+            { role: 'system', content: `El cliente ya recibió un link de compra para ${lastProductName || 'un producto'} de Mercado Libre previamente. Clasifica su mensaje. Responde con JSON: { "intent": "wants_to_buy"|"thinks_ordered"|"different_product"|"none" }
 
-"wants_to_buy": El cliente QUIERE comprar o pide el link de compra. Ej: "mándame el link", "quiero comprar", "lo quiero", "cómo realizo la compra", "pásame el link", "listo", "sí lo quiero".
+"wants_to_buy": El cliente quiere comprar EL MISMO PRODUCTO que se le cotizó (${lastProductName || 'el producto cotizado'}). Ej: "mándame el link", "quiero comprar", "lo quiero", "cómo realizo la compra", "pásame el link", "listo", "sí lo quiero", "Ese precio es total?", "Qué necesito?".
 "thinks_ordered": El cliente CREE que ya compró o pide que le envíen/manden el producto SIN haber comprado en Mercado Libre. Señales: da su dirección, pregunta cuándo le llega/traen, dice "mándenlo/mándenmelo", "me lo envían", "me la traen", "ya lo pedí", "cuándo llega". También si da datos de entrega (dirección, colonia, CP para envío) como si fuera un pedido.
-"none": Pregunta general (colores, medidas, pago, instalación, ubicación), saludo, despedida, o cualquier otra cosa.
+"different_product": El cliente pregunta por una MEDIDA o PRODUCTO DIFERENTE al que se le cotizó. Ej: pide otra medida ("8x9", "la más grande", "una de 3x4"), pregunta por otros tamaños disponibles, o cambia de opinión sobre el tamaño.
+"none": Pregunta general (colores, pago, instalación, ubicación), saludo, despedida, o cualquier otra cosa.
 
-IMPORTANTE: si el cliente da una dirección completa (calle, número, colonia) o pide que se lo manden/envíen/traigan, es "thinks_ordered" — NO es "none".` },
+IMPORTANTE: si el cliente menciona una medida diferente a ${lastProductName || 'la cotizada'}, es "different_product" — NO "wants_to_buy".
+Si el cliente da una dirección completa o pide que se lo manden/envíen, es "thinks_ordered".` },
             { role: 'user', content: `${conversationHistory ? `${conversationHistory}\n\n` : ''}Mensaje del cliente: ${userMessage}` }
           ],
           temperature: 0,
@@ -470,6 +476,16 @@ IMPORTANTE: si el cliente da una dirección completa (calle, número, colonia) o
             },
             state: flowState
           };
+        }
+
+        if (parsed.intent === 'different_product') {
+          // Customer is asking about a different size/product — clear stale link
+          // and let the productFlow + salesFlow handle the new request.
+          console.log(`🔄 [convo] Customer wants a different product than ${lastProductName} — clearing stale link`);
+          await updateConversation(psid, { lastSharedProductLink: null, lastSharedProductId: null });
+          convo.lastSharedProductLink = null;
+          convo.lastSharedProductId = null;
+          // Fall through to masterFlow → productFlow → salesFlow
         }
 
         if (parsed.intent === 'wants_to_buy') {
