@@ -2,10 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import API from '../api';
 import FeatureTip from '../components/FeatureTip';
-import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ScatterChart, Scatter, ZAxis } from 'recharts';
 
-const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6', fontSize: '13px' };
-const COLORS = ['#8B5CF6', '#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#06B6D4', '#EC4899', '#84CC16'];
+
 
 function getDaysAgo(d) { const dt = new Date(); dt.setDate(dt.getDate() - d); return dt.toISOString().split('T')[0]; }
 
@@ -80,38 +78,34 @@ function AdSpendOptimizationView() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">CPA por anuncio</h2>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={ads.filter(a => a.cpa !== null).slice(0, 10).map(a => ({ name: a.name.length > 15 ? a.name.substring(0, 15) + '...' : a.name, cpa: a.cpa, conversions: a.conversions }))} margin={{ left: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="name" tick={{ fill: '#9CA3AF', fontSize: 10 }} />
-                <YAxis yAxisId="left" tick={{ fill: '#9CA3AF', fontSize: 11 }} tickFormatter={v => `$${v}`} />
-                <YAxis yAxisId="right" orientation="right" tick={{ fill: '#9CA3AF', fontSize: 11 }} />
-                <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: "#F3F4F6" }} itemStyle={{ color: "#F3F4F6" }} />
-                <Bar yAxisId="left" dataKey="cpa" name="CPA" fill="#EF4444" fillOpacity={0.7} radius={[3, 3, 0, 0]} />
-                <Line yAxisId="right" type="monotone" dataKey="conversions" name="Conversiones" stroke="#10B981" strokeWidth={2} dot={{ fill: '#10B981', r: 3 }} />
-              </ComposedChart>
-            </ResponsiveContainer>
+      {/* What is this */}
+      <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-white mb-3">¿Cómo leer esta tabla?</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-gray-300">
+          <div className="space-y-3">
+            <div>
+              <p className="text-white font-medium mb-1">Gasto</p>
+              <p>Lo que Facebook te cobró por mostrar este anuncio.</p>
+            </div>
+            <div>
+              <p className="text-white font-medium mb-1">CPA (Costo por Adquisición)</p>
+              <p>Cuánto te costó conseguir cada venta. <span className="text-green-400">Menor = mejor.</span> Se calcula: Gasto ÷ Conversiones.</p>
+            </div>
+            <div>
+              <p className="text-white font-medium mb-1">ROI (Retorno de Inversión)</p>
+              <p>Cuánto dinero regresó por cada peso invertido. <span className="text-green-400">ROI de 10x = por cada $1 invertido regresaron $10.</span></p>
+            </div>
           </div>
-        </div>
-        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-4">Gasto vs Conversiones</h2>
-          <div className="h-72">
-            <ResponsiveContainer width="100%" height="100%">
-              <ScatterChart margin={{ left: 10, right: 20 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis type="number" dataKey="x" name="Gasto" tick={{ fill: '#9CA3AF', fontSize: 11 }} tickFormatter={v => `$${v}`} />
-                <YAxis type="number" dataKey="y" name="Conv." tick={{ fill: '#9CA3AF', fontSize: 11 }} />
-                <ZAxis type="number" dataKey="z" range={[60, 600]} />
-                <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#F3F4F6' }} itemStyle={{ color: '#F3F4F6' }} formatter={(v, n) => n === 'Gasto' ? `$${v.toLocaleString()}` : v.toLocaleString()} />
-                {ads.slice(0, 10).map((a, i) => (
-                  <Scatter key={i} name={a.name} data={[{ x: a.spend, y: a.conversions, z: a.revenue }]} fill={COLORS[i % COLORS.length]} />
-                ))}
-              </ScatterChart>
-            </ResponsiveContainer>
+          <div className="space-y-3">
+            <div>
+              <p className="text-white font-medium mb-1">Eficiencia</p>
+              <div className="space-y-1">
+                <p><span className="text-green-400">Óptimo</span> (ROI ≥ 20x) — Está funcionando muy bien, considera invertir más.</p>
+                <p><span className="text-cyan-400">Bueno</span> (ROI ≥ 5x) — Funciona bien, mantener.</p>
+                <p><span className="text-amber-400">Moderado</span> (ROI ≥ 1x) — Genera más de lo que cuesta pero podría mejorar.</p>
+                <p><span className="text-red-400">Decreciente</span> (ROI &lt; 1x) — Estás perdiendo dinero, reducir o pausar.</p>
+              </div>
+            </div>
           </div>
         </div>
       </div>
