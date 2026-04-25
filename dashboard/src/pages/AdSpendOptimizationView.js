@@ -12,6 +12,7 @@ function AdSpendOptimizationView() {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState(30);
+  const [expandedAd, setExpandedAd] = useState(null);
 
   const dateFrom = useMemo(() => getDaysAgo(range), [range]);
   const dateTo = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -121,6 +122,7 @@ function AdSpendOptimizationView() {
                 <th className="px-6 py-3">Anuncio</th>
                 <th className="px-4 py-3 text-right">Gasto</th>
                 <th className="px-4 py-3 text-right">Conv.</th>
+                <th className="px-4 py-3 text-right">En objetivo</th>
                 <th className="px-4 py-3 text-right">CPA</th>
                 <th className="px-4 py-3 text-right">ROI</th>
                 <th className="px-4 py-3">Eficiencia</th>
@@ -129,17 +131,60 @@ function AdSpendOptimizationView() {
             </thead>
             <tbody className="divide-y divide-gray-700/50">
               {ads.map((a, i) => (
-                <tr key={i} className="hover:bg-gray-700/20">
-                  <td className="px-6 py-3 text-sm text-white font-medium max-w-[200px] truncate" title={a.name}>{a.name}</td>
-                  <td className="px-4 py-3 text-right text-sm text-red-400">{fmt(a.spend)}</td>
-                  <td className="px-4 py-3 text-right text-sm text-green-400">{a.conversions}</td>
-                  <td className="px-4 py-3 text-right text-sm text-white">{a.cpa !== null ? fmt(a.cpa) : '—'}</td>
-                  <td className="px-4 py-3 text-right text-sm text-green-400">{a.roi}x</td>
-                  <td className="px-4 py-3">
-                    <span className={`text-xs px-2 py-0.5 rounded border ${effColor[a.efficiency]}`}>{effLabel[a.efficiency]}</span>
-                  </td>
-                  <td className="px-4 py-3 text-sm text-gray-300">{a.recommendation}</td>
-                </tr>
+                <React.Fragment key={i}>
+                  <tr className="hover:bg-gray-700/20 cursor-pointer" onClick={() => setExpandedAd(expandedAd === i ? null : i)}>
+                    <td className="px-6 py-3">
+                      <div className="flex items-center gap-2">
+                        <svg className={`w-3 h-3 text-gray-500 transition-transform ${expandedAd === i ? 'rotate-90' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                        <div>
+                          <span className="text-sm text-white font-medium">{a.name}</span>
+                          {a.targetProduct && <p className="text-xs text-gray-500">Objetivo: {a.targetProduct}</p>}
+                        </div>
+                      </div>
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm text-red-400">{fmt(a.spend)}</td>
+                    <td className="px-4 py-3 text-right text-sm text-green-400">{a.conversions}</td>
+                    <td className="px-4 py-3 text-right text-sm">
+                      {a.conversions > 0 ? (
+                        <span className={a.crossSellPct > 30 ? 'text-amber-400' : 'text-green-400'}>
+                          {a.onTarget} <span className="text-gray-500">({100 - a.crossSellPct}%)</span>
+                        </span>
+                      ) : '—'}
+                    </td>
+                    <td className="px-4 py-3 text-right text-sm text-white">{a.cpa !== null ? fmt(a.cpa) : '—'}</td>
+                    <td className="px-4 py-3 text-right text-sm text-green-400">{a.roi}x</td>
+                    <td className="px-4 py-3">
+                      <span className={`text-xs px-2 py-0.5 rounded border ${effColor[a.efficiency]}`}>{effLabel[a.efficiency]}</span>
+                    </td>
+                    <td className="px-4 py-3 text-sm text-gray-300">{a.recommendation}</td>
+                  </tr>
+                  {expandedAd === i && a.products?.length > 0 && (
+                    <tr>
+                      <td colSpan={8} className="px-6 py-4 bg-gray-900/30">
+                        <div className="flex flex-col gap-3">
+                          <p className="text-xs text-gray-400 font-medium uppercase">Desglose de ventas reales</p>
+                          <div className="grid grid-cols-2 md:grid-cols-5 gap-3">
+                            {a.products.map((p, j) => (
+                              <div key={j} className="bg-gray-800/50 border border-gray-700/30 rounded-lg p-3">
+                                <p className="text-sm text-white font-medium">{p.product}</p>
+                                <p className="text-xs text-gray-400 mt-1">{p.count} ventas · {fmt(p.revenue)}</p>
+                                <div className="w-full h-1.5 bg-gray-700 rounded-full mt-2">
+                                  <div className="h-full rounded-full bg-green-500" style={{ width: `${a.conversions > 0 ? (p.count / a.conversions * 100) : 0}%` }}></div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                          {a.crossSellPct > 0 && (
+                            <p className="text-xs text-amber-400">
+                              ⚠️ {a.crossSellPct}% de las ventas fueron de un producto diferente al objetivo del anuncio.
+                              {a.crossSellPct > 30 && ' Considera ajustar el contenido del anuncio o redirigir el flujo.'}
+                            </p>
+                          )}
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </React.Fragment>
               ))}
             </tbody>
           </table>

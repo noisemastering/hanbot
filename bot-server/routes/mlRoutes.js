@@ -572,6 +572,38 @@ router.get('/spend-optimization', async (req, res) => {
     const convMap = {};
     convData.forEach(c => convMap[c._id] = c);
 
+    // Product breakdown per ad — what actually sold vs what the ad promoted
+    const productBreakdown = await ClickLog.aggregate([
+      { $match: { converted: true, adId: { $ne: null }, ...(hasDate ? { createdAt: dateMatch } : {}) } },
+      { $group: { _id: { orderId: '$conversionData.orderId', adId: '$adId' }, item: { $first: '$conversionData.itemTitle' }, revenue: { $first: '$conversionData.totalAmount' } } },
+      { $group: { _id: { adId: '$_id.adId', item: '$item' }, count: { $sum: 1 }, revenue: { $sum: '$revenue' } } },
+      { $sort: { count: -1 } }
+    ]);
+
+    // Build per-ad product map
+    const adProductMap = {};
+    for (const row of productBreakdown) {
+      const adId = row._id.adId;
+      if (!adProductMap[adId]) adProductMap[adId] = [];
+      // Extract size from title
+      const title = row._id.item || '';
+      const sizeMatch = title.match(/(\d+)\s*m?\s*[xX×]\s*(\d+)\s*m/);
+      const shortName = sizeMatch ? `${sizeMatch[1]}x${sizeMatch[2]}m` : title.slice(0, 30);
+      adProductMap[adId].push({ product: shortName, count: row.count, revenue: Math.round(row.revenue) });
+    }
+
+    // Get ad target product from Ad model (convoFlowRef + promoId)
+    const Ad = require('../models/Ad');
+    require('../models/Promo');
+    const adDocs = await Ad.find({}, 'fbAdId name convoFlowRef promoId').populate('promoId', 'name promoProductIds').lean();
+    const adTargetMap = {};
+    adDocs.forEach(a => {
+      let target = null;
+      if (a.promoId?.name) target = a.promoId.name;
+      else if (a.convoFlowRef) target = a.convoFlowRef.replace('convo_', '').replace(/([A-Z])/g, ' $1').trim();
+      adTargetMap[a.fbAdId] = target;
+    });
+
     // Merge and analyze
     const ads = (fbData.data || []).map(row => {
       const spend = parseFloat(row.spend || 0);
@@ -596,6 +628,29 @@ router.get('/spend-optimization', async (req, res) => {
       else if (efficiency === 'no_conversions') recommendation = 'Revisar flujo o pausar';
       else recommendation = 'Datos insuficientes';
 
+      // Product breakdown for this ad
+      const products = adProductMap[row.ad_id] || [];
+      const targetProduct = adTargetMap[row.ad_id] || null;
+      const totalOrders = products.reduce((s, p) => s + p.count, 0);
+
+      // Determine on-target vs cross-sell
+      let onTarget = 0;
+      let crossSell = [];
+      if (targetProduct && products.length > 0) {
+        // Match target by checking if product name contains the target keyword
+        const targetLower = (targetProduct || '').toLowerCase();
+        products.forEach(p => {
+          const pLower = (p.product || '').toLowerCase();
+          // Simple match: if target mentions a size, match by size; otherwise match by keyword
+          const sizeMatch = targetLower.match(/(\d+)\s*x\s*(\d+)/);
+          const isOnTarget = sizeMatch
+            ? pLower.includes(`${sizeMatch[1]}x${sizeMatch[2]}`)
+            : pLower.includes(targetLower.split(' ')[0]);
+          if (isOnTarget) onTarget += p.count;
+          else crossSell.push(p);
+        });
+      }
+
       return {
         adId: row.ad_id,
         name: row.ad_name,
@@ -607,7 +662,12 @@ router.get('/spend-optimization', async (req, res) => {
         cpa: cpa !== null ? Math.round(cpa) : null,
         roi: +roi.toFixed(1),
         efficiency,
-        recommendation
+        recommendation,
+        targetProduct,
+        products: products.slice(0, 5),
+        onTarget,
+        crossSellCount: totalOrders - onTarget,
+        crossSellPct: totalOrders > 0 ? Math.round((totalOrders - onTarget) / totalOrders * 100) : 0
       };
     }).filter(a => a.spend > 0).sort((a, b) => b.revenue - a.revenue);
 
