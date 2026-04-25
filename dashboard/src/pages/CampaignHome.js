@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo, useRef, useCallback } from "react"
 import { useNavigate } from "react-router-dom";
 import API from "../api";
 import { abbrState } from "../utils/stateAbbr";
+import FeatureTip from "../components/FeatureTip";
 import {
   ComposedChart,
   Bar,
@@ -466,13 +467,15 @@ function CampaignHome() {
             />
           </div>
         )}
-        <button
-          onClick={runCorrelation}
-          disabled={correlating}
-          className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50 transition-all"
-        >
-          {correlating ? `${syncProgress}%` : "Correlacionar"}
-        </button>
+        <FeatureTip id="campaign-correlate" title="Correlacionar ventas" text="Conecta las órdenes de Mercado Libre con los clicks del bot para calcular ingresos y conversiones. Ejecuta esto periódicamente para mantener los datos actualizados." position="left">
+          <button
+            onClick={runCorrelation}
+            disabled={correlating}
+            className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50 transition-all"
+          >
+            {correlating ? `${syncProgress}%` : "Correlacionar"}
+          </button>
+        </FeatureTip>
       </div>
 
       {/* Geography + Gender + Channel + Products donuts */}

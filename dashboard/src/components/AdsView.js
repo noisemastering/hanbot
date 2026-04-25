@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import AdModal from './AdModal';
 import API from '../api';
 import { useTranslation } from '../i18n';
+import FeatureTip from './FeatureTip';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -329,16 +330,18 @@ function AdsView() {
           <p className="text-gray-400 mt-2">{ads.length} anuncios en total</p>
         </div>
         <div className="flex items-center gap-3">
-          <button
-            onClick={syncFromFacebook}
-            disabled={syncing}
-            className="px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center space-x-2"
-          >
-            <svg className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-            </svg>
-            <span>{syncing ? 'Sincronizando...' : 'Sync Facebook'}</span>
-          </button>
+          <FeatureTip id="ads-sync-fb" title="Sincronizar con Facebook" text="Importa campañas, ad sets y anuncios desde tu cuenta de Facebook Ads. Ejecútalo cuando crees anuncios nuevos en Facebook." position="bottom">
+            <button
+              onClick={syncFromFacebook}
+              disabled={syncing}
+              className="px-5 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 transition-colors flex items-center space-x-2"
+            >
+              <svg className={`w-5 h-5 ${syncing ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+              </svg>
+              <span>{syncing ? 'Sincronizando...' : 'Sync Facebook'}</span>
+            </button>
+          </FeatureTip>
           <button
             onClick={() => {
               setEditingAd(null);
@@ -518,7 +521,11 @@ function AdsView() {
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[18%]">{t('common.ad')}</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[13%]">Ad Set</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[16%]">{t('common.campaign')}</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[14%]">Flujo</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[14%]">
+                    <FeatureTip id="ads-flujo-col" title="Flujo de conversación" text="El flujo determina cómo el bot atiende a quien entra por este anuncio. Si dice ⚠️ Genérico, el bot no sabe qué producto ofrecer y la conversión será menor." position="bottom">
+                      <span>Flujo</span>
+                    </FeatureTip>
+                  </th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[12%]">Link Directo</th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[10%]">{t('common.status')}</th>
                   <th className="px-3 py-3 text-right text-xs font-medium text-gray-400 uppercase w-[7%]">{t('common.actions')}</th>

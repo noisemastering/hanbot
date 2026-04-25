@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import API from '../api';
+import FeatureTip from '../components/FeatureTip';
 
 // ML icon (shopping cart)
 const MLIcon = () => (
@@ -160,12 +161,14 @@ function CRMSalesView() {
     <div className="p-6 space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-white">Ventas</h1>
-        <button
-          onClick={() => { setShowAddSale(!showAddSale); setSaleSuccess(null); }}
-          className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-all"
-        >
-          {showAddSale ? 'Cerrar' : '+ Registrar Venta'}
-        </button>
+        <FeatureTip id="crm-add-sale" title="Registrar venta manual" text="Registra ventas que no pasaron por Mercado Libre — como ventas directas, por teléfono o en tienda. Puedes registrar ventas de hasta 30 días atrás." position="left">
+          <button
+            onClick={() => { setShowAddSale(!showAddSale); setSaleSuccess(null); }}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 transition-all"
+          >
+            {showAddSale ? 'Cerrar' : '+ Registrar Venta'}
+          </button>
+        </FeatureTip>
       </div>
 
       {/* Add Sale Form */}

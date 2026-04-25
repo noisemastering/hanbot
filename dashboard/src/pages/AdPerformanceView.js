@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import API from '../api';
+import FeatureTip from '../components/FeatureTip';
 import {
   ComposedChart,
   Bar,
@@ -182,7 +183,9 @@ function AdPerformanceView() {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" />
             </svg>
           </button>
-          <h1 className="text-2xl font-bold text-white">Rendimiento de Anuncios</h1>
+          <FeatureTip id="perf-overview" title="Desempeño de anuncios" text="Aquí ves el rendimiento de TODOS tus anuncios: cuánto invertiste, cuántos clicks, conversiones e ingresos generó cada uno. Los datos de inversión vienen de Facebook y las ventas de Mercado Libre." position="bottom" step="Nuevo">
+            <h1 className="text-2xl font-bold text-white">Rendimiento de Anuncios</h1>
+          </FeatureTip>
         </div>
         <div className="flex gap-2">
           {[7, 30, 90].map((d) => (

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import API from '../api';
 import { abbrState } from '../utils/stateAbbr';
+import FeatureTip from '../components/FeatureTip';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6', fontSize: '13px' };
@@ -43,7 +44,9 @@ function CustomerSegmentationView() {
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-white">Segmentación de Clientes</h1>
+            <FeatureTip id="seg-overview" title="Segmentación de clientes" text="Muestra quiénes compran tus productos, dónde están y qué género predomina por estado. Úsalo para decidir a quién dirigir tus campañas de Facebook." position="bottom" step="Nuevo">
+              <h1 className="text-2xl font-bold text-white">Segmentación de Clientes</h1>
+            </FeatureTip>
             <p className="text-sm text-gray-400">{data?.totalCustomers?.toLocaleString() || 0} órdenes únicas analizadas</p>
           </div>
         </div>
