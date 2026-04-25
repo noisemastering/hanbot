@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import API from '../api';
+import FeatureTip from '../components/FeatureTip';
 import {
   ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
 } from 'recharts';
@@ -67,10 +68,12 @@ function SalesForecastView() {
       </div>
 
       {/* Tab selector */}
-      <div className="flex gap-2">
-        <button onClick={() => setTab('global')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === 'global' ? 'bg-green-600 text-white' : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700/50'}`}>Global</button>
-        <button onClick={() => setTab('products')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === 'products' ? 'bg-green-600 text-white' : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700/50'}`}>Por Producto</button>
-      </div>
+      <FeatureTip id="forecast-tabs" title="Vista global vs por producto" text="Global muestra ingresos totales. Por Producto desglosa las ventas y proyección de cada medida." position="bottom">
+        <div className="flex gap-2">
+          <button onClick={() => setTab('global')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === 'global' ? 'bg-green-600 text-white' : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700/50'}`}>Global</button>
+          <button onClick={() => setTab('products')} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${tab === 'products' ? 'bg-green-600 text-white' : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700/50'}`}>Por Producto</button>
+        </div>
+      </FeatureTip>
 
       {/* ─── PRODUCT TAB ─── */}
       {tab === 'products' && productData && (() => {

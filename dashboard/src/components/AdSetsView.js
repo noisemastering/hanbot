@@ -3,6 +3,7 @@ import toast from 'react-hot-toast';
 import AdSetModal from './AdSetModal';
 import { useTranslation } from '../i18n';
 import API from '../api';
+import FeatureTip from './FeatureTip';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -112,7 +113,9 @@ function AdSetsView() {
     <div>
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-white">{t('adSets.title')}</h1>
+          <FeatureTip id="adsets-overview" title="Ad Sets" text="Lista de todos tus conjuntos de anuncios agrupados por estado. Click en uno para ver sus detalles." position="bottom">
+            <h1 className="text-3xl font-bold text-white">{t('adSets.title')}</h1>
+          </FeatureTip>
           <p className="text-gray-400 mt-2">{t('adSets.groupedByCampaign')}</p>
         </div>
         <div className="flex items-center gap-3">

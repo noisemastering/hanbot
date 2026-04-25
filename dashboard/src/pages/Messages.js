@@ -3,6 +3,7 @@ import API from "../api";
 import TrackedLinkGenerator from "../components/TrackedLinkGenerator";
 import ManualSaleForm from "../components/ManualSaleForm";
 import { useTranslation } from '../i18n';
+import FeatureTip from '../components/FeatureTip';
 
 const PRODUCT_LABELS = {
   malla_sombra_raschel: "Malla Raschel",
@@ -875,9 +876,11 @@ function Messages() {
       {/* SECTION 2: All Conversations Table with Date Filtering */}
       <div>
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "1rem" }}>
-          <h2 style={{ color: "white", margin: 0, fontSize: "1.3rem", fontWeight: "bold" }}>
-            💬 {t('messages.allConversations')} - {totalConversations !== 1 ? t('messages.conversationCountPlural', { count: totalConversations }) : t('messages.conversationCount', { count: totalConversations })}
-          </h2>
+          <FeatureTip id="messages-search" title="Conversaciones" text="Aquí aparecen todas las conversaciones del bot. Haz click en una para ver el historial completo y tomar el control." position="bottom">
+            <h2 style={{ color: "white", margin: 0, fontSize: "1.3rem", fontWeight: "bold" }}>
+              💬 {t('messages.allConversations')} - {totalConversations !== 1 ? t('messages.conversationCountPlural', { count: totalConversations }) : t('messages.conversationCount', { count: totalConversations })}
+            </h2>
+          </FeatureTip>
           {conversationsNeedingHelp > 0 && (
             <div style={{
               backgroundColor: "#ff5252",
@@ -1393,19 +1396,21 @@ function Messages() {
                 >
                   {showLinkGenerator ? `✕ ${t('messages.closeLink')}` : `🔗 ${t('messages.generateLink')}`}
                 </button>
-                <button
-                  onClick={() => { setShowSaleForm(!showSaleForm); setShowLinkGenerator(false); }}
-                  style={{
-                    padding: "8px 16px",
-                    backgroundColor: showSaleForm ? "#4caf50" : "#388e3c",
-                    color: "white",
-                    border: "none",
-                    borderRadius: "8px",
-                    cursor: "pointer"
-                  }}
-                >
-                  {showSaleForm ? `✕ ${t('messages.closeSale')}` : `💲 ${t('messages.registerSale')}`}
-                </button>
+                <FeatureTip id="messages-sale" title="Registrar venta" text="Registra una venta manual para esta conversación. Se vincula automáticamente al cliente." position="left">
+                  <button
+                    onClick={() => { setShowSaleForm(!showSaleForm); setShowLinkGenerator(false); }}
+                    style={{
+                      padding: "8px 16px",
+                      backgroundColor: showSaleForm ? "#4caf50" : "#388e3c",
+                      color: "white",
+                      border: "none",
+                      borderRadius: "8px",
+                      cursor: "pointer"
+                    }}
+                  >
+                    {showSaleForm ? `✕ ${t('messages.closeSale')}` : `💲 ${t('messages.registerSale')}`}
+                  </button>
+                </FeatureTip>
                 <button
                   onClick={() => handleResumeBot(selectedPsid)}
                   disabled={resumingBot}

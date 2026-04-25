@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from "react";
 import API from "../api";
+import FeatureTip from '../components/FeatureTip';
 
 const COLORS = {
   blue: "#3B82F6",
@@ -99,7 +100,9 @@ function TrackedLinksView() {
 
   return (
     <div className="p-6 space-y-6">
-      <h1 className="text-2xl font-bold text-white">Links de seguimiento</h1>
+      <FeatureTip id="tracked-overview" title="Links de seguimiento" text="Aquí puedes ver todos los links generados por el bot y su estado: si fueron clickeados y si resultaron en compra." position="bottom">
+        <h1 className="text-2xl font-bold text-white">Links de seguimiento</h1>
+      </FeatureTip>
 
       {/* Link Generator */}
       <div className="bg-gray-800/50 backdrop-blur-lg border border-gray-700/50 rounded-xl p-6">

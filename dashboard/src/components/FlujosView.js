@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import FeatureTip from './FeatureTip';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -173,15 +174,17 @@ function FlujosView() {
           <h1 className="text-3xl font-bold text-white">Flujos</h1>
           <p className="text-gray-400 mt-2">Crea y administra flujos de conversación</p>
         </div>
-        <button
-          onClick={openCreate}
-          className="px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center space-x-2"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          <span>Nuevo Flujo</span>
-        </button>
+        <FeatureTip id="flujos-add" title="Crear flujo" text="Crea un flujo de conversación para el bot. Define qué producto maneja, el canal de venta y el perfil del cliente." position="left">
+          <button
+            onClick={openCreate}
+            className="px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center space-x-2"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span>Nuevo Flujo</span>
+          </button>
+        </FeatureTip>
       </div>
 
       {loading ? (

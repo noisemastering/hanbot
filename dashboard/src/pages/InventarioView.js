@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from '../i18n';
+import FeatureTip from '../components/FeatureTip';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -709,7 +710,9 @@ function InventarioView() {
     <div className="p-6">
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">{t('inventory.title')}</h1>
+        <FeatureTip id="inv-overview" title="Inventario" text="Administra precios, stock y estado de cada producto. Los cambios se reflejan en el bot inmediatamente." position="bottom">
+          <h1 className="text-2xl font-bold text-white">{t('inventory.title')}</h1>
+        </FeatureTip>
         <p className="text-gray-400 text-sm mt-1">
           {t('inventory.sellableProducts', { count: totalProducts })}
         </p>

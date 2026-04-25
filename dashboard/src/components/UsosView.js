@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from '../i18n';
+import FeatureTip from './FeatureTip';
 
 function UsosView({
   usos,
@@ -17,16 +18,18 @@ function UsosView({
           <h1 className="text-3xl font-bold text-white">{t('usosGrupos.usosTabLabel')}</h1>
           <p className="text-gray-400 mt-2">{t('usos.subtitle')}</p>
         </div>
-        <button
-          onClick={onAdd}
-          className="px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center space-x-2"
-          title="Agregar uso"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          <span>{t('usos.newUso')}</span>
-        </button>
+        <FeatureTip id="usos-add" title="Usos" text="Define para qué se usa cada producto. El bot usa esta información para recomendar productos." position="bottom">
+          <button
+            onClick={onAdd}
+            className="px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center space-x-2"
+            title="Agregar uso"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span>{t('usos.newUso')}</span>
+          </button>
+        </FeatureTip>
       </div>
 
       {/* Usos Table */}

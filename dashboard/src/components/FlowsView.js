@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { useTranslation } from '../i18n';
 import FlowModal from './FlowModal';
+import FeatureTip from './FeatureTip';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -151,16 +152,18 @@ function FlowsView() {
           </p>
         </div>
 
-        <button
-          onClick={handleCreate}
-          className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors flex items-center gap-2"
-          title="Agregar flujo"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          {t('flows.addFlow')}
-        </button>
+        <FeatureTip id="flows-add" title="Flujos del bot" text="Estos son los flujos legacy del bot. Para los nuevos flujos de conversación, usa la sección 'Flujos' bajo Campañas." position="bottom">
+          <button
+            onClick={handleCreate}
+            className="px-4 py-2 bg-primary-600 hover:bg-primary-700 text-white rounded-lg transition-colors flex items-center gap-2"
+            title="Agregar flujo"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            {t('flows.addFlow')}
+          </button>
+        </FeatureTip>
       </div>
 
       {/* Filters */}

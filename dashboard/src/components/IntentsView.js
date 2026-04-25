@@ -4,6 +4,7 @@ import { useTranslation } from '../i18n';
 import toast from 'react-hot-toast';
 import IntentModal from './IntentModal';
 import IntentCategoryModal from './IntentCategoryModal';
+import FeatureTip from './FeatureTip';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -313,7 +314,9 @@ function IntentsView() {
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between mb-6 gap-4">
         <div>
-          <h2 className="text-2xl font-bold text-white">{t('intentsView.title')}</h2>
+          <FeatureTip id="intents-overview" title="Intenciones" text="Define las intenciones que el bot puede reconocer y las respuestas asociadas." position="bottom">
+            <h2 className="text-2xl font-bold text-white">{t('intentsView.title')}</h2>
+          </FeatureTip>
           <p className="text-sm text-gray-400 mt-1">{t('intentsView.subtitle')}</p>
         </div>
         <div className="flex gap-2">

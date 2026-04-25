@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import API from '../api';
+import FeatureTip from '../components/FeatureTip';
 import { ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ScatterChart, Scatter, ZAxis } from 'recharts';
 
 const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6', fontSize: '13px' };
@@ -42,10 +43,12 @@ function AdSpendOptimizationView() {
           <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-white" title="Volver">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
           </button>
-          <div>
-            <h1 className="text-2xl font-bold text-white">Optimización de Gasto</h1>
-            <p className="text-sm text-gray-400">Análisis de rendimientos por anuncio — ROI total: {totals.roi}x</p>
-          </div>
+          <FeatureTip id="spend-overview" title="Optimización de gasto" text="Analiza el rendimiento de cada anuncio: cuánto gastas vs cuánto vendes. Te recomienda dónde invertir más y dónde reducir." position="bottom">
+            <div>
+              <h1 className="text-2xl font-bold text-white">Optimización de Gasto</h1>
+              <p className="text-sm text-gray-400">Análisis de rendimientos por anuncio — ROI total: {totals.roi}x</p>
+            </div>
+          </FeatureTip>
         </div>
         <div className="flex gap-2">
           {[7, 30, 90].map(d => (

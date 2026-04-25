@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import API from '../api';
 import { useTranslation } from '../i18n';
+import FeatureTip from '../components/FeatureTip';
 import {
   ComposedChart,
   Bar,
@@ -485,13 +486,15 @@ function ConversionsView() {
           >
             {correlating ? t('conversions.processing') : t('conversions.preview')}
           </button>
-          <button
-            onClick={() => runCorrelation(false)}
-            disabled={correlating}
-            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
-          >
-            {correlating ? t('conversions.processing') : t('conversions.syncNow')}
-          </button>
+          <FeatureTip id="conv-correlate" title="Correlacionar" text="Conecta las órdenes de Mercado Libre con los clicks del bot para calcular conversiones e ingresos." position="left">
+            <button
+              onClick={() => runCorrelation(false)}
+              disabled={correlating}
+              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
+            >
+              {correlating ? t('conversions.processing') : t('conversions.syncNow')}
+            </button>
+          </FeatureTip>
         </div>
 
         {/* Correlation Result */}

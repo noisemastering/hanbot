@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import CatalogUpload from './CatalogUpload';
 import { useTranslation } from '../i18n';
+import FeatureTip from './FeatureTip';
 
 const API_URL = process.env.REACT_APP_API_URL || 'https://hanbot-production.up.railway.app';
 
@@ -323,7 +324,9 @@ function ProductFamilyTreeView({
       {/* Header with Add Button */}
       <div className="flex justify-between items-center mb-8">
         <div>
-          <h1 className="text-3xl font-bold text-white">Familias de Productos</h1>
+          <FeatureTip id="families-overview" title="Familias de productos" text="Organiza tus productos en un árbol jerárquico. Los productos vendibles están al final de cada rama." position="bottom">
+            <h1 className="text-3xl font-bold text-white">Familias de Productos</h1>
+          </FeatureTip>
           <p className="text-gray-400 mt-2">Gestiona árboles de familias de productos con relaciones padre-hijo generacionales</p>
         </div>
         <button

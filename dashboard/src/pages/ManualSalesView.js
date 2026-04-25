@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import API from "../api";
 import { useTranslation } from "../i18n";
+import FeatureTip from '../components/FeatureTip';
 
 function ManualSalesView() {
   const { t, locale } = useTranslation();
@@ -52,9 +53,11 @@ function ManualSalesView() {
 
   return (
     <div>
-      <h2 style={{ color: "white", marginBottom: "1.5rem", fontSize: "1.5rem", fontWeight: "bold" }}>
-        {t('manualSales.title')}
-      </h2>
+      <FeatureTip id="manual-sales-overview" title="Ventas manuales" text="Lista de ventas registradas manualmente por el equipo. Estas ventas no provienen de Mercado Libre." position="bottom">
+        <h2 style={{ color: "white", marginBottom: "1.5rem", fontSize: "1.5rem", fontWeight: "bold" }}>
+          {t('manualSales.title')}
+        </h2>
+      </FeatureTip>
 
       {/* Summary Cards */}
       <div style={{ display: "flex", gap: "1rem", marginBottom: "1.5rem", flexWrap: "wrap" }}>

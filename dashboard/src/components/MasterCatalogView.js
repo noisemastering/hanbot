@@ -1,4 +1,5 @@
 import React from 'react';
+import FeatureTip from './FeatureTip';
 
 function MasterCatalogView({
   subfamilies,
@@ -15,16 +16,18 @@ function MasterCatalogView({
           <h1 className="text-3xl font-bold text-white">Catálogo Maestro</h1>
           <p className="text-gray-400 mt-2">Gestiona la información base de productos (materiales, especificaciones, usos)</p>
         </div>
-        <button
-          onClick={onAdd}
-          className="px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center space-x-2"
-          title="Agregar"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          <span>Nueva Entrada</span>
-        </button>
+        <FeatureTip id="catalog-add" title="Catálogo maestro" text="Administra las subfamilias del catálogo de productos." position="bottom">
+          <button
+            onClick={onAdd}
+            className="px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center space-x-2"
+            title="Agregar"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span>Nueva Entrada</span>
+          </button>
+        </FeatureTip>
       </div>
 
       {/* Master Catalog Table */}

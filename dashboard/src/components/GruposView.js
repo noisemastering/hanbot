@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTranslation } from '../i18n';
+import FeatureTip from './FeatureTip';
 
 function GruposView({
   grupos,
@@ -40,16 +41,18 @@ function GruposView({
           <h1 className="text-3xl font-bold text-white">{t('usosGrupos.gruposTabLabel')}</h1>
           <p className="text-gray-400 mt-2">{t('grupos.subtitle')}</p>
         </div>
-        <button
-          onClick={onAdd}
-          className="px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center space-x-2"
-          title="Agregar grupo"
-        >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-          </svg>
-          <span>{t('grupos.newGrupo')}</span>
-        </button>
+        <FeatureTip id="grupos-add" title="Grupos" text="Agrupa productos para organizarlos y facilitar la búsqueda del bot." position="bottom">
+          <button
+            onClick={onAdd}
+            className="px-6 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors flex items-center space-x-2"
+            title="Agregar grupo"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            <span>{t('grupos.newGrupo')}</span>
+          </button>
+        </FeatureTip>
       </div>
 
       {/* Grupos Grid */}

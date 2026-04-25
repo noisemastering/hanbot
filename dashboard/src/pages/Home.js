@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import API from "../api";
 import { useTranslation } from "../i18n";
 import { useAuth } from "../contexts/AuthContext";
+import FeatureTip from '../components/FeatureTip';
 import {
   ComposedChart,
   Bar,
@@ -272,21 +273,23 @@ function Home() {
       {/* Row 1: Date range + KPI Cards */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
         <h1 className="text-2xl font-bold text-white">{t("home.pageTitle")}</h1>
-        <div className="flex gap-2">
-          {[7, 30, 90].map((d) => (
-            <button
-              key={d}
-              onClick={() => setRange(d)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                range === d
-                  ? "bg-blue-600 text-white"
-                  : "bg-gray-800/50 text-gray-400 hover:bg-gray-700/50"
-              }`}
-            >
-              {t(`home.last${d}d`)}
-            </button>
-          ))}
-        </div>
+        <FeatureTip id="home-date-range" title="Periodo de tiempo" text="Cambia el periodo para ver datos de 7, 30 o 90 días." position="bottom">
+          <div className="flex gap-2">
+            {[7, 30, 90].map((d) => (
+              <button
+                key={d}
+                onClick={() => setRange(d)}
+                className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
+                  range === d
+                    ? "bg-blue-600 text-white"
+                    : "bg-gray-800/50 text-gray-400 hover:bg-gray-700/50"
+                }`}
+              >
+                {t(`home.last${d}d`)}
+              </button>
+            ))}
+          </div>
+        </FeatureTip>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -602,13 +605,15 @@ function Home() {
             />
           </div>
         )}
-        <button
-          onClick={runCorrelation}
-          disabled={correlating}
-          className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-all"
-        >
-          {correlating ? `${syncProgress}%` : "Correlacionar"}
-        </button>
+        <FeatureTip id="home-correlate" title="Correlacionar" text="Conecta las órdenes de Mercado Libre con los clicks del bot para medir conversiones." position="left">
+          <button
+            onClick={runCorrelation}
+            disabled={correlating}
+            className="bg-blue-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-blue-700 disabled:opacity-50 transition-all"
+          >
+            {correlating ? `${syncProgress}%` : "Correlacionar"}
+          </button>
+        </FeatureTip>
       </div>
 
       {/* Row 3: Sales Funnel (full width) */}

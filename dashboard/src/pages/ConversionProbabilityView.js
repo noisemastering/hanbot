@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import API from '../api';
+import FeatureTip from '../components/FeatureTip';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 
 const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6', fontSize: '13px' };
@@ -38,10 +39,12 @@ function ConversionProbabilityView() {
           <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-white" title="Volver">
             <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 19l-7-7m0 0l7-7m-7 7h18" /></svg>
           </button>
-          <div>
-            <h1 className="text-2xl font-bold text-white">Probabilidad de Conversión</h1>
-            <p className="text-sm text-gray-400">Scoring de leads — tasa base: {summary.baseRate}% — {data?.totalAnalyzed || 0} analizados</p>
-          </div>
+          <FeatureTip id="conv-prob-overview" title="Probabilidad de conversión" text="Analiza los leads que aún no compran y calcula qué tan probable es que conviertan, basado en su actividad." position="bottom">
+            <div>
+              <h1 className="text-2xl font-bold text-white">Probabilidad de Conversión</h1>
+              <p className="text-sm text-gray-400">Scoring de leads — tasa base: {summary.baseRate}% — {data?.totalAnalyzed || 0} analizados</p>
+            </div>
+          </FeatureTip>
         </div>
         <div className="flex gap-2">
           {[3, 7, 14, 30].map(d => (
