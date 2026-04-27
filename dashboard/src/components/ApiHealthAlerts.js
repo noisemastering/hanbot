@@ -27,7 +27,9 @@ function ApiHealthAlerts() {
   const [loading, setLoading] = useState(true);
   const [aiUsage, setAiUsage] = useState(null);
 
-  const isSuperAdmin = user?.role === 'super_admin' || user?.role === 'admin';
+  const { simulationMode } = useAuth();
+  const effectiveRole = simulationMode?.role || user?.role;
+  const isSuperAdmin = effectiveRole === 'super_admin' || effectiveRole === 'admin';
 
   const fetchAlerts = useCallback(async () => {
     if (!user || !isSuperAdmin) return;
@@ -101,13 +103,18 @@ function ApiHealthAlerts() {
               <p className="text-sm text-gray-300 mt-1">
                 {aiUsage.quotaError
                   ? `Error de cuota detectado: ${aiUsage.quotaError.message?.slice(0, 100)}`
-                  : `Uso del día: ${aiUsage.calls} llamadas, ~${aiUsage.tokens.toLocaleString()} tokens (~$${aiUsage.estimatedCostMXN} MXN). ${aiUsage.budgetUsedPct}% del presupuesto diario.`
+                  : `Hoy: ${aiUsage.dailyCalls} llamadas, ~${aiUsage.dailyTokens?.toLocaleString()} tokens (~$${aiUsage.dailyCostMXN} MXN, ${aiUsage.dailyBudgetPct}% del diario).`
                 }
+              </p>
+              <p className="text-sm text-gray-300 mt-0.5">
+                Mes ({aiUsage.month}): {aiUsage.monthlyCalls?.toLocaleString()} llamadas, ~${ aiUsage.monthlyCostMXN} MXN de ${aiUsage.monthlyBudget ? `$${aiUsage.monthlyBudget}` : '—'} presupuesto ({aiUsage.monthlyBudgetPct}%).
               </p>
               <p className="text-xs text-gray-400 mt-1">
                 {aiUsage.status === 'critical'
                   ? 'El bot no puede responder con IA hasta que se renueven los créditos. Revisa tu cuenta en platform.openai.com.'
-                  : 'Considera revisar el consumo si esto es inusual.'}
+                  : aiUsage.monthlyBudgetPct > 80
+                    ? 'El gasto mensual se acerca al límite. Revisa el consumo o incrementa el presupuesto.'
+                    : 'Consumo diario elevado. Considera revisar si es inusual.'}
               </p>
             </div>
           </div>
