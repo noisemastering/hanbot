@@ -312,21 +312,17 @@ function SalesForecastView() {
             <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
               <h2 className="text-lg font-semibold text-white mb-1">Patrón por día de la semana</h2>
               <p className="text-sm text-gray-500 mb-4">Promedio de ingresos según el día — la proyección usa estos pesos para ajustar</p>
-              <div className="grid grid-cols-7 gap-3">
-                {data.dowSummary.map((d, i) => {
-                  const maxAvg = Math.max(...data.dowSummary.map(x => x.avg));
-                  const pct = maxAvg > 0 ? (d.avg / maxAvg * 100) : 0;
-                  return (
-                    <div key={i} className="bg-gray-900/50 border border-gray-700/30 rounded-lg p-3 text-center">
-                      <p className="text-xs text-gray-400 mb-1">{d.day}</p>
-                      <p className="text-sm font-bold text-white">{fmt(d.avg)}</p>
-                      <div className="w-full h-1.5 bg-gray-700 rounded-full mt-2">
-                        <div className="h-full rounded-full bg-cyan-500" style={{ width: `${pct}%` }}></div>
-                      </div>
-                      <p className="text-xs text-gray-500 mt-1">{d.multiplier}x</p>
-                    </div>
-                  );
-                })}
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={data.dowSummary} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis dataKey="day" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} />
+                    <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                    <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#F3F4F6' }} itemStyle={{ color: '#F3F4F6' }}
+                      formatter={(v, n) => [fmt(v), n]} />
+                    <Bar dataKey="avg" name="Promedio" fill="#06B6D4" fillOpacity={0.7} radius={[4, 4, 0, 0]} />
+                  </ComposedChart>
+                </ResponsiveContainer>
               </div>
             </div>
           )}
@@ -343,7 +339,7 @@ function SalesForecastView() {
                     <XAxis dataKey="label" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} />
                     <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
                     <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#F3F4F6' }} itemStyle={{ color: '#F3F4F6' }} formatter={v => fmt(v)} />
-                    <Bar dataKey="revenue" name="Ingresos semanales" fill="#8B5CF6" fillOpacity={0.7} radius={[4, 4, 0, 0]} />
+                    <Line type="monotone" dataKey="revenue" name="Ingresos semanales" stroke="#8B5CF6" strokeWidth={2.5} dot={{ fill: '#8B5CF6', r: 4 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
