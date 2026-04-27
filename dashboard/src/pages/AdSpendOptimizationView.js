@@ -131,38 +131,6 @@ function AdSpendOptimizationView() {
         </div>
       )}
 
-      {/* What is this */}
-      <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
-        <h2 className="text-lg font-semibold text-white mb-3">¿Cómo leer esta tabla?</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-gray-300">
-          <div className="space-y-3">
-            <div>
-              <p className="text-white font-medium mb-1">Gasto</p>
-              <p>Lo que Facebook te cobró por mostrar este anuncio.</p>
-            </div>
-            <div>
-              <p className="text-white font-medium mb-1">CPA (Costo por Adquisición)</p>
-              <p>Cuánto te costó conseguir cada venta. <span className="text-green-400">Menor = mejor.</span> Se calcula: Gasto ÷ Conversiones.</p>
-            </div>
-            <div>
-              <p className="text-white font-medium mb-1">ROI (Retorno de Inversión)</p>
-              <p>Cuánto dinero regresó por cada peso invertido. <span className="text-green-400">ROI de 10x = por cada $1 invertido regresaron $10.</span></p>
-            </div>
-          </div>
-          <div className="space-y-3">
-            <div>
-              <p className="text-white font-medium mb-1">Eficiencia</p>
-              <div className="space-y-1">
-                <p><span className="text-green-400">Óptimo</span> (ROI ≥ 20x) — Está funcionando muy bien, considera invertir más.</p>
-                <p><span className="text-cyan-400">Bueno</span> (ROI ≥ 5x) — Funciona bien, mantener.</p>
-                <p><span className="text-amber-400">Moderado</span> (ROI ≥ 1x) — Genera más de lo que cuesta pero podría mejorar.</p>
-                <p><span className="text-red-400">Decreciente</span> (ROI &lt; 1x) — Estás perdiendo dinero, reducir o pausar.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-
       <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl">
         <div className="px-6 py-4 border-b border-gray-700/50">
           <h2 className="text-lg font-semibold text-white">Recomendaciones</h2>
@@ -240,6 +208,38 @@ function AdSpendOptimizationView() {
               ))}
             </tbody>
           </table>
+        </div>
+      </div>
+
+      {/* What is this */}
+      <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-white mb-3">¿Cómo leer esta tabla?</h2>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 text-sm text-gray-300">
+          <div className="space-y-3">
+            <div>
+              <p className="text-white font-medium mb-1">Gasto</p>
+              <p>Lo que Facebook te cobró por mostrar este anuncio.</p>
+            </div>
+            <div>
+              <p className="text-white font-medium mb-1">CPA (Costo por Adquisición)</p>
+              <p>Cuánto te costó conseguir cada venta. <span className="text-green-400">Menor = mejor.</span> Se calcula: Gasto ÷ Conversiones.</p>
+            </div>
+            <div>
+              <p className="text-white font-medium mb-1">ROI (Retorno de Inversión)</p>
+              <p>Cuánto dinero regresó por cada peso invertido. <span className="text-green-400">ROI de 10x = por cada $1 invertido regresaron $10.</span></p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <p className="text-white font-medium mb-1">Eficiencia</p>
+              <div className="space-y-1">
+                <p><span className="text-green-400">Óptimo</span> (ROI ≥ 20x) — Está funcionando muy bien, considera invertir más.</p>
+                <p><span className="text-cyan-400">Bueno</span> (ROI ≥ 5x) — Funciona bien, mantener.</p>
+                <p><span className="text-amber-400">Moderado</span> (ROI ≥ 1x) — Genera más de lo que cuesta pero podría mejorar.</p>
+                <p><span className="text-red-400">Decreciente</span> (ROI &lt; 1x) — Estás perdiendo dinero, reducir o pausar.</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
 
