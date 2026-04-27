@@ -2,8 +2,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import API from '../api';
 import FeatureTip from '../components/FeatureTip';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
-
+const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6', fontSize: '13px' };
 
 function getDaysAgo(d) { const dt = new Date(); dt.setDate(dt.getDate() - d); return dt.toISOString().split('T')[0]; }
 
@@ -78,6 +79,57 @@ function AdSpendOptimizationView() {
           <p className="text-xl font-bold text-red-400">{(eff.diminishing || 0) + (eff.no_conversions || 0)}</p>
         </div>
       </div>
+
+      {/* Spend vs Revenue chart */}
+      {ads.length > 0 && (
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+          <h2 className="text-lg font-semibold text-white mb-1">Inversión vs Ingresos por anuncio</h2>
+          <p className="text-sm text-gray-500 mb-4">Rojo = lo que gastas · Verde = lo que vendes · Si el verde es mayor, estás ganando dinero</p>
+          <div className="h-80 overflow-x-auto">
+            <div style={{ minWidth: Math.max(600, ads.filter(a => a.conversions > 0).length * 80) }}>
+              <ResponsiveContainer width="100%" height={320}>
+                <BarChart
+                  data={ads.filter(a => a.spend > 0).slice(0, 15).map(a => ({
+                    name: a.name.length > 18 ? a.name.substring(0, 18) + '...' : a.name,
+                    fullName: a.name,
+                    spend: a.spend,
+                    revenue: a.revenue,
+                    roi: a.roi
+                  }))}
+                  margin={{ top: 5, right: 20, bottom: 60, left: 10 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis dataKey="name" tick={{ fill: '#9CA3AF', fontSize: 10 }} axisLine={{ stroke: '#374151' }} angle={-35} textAnchor="end" height={60} />
+                  <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} tickFormatter={v => v >= 1000 ? `$${(v/1000).toFixed(0)}k` : `$${v}`} />
+                  <Tooltip
+                    contentStyle={tooltipStyle}
+                    labelStyle={{ color: '#F3F4F6' }}
+                    content={({ active, payload }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0].payload;
+                      const profit = d.revenue - d.spend;
+                      return (
+                        <div style={tooltipStyle} className="p-3 text-sm">
+                          <p className="text-white font-medium mb-1">{d.fullName}</p>
+                          <p style={{ color: '#EF4444' }}>Inversión: {fmt(d.spend)}</p>
+                          <p style={{ color: '#10B981' }}>Ingresos: {fmt(d.revenue)}</p>
+                          <p style={{ color: profit >= 0 ? '#10B981' : '#EF4444' }}>
+                            {profit >= 0 ? 'Ganancia' : 'Pérdida'}: {fmt(Math.abs(profit))}
+                          </p>
+                          <p style={{ color: '#9CA3AF' }}>ROI: {d.roi}x</p>
+                        </div>
+                      );
+                    }}
+                  />
+                  <Legend wrapperStyle={{ color: '#9CA3AF' }} />
+                  <Bar dataKey="spend" name="Inversión" fill="#EF4444" fillOpacity={0.7} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="revenue" name="Ingresos" fill="#10B981" fillOpacity={0.7} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* What is this */}
       <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
