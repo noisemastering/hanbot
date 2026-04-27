@@ -25,6 +25,7 @@ function ApiHealthAlerts() {
   const [alerts, setAlerts] = useState([]);
   const [dismissed, setDismissed] = useState({});
   const [loading, setLoading] = useState(true);
+  const [aiUsage, setAiUsage] = useState(null);
 
   const isSuperAdmin = user?.role === 'super_admin' || user?.role === 'admin';
 
@@ -47,6 +48,15 @@ function ApiHealthAlerts() {
       const data = await res.json();
       if (data.success) {
         setAlerts(data.alerts || []);
+      }
+
+      // Also fetch AI usage
+      const aiRes = await fetch(`${API_URL}/health/ai-usage`, {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (aiRes.ok) {
+        const aiData = await aiRes.json();
+        if (aiData.success) setAiUsage(aiData);
       }
     } catch (error) {
       console.error('Error fetching health alerts:', error);
@@ -71,12 +81,40 @@ function ApiHealthAlerts() {
   // Filter out dismissed alerts
   const visibleAlerts = alerts.filter(alert => !dismissed[alert.service]);
 
-  if (!isSuperAdmin || loading || visibleAlerts.length === 0) {
+  const showAiWarning = aiUsage && (aiUsage.status === 'critical' || aiUsage.status === 'warning');
+
+  if (!isSuperAdmin || loading || (visibleAlerts.length === 0 && !showAiWarning)) {
     return null;
   }
 
   return (
     <div className="space-y-2 mb-4">
+      {/* AI Usage Warning */}
+      {showAiWarning && !dismissed['ai-usage'] && (
+        <div className={`${aiUsage.status === 'critical' ? 'bg-red-900/30 border-red-500/50' : 'bg-amber-900/30 border-amber-500/50'} border rounded-lg p-4 flex items-start justify-between`}>
+          <div className="flex items-start space-x-3">
+            <span className="text-2xl">{aiUsage.status === 'critical' ? '🚨' : '⚠️'}</span>
+            <div>
+              <h4 className={`${aiUsage.status === 'critical' ? 'text-red-400' : 'text-amber-400'} font-semibold`}>
+                {aiUsage.status === 'critical' ? 'OpenAI — Créditos agotados o límite alcanzado' : 'OpenAI — Uso elevado'}
+              </h4>
+              <p className="text-sm text-gray-300 mt-1">
+                {aiUsage.quotaError
+                  ? `Error de cuota detectado: ${aiUsage.quotaError.message?.slice(0, 100)}`
+                  : `Uso del día: ${aiUsage.calls} llamadas, ~${aiUsage.tokens.toLocaleString()} tokens (~$${aiUsage.estimatedCostMXN} MXN). ${aiUsage.budgetUsedPct}% del presupuesto diario.`
+                }
+              </p>
+              <p className="text-xs text-gray-400 mt-1">
+                {aiUsage.status === 'critical'
+                  ? 'El bot no puede responder con IA hasta que se renueven los créditos. Revisa tu cuenta en platform.openai.com.'
+                  : 'Considera revisar el consumo si esto es inusual.'}
+              </p>
+            </div>
+          </div>
+          <button onClick={() => handleDismiss('ai-usage')} className="text-gray-400 hover:text-white text-lg ml-4" title="Cerrar">×</button>
+        </div>
+      )}
+
       {visibleAlerts.map((alert) => (
         <div
           key={alert.service}

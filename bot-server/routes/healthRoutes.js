@@ -29,6 +29,16 @@ const authenticate = async (req, res, next) => {
   }
 };
 
+// GET /health/ai-usage - OpenAI usage and budget status
+router.get("/ai-usage", authenticate, async (req, res) => {
+  try {
+    const { getStats } = require('../utils/aiUsageTracker');
+    res.json({ success: true, ...getStats() });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // GET /health/status - Get current health status for all services
 router.get("/status", authenticate, async (req, res) => {
   try {

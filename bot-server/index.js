@@ -1,5 +1,28 @@
 // Load environment variables from .env file
 require('dotenv').config();
+
+// Monkey-patch OpenAI SDK to track all API calls for usage monitoring.
+// Must run before any module imports OpenAI.
+const { recordCall, recordError } = require('./utils/aiUsageTracker');
+const OrigOpenAI = require('openai').OpenAI;
+const _origCreate = OrigOpenAI.prototype._origCreate; // save for safety
+require('openai').OpenAI = class extends OrigOpenAI {
+  constructor(...args) {
+    super(...args);
+    const origChat = this.chat.completions.create.bind(this.chat.completions);
+    this.chat.completions.create = async function (...callArgs) {
+      try {
+        const result = await origChat(...callArgs);
+        if (result?.usage) recordCall(result.model || 'unknown', result.usage.prompt_tokens, result.usage.completion_tokens);
+        return result;
+      } catch (err) {
+        recordError(err);
+        throw err;
+      }
+    };
+  }
+};
+
 const Message = require('./models/Message');
 
 
