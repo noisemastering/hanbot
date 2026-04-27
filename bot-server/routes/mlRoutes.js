@@ -46,7 +46,7 @@ async function getMonthlyBreakdown() {
 }
 
 // ─── 1. SALES FORECAST ─────────────────────────────────────────────────────
-// Linear regression on daily revenue, projects 7 days forward.
+// Day-of-week adjusted forecast with confidence bands and weekly moving average.
 router.get('/forecast', async (req, res) => {
   try {
     const { days = 60 } = req.query;
@@ -65,38 +65,85 @@ router.get('/forecast', async (req, res) => {
       return res.json({ success: true, data: { history: [], forecast: [], trend: 0, r2: 0 } });
     }
 
-    // Build data points: x = day index, y = revenue
-    const points = daily.map((d, i) => [i, d.revenue]);
-    const regression = ss.linearRegression(points);
-    const line = ss.linearRegressionLine(regression);
-    const r2 = ss.rSquared(points, line);
+    // ── Day-of-week average multipliers ──
+    const DOW_NAMES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const dowBuckets = [[], [], [], [], [], [], []];
+    daily.forEach(d => {
+      const dow = new Date(d._id + 'T12:00:00').getDay();
+      dowBuckets[dow].push(d.revenue);
+    });
+    const overallMean = ss.mean(daily.map(d => d.revenue));
+    const dowAvg = dowBuckets.map(b => b.length > 0 ? ss.mean(b) : overallMean);
+    const dowMultiplier = dowAvg.map(a => overallMean > 0 ? a / overallMean : 1);
 
-    // Format history
-    const history = daily.map((d, i) => ({
-      date: d._id,
-      dateLabel: new Date(d._id + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }),
-      revenue: Math.round(d.revenue),
-      orders: d.orders,
-      trendLine: Math.round(line(i))
-    }));
+    // ── 7-day moving average for smoothed trend ──
+    const movingAvg = daily.map((d, i) => {
+      if (i < 6) return null;
+      const window = daily.slice(i - 6, i + 1).map(w => w.revenue);
+      return Math.round(ss.mean(window));
+    });
 
-    // Forecast next 7 days
-    const forecast = [];
-    const lastIdx = points.length;
-    for (let i = 0; i < 7; i++) {
-      const d = new Date();
-      d.setDate(d.getDate() + i + 1);
-      const dateStr = d.toISOString().split('T')[0];
-      const projected = Math.max(0, Math.round(line(lastIdx + i)));
-      forecast.push({
-        date: dateStr,
-        dateLabel: d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }),
-        revenue: projected,
-        orders: Math.max(0, Math.round(projected / (ss.mean(daily.map(d => d.revenue / d.orders)) || 700)))
+    // ── Weekly aggregation ──
+    const weeks = [];
+    for (let i = 0; i < daily.length; i += 7) {
+      const week = daily.slice(i, Math.min(i + 7, daily.length));
+      if (week.length < 3) continue;
+      weeks.push({
+        startDate: week[0]._id,
+        label: new Date(week[0]._id + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }),
+        revenue: Math.round(week.reduce((s, d) => s + d.revenue, 0)),
+        orders: week.reduce((s, d) => s + d.orders, 0),
+        days: week.length
       });
     }
 
-    // Trend: % change over period
+    // ── Linear regression on WEEKLY data (much cleaner signal) ──
+    const weeklyPoints = weeks.map((w, i) => [i, w.revenue]);
+    const weeklyReg = weeklyPoints.length >= 3 ? ss.linearRegression(weeklyPoints) : { m: 0, b: overallMean * 7 };
+    const weeklyLine = ss.linearRegressionLine(weeklyReg);
+    const weeklyR2 = weeklyPoints.length >= 3 ? ss.rSquared(weeklyPoints, weeklyLine) : 0;
+
+    // ── Confidence band (±1 std dev of residuals) ──
+    const residuals = daily.map((d, i) => d.revenue - (overallMean * dowMultiplier[new Date(d._id + 'T12:00:00').getDay()]));
+    const stdDev = ss.standardDeviation(residuals);
+
+    // ── Format history ──
+    const history = daily.map((d, i) => ({
+      date: d._id,
+      dateLabel: new Date(d._id + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }),
+      dow: DOW_NAMES[new Date(d._id + 'T12:00:00').getDay()],
+      revenue: Math.round(d.revenue),
+      orders: d.orders,
+      movingAvg: movingAvg[i]
+    }));
+
+    // ── Forecast next 14 days with DOW adjustment + confidence ──
+    // Use last 2 weeks' average as base, adjusted by day-of-week
+    const last14 = daily.slice(-14);
+    const recentBase = last14.length > 0 ? ss.mean(last14.map(d => d.revenue)) : overallMean;
+    // Apply weekly trend from regression
+    const weeklySlope = weeklyReg.m / 7; // per day
+
+    const forecast = [];
+    for (let i = 0; i < 14; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() + i + 1);
+      const dow = d.getDay();
+      const trendAdj = recentBase + weeklySlope * i;
+      const dowAdj = trendAdj * dowMultiplier[dow];
+      const projected = Math.max(0, Math.round(dowAdj));
+      forecast.push({
+        date: d.toISOString().split('T')[0],
+        dateLabel: d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }),
+        dow: DOW_NAMES[dow],
+        revenue: projected,
+        upper: Math.round(projected + stdDev),
+        lower: Math.max(0, Math.round(projected - stdDev)),
+        orders: Math.max(0, Math.round(projected / (overallMean / ss.mean(daily.map(d => d.orders)) || 1)))
+      });
+    }
+
+    // ── Trend ──
     const firstWeekAvg = ss.mean(daily.slice(0, 7).map(d => d.revenue));
     const lastWeekAvg = ss.mean(daily.slice(-7).map(d => d.revenue));
     const trend = firstWeekAvg > 0 ? ((lastWeekAvg - firstWeekAvg) / firstWeekAvg * 100) : 0;
@@ -104,17 +151,28 @@ router.get('/forecast', async (req, res) => {
     const totalHistoryRevenue = daily.reduce((s, d) => s + d.revenue, 0);
     const totalForecastRevenue = forecast.reduce((s, d) => s + d.revenue, 0);
 
+    // ── Day-of-week summary ──
+    const dowSummary = DOW_NAMES.map((name, i) => ({
+      day: name,
+      avg: Math.round(dowAvg[i]),
+      multiplier: +dowMultiplier[i].toFixed(2),
+      count: dowBuckets[i].length
+    }));
+
     res.json({
       success: true,
       data: {
         history,
         forecast,
+        weeks,
+        dowSummary,
         trend: +trend.toFixed(1),
-        r2: +r2.toFixed(3),
-        slope: Math.round(regression.m),
+        r2: +weeklyR2.toFixed(3),
+        slope: Math.round(weeklyReg.m),
+        stdDev: Math.round(stdDev),
         totalHistoryRevenue: Math.round(totalHistoryRevenue),
         totalForecastRevenue: Math.round(totalForecastRevenue),
-        avgDailyRevenue: Math.round(ss.mean(daily.map(d => d.revenue))),
+        avgDailyRevenue: Math.round(overallMean),
         monthly: await getMonthlyBreakdown()
       }
     });

@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import API from '../api';
 import FeatureTip from '../components/FeatureTip';
 import {
-  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
+  ComposedChart, Bar, Line, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
 } from 'recharts';
 
 const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6', fontSize: '13px' };
@@ -37,8 +37,8 @@ function SalesForecastView() {
   const chartData = useMemo(() => {
     if (!data) return [];
     return [
-      ...data.history.map(d => ({ ...d, forecast: null })),
-      ...data.forecast.map(d => ({ dateLabel: d.dateLabel, revenue: null, forecast: d.revenue }))
+      ...data.history.map(d => ({ ...d, forecast: null, upper: null, lower: null })),
+      ...data.forecast.map(d => ({ dateLabel: d.dateLabel, dow: d.dow, revenue: null, movingAvg: null, forecast: d.revenue, upper: d.upper, lower: d.lower }))
     ];
   }, [data]);
 
@@ -261,27 +261,94 @@ function SalesForecastView() {
           <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-lg font-semibold text-white">Ingresos diarios + proyección</h2>
-              <div className="flex items-center gap-4 text-xs text-gray-400">
+              <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400">
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block"></span> Real</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-cyan-500 inline-block"></span> Promedio 7d</span>
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-purple-500 inline-block"></span> Proyección</span>
+                <span className="flex items-center gap-1.5"><span className="w-3 h-2 rounded bg-purple-500/20 inline-block"></span> Rango probable</span>
               </div>
             </div>
             <div className="h-80 overflow-x-auto">
-              <div style={{ minWidth: Math.max(800, chartData.length * 28) }}>
+              <div style={{ minWidth: Math.max(800, chartData.length * 22) }}>
               <ResponsiveContainer width="100%" height={320}>
                 <ComposedChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                   <XAxis dataKey="dateLabel" tick={{ fill: '#9CA3AF', fontSize: 10 }} axisLine={{ stroke: '#374151' }} />
                   <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-                  <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#F3F4F6' }} itemStyle={{ color: '#F3F4F6' }} formatter={v => v ? fmt(v) : '—'} />
+                  <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#F3F4F6' }}
+                    content={({ active, payload, label }) => {
+                      if (!active || !payload?.length) return null;
+                      const d = payload[0]?.payload || {};
+                      return (
+                        <div style={tooltipStyle} className="p-3 text-sm">
+                          <p className="text-white font-medium mb-1">{label} {d.dow ? `(${d.dow})` : ''}</p>
+                          {d.revenue != null && <p style={{ color: '#10B981' }}>Real: {fmt(d.revenue)}</p>}
+                          {d.movingAvg != null && <p style={{ color: '#06B6D4' }}>Promedio 7d: {fmt(d.movingAvg)}</p>}
+                          {d.forecast != null && <p style={{ color: '#8B5CF6' }}>Proyección: {fmt(d.forecast)}</p>}
+                          {d.upper != null && <p style={{ color: '#9CA3AF' }}>Rango: {fmt(d.lower)} – {fmt(d.upper)}</p>}
+                          {d.orders != null && d.orders > 0 && <p style={{ color: '#9CA3AF' }}>{d.orders} órdenes</p>}
+                        </div>
+                      );
+                    }}
+                  />
                   <ReferenceLine x={todayLabel} stroke="#6B7280" strokeDasharray="4 4" label={{ value: 'Hoy', fill: '#9CA3AF', fontSize: 11 }} />
+                  {/* Confidence band */}
+                  <Area type="monotone" dataKey="upper" stroke="none" fill="#8B5CF6" fillOpacity={0.08} connectNulls={false} />
+                  <Area type="monotone" dataKey="lower" stroke="none" fill="#1F2937" fillOpacity={1} connectNulls={false} />
+                  {/* History bars */}
                   <Bar dataKey="revenue" name="Ingresos" fill="#10B981" fillOpacity={0.7} radius={[3, 3, 0, 0]} />
-                  <Line type="monotone" dataKey="forecast" name="Proyección" stroke="#8B5CF6" strokeWidth={2} strokeDasharray="6 3" dot={{ fill: '#8B5CF6', r: 3 }} connectNulls={false} />
+                  {/* 7-day moving average */}
+                  <Line type="monotone" dataKey="movingAvg" name="Promedio 7d" stroke="#06B6D4" strokeWidth={2} dot={false} connectNulls={false} />
+                  {/* Forecast line */}
+                  <Line type="monotone" dataKey="forecast" name="Proyección" stroke="#8B5CF6" strokeWidth={2.5} strokeDasharray="6 3" dot={{ fill: '#8B5CF6', r: 3 }} connectNulls={false} />
                 </ComposedChart>
               </ResponsiveContainer>
               </div>
             </div>
           </div>
+
+          {/* Day-of-week pattern */}
+          {data.dowSummary && (
+            <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+              <h2 className="text-lg font-semibold text-white mb-1">Patrón por día de la semana</h2>
+              <p className="text-sm text-gray-500 mb-4">Promedio de ingresos según el día — la proyección usa estos pesos para ajustar</p>
+              <div className="grid grid-cols-7 gap-3">
+                {data.dowSummary.map((d, i) => {
+                  const maxAvg = Math.max(...data.dowSummary.map(x => x.avg));
+                  const pct = maxAvg > 0 ? (d.avg / maxAvg * 100) : 0;
+                  return (
+                    <div key={i} className="bg-gray-900/50 border border-gray-700/30 rounded-lg p-3 text-center">
+                      <p className="text-xs text-gray-400 mb-1">{d.day}</p>
+                      <p className="text-sm font-bold text-white">{fmt(d.avg)}</p>
+                      <div className="w-full h-1.5 bg-gray-700 rounded-full mt-2">
+                        <div className="h-full rounded-full bg-cyan-500" style={{ width: `${pct}%` }}></div>
+                      </div>
+                      <p className="text-xs text-gray-500 mt-1">{d.multiplier}x</p>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
+          {/* Weekly trend */}
+          {data.weeks && data.weeks.length > 0 && (
+            <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+              <h2 className="text-lg font-semibold text-white mb-1">Tendencia semanal</h2>
+              <p className="text-sm text-gray-500 mb-4">R² = {data.r2} (semanal) — pendiente: {fmt(data.slope)}/semana</p>
+              <div className="h-56">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={data.weeks} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                    <XAxis dataKey="label" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} />
+                    <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
+                    <Tooltip contentStyle={tooltipStyle} labelStyle={{ color: '#F3F4F6' }} itemStyle={{ color: '#F3F4F6' }} formatter={v => fmt(v)} />
+                    <Bar dataKey="revenue" name="Ingresos semanales" fill="#8B5CF6" fillOpacity={0.7} radius={[4, 4, 0, 0]} />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
 
           {/* Monthly Comparison */}
           {data.monthly && data.monthly.length > 0 && (
