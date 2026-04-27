@@ -154,7 +154,7 @@ export const AuthProvider = ({ children }) => {
         sales: ['conversations', 'campaigns', 'adsets', 'ads', 'ad-performance', 'products', 'analytics', 'families', 'master-catalog', 'usos']
       },
       user: {
-        campaign_manager: ['campaign-overview', 'conversations', 'campaigns', 'adsets', 'ads', 'ad-performance', 'segmentacion', 'products', 'tracked-links'],
+        campaign_manager: ['campaign-overview', 'conversations', 'campaigns', 'adsets', 'ads', 'ad-performance', 'segmentacion', 'spend-optimization', 'products', 'tracked-links'],
         salesman: ['conversations']
       }
     };

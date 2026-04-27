@@ -275,6 +275,14 @@ const menuItems = [
         )
       },
       {
+        id: "spend-optimization",
+        labelKey: "menu.spendOptimization",
+        path: "/spend-optimization",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        )
+      },
+      {
         id: "flujos",
         labelKey: "menu.flujos",
         path: "/flujos",
@@ -2249,6 +2257,7 @@ function App() {
           <Route path="/click-logs" element={<ClickLogsView />} />
           <Route path="/ad-performance" element={<AdPerformanceView />} />
           <Route path="/segmentacion" element={<CustomerSegmentationView />} />
+          <Route path="/spend-optimization" element={<AdSpendOptimizationView />} />
           <Route path="/ad-performance/:fbAdId" element={<AdDetailView />} />
           <Route path="/geo" element={<GeoDetailView />} />
           <Route path="/conversions" element={<ConversionsView />} />

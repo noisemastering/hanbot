@@ -21,6 +21,7 @@ const es = {
   "menu.ads": "Anuncios",
   "menu.desempeno": "Desempeño",
   "menu.segmentacion": "Segmentación",
+  "menu.spendOptimization": "Optimización",
   "menu.flujos": "Flujos",
   "menu.trackedLinks": "Links de seguimiento",
   "menu.users": "Usuarios",
