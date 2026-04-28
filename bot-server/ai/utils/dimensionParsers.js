@@ -77,8 +77,8 @@ function parseConfeccionadaDimensions(str) {
   // The "de"/"d" is now optional to handle "3 largo x 2 ancho" format
   // Allow filler words between "largo" and connector (e.g., "7 metros de largo verdad i 4 de ancho")
   // Also accept "i" as informal "y"
-  const largoAnchoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*(?:d(?:e)?\s*)?largo\s*(?:\w+\s+)*?(?:x|×|por|[yi])\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*(?:(?:d(?:e)?\s*)?ancho)?/i;
-  const anchoLargoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*(?:d(?:e)?\s*)?ancho\s*(?:\w+\s+)*?(?:x|×|por|[yi])\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*(?:(?:d(?:e)?\s*)?largo)?/i;
+  const largoAnchoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*[,.]?\s*(?:d(?:e)?\s*)?largo\s*(?:\w+\s+)*?(?:x|×|por|[yi])\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*[,.]?\s*(?:(?:d(?:e)?\s*)?ancho)?/i;
+  const anchoLargoPattern = /(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*[,.]?\s*(?:d(?:e)?\s*)?ancho\s*(?:\w+\s+)*?(?:x|×|por|[yi])\s*(\d+(?:\.\d+)?)\s*(?:m(?:trs?|ts|etros?|t)?\.?)?\s*[,.]?\s*(?:(?:d(?:e)?\s*)?largo)?/i;
 
   // Pattern 1b: "N de ancho y de largo M" (number comes AFTER largo)
   // Example: "8 d ancho y d largo 610" -> width=8, height=6.10
