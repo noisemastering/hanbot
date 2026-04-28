@@ -56,7 +56,7 @@ async function handle(userMessage, convo, psid, state = {}) {
   // ── DIMENSION PRE-PROCESSING ──
   // Intercept fractional and oversize dimensions before the standard pipeline.
   // Integer dimensions within catalog range go straight to the pipeline.
-  const dims = parseDimensions(userMessage);
+  const dims = await parseDimensions(userMessage);
 
   if (dims) {
     const w = Math.min(dims.width, dims.height);

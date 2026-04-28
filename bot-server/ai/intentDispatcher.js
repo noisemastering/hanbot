@@ -129,7 +129,7 @@ async function dispatch(classification, context) {
     INTENTS.FRUSTRATION, INTENTS.HUMAN_REQUEST, INTENTS.COMPLAINT,
     INTENTS.GREETING, INTENTS.GOODBYE, INTENTS.THANKS
   ]);
-  if (userMessage && !DIMENSION_SAFE_INTENTS.has(intent) && parseConfeccionadaDimensions(userMessage)) {
+  if (userMessage && !DIMENSION_SAFE_INTENTS.has(intent) && await parseConfeccionadaDimensions(userMessage)) {
     console.log(`📐 Dimensions detected in message — skipping dispatcher for "${intent}", passing to flows`);
     return null;
   }

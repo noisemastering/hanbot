@@ -56,7 +56,7 @@ async function findBySize(w, h) {
 
 async function handle(userMessage, convo, psid, state = {}) {
   // ── DIMENSION PRE-PROCESSING ──
-  const dims = parseDimensions(userMessage);
+  const dims = await parseDimensions(userMessage);
 
   if (dims) {
     const w = Math.min(dims.width, dims.height);
