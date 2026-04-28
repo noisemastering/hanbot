@@ -19,12 +19,14 @@ const convo_confeccionadaRetail = require("./flows/convo_confeccionadaRetail");
 const convo_groundcoverWholesale = require("./flows/convo_groundcoverWholesale");
 const convo_rolloRaschelWholesale = require("./flows/convo_rolloRaschelWholesale");
 const convo_bordeSeparadorWholesale = require("./flows/convo_bordeSeparadorWholesale");
+const convo_confeccionadaSRRetail = require("./flows/convo_confeccionadaSRRetail");
 
 // Register JS-based convo_flows (these have custom handlers like dimension parsing)
 convoFlow.registerFlow('convo_bordeSeparadorRetail', convo_bordeSeparadorRetail);
 convoFlow.registerFlow('convo_bordeSeparadorWholesale', convo_bordeSeparadorWholesale);
 convoFlow.registerFlow('convo_vende_malla', convo_vende_malla);
 convoFlow.registerFlow('convo_confeccionadaRetail', convo_confeccionadaRetail);
+convoFlow.registerFlow('convo_confeccionadaSRRetail', convo_confeccionadaSRRetail);
 convoFlow.registerFlow('convo_groundcoverWholesale', convo_groundcoverWholesale);
 convoFlow.registerFlow('convo_rolloRaschelWholesale', convo_rolloRaschelWholesale);
 

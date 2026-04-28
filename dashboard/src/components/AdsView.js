@@ -16,7 +16,8 @@ const STATUS_STYLE = {
 const CONVO_FLOW_NAMES = {
   convo_bordeSeparadorRetail: "Borde Separador (Menudeo)",
   convo_bordeSeparadorWholesale: "Borde Separador (Mayoreo)",
-  convo_confeccionadaRetail: "Confeccionada (Menudeo)",
+  convo_confeccionadaRetail: "Confeccionada Reforzada (Menudeo)",
+  convo_confeccionadaSRRetail: "Confeccionada Sin Refuerzo (Menudeo)",
   convo_groundcoverWholesale: "Ground Cover (Mayoreo)",
   convo_rolloRaschelWholesale: "Rollo Raschel (Mayoreo)",
   convo_vende_malla: "Vende Malla (Distribuidor)"
