@@ -356,7 +356,6 @@ function SalesForecastView() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis dataKey="label" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} />
                     <YAxis yAxisId="left" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} tickFormatter={v => `$${(v/1000).toFixed(0)}k`} />
-                    <YAxis yAxisId="right" orientation="right" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} />
                     <Tooltip
                       contentStyle={tooltipStyle}
                       labelStyle={{ color: '#F3F4F6' }}
@@ -378,7 +377,6 @@ function SalesForecastView() {
                     />
                     <Bar yAxisId="left" dataKey="revenue" name="Ingresos" fill="#10B981" fillOpacity={0.7} radius={[4, 4, 0, 0]} />
                     <Bar yAxisId="left" dataKey="projected" name="Proyección mes" fill="#8B5CF6" fillOpacity={0.3} radius={[4, 4, 0, 0]} />
-                    <Line yAxisId="right" type="monotone" dataKey="orders" name="Órdenes" stroke="#F59E0B" strokeWidth={2} dot={{ fill: '#F59E0B', r: 3 }} />
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
