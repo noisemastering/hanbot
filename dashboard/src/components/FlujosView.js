@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import FeatureTip from './FeatureTip';
+import FlowWizard from './FlowWizard';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -20,38 +21,16 @@ const VOICES = [
   { value: 'technical', label: 'Técnico' }
 ];
 
-const ENDPOINTS = [
-  { value: 'online_store', label: 'Tienda en línea' },
-  { value: 'human', label: 'Asesor humano' }
-];
 
 function FlujosView() {
   const [flows, setFlows] = useState([]);
-  const [productFamilies, setProductFamilies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showModal, setShowModal] = useState(false);
   const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState(getEmptyForm());
 
-  function getEmptyForm() {
-    return {
-      displayName: '',
-      salesChannel: 'retail',
-      clientProfile: 'buyer',
-      endpointOfSale: 'online_store',
-      voice: 'casual',
-      products: [],
-      installationNote: '',
-      allowListing: false,
-      offersCatalog: false,
-      description: '',
-      active: true
-    };
-  }
 
   useEffect(() => {
     fetchFlows();
-    fetchProducts();
   }, []);
 
   const fetchFlows = async () => {
@@ -67,54 +46,17 @@ function FlujosView() {
     }
   };
 
-  const fetchProducts = async () => {
-    try {
-      const res = await fetch(`${API_URL}/product-families/tree`);
-      const data = await res.json();
-      if (data.success) {
-        // Flatten to root families only
-        const roots = (data.data || []).filter(p => !p.parentId);
-        setProductFamilies(roots);
-      }
-    } catch (err) {
-      console.error('Error fetching products:', err);
-    }
-  };
-
   const openCreate = () => {
     setEditing(null);
-    setForm(getEmptyForm());
     setShowModal(true);
   };
 
   const openEdit = (flow) => {
     setEditing(flow);
-    setForm({
-      displayName: flow.displayName || '',
-      salesChannel: flow.salesChannel || 'retail',
-      clientProfile: flow.clientProfile || 'buyer',
-      endpointOfSale: flow.endpointOfSale || 'online_store',
-      voice: flow.voice || 'casual',
-      products: (flow.products || []).map(p => p._id || p),
-      installationNote: flow.installationNote || '',
-      allowListing: flow.allowListing || false,
-      offersCatalog: flow.offersCatalog || false,
-      description: flow.description || '',
-      active: flow.active !== false
-    });
     setShowModal(true);
   };
 
-  const handleSave = async () => {
-    if (!form.displayName.trim()) {
-      toast.error('El nombre es requerido');
-      return;
-    }
-    if (form.products.length === 0) {
-      toast.error('Selecciona al menos un producto');
-      return;
-    }
-
+  const handleWizardSave = async (payload) => {
     try {
       const url = editing
         ? `${API_URL}/convo-flows/${editing._id}`
@@ -124,10 +66,9 @@ function FlujosView() {
       const res = await fetch(url, {
         method,
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(form)
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
-
       if (data.success) {
         toast.success(editing ? 'Flujo actualizado' : 'Flujo creado');
         setShowModal(false);
@@ -152,15 +93,6 @@ function FlujosView() {
     } catch (err) {
       toast.error('Error: ' + err.message);
     }
-  };
-
-  const toggleProduct = (id) => {
-    setForm(prev => ({
-      ...prev,
-      products: prev.products.includes(id)
-        ? prev.products.filter(p => p !== id)
-        : [...prev.products, id]
-    }));
   };
 
   const channelLabel = (v) => SALES_CHANNELS.find(c => c.value === v)?.label || v;
@@ -244,129 +176,13 @@ function FlujosView() {
         </div>
       )}
 
-      {/* Create/Edit Modal */}
+      {/* Flow Wizard */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-gray-800/95 backdrop-blur-lg border border-gray-700/50 rounded-xl max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col">
-            <div className="px-6 py-4 border-b border-gray-700/50 flex items-center justify-between">
-              <h2 className="text-xl font-bold text-white">{editing ? 'Editar Flujo' : 'Nuevo Flujo'}</h2>
-              <button onClick={() => setShowModal(false)} className="p-2 rounded-lg text-gray-400 hover:bg-gray-700/50 hover:text-white transition-colors" title="Cerrar">
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto p-6 space-y-5">
-              {/* Name */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Nombre</label>
-                <input
-                  type="text"
-                  value={form.displayName}
-                  onChange={(e) => setForm({ ...form, displayName: e.target.value })}
-                  placeholder="Ej: Confeccionada Menudeo"
-                  className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-              </div>
-
-              {/* Description */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Descripción (opcional)</label>
-                <input
-                  type="text"
-                  value={form.description}
-                  onChange={(e) => setForm({ ...form, description: e.target.value })}
-                  placeholder="Breve descripción del flujo"
-                  className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-              </div>
-
-              {/* Core config row */}
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Canal de venta</label>
-                  <select value={form.salesChannel} onChange={(e) => setForm({ ...form, salesChannel: e.target.value })} className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500">
-                    {SALES_CHANNELS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Perfil del cliente</label>
-                  <select value={form.clientProfile} onChange={(e) => setForm({ ...form, clientProfile: e.target.value })} className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500">
-                    {CLIENT_PROFILES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Voz</label>
-                  <select value={form.voice} onChange={(e) => setForm({ ...form, voice: e.target.value })} className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500">
-                    {VOICES.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block text-sm font-medium text-gray-300 mb-2">Cierre de venta</label>
-                  <select value={form.endpointOfSale} onChange={(e) => setForm({ ...form, endpointOfSale: e.target.value })} className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500">
-                    {ENDPOINTS.map(c => <option key={c.value} value={c.value}>{c.label}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              {/* Products */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Productos</label>
-                <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto bg-gray-900/30 border border-gray-700 rounded-lg p-3">
-                  {productFamilies.map(p => (
-                    <label key={p._id} className="flex items-center gap-2 px-2 py-1.5 rounded hover:bg-gray-700/30 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={form.products.includes(p._id)}
-                        onChange={() => toggleProduct(p._id)}
-                        className="rounded border-gray-600 text-primary-500 focus:ring-primary-500"
-                      />
-                      <span className="text-sm text-gray-300">{p.name}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              {/* Installation note */}
-              <div>
-                <label className="block text-sm font-medium text-gray-300 mb-2">Nota de instalación (opcional)</label>
-                <textarea
-                  value={form.installationNote}
-                  onChange={(e) => setForm({ ...form, installationNote: e.target.value })}
-                  rows={2}
-                  placeholder="Instrucciones que el bot menciona al cotizar"
-                  className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
-                />
-              </div>
-
-              {/* Toggles */}
-              <div className="flex items-center gap-6">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={form.allowListing} onChange={(e) => setForm({ ...form, allowListing: e.target.checked })} className="rounded border-gray-600 text-primary-500 focus:ring-primary-500" />
-                  <span className="text-sm text-gray-300">Permitir listar productos</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={form.offersCatalog} onChange={(e) => setForm({ ...form, offersCatalog: e.target.checked })} className="rounded border-gray-600 text-primary-500 focus:ring-primary-500" />
-                  <span className="text-sm text-gray-300">Ofrece catálogo</span>
-                </label>
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} className="rounded border-gray-600 text-primary-500 focus:ring-primary-500" />
-                  <span className="text-sm text-gray-300">Activo</span>
-                </label>
-              </div>
-            </div>
-
-            <div className="px-6 py-4 border-t border-gray-700/50 flex justify-end gap-3">
-              <button onClick={() => setShowModal(false)} className="px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors">
-                Cancelar
-              </button>
-              <button onClick={handleSave} className="px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors">
-                {editing ? 'Guardar' : 'Crear'}
-              </button>
-            </div>
-          </div>
-        </div>
+        <FlowWizard
+          editing={editing}
+          onSave={handleWizardSave}
+          onClose={() => { setShowModal(false); setEditing(null); }}
+        />
       )}
     </div>
   );
