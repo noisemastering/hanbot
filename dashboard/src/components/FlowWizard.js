@@ -12,12 +12,15 @@ const STEPS = [
 export default function FlowWizard({ editing, onSave, onClose }) {
   const [step, setStep] = useState(1);
   const [families, setFamilies] = useState([]);
-  const [subfamilies, setSubfamilies] = useState([]);
   const [saving, setSaving] = useState(false);
 
+  // Navigation stack for drilling into product tree
+  // Each entry: { id, name, children: [...] }
+  const [navStack, setNavStack] = useState([]);
+  const [currentChildren, setCurrentChildren] = useState([]);
+  const [selectedProduct, setSelectedProduct] = useState(null); // { id, name }
+
   const [form, setForm] = useState({
-    selectedFamily: null,
-    selectedSubfamily: null,
     salesChannel: 'retail',
     clientProfile: 'buyer',
     endpointOfSale: 'online_store',
@@ -33,7 +36,6 @@ export default function FlowWizard({ editing, onSave, onClose }) {
     if (editing) {
       setForm(f => ({
         ...f,
-        selectedFamily: editing.products?.[0]?._id || editing.products?.[0] || null,
         salesChannel: editing.salesChannel || 'retail',
         clientProfile: editing.clientProfile || 'buyer',
         endpointOfSale: editing.endpointOfSale || 'online_store',
@@ -43,6 +45,11 @@ export default function FlowWizard({ editing, onSave, onClose }) {
         offersCatalog: editing.offersCatalog || false,
         description: editing.description || ''
       }));
+      // For editing, set the selected product
+      if (editing.products?.[0]) {
+        const p = editing.products[0];
+        setSelectedProduct({ id: p._id || p, name: p.name || '' });
+      }
     }
   }, [editing]);
 
@@ -52,31 +59,69 @@ export default function FlowWizard({ editing, onSave, onClose }) {
       if (data.success) {
         const roots = (data.data || []).filter(p => !p.parentId && !p.sellable);
         setFamilies(roots);
+        setCurrentChildren(roots);
       }
     }).catch(() => {});
   }, []);
 
-  // When family changes, load subfamilies
-  useEffect(() => {
-    if (!form.selectedFamily) { setSubfamilies([]); return; }
-    const family = families.find(f => f._id === form.selectedFamily);
-    if (family?.children) {
-      const subs = family.children.filter(c => !c.sellable);
-      setSubfamilies(subs);
-    } else {
-      // Fetch from API
-      fetch(`${API_URL}/product-families/${form.selectedFamily}/children`).then(r => r.json()).then(data => {
-        if (data.success) setSubfamilies((data.data || []).filter(c => !c.sellable));
-      }).catch(() => setSubfamilies([]));
-    }
-    setForm(f => ({ ...f, selectedSubfamily: null }));
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.selectedFamily, families]);
+  // Fetch children for a family node
+  const fetchChildren = async (familyId) => {
+    try {
+      const res = await fetch(`${API_URL}/product-families/${familyId}/children`);
+      const data = await res.json();
+      if (data.success) return data.data || [];
+    } catch {}
+    return [];
+  };
 
-  const selectedFamilyName = families.find(f => f._id === form.selectedFamily)?.name || '';
-  const selectedSubName = subfamilies.find(s => s._id === form.selectedSubfamily)?.name || '';
-  const productId = form.selectedSubfamily || form.selectedFamily;
-  const productName = selectedSubName || selectedFamilyName;
+  // Drill into a non-sellable family
+  const drillInto = async (family) => {
+    // Get children — from cached tree or API
+    let children = family.children || await fetchChildren(family._id);
+    const nonSellable = children.filter(c => !c.sellable);
+
+    if (nonSellable.length === 0) {
+      // This node's children are all sellable — this IS the target level
+      setSelectedProduct({ id: family._id, name: family.name });
+      return;
+    }
+
+    // Has non-sellable children — drill deeper
+    setNavStack(prev => [...prev, { id: family._id, name: family.name }]);
+    setCurrentChildren(nonSellable);
+    setSelectedProduct(null);
+  };
+
+  // Navigate back in breadcrumb
+  const navigateBack = (toIndex) => {
+    if (toIndex < 0) {
+      // Back to root
+      setNavStack([]);
+      setCurrentChildren(families);
+      setSelectedProduct(null);
+      return;
+    }
+    // Go back to a specific level — re-drill from that point
+    const newStack = navStack.slice(0, toIndex);
+    setNavStack(newStack);
+    // We need to re-fetch children for the target level
+    const targetId = navStack[toIndex].id;
+    const targetFamily = families.find(f => f._id === targetId);
+    if (targetFamily?.children) {
+      const nonSellable = targetFamily.children.filter(c => !c.sellable);
+      setCurrentChildren(nonSellable);
+    } else {
+      fetchChildren(targetId).then(children => {
+        setCurrentChildren(children.filter(c => !c.sellable));
+      });
+    }
+    setSelectedProduct(null);
+  };
+
+  const productId = selectedProduct?.id || null;
+  const productName = selectedProduct?.name || '';
+  // Build full path name for display
+  const fullPathName = [...navStack.map(n => n.name), productName].filter(Boolean).join(' › ');
 
   // Auto-generate display name
   const channelLabel = form.salesChannel === 'retail' ? 'Menudeo' : 'Mayoreo';
@@ -84,7 +129,7 @@ export default function FlowWizard({ editing, onSave, onClose }) {
   const autoName = productName ? `${productName} (${channelLabel})` : '';
 
   const canNext = () => {
-    if (step === 1) return !!form.selectedFamily;
+    if (step === 1) return !!selectedProduct;
     if (step === 2) return true;
     if (step === 3) return true;
     return true;
@@ -146,41 +191,49 @@ export default function FlowWizard({ editing, onSave, onClose }) {
                 <p className="text-sm text-gray-400 mb-1">El flujo maestro se incluye siempre automáticamente.</p>
                 <h3 className="text-lg font-semibold text-white mb-4">¿Para qué familia de productos es este flujo?</h3>
               </div>
-              <div className="grid grid-cols-2 gap-3">
-                {families.map(f => (
-                  <button key={f._id} onClick={() => setForm(prev => ({ ...prev, selectedFamily: f._id }))}
-                    className={`p-4 rounded-xl border text-left transition-all ${
-                      form.selectedFamily === f._id
-                        ? 'bg-primary-500/10 border-primary-500/50 text-white'
-                        : 'bg-gray-900/30 border-gray-700/50 text-gray-300 hover:border-gray-600'
-                    }`}>
-                    <p className="text-sm font-medium">{f.name}</p>
-                    {f.children && <p className="text-xs text-gray-500 mt-1">{f.children.filter(c => !c.sellable).length} subfamilias</p>}
-                  </button>
-                ))}
-              </div>
 
-              {/* Subfamilies */}
-              {subfamilies.length > 0 && (
-                <div>
-                  <h4 className="text-sm font-medium text-gray-300 mb-2">¿Subfamilia específica? (opcional)</h4>
-                  <p className="text-xs text-gray-500 mb-3">Si no seleccionas una, el flujo cubrirá toda la familia.</p>
-                  <div className="grid grid-cols-3 gap-2">
-                    <button onClick={() => setForm(prev => ({ ...prev, selectedSubfamily: null }))}
-                      className={`p-3 rounded-lg border text-sm transition-all ${
-                        !form.selectedSubfamily ? 'bg-primary-500/10 border-primary-500/50 text-white' : 'bg-gray-900/30 border-gray-700/50 text-gray-400 hover:border-gray-600'
-                      }`}>
-                      Toda la familia
+              {/* Breadcrumbs */}
+              {navStack.length > 0 && (
+                <div className="flex items-center gap-1 text-sm flex-wrap">
+                  <button onClick={() => navigateBack(-1)} className="text-primary-400 hover:text-primary-300 transition-colors">
+                    Inicio
+                  </button>
+                  {navStack.map((node, i) => (
+                    <span key={node.id} className="flex items-center gap-1">
+                      <span className="text-gray-600">›</span>
+                      {i < navStack.length - 1 ? (
+                        <button onClick={() => navigateBack(i)} className="text-primary-400 hover:text-primary-300 transition-colors">
+                          {node.name}
+                        </button>
+                      ) : (
+                        <span className="text-white font-medium">{node.name}</span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              {/* Selected product indicator */}
+              {selectedProduct && (
+                <div className="flex items-center gap-3 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
+                  <span className="text-green-400 text-sm">✓</span>
+                  <span className="text-green-300 text-sm font-medium">{fullPathName}</span>
+                  <button onClick={() => setSelectedProduct(null)} className="ml-auto text-gray-400 hover:text-white text-xs">Cambiar</button>
+                </div>
+              )}
+
+              {/* Family/subfamiliy grid */}
+              {!selectedProduct && (
+                <div className="grid grid-cols-2 gap-3">
+                  {currentChildren.map(f => (
+                    <button key={f._id} onClick={() => drillInto(f)}
+                      className="p-4 rounded-xl border text-left transition-all bg-gray-900/30 border-gray-700/50 text-gray-300 hover:border-gray-600 hover:bg-gray-800/50">
+                      <p className="text-sm font-medium text-white">{f.name}</p>
+                      {f.children && f.children.filter(c => !c.sellable).length > 0 && (
+                        <p className="text-xs text-gray-500 mt-1">{f.children.filter(c => !c.sellable).length} subfamilias →</p>
+                      )}
                     </button>
-                    {subfamilies.map(s => (
-                      <button key={s._id} onClick={() => setForm(prev => ({ ...prev, selectedSubfamily: s._id }))}
-                        className={`p-3 rounded-lg border text-sm transition-all ${
-                          form.selectedSubfamily === s._id ? 'bg-primary-500/10 border-primary-500/50 text-white' : 'bg-gray-900/30 border-gray-700/50 text-gray-400 hover:border-gray-600'
-                        }`}>
-                        {s.name}
-                      </button>
-                    ))}
-                  </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -316,14 +369,8 @@ export default function FlowWizard({ editing, onSave, onClose }) {
                 </div>
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-400">Producto</span>
-                  <span className="text-sm text-white">{productName}</span>
+                  <span className="text-sm text-white">{fullPathName}</span>
                 </div>
-                {selectedSubName && (
-                  <div className="flex justify-between">
-                    <span className="text-sm text-gray-400">Subfamilia</span>
-                    <span className="text-sm text-white">{selectedSubName}</span>
-                  </div>
-                )}
                 <div className="flex justify-between">
                   <span className="text-sm text-gray-400">Canal</span>
                   <span className="text-sm text-white">{channelLabel}</span>
