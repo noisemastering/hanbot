@@ -17,6 +17,7 @@ const { updateConversation } = require("../../conversationManager");
 const { executeHandoff } = require("../utils/executeHandoff");
 const { getOrCreateClickLink } = require("../../tracking");
 const { getConversationContext } = require("../middleware/contextManager");
+const { parseConfeccionadaDimensions } = require("../utils/dimensionParsers");
 
 const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 
@@ -357,6 +358,96 @@ function create(manifest) {
     // ── LOAD PRODUCTS (once) ──
     if (!productCache) {
       productCache = await productFlow.loadProducts(manifest.products);
+    }
+
+    // ── DIMENSION PRE-PROCESSING (runs BEFORE everything — like the old custom handlers) ──
+    // If the user message contains dimensions (e.g. "3.60 x 2.50"), handle it directly
+    // without going through masterFlow/promoFlow which would intercept and give wrong answers.
+    const hasSizedProducts = productCache.some(p => p.size && /^\d+x\d+m$/i.test(p.size));
+    if (hasSizedProducts) {
+      const dims = await parseConfeccionadaDimensions(userMessage);
+      if (dims) {
+        console.log(`📏 [convo] Dimension detected: ${dims.width}x${dims.height} — bypassing masterFlow/promoFlow`);
+        // Delegate to productFlow which has the full dimension handling logic
+        const dimResult = await productFlow.handle(userMessage, convo, psid, {
+          familyIds: manifest.products,
+          products: productCache,
+          manifests: getOtherManifests(manifest.name),
+          basket: flowState.basket,
+          lastQuotedProducts: flowState.lastQuotedProducts || [],
+          conversationHistory
+        });
+
+        if (dimResult) {
+          // Dimension handoff (oversize, fractional insist, not in catalog)
+          if (dimResult.type === 'dimension_handoff') {
+            const handoffResp = await executeHandoff(psid, convo, userMessage, {
+              reason: `${dimResult.reason}: ${dimResult.width}x${dimResult.height}m`,
+              responsePrefix: dimResult.message,
+              lastIntent: `${dimResult.reason}_handoff`,
+              timingStyle: 'elaborate',
+              includeVideo: dimResult.reason === 'oversize'
+            });
+            return { response: handoffResp, state: flowState };
+          }
+
+          // Dimension match (exact or rounded)
+          if (dimResult.type === 'dimension_match') {
+            if (dimResult.fractionalKey) {
+              await updateConversation(psid, { lastFractionalSize: dimResult.fractionalKey });
+            }
+
+            let quotableProducts = dimResult.products;
+            if (manifest.salesChannel === 'retail' && quotableProducts.length === 1) {
+              quotableProducts = await Promise.all(quotableProducts.map(async p => {
+                if (p.link) {
+                  const tracked = await getOrCreateClickLink(psid, p.link, {
+                    productName: p.name, productId: p.productId,
+                    reason: dimResult.exact ? 'retail_quote' : 'retail_fractional_round'
+                  });
+                  return { ...p, link: tracked };
+                }
+                return p;
+              }));
+            }
+
+            flowState.lastQuotedProducts = quotableProducts;
+
+            const salesResult = await salesFlow.handle(userMessage, convo, psid, {
+              products: quotableProducts,
+              voice: manifest.voice || 'casual',
+              salesChannel: manifest.salesChannel === 'retail' ? 'mercado_libre' : 'direct',
+              customerName,
+              clientData: flowState.clientData,
+              allowListing: manifest.allowListing || false,
+              offersCatalog: manifest.offersCatalog || false,
+              colorNote: manifest.promo?.colorNote || null,
+              conversationHistory,
+              dimensionContext: {
+                explanation: dimResult.explanation || dimResult.sizeText || null,
+                exact: dimResult.exact,
+                convertedFromFeet: dimResult.convertedFromFeet
+              }
+            });
+
+            if (salesResult) {
+              if (salesResult.type === 'flow_switch') {
+                return await resolveFlowSwitch(salesResult, manifest, flowState, userMessage, convo, psid);
+              }
+              if (salesResult.products) flowState.lastQuotedProducts = salesResult.products;
+              if (salesResult.clientData) flowState.clientData = salesResult.clientData;
+              const sharedProduct = quotableProducts.find(p => p.link);
+              if (sharedProduct) {
+                await updateConversation(psid, {
+                  lastSharedProductId: sharedProduct.productId,
+                  lastSharedProductLink: sharedProduct.link
+                });
+              }
+              return { response: salesResult, state: flowState };
+            }
+          }
+        }
+      }
     }
 
     // ── MASTER FLOW (general questions — sits above everything per architecture) ──
