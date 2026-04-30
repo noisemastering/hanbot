@@ -217,8 +217,10 @@ export default function FlowWizard({ editing, onSave, onClose }) {
               {selectedProduct && (
                 <div className="flex items-center gap-3 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
                   <span className="text-green-400 text-sm">✓</span>
-                  <span className="text-green-300 text-sm font-medium">{fullPathName}</span>
-                  <button onClick={() => setSelectedProduct(null)} className="ml-auto text-gray-400 hover:text-white text-xs">Cambiar</button>
+                  <span className="text-green-300 text-sm font-medium flex-1">{fullPathName}</span>
+                  <button onClick={() => navigateBack(navStack.length - 1)} className="text-gray-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-gray-700/50 transition-colors">
+                    ← Regresar
+                  </button>
                 </div>
               )}
 
