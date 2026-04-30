@@ -519,17 +519,17 @@ function AdsView() {
                       className="w-4 h-4 rounded bg-gray-900/50 border-gray-600 text-primary-500 focus:ring-primary-500 cursor-pointer"
                     />
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[16%]">{t('common.ad')}</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[12%]">Ad Set</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[13%]">{t('common.campaign')}</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[18%]">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[15%]">{t('common.ad')}</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[11%]">Ad Set</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[12%]">{t('common.campaign')}</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[17%]">
                     <FeatureTip id="ads-flujo-col" title="Flujo de conversación" text="El flujo determina cómo el bot atiende a quien entra por este anuncio. Si dice ⚠️ Genérico, el bot no sabe qué producto ofrecer y la conversión será menor." position="bottom">
                       <span>Flujo</span>
                     </FeatureTip>
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[12%]">Link Directo</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[8%]">{t('common.status')}</th>
-                  <th className="px-3 py-3 text-right text-xs font-medium text-gray-400 uppercase w-[7%]">{t('common.actions')}</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[11%]">Link Directo</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[10%]">{t('common.status')}</th>
+                  <th className="px-3 py-3 text-right text-xs font-medium text-gray-400 uppercase w-[10%]">{t('common.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-700/30">
@@ -624,18 +624,18 @@ function AdsView() {
                         </button>
                       )}
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
+                    <td className="px-2 py-3 whitespace-nowrap">
                       <select
                         value={ad.status}
                         onChange={(e) => handleStatusChange(ad._id, e.target.value)}
-                        className={`text-xs font-medium px-2.5 py-1.5 rounded-lg border-2 transition-colors cursor-pointer ${STATUS_STYLE[ad.status] || STATUS_STYLE.ARCHIVED}`}
+                        className={`text-xs font-medium px-2 py-1.5 rounded-lg border-2 transition-colors cursor-pointer ${STATUS_STYLE[ad.status] || STATUS_STYLE.ARCHIVED}`}
                       >
                         <option value="ACTIVE">{t('ads.statusActive')}</option>
                         <option value="PAUSED">{t('ads.statusPaused')}</option>
                         <option value="ARCHIVED">{t('ads.statusArchived')}</option>
                       </select>
                     </td>
-                    <td className="px-4 py-3 whitespace-nowrap text-right">
+                    <td className="px-2 py-3 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end space-x-1">
                         <button
                           onClick={() => setSelectedAd(ad)}
