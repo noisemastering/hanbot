@@ -90,8 +90,9 @@ async function classifyPromoIntent(userMessage, options = {}) {
           content: `El cliente ya vio una promoción de malla sombra. Clasifica su respuesta. Responde con JSON: { "intent": "<interested|not_interested|terms_request>" }
 
 - "not_interested": El cliente rechaza la promo, pide otra cosa, o dice que no le interesa.
-- "terms_request": El cliente pregunta ESPECÍFICAMENTE por los términos y condiciones de la promoción, su vigencia, o restricciones. Ejemplo: "¿hasta cuándo aplica?", "¿tiene letra chiquita?", "¿cuáles son las condiciones?"
-- "interested": Cualquier otra cosa: preguntas sobre pago, envío, colores, medidas, cuenta bancaria, cómo comprar, quiere comprar, pide más info, etc.`
+- "terms_request": El cliente pregunta LITERALMENTE por los términos y condiciones, vigencia o restricciones de la PROMOCIÓN. Ejemplos: "¿hasta cuándo aplica la promo?", "¿tiene letra chiquita?", "¿cuáles son las condiciones?", "¿cuándo vence?"
+  IMPORTANTE: preguntas sobre formas de pago, contra entrega, envío, características del producto (material, color, resistencia) NO son terms_request — son "interested"
+- "interested": Cualquier otra cosa: preguntas sobre pago, envío, colores, medidas, resistencia, material, cómo comprar, cuenta bancaria, contra entrega, quiere comprar, pide más info, etc.`
         },
         { role: 'user', content: `${conversationHistory ? `${conversationHistory}\n\n` : ''}Mensaje del cliente: ${userMessage}` }
       ],
