@@ -393,58 +393,56 @@ function create(manifest) {
 
           // Dimension match (exact or rounded)
           if (dimResult.type === 'dimension_match') {
-            if (dimResult.fractionalKey) {
-              await updateConversation(psid, { lastFractionalSize: dimResult.fractionalKey });
+            const product = dimResult.products[0];
+
+            // Generate tracked link for retail
+            let trackedLink = product.link;
+            if (manifest.salesChannel === 'retail' && product.link) {
+              trackedLink = await getOrCreateClickLink(psid, product.link, {
+                productName: product.name, productId: product.productId,
+                reason: dimResult.exact ? 'retail_quote' : 'retail_fractional_round'
+              });
             }
+            const quotedProduct = { ...product, link: trackedLink };
+            flowState.lastQuotedProducts = [quotedProduct];
 
-            let quotableProducts = dimResult.products;
-            if (manifest.salesChannel === 'retail' && quotableProducts.length === 1) {
-              quotableProducts = await Promise.all(quotableProducts.map(async p => {
-                if (p.link) {
-                  const tracked = await getOrCreateClickLink(psid, p.link, {
-                    productName: p.name, productId: p.productId,
-                    reason: dimResult.exact ? 'retail_quote' : 'retail_fractional_round'
-                  });
-                  return { ...p, link: tracked };
-                }
-                return p;
-              }));
-            }
-
-            flowState.lastQuotedProducts = quotableProducts;
-
-            const salesResult = await salesFlow.handle(userMessage, convo, psid, {
-              products: quotableProducts,
-              voice: manifest.voice || 'casual',
-              salesChannel: manifest.salesChannel === 'retail' ? 'mercado_libre' : 'direct',
-              customerName,
-              clientData: flowState.clientData,
-              allowListing: manifest.allowListing || false,
-              offersCatalog: manifest.offersCatalog || false,
-              colorNote: manifest.promo?.colorNote || null,
-              conversationHistory,
-              dimensionContext: {
-                explanation: dimResult.explanation || dimResult.sizeText || null,
-                exact: dimResult.exact,
-                convertedFromFeet: dimResult.convertedFromFeet
-              }
+            // Persist state for follow-ups
+            await updateConversation(psid, {
+              lastSharedProductId: product.productId,
+              lastSharedProductLink: trackedLink,
+              lastQuotedProducts: [{
+                displayText: product.size || product.name,
+                price: product.price,
+                productId: product.productId,
+                productUrl: product.link,
+                productName: product.name
+              }],
+              ...(dimResult.fractionalKey ? { lastFractionalSize: dimResult.fractionalKey } : {})
             });
 
-            if (salesResult) {
-              if (salesResult.type === 'flow_switch') {
-                return await resolveFlowSwitch(salesResult, manifest, flowState, userMessage, convo, psid);
-              }
-              if (salesResult.products) flowState.lastQuotedProducts = salesResult.products;
-              if (salesResult.clientData) flowState.clientData = salesResult.clientData;
-              const sharedProduct = quotableProducts.find(p => p.link);
-              if (sharedProduct) {
-                await updateConversation(psid, {
-                  lastSharedProductId: sharedProduct.productId,
-                  lastSharedProductLink: sharedProduct.link
-                });
-              }
-              return { response: salesResult, state: flowState };
+            // Build response message
+            const formatPrice = (n) => typeof n === 'number'
+              ? n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 })
+              : String(n);
+
+            let text;
+            if (dimResult.exact) {
+              // Exact integer match
+              const sizePrefix = dimResult.sizeText || '';
+              text = `${sizePrefix}${product.name || `Malla de ${product.size}`} — ${formatPrice(product.price)} con envío incluido.\n\nViene reforzada con ojillos y sujetadores, lista para instalar.`;
+              if (trackedLink) text += `\n\n🛒 Cómprala aquí:\n${trackedLink}`;
+            } else {
+              // Fractional → suggest nearest standard size, ask if OK
+              text = dimResult.explanation;
+              text += `\n\n${product.name || `Malla de ${product.size}`} — ${formatPrice(product.price)} con envío incluido.`;
+              if (trackedLink) text += `\n\n🛒 Cómprala aquí:\n${trackedLink}`;
+              text += `\n\n¿Te funciona esa medida o necesitas la medida exacta?`;
             }
+
+            return {
+              response: { type: 'text', text },
+              state: flowState
+            };
           }
         }
       }
