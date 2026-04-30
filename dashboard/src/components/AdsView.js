@@ -519,16 +519,16 @@ function AdsView() {
                       className="w-4 h-4 rounded bg-gray-900/50 border-gray-600 text-primary-500 focus:ring-primary-500 cursor-pointer"
                     />
                   </th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[18%]">{t('common.ad')}</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[13%]">Ad Set</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[16%]">{t('common.campaign')}</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[14%]">
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[16%]">{t('common.ad')}</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[12%]">Ad Set</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[13%]">{t('common.campaign')}</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[18%]">
                     <FeatureTip id="ads-flujo-col" title="Flujo de conversación" text="El flujo determina cómo el bot atiende a quien entra por este anuncio. Si dice ⚠️ Genérico, el bot no sabe qué producto ofrecer y la conversión será menor." position="bottom">
                       <span>Flujo</span>
                     </FeatureTip>
                   </th>
                   <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[12%]">Link Directo</th>
-                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[10%]">{t('common.status')}</th>
+                  <th className="px-3 py-3 text-left text-xs font-medium text-gray-400 uppercase w-[8%]">{t('common.status')}</th>
                   <th className="px-3 py-3 text-right text-xs font-medium text-gray-400 uppercase w-[7%]">{t('common.actions')}</th>
                 </tr>
               </thead>
@@ -555,19 +555,19 @@ function AdsView() {
                     <td className="px-4 py-3 max-w-[180px]">
                       <span className="text-sm text-gray-300 block truncate" title={ad.adSetId?.campaignId?.name || '-'}>{ad.adSetId?.campaignId?.name || '-'}</span>
                     </td>
-                    <td className="px-4 py-2">
-                      <div className="flex flex-col gap-1">
+                    <td className="px-3 py-2">
+                      <div className="flex flex-col gap-1 min-w-0">
                         {ad.convoFlowRef ? (
-                          <span className="text-xs font-medium px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 whitespace-nowrap w-fit">
+                          <span className="text-xs font-medium px-2 py-0.5 rounded bg-indigo-500/10 border border-indigo-500/30 text-indigo-300 truncate block" title={CONVO_FLOW_NAMES[ad.convoFlowRef] || ad.convoFlowRef}>
                             {CONVO_FLOW_NAMES[ad.convoFlowRef] || ad.convoFlowRef}
                           </span>
                         ) : (
-                          <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 whitespace-nowrap w-fit flex items-center gap-1" title="Sin flujo asignado — el bot tratará esta entrada como genérica">
+                          <span className="text-xs px-2 py-0.5 rounded bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 flex items-center gap-1" title="Sin flujo asignado — el bot tratará esta entrada como genérica">
                             ⚠️ Genérico
                           </span>
                         )}
                         {ad.promoId && (
-                          <span className="text-xs font-medium px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 whitespace-nowrap w-fit">
+                          <span className="text-xs font-medium px-2 py-0.5 rounded bg-amber-500/10 border border-amber-500/30 text-amber-300 truncate block" title={ad.promoId.name || 'Promo'}>
                             {ad.promoId.name || 'Promo'}
                           </span>
                         )}
