@@ -23,6 +23,7 @@ const es = {
   "menu.segmentacion": "Segmentación",
   "menu.spendOptimization": "Optimización",
   "menu.flujos": "Flujos",
+  "menu.simulador": "Simulador",
   "menu.trackedLinks": "Links de seguimiento",
   "menu.users": "Usuarios",
   "menu.usersSub": "Usuarios",
