@@ -296,8 +296,14 @@ async function handle(userMessage, convo, psid, context = {}) {
       const w = Math.min(dims.width, dims.height);
       const h = Math.max(dims.width, dims.height);
 
-      // Both sides > 8 → oversize handoff
-      if (w > 8 && h > 8) {
+      // Both sides > 8 → oversize handoff (confeccionada only)
+      // Confeccionada products have both dimensions ≤ 10m. Rollos have one side = 100m.
+      const isConfeccionada = products.every(p => {
+        if (!p.size) return false;
+        const m = p.size.match(/^(\d+)x(\d+)m$/i);
+        return m && parseInt(m[1]) <= 10 && parseInt(m[2]) <= 10;
+      });
+      if (isConfeccionada && w > 8 && h > 8) {
         return {
           type: 'dimension_handoff',
           reason: 'oversize',
