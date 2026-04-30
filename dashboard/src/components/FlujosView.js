@@ -38,7 +38,7 @@ function FlujosView() {
     try {
       const res = await fetch(`${API_URL}/convo-flows`);
       const data = await res.json();
-      if (data.success) setFlows(data.data || []);
+      if (data.success) setFlows((data.data || []).filter(f => !f.hasCustomHandler));
     } catch (err) {
       console.error('Error fetching flows:', err);
     } finally {
