@@ -20,7 +20,9 @@ const HANDOFF_RULES = [
     name: 'oversized_confeccionada',
     check: (product) => {
       if (!product || !product.name) return null;
-      const isConfeccionada = /confeccionada/i.test(product.name);
+      const name = (product.name || '').toLowerCase();
+      const family = (product.familyName || '').toLowerCase();
+      const isConfeccionada = name.includes('confeccionada') || family.includes('confeccionada');
       if (!isConfeccionada) return null;
       // Dimensions beyond what ML listings cover
       const width = product.requestedWidth;

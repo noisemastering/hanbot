@@ -76,16 +76,13 @@ async function findSimilarProducts(dimensions, productType, tolerance = 1) {
     let query = { active: true };
 
     if (productType === 'confeccionada') {
-      // Look for malla confeccionada products
       query.$or = [
         { category: 'confeccionada' },
-        { category: 'malla' },
-        { name: { $regex: /confeccionada|malla sombra/i } }
+        { category: 'malla' }
       ];
     } else if (productType === 'rollo') {
       query.$or = [
-        { category: 'rollo' },
-        { name: { $regex: /rollo/i } }
+        { category: 'rollo' }
       ];
     }
 
@@ -134,25 +131,18 @@ function extractProductDimensions(product) {
     };
   }
 
-  // Try to parse from name or SKU
-  const nameMatch = product.name?.match(/(\d+(?:\.\d+)?)\s*x\s*(\d+(?:\.\d+)?)/i);
-  if (nameMatch) {
-    const d1 = parseFloat(nameMatch[1]);
-    const d2 = parseFloat(nameMatch[2]);
-    return {
-      width: Math.min(d1, d2),
-      length: Math.max(d1, d2)
-    };
-  }
-
-  const skuMatch = product.sku?.match(/(\d+)x(\d+)/i);
-  if (skuMatch) {
-    const d1 = parseFloat(skuMatch[1]);
-    const d2 = parseFloat(skuMatch[2]);
-    return {
-      width: Math.min(d1, d2),
-      length: Math.max(d1, d2)
-    };
+  // Try to parse from size field (structured data, e.g. "3x7m")
+  const sizeStr = product.size || product.name || product.sku || '';
+  const parts = sizeStr.split(/[xX×]/);
+  if (parts.length === 2) {
+    const d1 = parseFloat(parts[0]);
+    const d2 = parseFloat(parts[1]);
+    if (!isNaN(d1) && !isNaN(d2) && d1 > 0 && d2 > 0) {
+      return {
+        width: Math.min(d1, d2),
+        length: Math.max(d1, d2)
+      };
+    }
   }
 
   return null;

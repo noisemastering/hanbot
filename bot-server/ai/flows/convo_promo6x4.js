@@ -40,16 +40,15 @@ function formatMoney(n) {
 }
 
 /**
- * Find matching confeccionada product by rounded size.
+ * Find matching confeccionada product by rounded size (exact match, both orientations).
  */
 async function findBySize(w, h) {
   const minD = Math.min(w, h);
   const maxD = Math.max(w, h);
-  const sizeRegex = new RegExp(
-    `^\\s*(${minD}\\s*m?\\s*[xX×]\\s*${maxD}|${maxD}\\s*m?\\s*[xX×]\\s*${minD})\\s*m?\\s*$`, 'i'
-  );
-  return ProductFamily.find({ sellable: true, active: true, size: sizeRegex })
-    .sort({ price: 1 }).lean();
+  return ProductFamily.find({
+    sellable: true, active: true,
+    size: { $in: [`${minD}x${maxD}m`, `${maxD}x${minD}m`] }
+  }).sort({ price: 1 }).lean();
 }
 
 async function handle(userMessage, convo, psid, state = {}) {

@@ -37,20 +37,17 @@ function formatMoney(n) {
 }
 
 /**
- * Find matching sin-refuerzo product by size.
+ * Find matching sin-refuerzo product by size (exact match, both orientations).
  * Scoped to this family's children only.
  */
 async function findBySize(w, h) {
   const minD = Math.min(w, h);
   const maxD = Math.max(w, h);
-  const sizeRegex = new RegExp(
-    `^\\s*(${minD}\\s*m?\\s*[xX×]\\s*${maxD}|${maxD}\\s*m?\\s*[xX×]\\s*${minD})\\s*m?\\s*$`, 'i'
-  );
   return ProductFamily.find({
     parentId: '69431347ed2d4185ba4706c2',
     sellable: true,
     active: true,
-    size: sizeRegex
+    size: { $in: [`${minD}x${maxD}m`, `${maxD}x${minD}m`] }
   }).sort({ price: 1 }).lean();
 }
 
