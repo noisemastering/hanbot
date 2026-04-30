@@ -13,24 +13,8 @@ const Campaign = require("../models/Campaign");
 
 // Convo_flow system
 const convoFlow = require("./flows/convoFlow");
-const convo_bordeSeparadorRetail = require("./flows/convo_bordeSeparadorRetail");
-const convo_vende_malla = require("./flows/convo_vende_malla");
-const convo_confeccionadaRetail = require("./flows/convo_confeccionadaRetail");
-const convo_groundcoverWholesale = require("./flows/convo_groundcoverWholesale");
-const convo_rolloRaschelWholesale = require("./flows/convo_rolloRaschelWholesale");
-const convo_bordeSeparadorWholesale = require("./flows/convo_bordeSeparadorWholesale");
-const convo_confeccionadaSRRetail = require("./flows/convo_confeccionadaSRRetail");
 
-// Register JS-based convo_flows (these have custom handlers like dimension parsing)
-convoFlow.registerFlow('convo_bordeSeparadorRetail', convo_bordeSeparadorRetail);
-convoFlow.registerFlow('convo_bordeSeparadorWholesale', convo_bordeSeparadorWholesale);
-convoFlow.registerFlow('convo_vende_malla', convo_vende_malla);
-convoFlow.registerFlow('convo_confeccionadaRetail', convo_confeccionadaRetail);
-convoFlow.registerFlow('convo_confeccionadaSRRetail', convo_confeccionadaSRRetail);
-convoFlow.registerFlow('convo_groundcoverWholesale', convo_groundcoverWholesale);
-convoFlow.registerFlow('convo_rolloRaschelWholesale', convo_rolloRaschelWholesale);
-
-// Load DB-based convo_flows (new flows created from dashboard)
+// Load ALL convo_flows from DB at startup
 const ConvoFlowManifest = require("../models/ConvoFlowManifest");
 
 async function loadConvoFlowsFromDB() {
@@ -38,8 +22,6 @@ async function loadConvoFlowsFromDB() {
     const manifests = await ConvoFlowManifest.find({ active: true });
     let loaded = 0;
     for (const doc of manifests) {
-      // Skip if JS handler already registered (hasCustomHandler flows)
-      if (doc.hasCustomHandler && convoFlow.getFlow(doc.name)) continue;
       const manifest = doc.toObject();
       const instance = convoFlow.create(manifest);
       convoFlow.registerFlow(doc.name, {

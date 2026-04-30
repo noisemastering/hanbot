@@ -8,6 +8,7 @@
 const { OpenAI } = require("openai");
 const ProductFamily = require("../../models/ProductFamily");
 const Product = require("../../models/Product");
+const { parseConfeccionadaDimensions } = require("../utils/dimensionParsers");
 
 const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 
@@ -284,6 +285,99 @@ async function handle(userMessage, convo, psid, context = {}) {
 
   // ── LOAD PRODUCTS (once, then cache in convo_flow) ──
   const products = preloaded || await loadProducts(familyIds);
+
+  // ── DIMENSION PRE-PROCESSING ──
+  // If any product has a WxHm size format, try to parse dimensions from the message
+  // and look up the product directly — skipping the AI product search.
+  const hasSizedProducts = products.some(p => p.size && /^\d+x\d+m$/i.test(p.size));
+  if (hasSizedProducts) {
+    const dims = await parseConfeccionadaDimensions(userMessage);
+    if (dims) {
+      const w = Math.min(dims.width, dims.height);
+      const h = Math.max(dims.width, dims.height);
+
+      // Both sides > 8 → oversize handoff
+      if (w > 8 && h > 8) {
+        return {
+          type: 'dimension_handoff',
+          reason: 'oversize',
+          width: w, height: h,
+          message: `Esa medida (${w}x${h}m) requiere cotización especial ya que es más grande que nuestro catálogo estándar. Te comunico con un especialista para cotizarte.`
+        };
+      }
+
+      // Fractional dimensions → round to nearest integer
+      const hasFractions = (w % 1 !== 0) || (h % 1 !== 0);
+      if (hasFractions) {
+        const rw = Math.ceil(w);
+        const rh = Math.ceil(h);
+        const fractionalKey = `${w}x${h}`;
+        const isInsisting = convo?.lastFractionalSize === fractionalKey;
+
+        if (isInsisting) {
+          return {
+            type: 'dimension_handoff',
+            reason: 'fractional_insist',
+            width: w, height: h,
+            message: `La medida exacta de ${w}x${h}m requiere fabricación especial. Te comunico con un especialista para cotizarte.`
+          };
+        }
+
+        // Find the rounded size in our products
+        const sizeKey = `${Math.min(rw, rh)}x${Math.max(rw, rh)}m`;
+        const altKey = `${Math.max(rw, rh)}x${Math.min(rw, rh)}m`;
+        const match = products.find(p => p.size === sizeKey || p.size === altKey);
+
+        if (match) {
+          const explanation = dims.convertedFromFeet
+            ? `Tu medida de ${dims.originalFeetStr} equivale a aproximadamente ${w}x${h} metros.\n\nLa medida más cercana que manejamos es ${rw}x${rh}m:`
+            : `La medida más cercana que manejamos es ${rw}x${rh}m:`;
+          return {
+            type: 'dimension_match',
+            exact: false,
+            fractionalKey,
+            explanation,
+            products: [match],
+            convertedFromFeet: dims.convertedFromFeet || false
+          };
+        }
+
+        // No rounded match found
+        return {
+          type: 'dimension_handoff',
+          reason: 'size_not_found',
+          width: w, height: h,
+          message: `La medida ${w}x${h}m no la tenemos en catálogo estándar. Te comunico con un especialista para cotizarte.`
+        };
+      }
+
+      // ── INTEGER DIMENSION LOOKUP ──
+      const sizeKey = `${w}x${h}m`;
+      const altKey = `${h}x${w}m`;
+      const match = products.find(p => p.size === sizeKey || p.size === altKey);
+
+      if (match) {
+        const sizeText = dims.convertedFromFeet
+          ? `Tu medida de ${dims.originalFeetStr} equivale a ${w}x${h} metros.\n\n`
+          : null;
+        return {
+          type: 'dimension_match',
+          exact: true,
+          sizeText,
+          products: [match],
+          convertedFromFeet: dims.convertedFromFeet || false
+        };
+      }
+
+      // Exact size not in catalog
+      return {
+        type: 'dimension_handoff',
+        reason: 'size_not_found',
+        width: w, height: h,
+        message: `La medida de ${w}x${h}m no la tenemos en catálogo estándar. Te comunico con un especialista para cotizarte.`
+      };
+    }
+  }
 
   // ── FIND MATCHING PRODUCT (with conversation context) ──
   const conversationContext = {

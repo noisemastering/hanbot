@@ -485,6 +485,80 @@ function create(manifest) {
     });
 
     if (productResult) {
+      // ── DIMENSION HANDOFF (oversize, fractional insist, not in catalog) ──
+      if (productResult.type === 'dimension_handoff') {
+        const handoffResp = await executeHandoff(psid, convo, userMessage, {
+          reason: `${productResult.reason}: ${productResult.width}x${productResult.height}m`,
+          responsePrefix: productResult.message,
+          lastIntent: `${productResult.reason}_handoff`,
+          timingStyle: 'elaborate',
+          includeVideo: productResult.reason === 'oversize'
+        });
+        return { response: handoffResp, state: flowState };
+      }
+
+      // ── DIMENSION MATCH (exact or rounded) ──
+      if (productResult.type === 'dimension_match') {
+        // Track fractional size for insistence detection
+        if (productResult.fractionalKey) {
+          await updateConversation(psid, { lastFractionalSize: productResult.fractionalKey });
+        }
+
+        // Feed the matched products through the sales flow
+        let quotableProducts = productResult.products;
+        if (manifest.salesChannel === 'retail' && quotableProducts.length === 1) {
+          quotableProducts = await Promise.all(quotableProducts.map(async p => {
+            if (p.link) {
+              const tracked = await getOrCreateClickLink(psid, p.link, {
+                productName: p.name, productId: p.productId,
+                reason: productResult.exact ? 'retail_quote' : 'retail_fractional_round'
+              });
+              return { ...p, link: tracked };
+            }
+            return p;
+          }));
+        }
+
+        flowState.lastQuotedProducts = quotableProducts;
+
+        const salesResult = await salesFlow.handle(userMessage, convo, psid, {
+          products: quotableProducts,
+          voice: manifest.voice || 'casual',
+          salesChannel: manifest.salesChannel === 'retail' ? 'mercado_libre' : 'direct',
+          customerName,
+          clientData: flowState.clientData,
+          allowListing: manifest.allowListing || false,
+          offersCatalog: manifest.offersCatalog || false,
+          colorNote: manifest.promo?.colorNote || null,
+          conversationHistory,
+          dimensionContext: {
+            explanation: productResult.explanation || productResult.sizeText || null,
+            exact: productResult.exact,
+            convertedFromFeet: productResult.convertedFromFeet
+          }
+        });
+
+        if (salesResult) {
+          if (salesResult.type === 'flow_switch') {
+            return await resolveFlowSwitch(salesResult, manifest, flowState, userMessage, convo, psid);
+          }
+          if (salesResult.products) {
+            flowState.lastQuotedProducts = salesResult.products;
+          }
+          if (salesResult.clientData) {
+            flowState.clientData = salesResult.clientData;
+          }
+          const sharedProduct = quotableProducts.find(p => p.link);
+          if (sharedProduct) {
+            await updateConversation(psid, {
+              lastSharedProductId: sharedProduct.productId,
+              lastSharedProductLink: sharedProduct.link
+            });
+          }
+          return { response: salesResult, state: flowState };
+        }
+      }
+
       // Not offered
       if (productResult.type === 'not_offered') {
         // Generate a helpful response that acknowledges we don't have what they asked for
