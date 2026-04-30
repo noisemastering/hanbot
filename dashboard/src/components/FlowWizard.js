@@ -74,22 +74,22 @@ export default function FlowWizard({ editing, onSave, onClose }) {
     return [];
   };
 
-  // Drill into a non-sellable family
+  // Drill into a family — show its children for further navigation
   const drillInto = async (family) => {
-    // Get children — from cached tree or API
     let children = family.children || await fetchChildren(family._id);
     const nonSellable = children.filter(c => !c.sellable);
 
-    if (nonSellable.length === 0) {
-      // This node's children are all sellable — this IS the target level
-      setSelectedProduct({ id: family._id, name: family.name });
-      return;
-    }
-
-    // Has non-sellable children — drill deeper
+    // Push this level onto the nav stack and show its non-sellable children
     setNavStack(prev => [...prev, { id: family._id, name: family.name }]);
     setCurrentChildren(nonSellable);
     setSelectedProduct(null);
+  };
+
+  // Select the current level (the last item in navStack) as the product
+  const selectCurrentLevel = () => {
+    if (navStack.length === 0) return;
+    const current = navStack[navStack.length - 1];
+    setSelectedProduct({ id: current.id, name: current.name });
   };
 
   // Navigate back in breadcrumb
@@ -213,18 +213,32 @@ export default function FlowWizard({ editing, onSave, onClose }) {
                 </div>
               )}
 
+              {/* Back button + select this level */}
+              {!selectedProduct && navStack.length > 0 && (
+                <div className="flex items-center gap-3">
+                  <button onClick={() => navigateBack(navStack.length - 2)}
+                    className="text-sm text-gray-400 hover:text-white flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-gray-700/50 transition-colors">
+                    ← Regresar
+                  </button>
+                  <button onClick={selectCurrentLevel}
+                    className="text-sm text-primary-400 hover:text-primary-300 flex items-center gap-1 px-3 py-1.5 rounded-lg border border-primary-500/30 hover:bg-primary-500/10 transition-colors ml-auto">
+                    Seleccionar "{navStack[navStack.length - 1].name}"
+                  </button>
+                </div>
+              )}
+
               {/* Selected product indicator */}
               {selectedProduct && (
                 <div className="flex items-center gap-3 p-3 bg-green-500/10 border border-green-500/30 rounded-lg">
                   <span className="text-green-400 text-sm">✓</span>
                   <span className="text-green-300 text-sm font-medium flex-1">{fullPathName}</span>
                   <button onClick={() => navigateBack(navStack.length - 1)} className="text-gray-400 hover:text-white text-xs px-2 py-1 rounded hover:bg-gray-700/50 transition-colors">
-                    ← Regresar
+                    ← Cambiar
                   </button>
                 </div>
               )}
 
-              {/* Family/subfamiliy grid */}
+              {/* Family/subfamily grid */}
               {!selectedProduct && (
                 <div className="grid grid-cols-2 gap-3">
                   {currentChildren.map(f => (
@@ -236,6 +250,9 @@ export default function FlowWizard({ editing, onSave, onClose }) {
                       )}
                     </button>
                   ))}
+                  {currentChildren.length === 0 && (
+                    <p className="text-sm text-gray-500 col-span-2">No hay subfamilias. Usa "Seleccionar" arriba para elegir este nivel.</p>
+                  )}
                 </div>
               )}
             </div>
