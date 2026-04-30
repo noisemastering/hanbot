@@ -213,13 +213,9 @@ export default function FlowWizard({ editing, onSave, onClose }) {
                 </div>
               )}
 
-              {/* Back button + select this level */}
+              {/* Select this level */}
               {!selectedProduct && navStack.length > 0 && (
-                <div className="flex items-center gap-3">
-                  <button onClick={() => navigateBack(navStack.length - 2)}
-                    className="text-sm text-gray-400 hover:text-white flex items-center gap-1 px-3 py-1.5 rounded-lg hover:bg-gray-700/50 transition-colors">
-                    ← Regresar
-                  </button>
+                <div className="flex items-center">
                   <button onClick={selectCurrentLevel}
                     className="text-sm text-primary-400 hover:text-primary-300 flex items-center gap-1 px-3 py-1.5 rounded-lg border border-primary-500/30 hover:bg-primary-500/10 transition-colors ml-auto">
                     Seleccionar "{navStack[navStack.length - 1].name}"
@@ -421,9 +417,14 @@ export default function FlowWizard({ editing, onSave, onClose }) {
 
         {/* Footer */}
         <div className="px-6 py-4 border-t border-gray-700/50 flex justify-between">
-          <button onClick={() => step > 1 ? setStep(step - 1) : onClose()}
+          <button onClick={() => {
+              if (step > 1) { setStep(step - 1); }
+              else if (step === 1 && !selectedProduct && navStack.length > 0) { navigateBack(navStack.length - 2); }
+              else if (step === 1 && selectedProduct) { navigateBack(navStack.length - 1); }
+              else { onClose(); }
+            }}
             className="px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors text-sm">
-            {step === 1 ? 'Cancelar' : '← Anterior'}
+            {step === 1 && (navStack.length > 0 || selectedProduct) ? '← Regresar' : step === 1 ? 'Cancelar' : '← Anterior'}
           </button>
           {step < 4 ? (
             <button onClick={() => setStep(step + 1)} disabled={!canNext()}
