@@ -269,22 +269,28 @@ function generateRecommendations(spendData, productData, perfData) {
     });
   }
 
-  // Ads with declining trend in products they drive
+  // Products with declining trend — group affected ads together
+  const decliningProducts = new Map();
   for (const ad of ads) {
     if (ad.conversions >= 5 && ad.products?.length > 0) {
-      const mainProduct = ad.products.sort((a, b) => b.revenue - a.revenue)[0];
+      const mainProduct = [...ad.products].sort((a, b) => b.revenue - a.revenue)[0];
       const prodData = products.find(p => p.name === mainProduct.product);
       if (prodData && prodData.trend < -20) {
-        recommendations.push({
-          category: 'performance',
-          priority: 'medium',
-          ad: ad.name,
-          title: `Las ventas de ${mainProduct.product} están cayendo (-${Math.abs(prodData.trend).toFixed(0)}%)`,
-          detail: `"${ad.name}" genera la mayoría de las ventas de ${mainProduct.product}, que tiene tendencia negativa.`,
-          action: `Evalúa si la demanda bajó estacionalmente o si el anuncio necesita refrescarse.`
-        });
+        if (!decliningProducts.has(mainProduct.product)) {
+          decliningProducts.set(mainProduct.product, { prodData, ads: [] });
+        }
+        decliningProducts.get(mainProduct.product).ads.push(ad.name);
       }
     }
+  }
+  for (const [productName, { prodData, ads: affectedAds }] of decliningProducts) {
+    recommendations.push({
+      category: 'performance',
+      priority: 'medium',
+      title: `Las ventas de ${productName} están cayendo (-${Math.abs(prodData.trend).toFixed(0)}%)`,
+      detail: `${affectedAds.length} anuncio${affectedAds.length > 1 ? 's' : ''} afectado${affectedAds.length > 1 ? 's' : ''}: ${affectedAds.map(n => `"${n}"`).join(', ')}.`,
+      action: `Evalúa si la demanda bajó estacionalmente o si los anuncios necesitan refrescarse. Considera pausar los de menor ROI.`
+    });
   }
 
   return recommendations.sort((a, b) => {
