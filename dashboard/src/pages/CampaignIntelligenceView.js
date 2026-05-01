@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { LineChart, Line, ResponsiveContainer, Tooltip, XAxis, YAxis } from 'recharts';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -286,32 +287,41 @@ function generateRecommendations(spendData, productData, perfData) {
           decliningProducts.set(mainProduct.product, { prodData, activeAds: [], inactiveAds: [] });
         }
         const entry = decliningProducts.get(mainProduct.product);
+        const adDetail = {
+          name: ad.name,
+          spend: ad.spend || 0,
+          conversions: ad.conversions || 0,
+          revenue: ad.revenue || 0,
+          roi: ad.roi || 0,
+          active: recentActivity
+        };
         if (recentActivity) {
-          entry.activeAds.push(ad.name);
+          entry.activeAds.push(adDetail);
         } else {
-          entry.inactiveAds.push(ad.name);
+          entry.inactiveAds.push(adDetail);
         }
       }
     }
   }
   for (const [productName, { prodData, activeAds, inactiveAds }] of decliningProducts) {
+    const allAds = [...activeAds, ...inactiveAds];
     if (activeAds.length > 0) {
-      // Ads still running but sales declining — actionable
       recommendations.push({
         category: 'performance',
         priority: 'medium',
         title: `Las ventas de ${productName} están cayendo (-${Math.abs(prodData.trend).toFixed(0)}%) con anuncios activos`,
-        detail: `${activeAds.length} anuncio${activeAds.length > 1 ? 's' : ''} activo${activeAds.length > 1 ? 's' : ''}: ${activeAds.map(n => `"${n}"`).join(', ')}.${inactiveAds.length > 0 ? ` ${inactiveAds.length} más están pausados.` : ''}`,
-        action: `Evalúa si la demanda bajó estacionalmente o si los anuncios necesitan refrescarse. Considera pausar los de menor ROI.`
+        detail: `${activeAds.length} activo${activeAds.length > 1 ? 's' : ''}${inactiveAds.length > 0 ? `, ${inactiveAds.length} pausado${inactiveAds.length > 1 ? 's' : ''}` : ''}.`,
+        action: `Evalúa si la demanda bajó estacionalmente o si los anuncios necesitan refrescarse. Considera pausar los de menor ROI.`,
+        productDetail: { daily: prodData.daily || [], ads: allAds, productName }
       });
     } else if (inactiveAds.length > 0) {
-      // All ads paused — decline is expected, just informational
       recommendations.push({
         category: 'performance',
         priority: 'info',
         title: `Las ventas de ${productName} bajaron (-${Math.abs(prodData.trend).toFixed(0)}%) — anuncios pausados`,
         detail: `Los ${inactiveAds.length} anuncios que vendían ${productName} están inactivos. La caída es esperada.`,
-        action: `Si quieres recuperar ventas de ${productName}, reactiva al menos un anuncio.`
+        action: `Si quieres recuperar ventas de ${productName}, reactiva al menos un anuncio.`,
+        productDetail: { daily: prodData.daily || [], ads: allAds, productName }
       });
     }
   }
@@ -502,6 +512,65 @@ export default function CampaignIntelligenceView() {
                   {isExpanded && (
                     <div className="mt-3 ml-8 space-y-3">
                       <p className="text-sm text-gray-300">{rec.detail}</p>
+
+                      {/* Product detail: trend chart + ad table */}
+                      {rec.productDetail && (
+                        <div className="space-y-3">
+                          {/* Trend chart */}
+                          {rec.productDetail.daily.length > 0 && (
+                            <div className="bg-gray-900/50 border border-gray-700/50 rounded-lg p-4">
+                              <p className="text-xs text-gray-400 mb-2">Tendencia de {rec.productDetail.productName}</p>
+                              <ResponsiveContainer width="100%" height={120}>
+                                <LineChart data={rec.productDetail.daily}>
+                                  <XAxis dataKey="dateLabel" tick={{ fill: '#6b7280', fontSize: 10 }} interval="preserveStartEnd" />
+                                  <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} tickFormatter={v => '$' + (v / 1000).toFixed(0) + 'k'} width={45} />
+                                  <Tooltip
+                                    contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px', fontSize: 12 }}
+                                    labelStyle={{ color: '#fff' }}
+                                    formatter={(v) => [formatMoney(v), 'Ingresos']}
+                                  />
+                                  <Line type="monotone" dataKey="revenue" stroke="#8b5cf6" strokeWidth={2} dot={false} />
+                                </LineChart>
+                              </ResponsiveContainer>
+                            </div>
+                          )}
+
+                          {/* Ad breakdown table */}
+                          {rec.productDetail.ads.length > 0 && (
+                            <div className="bg-gray-900/50 border border-gray-700/50 rounded-lg overflow-hidden">
+                              <table className="w-full text-xs">
+                                <thead>
+                                  <tr className="border-b border-gray-700/50">
+                                    <th className="px-3 py-2 text-left text-gray-500 font-medium">Anuncio</th>
+                                    <th className="px-3 py-2 text-center text-gray-500 font-medium">Estado</th>
+                                    <th className="px-3 py-2 text-right text-gray-500 font-medium">Inversión</th>
+                                    <th className="px-3 py-2 text-right text-gray-500 font-medium">Ventas</th>
+                                    <th className="px-3 py-2 text-right text-gray-500 font-medium">Ingresos</th>
+                                    <th className="px-3 py-2 text-right text-gray-500 font-medium">ROI</th>
+                                  </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-700/30">
+                                  {rec.productDetail.ads.map((ad, j) => (
+                                    <tr key={j} className={ad.active ? '' : 'opacity-50'}>
+                                      <td className="px-3 py-2 text-gray-300 truncate max-w-[180px]" title={ad.name}>{ad.name}</td>
+                                      <td className="px-3 py-2 text-center">
+                                        <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium ${ad.active ? 'bg-green-500/10 text-green-400 border border-green-500/30' : 'bg-gray-500/10 text-gray-500 border border-gray-500/30'}`}>
+                                          {ad.active ? 'Activo' : 'Pausado'}
+                                        </span>
+                                      </td>
+                                      <td className="px-3 py-2 text-right text-gray-400">{formatMoney(ad.spend)}</td>
+                                      <td className="px-3 py-2 text-right text-gray-300">{ad.conversions}</td>
+                                      <td className="px-3 py-2 text-right text-gray-300">{formatMoney(ad.revenue)}</td>
+                                      <td className="px-3 py-2 text-right text-gray-300">{ad.roi > 0 ? ad.roi.toFixed(1) + 'x' : '—'}</td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
                       <div className="bg-green-500/5 border border-green-500/20 rounded-lg p-3">
                         <p className="text-xs text-green-400 font-medium mb-1">Acción sugerida</p>
                         <p className="text-sm text-green-300">{rec.action}</p>
