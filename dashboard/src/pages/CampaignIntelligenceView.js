@@ -274,7 +274,11 @@ function generateRecommendations(spendData, productData, perfData) {
   const decliningProducts = new Map();
   for (const ad of ads) {
     if (ad.conversions >= 5 && ad.products?.length > 0) {
-      const mainProduct = [...ad.products].sort((a, b) => b.revenue - a.revenue)[0];
+      const sortedProducts = [...ad.products].sort((a, b) => b.revenue - a.revenue);
+      const mainProduct = sortedProducts[0];
+      // Only associate this ad with the product if it's the primary one (>40% of revenue)
+      const adTotalRevenue = sortedProducts.reduce((s, p) => s + (p.revenue || 0), 0);
+      if (adTotalRevenue > 0 && mainProduct.revenue / adTotalRevenue < 0.4) continue;
       const prodData = products.find(p => p.name === mainProduct.product);
       if (prodData && prodData.trend < -20) {
         // Check if this ad has recent activity (last 7 days)
