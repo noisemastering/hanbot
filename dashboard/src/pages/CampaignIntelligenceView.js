@@ -269,28 +269,51 @@ function generateRecommendations(spendData, productData, perfData) {
     });
   }
 
-  // Products with declining trend — group affected ads together
+  // Products with declining trend — group affected ads, check if still active
   const decliningProducts = new Map();
   for (const ad of ads) {
     if (ad.conversions >= 5 && ad.products?.length > 0) {
       const mainProduct = [...ad.products].sort((a, b) => b.revenue - a.revenue)[0];
       const prodData = products.find(p => p.name === mainProduct.product);
       if (prodData && prodData.trend < -20) {
+        // Check if this ad has recent activity (last 7 days)
+        const perfAd = perfAds.find(p => p.adId === ad.adId);
+        const daily = perfAd?.daily || [];
+        const last7 = daily.slice(-7);
+        const recentActivity = last7.some(d => (d.clicks || 0) > 0 || (d.revenue || 0) > 0);
+
         if (!decliningProducts.has(mainProduct.product)) {
-          decliningProducts.set(mainProduct.product, { prodData, ads: [] });
+          decliningProducts.set(mainProduct.product, { prodData, activeAds: [], inactiveAds: [] });
         }
-        decliningProducts.get(mainProduct.product).ads.push(ad.name);
+        const entry = decliningProducts.get(mainProduct.product);
+        if (recentActivity) {
+          entry.activeAds.push(ad.name);
+        } else {
+          entry.inactiveAds.push(ad.name);
+        }
       }
     }
   }
-  for (const [productName, { prodData, ads: affectedAds }] of decliningProducts) {
-    recommendations.push({
-      category: 'performance',
-      priority: 'medium',
-      title: `Las ventas de ${productName} están cayendo (-${Math.abs(prodData.trend).toFixed(0)}%)`,
-      detail: `${affectedAds.length} anuncio${affectedAds.length > 1 ? 's' : ''} afectado${affectedAds.length > 1 ? 's' : ''}: ${affectedAds.map(n => `"${n}"`).join(', ')}.`,
-      action: `Evalúa si la demanda bajó estacionalmente o si los anuncios necesitan refrescarse. Considera pausar los de menor ROI.`
-    });
+  for (const [productName, { prodData, activeAds, inactiveAds }] of decliningProducts) {
+    if (activeAds.length > 0) {
+      // Ads still running but sales declining — actionable
+      recommendations.push({
+        category: 'performance',
+        priority: 'medium',
+        title: `Las ventas de ${productName} están cayendo (-${Math.abs(prodData.trend).toFixed(0)}%) con anuncios activos`,
+        detail: `${activeAds.length} anuncio${activeAds.length > 1 ? 's' : ''} activo${activeAds.length > 1 ? 's' : ''}: ${activeAds.map(n => `"${n}"`).join(', ')}.${inactiveAds.length > 0 ? ` ${inactiveAds.length} más están pausados.` : ''}`,
+        action: `Evalúa si la demanda bajó estacionalmente o si los anuncios necesitan refrescarse. Considera pausar los de menor ROI.`
+      });
+    } else if (inactiveAds.length > 0) {
+      // All ads paused — decline is expected, just informational
+      recommendations.push({
+        category: 'performance',
+        priority: 'info',
+        title: `Las ventas de ${productName} bajaron (-${Math.abs(prodData.trend).toFixed(0)}%) — anuncios pausados`,
+        detail: `Los ${inactiveAds.length} anuncios que vendían ${productName} están inactivos. La caída es esperada.`,
+        action: `Si quieres recuperar ventas de ${productName}, reactiva al menos un anuncio.`
+      });
+    }
   }
 
   return recommendations.sort((a, b) => {
