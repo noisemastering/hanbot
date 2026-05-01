@@ -386,7 +386,7 @@ function create(manifest) {
               responsePrefix: dimResult.message,
               lastIntent: `${dimResult.reason}_handoff`,
               timingStyle: 'elaborate',
-              includeVideo: dimResult.reason === 'oversize'
+              includeVideo: dimResult.reason === 'oversize' || dimResult.reason === 'size_not_found'
             });
             return { response: handoffResp, state: flowState };
           }
@@ -395,16 +395,25 @@ function create(manifest) {
           if (dimResult.type === 'dimension_match') {
             const product = dimResult.products[0];
 
+            // Tracked link reason distinguishes promo vs retail
+            const activePromo = flowState._adPromo || manifest.promo;
+            const linkReason = dimResult.exact
+              ? 'retail_quote'
+              : (activePromo ? 'promo_fractional_round' : 'retail_fractional_round');
+
             // Generate tracked link for retail
             let trackedLink = product.link;
             if (manifest.salesChannel === 'retail' && product.link) {
               trackedLink = await getOrCreateClickLink(psid, product.link, {
                 productName: product.name, productId: product.productId,
-                reason: dimResult.exact ? 'retail_quote' : 'retail_fractional_round'
+                reason: linkReason
               });
             }
             const quotedProduct = { ...product, link: trackedLink };
             flowState.lastQuotedProducts = [quotedProduct];
+
+            // Mark pitch as sent so promo flow doesn't re-pitch
+            if (activePromo) flowState.pitchSent = true;
 
             // Persist state for follow-ups
             await updateConversation(psid, {
@@ -425,11 +434,15 @@ function create(manifest) {
               ? n.toLocaleString('es-MX', { style: 'currency', currency: 'MXN', maximumFractionDigits: 0 })
               : String(n);
 
+            // Use installationNote from manifest (not hardcoded — different products have different hardware)
+            const installNote = manifest.installationNote || '';
+
             let text;
             if (dimResult.exact) {
               // Exact integer match
               const sizePrefix = dimResult.sizeText || '';
-              text = `${sizePrefix}${product.name || `Malla de ${product.size}`} — ${formatPrice(product.price)} con envío incluido.\n\nViene reforzada con ojillos y sujetadores, lista para instalar.`;
+              text = `${sizePrefix}${product.name || `Malla de ${product.size}`} — ${formatPrice(product.price)} con envío incluido.`;
+              if (installNote) text += `\n\n${installNote}`;
               if (trackedLink) text += `\n\n🛒 Cómprala aquí:\n${trackedLink}`;
             } else {
               // Fractional → suggest nearest standard size, ask if OK
