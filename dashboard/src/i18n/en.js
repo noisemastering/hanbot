@@ -24,6 +24,7 @@ const en = {
   "menu.spendOptimization": "Optimization",
   "menu.flujos": "Flows",
   "menu.simulador": "Simulator",
+  "menu.intelligence": "Artificial Intelligence",
   "menu.trackedLinks": "Tracked Links",
   "menu.users": "Users",
   "menu.usersSub": "Users",
