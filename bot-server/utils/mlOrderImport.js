@@ -153,7 +153,7 @@ async function saveOrderBatch(orders, batchId, source) {
  * Runs as a background task — call getProgress() to check status.
  */
 async function importAllOrders(sellerId, options = {}) {
-  const startDate = options.startDate || new Date(Date.now() - 2 * 365 * 24 * 60 * 60 * 1000); // 2 years ago
+  const startDate = options.startDate || new Date(Date.now() - 5 * 365 * 24 * 60 * 60 * 1000); // 5 years ago
   const batchId = `import_${Date.now()}`;
 
   // Prevent concurrent imports
