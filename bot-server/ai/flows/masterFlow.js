@@ -158,7 +158,30 @@ Mensaje del cliente: ${userMessage}`;
     }
 
     // ── RESPONSE: AI answered a general question ──
+    // WHITELIST GUARD: only accept responses for topics masterFlow owns.
+    // If the AI classified something outside this list, reject it and fall through.
+    const ALLOWED_INTENTS = new Set([
+      'location', 'shipping', 'payment_method', 'invoice', 'installation',
+      'phone_request', 'trust_concern', 'pay_on_delivery',
+      'farewell', 'general'
+    ]);
+
     if (result.type === 'response' && result.text) {
+      // Reject if intent is not in the whitelist
+      if (!ALLOWED_INTENTS.has(result.intent)) {
+        console.log(`🏛️ [master] Intent "${result.intent}" not in whitelist — rejecting, fall through`);
+        return null;
+      }
+
+      // Reject if the response contains prices or ML URLs — masterFlow should never quote
+      const hasPrice = /\$\s*\d{3,}/.test(result.text);
+      const hasMLUrl = /mercadolibre\.com\.mx/i.test(result.text);
+      const hasDimensions = /\d+\s*[xX×]\s*\d+/.test(result.text);
+      if (hasPrice || hasMLUrl || hasDimensions) {
+        console.log(`🏛️ [master] Response contains product data (price=${hasPrice}, url=${hasMLUrl}, dims=${hasDimensions}) — rejecting`);
+        return null;
+      }
+
       // Farewell dedup: don't repeat farewell on consecutive thanks/goodbye
       const isFarewell = result.intent === 'farewell';
       const alreadyClosing = convo?.lastIntent === 'farewell' || convo?.lastIntent === 'thanks' || convo?.lastIntent === 'goodbye';
