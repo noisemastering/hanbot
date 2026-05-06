@@ -8,14 +8,8 @@ function formatMoney(n) {
   return '$' + n.toLocaleString('es-MX', { maximumFractionDigits: 0 });
 }
 
-function getToken() {
-  const stored = localStorage.getItem('hanlob_auth');
-  if (!stored) return null;
-  try { return JSON.parse(stored).token; } catch { return null; }
-}
-
 function authHeaders() {
-  const token = getToken();
+  const token = localStorage.getItem('token');
   return {
     'Content-Type': 'application/json',
     ...(token ? { Authorization: `Bearer ${token}` } : {})
