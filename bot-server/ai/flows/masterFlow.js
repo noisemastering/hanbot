@@ -125,7 +125,6 @@ ${productBlock}`;
 
     const userContext = [];
     if (convo?.userName) userContext.push(`Nombre del cliente: ${convo.userName}`);
-    if (convo?.lastSharedProductLink) userContext.push(`Link de compra compartido: ${convo.lastSharedProductLink}`);
     if (convo?.lastBotResponse) userContext.push(`Último mensaje del bot: "${convo.lastBotResponse.slice(0, 120)}"`);
     const contextStr = userContext.length > 0 ? `\n${userContext.join('\n')}` : '';
 
