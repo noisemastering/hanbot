@@ -25,6 +25,7 @@ const es = {
   "menu.flujos": "Flujos",
   "menu.simulador": "Simulador",
   "menu.intelligence": "Inteligencia Artificial",
+  "menu.mlImport": "Importar Órdenes",
   "menu.trackedLinks": "Links de seguimiento",
   "menu.users": "Usuarios",
   "menu.usersSub": "Usuarios",
