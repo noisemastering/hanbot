@@ -136,6 +136,7 @@ const pushRoutes = require('./routes/pushRoutes');
 const usersRoutes = require('./routes/usersRoutes');
 const mercadoLibreAuthRoutes = require('./routes/mercadoLibreAuthRoutes');
 const mercadoLibreOrdersRoutes = require('./routes/mercadoLibreOrdersRoutes');
+const mlOrderImportRoutes = require('./routes/mlOrderImportRoutes');
 const mercadoLibreNotificationsRoutes = require('./routes/mercadoLibreNotificationsRoutes');
 const healthRoutes = require('./routes/healthRoutes');
 const intentsRoutes = require('./routes/intentsRoutes');
@@ -152,6 +153,7 @@ app.use('/profiles', profilesRoutes);
 app.use('/click-logs', clickLogsRoutes);
 app.use('/ml', mercadoLibreAuthRoutes);
 app.use('/ml', mercadoLibreOrdersRoutes);
+app.use('/ml', mlOrderImportRoutes);
 app.use('/ml', mercadoLibreNotificationsRoutes);
 app.use('/health', healthRoutes);
 
