@@ -1506,8 +1506,6 @@ function App() {
 
   // Count active campaigns
   const activeCampaigns = campaigns.filter((c) => c.active === true).length;
-  console.log("Campaigns state:", campaigns);
-  console.log("Active campaigns count:", activeCampaigns);
 
   // Best ad comes from clickStats (aggregated from ClickLog)
   const bestAd = clickStats.bestAd;
