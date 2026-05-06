@@ -228,14 +228,19 @@ export default function MLOrderImportView() {
               Importando ({progress.phase === 'archived' ? 'órdenes archivadas' : 'órdenes recientes'})
             </span>
             <span className="text-sm text-primary-400">
-              {progress.imported?.toLocaleString()} importadas, {progress.skipped?.toLocaleString()} existentes
+              {progress.imported?.toLocaleString()} nuevas, {progress.skipped?.toLocaleString()} existentes
             </span>
           </div>
           <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
             <div className="bg-primary-500 h-2 rounded-full transition-all"
-              style={{ width: `${progress.windowsTotal > 0 ? (progress.windowsDone / progress.windowsTotal * 100) : 0}%` }} />
+              style={{ width: `${progress.pagesTotal > 0 ? Math.min(100, progress.pagesProcessed / progress.pagesTotal * 100) : progress.windowsTotal > 0 ? (progress.windowsDone / progress.windowsTotal * 100) : 0}%` }} />
           </div>
-          <p className="text-xs text-gray-500">{progress.currentWindow || 'Preparando...'}</p>
+          <div className="flex justify-between">
+            <p className="text-xs text-gray-500">{progress.currentWindow || 'Preparando...'}</p>
+            <p className="text-xs text-gray-500">
+              {progress.pagesProcessed > 0 ? `Página ${progress.pagesProcessed}${progress.pagesTotal > 0 ? ` de ~${progress.pagesTotal}` : ''}` : `Ventana ${progress.windowsDone}/${progress.windowsTotal}`}
+            </p>
+          </div>
           {progress.errors?.length > 0 && (
             <p className="text-xs text-red-400 mt-1">{progress.errors.length} errores</p>
           )}

@@ -97,6 +97,7 @@ async function fetchPage(sellerId, accessToken, params, retries = 0) {
 
 /**
  * Save a batch of ML orders into the database.
+ * Returns { imported, skipped }
  */
 async function saveOrderBatch(orders, batchId, source) {
   let imported = 0;
@@ -105,7 +106,7 @@ async function saveOrderBatch(orders, batchId, source) {
   for (const order of orders) {
     const doc = {
       mlOrderId: String(order.id),
-      sellerId: String(order.buyer?.id ? order.seller?.id || '' : ''),
+      sellerId: String(order.seller?.id || ''),
       dateCreated: new Date(order.date_created),
       dateClosed: order.date_closed ? new Date(order.date_closed) : null,
       status: order.status,
@@ -130,17 +131,15 @@ async function saveOrderBatch(orders, batchId, source) {
     };
 
     try {
-      const result = await MLOrder.findOneAndUpdate(
-        { mlOrderId: doc.mlOrderId },
-        { $set: doc },
-        { upsert: true, new: true }
-      );
-      // If createdAt roughly equals updatedAt, it was a new insert
-      const isNew = Math.abs(result.createdAt - result.updatedAt) < 1000;
-      if (isNew) imported++;
-      else skipped++;
+      const exists = await MLOrder.exists({ mlOrderId: doc.mlOrderId });
+      if (exists) {
+        skipped++;
+        continue;
+      }
+      await MLOrder.create(doc);
+      imported++;
     } catch (err) {
-      if (err.code === 11000) skipped++; // Duplicate
+      if (err.code === 11000) skipped++;
       else console.error(`❌ Error saving order ${doc.mlOrderId}:`, err.message);
     }
   }
@@ -153,14 +152,29 @@ async function saveOrderBatch(orders, batchId, source) {
  * Runs as a background task — call getProgress() to check status.
  */
 async function importAllOrders(sellerId, options = {}) {
-  const startDate = options.startDate || new Date(Date.now() - 5 * 365 * 24 * 60 * 60 * 1000); // 5 years ago
-  const batchId = `import_${Date.now()}`;
-
   // Prevent concurrent imports
   const existing = progressMap.get(sellerId);
   if (existing?.status === 'running') {
     return { error: 'Import already running', batchId: existing.batchId };
   }
+
+  // Smart start date: resume from last imported order, or go back 5 years
+  let startDate = options.startDate;
+  if (!startDate) {
+    const latest = await MLOrder.findOne({ sellerId }).sort({ dateCreated: -1 }).select('dateCreated').lean();
+    if (latest?.dateCreated) {
+      // Start from 1 day before the last imported order (overlap to catch stragglers)
+      startDate = new Date(latest.dateCreated.getTime() - 24 * 60 * 60 * 1000);
+      console.log(`📅 Resuming import from ${startDate.toISOString().split('T')[0]} (last order: ${latest.dateCreated.toISOString().split('T')[0]})`);
+    } else {
+      startDate = new Date(Date.now() - 5 * 365 * 24 * 60 * 60 * 1000); // 5 years ago
+      console.log(`📅 Fresh import starting from ${startDate.toISOString().split('T')[0]}`);
+    }
+  }
+
+  const batchId = `import_${Date.now()}`;
+  const windows = generateMonthlyWindows(startDate);
+  const totalPages = windows.length * 2; // rough estimate, 2 phases
 
   const progress = {
     status: 'running',
@@ -172,17 +186,16 @@ async function importAllOrders(sellerId, options = {}) {
     skipped: 0,
     errors: [],
     currentWindow: '',
-    windowsTotal: 0,
-    windowsDone: 0
+    windowsTotal: windows.length * 2,
+    windowsDone: 0,
+    pagesProcessed: 0,
+    pagesTotal: 0
   };
   progressMap.set(sellerId, progress);
 
   // Run in background
   (async () => {
     try {
-      const windows = generateMonthlyWindows(startDate);
-      progress.windowsTotal = windows.length * 2; // recent + archived
-
       // Phase 1: Recent orders
       progress.phase = 'recent';
       await processWindows(sellerId, windows, ML_ORDERS_API, batchId, 'recent', progress);
@@ -211,7 +224,7 @@ async function processWindows(sellerId, windows, endpoint, batchId, source, prog
   for (const window of windows) {
     progress.currentWindow = `${window.from.toISOString().split('T')[0]} → ${window.to.toISOString().split('T')[0]}`;
 
-    if (progress.status !== 'running') break; // Stop if cancelled
+    if (progress.status !== 'running') break;
 
     try {
       const accessToken = (await getValidAccessToken(sellerId)).trim();
@@ -231,18 +244,51 @@ async function processWindows(sellerId, windows, endpoint, batchId, source, prog
         continue;
       }
 
+      const windowPages = Math.ceil(total / PAGE_SIZE);
+      progress.pagesTotal += windowPages;
       progress.totalEstimate += total;
 
       // Save first page
+      let windowAllExisting = true;
       if (firstPage.results?.length > 0) {
         const result = await saveOrderBatch(firstPage.results, batchId, source);
         progress.imported += result.imported;
         progress.skipped += result.skipped;
+        progress.pagesProcessed++;
+        if (result.imported > 0) windowAllExisting = false;
+      }
+
+      // Smart skip: if first page is 100% existing and this is a re-import,
+      // check one more page. If also all existing, skip the rest of this window.
+      if (windowAllExisting && total > PAGE_SIZE * 2) {
+        await sleep(DELAY_BETWEEN_PAGES);
+        const checkPage = await fetchPage(sellerId, accessToken, {
+          endpoint,
+          offset: PAGE_SIZE,
+          dateFrom: toMLDate(window.from),
+          dateTo: toMLDate(window.to)
+        });
+        if (checkPage.results?.length > 0) {
+          const checkResult = await saveOrderBatch(checkPage.results, batchId, source);
+          progress.imported += checkResult.imported;
+          progress.skipped += checkResult.skipped;
+          progress.pagesProcessed++;
+          if (checkResult.imported === 0) {
+            // Both pages all existing — skip rest of this window
+            console.log(`⏭️  Skipping ${total - PAGE_SIZE * 2} existing orders in ${progress.currentWindow}`);
+            progress.skipped += total - PAGE_SIZE * 2;
+            progress.pagesProcessed += windowPages - 2;
+            progress.windowsDone++;
+            await sleep(DELAY_BETWEEN_WINDOWS);
+            continue;
+          }
+        }
       }
 
       // Paginate remaining
+      const startOffset = windowAllExisting ? PAGE_SIZE * 2 : PAGE_SIZE; // skip pages we already checked
       const maxOffset = Math.min(total, 10000);
-      for (let offset = PAGE_SIZE; offset < maxOffset; offset += PAGE_SIZE) {
+      for (let offset = startOffset; offset < maxOffset; offset += PAGE_SIZE) {
         if (progress.status !== 'running') break;
 
         await sleep(DELAY_BETWEEN_PAGES);
@@ -259,14 +305,11 @@ async function processWindows(sellerId, windows, endpoint, batchId, source, prog
             progress.imported += result.imported;
             progress.skipped += result.skipped;
           }
+          progress.pagesProcessed++;
         } catch (pageErr) {
           progress.errors.push(`${source}:${window.from.toISOString().split('T')[0]}:offset${offset}: ${pageErr.message}`);
+          progress.pagesProcessed++;
         }
-      }
-
-      // If total > 10000, use weekly sub-windows
-      if (total > 9000) {
-        console.log(`⚠️ Window ${progress.currentWindow} has ${total} orders — would need sub-windowing (TODO)`);
       }
 
     } catch (windowErr) {
