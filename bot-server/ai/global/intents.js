@@ -1636,7 +1636,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
       return {
         type: "text",
         text: "Nos ubicamos en Querétaro. Somos principalmente tienda en línea, pero si gustas visitarnos puedes contactarnos para coordinar:\n\n" +
-              "📞 442 123 4567\n" +
+              "📞 442 352 1646\n" +
               "💬 WhatsApp: https://wa.me/524425957432\n\n" +
               "Recuerda que enviamos a todo México y Estados Unidos 📦"
       };

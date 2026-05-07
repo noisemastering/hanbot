@@ -26,8 +26,7 @@ async function seedBusinessInfo() {
       _id: "hanlob-info",
       name: "Hanlob",
       phones: [
-        "442 123 4567", // Replace with real phone
-        "442 765 4321"  // Replace with real phone
+        "442 352 1646"
       ],
       hours: "Lunes a Viernes de 8:00 a 18:00",
       address: "Calle Loma de San Gremal No. 108, bodega 73, Col. Ejido Santa María Magdalena, C.P. 76137, Santiago de Querétaro, Qro.",
