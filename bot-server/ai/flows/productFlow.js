@@ -348,7 +348,21 @@ async function handle(userMessage, convo, psid, context = {}) {
           };
         }
 
-        // No rounded match found
+        // No rounded match found — check other flows' product families
+        if (manifests && manifests.length > 0) {
+          const rsizeKey = `${Math.min(rw, rh)}x${Math.max(rw, rh)}m`;
+          const raltKey = `${Math.max(rw, rh)}x${Math.min(rw, rh)}m`;
+          for (const m of manifests) {
+            if (!m.products?.length) continue;
+            const otherProducts = await loadProducts(m.products);
+            const found = otherProducts.find(p => p.size === rsizeKey || p.size === raltKey);
+            if (found) {
+              console.log(`🏛️ [product] Rounded size ${rw}x${rh}m found in ${m.name} (${found.name})`);
+              return { type: 'flow_switch', action: 'product_redirect', targetFlowName: m.name };
+            }
+          }
+        }
+
         return {
           type: 'dimension_handoff',
           reason: 'size_not_found',
@@ -375,7 +389,21 @@ async function handle(userMessage, convo, psid, context = {}) {
         };
       }
 
-      // Exact size not in catalog
+      // Exact size not in THIS flow's catalog — check other flows' product families
+      if (manifests && manifests.length > 0) {
+        const sizeKey = `${w}x${h}m`;
+        const altKey = `${h}x${w}m`;
+        for (const m of manifests) {
+          if (!m.products?.length) continue;
+          const otherProducts = await loadProducts(m.products);
+          const found = otherProducts.find(p => p.size === sizeKey || p.size === altKey);
+          if (found) {
+            console.log(`🏛️ [product] Size ${w}x${h}m found in ${m.name} (${found.name})`);
+            return { type: 'flow_switch', action: 'product_redirect', targetFlowName: m.name };
+          }
+        }
+      }
+
       return {
         type: 'dimension_handoff',
         reason: 'size_not_found',
