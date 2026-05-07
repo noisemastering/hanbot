@@ -240,6 +240,17 @@ function SalesForecastView() {
             </div>
           </div>
 
+          {/* Manual sales summary */}
+          {data.manualSales && data.manualSales.totalOrders > 0 && (
+            <div className="bg-orange-500/5 border border-orange-500/20 rounded-xl p-4 flex items-center gap-4">
+              <span className="text-lg">🏷️</span>
+              <div className="flex-1">
+                <p className="text-sm text-white font-medium">Ventas manuales incluidas: {data.manualSales.totalOrders} ventas por {fmt(data.manualSales.totalRevenue)}</p>
+                <p className="text-xs text-gray-500">Registradas desde CRM. Se incluyen en el total, se separan al segmentar por producto.</p>
+              </div>
+            </div>
+          )}
+
           {/* Meta attribution summary */}
           {data.metaAttribution && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">

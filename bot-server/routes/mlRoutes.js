@@ -238,6 +238,56 @@ router.get('/forecast-v2', async (req, res) => {
 
     let daily = await MLOrder.aggregate(mlPipeline);
 
+    // ── MANUAL SALES (from CRM standalone sales) ──
+    // Always query manual sales and merge into daily data for global view.
+    // Track them separately so they can be isolated when segmenting.
+    const manualDaily = await ClickLog.aggregate([
+      { $match: { converted: true, correlationMethod: 'manual', createdAt: { $gte: since } } },
+      { $group: {
+        _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'America/Mexico_City' } },
+        revenue: { $sum: { $ifNull: ['$conversionData.totalAmount', 0] } },
+        orders: { $sum: 1 }
+      }},
+      { $sort: { _id: 1 } }
+    ]);
+
+    const manualByDate = new Map(manualDaily.map(d => [d._id, d]));
+    const totalManualRevenue = manualDaily.reduce((s, d) => s + d.revenue, 0);
+    const totalManualOrders = manualDaily.reduce((s, d) => s + d.orders, 0);
+
+    // Merge manual sales into daily (add revenue to existing dates, create new entries for dates with only manual)
+    const dailyMap = new Map(daily.map(d => [d._id, { ...d }]));
+    for (const md of manualDaily) {
+      const existing = dailyMap.get(md._id);
+      if (existing) {
+        existing.revenue += md.revenue;
+        existing.orders += md.orders;
+        existing.manualRevenue = md.revenue;
+        existing.manualOrders = md.orders;
+      } else {
+        dailyMap.set(md._id, {
+          _id: md._id,
+          revenue: md.revenue,
+          orders: md.orders,
+          manualRevenue: md.revenue,
+          manualOrders: md.orders
+        });
+      }
+    }
+    // Also tag ML-only days with zero manual
+    for (const [key, val] of dailyMap) {
+      if (val.manualRevenue == null) {
+        val.manualRevenue = 0;
+        val.manualOrders = 0;
+      }
+    }
+    daily = Array.from(dailyMap.values()).sort((a, b) => a._id.localeCompare(b._id));
+
+    const manualSales = {
+      totalRevenue: Math.round(totalManualRevenue),
+      totalOrders: totalManualOrders
+    };
+
     // ── META ATTRIBUTION OVERLAY (modifier, not a separate source) ──
     // ML orders are always the revenue base. ClickLog tells us which sales came from ads.
     let metaAttribution = null;
@@ -364,6 +414,7 @@ router.get('/forecast-v2', async (req, res) => {
       revenue: Math.round(d.revenue),
       orders: d.orders,
       movingAvg: movingAvg[i],
+      manualRevenue: Math.round(d.manualRevenue || 0),
       ...(d.adRevenue != null ? {
         adRevenue: Math.round(d.adRevenue),
         organicRevenue: Math.round(d.organicRevenue)
@@ -468,7 +519,8 @@ router.get('/forecast-v2', async (req, res) => {
         avgDailyRevenue: Math.round(overallMean),
         monthly,
         seasonSummary,
-        metaAttribution
+        metaAttribution,
+        manualSales
       }
     });
   } catch (err) {
