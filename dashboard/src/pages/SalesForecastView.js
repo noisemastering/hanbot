@@ -240,6 +240,30 @@ function SalesForecastView() {
             </div>
           </div>
 
+          {/* Meta attribution summary */}
+          {data.metaAttribution && (
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-5">
+                <p className="text-xs text-gray-400">Ingresos por Ads</p>
+                <p className="text-xl font-bold text-blue-400">{fmt(data.metaAttribution.totalAdRevenue)}</p>
+                <p className="text-xs text-gray-500 mt-1">{data.metaAttribution.adRevenuePercent}% del total</p>
+              </div>
+              <div className="bg-green-500/5 border border-green-500/20 rounded-xl p-5">
+                <p className="text-xs text-gray-400">Ingresos orgánicos</p>
+                <p className="text-xl font-bold text-green-400">{fmt(data.metaAttribution.totalOrganicRevenue)}</p>
+                <p className="text-xs text-gray-500 mt-1">{(100 - data.metaAttribution.adRevenuePercent).toFixed(1)}% del total</p>
+              </div>
+              <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-5">
+                <p className="text-xs text-gray-400">Ventas por Ads</p>
+                <p className="text-xl font-bold text-blue-400">{data.metaAttribution.totalAdOrders}</p>
+              </div>
+              <div className="bg-green-500/5 border border-green-500/20 rounded-xl p-5">
+                <p className="text-xs text-gray-400">Ventas orgánicas</p>
+                <p className="text-xl font-bold text-green-400">{data.metaAttribution.totalOrganicOrders}</p>
+              </div>
+            </div>
+          )}
+
           {/* Main chart: daily + forecast */}
           <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
             <div className="flex items-center justify-between mb-4">

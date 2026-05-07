@@ -238,31 +238,51 @@ router.get('/forecast-v2', async (req, res) => {
 
     let daily = await MLOrder.aggregate(mlPipeline);
 
-    // ── OPTIONALLY MERGE ClickLog (Meta) DATA ──
+    // ── META ATTRIBUTION OVERLAY (modifier, not a separate source) ──
+    // ML orders are always the revenue base. ClickLog tells us which sales came from ads.
+    let metaAttribution = null;
     if (source === 'ml+meta') {
       const clickDaily = await ClickLog.aggregate([
         { $match: { converted: true, createdAt: { $gte: since } } },
         { $group: {
           _id: { orderId: '$conversionData.orderId', date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'America/Mexico_City' } } },
-          revenue: { $first: '$conversionData.totalAmount' }
+          revenue: { $first: '$conversionData.totalAmount' },
+          adId: { $first: '$adId' }
         }},
-        { $group: { _id: '$_id.date', revenue: { $sum: { $ifNull: ['$revenue', 0] } }, orders: { $sum: 1 } } },
+        { $group: {
+          _id: '$_id.date',
+          adRevenue: { $sum: { $ifNull: ['$revenue', 0] } },
+          adOrders: { $sum: 1 }
+        }},
         { $sort: { _id: 1 } }
       ]);
 
-      // Merge: for each date, take the HIGHER of ML or ClickLog (avoid double-counting)
-      // ML orders are the source of truth; ClickLog may capture some that ML missed
-      const dateMap = new Map(daily.map(d => [d._id, d]));
-      for (const cd of clickDaily) {
-        const existing = dateMap.get(cd._id);
-        if (!existing) {
-          dateMap.set(cd._id, cd);
-        } else if (cd.revenue > existing.revenue) {
-          existing.revenue = cd.revenue;
-          existing.orders = Math.max(existing.orders, cd.orders);
-        }
-      }
-      daily = Array.from(dateMap.values()).sort((a, b) => a._id.localeCompare(b._id));
+      // Build per-day ad attribution map
+      const adByDate = new Map(clickDaily.map(d => [d._id, d]));
+      const totalAdRevenue = clickDaily.reduce((s, d) => s + d.adRevenue, 0);
+      const totalAdOrders = clickDaily.reduce((s, d) => s + d.adOrders, 0);
+      const totalMLRevenue = daily.reduce((s, d) => s + d.revenue, 0);
+      const totalMLOrders = daily.reduce((s, d) => s + d.orders, 0);
+
+      // Enrich daily data with ad attribution (without changing revenue)
+      daily = daily.map(d => {
+        const ad = adByDate.get(d._id);
+        return {
+          ...d,
+          adRevenue: ad?.adRevenue || 0,
+          adOrders: ad?.adOrders || 0,
+          organicRevenue: Math.max(0, d.revenue - (ad?.adRevenue || 0)),
+          organicOrders: Math.max(0, d.orders - (ad?.adOrders || 0))
+        };
+      });
+
+      metaAttribution = {
+        totalAdRevenue: Math.round(totalAdRevenue),
+        totalAdOrders,
+        totalOrganicRevenue: Math.round(Math.max(0, totalMLRevenue - totalAdRevenue)),
+        totalOrganicOrders: Math.max(0, totalMLOrders - totalAdOrders),
+        adRevenuePercent: totalMLRevenue > 0 ? +(totalAdRevenue / totalMLRevenue * 100).toFixed(1) : 0
+      };
     }
 
     if (daily.length < 7) {
@@ -343,7 +363,11 @@ router.get('/forecast-v2', async (req, res) => {
       dow: DOW_NAMES[new Date(d._id + 'T12:00:00').getDay()],
       revenue: Math.round(d.revenue),
       orders: d.orders,
-      movingAvg: movingAvg[i]
+      movingAvg: movingAvg[i],
+      ...(d.adRevenue != null ? {
+        adRevenue: Math.round(d.adRevenue),
+        organicRevenue: Math.round(d.organicRevenue)
+      } : {})
     }));
 
     // Forecast (14 days)
@@ -443,7 +467,8 @@ router.get('/forecast-v2', async (req, res) => {
         totalForecastRevenue: Math.round(totalForecastRevenue),
         avgDailyRevenue: Math.round(overallMean),
         monthly,
-        seasonSummary
+        seasonSummary,
+        metaAttribution
       }
     });
   } catch (err) {
