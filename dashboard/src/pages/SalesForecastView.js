@@ -5,7 +5,6 @@ import {
 } from 'recharts';
 
 const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6', fontSize: '13px' };
-const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
 const fmt = (n) => '$' + Math.round(n).toLocaleString('es-MX');
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
