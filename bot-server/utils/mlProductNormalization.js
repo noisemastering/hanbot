@@ -7,6 +7,9 @@ const MLOrder = require("../models/MLOrder");
 const MLProductMapping = require("../models/MLProductMapping");
 const ProductFamily = require("../models/ProductFamily");
 
+// In-memory progress tracking for normalization
+const normProgressMap = new Map();
+
 /**
  * Bootstrap mappings from existing ProductFamily.onlineStoreLinks.
  * If a ProductFamily has an ML link, we can auto-map any order with that item ID.
@@ -189,16 +192,34 @@ REGLAS:
 
 /**
  * Run AI normalization on all unmapped titles.
+ * Tracks progress in normProgressMap for polling.
  */
 async function normalizeUnmapped(options = {}) {
   const batchSize = options.batchSize || 10;
   const limit = options.limit || 200;
+  const progressKey = options.progressKey || 'default';
 
   const unmapped = await getUnmappedTitles(limit);
-  if (unmapped.length === 0) return { processed: 0, mapped: 0 };
+  if (unmapped.length === 0) {
+    normProgressMap.set(progressKey, { status: 'completed', processed: 0, mapped: 0, total: 0 });
+    return { processed: 0, mapped: 0 };
+  }
 
   const productContext = await buildProductContext();
-  if (productContext.length === 0) return { processed: 0, mapped: 0, error: 'No sellable products in catalog' };
+  if (productContext.length === 0) {
+    normProgressMap.set(progressKey, { status: 'error', error: 'No sellable products in catalog' });
+    return { processed: 0, mapped: 0, error: 'No sellable products in catalog' };
+  }
+
+  const progress = {
+    status: 'running',
+    total: unmapped.length,
+    processed: 0,
+    mapped: 0,
+    currentBatch: '',
+    startedAt: new Date()
+  };
+  normProgressMap.set(progressKey, progress);
 
   let mapped = 0;
   let processed = 0;
@@ -206,6 +227,8 @@ async function normalizeUnmapped(options = {}) {
   // Process in batches
   for (let i = 0; i < unmapped.length; i += batchSize) {
     const batch = unmapped.slice(i, i + batchSize);
+    progress.currentBatch = batch.map(b => b.title).slice(0, 2).join(', ').substring(0, 60) + '...';
+
     const result = await matchTitlesBatch(batch, productContext);
 
     for (const match of (result.matches || [])) {
@@ -237,14 +260,23 @@ async function normalizeUnmapped(options = {}) {
       }
     }
 
+    progress.processed = processed;
+    progress.mapped = mapped;
+
     // Small delay between batches
     if (i + batchSize < unmapped.length) {
       await new Promise(r => setTimeout(r, 500));
     }
   }
 
+  progress.status = 'completed';
+  progress.completedAt = new Date();
   console.log(`🧠 Normalization: processed ${processed}, mapped ${mapped} of ${unmapped.length}`);
   return { processed, mapped, total: unmapped.length };
+}
+
+function getNormProgress(key = 'default') {
+  return normProgressMap.get(key) || null;
 }
 
 /**
@@ -312,5 +344,6 @@ module.exports = {
   getUnmappedTitles,
   normalizeUnmapped,
   applyMappingsToOrders,
-  getStats
+  getStats,
+  getNormProgress
 };

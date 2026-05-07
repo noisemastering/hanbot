@@ -26,6 +26,7 @@ export default function MLOrderImportView() {
   const [monthly, setMonthly] = useState([]);
   const [loading, setLoading] = useState(true);
   const [normalizing, setNormalizing] = useState(false);
+  const [normProgress, setNormProgress] = useState(null);
   const [tab, setTab] = useState('overview'); // overview, mappings, unmapped
   const [families, setFamilies] = useState([]);
   const [editingMapping, setEditingMapping] = useState(null);
@@ -141,21 +142,41 @@ export default function MLOrderImportView() {
 
   const runNormalization = async () => {
     setNormalizing(true);
+    setNormProgress({ status: 'running', processed: 0, total: 0, mapped: 0 });
     try {
       await fetch(`${API_URL}/ml/import/normalize`, {
         method: 'POST',
         headers: authHeaders(),
         body: JSON.stringify({ limit: 200 })
       });
-      await fetchAll();
-      if (tab === 'mappings') await fetchMappings();
-      if (tab === 'unmapped') await fetchUnmapped();
     } catch (err) {
-      console.error('Error normalizing:', err);
-    } finally {
+      console.error('Error starting normalization:', err);
       setNormalizing(false);
+      setNormProgress(null);
     }
   };
+
+  // Poll normalization progress
+  useEffect(() => {
+    if (!normalizing) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_URL}/ml/import/normalize/progress`, { headers: authHeaders() });
+        const data = await res.json();
+        if (data.success && data.data) {
+          setNormProgress(data.data);
+          if (data.data.status === 'completed' || data.data.status === 'error') {
+            setNormalizing(false);
+            fetchAll();
+            if (tab === 'mappings') fetchMappings();
+            if (tab === 'unmapped') fetchUnmapped();
+          }
+        }
+      } catch {}
+    }, 2000);
+    return () => clearInterval(interval);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [normalizing]);
 
   const saveMapping = async (mappingId) => {
     try {
@@ -253,6 +274,23 @@ export default function MLOrderImportView() {
           <p className="text-sm text-green-300">
             Importación completada: {progress.imported?.toLocaleString()} nuevas, {progress.skipped?.toLocaleString()} existentes.
           </p>
+        </div>
+      )}
+
+      {/* Normalization progress */}
+      {normalizing && normProgress && (
+        <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4 mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-purple-300 font-medium">Normalizando productos</span>
+            <span className="text-sm text-purple-400">
+              {normProgress.mapped || 0} mapeados de {normProgress.processed || 0} procesados ({normProgress.total || 0} total)
+            </span>
+          </div>
+          <div className="w-full bg-gray-700 rounded-full h-2 mb-2">
+            <div className="bg-purple-500 h-2 rounded-full transition-all"
+              style={{ width: `${normProgress.total > 0 ? (normProgress.processed / normProgress.total * 100) : 0}%` }} />
+          </div>
+          <p className="text-xs text-gray-500 truncate">{normProgress.currentBatch || 'Preparando...'}</p>
         </div>
       )}
 

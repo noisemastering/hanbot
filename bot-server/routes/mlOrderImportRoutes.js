@@ -19,7 +19,7 @@ const authenticate = async (req, res, next) => {
 const MLOrder = require("../models/MLOrder");
 const MLProductMapping = require("../models/MLProductMapping");
 const { importAllOrders, getProgress, stopImport } = require("../utils/mlOrderImport");
-const { bootstrapFromExistingLinks, normalizeUnmapped, applyMappingsToOrders, getUnmappedTitles, getStats } = require("../utils/mlProductNormalization");
+const { bootstrapFromExistingLinks, normalizeUnmapped, applyMappingsToOrders, getUnmappedTitles, getStats, getNormProgress } = require("../utils/mlProductNormalization");
 
 // POST /ml/import/start/:sellerId — Start historical import
 router.post("/import/start/:sellerId", authenticate, async (req, res) => {
@@ -84,28 +84,33 @@ router.get("/import/unmapped", authenticate, async (req, res) => {
   }
 });
 
-// POST /ml/import/normalize — Run AI normalization
+// POST /ml/import/normalize — Run AI normalization (async, returns immediately)
 router.post("/import/normalize", authenticate, async (req, res) => {
   try {
-    // First bootstrap from existing ML links
-    const bootstrapped = await bootstrapFromExistingLinks();
+    // Return immediately, run in background
+    res.json({ success: true, data: { status: 'started' } });
 
-    // Then AI-match remaining
-    const normalized = await normalizeUnmapped({
+    // Bootstrap from existing ML links first
+    await bootstrapFromExistingLinks();
+
+    // AI-match remaining
+    await normalizeUnmapped({
       batchSize: req.body.batchSize || 10,
-      limit: req.body.limit || 200
+      limit: req.body.limit || 200,
+      progressKey: 'default'
     });
 
     // Apply all mappings to orders
-    const applied = await applyMappingsToOrders();
-
-    res.json({
-      success: true,
-      data: { bootstrapped, normalized, applied }
-    });
+    await applyMappingsToOrders();
   } catch (err) {
-    res.status(500).json({ success: false, error: err.message });
+    console.error('❌ Normalization error:', err.message);
   }
+});
+
+// GET /ml/import/normalize/progress — Poll normalization progress
+router.get("/import/normalize/progress", authenticate, async (req, res) => {
+  const progress = getNormProgress('default');
+  res.json({ success: true, data: progress || { status: 'idle' } });
 });
 
 // GET /ml/import/mappings — List all mappings
