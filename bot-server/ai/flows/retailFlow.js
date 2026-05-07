@@ -210,10 +210,14 @@ async function handle(userMessage, convo, psid, context = {}) {
   // ── QUOTE — build AI-generated message ──
   const quoteText = await buildQuoteMessage(products, { voice, customerName, salesChannel, colorNote, conversationHistory });
 
-  const firstProductLink = products.find(p => p.link)?.link;
+  // Only store lastSharedProductLink for single-product quotes where we actually
+  // shared a specific tracked link. For multi-product range presentations, don't
+  // store anything — the customer hasn't picked a size yet and the follow-up job
+  // would re-share a random product's raw URL.
+  const singleProductLink = products.length === 1 ? products[0]?.link : null;
   await updateConversation(psid, {
     lastIntent: 'retail_quote',
-    ...(firstProductLink ? { lastSharedProductLink: firstProductLink } : {}),
+    ...(singleProductLink ? { lastSharedProductLink: singleProductLink } : {}),
     unknownCount: 0
   });
 

@@ -179,19 +179,16 @@ async function handle(userMessage, convo, psid, state = {}) {
       }
     }
 
-    // Size not in catalog → handoff
-    const handoffResp = await executeHandoff(psid, convo, userMessage, {
-      reason: `Medida ${w}x${h}m no encontrada en catálogo`,
-      responsePrefix: `La medida de ${w}x${h}m no la tenemos en catálogo estándar. Te comunico con un especialista para cotizarte.`,
-      lastIntent: 'size_not_found_handoff',
-      timingStyle: 'elaborate'
-    });
-    return { response: handoffResp, state };
+    // Size not in this family's catalog → fall through to standard pipeline.
+    // productFlow will check other convo_flows (e.g. sin-refuerzo) and offer a switch
+    // if the size exists there, instead of going straight to handoff.
+    console.log(`📏 [confeccionadaRetail] Size ${w}x${h}m not in reforzada catalog — falling through to chain`);
   }
 
   // ── STANDARD PIPELINE ──
-  // Non-dimension messages: product questions, general questions
+  // Non-dimension messages, or sizes not found in this family:
   // Handled by: masterFlow → buyerFlow → productFlow → retailFlow
+  // productFlow checks other convo_flow manifests for cross-family matches.
   return await instance.handle(userMessage, convo, psid, state);
 }
 

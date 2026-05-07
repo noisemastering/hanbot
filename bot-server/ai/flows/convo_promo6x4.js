@@ -190,14 +190,8 @@ async function handle(userMessage, convo, psid, state = {}) {
       }
     }
 
-    // Size not in catalog → handoff
-    const handoffResp = await executeHandoff(psid, convo, userMessage, {
-      reason: `Medida ${w}x${h}m no encontrada en catálogo`,
-      responsePrefix: `La medida de ${w}x${h}m no la tenemos en catálogo estándar. Te comunico con un especialista para cotizarte.`,
-      lastIntent: 'size_not_found_handoff',
-      timingStyle: 'elaborate'
-    });
-    return { response: handoffResp, state };
+    // Size not in this family's catalog → fall through to standard pipeline.
+    console.log(`📏 [promo6x4] Size ${w}x${h}m not in catalog — falling through to chain`);
   }
 
   // ── STANDARD PIPELINE ──
