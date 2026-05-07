@@ -182,6 +182,334 @@ router.get('/forecast', async (req, res) => {
   }
 });
 
+// ─── 1a. ENHANCED FORECAST (MLOrder-based) ──────────────────────────────────
+// Queries MLOrder for historical revenue with product family filtering.
+// Supports: plain ML sales, Meta overlay, seasonality.
+const MLOrder = require('../models/MLOrder');
+const ProductFamily = require('../models/ProductFamily');
+
+router.get('/forecast-v2', async (req, res) => {
+  try {
+    const {
+      days = 90,
+      source = 'ml',              // 'ml' = MLOrder only, 'ml+meta' = MLOrder + ClickLog
+      productFamilyId,            // Optional: filter to a product family
+      includeSubfamilies = 'true', // Include all descendants
+      seasonality = 'false'        // Apply month-of-year seasonality adjustment
+    } = req.query;
+
+    const since = new Date();
+    since.setDate(since.getDate() - parseInt(days));
+
+    // ── BUILD PRODUCT FAMILY FILTER ──
+    let familyFilter = null;
+    if (productFamilyId) {
+      // Get all descendant family IDs
+      const familyIds = [productFamilyId];
+      if (includeSubfamilies === 'true') {
+        const queue = [productFamilyId];
+        while (queue.length > 0) {
+          const parentIds = queue.splice(0, queue.length);
+          const children = await ProductFamily.find({ parentId: { $in: parentIds } }).select('_id').lean();
+          for (const c of children) {
+            familyIds.push(String(c._id));
+            queue.push(c._id);
+          }
+        }
+      }
+      familyFilter = familyIds.map(id => {
+        try { return require('mongoose').Types.ObjectId.createFromHexString(id); } catch { return null; }
+      }).filter(Boolean);
+    }
+
+    // ── QUERY MLOrder ──
+    const mlMatch = { status: 'paid', dateCreated: { $gte: since } };
+    const mlPipeline = [
+      { $match: mlMatch },
+      { $unwind: '$items' },
+      ...(familyFilter ? [{ $match: { 'items.productFamilyId': { $in: familyFilter } } }] : []),
+      { $group: {
+        _id: { $dateToString: { format: '%Y-%m-%d', date: '$dateCreated', timezone: 'America/Mexico_City' } },
+        revenue: { $sum: { $multiply: ['$items.unitPrice', '$items.quantity'] } },
+        orders: { $sum: 1 }
+      }},
+      { $sort: { _id: 1 } }
+    ];
+
+    let daily = await MLOrder.aggregate(mlPipeline);
+
+    // ── OPTIONALLY MERGE ClickLog (Meta) DATA ──
+    if (source === 'ml+meta') {
+      const clickDaily = await ClickLog.aggregate([
+        { $match: { converted: true, createdAt: { $gte: since } } },
+        { $group: {
+          _id: { orderId: '$conversionData.orderId', date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'America/Mexico_City' } } },
+          revenue: { $first: '$conversionData.totalAmount' }
+        }},
+        { $group: { _id: '$_id.date', revenue: { $sum: { $ifNull: ['$revenue', 0] } }, orders: { $sum: 1 } } },
+        { $sort: { _id: 1 } }
+      ]);
+
+      // Merge: for each date, take the HIGHER of ML or ClickLog (avoid double-counting)
+      // ML orders are the source of truth; ClickLog may capture some that ML missed
+      const dateMap = new Map(daily.map(d => [d._id, d]));
+      for (const cd of clickDaily) {
+        const existing = dateMap.get(cd._id);
+        if (!existing) {
+          dateMap.set(cd._id, cd);
+        } else if (cd.revenue > existing.revenue) {
+          existing.revenue = cd.revenue;
+          existing.orders = Math.max(existing.orders, cd.orders);
+        }
+      }
+      daily = Array.from(dateMap.values()).sort((a, b) => a._id.localeCompare(b._id));
+    }
+
+    if (daily.length < 7) {
+      return res.json({ success: true, data: { history: [], forecast: [], trend: 0, r2: 0, source, productFamilyId: productFamilyId || null } });
+    }
+
+    // ── STANDARD FORECAST ALGORITHM (same as v1) ──
+    const DOW_NAMES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const dowBuckets = [[], [], [], [], [], [], []];
+    daily.forEach(d => {
+      const dow = new Date(d._id + 'T12:00:00').getDay();
+      dowBuckets[dow].push(d.revenue);
+    });
+    const overallMean = ss.mean(daily.map(d => d.revenue));
+    const dowAvg = dowBuckets.map(b => b.length > 0 ? ss.mean(b) : overallMean);
+    const dowMultiplier = dowAvg.map(a => overallMean > 0 ? a / overallMean : 1);
+
+    // Moving average
+    const movingAvg = daily.map((d, i) => {
+      if (i < 6) return null;
+      return Math.round(ss.mean(daily.slice(i - 6, i + 1).map(w => w.revenue)));
+    });
+
+    // Weekly aggregation + regression
+    const weeks = [];
+    for (let i = 0; i < daily.length; i += 7) {
+      const week = daily.slice(i, Math.min(i + 7, daily.length));
+      if (week.length < 3) continue;
+      weeks.push({
+        startDate: week[0]._id,
+        label: new Date(week[0]._id + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }),
+        revenue: Math.round(week.reduce((s, d) => s + d.revenue, 0)),
+        orders: week.reduce((s, d) => s + d.orders, 0),
+        days: week.length
+      });
+    }
+
+    const weeklyPoints = weeks.map((w, i) => [i, w.revenue]);
+    const weeklyReg = weeklyPoints.length >= 3 ? ss.linearRegression(weeklyPoints) : { m: 0, b: overallMean * 7 };
+    const weeklyLine = ss.linearRegressionLine(weeklyReg);
+    const weeklyR2 = weeklyPoints.length >= 3 ? ss.rSquared(weeklyPoints, weeklyLine) : 0;
+
+    const residuals = daily.map(d => d.revenue - (overallMean * dowMultiplier[new Date(d._id + 'T12:00:00').getDay()]));
+    const stdDev = ss.standardDeviation(residuals);
+
+    // ── SEASONALITY (month-of-year multipliers from full history) ──
+    let monthMultiplier = Array(12).fill(1); // default: no adjustment
+    if (seasonality === 'true') {
+      // Get ALL MLOrder monthly data for seasonality
+      const allMonthly = await MLOrder.aggregate([
+        { $match: { status: 'paid' } },
+        ...(familyFilter ? [{ $unwind: '$items' }, { $match: { 'items.productFamilyId': { $in: familyFilter } } }] : []),
+        { $group: {
+          _id: { month: { $month: '$dateCreated' }, year: { $year: '$dateCreated' } },
+          revenue: { $sum: familyFilter ? { $multiply: ['$items.unitPrice', '$items.quantity'] } : '$totalAmount' }
+        }},
+        { $group: {
+          _id: '$_id.month',
+          avgRevenue: { $avg: '$revenue' },
+          count: { $sum: 1 }
+        }}
+      ]);
+
+      if (allMonthly.length >= 6) {
+        const monthlyAvgs = Array(12).fill(0);
+        allMonthly.forEach(m => { monthlyAvgs[m._id - 1] = m.avgRevenue; });
+        const monthlyMean = ss.mean(monthlyAvgs.filter(v => v > 0));
+        if (monthlyMean > 0) {
+          monthMultiplier = monthlyAvgs.map(v => v > 0 ? v / monthlyMean : 1);
+        }
+      }
+    }
+
+    // History
+    const history = daily.map((d, i) => ({
+      date: d._id,
+      dateLabel: new Date(d._id + 'T12:00:00').toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }),
+      dow: DOW_NAMES[new Date(d._id + 'T12:00:00').getDay()],
+      revenue: Math.round(d.revenue),
+      orders: d.orders,
+      movingAvg: movingAvg[i]
+    }));
+
+    // Forecast (14 days)
+    const last14 = daily.slice(-14);
+    const recentBase = last14.length > 0 ? ss.mean(last14.map(d => d.revenue)) : overallMean;
+    const weeklySlope = weeklyReg.m / 7;
+
+    const forecast = [];
+    for (let i = 0; i < 14; i++) {
+      const d = new Date();
+      d.setDate(d.getDate() + i + 1);
+      const dow = d.getDay();
+      const month = d.getMonth();
+      const trendAdj = recentBase + weeklySlope * i;
+      const dowAdj = trendAdj * dowMultiplier[dow];
+      const seasonAdj = dowAdj * monthMultiplier[month];
+      const projected = Math.max(0, Math.round(seasonAdj));
+      forecast.push({
+        date: d.toISOString().split('T')[0],
+        dateLabel: d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }),
+        dow: DOW_NAMES[dow],
+        revenue: projected,
+        upper: Math.round(projected + stdDev),
+        lower: Math.max(0, Math.round(projected - stdDev)),
+        orders: Math.max(0, Math.round(projected / (overallMean / ss.mean(daily.map(d => d.orders)) || 1)))
+      });
+    }
+
+    const firstWeekAvg = ss.mean(daily.slice(0, 7).map(d => d.revenue));
+    const lastWeekAvg = ss.mean(daily.slice(-7).map(d => d.revenue));
+    const trend = firstWeekAvg > 0 ? ((lastWeekAvg - firstWeekAvg) / firstWeekAvg * 100) : 0;
+
+    const totalHistoryRevenue = daily.reduce((s, d) => s + d.revenue, 0);
+    const totalForecastRevenue = forecast.reduce((s, d) => s + d.revenue, 0);
+
+    const dowSummary = DOW_NAMES.map((name, i) => ({
+      day: name,
+      avg: Math.round(dowAvg[i]),
+      multiplier: +dowMultiplier[i].toFixed(2),
+      count: dowBuckets[i].length
+    }));
+
+    // Monthly breakdown from MLOrder
+    const mlMonthly = await MLOrder.aggregate([
+      { $match: { status: 'paid' } },
+      ...(familyFilter ? [{ $unwind: '$items' }, { $match: { 'items.productFamilyId': { $in: familyFilter } } }] : []),
+      { $group: {
+        _id: { $dateToString: { format: '%Y-%m', date: '$dateCreated', timezone: 'America/Mexico_City' } },
+        revenue: { $sum: familyFilter ? { $multiply: ['$items.unitPrice', '$items.quantity'] } : '$totalAmount' },
+        orders: { $sum: 1 }
+      }},
+      { $sort: { _id: 1 } }
+    ]);
+
+    const now = new Date();
+    const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
+    const dayOfMonth = now.getDate();
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+
+    const monthly = mlMonthly.map(m => {
+      const [year, monthNum] = m._id.split('-');
+      const isCurrentMonth = m._id === currentMonth;
+      const dailyRate = isCurrentMonth && dayOfMonth > 0 ? m.revenue / dayOfMonth : null;
+      return {
+        month: m._id,
+        label: `${MONTH_NAMES[parseInt(monthNum) - 1]} ${year}`,
+        revenue: Math.round(m.revenue),
+        orders: m.orders,
+        avgOrder: m.orders > 0 ? Math.round(m.revenue / m.orders) : 0,
+        isPartial: isCurrentMonth,
+        projected: isCurrentMonth ? Math.round(dailyRate * daysInMonth) : null,
+        dailyRate: dailyRate ? Math.round(dailyRate) : null
+      };
+    });
+
+    // Seasonality summary (if enabled)
+    const seasonSummary = seasonality === 'true' ? MONTH_NAMES.map((name, i) => ({
+      month: name,
+      multiplier: +monthMultiplier[i].toFixed(2)
+    })) : null;
+
+    res.json({
+      success: true,
+      data: {
+        source,
+        productFamilyId: productFamilyId || null,
+        seasonality: seasonality === 'true',
+        history,
+        forecast,
+        weeks,
+        dowSummary,
+        trend: +trend.toFixed(1),
+        r2: +weeklyR2.toFixed(3),
+        slope: Math.round(weeklyReg.m),
+        stdDev: Math.round(stdDev),
+        totalHistoryRevenue: Math.round(totalHistoryRevenue),
+        totalForecastRevenue: Math.round(totalForecastRevenue),
+        avgDailyRevenue: Math.round(overallMean),
+        monthly,
+        seasonSummary
+      }
+    });
+  } catch (err) {
+    console.error('❌ ML forecast-v2 error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /ml/forecast-v2/families — Available product families for filtering
+router.get('/forecast-v2/families', async (req, res) => {
+  try {
+    // Get root families that have MLOrder data
+    const familiesWithOrders = await MLOrder.aggregate([
+      { $match: { status: 'paid' } },
+      { $unwind: '$items' },
+      { $match: { 'items.productFamilyId': { $ne: null } } },
+      { $group: { _id: '$items.productFamilyId', orders: { $sum: 1 }, revenue: { $sum: { $multiply: ['$items.unitPrice', '$items.quantity'] } } } },
+      { $sort: { revenue: -1 } }
+    ]);
+
+    // Resolve family names and walk up to root
+    const allFamilies = await ProductFamily.find({}).select('name parentId sellable').lean();
+    const familyMap = new Map(allFamilies.map(f => [String(f._id), f]));
+
+    const result = [];
+    const seenRoots = new Set();
+
+    for (const fwo of familiesWithOrders) {
+      // Walk up to find root and intermediate families
+      let current = familyMap.get(String(fwo._id));
+      if (!current) continue;
+
+      const path = [{ id: String(fwo._id), name: current.name }];
+      while (current?.parentId) {
+        const parent = familyMap.get(String(current.parentId));
+        if (parent) {
+          path.unshift({ id: String(current.parentId), name: parent.name });
+          current = parent;
+        } else break;
+      }
+
+      // Add root if not seen
+      const root = path[0];
+      if (!seenRoots.has(root.id)) {
+        seenRoots.add(root.id);
+        // Get children of this root
+        const children = allFamilies
+          .filter(f => String(f.parentId) === root.id && !f.sellable)
+          .map(f => ({ id: String(f._id), name: f.name }));
+
+        result.push({
+          id: root.id,
+          name: root.name,
+          children,
+          orders: fwo.orders,
+          revenue: Math.round(fwo.revenue)
+        });
+      }
+    }
+
+    res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ─── 1b. PRODUCT-LEVEL FORECAST ─────────────────────────────────────────────
 // Per-product daily revenue with individual linear regressions.
 router.get('/forecast-by-product', async (req, res) => {
