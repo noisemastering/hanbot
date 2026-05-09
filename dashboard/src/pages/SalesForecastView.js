@@ -10,49 +10,99 @@ const fmt = (n) => '$' + Math.round(n).toLocaleString('es-MX');
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
 function SalesForecastView() {
-  // ── CONFIG STATE (shown first, before any data loads) ──
+  // ── WIZARD STATE ──
+  const [wizardStep, setWizardStep] = useState(1); // 1 = product picker
   const [configured, setConfigured] = useState(false);
   const [config, setConfig] = useState({
-    reach: 'global',         // 'global' | 'product'
-    channel: 'ml',           // 'ml' | 'manual' | 'campaigns'
+    productFamilyId: '',
+    productName: 'Global',
+    productPath: '',
+    channel: 'ml',
+    campaignId: '',
     seasonality: false,
-    productFamilyId: '',     // when reach=product
-    campaignId: '',          // when channel=campaigns ('' = all)
     days: 90
   });
+
+  // ── Product tree navigation (same pattern as FlowWizard) ──
+  const [families, setFamilies] = useState([]);
+  const [navStack, setNavStack] = useState([]);
+  const [currentChildren, setCurrentChildren] = useState([]);
+  const [selectedProduct, setSelectedProduct] = useState({ id: '', name: 'Global' }); // '' = global
 
   // ── DATA STATE ──
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [families, setFamilies] = useState([]);
-  const [familiesLoading, setFamiliesLoading] = useState(true);
   const [campaigns, setCampaigns] = useState([]);
   const [campaignsLoading, setCampaignsLoading] = useState(true);
 
-  // Fetch available product families and campaigns on mount
+  // Fetch product families tree on mount
   useEffect(() => {
-    setFamiliesLoading(true);
     fetch(`${API_URL}/product-families/tree`).then(r => r.json()).then(res => {
       if (res.success) {
         const roots = (res.data || []).filter(f => !f.parentId && !f.sellable);
-        const flat = [];
-        for (const root of roots) {
-          flat.push({ id: root._id, name: root.name, level: 0 });
-          if (root.children) {
-            for (const child of root.children.filter(c => !c.sellable)) {
-              flat.push({ id: child._id, name: child.name, level: 1, parent: root.name });
-            }
-          }
-        }
-        setFamilies(flat);
+        setFamilies(roots);
+        setCurrentChildren(roots);
       }
-    }).catch(() => {}).finally(() => setFamiliesLoading(false));
+    }).catch(() => {});
 
     setCampaignsLoading(true);
     API.get('/ml/forecast-v2/campaigns').then(res => {
       setCampaigns(res.data?.data || []);
     }).catch(() => {}).finally(() => setCampaignsLoading(false));
   }, []);
+
+  // Fetch children for a node
+  const fetchChildren = async (familyId) => {
+    try {
+      const res = await fetch(`${API_URL}/product-families/${familyId}/children`);
+      const data = await res.json();
+      if (data.success) return data.data || [];
+    } catch {}
+    return [];
+  };
+
+  // Drill into a family
+  const drillInto = async (family) => {
+    let children = family.children || await fetchChildren(family._id);
+    const nonSellable = children.filter(c => !c.sellable);
+    setNavStack(prev => [...prev, { id: family._id, name: family.name }]);
+    setCurrentChildren(nonSellable);
+  };
+
+  // Navigate back
+  const navigateBack = (toIndex) => {
+    if (toIndex < 0) {
+      setNavStack([]);
+      setCurrentChildren(families);
+      return;
+    }
+    const newStack = navStack.slice(0, toIndex);
+    setNavStack(newStack);
+    const targetId = navStack[toIndex].id;
+    const targetFamily = families.find(f => f._id === targetId);
+    if (targetFamily?.children) {
+      setCurrentChildren(targetFamily.children.filter(c => !c.sellable));
+    } else {
+      fetchChildren(targetId).then(children => {
+        setCurrentChildren(children.filter(c => !c.sellable));
+      });
+    }
+  };
+
+  // Select a product level
+  const selectProduct = (id, name) => {
+    const pathName = [...navStack.map(n => n.name), name].filter(Boolean).join(' › ');
+    setSelectedProduct({ id, name });
+    setConfig(c => ({ ...c, productFamilyId: id, productName: name, productPath: pathName }));
+  };
+
+  // Select Global
+  const selectGlobal = () => {
+    setNavStack([]);
+    setCurrentChildren(families);
+    setSelectedProduct({ id: '', name: 'Global' });
+    setConfig(c => ({ ...c, productFamilyId: '', productName: 'Global', productPath: '' }));
+  };
 
   const generateForecast = useCallback(async () => {
     setLoading(true);
@@ -61,15 +111,14 @@ function SalesForecastView() {
       const params = new URLSearchParams({
         days: config.days.toString(),
         channel: config.channel,
-        reach: config.reach,
         seasonality: config.seasonality.toString()
       });
-      if (config.reach === 'product' && config.productFamilyId) {
+      if (config.productFamilyId) {
         params.set('productFamilyId', config.productFamilyId);
         params.set('includeSubfamilies', 'true');
       }
-      if (config.channel === 'campaigns') {
-        params.set('campaignId', config.campaignId || 'all');
+      if (config.channel === 'campaigns' && config.campaignId) {
+        params.set('campaignId', config.campaignId);
       }
       const res = await API.get(`/ml/forecast-v2?${params.toString()}`);
       setData(res.data?.data || null);
@@ -91,93 +140,150 @@ function SalesForecastView() {
 
   const todayLabel = new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
 
-  const selectedFamilyName = config.reach === 'product' && config.productFamilyId
-    ? families.find(f => f.id === config.productFamilyId)?.name || 'Todos'
-    : null; // eslint-disable-line no-unused-vars
-
-  // ── CONFIG PANEL (always shown) ──
+  // ── WIZARD CONFIG PANEL ──
   const configPanel = (
     <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6 mb-6">
-      <h3 className="text-sm font-medium text-gray-400 uppercase mb-5">Configurar pronóstico</h3>
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+      {/* Step indicator */}
+      <div className="flex gap-1 mb-6">
+        {[{ n: 1, label: 'Producto' }, { n: 2, label: 'Canal' }, { n: 3, label: 'Periodo' }].map(s => (
+          <div key={s.n} className={`flex-1 flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium transition-all ${
+            wizardStep === s.n ? 'bg-primary-500/20 text-primary-400 border border-primary-500/30' :
+            wizardStep > s.n ? 'bg-green-500/10 text-green-400' : 'bg-gray-700/30 text-gray-500'
+          }`}>
+            <span>{wizardStep > s.n ? '✓' : s.n}</span>
+            <span>{s.label}</span>
+          </div>
+        ))}
+      </div>
 
-        {/* Reach */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-3">Alcance</label>
-          <div className="flex gap-2 mb-2">
-            {[['global', 'Global'], ['product', 'Por producto']].map(([val, label]) => (
-              <button key={val} onClick={() => setConfig(c => ({ ...c, reach: val, productFamilyId: '' }))}
-                className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${config.reach === val ? 'bg-primary-500 text-white' : 'bg-gray-900/30 border border-gray-700/50 text-gray-400 hover:border-gray-600'}`}>
-                {label}
+      {/* Step 1: Product picker */}
+      {wizardStep === 1 && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-white">¿Para qué producto es la proyección?</h3>
+
+          {/* Global option */}
+          <button onClick={() => { selectGlobal(); setWizardStep(2); }}
+            className={`w-full p-4 rounded-xl border text-left transition-all ${
+              selectedProduct.id === '' && navStack.length === 0 ? 'bg-primary-500/10 border-primary-500/50' : 'bg-gray-900/30 border-gray-700/50 hover:border-gray-600'
+            }`}>
+            <p className="text-sm font-medium text-white">Global</p>
+            <p className="text-xs text-gray-500 mt-0.5">Todos los productos combinados</p>
+          </button>
+
+          {/* Breadcrumbs */}
+          {navStack.length > 0 && (
+            <div className="flex items-center gap-1 text-sm flex-wrap">
+              <button onClick={() => navigateBack(-1)} className="text-primary-400 hover:text-primary-300 transition-colors">Inicio</button>
+              {navStack.map((node, i) => (
+                <span key={node.id} className="flex items-center gap-1">
+                  <span className="text-gray-600">›</span>
+                  {i < navStack.length - 1 ? (
+                    <button onClick={() => navigateBack(i)} className="text-primary-400 hover:text-primary-300 transition-colors">{node.name}</button>
+                  ) : (
+                    <span className="text-white font-medium">{node.name}</span>
+                  )}
+                </span>
+              ))}
+            </div>
+          )}
+
+          {/* Select current level button */}
+          {navStack.length > 0 && (
+            <div className="flex items-center gap-3">
+              <button onClick={() => navigateBack(navStack.length - 2)}
+                className="text-sm text-gray-400 hover:text-white px-3 py-1.5 rounded-lg hover:bg-gray-700/50 transition-colors">
+                ← Regresar
+              </button>
+              <button onClick={() => { selectProduct(navStack[navStack.length - 1].id, navStack[navStack.length - 1].name); setWizardStep(2); }}
+                className="text-sm text-primary-400 hover:text-primary-300 px-3 py-1.5 rounded-lg border border-primary-500/30 hover:bg-primary-500/10 transition-colors ml-auto">
+                Seleccionar "{navStack[navStack.length - 1].name}" →
+              </button>
+            </div>
+          )}
+
+          {/* Family grid */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+            {currentChildren.map(f => (
+              <button key={f._id} onClick={() => drillInto(f)}
+                className="p-4 rounded-xl border text-left transition-all bg-gray-900/30 border-gray-700/50 text-gray-300 hover:border-gray-600 hover:bg-gray-800/50">
+                <p className="text-sm font-medium text-white">{f.name}</p>
+                {f.children && f.children.filter(c => !c.sellable).length > 0 && (
+                  <p className="text-xs text-gray-500 mt-1">{f.children.filter(c => !c.sellable).length} subfamilias →</p>
+                )}
               </button>
             ))}
+            {currentChildren.length === 0 && navStack.length > 0 && (
+              <p className="text-sm text-gray-500 col-span-2">No hay subfamilias. Usa "Seleccionar" arriba.</p>
+            )}
           </div>
-          {config.reach === 'product' && (
-            familiesLoading ? (
-              <div className="animate-pulse bg-gray-700/50 h-10 rounded-lg" />
-            ) : (
-              <select value={config.productFamilyId} onChange={e => setConfig(c => ({ ...c, productFamilyId: e.target.value }))}
-                className="w-full px-4 py-2.5 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-                <option value="">Todos los productos</option>
-                {families.map(f => (
-                  <option key={f.id} value={f.id}>
-                    {f.level === 1 ? `  └ ${f.name}` : f.name}
-                  </option>
-                ))}
-              </select>
-            )
-          )}
         </div>
+      )}
 
-        {/* Channel */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-3">Canal</label>
-          <div className="space-y-2">
+      {/* Step 2: Channel */}
+      {wizardStep === 2 && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-white">¿Qué datos quieres analizar?</h3>
+          <p className="text-sm text-gray-400">Producto: <span className="text-white font-medium">{config.productPath || config.productName}</span></p>
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             {[
-              ['ml', 'Mercado Libre', 'Ventas reales de ML'],
+              ['ml', 'Mercado Libre', 'Ventas reales de ML (base histórica)'],
               ['manual', 'Ventas manuales', 'Ventas registradas en CRM'],
-              ['campaigns', 'Campañas', 'Ventas atribuidas a anuncios']
+              ['campaigns', 'Campañas', 'Ventas atribuidas a anuncios de Meta']
             ].map(([val, label, desc]) => (
-              <button key={val} onClick={() => setConfig(c => ({ ...c, channel: val, campaignId: '' }))}
-                className={`w-full p-3 rounded-lg border text-left text-sm transition-all ${config.channel === val ? 'bg-primary-500/10 border-primary-500/50 text-white' : 'bg-gray-900/30 border-gray-700/50 text-gray-400 hover:border-gray-600'}`}>
-                <p className="font-medium">{label}</p>
-                <p className="text-xs text-gray-500 mt-0.5">{desc}</p>
+              <button key={val} onClick={() => { setConfig(c => ({ ...c, channel: val, campaignId: '' })); if (val !== 'campaigns') setWizardStep(3); }}
+                className={`p-4 rounded-xl border text-left transition-all ${config.channel === val ? 'bg-primary-500/10 border-primary-500/50 text-white' : 'bg-gray-900/30 border-gray-700/50 text-gray-400 hover:border-gray-600'}`}>
+                <p className="font-medium text-white">{label}</p>
+                <p className="text-xs text-gray-500 mt-1">{desc}</p>
               </button>
             ))}
           </div>
           {config.channel === 'campaigns' && (
-            campaignsLoading ? (
-              <div className="animate-pulse bg-gray-700/50 h-10 rounded-lg mt-2" />
-            ) : (
-              <select value={config.campaignId} onChange={e => setConfig(c => ({ ...c, campaignId: e.target.value }))}
-                className="w-full px-4 py-2.5 mt-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-                <option value="">Todas las campañas</option>
-                {campaigns.map(c => (
-                  <option key={c.fbCampaignId} value={c.fbCampaignId}>
-                    {c.name} {c.status !== 'ACTIVE' ? `(${c.status})` : ''}
-                  </option>
-                ))}
-              </select>
-            )
+            <div>
+              {campaignsLoading ? (
+                <div className="animate-pulse bg-gray-700/50 h-10 rounded-lg" />
+              ) : (
+                <select value={config.campaignId} onChange={e => setConfig(c => ({ ...c, campaignId: e.target.value }))}
+                  className="w-full px-4 py-2.5 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                  <option value="">Todas las campañas</option>
+                  {campaigns.map(c => (
+                    <option key={c.fbCampaignId} value={c.fbCampaignId}>
+                      {c.name} {c.status !== 'ACTIVE' ? `(${c.status})` : ''}
+                    </option>
+                  ))}
+                </select>
+              )}
+              <button onClick={() => setWizardStep(3)}
+                className="mt-3 px-6 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm">
+                Siguiente →
+              </button>
+            </div>
           )}
         </div>
+      )}
 
-        {/* Period */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-3">Periodo</label>
-          <div className="flex gap-2">
-            {[30, 60, 90, 180, 365].map(d => (
-              <button key={d} onClick={() => setConfig(c => ({ ...c, days: d }))}
-                className={`flex-1 px-2 py-2.5 rounded-lg text-sm font-medium transition-all ${config.days === d ? 'bg-primary-500 text-white' : 'bg-gray-900/30 border border-gray-700/50 text-gray-400 hover:border-gray-600'}`}>
-                {d >= 365 ? '1a' : d >= 180 ? '6m' : `${d}d`}
-              </button>
-            ))}
+      {/* Step 3: Period + modifiers */}
+      {wizardStep === 3 && (
+        <div className="space-y-4">
+          <h3 className="text-lg font-semibold text-white">Periodo y modificadores</h3>
+          <div className="flex flex-wrap gap-2 text-xs mb-2">
+            <span className="px-2 py-1 rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-300">{config.productPath || config.productName}</span>
+            <span className="px-2 py-1 rounded bg-indigo-500/10 border border-indigo-500/30 text-indigo-300">
+              {config.channel === 'ml' ? 'Mercado Libre' : config.channel === 'manual' ? 'Ventas manuales' : 'Campañas'}
+            </span>
           </div>
-        </div>
 
-        {/* Modifiers */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-3">Modificadores</label>
+          <div>
+            <label className="block text-sm font-medium text-gray-300 mb-3">Periodo de análisis</label>
+            <div className="flex gap-2">
+              {[30, 60, 90, 180, 365].map(d => (
+                <button key={d} onClick={() => setConfig(c => ({ ...c, days: d }))}
+                  className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${config.days === d ? 'bg-primary-500 text-white' : 'bg-gray-900/30 border border-gray-700/50 text-gray-400 hover:border-gray-600'}`}>
+                  {d >= 365 ? '1 año' : d >= 180 ? '6 meses' : `${d} días`}
+                </button>
+              ))}
+            </div>
+          </div>
+
           <label className="flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-all bg-gray-900/30 border-gray-700/50 hover:border-gray-600">
             <input type="checkbox" checked={config.seasonality} onChange={e => setConfig(c => ({ ...c, seasonality: e.target.checked }))}
               className="rounded border-gray-600 text-primary-500 focus:ring-primary-500" />
@@ -187,13 +293,22 @@ function SalesForecastView() {
             </div>
           </label>
         </div>
-      </div>
+      )}
 
-      <div className="flex justify-end mt-6">
-        <button onClick={generateForecast} disabled={loading}
-          className="px-8 py-3 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-50 transition-colors text-sm font-medium">
-          {loading ? 'Generando...' : configured ? 'Regenerar pronóstico' : 'Generar pronóstico'}
+      {/* Footer: back + next/generate */}
+      <div className="flex justify-between mt-6">
+        <button onClick={() => setWizardStep(s => Math.max(1, s - 1))}
+          className={`px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors text-sm ${wizardStep === 1 ? 'invisible' : ''}`}>
+          ← Anterior
         </button>
+        {wizardStep === 3 ? (
+          <button onClick={generateForecast} disabled={loading}
+            className="px-8 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50 transition-colors text-sm font-medium">
+            {loading ? 'Generando...' : configured ? 'Regenerar pronóstico' : 'Generar pronóstico'}
+          </button>
+        ) : (
+          <div /> /* spacer — next is handled by clicking options in steps 1 & 2 */
+        )}
       </div>
     </div>
   );
@@ -241,11 +356,11 @@ function SalesForecastView() {
         <div className="space-y-6">
           {/* Active config badge */}
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="px-2 py-1 rounded bg-indigo-500/10 border border-indigo-500/30 text-indigo-300">
-              {config.source === 'ml' ? 'Mercado Libre' : 'ML + Meta'}
-            </span>
             <span className="px-2 py-1 rounded bg-cyan-500/10 border border-cyan-500/30 text-cyan-300">
-              {selectedFamilyName}
+              {config.productPath || config.productName}
+            </span>
+            <span className="px-2 py-1 rounded bg-indigo-500/10 border border-indigo-500/30 text-indigo-300">
+              {config.channel === 'ml' ? 'Mercado Libre' : config.channel === 'manual' ? 'Ventas manuales' : 'Campañas'}
             </span>
             <span className="px-2 py-1 rounded bg-gray-500/10 border border-gray-500/30 text-gray-300">
               {config.days >= 365 ? '1 año' : config.days >= 180 ? '6 meses' : `${config.days} días`}
