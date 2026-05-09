@@ -75,7 +75,7 @@ import SalesSimulatorView from "./pages/SalesSimulatorView";
 import CampaignIntelligenceView from "./pages/CampaignIntelligenceView";
 import MLOrderImportView from "./pages/MLOrderImportView";
 import IntentsView from "./components/IntentsView";
-import FlowsView from "./components/FlowsView";
+// FlowsView replaced by FlowPromptsView
 // FlujosView replaced by FlowPromptsView
 import ApiHealthAlerts from "./components/ApiHealthAlerts";
 import SimulationModeSelector from "./components/SimulationModeSelector";
@@ -2290,7 +2290,7 @@ function App() {
 
           {/* Bot Configuration Routes */}
           <Route path="/intents" element={<IntentsView />} />
-          <Route path="/flows" element={<FlowsView />} />
+          <Route path="/flows" element={<FlowPromptsView />} />
 
           <Route path="/settings" element={<Settings />} />
         </Routes>
