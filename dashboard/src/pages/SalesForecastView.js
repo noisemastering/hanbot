@@ -91,8 +91,7 @@ function SalesForecastView() {
 
   const todayLabel = new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
 
-  const selectedFamilyName = families.find(f => f.id === config.productFamilyId)?.name || 'Todos los productos';
-  const selectedCampaignName = campaigns.find(c => c._id === config.campaignId || c.fbCampaignId === config.campaignId)?.name || 'Todas las campañas';
+  const selectedFamilyName = families.find(f => f.id === config.productFamilyId)?.name || 'Todos los productos'; // eslint-disable-line no-unused-vars
 
   // ── CONFIG PANEL (always shown) ──
   const configPanel = (
