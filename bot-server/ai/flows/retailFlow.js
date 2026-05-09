@@ -7,6 +7,7 @@
 const { OpenAI } = require("openai");
 const { updateConversation } = require("../../conversationManager");
 const { executeHandoff } = require("../utils/executeHandoff");
+const { getPrompt } = require("../utils/promptLoader");
 
 const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 
@@ -62,7 +63,7 @@ async function detectWholesale(userMessage, options = {}) {
     const response = await _openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: `¿El cliente está preguntando por compra al mayoreo, distribución, reventa, o grandes cantidades? Responde con JSON: { "isWholesale": true/false }` },
+        { role: 'system', content: await getPrompt('retailFlow', 'detectWholesale', `¿El cliente está preguntando por compra al mayoreo, distribución, reventa, o grandes cantidades? Responde con JSON: { "isWholesale": true/false }`) },
         { role: 'user', content: `${conversationHistory ? `${conversationHistory}\n\n` : ''}Mensaje del cliente: ${userMessage}` }
       ],
       temperature: 0,

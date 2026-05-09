@@ -6,6 +6,7 @@
 // Called by convo_flows, never drives a conversation alone.
 
 const { OpenAI } = require("openai");
+const { getPrompt } = require("../utils/promptLoader");
 const { updateConversation } = require("../../conversationManager");
 const { executeHandoff } = require("../utils/executeHandoff");
 // getCatalogUrl required lazily inside handler to avoid circular dependency with flowManager
@@ -42,13 +43,13 @@ async function classifyResellerIntent(userMessage, options = {}) {
       messages: [
         {
           role: 'system',
-          content: `Clasifica el mensaje del cliente en el contexto de un flujo de REVENDEDORES de malla sombra. Responde solo con JSON: { "intent": "<buyer|catalog_interest|reseller>" }
+          content: (await getPrompt('resellerFlow', 'classify', `Clasifica el mensaje del cliente en el contexto de un flujo de REVENDEDORES de malla sombra. Responde solo con JSON: { "intent": "<buyer|catalog_interest|reseller>" }
 
 - "buyer": El cliente es comprador final, NO revendedor. Señales: pide una medida específica para uso propio, menciona su casa/patio/cochera/terraza, quiere solo una pieza, da medidas personales, o dice "comprar"/"solo comprar"/"nada más comprar" (en respuesta a si quiere ser distribuidor o solo comprar). Alguien que dice "busco una de 3x4" o "necesito para mi cochera" es comprador final.
 - "catalog_interest": El cliente quiere ver el catálogo, productos, medidas, precios, o muestra interés/aceptación (sí, ok, dale, mándame, me interesa, etc.)
 - "reseller": El cliente habla como revendedor — pregunta por mayoreo, cantidades, márgenes, programa de distribución, o da datos de negocio.
 
-En caso de duda entre buyer y reseller, elige buyer — es más común que un comprador final llegue por anuncios.${conversationHistory}`
+En caso de duda entre buyer y reseller, elige buyer — es más común que un comprador final llegue por anuncios.`)) + conversationHistory
         },
         { role: 'user', content: userMessage }
       ],

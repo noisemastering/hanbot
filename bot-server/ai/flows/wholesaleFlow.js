@@ -8,6 +8,7 @@
 const { OpenAI } = require("openai");
 const { updateConversation } = require("../../conversationManager");
 const { executeHandoff } = require("../utils/executeHandoff");
+const { getPrompt } = require("../utils/promptLoader");
 
 const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 
@@ -39,7 +40,7 @@ async function detectRetail(userMessage, options = {}) {
     const response = await _openai.chat.completions.create({
       model: 'gpt-4o-mini',
       messages: [
-        { role: 'system', content: `¿El cliente es comprador final (uso personal, una sola pieza, para su casa/patio/cochera)? Responde con JSON: { "isRetail": true/false }` },
+        { role: 'system', content: await getPrompt('wholesaleFlow', 'detectRetail', `¿El cliente es comprador final (uso personal, una sola pieza, para su casa/patio/cochera)? Responde con JSON: { "isRetail": true/false }`) },
         { role: 'user', content: `${conversationHistory ? `${conversationHistory}\n\n` : ''}Mensaje del cliente: ${userMessage}` }
       ],
       temperature: 0,

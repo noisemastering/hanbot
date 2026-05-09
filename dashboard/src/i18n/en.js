@@ -27,6 +27,7 @@ const en = {
   "menu.intelligence": "Artificial Intelligence",
   "menu.mlImport": "Import Orders",
   "menu.trackedLinks": "Tracked Links",
+  "menu.flowPrompts": "Flow Prompts",
   "menu.users": "Users",
   "menu.usersSub": "Users",
   "menu.roles": "Roles",

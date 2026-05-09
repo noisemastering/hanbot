@@ -13,6 +13,7 @@ const { getBusinessInfo, MAPS_URL, STORE_ADDRESS } = require("../../businessInfo
 const { updateConversation } = require("../../conversationManager");
 const { executeHandoff } = require("../utils/executeHandoff");
 const { isBusinessHours } = require("../utils/businessHours");
+const { getPrompt } = require("../utils/promptLoader");
 
 const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 
@@ -40,7 +41,7 @@ async function handle(userMessage, convo, psid, context = {}) {
 - Compra protegida: si no llega, llega defectuoso o diferente, Mercado Libre devuelve el dinero.
 - Factura: Mercado Libre la genera automáticamente con los datos fiscales del cliente.`;
 
-    const systemPrompt = `Eres asesora de ventas de Hanlob, empresa mexicana fabricante de malla sombra.
+    const defaultPrompt = `Eres asesora de ventas de Hanlob, empresa mexicana fabricante de malla sombra.
 Tu trabajo es responder SOLO preguntas concretas sobre datos del negocio. Todo lo demás es para otro flujo.
 
 PRINCIPIO CLAVE: Como ya hay un flujo activo con productos asignados, NO eres punto de entrada de cold-start.
@@ -98,6 +99,8 @@ FORMATO DE RESPUESTAS:
 - Si el cliente pide que le envíen/manden el producto, da su dirección, o pregunta cuándo le llega SIN haber comprado: explica que primero debe realizar su compra por Mercado Libre usando el link que se le compartió, y una vez que compre el envío tarda 3-5 días hábiles. Incluye el link de compra si está disponible en el contexto.
 - PROHIBIDO responder con frases genéricas vagas como "Gracias por la información", "¿Necesitas algo más?", "¿En qué te puedo ayudar?" sin contenido útil. Si no tienes nada útil que agregar, clasifica como product_specific.
 - Solo devuelve JSON`;
+
+    const systemPrompt = await getPrompt('masterFlow', 'classify', defaultPrompt);
 
     // Build product context so AI answers shipping/payment questions with specific product info
     let productBlock = '';

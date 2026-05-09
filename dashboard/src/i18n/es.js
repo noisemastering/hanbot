@@ -27,6 +27,7 @@ const es = {
   "menu.intelligence": "Inteligencia Artificial",
   "menu.mlImport": "Importar Órdenes",
   "menu.trackedLinks": "Links de seguimiento",
+  "menu.flowPrompts": "Prompts de Flujos",
   "menu.users": "Usuarios",
   "menu.usersSub": "Usuarios",
   "menu.roles": "Roles",

@@ -6,6 +6,7 @@
 // Called by convo_flows, never drives a conversation alone.
 
 const { OpenAI } = require("openai");
+const { getPrompt } = require("../utils/promptLoader");
 
 const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 
@@ -34,12 +35,12 @@ async function classifyBuyerIntent(userMessage, currentProfile = 'casual', optio
       messages: [
         {
           role: 'system',
-          content: `Analiza el mensaje de un cliente de malla sombra. Responde con JSON:
+          content: await getPrompt('buyerFlow', 'classify', `Analiza el mensaje de un cliente de malla sombra. Responde con JSON:
 { "isReseller": true/false, "profile": "casual"|"technical" }
 
 - isReseller: true si el cliente quiere revender, distribuir, tiene un negocio/tienda y busca vender a sus clientes, o pregunta por márgenes/utilidad.
 - profile: "technical" si usa lenguaje técnico (especificaciones, densidad, gramaje, UV, resistencia, fichas técnicas, normas). "casual" si habla de forma cotidiana (para mi casa, mi patio, sirve para, aguanta).
-- Perfil actual del cliente: ${currentProfile}. Solo cambia si hay señales claras.`
+- Perfil actual del cliente: {{currentProfile}}. Solo cambia si hay señales claras.`, { currentProfile })
         },
         { role: 'user', content: `${conversationHistory ? `${conversationHistory}\n\n` : ''}Mensaje del cliente: ${userMessage}` }
       ],

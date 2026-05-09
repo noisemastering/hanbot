@@ -6,6 +6,7 @@
 
 const { OpenAI } = require("openai");
 const { updateConversation } = require("../../conversationManager");
+const { getPrompt } = require("../utils/promptLoader");
 
 const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 
@@ -87,12 +88,12 @@ async function classifyPromoIntent(userMessage, options = {}) {
       messages: [
         {
           role: 'system',
-          content: `El cliente ya vio una promoción de malla sombra. Clasifica su respuesta. Responde con JSON: { "intent": "<interested|not_interested|terms_request>" }
+          content: await getPrompt('promoFlow', 'classifyIntent', `El cliente ya vio una promoción de malla sombra. Clasifica su respuesta. Responde con JSON: { "intent": "<interested|not_interested|terms_request>" }
 
 - "not_interested": El cliente rechaza la promo, pide otra cosa, o dice que no le interesa.
 - "terms_request": El cliente pregunta LITERALMENTE por los términos y condiciones, vigencia o restricciones de la PROMOCIÓN. Ejemplos: "¿hasta cuándo aplica la promo?", "¿tiene letra chiquita?", "¿cuáles son las condiciones?", "¿cuándo vence?"
   IMPORTANTE: preguntas sobre formas de pago, contra entrega, envío, características del producto (material, color, resistencia) NO son terms_request — son "interested"
-- "interested": Cualquier otra cosa: preguntas sobre pago, envío, colores, medidas, resistencia, material, cómo comprar, cuenta bancaria, contra entrega, quiere comprar, pide más info, etc.`
+- "interested": Cualquier otra cosa: preguntas sobre pago, envío, colores, medidas, resistencia, material, cómo comprar, cuenta bancaria, contra entrega, quiere comprar, pide más info, etc.`)
         },
         { role: 'user', content: `${conversationHistory ? `${conversationHistory}\n\n` : ''}Mensaje del cliente: ${userMessage}` }
       ],
