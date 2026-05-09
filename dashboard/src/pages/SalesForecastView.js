@@ -153,36 +153,26 @@ function SalesForecastView() {
     }
   }, []);
 
-  // ── Auto-generate when product is selected (first time) ──
-  useEffect(() => {
-    if (!selectedProduct) return;
+  // ── Generate forecast (called explicitly, not on product selection) ──
+  const generate = useCallback((productId, ch, d) => {
     runLoadingSequence();
-    fetchForecast(selectedProduct.id, channel, days).then(result => {
+    fetchForecast(productId, ch, d).then(result => {
       setData(result);
       dataReady.current = true;
     });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedProduct]);
+  }, [runLoadingSequence, fetchForecast]);
 
-  // ── Re-fetch when channel or days change (after initial selection) ──
+  // ── Channel/days change triggers regeneration ──
   const handleChannelChange = (ch) => {
     setChannel(ch);
     if (!selectedProduct) return;
-    runLoadingSequence();
-    fetchForecast(selectedProduct.id, ch, days).then(result => {
-      setData(result);
-      dataReady.current = true;
-    });
+    generate(selectedProduct.id, ch, days);
   };
 
   const handleDaysChange = (d) => {
     setDays(d);
     if (!selectedProduct) return;
-    runLoadingSequence();
-    fetchForecast(selectedProduct.id, channel, d).then(result => {
-      setData(result);
-      dataReady.current = true;
-    });
+    generate(selectedProduct.id, channel, d);
   };
 
   // Cleanup
@@ -261,6 +251,32 @@ function SalesForecastView() {
             {currentChildren.length === 0 && navStack.length > 0 && (
               <p className="text-sm text-gray-500 col-span-2">No hay subfamilias. Usa "Seleccionar" arriba.</p>
             )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // ── RENDER: Product selected, pick channel to start ──
+  if (selectedProduct && !data && !loading) {
+    return (
+      <div>
+        <h1 className="text-3xl font-bold text-white mb-1">Pronóstico de Ventas</h1>
+        <div className="flex items-center gap-2 mb-6">
+          <span className="text-sm text-primary-400 font-medium">{selectedProduct.path}</span>
+          <button onClick={changeProduct} className="text-xs text-gray-500 hover:text-white px-2 py-0.5 rounded hover:bg-gray-700/50 transition-colors">Cambiar</button>
+        </div>
+
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+          <h3 className="text-lg font-semibold text-white mb-4">¿Qué canal de venta quieres analizar?</h3>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            {CHANNELS.map(ch => (
+              <button key={ch.id} onClick={() => { setChannel(ch.id); generate(selectedProduct.id, ch.id, days); }}
+                className="p-4 rounded-xl border text-left transition-all bg-gray-900/30 border-gray-700/50 hover:border-primary-500/50 hover:bg-primary-500/5">
+                <p className="text-sm font-medium text-white">{ch.label}</p>
+                <p className="text-xs text-gray-500 mt-1">{ch.desc}</p>
+              </button>
+            ))}
           </div>
         </div>
       </div>
