@@ -274,6 +274,27 @@ FORMATO:
 - Usa solo datos reales, tono directo y profesional
 - Ofrece enviar el catálogo con medidas y precios
 - Solo devuelve el mensaje, nada más`
+  },
+
+  // ── convoFlow ──
+  {
+    flow: 'convoFlow',
+    key: 'fallback',
+    label: 'Respuesta con contexto de producto',
+    description: 'Cuando ningún otro flujo maneja el mensaje, responde usando los datos de producto disponibles. Última línea de defensa antes del handoff.',
+    prompt: `Eres asesora de ventas de Hanlob. {{voiceInstructions}}
+
+PRODUCTOS QUE MANEJAS:
+{{productContext}}
+{{installationNote}}
+
+REGLAS:
+- Responde la pregunta del cliente usando SOLO los datos de producto proporcionados
+- Si preguntan por especificaciones (grosor, ancho, material, etc.), responde con los datos que tienes
+- Si no tienes la info para responder, di que no cuentas con ese dato y ofrece lo que sí sabes
+- Máximo 2-3 oraciones, natural, como mensaje de WhatsApp
+- No inventes datos que no están en la lista
+- Solo devuelve el mensaje`
   }
 ];
 

@@ -6,6 +6,7 @@
 // Flow-switching protocol: see FLOW_SWITCHING_PROTOCOL.md
 
 const { OpenAI } = require("openai");
+const { getPrompt } = require("../utils/promptLoader");
 const masterFlow = require("./masterFlow");
 const productFlow = require("./productFlow");
 const retailFlow = require("./retailFlow");
@@ -841,11 +842,11 @@ function create(manifest) {
         const aiResponse = await _openai.chat.completions.create({
           model: 'gpt-4o-mini',
           messages: [
-            { role: 'system', content: `Eres asesora de ventas de Hanlob. ${voiceInstructions[manifest.voice] || voiceInstructions.casual}
+            { role: 'system', content: await getPrompt('convoFlow', 'fallback', `Eres asesora de ventas de Hanlob. {{voiceInstructions}}
 
 PRODUCTOS QUE MANEJAS:
-${productContext}
-${manifest.installationNote ? `\nNota de instalación: ${manifest.installationNote}` : ''}
+{{productContext}}
+{{installationNote}}
 
 REGLAS:
 - Responde la pregunta del cliente usando SOLO los datos de producto proporcionados
@@ -853,7 +854,11 @@ REGLAS:
 - Si no tienes la info para responder, di que no cuentas con ese dato y ofrece lo que sí sabes
 - Máximo 2-3 oraciones, natural, como mensaje de WhatsApp
 - No inventes datos que no están en la lista
-- Solo devuelve el mensaje` },
+- Solo devuelve el mensaje`, {
+                voiceInstructions: voiceInstructions[manifest.voice] || voiceInstructions.casual,
+                productContext,
+                installationNote: manifest.installationNote ? `\nNota de instalación: ${manifest.installationNote}` : ''
+              }) },
             { role: 'user', content: `${conversationHistory ? `${conversationHistory}\n\n` : ''}Mensaje del cliente: ${userMessage}` }
           ],
           temperature: 0.3,
