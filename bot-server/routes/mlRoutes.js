@@ -246,6 +246,10 @@ router.get('/forecast-v2', async (req, res) => {
     }
 
     // ── QUERY DATA ──
+    // Channel mapping: 'all' and 'online' and 'mercadolibre' all use MLOrder as base
+    const useMLOrder = ['all', 'online', 'mercadolibre', 'ml'].includes(effectiveChannel);
+    const includeManual = ['all', 'manual'].includes(effectiveChannel);
+    const includeCampaigns = ['all', 'campaigns'].includes(effectiveChannel);
     let daily;
 
     if (effectiveChannel === 'manual') {
@@ -281,8 +285,8 @@ router.get('/forecast-v2', async (req, res) => {
         }},
         { $sort: { _id: 1 } }
       ]);
-    } else {
-      // Global or product-scoped: use MLOrder
+    } else if (useMLOrder) {
+      // ML-based channels: query MLOrder
       const mlMatch = { status: 'paid', dateCreated: { $gte: since } };
       const mlPipeline = [
         { $match: mlMatch },
@@ -297,11 +301,13 @@ router.get('/forecast-v2', async (req, res) => {
       ];
 
       daily = await MLOrder.aggregate(mlPipeline);
+    } else {
+      daily = [];
     }
 
-    // ── MANUAL SALES (merge into ML channel only — manual/campaigns channels already have their own data) ──
+    // ── MANUAL SALES (merge when channel includes manual) ──
     let manualDaily = [];
-    if (effectiveChannel === 'ml') {
+    if (includeManual && effectiveChannel !== 'manual') {
     manualDaily = await ClickLog.aggregate([
       { $match: { converted: true, correlationMethod: 'manual', createdAt: { $gte: since } } },
       { $group: {
@@ -343,16 +349,16 @@ router.get('/forecast-v2', async (req, res) => {
       }
       daily = Array.from(dailyMap.values()).sort((a, b) => a._id.localeCompare(b._id));
     }
-    } // close if (effectiveChannel === 'ml')
+    } // close manual sales merge
 
     const manualSales = {
       totalRevenue: Math.round(totalManualRevenue),
       totalOrders: totalManualOrders
     };
 
-    // ── META ATTRIBUTION OVERLAY — only relevant for ML channel ──
+    // ── META ATTRIBUTION OVERLAY — available for all/online/ml channels ──
     let metaAttribution = null;
-    if (effectiveChannel === 'ml') {
+    if (useMLOrder) {
       const clickDaily = await ClickLog.aggregate([
         { $match: { converted: true, createdAt: { $gte: since } } },
         { $group: {
