@@ -14,8 +14,10 @@ function SalesForecastView() {
   const [configured, setConfigured] = useState(false);
   const [config, setConfig] = useState({
     source: 'ml',           // 'ml' | 'ml+meta'
+    scope: 'global',        // 'global' | 'product' | 'campaign'
     seasonality: false,
-    productFamilyId: '',     // '' = all products
+    productFamilyId: '',     // '' = all products (when scope=product)
+    campaignId: '',          // '' = all campaigns (when scope=campaign)
     days: 90
   });
 
@@ -24,14 +26,15 @@ function SalesForecastView() {
   const [loading, setLoading] = useState(false);
   const [families, setFamilies] = useState([]);
   const [familiesLoading, setFamiliesLoading] = useState(true);
+  const [campaigns, setCampaigns] = useState([]);
+  const [campaignsLoading, setCampaignsLoading] = useState(true);
 
-  // Fetch available product families on mount
+  // Fetch available product families and campaigns on mount
   useEffect(() => {
     setFamiliesLoading(true);
     fetch(`${API_URL}/product-families/tree`).then(r => r.json()).then(res => {
       if (res.success) {
         const roots = (res.data || []).filter(f => !f.parentId && !f.sellable);
-        // Flatten to root + direct non-sellable children
         const flat = [];
         for (const root of roots) {
           flat.push({ id: root._id, name: root.name, level: 0 });
@@ -44,6 +47,11 @@ function SalesForecastView() {
         setFamilies(flat);
       }
     }).catch(() => {}).finally(() => setFamiliesLoading(false));
+
+    setCampaignsLoading(true);
+    API.get('/ml/forecast-v2/campaigns').then(res => {
+      setCampaigns(res.data?.data || []);
+    }).catch(() => {}).finally(() => setCampaignsLoading(false));
   }, []);
 
   const generateForecast = useCallback(async () => {
@@ -53,11 +61,15 @@ function SalesForecastView() {
       const params = new URLSearchParams({
         days: config.days.toString(),
         source: config.source,
+        scope: config.scope,
         seasonality: config.seasonality.toString()
       });
-      if (config.productFamilyId) {
+      if (config.scope === 'product' && config.productFamilyId) {
         params.set('productFamilyId', config.productFamilyId);
         params.set('includeSubfamilies', 'true');
+      }
+      if (config.scope === 'campaign') {
+        params.set('campaignId', config.campaignId || 'all');
       }
       const res = await API.get(`/ml/forecast-v2?${params.toString()}`);
       setData(res.data?.data || null);
@@ -80,6 +92,8 @@ function SalesForecastView() {
   const todayLabel = new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
 
   const selectedFamilyName = families.find(f => f.id === config.productFamilyId)?.name || 'Todos los productos';
+  const selectedCampaignName = campaigns.find(c => c._id === config.campaignId || c.fbCampaignId === config.campaignId)?.name || 'Todas las campañas';
+  const scopeLabel = config.scope === 'campaign' ? selectedCampaignName : config.scope === 'product' ? selectedFamilyName : 'Global';
 
   // ── CONFIG PANEL (always shown) ──
   const configPanel = (
@@ -104,21 +118,48 @@ function SalesForecastView() {
           </div>
         </div>
 
-        {/* Product family */}
+        {/* Scope */}
         <div>
-          <label className="block text-sm font-medium text-gray-300 mb-3">Producto</label>
-          {familiesLoading ? (
-            <div className="animate-pulse bg-gray-700/50 h-10 rounded-lg" />
-          ) : (
-            <select value={config.productFamilyId} onChange={e => setConfig(c => ({ ...c, productFamilyId: e.target.value }))}
-              className="w-full px-4 py-2.5 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
-              <option value="">Todos los productos</option>
-              {families.map(f => (
-                <option key={f.id} value={f.id}>
-                  {f.level === 1 ? `  └ ${f.name}` : f.name}
-                </option>
-              ))}
-            </select>
+          <label className="block text-sm font-medium text-gray-300 mb-3">Alcance</label>
+          <select value={config.scope} onChange={e => setConfig(c => ({ ...c, scope: e.target.value, productFamilyId: '', campaignId: '' }))}
+            className="w-full px-4 py-2.5 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 mb-2">
+            <option value="global">Global</option>
+            <option value="product">Por producto</option>
+            <option value="campaign">Por campaña</option>
+          </select>
+
+          {/* Product family selector (when scope=product) */}
+          {config.scope === 'product' && (
+            familiesLoading ? (
+              <div className="animate-pulse bg-gray-700/50 h-10 rounded-lg" />
+            ) : (
+              <select value={config.productFamilyId} onChange={e => setConfig(c => ({ ...c, productFamilyId: e.target.value }))}
+                className="w-full px-4 py-2.5 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                <option value="">Todos los productos</option>
+                {families.map(f => (
+                  <option key={f.id} value={f.id}>
+                    {f.level === 1 ? `  └ ${f.name}` : f.name}
+                  </option>
+                ))}
+              </select>
+            )
+          )}
+
+          {/* Campaign selector (when scope=campaign) */}
+          {config.scope === 'campaign' && (
+            campaignsLoading ? (
+              <div className="animate-pulse bg-gray-700/50 h-10 rounded-lg" />
+            ) : (
+              <select value={config.campaignId} onChange={e => setConfig(c => ({ ...c, campaignId: e.target.value }))}
+                className="w-full px-4 py-2.5 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                <option value="">Todas las campañas</option>
+                {campaigns.map(c => (
+                  <option key={c.fbCampaignId} value={c.fbCampaignId}>
+                    {c.name} {c.status !== 'ACTIVE' ? `(${c.status})` : ''}
+                  </option>
+                ))}
+              </select>
+            )
           )}
         </div>
 

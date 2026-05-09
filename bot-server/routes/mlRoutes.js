@@ -193,7 +193,9 @@ router.get('/forecast-v2', async (req, res) => {
     const {
       days = 90,
       source = 'ml',              // 'ml' = MLOrder only, 'ml+meta' = MLOrder + ClickLog
-      productFamilyId,            // Optional: filter to a product family
+      scope = 'global',           // 'global' | 'product' | 'campaign'
+      productFamilyId,            // Required when scope='product'
+      campaignId,                 // Required when scope='campaign' (fbCampaignId or 'all')
       includeSubfamilies = 'true', // Include all descendants
       seasonality = 'false'        // Apply month-of-year seasonality adjustment
     } = req.query;
@@ -222,21 +224,64 @@ router.get('/forecast-v2', async (req, res) => {
       }).filter(Boolean);
     }
 
-    // ── QUERY MLOrder ──
-    const mlMatch = { status: 'paid', dateCreated: { $gte: since } };
-    const mlPipeline = [
-      { $match: mlMatch },
-      { $unwind: '$items' },
-      ...(familyFilter ? [{ $match: { 'items.productFamilyId': { $in: familyFilter } } }] : []),
-      { $group: {
-        _id: { $dateToString: { format: '%Y-%m-%d', date: '$dateCreated', timezone: 'America/Mexico_City' } },
-        revenue: { $sum: { $multiply: ['$items.unitPrice', '$items.quantity'] } },
-        orders: { $sum: 1 }
-      }},
-      { $sort: { _id: 1 } }
-    ];
+    // ── CAMPAIGN FILTER (resolve ad IDs belonging to the selected campaign) ──
+    let campaignAdIds = null;
+    if (scope === 'campaign' && campaignId && campaignId !== 'all') {
+      const Ad = require('../models/Ad');
+      const AdSet = require('../models/AdSet');
+      const adSets = await AdSet.find({ campaignId: campaignId }).select('_id').lean();
+      const adSetIds = adSets.map(s => s._id);
+      const ads = await Ad.find({ adSetId: { $in: adSetIds } }).select('fbAdId').lean();
+      campaignAdIds = ads.map(a => a.fbAdId);
+      console.log(`📊 Campaign filter: ${campaignAdIds.length} ads for campaign ${campaignId}`);
+    } else if (scope === 'campaign' && campaignId === 'all') {
+      // All campaigns = all ads that have an adId (i.e. came from ads, not organic)
+      campaignAdIds = 'all';
+    }
 
-    let daily = await MLOrder.aggregate(mlPipeline);
+    // ── QUERY DATA ──
+    let daily;
+
+    if (scope === 'campaign') {
+      // Campaign-scoped: use ClickLog conversions (sales attributed to ads)
+      const clMatch = { converted: true, createdAt: { $gte: since } };
+      if (campaignAdIds !== 'all') {
+        clMatch.adId = { $in: campaignAdIds };
+      } else {
+        clMatch.adId = { $ne: null };
+      }
+
+      daily = await ClickLog.aggregate([
+        { $match: clMatch },
+        // Deduplicate by orderId to avoid counting the same sale from multiple clicks
+        { $group: {
+          _id: { orderId: '$conversionData.orderId', date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'America/Mexico_City' } } },
+          revenue: { $first: { $ifNull: ['$conversionData.totalAmount', 0] } }
+        }},
+        { $group: {
+          _id: '$_id.date',
+          revenue: { $sum: '$revenue' },
+          orders: { $sum: 1 }
+        }},
+        { $sort: { _id: 1 } }
+      ]);
+    } else {
+      // Global or product-scoped: use MLOrder
+      const mlMatch = { status: 'paid', dateCreated: { $gte: since } };
+      const mlPipeline = [
+        { $match: mlMatch },
+        { $unwind: '$items' },
+        ...(familyFilter ? [{ $match: { 'items.productFamilyId': { $in: familyFilter } } }] : []),
+        { $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$dateCreated', timezone: 'America/Mexico_City' } },
+          revenue: { $sum: { $multiply: ['$items.unitPrice', '$items.quantity'] } },
+          orders: { $sum: 1 }
+        }},
+        { $sort: { _id: 1 } }
+      ];
+
+      daily = await MLOrder.aggregate(mlPipeline);
+    }
 
     // ── MANUAL SALES (from CRM standalone sales) ──
     // Always query manual sales and merge into daily data for global view.
@@ -504,7 +549,9 @@ router.get('/forecast-v2', async (req, res) => {
       success: true,
       data: {
         source,
+        scope,
         productFamilyId: productFamilyId || null,
+        campaignId: campaignId || null,
         seasonality: seasonality === 'true',
         history,
         forecast,
@@ -582,6 +629,28 @@ router.get('/forecast-v2/families', async (req, res) => {
     }
 
     res.json({ success: true, data: result });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /ml/forecast-v2/campaigns — Available campaigns for filtering
+router.get('/forecast-v2/campaigns', async (req, res) => {
+  try {
+    const Campaign = require('../models/Campaign');
+    const campaigns = await Campaign.find({})
+      .select('name fbCampaignId status')
+      .sort({ status: 1, name: 1 })
+      .lean();
+    res.json({
+      success: true,
+      data: campaigns.map(c => ({
+        id: c._id,
+        fbCampaignId: c.fbCampaignId,
+        name: c.name,
+        status: c.status
+      }))
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
