@@ -4,14 +4,13 @@ import toast from 'react-hot-toast';
 
 const FLOW_LABELS = {
   masterFlow: 'Master Flow',
+  convoFlow: 'Convo Flow',
   retailFlow: 'Retail Flow',
   wholesaleFlow: 'Wholesale Flow',
   promoFlow: 'Promo Flow',
   buyerFlow: 'Buyer Flow',
   resellerFlow: 'Reseller Flow'
 };
-
-const FLOW_ORDER = ['masterFlow', 'retailFlow', 'wholesaleFlow', 'promoFlow', 'buyerFlow', 'resellerFlow'];
 
 function FlowPromptsView() {
   const [prompts, setPrompts] = useState({});
@@ -121,7 +120,11 @@ function FlowPromptsView() {
 
       {/* Flow list */}
       <div className="space-y-4">
-        {FLOW_ORDER.filter(f => prompts[f]).map(flow => {
+        {Object.keys(prompts).sort((a, b) => {
+          const order = Object.keys(FLOW_LABELS);
+          const ai = order.indexOf(a), bi = order.indexOf(b);
+          return (ai === -1 ? 99 : ai) - (bi === -1 ? 99 : bi);
+        }).map(flow => {
           const flowPrompts = prompts[flow];
           const isExpanded = expandedFlows.has(flow);
 
