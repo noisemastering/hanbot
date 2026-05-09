@@ -93,7 +93,6 @@ function SalesForecastView() {
 
   const selectedFamilyName = families.find(f => f.id === config.productFamilyId)?.name || 'Todos los productos';
   const selectedCampaignName = campaigns.find(c => c._id === config.campaignId || c.fbCampaignId === config.campaignId)?.name || 'Todas las campañas';
-  const scopeLabel = config.scope === 'campaign' ? selectedCampaignName : config.scope === 'product' ? selectedFamilyName : 'Global';
 
   // ── CONFIG PANEL (always shown) ──
   const configPanel = (
