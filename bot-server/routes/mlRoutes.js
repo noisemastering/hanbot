@@ -192,13 +192,19 @@ router.get('/forecast-v2', async (req, res) => {
   try {
     const {
       days = 90,
-      source = 'ml',              // 'ml' = MLOrder only, 'ml+meta' = MLOrder + ClickLog
-      scope = 'global',           // 'global' | 'product' | 'campaign'
-      productFamilyId,            // Required when scope='product'
-      campaignId,                 // Required when scope='campaign' (fbCampaignId or 'all')
-      includeSubfamilies = 'true', // Include all descendants
-      seasonality = 'false'        // Apply month-of-year seasonality adjustment
+      reach = 'global',           // 'global' | 'product'
+      channel = 'ml',             // 'ml' | 'manual' | 'campaigns'
+      // Legacy compat: accept source/scope as aliases
+      source, scope,
+      productFamilyId,            // When reach=product
+      campaignId,                 // When channel=campaigns (fbCampaignId or 'all')
+      includeSubfamilies = 'true',
+      seasonality = 'false'
     } = req.query;
+
+    // Legacy compat
+    const effectiveChannel = source === 'ml+meta' ? 'campaigns' : (channel || source || 'ml');
+    const effectiveReach = scope === 'product' ? 'product' : (reach || scope || 'global');
 
     const since = new Date();
     since.setDate(since.getDate() - parseInt(days));
@@ -226,7 +232,7 @@ router.get('/forecast-v2', async (req, res) => {
 
     // ── CAMPAIGN FILTER (resolve ad IDs belonging to the selected campaign) ──
     let campaignAdIds = null;
-    if (scope === 'campaign' && campaignId && campaignId !== 'all') {
+    if (effectiveChannel === 'campaigns' && campaignId && campaignId !== 'all') {
       const Ad = require('../models/Ad');
       const AdSet = require('../models/AdSet');
       const adSets = await AdSet.find({ campaignId: campaignId }).select('_id').lean();
@@ -234,7 +240,7 @@ router.get('/forecast-v2', async (req, res) => {
       const ads = await Ad.find({ adSetId: { $in: adSetIds } }).select('fbAdId').lean();
       campaignAdIds = ads.map(a => a.fbAdId);
       console.log(`📊 Campaign filter: ${campaignAdIds.length} ads for campaign ${campaignId}`);
-    } else if (scope === 'campaign' && campaignId === 'all') {
+    } else if (effectiveChannel === 'campaigns' && (!campaignId || campaignId === 'all')) {
       // All campaigns = all ads that have an adId (i.e. came from ads, not organic)
       campaignAdIds = 'all';
     }
@@ -242,7 +248,18 @@ router.get('/forecast-v2', async (req, res) => {
     // ── QUERY DATA ──
     let daily;
 
-    if (scope === 'campaign') {
+    if (effectiveChannel === 'manual') {
+      // Manual sales only (CRM standalone sales)
+      daily = await ClickLog.aggregate([
+        { $match: { converted: true, correlationMethod: 'manual', createdAt: { $gte: since } } },
+        { $group: {
+          _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'America/Mexico_City' } },
+          revenue: { $sum: { $ifNull: ['$conversionData.totalAmount', 0] } },
+          orders: { $sum: 1 }
+        }},
+        { $sort: { _id: 1 } }
+      ]);
+    } else if (effectiveChannel === 'campaigns') {
       // Campaign-scoped: use ClickLog conversions (sales attributed to ads)
       const clMatch = { converted: true, createdAt: { $gte: since } };
       if (campaignAdIds !== 'all') {
@@ -253,7 +270,6 @@ router.get('/forecast-v2', async (req, res) => {
 
       daily = await ClickLog.aggregate([
         { $match: clMatch },
-        // Deduplicate by orderId to avoid counting the same sale from multiple clicks
         { $group: {
           _id: { orderId: '$conversionData.orderId', date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'America/Mexico_City' } } },
           revenue: { $first: { $ifNull: ['$conversionData.totalAmount', 0] } }
@@ -283,10 +299,10 @@ router.get('/forecast-v2', async (req, res) => {
       daily = await MLOrder.aggregate(mlPipeline);
     }
 
-    // ── MANUAL SALES (from CRM standalone sales) ──
-    // Always query manual sales and merge into daily data for global view.
-    // Track them separately so they can be isolated when segmenting.
-    const manualDaily = await ClickLog.aggregate([
+    // ── MANUAL SALES (merge into ML channel only — manual/campaigns channels already have their own data) ──
+    let manualDaily = [];
+    if (effectiveChannel === 'ml') {
+    manualDaily = await ClickLog.aggregate([
       { $match: { converted: true, correlationMethod: 'manual', createdAt: { $gte: since } } },
       { $group: {
         _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'America/Mexico_City' } },
@@ -296,47 +312,47 @@ router.get('/forecast-v2', async (req, res) => {
       { $sort: { _id: 1 } }
     ]);
 
-    const manualByDate = new Map(manualDaily.map(d => [d._id, d]));
     const totalManualRevenue = manualDaily.reduce((s, d) => s + d.revenue, 0);
     const totalManualOrders = manualDaily.reduce((s, d) => s + d.orders, 0);
 
-    // Merge manual sales into daily (add revenue to existing dates, create new entries for dates with only manual)
-    const dailyMap = new Map(daily.map(d => [d._id, { ...d }]));
-    for (const md of manualDaily) {
-      const existing = dailyMap.get(md._id);
-      if (existing) {
-        existing.revenue += md.revenue;
-        existing.orders += md.orders;
-        existing.manualRevenue = md.revenue;
-        existing.manualOrders = md.orders;
-      } else {
-        dailyMap.set(md._id, {
-          _id: md._id,
-          revenue: md.revenue,
-          orders: md.orders,
-          manualRevenue: md.revenue,
-          manualOrders: md.orders
-        });
+    // Merge manual sales into ML daily data
+    if (manualDaily.length > 0) {
+      const dailyMap = new Map(daily.map(d => [d._id, { ...d }]));
+      for (const md of manualDaily) {
+        const existing = dailyMap.get(md._id);
+        if (existing) {
+          existing.revenue += md.revenue;
+          existing.orders += md.orders;
+          existing.manualRevenue = md.revenue;
+          existing.manualOrders = md.orders;
+        } else {
+          dailyMap.set(md._id, {
+            _id: md._id,
+            revenue: md.revenue,
+            orders: md.orders,
+            manualRevenue: md.revenue,
+            manualOrders: md.orders
+          });
+        }
       }
-    }
-    // Also tag ML-only days with zero manual
-    for (const [key, val] of dailyMap) {
-      if (val.manualRevenue == null) {
-        val.manualRevenue = 0;
-        val.manualOrders = 0;
+      for (const [, val] of dailyMap) {
+        if (val.manualRevenue == null) {
+          val.manualRevenue = 0;
+          val.manualOrders = 0;
+        }
       }
+      daily = Array.from(dailyMap.values()).sort((a, b) => a._id.localeCompare(b._id));
     }
-    daily = Array.from(dailyMap.values()).sort((a, b) => a._id.localeCompare(b._id));
+    } // close if (effectiveChannel === 'ml')
 
     const manualSales = {
       totalRevenue: Math.round(totalManualRevenue),
       totalOrders: totalManualOrders
     };
 
-    // ── META ATTRIBUTION OVERLAY (modifier, not a separate source) ──
-    // ML orders are always the revenue base. ClickLog tells us which sales came from ads.
+    // ── META ATTRIBUTION OVERLAY — only relevant for ML channel ──
     let metaAttribution = null;
-    if (source === 'ml+meta') {
+    if (effectiveChannel === 'ml') {
       const clickDaily = await ClickLog.aggregate([
         { $match: { converted: true, createdAt: { $gte: since } } },
         { $group: {
@@ -548,8 +564,8 @@ router.get('/forecast-v2', async (req, res) => {
     res.json({
       success: true,
       data: {
-        source,
-        scope,
+        reach: effectiveReach,
+        channel: effectiveChannel,
         productFamilyId: productFamilyId || null,
         campaignId: campaignId || null,
         seasonality: seasonality === 'true',

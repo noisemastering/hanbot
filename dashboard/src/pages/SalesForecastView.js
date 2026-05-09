@@ -13,11 +13,11 @@ function SalesForecastView() {
   // ── CONFIG STATE (shown first, before any data loads) ──
   const [configured, setConfigured] = useState(false);
   const [config, setConfig] = useState({
-    source: 'ml',           // 'ml' | 'ml+meta'
-    scope: 'global',        // 'global' | 'product' | 'campaign'
+    reach: 'global',         // 'global' | 'product'
+    channel: 'ml',           // 'ml' | 'manual' | 'campaigns'
     seasonality: false,
-    productFamilyId: '',     // '' = all products (when scope=product)
-    campaignId: '',          // '' = all campaigns (when scope=campaign)
+    productFamilyId: '',     // when reach=product
+    campaignId: '',          // when channel=campaigns ('' = all)
     days: 90
   });
 
@@ -60,15 +60,15 @@ function SalesForecastView() {
     try {
       const params = new URLSearchParams({
         days: config.days.toString(),
-        source: config.source,
-        scope: config.scope,
+        channel: config.channel,
+        reach: config.reach,
         seasonality: config.seasonality.toString()
       });
-      if (config.scope === 'product' && config.productFamilyId) {
+      if (config.reach === 'product' && config.productFamilyId) {
         params.set('productFamilyId', config.productFamilyId);
         params.set('includeSubfamilies', 'true');
       }
-      if (config.scope === 'campaign') {
+      if (config.channel === 'campaigns') {
         params.set('campaignId', config.campaignId || 'all');
       }
       const res = await API.get(`/ml/forecast-v2?${params.toString()}`);
@@ -91,7 +91,9 @@ function SalesForecastView() {
 
   const todayLabel = new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
 
-  const selectedFamilyName = families.find(f => f.id === config.productFamilyId)?.name || 'Todos los productos'; // eslint-disable-line no-unused-vars
+  const selectedFamilyName = config.reach === 'product' && config.productFamilyId
+    ? families.find(f => f.id === config.productFamilyId)?.name || 'Todos'
+    : null; // eslint-disable-line no-unused-vars
 
   // ── CONFIG PANEL (always shown) ──
   const configPanel = (
@@ -99,35 +101,18 @@ function SalesForecastView() {
       <h3 className="text-sm font-medium text-gray-400 uppercase mb-5">Configurar pronóstico</h3>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
 
-        {/* Data source */}
-        <div>
-          <label className="block text-sm font-medium text-gray-300 mb-3">Fuente de datos</label>
-          <div className="space-y-2">
-            <button onClick={() => setConfig(c => ({ ...c, source: 'ml' }))}
-              className={`w-full p-3 rounded-lg border text-left text-sm transition-all ${config.source === 'ml' ? 'bg-primary-500/10 border-primary-500/50 text-white' : 'bg-gray-900/30 border-gray-700/50 text-gray-400 hover:border-gray-600'}`}>
-              <p className="font-medium">Mercado Libre</p>
-              <p className="text-xs text-gray-500 mt-0.5">Ventas reales de ML + ventas manuales</p>
-            </button>
-            <button onClick={() => setConfig(c => ({ ...c, source: 'ml+meta' }))}
-              className={`w-full p-3 rounded-lg border text-left text-sm transition-all ${config.source === 'ml+meta' ? 'bg-primary-500/10 border-primary-500/50 text-white' : 'bg-gray-900/30 border-gray-700/50 text-gray-400 hover:border-gray-600'}`}>
-              <p className="font-medium">ML + Meta Campaigns</p>
-              <p className="text-xs text-gray-500 mt-0.5">Incluye atribución de campañas de Facebook</p>
-            </button>
-          </div>
-        </div>
-
-        {/* Scope */}
+        {/* Reach */}
         <div>
           <label className="block text-sm font-medium text-gray-300 mb-3">Alcance</label>
-          <select value={config.scope} onChange={e => setConfig(c => ({ ...c, scope: e.target.value, productFamilyId: '', campaignId: '' }))}
-            className="w-full px-4 py-2.5 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500 mb-2">
-            <option value="global">Global</option>
-            <option value="product">Por producto</option>
-            <option value="campaign">Por campaña</option>
-          </select>
-
-          {/* Product family selector (when scope=product) */}
-          {config.scope === 'product' && (
+          <div className="flex gap-2 mb-2">
+            {[['global', 'Global'], ['product', 'Por producto']].map(([val, label]) => (
+              <button key={val} onClick={() => setConfig(c => ({ ...c, reach: val, productFamilyId: '' }))}
+                className={`flex-1 px-3 py-2.5 rounded-lg text-sm font-medium transition-all ${config.reach === val ? 'bg-primary-500 text-white' : 'bg-gray-900/30 border border-gray-700/50 text-gray-400 hover:border-gray-600'}`}>
+                {label}
+              </button>
+            ))}
+          </div>
+          {config.reach === 'product' && (
             familiesLoading ? (
               <div className="animate-pulse bg-gray-700/50 h-10 rounded-lg" />
             ) : (
@@ -142,14 +127,30 @@ function SalesForecastView() {
               </select>
             )
           )}
+        </div>
 
-          {/* Campaign selector (when scope=campaign) */}
-          {config.scope === 'campaign' && (
+        {/* Channel */}
+        <div>
+          <label className="block text-sm font-medium text-gray-300 mb-3">Canal</label>
+          <div className="space-y-2">
+            {[
+              ['ml', 'Mercado Libre', 'Ventas reales de ML'],
+              ['manual', 'Ventas manuales', 'Ventas registradas en CRM'],
+              ['campaigns', 'Campañas', 'Ventas atribuidas a anuncios']
+            ].map(([val, label, desc]) => (
+              <button key={val} onClick={() => setConfig(c => ({ ...c, channel: val, campaignId: '' }))}
+                className={`w-full p-3 rounded-lg border text-left text-sm transition-all ${config.channel === val ? 'bg-primary-500/10 border-primary-500/50 text-white' : 'bg-gray-900/30 border-gray-700/50 text-gray-400 hover:border-gray-600'}`}>
+                <p className="font-medium">{label}</p>
+                <p className="text-xs text-gray-500 mt-0.5">{desc}</p>
+              </button>
+            ))}
+          </div>
+          {config.channel === 'campaigns' && (
             campaignsLoading ? (
-              <div className="animate-pulse bg-gray-700/50 h-10 rounded-lg" />
+              <div className="animate-pulse bg-gray-700/50 h-10 rounded-lg mt-2" />
             ) : (
               <select value={config.campaignId} onChange={e => setConfig(c => ({ ...c, campaignId: e.target.value }))}
-                className="w-full px-4 py-2.5 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
+                className="w-full px-4 py-2.5 mt-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500">
                 <option value="">Todas las campañas</option>
                 {campaigns.map(c => (
                   <option key={c.fbCampaignId} value={c.fbCampaignId}>
