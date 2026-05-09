@@ -199,12 +199,22 @@ function SalesForecastView() {
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
           <h3 className="text-lg font-semibold text-white mb-4">¿Para qué producto es la proyección?</h3>
 
-          {/* Global */}
-          <button onClick={selectGlobal}
-            className="w-full p-4 rounded-xl border text-left transition-all bg-gray-900/30 border-gray-700/50 hover:border-primary-500/50 hover:bg-primary-500/5 mb-4">
-            <p className="text-sm font-medium text-white">Global</p>
-            <p className="text-xs text-gray-500 mt-0.5">Todos los productos combinados</p>
-          </button>
+          {/* Family grid */}
+          {families.length === 0 ? (
+            <div className="p-8 text-center">
+              <div className="inline-block w-6 h-6 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
+              <p className="text-xs text-gray-500 mt-2">Cargando productos...</p>
+            </div>
+          ) : (
+          <>
+          {/* Global option — same row as families, not full width */}
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-3 mb-3">
+            <button onClick={selectGlobal}
+              className="p-4 rounded-xl border text-left transition-all bg-primary-500/5 border-primary-500/30 hover:border-primary-500/50 hover:bg-primary-500/10">
+              <p className="text-sm font-medium text-white">Global</p>
+              <p className="text-xs text-gray-500 mt-0.5">Todos los productos</p>
+            </button>
+          </div>
 
           {/* Breadcrumbs */}
           {navStack.length > 0 && (
@@ -252,6 +262,8 @@ function SalesForecastView() {
               <p className="text-sm text-gray-500 col-span-2">No hay subfamilias. Usa "Seleccionar" arriba.</p>
             )}
           </div>
+          </>
+          )}
         </div>
       </div>
     );
