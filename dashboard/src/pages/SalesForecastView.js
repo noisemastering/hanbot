@@ -423,14 +423,14 @@ function SalesForecastView() {
           {data.metaAttribution && (
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4">
-                <p className="text-xs text-gray-400">Ventas por Ads</p>
+                <p className="text-xs text-gray-400">Atribuidas a Ads</p>
                 <p className="text-xl font-bold text-blue-400">{fmt(data.metaAttribution.totalAdRevenue)}</p>
                 <p className="text-xs text-gray-500 mt-1">{data.metaAttribution.adRevenuePercent}% del total</p>
               </div>
-              <div className="bg-green-500/5 border border-green-500/20 rounded-xl p-4">
-                <p className="text-xs text-gray-400">Ventas orgánicas</p>
-                <p className="text-xl font-bold text-green-400">{fmt(data.metaAttribution.totalOrganicRevenue)}</p>
-                <p className="text-xs text-gray-500 mt-1">{(100 - data.metaAttribution.adRevenuePercent).toFixed(1)}%</p>
+              <div className="bg-gray-700/30 border border-gray-600/30 rounded-xl p-4">
+                <p className="text-xs text-gray-400">Sin atribución</p>
+                <p className="text-xl font-bold text-gray-300">{fmt(data.metaAttribution.totalOrganicRevenue)}</p>
+                <p className="text-xs text-gray-500 mt-1">{(100 - data.metaAttribution.adRevenuePercent).toFixed(1)}% — sin link tracked</p>
               </div>
               {data.manualSales && data.manualSales.totalOrders > 0 && (
                 <div className="bg-orange-500/5 border border-orange-500/20 rounded-xl p-4">
