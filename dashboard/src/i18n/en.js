@@ -45,6 +45,7 @@ const en = {
   "menu.playgroundConversion": "Conversion Prob.",
   "menu.playgroundSpend": "Spend Optimization",
   "menu.settings": "Settings",
+  "menu.help": "Help",
 
   // ── Common ───────────────────────────────────────────────
   "common.save": "Save",
