@@ -247,8 +247,13 @@ function SalesForecastView() {
       }
     }
 
+    // Only show months within the selected period
+    const cutoff = new Date();
+    cutoff.setDate(cutoff.getDate() - days);
+    const cutoffMonth = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}`;
+
     return data.monthly
-      .filter(m => m.revenue > 0 || m.projected > 0)
+      .filter(m => m.month >= cutoffMonth && (m.revenue > 0 || m.projected > 0))
       .map(m => {
         const ad = monthlyAd[m.month];
         return {
@@ -262,7 +267,7 @@ function SalesForecastView() {
           adBoost: ad ? Math.round(ad.ad) : null
         };
       });
-  }, [data, showAdBoost]);
+  }, [data, showAdBoost, days]);
 
   const chartData = effectiveZoom === 'monthly' ? monthlyChartData
     : effectiveZoom === 'weekly' ? weeklyChartData
