@@ -110,11 +110,12 @@ export default function KnobControl({
         ref={knobRef}
         width={size}
         height={size}
+        viewBox={`-6 -6 ${size + 12} ${size + 12}`}
         className={`cursor-grab select-none ${dragging ? 'cursor-grabbing' : ''}`}
         onMouseDown={handleMouseDown}
         onWheel={handleWheel}
         onDoubleClick={handleDoubleClick}
-        style={{ touchAction: 'none' }}
+        style={{ touchAction: 'none', overflow: 'visible' }}
       >
         {/* Background track */}
         <circle cx={cx} cy={cy} r={r} fill="none" stroke="#374151" strokeWidth={5}
