@@ -797,6 +797,13 @@ function SalesForecastView() {
 
             {simOpen && (
               <div className="px-6 pt-6 pb-6 border-t border-gray-700/50 space-y-5">
+                {/* Global scope warning */}
+                {selectedProduct?.id === '' && (
+                  <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg px-4 py-2 text-xs text-amber-300 flex items-center gap-2">
+                    <span>⚠️</span>
+                    <span>Estás simulando a nivel global — los cambios se aplican proporcionalmente a todos los productos. Para una simulación más precisa, selecciona un producto específico.</span>
+                  </div>
+                )}
                 {/* Knobs row */}
                 <div className="flex flex-wrap items-start justify-center gap-6">
                   <KnobControl label="Inversión en Ads" value={sim.adSpendMult} min={0} max={3} step={0.1} baseline={1} color="#3B82F6" size={80} format={v => v === 1 ? 'Actual' : v === 0 ? 'Sin ads' : (v > 1 ? '+' : '') + Math.round((v - 1) * 100) + '%'} onChange={v => setSim(s => ({ ...s, adSpendMult: v }))} />
