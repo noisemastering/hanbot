@@ -180,22 +180,32 @@ function SalesForecastView() {
   useEffect(() => () => { if (stageTimer.current) clearTimeout(stageTimer.current); }, []);
 
   // ── Chart data ──
-  // Chart zoom level
-  const [chartZoom, setChartZoom] = useState('auto'); // 'auto' | 'monthly' | 'weekly' | 'daily'
+  // Chart controls
+  const [chartZoom, setChartZoom] = useState('auto');
+  const [showAdBoost, setShowAdBoost] = useState(true);
 
   // Auto-select zoom based on period
   const effectiveZoom = chartZoom === 'auto'
     ? (days >= 180 ? 'monthly' : days >= 60 ? 'weekly' : 'daily')
     : chartZoom;
 
+  // Check if ad attribution data exists
+  const hasAdData = data?.history?.some(d => d.adRevenue > 0);
+
   // Daily chart data (raw)
   const dailyChartData = useMemo(() => {
     if (!data) return [];
     return [
-      ...data.history.map(d => ({ ...d, forecast: null, upper: null, lower: null })),
-      ...data.forecast.map(d => ({ dateLabel: d.dateLabel, date: d.date, dow: d.dow, revenue: null, movingAvg: null, forecast: d.revenue, upper: d.upper, lower: d.lower, orders: d.orders }))
+      ...data.history.map(d => ({
+        ...d,
+        forecast: null, upper: null, lower: null,
+        // For stacked bars: split revenue into organic base + ad boost
+        organicBase: showAdBoost && d.adRevenue != null ? Math.round(d.revenue - d.adRevenue) : null,
+        adBoost: showAdBoost && d.adRevenue != null ? Math.round(d.adRevenue) : null
+      })),
+      ...data.forecast.map(d => ({ dateLabel: d.dateLabel, date: d.date, dow: d.dow, revenue: null, movingAvg: null, forecast: d.revenue, upper: d.upper, lower: d.lower, orders: d.orders, organicBase: null, adBoost: null }))
     ];
-  }, [data]);
+  }, [data, showAdBoost]);
 
   // Aggregate daily into weekly
   const weeklyChartData = useMemo(() => {
@@ -206,13 +216,16 @@ function SalesForecastView() {
       if (chunk.length < 2) continue;
       const hasHistory = chunk.some(d => d.revenue != null);
       const hasForecast = chunk.some(d => d.forecast != null);
+      const hasAd = showAdBoost && chunk.some(d => d.adBoost > 0);
       weeks.push({
         dateLabel: chunk[0].dateLabel + '–' + chunk[chunk.length - 1].dateLabel,
         revenue: hasHistory ? chunk.reduce((s, d) => s + (d.revenue || 0), 0) : null,
         movingAvg: null,
         forecast: hasForecast ? chunk.reduce((s, d) => s + (d.forecast || 0), 0) : null,
         upper: hasForecast ? chunk.reduce((s, d) => s + (d.upper || 0), 0) : null,
-        lower: hasForecast ? Math.max(0, chunk.reduce((s, d) => s + (d.lower || 0), 0)) : null
+        lower: hasForecast ? Math.max(0, chunk.reduce((s, d) => s + (d.lower || 0), 0)) : null,
+        organicBase: hasAd ? chunk.reduce((s, d) => s + (d.organicBase || 0), 0) : null,
+        adBoost: hasAd ? chunk.reduce((s, d) => s + (d.adBoost || 0), 0) : null
       });
     }
     return weeks;
@@ -512,9 +525,22 @@ function SalesForecastView() {
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400">
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> Real</span>
+                {showAdBoost && hasAdData ? (
+                  <>
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> Sin atribución</span>
+                    <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-blue-500 inline-block" /> Boost de Ads</span>
+                  </>
+                ) : (
+                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> Real</span>
+                )}
                 {effectiveZoom === 'daily' && <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-cyan-500 inline-block" /> Promedio 7d</span>}
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-purple-500 inline-block" /> Proyección</span>
+                {hasAdData && (
+                  <button onClick={() => setShowAdBoost(v => !v)}
+                    className={`ml-2 px-2 py-0.5 rounded text-xs transition-all ${showAdBoost ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-gray-700/50 text-gray-500'}`}>
+                    {showAdBoost ? 'Ocultar boost' : 'Mostrar boost'}
+                  </button>
+                )}
               </div>
             </div>
             <div className="h-80 overflow-x-auto">
@@ -531,7 +557,15 @@ function SalesForecastView() {
                         return (
                           <div style={tooltipStyle} className="p-3 text-sm">
                             <p className="text-white font-medium mb-1">{label} {d.dow ? `(${d.dow})` : ''}</p>
-                            {d.revenue != null && <p style={{ color: '#10B981' }}>Real: {fmt(d.revenue)}</p>}
+                            {d.revenue != null && !showAdBoost && <p style={{ color: '#10B981' }}>Real: {fmt(d.revenue)}</p>}
+                            {d.revenue != null && showAdBoost && d.organicBase != null && (
+                              <>
+                                <p style={{ color: '#10B981' }}>Sin atribución: {fmt(d.organicBase)}</p>
+                                <p style={{ color: '#3B82F6' }}>Boost de Ads: {fmt(d.adBoost)}</p>
+                                <p style={{ color: '#9CA3AF' }}>Total: {fmt(d.revenue)}</p>
+                              </>
+                            )}
+                            {d.revenue != null && showAdBoost && d.organicBase == null && <p style={{ color: '#10B981' }}>Real: {fmt(d.revenue)}</p>}
                             {d.movingAvg != null && <p style={{ color: '#06B6D4' }}>Promedio 7d: {fmt(d.movingAvg)}</p>}
                             {d.forecast != null && <p style={{ color: '#8B5CF6' }}>Proyección: {fmt(d.forecast)}</p>}
                             {d.upper != null && <p style={{ color: '#9CA3AF' }}>Rango: {fmt(d.lower)} – {fmt(d.upper)}</p>}
@@ -542,7 +576,14 @@ function SalesForecastView() {
                     <ReferenceLine x={todayLabel} stroke="#6B7280" strokeDasharray="4 4" label={{ value: 'Hoy', fill: '#9CA3AF', fontSize: 11 }} />
                     <Area type="monotone" dataKey="upper" stroke="none" fill="#8B5CF6" fillOpacity={0.08} connectNulls={false} />
                     <Area type="monotone" dataKey="lower" stroke="none" fill="#1F2937" fillOpacity={1} connectNulls={false} />
-                    <Bar dataKey="revenue" name="Ingresos" fill="#10B981" fillOpacity={0.7} radius={[3, 3, 0, 0]} />
+                    {showAdBoost && hasAdData ? (
+                      <>
+                        <Bar dataKey="organicBase" name="Sin atribución" stackId="rev" fill="#10B981" fillOpacity={0.7} />
+                        <Bar dataKey="adBoost" name="Boost de Ads" stackId="rev" fill="#3B82F6" fillOpacity={0.8} radius={[3, 3, 0, 0]} />
+                      </>
+                    ) : (
+                      <Bar dataKey="revenue" name="Ingresos" fill="#10B981" fillOpacity={0.7} radius={[3, 3, 0, 0]} />
+                    )}
                     {effectiveZoom === 'daily' && (
                       <Line type="monotone" dataKey="movingAvg" name="Promedio 7d" stroke="#06B6D4" strokeWidth={2} dot={false} connectNulls={false} />
                     )}
