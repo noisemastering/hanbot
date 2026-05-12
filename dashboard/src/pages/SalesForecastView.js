@@ -708,7 +708,7 @@ function SalesForecastView() {
             </button>
 
             {simOpen && (
-              <div className="px-6 py-4 border-t border-gray-700/50">
+              <div className="px-6 pt-8 pb-4 border-t border-gray-700/50">
                 <div className="flex items-center justify-center gap-6">
                   <KnobControl label="Inversión en Ads" value={sim.adSpendMult} min={0} max={3} step={0.1} baseline={1} color="#3B82F6" size={65} format={v => v.toFixed(1) + 'x'} onChange={v => setSim(s => ({ ...s, adSpendMult: v }))} />
                   <KnobControl label="Anuncios nuevos" value={sim.newAds} min={0} max={10} step={1} baseline={0} color="#F97316" size={65} format={v => '+' + v} onChange={v => setSim(s => ({ ...s, newAds: v }))} />
