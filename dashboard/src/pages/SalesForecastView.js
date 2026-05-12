@@ -623,11 +623,15 @@ function SalesForecastView() {
           {/* DOW pattern */}
           {data.dowSummary && (() => {
             const bestDayAvg = Math.max(...data.dowSummary.map(d => d.avg));
+            const worstDayAvg = Math.min(...data.dowSummary.map(d => d.avg));
             const bestDayName = data.dowSummary.find(d => d.avg === bestDayAvg)?.day;
+            const worstDayName = data.dowSummary.find(d => d.avg === worstDayAvg)?.day;
             return (
             <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
               <h2 className="text-lg font-semibold text-white mb-1">Patrón semanal</h2>
-              <p className="text-sm text-gray-500 mb-4">Promedio de ingresos por día — <span className="text-green-400 font-medium">{bestDayName}</span> es el mejor día ({fmt(bestDayAvg)})</p>
+              <p className="text-sm text-gray-500 mb-4">
+                Mejor día: <span className="text-green-400 font-medium">{bestDayName}</span> ({fmt(bestDayAvg)}) — Peor día: <span className="text-red-400 font-medium">{worstDayName}</span> ({fmt(worstDayAvg)})
+              </p>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={data.dowSummary} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
@@ -637,7 +641,10 @@ function SalesForecastView() {
                     <Tooltip contentStyle={tooltipStyle} formatter={v => [fmt(v), 'Promedio']} />
                     <Bar dataKey="avg" name="Promedio" radius={[4, 4, 0, 0]}>
                       {data.dowSummary.map((d, i) => (
-                        <Cell key={i} fill={d.avg === bestDayAvg ? '#10B981' : '#06B6D4'} fillOpacity={d.avg === bestDayAvg ? 0.9 : 0.5} />
+                        <Cell key={i}
+                          fill={d.avg === bestDayAvg ? '#10B981' : d.avg === worstDayAvg ? '#EF4444' : '#06B6D4'}
+                          fillOpacity={d.avg === bestDayAvg || d.avg === worstDayAvg ? 0.9 : 0.5}
+                        />
                       ))}
                     </Bar>
                   </BarChart>
