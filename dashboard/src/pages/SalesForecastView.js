@@ -799,7 +799,7 @@ function SalesForecastView() {
               <div className="px-6 pt-6 pb-6 border-t border-gray-700/50 space-y-5">
                 {/* Knobs row */}
                 <div className="flex flex-wrap items-start justify-center gap-6">
-                  <KnobControl label="Inversión en Ads" value={sim.adSpendMult} min={0} max={3} step={0.1} baseline={1} color="#3B82F6" size={80} format={v => v.toFixed(1) + 'x'} onChange={v => setSim(s => ({ ...s, adSpendMult: v }))} />
+                  <KnobControl label="Inversión en Ads" value={sim.adSpendMult} min={0} max={3} step={0.1} baseline={1} color="#3B82F6" size={80} format={v => v === 1 ? 'Actual' : v === 0 ? 'Sin ads' : (v > 1 ? '+' : '') + Math.round((v - 1) * 100) + '%'} onChange={v => setSim(s => ({ ...s, adSpendMult: v }))} />
                   <KnobControl label="Anuncios nuevos" value={sim.newAds} min={0} max={10} step={1} baseline={0} color="#F97316" size={80} format={v => '+' + v} onChange={v => setSim(s => ({ ...s, newAds: v }))} />
                   <KnobControl label="Mejor conversión" value={sim.conversionRate} min={0} max={50} step={1} baseline={0} color="#10B981" size={80} format={v => '+' + v + '%'} onChange={v => setSim(s => ({ ...s, conversionRate: v }))} />
                   <KnobControl label="Boost de promo" value={sim.promoBoost} min={0} max={100} step={5} baseline={0} color="#F59E0B" size={80} format={v => '+' + v + '%'} onChange={v => setSim(s => ({ ...s, promoBoost: v }))} />
