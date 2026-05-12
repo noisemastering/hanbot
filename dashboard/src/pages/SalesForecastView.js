@@ -229,7 +229,7 @@ function SalesForecastView() {
       });
     }
     return weeks;
-  }, [dailyChartData]);
+  }, [dailyChartData, showAdBoost]);
 
   // Monthly from backend — enriched with ad attribution from daily data
   const monthlyChartData = useMemo(() => {
