@@ -110,7 +110,7 @@ export default function KnobControl({
         ref={knobRef}
         width={size}
         height={size}
-        viewBox={`-6 -6 ${size + 12} ${size + 12}`}
+        viewBox={`-10 -10 ${size + 20} ${size + 20}`}
         className={`cursor-grab select-none ${dragging ? 'cursor-grabbing' : ''}`}
         onMouseDown={handleMouseDown}
         onWheel={handleWheel}
