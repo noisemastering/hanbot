@@ -757,21 +757,13 @@ function SalesForecastView() {
                 </div>
 
                 {simActive && simTotalForecast != null && (
-                  <div className="mt-5 grid grid-cols-3 gap-4">
-                    <div className="bg-gray-900/50 rounded-lg p-4 text-center">
-                      <p className="text-xs text-gray-500">Proyección base</p>
-                      <p className="text-lg font-bold text-purple-400">{fmt(data.totalForecastRevenue)}</p>
-                    </div>
-                    <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4 text-center">
-                      <p className="text-xs text-gray-500">Con simulación</p>
-                      <p className="text-lg font-bold text-amber-400">{fmt(simTotalForecast)}</p>
-                    </div>
-                    <div className="bg-gray-900/50 rounded-lg p-4 text-center">
-                      <p className="text-xs text-gray-500">Diferencia</p>
-                      <p className={`text-lg font-bold ${simTotalForecast >= data.totalForecastRevenue ? 'text-green-400' : 'text-red-400'}`}>
-                        {simTotalForecast >= data.totalForecastRevenue ? '+' : ''}{fmt(simTotalForecast - data.totalForecastRevenue)}
-                      </p>
-                    </div>
+                  <div className="mt-4 flex items-center justify-center gap-4 text-sm">
+                    <span className="text-gray-500">Base: <span className="text-purple-400 font-medium">{fmt(data.totalForecastRevenue)}</span></span>
+                    <span className="text-gray-600">→</span>
+                    <span className="text-gray-500">Simulación: <span className="text-amber-400 font-bold">{fmt(simTotalForecast)}</span></span>
+                    <span className={`font-bold ${simTotalForecast >= data.totalForecastRevenue ? 'text-green-400' : 'text-red-400'}`}>
+                      ({simTotalForecast >= data.totalForecastRevenue ? '+' : ''}{((simTotalForecast - data.totalForecastRevenue) / data.totalForecastRevenue * 100).toFixed(0)}%)
+                    </span>
                   </div>
                 )}
 
