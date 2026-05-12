@@ -685,7 +685,7 @@ function SalesForecastView() {
           </div>
 
           {/* ── SIMULATION PANEL ("What if") ── */}
-          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl mb-8">
+          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl mb-8 mt-[30px]">
             <button onClick={() => setSimOpen(v => !v)}
               className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-700/20 transition-colors">
               <div className="flex items-center gap-3">
