@@ -247,19 +247,21 @@ function SalesForecastView() {
       }
     }
 
-    return data.monthly.map(m => {
-      const ad = monthlyAd[m.month];
-      return {
-        dateLabel: m.label,
-        revenue: m.revenue,
-        movingAvg: null,
-        forecast: m.projected || null,
-        upper: null,
-        lower: null,
-        organicBase: ad ? Math.round(ad.organic) : null,
-        adBoost: ad ? Math.round(ad.ad) : null
-      };
-    });
+    return data.monthly
+      .filter(m => m.revenue > 0 || m.projected > 0)
+      .map(m => {
+        const ad = monthlyAd[m.month];
+        return {
+          dateLabel: m.label,
+          revenue: m.revenue,
+          movingAvg: null,
+          forecast: m.projected || null,
+          upper: null,
+          lower: null,
+          organicBase: ad ? Math.round(ad.organic) : null,
+          adBoost: ad ? Math.round(ad.ad) : null
+        };
+      });
   }, [data, showAdBoost]);
 
   const chartData = effectiveZoom === 'monthly' ? monthlyChartData
