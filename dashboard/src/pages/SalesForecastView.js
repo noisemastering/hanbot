@@ -685,7 +685,7 @@ function SalesForecastView() {
           </div>
 
           {/* ── SIMULATION PANEL ("What if") ── */}
-          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl">
+          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl mb-8">
             <button onClick={() => setSimOpen(v => !v)}
               className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-700/20 transition-colors">
               <div className="flex items-center gap-3">
@@ -708,7 +708,7 @@ function SalesForecastView() {
             </button>
 
             {simOpen && (
-              <div className="px-6 pb-6 border-t border-gray-700/50 pt-5">
+              <div className="px-6 pb-8 border-t border-gray-700/50 pt-5">
                 <div className="flex flex-wrap justify-center gap-8">
                   <KnobControl
                     label="Inversión en Ads"
