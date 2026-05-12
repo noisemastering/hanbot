@@ -708,71 +708,19 @@ function SalesForecastView() {
             </button>
 
             {simOpen && (
-              <div className="px-6 pb-8 border-t border-gray-700/50 pt-5">
-                <div className="flex flex-wrap justify-center gap-8">
-                  <KnobControl
-                    label="Inversión en Ads"
-                    value={sim.adSpendMult}
-                    min={0}
-                    max={3}
-                    step={0.1}
-                    baseline={1}
-                    color="#3B82F6"
-                    format={v => v.toFixed(1) + 'x'}
-                    onChange={v => setSim(s => ({ ...s, adSpendMult: v }))}
-                  />
-                  <KnobControl
-                    label="Anuncios nuevos"
-                    value={sim.newAds}
-                    min={0}
-                    max={10}
-                    step={1}
-                    baseline={0}
-                    color="#F97316"
-                    format={v => '+' + v}
-                    onChange={v => setSim(s => ({ ...s, newAds: v }))}
-                  />
-                  <KnobControl
-                    label="Mejor conversión"
-                    value={sim.conversionRate}
-                    min={0}
-                    max={50}
-                    step={1}
-                    baseline={0}
-                    color="#10B981"
-                    format={v => '+' + v + '%'}
-                    onChange={v => setSim(s => ({ ...s, conversionRate: v }))}
-                  />
-                  <KnobControl
-                    label="Boost de promo"
-                    value={sim.promoBoost}
-                    min={0}
-                    max={100}
-                    step={5}
-                    baseline={0}
-                    color="#F59E0B"
-                    format={v => '+' + v + '%'}
-                    onChange={v => setSim(s => ({ ...s, promoBoost: v }))}
-                  />
-                </div>
-
-                {simActive && simTotalForecast != null && (
-                  <div className="mt-4 flex items-center justify-center gap-4 text-sm">
-                    <span className="text-gray-500">Base: <span className="text-purple-400 font-medium">{fmt(data.totalForecastRevenue)}</span></span>
-                    <span className="text-gray-600">→</span>
-                    <span className="text-gray-500">Simulación: <span className="text-amber-400 font-bold">{fmt(simTotalForecast)}</span></span>
-                    <span className={`font-bold ${simTotalForecast >= data.totalForecastRevenue ? 'text-green-400' : 'text-red-400'}`}>
-                      ({simTotalForecast >= data.totalForecastRevenue ? '+' : ''}{((simTotalForecast - data.totalForecastRevenue) / data.totalForecastRevenue * 100).toFixed(0)}%)
-                    </span>
-                  </div>
-                )}
-
-                <div className="mt-4 flex justify-between items-center">
-                  <p className="text-xs text-gray-500">Arrastra los controles o usa la rueda del mouse. Doble clic para restablecer.</p>
-                  <button onClick={() => setSim({ adSpendMult: 1, newAds: 0, conversionRate: 0, promoBoost: 0 })}
-                    className="text-xs text-gray-500 hover:text-white px-3 py-1 rounded hover:bg-gray-700/50 transition-colors">
-                    Restablecer todo
-                  </button>
+              <div className="px-6 py-4 border-t border-gray-700/50">
+                <div className="flex items-center justify-center gap-6">
+                  <KnobControl label="Inversión en Ads" value={sim.adSpendMult} min={0} max={3} step={0.1} baseline={1} color="#3B82F6" size={65} format={v => v.toFixed(1) + 'x'} onChange={v => setSim(s => ({ ...s, adSpendMult: v }))} />
+                  <KnobControl label="Anuncios nuevos" value={sim.newAds} min={0} max={10} step={1} baseline={0} color="#F97316" size={65} format={v => '+' + v} onChange={v => setSim(s => ({ ...s, newAds: v }))} />
+                  <KnobControl label="Mejor conversión" value={sim.conversionRate} min={0} max={50} step={1} baseline={0} color="#10B981" size={65} format={v => '+' + v + '%'} onChange={v => setSim(s => ({ ...s, conversionRate: v }))} />
+                  <KnobControl label="Boost de promo" value={sim.promoBoost} min={0} max={100} step={5} baseline={0} color="#F59E0B" size={65} format={v => '+' + v + '%'} onChange={v => setSim(s => ({ ...s, promoBoost: v }))} />
+                  {simActive && simTotalForecast != null && (
+                    <div className="ml-4 pl-4 border-l border-gray-700/50 text-sm">
+                      <p className="text-gray-500">Base: <span className="text-purple-400">{fmt(data.totalForecastRevenue)}</span></p>
+                      <p className="text-amber-400 font-bold">{fmt(simTotalForecast)} <span className={simTotalForecast >= data.totalForecastRevenue ? 'text-green-400' : 'text-red-400'}>({simTotalForecast >= data.totalForecastRevenue ? '+' : ''}{((simTotalForecast - data.totalForecastRevenue) / data.totalForecastRevenue * 100).toFixed(0)}%)</span></p>
+                    </div>
+                  )}
+                  <button onClick={() => setSim({ adSpendMult: 1, newAds: 0, conversionRate: 0, promoBoost: 0 })} className="text-xs text-gray-600 hover:text-white ml-2" title="Restablecer">↺</button>
                 </div>
               </div>
             )}
