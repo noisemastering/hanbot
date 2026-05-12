@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import API from '../api';
 import {
-  ComposedChart, Bar, Line, Area, BarChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine
+  ComposedChart, Bar, Line, Area, BarChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell
 } from 'recharts';
 
 const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6', fontSize: '13px' };
@@ -574,10 +574,13 @@ function SalesForecastView() {
           )}
 
           {/* DOW pattern */}
-          {data.dowSummary && (
+          {data.dowSummary && (() => {
+            const bestDayAvg = Math.max(...data.dowSummary.map(d => d.avg));
+            const bestDayName = data.dowSummary.find(d => d.avg === bestDayAvg)?.day;
+            return (
             <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
               <h2 className="text-lg font-semibold text-white mb-1">Patrón semanal</h2>
-              <p className="text-sm text-gray-500 mb-4">Promedio de ingresos por día de la semana</p>
+              <p className="text-sm text-gray-500 mb-4">Promedio de ingresos por día — <span className="text-green-400 font-medium">{bestDayName}</span> es el mejor día ({fmt(bestDayAvg)})</p>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={data.dowSummary} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
@@ -585,12 +588,17 @@ function SalesForecastView() {
                     <XAxis dataKey="day" tick={{ fill: '#9CA3AF', fontSize: 11 }} />
                     <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
                     <Tooltip contentStyle={tooltipStyle} formatter={v => [fmt(v), 'Promedio']} />
-                    <Bar dataKey="avg" name="Promedio" fill="#06B6D4" fillOpacity={0.7} radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="avg" name="Promedio" radius={[4, 4, 0, 0]}>
+                      {data.dowSummary.map((d, i) => (
+                        <Cell key={i} fill={d.avg === bestDayAvg ? '#10B981' : '#06B6D4'} fillOpacity={d.avg === bestDayAvg ? 0.9 : 0.5} />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* Monthly breakdown */}
           {data.monthly && data.monthly.length > 0 && (
