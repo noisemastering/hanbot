@@ -3,6 +3,7 @@ import API from '../api';
 import {
   ComposedChart, Bar, Line, Area, BarChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell
 } from 'recharts';
+import KnobControl from '../components/KnobControl';
 
 const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6', fontSize: '13px' };
 const fmt = (n) => '$' + Math.round(n).toLocaleString('es-MX');
@@ -42,6 +43,15 @@ function SalesForecastView() {
   const [revealed, setRevealed] = useState(false);
   const dataReady = useRef(false);
   const stageTimer = useRef(null);
+
+  // ── Simulation ("What if") ──
+  const [simOpen, setSimOpen] = useState(false);
+  const [sim, setSim] = useState({
+    adSpendMult: 1,       // multiplier on ad spend (1 = no change)
+    newAds: 0,            // additional ads to launch
+    conversionRate: 0,    // percentage points improvement
+    promoBoost: 0         // % revenue boost from promo
+  });
 
   // Fetch product tree
   useEffect(() => {
@@ -269,9 +279,52 @@ function SalesForecastView() {
       });
   }, [data, showAdBoost, days]);
 
-  const chartData = effectiveZoom === 'monthly' ? monthlyChartData
+  const baseChartData = effectiveZoom === 'monthly' ? monthlyChartData
     : effectiveZoom === 'weekly' ? weeklyChartData
     : dailyChartData;
+
+  // ── Simulation: compute "what if" forecast line ──
+  const simActive = simOpen && (sim.adSpendMult !== 1 || sim.newAds > 0 || sim.conversionRate > 0 || sim.promoBoost > 0);
+
+  const simBaseline = useMemo(() => {
+    if (!data) return { adRevenuePct: 0, avgDailyRevenue: 0, currentAds: 0 };
+    const adPct = data.metaAttribution?.adRevenuePercent || 0;
+    const currentAds = data.metaAttribution?.totalAdOrders || 0;
+    return {
+      adRevenuePct: adPct / 100,
+      avgDailyRevenue: data.avgDailyRevenue || 0,
+      currentAds
+    };
+  }, [data]);
+
+  const chartData = useMemo(() => {
+    if (!simActive) return baseChartData;
+
+    // Compute simulation multiplier with diminishing returns
+    const adPct = simBaseline.adRevenuePct;
+    const organicPct = 1 - adPct;
+
+    // Ad spend change: only affects the ad-attributed portion
+    const spendEffect = Math.pow(sim.adSpendMult, 0.65); // diminishing returns
+    const newAdsEffect = sim.newAds > 0 ? Math.pow(1 + sim.newAds * 0.15, 0.5) : 1; // each new ad adds ~15% diminishing
+    const conversionEffect = 1 + (sim.conversionRate / 100);
+    const promoEffect = 1 + (sim.promoBoost / 100);
+
+    // Combined: organic stays the same, ad portion gets multiplied
+    const adMultiplier = spendEffect * newAdsEffect * conversionEffect * promoEffect;
+    const totalMultiplier = organicPct + (adPct * adMultiplier);
+
+    return baseChartData.map(d => ({
+      ...d,
+      simForecast: d.forecast != null ? Math.round(d.forecast * totalMultiplier) : null
+    }));
+  }, [baseChartData, simActive, sim, simBaseline]);
+
+  // Simulated totals
+  const simTotalForecast = useMemo(() => {
+    if (!simActive || !data) return null;
+    return chartData.reduce((s, d) => s + (d.simForecast || 0), 0);
+  }, [chartData, simActive, data]);
 
   const todayLabel = new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
 
@@ -489,9 +542,16 @@ function SalesForecastView() {
               <p className="text-xs text-gray-400">Ingresos ({days >= 730 ? '2a' : days >= 365 ? '1a' : days >= 180 ? '6m' : days + 'd'})</p>
               <p className="text-2xl font-bold text-green-400">{fmt(data.totalHistoryRevenue)}</p>
             </div>
-            <div className="bg-gray-800/50 border border-purple-500/20 rounded-xl p-5">
+            <div className={`bg-gray-800/50 border rounded-xl p-5 ${simActive ? 'border-amber-500/30' : 'border-purple-500/20'}`}>
               <p className="text-xs text-gray-400">Proyección 14 días</p>
-              <p className="text-2xl font-bold text-purple-400">{fmt(data.totalForecastRevenue)}</p>
+              {simActive && simTotalForecast != null ? (
+                <>
+                  <p className="text-2xl font-bold text-amber-400">{fmt(simTotalForecast)}</p>
+                  <p className="text-xs text-gray-500">Base: {fmt(data.totalForecastRevenue)}</p>
+                </>
+              ) : (
+                <p className="text-2xl font-bold text-purple-400">{fmt(data.totalForecastRevenue)}</p>
+              )}
             </div>
             <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5">
               <p className="text-xs text-gray-400">Promedio diario</p>
@@ -560,6 +620,7 @@ function SalesForecastView() {
                 )}
                 {effectiveZoom === 'daily' && <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-cyan-500 inline-block" /> Promedio 7d</span>}
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-purple-500 inline-block" /> Proyección</span>
+                {simActive && <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-500 inline-block" /> Simulación</span>}
                 {hasAdData && (
                   <button onClick={() => setShowAdBoost(v => !v)}
                     className={`ml-2 px-2 py-0.5 rounded text-xs transition-all ${showAdBoost ? 'bg-blue-500/20 text-blue-400 border border-blue-500/30' : 'bg-gray-700/50 text-gray-500'}`}>
@@ -593,6 +654,7 @@ function SalesForecastView() {
                             {d.revenue != null && showAdBoost && d.organicBase == null && <p style={{ color: '#10B981' }}>Real: {fmt(d.revenue)}</p>}
                             {d.movingAvg != null && <p style={{ color: '#06B6D4' }}>Promedio 7d: {fmt(d.movingAvg)}</p>}
                             {d.forecast != null && <p style={{ color: '#8B5CF6' }}>Proyección: {fmt(d.forecast)}</p>}
+                            {d.simForecast != null && <p style={{ color: '#F59E0B' }}>Simulación: {fmt(d.simForecast)} ({d.simForecast > d.forecast ? '+' : ''}{((d.simForecast - d.forecast) / d.forecast * 100).toFixed(0)}%)</p>}
                             {d.upper != null && <p style={{ color: '#9CA3AF' }}>Rango: {fmt(d.lower)} – {fmt(d.upper)}</p>}
                           </div>
                         );
@@ -613,10 +675,115 @@ function SalesForecastView() {
                       <Line type="monotone" dataKey="movingAvg" name="Promedio 7d" stroke="#06B6D4" strokeWidth={2} dot={false} connectNulls={false} />
                     )}
                     <Line type="monotone" dataKey="forecast" name="Proyección" stroke="#8B5CF6" strokeWidth={2.5} strokeDasharray="6 3" dot={{ fill: '#8B5CF6', r: 3 }} connectNulls={false} />
+                    {simActive && (
+                      <Line type="monotone" dataKey="simForecast" name="Simulación" stroke="#F59E0B" strokeWidth={2.5} dot={{ fill: '#F59E0B', r: 3, stroke: '#F59E0B' }} connectNulls={false} />
+                    )}
                   </ComposedChart>
                 </ResponsiveContainer>
               </div>
             </div>
+          </div>
+
+          {/* ── SIMULATION PANEL ("What if") ── */}
+          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl overflow-hidden">
+            <button onClick={() => setSimOpen(v => !v)}
+              className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-700/20 transition-colors">
+              <div className="flex items-center gap-3">
+                <span className="text-lg">🎛️</span>
+                <div className="text-left">
+                  <h3 className="text-sm font-semibold text-white">¿Qué pasaría si...?</h3>
+                  <p className="text-xs text-gray-500">Ajusta parámetros para simular el impacto en la proyección</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3">
+                {simActive && simTotalForecast != null && (
+                  <span className="text-xs px-2 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400">
+                    Simulación: {fmt(simTotalForecast)} ({simTotalForecast > data.totalForecastRevenue ? '+' : ''}{((simTotalForecast - data.totalForecastRevenue) / data.totalForecastRevenue * 100).toFixed(0)}%)
+                  </span>
+                )}
+                <svg className={`w-4 h-4 text-gray-500 transition-transform ${simOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </div>
+            </button>
+
+            {simOpen && (
+              <div className="px-6 pb-6 border-t border-gray-700/50 pt-5">
+                <div className="flex flex-wrap justify-center gap-8">
+                  <KnobControl
+                    label="Inversión en Ads"
+                    value={sim.adSpendMult}
+                    min={0}
+                    max={3}
+                    step={0.1}
+                    baseline={1}
+                    color="#3B82F6"
+                    format={v => v.toFixed(1) + 'x'}
+                    onChange={v => setSim(s => ({ ...s, adSpendMult: v }))}
+                  />
+                  <KnobControl
+                    label="Anuncios nuevos"
+                    value={sim.newAds}
+                    min={0}
+                    max={10}
+                    step={1}
+                    baseline={0}
+                    color="#F97316"
+                    format={v => '+' + v}
+                    onChange={v => setSim(s => ({ ...s, newAds: v }))}
+                  />
+                  <KnobControl
+                    label="Mejor conversión"
+                    value={sim.conversionRate}
+                    min={0}
+                    max={50}
+                    step={1}
+                    baseline={0}
+                    color="#10B981"
+                    format={v => '+' + v + '%'}
+                    onChange={v => setSim(s => ({ ...s, conversionRate: v }))}
+                  />
+                  <KnobControl
+                    label="Boost de promo"
+                    value={sim.promoBoost}
+                    min={0}
+                    max={100}
+                    step={5}
+                    baseline={0}
+                    color="#F59E0B"
+                    format={v => '+' + v + '%'}
+                    onChange={v => setSim(s => ({ ...s, promoBoost: v }))}
+                  />
+                </div>
+
+                {simActive && simTotalForecast != null && (
+                  <div className="mt-5 grid grid-cols-3 gap-4">
+                    <div className="bg-gray-900/50 rounded-lg p-4 text-center">
+                      <p className="text-xs text-gray-500">Proyección base</p>
+                      <p className="text-lg font-bold text-purple-400">{fmt(data.totalForecastRevenue)}</p>
+                    </div>
+                    <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-4 text-center">
+                      <p className="text-xs text-gray-500">Con simulación</p>
+                      <p className="text-lg font-bold text-amber-400">{fmt(simTotalForecast)}</p>
+                    </div>
+                    <div className="bg-gray-900/50 rounded-lg p-4 text-center">
+                      <p className="text-xs text-gray-500">Diferencia</p>
+                      <p className={`text-lg font-bold ${simTotalForecast >= data.totalForecastRevenue ? 'text-green-400' : 'text-red-400'}`}>
+                        {simTotalForecast >= data.totalForecastRevenue ? '+' : ''}{fmt(simTotalForecast - data.totalForecastRevenue)}
+                      </p>
+                    </div>
+                  </div>
+                )}
+
+                <div className="mt-4 flex justify-between items-center">
+                  <p className="text-xs text-gray-500">Arrastra los controles o usa la rueda del mouse. Doble clic para restablecer.</p>
+                  <button onClick={() => setSim({ adSpendMult: 1, newAds: 0, conversionRate: 0, promoBoost: 0 })}
+                    className="text-xs text-gray-500 hover:text-white px-3 py-1 rounded hover:bg-gray-700/50 transition-colors">
+                    Restablecer todo
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Seasonality breakdown */}
