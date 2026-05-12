@@ -554,24 +554,71 @@ function SalesForecastView() {
           </div>
 
           {/* Seasonality breakdown */}
-          {data.seasonSummary && (
+          {data.seasonSummary && (() => {
+            // Season colors and labels (Mexico / Northern Hemisphere)
+            const SEASONS = {
+              'Ene': { season: 'Invierno', color: '#60A5FA', emoji: '❄️' },
+              'Feb': { season: 'Invierno', color: '#60A5FA', emoji: '❄️' },
+              'Mar': { season: 'Primavera', color: '#34D399', emoji: '🌱' },
+              'Abr': { season: 'Primavera', color: '#34D399', emoji: '🌱' },
+              'May': { season: 'Primavera', color: '#34D399', emoji: '🌱' },
+              'Jun': { season: 'Verano', color: '#FBBF24', emoji: '☀️' },
+              'Jul': { season: 'Verano', color: '#FBBF24', emoji: '☀️' },
+              'Ago': { season: 'Verano', color: '#FBBF24', emoji: '☀️' },
+              'Sep': { season: 'Otoño', color: '#F97316', emoji: '🍂' },
+              'Oct': { season: 'Otoño', color: '#F97316', emoji: '🍂' },
+              'Nov': { season: 'Otoño', color: '#F97316', emoji: '🍂' },
+              'Dic': { season: 'Invierno', color: '#60A5FA', emoji: '❄️' }
+            };
+            const enriched = data.seasonSummary.map(d => ({
+              ...d,
+              label: `${d.month}`,
+              ...(SEASONS[d.month] || { season: '', color: '#F59E0B' })
+            }));
+            // Best season
+            const seasonAvgs = {};
+            enriched.forEach(d => {
+              if (!seasonAvgs[d.season]) seasonAvgs[d.season] = [];
+              seasonAvgs[d.season].push(d.multiplier);
+            });
+            const bestSeason = Object.entries(seasonAvgs)
+              .map(([s, vals]) => ({ season: s, avg: vals.reduce((a, b) => a + b, 0) / vals.length }))
+              .sort((a, b) => b.avg - a.avg)[0];
+
+            return (
             <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
               <h2 className="text-lg font-semibold text-white mb-1">Estacionalidad</h2>
-              <p className="text-sm text-gray-500 mb-4">Multiplicador por mes — valores mayores a 1 indican meses fuertes</p>
+              <p className="text-sm text-gray-500 mb-4">
+                Multiplicador por mes — la mejor temporada es <span className="text-white font-medium">{bestSeason?.season}</span> ({(bestSeason?.avg || 0).toFixed(2)}x promedio)
+              </p>
+              {/* Season legend */}
+              <div className="flex gap-4 mb-3 text-xs text-gray-400">
+                <span>❄️ Invierno (Dic–Feb)</span>
+                <span>🌱 Primavera (Mar–May)</span>
+                <span>☀️ Verano (Jun–Ago)</span>
+                <span>🍂 Otoño (Sep–Nov)</span>
+              </div>
               <div className="h-56">
                 <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data.seasonSummary} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
+                  <BarChart data={enriched} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis dataKey="month" tick={{ fill: '#9CA3AF', fontSize: 11 }} />
                     <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} domain={[0, 'auto']} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={(v) => [v.toFixed(2) + 'x', 'Multiplicador']} />
+                    <Tooltip contentStyle={tooltipStyle}
+                      formatter={(v, name, props) => [v.toFixed(2) + 'x', props.payload.season]}
+                    />
                     <ReferenceLine y={1} stroke="#6B7280" strokeDasharray="4 4" />
-                    <Bar dataKey="multiplier" name="Multiplicador" fill="#F59E0B" fillOpacity={0.7} radius={[4, 4, 0, 0]} />
+                    <Bar dataKey="multiplier" name="Multiplicador" radius={[4, 4, 0, 0]}>
+                      {enriched.map((d, i) => (
+                        <Cell key={i} fill={d.color} fillOpacity={d.multiplier >= 1 ? 0.8 : 0.4} />
+                      ))}
+                    </Bar>
                   </BarChart>
                 </ResponsiveContainer>
               </div>
             </div>
-          )}
+            );
+          })()}
 
           {/* DOW pattern */}
           {data.dowSummary && (() => {
