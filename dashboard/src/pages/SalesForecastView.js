@@ -439,12 +439,12 @@ function SalesForecastView() {
                   <p className="text-xs text-gray-500 mt-1">{data.manualSales.totalOrders} ventas</p>
                 </div>
               )}
-              <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
-                <p className="text-xs text-gray-400">Confianza (R²)</p>
-                <p className={`text-xl font-bold ${data.r2 >= 0.7 ? 'text-green-400' : data.r2 >= 0.4 ? 'text-amber-400' : 'text-red-400'}`}>
-                  {(data.r2 * 100).toFixed(0)}%
+              <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4" title={`R² = ${data.r2} — mide qué tan predecible es el patrón de ventas. Valores bajos son normales en retail porque las ventas diarias varían mucho.`}>
+                <p className="text-xs text-gray-400">Predictibilidad</p>
+                <p className={`text-xl font-bold ${data.r2 >= 0.7 ? 'text-green-400' : data.r2 >= 0.4 ? 'text-cyan-400' : 'text-purple-400'}`}>
+                  {data.r2 >= 0.7 ? 'Alta' : data.r2 >= 0.4 ? 'Moderada' : 'Variable'}
                 </p>
-                <p className="text-xs text-gray-500 mt-1">{data.r2 >= 0.7 ? 'Alta' : data.r2 >= 0.4 ? 'Moderada' : 'Baja'}</p>
+                <p className="text-xs text-gray-500 mt-1">{data.r2 >= 0.7 ? 'Patrón de ventas estable' : data.r2 >= 0.4 ? 'Ventas con algo de variación' : 'Ventas con mucha variación diaria — normal en retail'}</p>
               </div>
             </div>
           )}
