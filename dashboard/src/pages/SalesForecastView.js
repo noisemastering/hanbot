@@ -231,18 +231,36 @@ function SalesForecastView() {
     return weeks;
   }, [dailyChartData]);
 
-  // Monthly from backend
+  // Monthly from backend — enriched with ad attribution from daily data
   const monthlyChartData = useMemo(() => {
     if (!data?.monthly) return [];
-    return data.monthly.map(m => ({
-      dateLabel: m.label,
-      revenue: m.revenue,
-      movingAvg: null,
-      forecast: m.projected || null,
-      upper: null,
-      lower: null
-    }));
-  }, [data]);
+
+    // Aggregate daily ad data into monthly buckets
+    const monthlyAd = {};
+    if (showAdBoost && data.history) {
+      for (const d of data.history) {
+        if (d.adRevenue == null || !d.date) continue;
+        const monthKey = d.date.substring(0, 7); // "2025-07"
+        if (!monthlyAd[monthKey]) monthlyAd[monthKey] = { ad: 0, organic: 0 };
+        monthlyAd[monthKey].ad += d.adRevenue || 0;
+        monthlyAd[monthKey].organic += Math.max(0, (d.revenue || 0) - (d.adRevenue || 0));
+      }
+    }
+
+    return data.monthly.map(m => {
+      const ad = monthlyAd[m.month];
+      return {
+        dateLabel: m.label,
+        revenue: m.revenue,
+        movingAvg: null,
+        forecast: m.projected || null,
+        upper: null,
+        lower: null,
+        organicBase: ad ? Math.round(ad.organic) : null,
+        adBoost: ad ? Math.round(ad.ad) : null
+      };
+    });
+  }, [data, showAdBoost]);
 
   const chartData = effectiveZoom === 'monthly' ? monthlyChartData
     : effectiveZoom === 'weekly' ? weeklyChartData
