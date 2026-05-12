@@ -171,6 +171,7 @@ function SalesForecastView() {
 
   const handleDaysChange = (d) => {
     setDays(d);
+    setChartZoom('auto');
     if (!selectedProduct) return;
     generate(selectedProduct.id, channel, d);
   };
@@ -179,13 +180,60 @@ function SalesForecastView() {
   useEffect(() => () => { if (stageTimer.current) clearTimeout(stageTimer.current); }, []);
 
   // ── Chart data ──
-  const chartData = useMemo(() => {
+  // Chart zoom level
+  const [chartZoom, setChartZoom] = useState('auto'); // 'auto' | 'monthly' | 'weekly' | 'daily'
+
+  // Auto-select zoom based on period
+  const effectiveZoom = chartZoom === 'auto'
+    ? (days >= 180 ? 'monthly' : days >= 60 ? 'weekly' : 'daily')
+    : chartZoom;
+
+  // Daily chart data (raw)
+  const dailyChartData = useMemo(() => {
     if (!data) return [];
     return [
       ...data.history.map(d => ({ ...d, forecast: null, upper: null, lower: null })),
-      ...data.forecast.map(d => ({ dateLabel: d.dateLabel, dow: d.dow, revenue: null, movingAvg: null, forecast: d.revenue, upper: d.upper, lower: d.lower, orders: d.orders }))
+      ...data.forecast.map(d => ({ dateLabel: d.dateLabel, date: d.date, dow: d.dow, revenue: null, movingAvg: null, forecast: d.revenue, upper: d.upper, lower: d.lower, orders: d.orders }))
     ];
   }, [data]);
+
+  // Aggregate daily into weekly
+  const weeklyChartData = useMemo(() => {
+    if (!dailyChartData.length) return [];
+    const weeks = [];
+    for (let i = 0; i < dailyChartData.length; i += 7) {
+      const chunk = dailyChartData.slice(i, Math.min(i + 7, dailyChartData.length));
+      if (chunk.length < 2) continue;
+      const hasHistory = chunk.some(d => d.revenue != null);
+      const hasForecast = chunk.some(d => d.forecast != null);
+      weeks.push({
+        dateLabel: chunk[0].dateLabel + '–' + chunk[chunk.length - 1].dateLabel,
+        revenue: hasHistory ? chunk.reduce((s, d) => s + (d.revenue || 0), 0) : null,
+        movingAvg: null,
+        forecast: hasForecast ? chunk.reduce((s, d) => s + (d.forecast || 0), 0) : null,
+        upper: hasForecast ? chunk.reduce((s, d) => s + (d.upper || 0), 0) : null,
+        lower: hasForecast ? Math.max(0, chunk.reduce((s, d) => s + (d.lower || 0), 0)) : null
+      });
+    }
+    return weeks;
+  }, [dailyChartData]);
+
+  // Monthly from backend
+  const monthlyChartData = useMemo(() => {
+    if (!data?.monthly) return [];
+    return data.monthly.map(m => ({
+      dateLabel: m.label,
+      revenue: m.revenue,
+      movingAvg: null,
+      forecast: m.projected || null,
+      upper: null,
+      lower: null
+    }));
+  }, [data]);
+
+  const chartData = effectiveZoom === 'monthly' ? monthlyChartData
+    : effectiveZoom === 'weekly' ? weeklyChartData
+    : dailyChartData;
 
   const todayLabel = new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
 
@@ -452,15 +500,25 @@ function SalesForecastView() {
           {/* Main chart */}
           <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-lg font-semibold text-white">Proyección integrada</h2>
+              <div className="flex items-center gap-4">
+                <h2 className="text-lg font-semibold text-white">Proyección integrada</h2>
+                <div className="flex gap-1 bg-gray-900/50 rounded-lg p-0.5">
+                  {[['monthly', 'Mes'], ['weekly', 'Sem'], ['daily', 'Día']].map(([z, label]) => (
+                    <button key={z} onClick={() => setChartZoom(z)}
+                      className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${effectiveZoom === z ? 'bg-gray-700 text-white' : 'text-gray-500 hover:text-gray-300'}`}>
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
               <div className="flex flex-wrap items-center gap-3 text-xs text-gray-400">
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> Real</span>
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-cyan-500 inline-block" /> Promedio 7d</span>
+                {effectiveZoom === 'daily' && <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-cyan-500 inline-block" /> Promedio 7d</span>}
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-purple-500 inline-block" /> Proyección</span>
               </div>
             </div>
             <div className="h-80 overflow-x-auto">
-              <div style={{ minWidth: Math.max(800, chartData.length * 16) }}>
+              <div style={{ minWidth: Math.max(600, chartData.length * (effectiveZoom === 'daily' ? 16 : effectiveZoom === 'weekly' ? 40 : 60)) }}>
                 <ResponsiveContainer width="100%" height={320}>
                   <ComposedChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
@@ -485,7 +543,9 @@ function SalesForecastView() {
                     <Area type="monotone" dataKey="upper" stroke="none" fill="#8B5CF6" fillOpacity={0.08} connectNulls={false} />
                     <Area type="monotone" dataKey="lower" stroke="none" fill="#1F2937" fillOpacity={1} connectNulls={false} />
                     <Bar dataKey="revenue" name="Ingresos" fill="#10B981" fillOpacity={0.7} radius={[3, 3, 0, 0]} />
-                    <Line type="monotone" dataKey="movingAvg" name="Promedio 7d" stroke="#06B6D4" strokeWidth={2} dot={false} connectNulls={false} />
+                    {effectiveZoom === 'daily' && (
+                      <Line type="monotone" dataKey="movingAvg" name="Promedio 7d" stroke="#06B6D4" strokeWidth={2} dot={false} connectNulls={false} />
+                    )}
                     <Line type="monotone" dataKey="forecast" name="Proyección" stroke="#8B5CF6" strokeWidth={2.5} strokeDasharray="6 3" dot={{ fill: '#8B5CF6', r: 3 }} connectNulls={false} />
                   </ComposedChart>
                 </ResponsiveContainer>
