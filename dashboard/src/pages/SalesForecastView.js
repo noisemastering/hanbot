@@ -7,6 +7,7 @@ import KnobControl from '../components/KnobControl';
 
 const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6', fontSize: '13px' };
 const fmt = (n) => '$' + Math.round(n).toLocaleString('es-MX');
+const MONTH_LABELS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
 const CHANNELS = [
@@ -290,8 +291,6 @@ function SalesForecastView() {
   // ── CAMPAIGN SIMULATION MODEL ──
   // Generates a week-by-week projection for a campaign of N weeks.
   // Shape emerges from the data: short campaigns ≈ linear, long ones → S-curve with fatigue.
-
-  const MONTH_LABELS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
   const simModel = useMemo(() => {
     if (!data) return null;
