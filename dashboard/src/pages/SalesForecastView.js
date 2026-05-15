@@ -884,7 +884,7 @@ function SalesForecastView() {
                   <div className="flex flex-col items-center gap-1">
                     <p className="text-xs text-gray-400 mb-1">Tipo de anuncio</p>
                     <div className="flex gap-1">
-                      {[['current', 'Sin cambio'], ['click', 'Clics'], ['presence', 'Presencia']].map(([val, label]) => (
+                      {[['current', `${simParams?.summary?.adTypes?.click > simParams?.summary?.adTypes?.presence ? 'Clics' : simParams?.summary?.adTypes?.presence > simParams?.summary?.adTypes?.click ? 'Presencia' : 'Mixto'} (actual)`], ['click', 'Clics'], ['presence', 'Presencia']].map(([val, label]) => (
                         <button key={val} onClick={() => setSim(s => ({ ...s, adType: val }))}
                           className={`px-2.5 py-1.5 rounded text-xs font-medium transition-all ${sim.adType === val ? 'bg-amber-500 text-white' : 'bg-gray-900/50 text-gray-500 hover:text-white'}`}>
                           {label}
