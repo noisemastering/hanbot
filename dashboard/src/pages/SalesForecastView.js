@@ -46,6 +46,7 @@ function SalesForecastView() {
 
   // ── Simulation ("What if") ──
   const [simOpen, setSimOpen] = useState(false);
+  const [simWeeks, setSimWeeks] = useState(4); // campaign duration in weeks
   const [sim, setSim] = useState({
     adSpendMult: 1,       // multiplier on ad spend (1 = no change)
     newAds: 0,            // additional ads to launch
@@ -286,9 +287,11 @@ function SalesForecastView() {
   // ── Simulation: compute "what if" forecast line ──
   const simActive = simOpen && (sim.adSpendMult !== 1 || sim.newAds > 0 || sim.conversionRate > 0 || sim.promoBoost > 0);
 
-  // ── S-CURVE MODEL ──
-  // Logistic function: f(x) = baseline + (ceiling - baseline) / (1 + e^(-k*(x - x0)))
-  // Calibrated from actual data: organic baseline, current spend/revenue point, estimated ceiling.
+  // ── CAMPAIGN SIMULATION MODEL ──
+  // Generates a week-by-week projection for a campaign of N weeks.
+  // Shape emerges from the data: short campaigns ≈ linear, long ones → S-curve with fatigue.
+
+  const MONTH_LABELS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 
   const simModel = useMemo(() => {
     if (!data) return null;
@@ -297,122 +300,147 @@ function SalesForecastView() {
     const adRevenue = data.metaAttribution?.totalAdRevenue || 0;
     const organicRevenue = Math.max(0, totalRevenue - adRevenue);
     const adPct = totalRevenue > 0 ? adRevenue / totalRevenue : 0;
+    const historyDays = data.history?.length || 1;
 
-    // Current spend (from forecast period — we approximate from ad attribution)
-    // Use ad revenue as proxy since we don't have direct spend in forecast-v2
-    const currentAdInvestment = adRevenue; // proxy — ad-attributed revenue as "effort"
+    // Weekly averages from actual data
+    const weeklyOrganic = (organicRevenue / historyDays) * 7;
+    const weeklyAdRevenue = (adRevenue / historyDays) * 7;
 
-    // Estimate market ceiling based on where we are on the curve
-    // Lower ad penetration = more room to grow
-    let ceilingMultiplier;
-    if (adPct < 0.1) ceilingMultiplier = 5;      // Early stage — 5x potential
-    else if (adPct < 0.2) ceilingMultiplier = 3.5; // Growth phase
-    else if (adPct < 0.35) ceilingMultiplier = 2.5; // Maturing
-    else ceilingMultiplier = 1.8;                   // Approaching saturation
+    // Market ceiling estimation
+    let ceilingMult;
+    if (adPct < 0.1) ceilingMult = 5;
+    else if (adPct < 0.2) ceilingMult = 3.5;
+    else if (adPct < 0.35) ceilingMult = 2.5;
+    else ceilingMult = 1.8;
 
-    const ceiling = organicRevenue + adRevenue * ceilingMultiplier;
-    const baseline = organicRevenue;
+    const weeklyCeiling = weeklyOrganic + weeklyAdRevenue * ceilingMult;
+    const currentPosition = weeklyAdRevenue > 0 ? weeklyAdRevenue / (weeklyCeiling - weeklyOrganic) : 0;
 
-    // Solve for k (steepness) using current point
-    // f(currentSpend) = baseline + (ceiling - baseline) / (1 + e^(-k*(x-x0))) = totalRevenue
-    // We set x0 (midpoint) where revenue = halfway between baseline and ceiling
-    const x0 = currentAdInvestment * (ceilingMultiplier / 2); // midpoint at ~half of max investment
-    const currentY = adRevenue;
-    const maxAdRevenue = ceiling - baseline;
-
-    // Solve: currentY = maxAdRevenue / (1 + e^(-k*(currentSpend - x0)))
-    // 1 + e^(-k*(x-x0)) = maxAdRevenue / currentY
-    // e^(-k*(x-x0)) = (maxAdRevenue / currentY) - 1
-    // -k*(x-x0) = ln((maxAdRevenue/currentY) - 1)
-    const ratio = maxAdRevenue / Math.max(currentY, 1);
-    const k = ratio > 1.01
-      ? -Math.log(ratio - 1) / (currentAdInvestment - x0 || 1)
-      : 0.001;
-
-    // S-curve function
-    const sCurve = (spend) => {
-      const adPortion = maxAdRevenue / (1 + Math.exp(-k * (spend - x0)));
-      return baseline + adPortion;
-    };
-
-    // Current position on the curve (0-1)
-    const currentPosition = maxAdRevenue > 0 ? currentY / maxAdRevenue : 0;
-
-    // Generate curve points for visualization (0 to 3x current spend)
-    const maxSpend = currentAdInvestment * 3;
-    const curvePoints = [];
-    for (let i = 0; i <= 20; i++) {
-      const spend = (maxSpend / 20) * i;
-      curvePoints.push({
-        spend: Math.round(spend),
-        spendLabel: '$' + Math.round(spend / 1000) + 'k',
-        revenue: Math.round(sCurve(spend)),
-        isCurrent: Math.abs(spend - currentAdInvestment) < maxSpend / 20
-      });
+    // Seasonality multipliers per month (from backend or default to 1)
+    const seasonMults = {};
+    if (data.seasonSummary) {
+      data.seasonSummary.forEach(s => { seasonMults[s.month] = s.multiplier; });
     }
 
     return {
-      baseline, ceiling, k, x0, currentAdInvestment, maxAdRevenue,
-      adPct, ceilingMultiplier, currentPosition, curvePoints, sCurve,
-      organicRevenue, adRevenue, totalRevenue
+      weeklyOrganic, weeklyAdRevenue, weeklyCeiling, ceilingMult,
+      adPct, currentPosition, organicRevenue, adRevenue, totalRevenue,
+      historyDays, seasonMults
     };
   }, [data]);
 
-  const chartData = useMemo(() => {
-    if (!simActive || !simModel) return baseChartData;
+  // Generate week-by-week campaign projection
+  const campaignProjection = useMemo(() => {
+    if (!simModel) return null;
+    const { weeklyOrganic, weeklyAdRevenue, weeklyCeiling, seasonMults } = simModel;
 
-    const { sCurve, currentAdInvestment, organicRevenue, totalRevenue } = simModel;
-
-    // Apply knobs to estimate new spend level
-    const newSpend = currentAdInvestment * sim.adSpendMult;
-    // New ads expand the ceiling (shift curve up)
-    const adsExpansion = sim.newAds > 0 ? 1 + sim.newAds * 0.08 : 1; // each ad widens reach 8%
-    // Conversion improvement steepens the curve
+    // Knob effects
+    const spendMult = sim.adSpendMult;
+    const adsExpansion = sim.newAds > 0 ? 1 + sim.newAds * 0.08 : 1;
     const conversionEffect = 1 + (sim.conversionRate / 100);
-    // Promo is a temporary multiplicative boost
     const promoEffect = 1 + (sim.promoBoost / 100);
 
-    // Revenue from S-curve at new spend, with adjustments
-    const baseRevFromCurve = sCurve(newSpend);
-    const adjustedAdRevenue = (baseRevFromCurve - organicRevenue) * adsExpansion * conversionEffect * promoEffect;
-    const simTotalRevenue = organicRevenue + Math.max(0, adjustedAdRevenue);
+    // Adjusted ceiling with new ads
+    const adjCeiling = (weeklyCeiling - weeklyOrganic) * adsExpansion + weeklyOrganic;
+    const maxAdRev = adjCeiling - weeklyOrganic;
 
-    // Multiplier relative to current total
-    const totalMultiplier = totalRevenue > 0 ? simTotalRevenue / totalRevenue : 1;
+    // Base weekly ad revenue at simulated spend
+    const baseSimAdRev = weeklyAdRevenue * spendMult * conversionEffect * promoEffect;
+
+    const weeks = [];
+    let cumulativeRevenue = 0;
+
+    for (let w = 0; w < simWeeks; w++) {
+      const campaignDate = new Date();
+      campaignDate.setDate(campaignDate.getDate() + w * 7);
+      const monthIdx = campaignDate.getMonth();
+      const monthLabel = MONTH_LABELS[monthIdx];
+
+      // Seasonality for this week's month
+      const seasonMult = seasonMults[monthLabel] || 1;
+
+      // Audience fatigue: effectiveness decays over time
+      // Week 1-2: 100%, Week 3-4: ~90%, Week 5-8: ~75%, Week 9+: ~60%
+      const fatigueFactor = w < 2 ? 1.0 : w < 4 ? 0.92 : w < 8 ? 0.78 : Math.max(0.5, 0.65 - (w - 8) * 0.02);
+
+      // Saturation: can't exceed ceiling even with infinite spend
+      const rawAdRev = baseSimAdRev * fatigueFactor * seasonMult;
+      const cappedAdRev = Math.min(rawAdRev, maxAdRev * fatigueFactor);
+
+      // Organic stays stable with slight seasonal influence
+      const weekOrganic = weeklyOrganic * seasonMult;
+
+      const weekTotal = weekOrganic + Math.max(0, cappedAdRev);
+      cumulativeRevenue += weekTotal;
+
+      // Baseline (what would happen without changes — current spend)
+      const baselineAdRev = Math.min(weeklyAdRevenue * fatigueFactor * seasonMult, maxAdRev * fatigueFactor);
+      const baselineTotal = weekOrganic + baselineAdRev;
+
+      weeks.push({
+        week: w + 1,
+        label: `Sem ${w + 1}`,
+        dateRange: `${campaignDate.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' })}`,
+        month: monthLabel,
+        baseline: Math.round(baselineTotal),
+        simulated: Math.round(weekTotal),
+        organic: Math.round(weekOrganic),
+        adContribution: Math.round(Math.max(0, cappedAdRev)),
+        fatigue: Math.round(fatigueFactor * 100),
+        seasonality: +seasonMult.toFixed(2),
+        cumulative: Math.round(cumulativeRevenue)
+      });
+    }
+
+    // Summary
+    const totalBaseline = weeks.reduce((s, w) => s + w.baseline, 0);
+    const totalSimulated = weeks.reduce((s, w) => s + w.simulated, 0);
+    const totalAdContribution = weeks.reduce((s, w) => s + w.adContribution, 0);
+
+    // Marginal return at current sim level
+    const marginalSim = { ...sim, adSpendMult: sim.adSpendMult + 0.1 };
+    const marginalAdRev = weeklyAdRevenue * marginalSim.adSpendMult * conversionEffect * promoEffect;
+    const marginalDelta = weeks.reduce((s, w) => {
+      const mRaw = marginalAdRev * (w.fatigue / 100) * w.seasonality;
+      const mCapped = Math.min(mRaw, maxAdRev * (w.fatigue / 100));
+      return s + Math.max(0, mCapped);
+    }, 0) - totalAdContribution;
+
+    // Curve shape description
+    let curveShape;
+    const lastWeekRatio = weeks.length > 1 ? weeks[weeks.length - 1].simulated / weeks[0].simulated : 1;
+    if (simWeeks <= 2) curveShape = 'Casi lineal — campaña corta, no hay tiempo para saturación';
+    else if (lastWeekRatio > 0.85) curveShape = 'Crecimiento sostenido — buena duración para este nivel de inversión';
+    else if (lastWeekRatio > 0.6) curveShape = 'Rendimiento decreciente — la fatiga reduce el impacto en las últimas semanas';
+    else curveShape = 'Saturación severa — considera acortar la campaña o refrescar el creative';
+
+    return {
+      weeks, totalBaseline, totalSimulated, totalAdContribution,
+      marginalReturn: Math.round(marginalDelta / simWeeks),
+      curveShape,
+      currentPosition: simModel.currentPosition
+    };
+  }, [simModel, sim, simWeeks]);
+
+  const chartData = useMemo(() => {
+    if (!simActive || !campaignProjection) return baseChartData;
+
+    // Apply campaign projection multiplier to the forecast line
+    const totalMultiplier = campaignProjection.totalBaseline > 0
+      ? campaignProjection.totalSimulated / campaignProjection.totalBaseline
+      : 1;
 
     return baseChartData.map(d => ({
       ...d,
       simForecast: d.forecast != null ? Math.round(d.forecast * totalMultiplier) : null
     }));
-  }, [baseChartData, simActive, sim, simModel]);
+  }, [baseChartData, simActive, campaignProjection]);
 
   // Simulated totals
   const simTotalForecast = useMemo(() => {
-    if (!simActive || !data) return null;
-    return chartData.reduce((s, d) => s + (d.simForecast || 0), 0);
-  }, [chartData, simActive, data]);
-
-  // Marginal return: how much revenue per additional $1,000 at current sim level
-  const marginalReturn = useMemo(() => {
-    if (!simModel || !simActive) return null;
-    const { sCurve, currentAdInvestment } = simModel;
-    const currentSpend = currentAdInvestment * sim.adSpendMult;
-    const delta = 1000;
-    const revAt = sCurve(currentSpend);
-    const revAtPlus = sCurve(currentSpend + delta);
-    return Math.round(revAtPlus - revAt);
-  }, [simModel, simActive, sim]);
-
-  // Simulated S-curve points (for visualization)
-  const simCurvePoints = useMemo(() => {
-    if (!simModel || !simActive) return null;
-    const { curvePoints, currentAdInvestment } = simModel;
-    const simSpend = currentAdInvestment * sim.adSpendMult;
-    return curvePoints.map(p => ({
-      ...p,
-      isSimulated: Math.abs(p.spend - simSpend) < (currentAdInvestment * 3 / 20)
-    }));
-  }, [simModel, simActive, sim]);
+    if (!simActive || !campaignProjection) return null;
+    return campaignProjection.totalSimulated;
+  }, [simActive, campaignProjection]);
 
   const todayLabel = new Date().toLocaleDateString('es-MX', { day: 'numeric', month: 'short' });
 
@@ -804,101 +832,108 @@ function SalesForecastView() {
                     <span>Estás simulando a nivel global — los cambios se aplican proporcionalmente a todos los productos. Para una simulación más precisa, selecciona un producto específico.</span>
                   </div>
                 )}
+
+                {/* Duration selector */}
+                <div>
+                  <label className="block text-xs text-gray-400 mb-2">Duración de la campaña</label>
+                  <div className="flex gap-2">
+                    {[1, 2, 4, 8, 12, 24].map(w => (
+                      <button key={w} onClick={() => setSimWeeks(w)}
+                        className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${simWeeks === w ? 'bg-primary-500 text-white' : 'bg-gray-900/50 text-gray-500 hover:text-white hover:bg-gray-700/50'}`}>
+                        {w >= 12 ? `${Math.round(w / 4)} meses` : w === 1 ? '1 sem' : `${w} sem`}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
                 {/* Knobs row */}
                 <div className="flex flex-wrap items-start justify-center gap-6">
                   <KnobControl label="Inversión en Ads" value={sim.adSpendMult} min={0} max={3} step={0.1} baseline={1} color="#3B82F6" size={80} format={v => v === 1 ? 'Actual' : v === 0 ? 'Sin ads' : (v > 1 ? '+' : '') + Math.round((v - 1) * 100) + '%'} onChange={v => setSim(s => ({ ...s, adSpendMult: v }))} />
                   <KnobControl label="Anuncios nuevos" value={sim.newAds} min={0} max={10} step={1} baseline={0} color="#F97316" size={80} format={v => '+' + v} onChange={v => setSim(s => ({ ...s, newAds: v }))} />
                   <KnobControl label="Mejor conversión" value={sim.conversionRate} min={0} max={50} step={1} baseline={0} color="#10B981" size={80} format={v => '+' + v + '%'} onChange={v => setSim(s => ({ ...s, conversionRate: v }))} />
                   <KnobControl label="Boost de promo" value={sim.promoBoost} min={0} max={100} step={5} baseline={0} color="#F59E0B" size={80} format={v => '+' + v + '%'} onChange={v => setSim(s => ({ ...s, promoBoost: v }))} />
-                  <button onClick={() => setSim({ adSpendMult: 1, newAds: 0, conversionRate: 0, promoBoost: 0 })} className="text-xs text-gray-600 hover:text-white mt-8" title="Restablecer">↺ Reset</button>
+                  <button onClick={() => { setSim({ adSpendMult: 1, newAds: 0, conversionRate: 0, promoBoost: 0 }); setSimWeeks(4); }} className="text-xs text-gray-600 hover:text-white mt-8" title="Restablecer">↺ Reset</button>
                 </div>
 
-                {/* S-curve visualization + results */}
-                {simActive && simModel && (
-                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-                    {/* S-curve chart */}
+                {/* Campaign week-by-week projection */}
+                {campaignProjection && (
+                  <div className="space-y-4">
+                    {/* Campaign curve chart */}
                     <div className="bg-gray-900/50 rounded-lg p-4">
-                      <p className="text-xs text-gray-400 mb-2">Curva de rendimiento (inversión → ingresos)</p>
-                      <ResponsiveContainer width="100%" height={180}>
-                        <ComposedChart data={simCurvePoints || simModel.curvePoints} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
+                      <div className="flex items-center justify-between mb-2">
+                        <p className="text-xs text-gray-400">Proyección semana a semana — {simWeeks} semanas</p>
+                        <p className="text-xs text-gray-500 italic">{campaignProjection.curveShape}</p>
+                      </div>
+                      <ResponsiveContainer width="100%" height={200}>
+                        <ComposedChart data={campaignProjection.weeks} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                          <XAxis dataKey="spendLabel" tick={{ fill: '#6b7280', fontSize: 10 }} />
-                          <YAxis tick={{ fill: '#6b7280', fontSize: 10 }} tickFormatter={v => '$' + (v / 1000).toFixed(0) + 'k'} />
-                          <Tooltip contentStyle={tooltipStyle} formatter={(v) => [fmt(v), 'Ingresos']} />
-                          <ReferenceLine y={simModel.baseline} stroke="#10B981" strokeDasharray="4 4" label={{ value: 'Orgánico', fill: '#10B981', fontSize: 9, position: 'left' }} />
-                          <ReferenceLine y={simModel.ceiling} stroke="#EF4444" strokeDasharray="4 4" label={{ value: 'Techo', fill: '#EF4444', fontSize: 9, position: 'left' }} />
-                          <Area type="monotone" dataKey="revenue" stroke="none" fill="#8B5CF6" fillOpacity={0.1} />
-                          <Line type="monotone" dataKey="revenue" stroke="#8B5CF6" strokeWidth={2} dot={(props) => {
-                            const { cx, cy, payload } = props;
-                            if (payload.isCurrent) return <circle key="current" cx={cx} cy={cy} r={5} fill="#8B5CF6" stroke="#fff" strokeWidth={2} />;
-                            if (payload.isSimulated) return <circle key="sim" cx={cx} cy={cy} r={5} fill="#F59E0B" stroke="#fff" strokeWidth={2} />;
-                            return null;
-                          }} />
+                          <XAxis dataKey="label" tick={{ fill: '#9CA3AF', fontSize: 10 }} />
+                          <YAxis tick={{ fill: '#9CA3AF', fontSize: 10 }} tickFormatter={v => '$' + (v / 1000).toFixed(0) + 'k'} />
+                          <Tooltip contentStyle={tooltipStyle}
+                            content={({ active, payload, label }) => {
+                              if (!active || !payload?.length) return null;
+                              const w = payload[0]?.payload;
+                              if (!w) return null;
+                              return (
+                                <div style={tooltipStyle} className="p-3 text-sm">
+                                  <p className="text-white font-medium mb-1">{label} — {w.dateRange}</p>
+                                  <p style={{ color: '#8B5CF6' }}>Base: {fmt(w.baseline)}</p>
+                                  <p style={{ color: '#F59E0B' }}>Simulación: {fmt(w.simulated)}</p>
+                                  <p style={{ color: '#10B981' }}>Orgánico: {fmt(w.organic)}</p>
+                                  <p style={{ color: '#3B82F6' }}>Ads: {fmt(w.adContribution)}</p>
+                                  <p style={{ color: '#9CA3AF' }}>Fatiga: {w.fatigue}% | Temporada: {w.seasonality}x</p>
+                                </div>
+                              );
+                            }}
+                          />
+                          <Bar dataKey="organic" name="Orgánico" stackId="sim" fill="#10B981" fillOpacity={0.5} />
+                          <Bar dataKey="adContribution" name="Ads" stackId="sim" fill="#3B82F6" fillOpacity={0.7} radius={[3, 3, 0, 0]} />
+                          <Line type="monotone" dataKey="baseline" name="Sin cambios" stroke="#8B5CF6" strokeWidth={2} strokeDasharray="4 4" dot={false} />
                         </ComposedChart>
                       </ResponsiveContainer>
-                      <div className="flex items-center justify-center gap-4 mt-1 text-[10px] text-gray-500">
-                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-purple-500 inline-block" /> Posición actual</span>
-                        <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-500 inline-block" /> Con simulación</span>
-                        <span className="flex items-center gap-1"><span className="w-3 h-px bg-green-500 inline-block" /> Base orgánica</span>
-                        <span className="flex items-center gap-1"><span className="w-3 h-px bg-red-500 inline-block" /> Techo de mercado</span>
+                      <div className="flex items-center justify-center gap-4 mt-2 text-[10px] text-gray-500">
+                        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-green-500/50 inline-block" /> Orgánico</span>
+                        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded-sm bg-blue-500/70 inline-block" /> Aporte de Ads</span>
+                        <span className="flex items-center gap-1"><span className="w-3 h-px bg-purple-500 inline-block" /> Sin cambios</span>
                       </div>
                     </div>
 
-                    {/* Results panel */}
-                    <div className="space-y-3">
-                      {/* Projection comparison */}
-                      {simTotalForecast != null && (
-                        <div className="bg-gray-900/50 rounded-lg p-4">
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs text-gray-400">Proyección base</span>
-                            <span className="text-sm font-medium text-purple-400">{fmt(data.totalForecastRevenue)}</span>
-                          </div>
-                          <div className="flex items-center justify-between mb-2">
-                            <span className="text-xs text-gray-400">Con simulación</span>
-                            <span className="text-sm font-bold text-amber-400">{fmt(simTotalForecast)}</span>
-                          </div>
-                          <div className="flex items-center justify-between pt-2 border-t border-gray-700/50">
-                            <span className="text-xs text-gray-400">Diferencia</span>
-                            <span className={`text-sm font-bold ${simTotalForecast >= data.totalForecastRevenue ? 'text-green-400' : 'text-red-400'}`}>
-                              {simTotalForecast >= data.totalForecastRevenue ? '+' : ''}{fmt(simTotalForecast - data.totalForecastRevenue)}
-                            </span>
-                          </div>
-                        </div>
-                      )}
+                    {/* Summary row */}
+                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                      <div className="bg-gray-900/50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500">Sin cambios ({simWeeks} sem)</p>
+                        <p className="text-sm font-medium text-purple-400">{fmt(campaignProjection.totalBaseline)}</p>
+                      </div>
+                      <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500">Con simulación</p>
+                        <p className="text-sm font-bold text-amber-400">{fmt(campaignProjection.totalSimulated)}</p>
+                      </div>
+                      <div className="bg-gray-900/50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500">Diferencia</p>
+                        <p className={`text-sm font-bold ${campaignProjection.totalSimulated >= campaignProjection.totalBaseline ? 'text-green-400' : 'text-red-400'}`}>
+                          {campaignProjection.totalSimulated >= campaignProjection.totalBaseline ? '+' : ''}{fmt(campaignProjection.totalSimulated - campaignProjection.totalBaseline)}
+                        </p>
+                      </div>
+                      <div className="bg-gray-900/50 rounded-lg p-3 text-center">
+                        <p className="text-xs text-gray-500">Retorno semanal marginal</p>
+                        <p className="text-sm font-bold text-white">{fmt(campaignProjection.marginalReturn)}</p>
+                      </div>
+                    </div>
 
-                      {/* Marginal return */}
-                      {marginalReturn != null && (
-                        <div className="bg-gray-900/50 rounded-lg p-4">
-                          <p className="text-xs text-gray-400 mb-1">Retorno marginal</p>
-                          <p className="text-lg font-bold text-white">{fmt(marginalReturn)} <span className="text-xs text-gray-500 font-normal">por cada $1,000 adicionales</span></p>
-                          <p className="text-xs text-gray-500 mt-1">
-                            {marginalReturn > 1000 ? 'Todavía hay buen retorno — vale la pena invertir más.' :
-                             marginalReturn > 500 ? 'Retorno moderado — cerca del punto de inflexión.' :
-                             marginalReturn > 100 ? 'Retorno bajo — estás cerca de la saturación.' :
-                             'Saturación — invertir más no genera retorno significativo.'}
-                          </p>
-                        </div>
-                      )}
-
-                      {/* Market position */}
-                      {simModel && (
-                        <div className="bg-gray-900/50 rounded-lg p-4">
-                          <p className="text-xs text-gray-400 mb-2">Posición en el mercado</p>
-                          <div className="w-full bg-gray-700 rounded-full h-2 mb-1">
-                            <div className="bg-gradient-to-r from-green-500 via-amber-500 to-red-500 h-2 rounded-full" style={{ width: `${Math.min(100, simModel.currentPosition * 100)}%` }} />
-                          </div>
-                          <div className="flex justify-between text-[10px] text-gray-600">
-                            <span>Inicio</span>
-                            <span>Punto óptimo</span>
-                            <span>Saturación</span>
-                          </div>
-                        </div>
-                      )}
+                    {/* Market position */}
+                    <div className="bg-gray-900/50 rounded-lg p-3">
+                      <div className="flex items-center justify-between mb-1">
+                        <p className="text-xs text-gray-400">Posición en el mercado</p>
+                        <p className="text-xs text-gray-500">{Math.round(campaignProjection.currentPosition * 100)}% de saturación</p>
+                      </div>
+                      <div className="w-full bg-gray-700 rounded-full h-2">
+                        <div className="bg-gradient-to-r from-green-500 via-amber-500 to-red-500 h-2 rounded-full" style={{ width: `${Math.min(100, campaignProjection.currentPosition * 100)}%` }} />
+                      </div>
                     </div>
                   </div>
                 )}
 
-                <p className="text-xs text-gray-600 text-center">Modelo logístico (curva S) calibrado con datos reales. Doble clic en un control para restablecer.</p>
+                <p className="text-xs text-gray-600 text-center">Modelo con fatiga de audiencia, estacionalidad y techo de mercado. Doble clic en un control para restablecer.</p>
               </div>
             )}
           </div>
