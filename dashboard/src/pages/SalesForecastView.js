@@ -47,15 +47,16 @@ function SalesForecastView() {
 
   // ── Simulation ("What if") ──
   const [simOpen, setSimOpen] = useState(false);
-  const [simWeeks, setSimWeeks] = useState(4); // campaign duration in weeks
+  const [simWeeks, setSimWeeks] = useState(4);
+  const [simParams, setSimParams] = useState(null); // real campaign params from API
   const [sim, setSim] = useState({
-    adSpendMult: 1,       // multiplier on ad spend (1 = no change)
-    newAds: 0,            // additional ads to launch
-    conversionRate: 0,    // percentage points improvement
-    promoBoost: 0         // % revenue boost from promo
+    budgetMult: 1,        // multiplier on current daily budget
+    adCount: 0,           // additional ads (on top of current)
+    adType: 'current',    // 'current' | 'click' | 'presence'
+    targetExpansion: 0    // % audience expansion
   });
 
-  // Fetch product tree
+  // Fetch product tree and sim params
   useEffect(() => {
     fetch(`${API_URL}/product-families/tree`).then(r => r.json()).then(res => {
       if (res.success) {
@@ -63,6 +64,10 @@ function SalesForecastView() {
         setFamilies(roots);
         setCurrentChildren(roots);
       }
+    }).catch(() => {});
+
+    API.get('/ml/forecast-v2/sim-params').then(res => {
+      if (res.data?.success) setSimParams(res.data.data);
     }).catch(() => {});
   }, []);
 
@@ -286,7 +291,7 @@ function SalesForecastView() {
     : dailyChartData;
 
   // ── Simulation: compute "what if" forecast line ──
-  const simActive = simOpen && (sim.adSpendMult !== 1 || sim.newAds > 0 || sim.conversionRate > 0 || sim.promoBoost > 0);
+  const simActive = simOpen && (sim.budgetMult !== 1 || sim.adCount > 0 || sim.adType !== 'current' || sim.targetExpansion > 0);
 
   // ── CAMPAIGN SIMULATION MODEL ──
   // Generates a week-by-week projection for a campaign of N weeks.
@@ -333,18 +338,31 @@ function SalesForecastView() {
     if (!simModel) return null;
     const { weeklyOrganic, weeklyAdRevenue, weeklyCeiling, seasonMults } = simModel;
 
-    // Knob effects
-    const spendMult = sim.adSpendMult;
-    const adsExpansion = sim.newAds > 0 ? 1 + sim.newAds * 0.08 : 1;
-    const conversionEffect = 1 + (sim.conversionRate / 100);
-    const promoEffect = 1 + (sim.promoBoost / 100);
+    // Knob effects using real campaign parameters
+    const currentAds = simParams?.summary?.totalActiveAds || 1;
+    const totalNewAds = currentAds + sim.adCount;
 
-    // Adjusted ceiling with new ads
-    const adjCeiling = (weeklyCeiling - weeklyOrganic) * adsExpansion + weeklyOrganic;
+    // Budget: diminishing returns via power function
+    const budgetEffect = Math.pow(sim.budgetMult, 0.7);
+
+    // More ads expand reach (ceiling goes up), diminishing per ad
+    const adsExpansion = totalNewAds > currentAds ? Math.pow(totalNewAds / currentAds, 0.5) : 1;
+
+    // Ad type modifier:
+    // Click campaigns convert directly but saturate faster
+    // Presence campaigns build awareness, slower but wider reach
+    const typeEffect = sim.adType === 'click' ? 1.2 : sim.adType === 'presence' ? 0.8 : 1;
+    const typeFatigueRate = sim.adType === 'click' ? 1.3 : sim.adType === 'presence' ? 0.7 : 1;
+
+    // Target expansion widens audience = higher ceiling
+    const targetEffect = 1 + (sim.targetExpansion / 100) * 0.6; // 60% of expansion translates to reach
+
+    // Adjusted ceiling
+    const adjCeiling = (weeklyCeiling - weeklyOrganic) * adsExpansion * targetEffect + weeklyOrganic;
     const maxAdRev = adjCeiling - weeklyOrganic;
 
-    // Base weekly ad revenue at simulated spend
-    const baseSimAdRev = weeklyAdRevenue * spendMult * conversionEffect * promoEffect;
+    // Base weekly ad revenue at simulated budget
+    const baseSimAdRev = weeklyAdRevenue * budgetEffect * typeEffect;
 
     const weeks = [];
     let cumulativeRevenue = 0;
@@ -359,8 +377,9 @@ function SalesForecastView() {
       const seasonMult = seasonMults[monthLabel] || 1;
 
       // Audience fatigue: effectiveness decays over time
-      // Week 1-2: 100%, Week 3-4: ~90%, Week 5-8: ~75%, Week 9+: ~60%
-      const fatigueFactor = w < 2 ? 1.0 : w < 4 ? 0.92 : w < 8 ? 0.78 : Math.max(0.5, 0.65 - (w - 8) * 0.02);
+      // Click ads fatigue faster (typeFatigueRate > 1), presence ads fatigue slower
+      const baseFatigue = w < 2 ? 1.0 : w < 4 ? 0.92 : w < 8 ? 0.78 : Math.max(0.5, 0.65 - (w - 8) * 0.02);
+      const fatigueFactor = Math.max(0.3, 1 - (1 - baseFatigue) * typeFatigueRate);
 
       // Saturation: can't exceed ceiling even with infinite spend
       const rawAdRev = baseSimAdRev * fatigueFactor * seasonMult;
@@ -396,9 +415,9 @@ function SalesForecastView() {
     const totalSimulated = weeks.reduce((s, w) => s + w.simulated, 0);
     const totalAdContribution = weeks.reduce((s, w) => s + w.adContribution, 0);
 
-    // Marginal return at current sim level
-    const marginalSim = { ...sim, adSpendMult: sim.adSpendMult + 0.1 };
-    const marginalAdRev = weeklyAdRevenue * marginalSim.adSpendMult * conversionEffect * promoEffect;
+    // Marginal return: what happens if budget goes up 10% more
+    const marginalBudgetEffect = Math.pow(sim.budgetMult + 0.1, 0.7);
+    const marginalAdRev = weeklyAdRevenue * marginalBudgetEffect * typeEffect;
     const marginalDelta = weeks.reduce((s, w) => {
       const mRaw = marginalAdRev * (w.fatigue / 100) * w.seasonality;
       const mCapped = Math.min(mRaw, maxAdRev * (w.fatigue / 100));
@@ -419,7 +438,7 @@ function SalesForecastView() {
       curveShape,
       currentPosition: simModel.currentPosition
     };
-  }, [simModel, sim, simWeeks]);
+  }, [simModel, sim, simWeeks, simParams]);
 
   const chartData = useMemo(() => {
     if (!simActive || !campaignProjection) return baseChartData;
@@ -845,13 +864,35 @@ function SalesForecastView() {
                   </div>
                 </div>
 
+                {/* Current campaign info */}
+                {simParams?.summary && (
+                  <div className="flex flex-wrap gap-3 text-xs">
+                    <span className="px-2 py-1 rounded bg-gray-700/50 text-gray-300">Presupuesto actual: <span className="text-white font-medium">{fmt(simParams.summary.totalDailyBudget)}/día</span></span>
+                    <span className="px-2 py-1 rounded bg-gray-700/50 text-gray-300">Anuncios activos: <span className="text-white font-medium">{simParams.summary.totalActiveAds}</span></span>
+                    <span className="px-2 py-1 rounded bg-gray-700/50 text-gray-300">Tipo: <span className="text-white font-medium">{simParams.summary.adTypes.click > simParams.summary.adTypes.presence ? 'Mayormente clics' : simParams.summary.adTypes.presence > simParams.summary.adTypes.click ? 'Mayormente presencia' : 'Mixto'}</span></span>
+                    {simParams.summary.targetLocations?.length > 0 && (
+                      <span className="px-2 py-1 rounded bg-gray-700/50 text-gray-300">Target: <span className="text-white font-medium">{simParams.summary.targetLocations.slice(0, 3).join(', ')}{simParams.summary.targetLocations.length > 3 ? '...' : ''}</span></span>
+                    )}
+                  </div>
+                )}
+
                 {/* Knobs row */}
                 <div className="flex flex-wrap items-start justify-center gap-6">
-                  <KnobControl label="Inversión en Ads" value={sim.adSpendMult} min={0} max={3} step={0.1} baseline={1} color="#3B82F6" size={80} format={v => v === 1 ? 'Actual' : v === 0 ? 'Sin ads' : (v > 1 ? '+' : '') + Math.round((v - 1) * 100) + '%'} onChange={v => setSim(s => ({ ...s, adSpendMult: v }))} />
-                  <KnobControl label="Anuncios nuevos" value={sim.newAds} min={0} max={10} step={1} baseline={0} color="#F97316" size={80} format={v => '+' + v} onChange={v => setSim(s => ({ ...s, newAds: v }))} />
-                  <KnobControl label="Mejor conversión" value={sim.conversionRate} min={0} max={50} step={1} baseline={0} color="#10B981" size={80} format={v => '+' + v + '%'} onChange={v => setSim(s => ({ ...s, conversionRate: v }))} />
-                  <KnobControl label="Boost de promo" value={sim.promoBoost} min={0} max={100} step={5} baseline={0} color="#F59E0B" size={80} format={v => '+' + v + '%'} onChange={v => setSim(s => ({ ...s, promoBoost: v }))} />
-                  <button onClick={() => { setSim({ adSpendMult: 1, newAds: 0, conversionRate: 0, promoBoost: 0 }); setSimWeeks(4); }} className="text-xs text-gray-600 hover:text-white mt-8" title="Restablecer">↺ Reset</button>
+                  <KnobControl label="Presupuesto" value={sim.budgetMult} min={0} max={3} step={0.1} baseline={1} color="#3B82F6" size={80} format={v => v === 1 ? 'Actual' : v === 0 ? 'Sin ads' : (v > 1 ? '+' : '') + Math.round((v - 1) * 100) + '%'} onChange={v => setSim(s => ({ ...s, budgetMult: v }))} />
+                  <KnobControl label="Anuncios" value={sim.adCount} min={0} max={20} step={1} baseline={0} color="#F97316" size={80} format={v => v === 0 ? `${simParams?.summary?.totalActiveAds || '?'}` : `${(simParams?.summary?.totalActiveAds || 0) + v}`} onChange={v => setSim(s => ({ ...s, adCount: v }))} />
+                  <KnobControl label="Ampliar target" value={sim.targetExpansion} min={0} max={100} step={5} baseline={0} color="#10B981" size={80} format={v => v === 0 ? 'Actual' : '+' + v + '%'} onChange={v => setSim(s => ({ ...s, targetExpansion: v }))} />
+                  <div className="flex flex-col items-center gap-1">
+                    <p className="text-xs text-gray-400 mb-1">Tipo de anuncio</p>
+                    <div className="flex gap-1">
+                      {[['current', 'Actual'], ['click', 'Clics'], ['presence', 'Presencia']].map(([val, label]) => (
+                        <button key={val} onClick={() => setSim(s => ({ ...s, adType: val }))}
+                          className={`px-2.5 py-1.5 rounded text-xs font-medium transition-all ${sim.adType === val ? 'bg-amber-500 text-white' : 'bg-gray-900/50 text-gray-500 hover:text-white'}`}>
+                          {label}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                  <button onClick={() => { setSim({ budgetMult: 1, adCount: 0, adType: 'current', targetExpansion: 0 }); setSimWeeks(4); }} className="text-xs text-gray-600 hover:text-white mt-8" title="Restablecer">↺ Reset</button>
                 </div>
 
                 {/* Campaign week-by-week projection */}

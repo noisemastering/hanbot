@@ -160,10 +160,12 @@ const campaignSchema = new mongoose.Schema(
     startDate: { type: Date },
     endDate: { type: Date },
 
-    // ====== BUDGET (from Meta) ======
+    // ====== BUDGET & OBJECTIVE (from Meta) ======
     dailyBudget: { type: Number },
     lifetimeBudget: { type: Number },
-    objective: { type: String },
+    objective: { type: String },       // OUTCOME_TRAFFIC, OUTCOME_ENGAGEMENT, OUTCOME_SALES, OUTCOME_AWARENESS, etc.
+    effectiveStatus: { type: String },  // ACTIVE, PAUSED, CAMPAIGN_PAUSED, etc.
+    buyingType: { type: String },       // AUCTION, RESERVED
 
     // ====== METRICS ======
     metrics: {

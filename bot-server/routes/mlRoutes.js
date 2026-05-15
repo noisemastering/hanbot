@@ -679,6 +679,96 @@ router.get('/forecast-v2/campaigns', async (req, res) => {
   }
 });
 
+// GET /ml/forecast-v2/sim-params — Real campaign parameters for the simulator
+router.get('/forecast-v2/sim-params', async (req, res) => {
+  try {
+    const Campaign = require('../models/Campaign');
+    const AdSet = require('../models/AdSet');
+    const Ad = require('../models/Ad');
+
+    // Active campaigns with budget and objective
+    const campaigns = await Campaign.find({ status: 'ACTIVE' })
+      .select('name fbCampaignId objective effectiveStatus dailyBudget lifetimeBudget buyingType metrics')
+      .lean();
+
+    // Active ad sets with targeting
+    const adSets = await AdSet.find({ status: 'ACTIVE' })
+      .select('name fbAdSetId campaignId optimizationGoal billingEvent dailyBudget targeting metrics effectiveStatus')
+      .lean();
+
+    // Count active ads per campaign
+    const adCounts = await Ad.aggregate([
+      { $match: { status: 'ACTIVE' } },
+      { $lookup: { from: 'adsets', localField: 'adSetId', foreignField: '_id', as: 'adset' } },
+      { $unwind: '$adset' },
+      { $group: { _id: '$adset.campaignId', activeAds: { $sum: 1 } } }
+    ]);
+    const adCountMap = Object.fromEntries(adCounts.map(a => [String(a._id), a.activeAds]));
+
+    // Total active ads
+    const totalActiveAds = await Ad.countDocuments({ status: 'ACTIVE' });
+
+    // Aggregate budget
+    const totalDailyBudget = campaigns.reduce((s, c) => s + (c.dailyBudget || 0), 0);
+
+    // Objective breakdown
+    const objectives = {};
+    campaigns.forEach(c => {
+      const obj = c.objective || 'UNKNOWN';
+      objectives[obj] = (objectives[obj] || 0) + 1;
+    });
+
+    // Targeting summary from ad sets
+    const allLocations = new Set();
+    const ageRange = { min: 65, max: 13 };
+    adSets.forEach(as => {
+      if (as.targeting?.locations) as.targeting.locations.forEach(l => allLocations.add(l));
+      if (as.targeting?.ageMin && as.targeting.ageMin < ageRange.min) ageRange.min = as.targeting.ageMin;
+      if (as.targeting?.ageMax && as.targeting.ageMax > ageRange.max) ageRange.max = as.targeting.ageMax;
+    });
+
+    // Ad type breakdown (click vs presence)
+    const adTypes = { click: 0, presence: 0, other: 0 };
+    const clickObjectives = ['OUTCOME_TRAFFIC', 'OUTCOME_SALES', 'LINK_CLICKS', 'CONVERSIONS', 'PRODUCT_CATALOG_SALES'];
+    const presenceObjectives = ['OUTCOME_AWARENESS', 'REACH', 'BRAND_AWARENESS', 'OUTCOME_ENGAGEMENT', 'POST_ENGAGEMENT', 'VIDEO_VIEWS'];
+    campaigns.forEach(c => {
+      const obj = (c.objective || '').toUpperCase();
+      if (clickObjectives.some(o => obj.includes(o))) adTypes.click++;
+      else if (presenceObjectives.some(o => obj.includes(o))) adTypes.presence++;
+      else adTypes.other++;
+    });
+
+    res.json({
+      success: true,
+      data: {
+        campaigns: campaigns.map(c => ({
+          id: c.fbCampaignId,
+          name: c.name,
+          objective: c.objective,
+          effectiveStatus: c.effectiveStatus,
+          dailyBudget: c.dailyBudget,
+          lifetimeBudget: c.lifetimeBudget,
+          activeAds: adCountMap[String(c._id)] || 0,
+          spend: c.metrics?.spend || 0,
+          impressions: c.metrics?.impressions || 0,
+          frequency: c.metrics?.frequency || 0
+        })),
+        summary: {
+          totalCampaigns: campaigns.length,
+          totalActiveAds,
+          totalDailyBudget: Math.round(totalDailyBudget),
+          objectives,
+          adTypes,
+          targetLocations: [...allLocations],
+          targetAgeRange: ageRange.min < 65 ? ageRange : null
+        }
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // ─── 1b. PRODUCT-LEVEL FORECAST ─────────────────────────────────────────────
 // Per-product daily revenue with individual linear regressions.
 router.get('/forecast-by-product', async (req, res) => {

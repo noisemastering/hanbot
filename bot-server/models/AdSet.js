@@ -42,6 +42,7 @@ const adSetSchema = new mongoose.Schema(
     optimizationGoal: String,  // e.g., "REACH", "LINK_CLICKS", "CONVERSIONS"
     billingEvent: String,      // e.g., "IMPRESSIONS", "LINK_CLICKS"
     bidAmount: Number,
+    effectiveStatus: String,   // ACTIVE, PAUSED, CAMPAIGN_PAUSED, etc.
 
     // Placement
     placements: [String],      // e.g., ["facebook_feed", "instagram_feed"]

@@ -146,7 +146,7 @@ async function syncCampaigns() {
 
   const fbCampaigns = await fetchAllPages(
     `${AD_ACCOUNT_ID}/campaigns`,
-    { fields: "name,status,objective,daily_budget,lifetime_budget,start_time,stop_time" }
+    { fields: "name,status,effective_status,objective,daily_budget,lifetime_budget,start_time,stop_time,buying_type" }
   );
 
   console.log(`📋 Found ${fbCampaigns.length} campaigns on Facebook`);
@@ -161,7 +161,9 @@ async function syncCampaigns() {
       const updateFields = {
         name: fb.name,
         status: fb.status,
+        effectiveStatus: fb.effective_status,
         objective: fb.objective,
+        buyingType: fb.buying_type,
         dailyBudget: budgetFromCents(fb.daily_budget),
         lifetimeBudget: budgetFromCents(fb.lifetime_budget),
         startDate: fb.start_time ? new Date(fb.start_time) : undefined,
@@ -207,7 +209,7 @@ async function syncAdSets() {
   const fbAdSets = await fetchAllPages(
     `${AD_ACCOUNT_ID}/adsets`,
     {
-      fields: "name,status,campaign_id,targeting,daily_budget,lifetime_budget,start_time,end_time,optimization_goal,billing_event,bid_amount"
+      fields: "name,status,effective_status,campaign_id,targeting,daily_budget,lifetime_budget,start_time,end_time,optimization_goal,billing_event,bid_amount"
     }
   );
 
@@ -234,6 +236,7 @@ async function syncAdSets() {
       const updateFields = {
         name: fb.name,
         status: fb.status,
+        effectiveStatus: fb.effective_status,
         campaignId: parentCampaign._id,
         dailyBudget: budgetFromCents(fb.daily_budget),
         lifetimeBudget: budgetFromCents(fb.lifetime_budget),
@@ -381,7 +384,7 @@ async function syncMetrics() {
   console.log("🔄 Syncing metrics from Facebook Insights...");
 
   const levels = ["campaign", "adset", "ad"];
-  const insightsFields = "impressions,clicks,spend,reach,ctr,cpc,cpm,actions";
+  const insightsFields = "impressions,clicks,spend,reach,ctr,cpc,cpm,frequency,actions";
   const results = {};
 
   for (const level of levels) {
@@ -420,6 +423,7 @@ async function syncMetrics() {
         "metrics.ctr": parseFloat(row.ctr) || 0,
         "metrics.cpc": parseFloat(row.cpc) || 0,
         "metrics.cpm": parseFloat(row.cpm) || 0,
+        "metrics.frequency": parseFloat(row.frequency) || 0,
         "metrics.lastUpdated": new Date()
       };
 
