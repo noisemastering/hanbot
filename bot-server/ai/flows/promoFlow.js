@@ -142,6 +142,9 @@ async function buildPromoPitch(products, options = {}) {
     if (p.isPromoPrice && p.originalPrice) {
       entry += `\nPrecio regular: $${p.originalPrice}`;
       entry += `\nPrecio promocional: $${p.price}`;
+    } else if (p.hasDiscount && p.originalPrice) {
+      entry += `\nPrecio regular: $${p.originalPrice}`;
+      entry += `\nPrecio con descuento: $${p.price} (${p.discountPercent}% OFF)`;
     } else if (p.price) {
       entry += `\nPrecio: $${p.price}`;
     }

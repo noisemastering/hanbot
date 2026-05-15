@@ -105,7 +105,12 @@ async function buildQuoteMessage(products, options = {}) {
         .map(([k, v]) => `${k}: ${v}`).join(', ');
       entry += `\nEspecificaciones: ${attrs}`;
     }
-    if (p.price) entry += `\nPrecio: $${p.price}`;
+    if (p.hasDiscount && p.originalPrice) {
+      entry += `\nPrecio regular: $${p.originalPrice}`;
+      entry += `\nPrecio con descuento: $${p.price} (${p.discountPercent}% OFF)`;
+    } else if (p.price) {
+      entry += `\nPrecio: $${p.price}`;
+    }
     if (p.link) entry += `\nLink de compra: ${p.link}`;
     if (p.colors?.length) entry += `\nColores: ${p.colors.join(', ')}`;
     return entry;

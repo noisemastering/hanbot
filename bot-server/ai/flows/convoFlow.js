@@ -17,6 +17,7 @@ const promoFlow = require("./promoFlow");
 const { updateConversation } = require("../../conversationManager");
 const { executeHandoff } = require("../utils/executeHandoff");
 const { getOrCreateClickLink } = require("../../tracking");
+const { enrichWithMLPrice } = require("../utils/mlPriceLookup");
 const { getConversationContext } = require("../middleware/contextManager");
 const { parseConfeccionadaDimensions } = require("../utils/dimensionParsers");
 
@@ -491,9 +492,11 @@ function create(manifest) {
     const activePromo = flowState._adPromo || manifest.promo;
     if (activePromo) {
       // Filter to promo-specific products if configured, otherwise pitch all
+      // Enrich with real-time ML prices (ML is source of truth)
       let promoProducts = activePromo.promoProductIds
         ? productCache.filter(p => activePromo.promoProductIds.includes(String(p.productId)))
         : productCache;
+      promoProducts = await Promise.all(promoProducts.map(p => enrichWithMLPrice(p)));
 
       // Generate (or reuse) tracked links for retail promo products (before first pitch)
       if (!flowState.pitchSent && manifest.salesChannel === 'retail') {
@@ -608,7 +611,10 @@ function create(manifest) {
         }
 
         // Feed the matched products through the sales flow
-        let quotableProducts = productResult.products;
+        // Enrich with real-time ML prices (ML is source of truth)
+        let quotableProducts = await Promise.all(
+          productResult.products.map(p => enrichWithMLPrice(p))
+        );
         if (manifest.salesChannel === 'retail' && quotableProducts.length === 1) {
           quotableProducts = await Promise.all(quotableProducts.map(async p => {
             if (p.link) {
@@ -698,11 +704,10 @@ function create(manifest) {
 
       // Products found — pass to sales flow with the matched products
       if (productResult.type === 'products_found' && productResult.products.length > 0) {
-        // Generate (or reuse) tracked links ONLY for the single-product retail quote case.
-        // When the match is multiple products, the sales flow presents a "desde X hasta Y"
-        // range with no links — generating tracked links here would create N stale ClickLogs
-        // the customer never sees.
-        let quotableProducts = productResult.products;
+        // Enrich with real-time ML prices (ML is source of truth)
+        let quotableProducts = await Promise.all(
+          productResult.products.map(p => enrichWithMLPrice(p))
+        );
         if (manifest.salesChannel === 'retail' && productResult.products.length === 1) {
           quotableProducts = await Promise.all(productResult.products.map(async p => {
             if (p.link) {
