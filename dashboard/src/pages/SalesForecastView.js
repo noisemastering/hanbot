@@ -939,7 +939,7 @@ function SalesForecastView() {
                     </div>
 
                     {/* Summary row */}
-                    <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                    <div className="grid grid-cols-3 gap-3">
                       <div className="bg-gray-900/50 rounded-lg p-3 text-center">
                         <p className="text-xs text-gray-500">Sin cambios ({simWeeks} sem)</p>
                         <p className="text-sm font-medium text-purple-400">{fmt(campaignProjection.totalBaseline)}</p>
@@ -953,10 +953,6 @@ function SalesForecastView() {
                         <p className={`text-sm font-bold ${campaignProjection.totalSimulated >= campaignProjection.totalBaseline ? 'text-green-400' : 'text-red-400'}`}>
                           {campaignProjection.totalSimulated >= campaignProjection.totalBaseline ? '+' : ''}{fmt(campaignProjection.totalSimulated - campaignProjection.totalBaseline)}
                         </p>
-                      </div>
-                      <div className="bg-gray-900/50 rounded-lg p-3 text-center">
-                        <p className="text-xs text-gray-500">Retorno semanal marginal</p>
-                        <p className="text-sm font-bold text-white">{fmt(campaignProjection.marginalReturn)}</p>
                       </div>
                     </div>
 
