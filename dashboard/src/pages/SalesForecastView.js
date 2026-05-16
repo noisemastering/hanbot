@@ -914,7 +914,7 @@ function SalesForecastView() {
 
                   return (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <SliderWithDot label="Presupuesto" value={sim.budgetMult} min={0} max={3} step={0.1}
+                    <SliderWithDot label="Presupuesto" value={sim.budgetMult} min={0} max={3} step={0.01}
                       sweetSpot={budgetSweet} color="text-blue-400"
                       valueLabel={sim.budgetMult === 1 ? 'Actual' : sim.budgetMult === 0 ? 'Sin ads' : (sim.budgetMult > 1 ? '+' : '') + Math.round((sim.budgetMult - 1) * 100) + '%'}
                       minLabel="Sin ads" maxLabel="3x"
@@ -926,7 +926,7 @@ function SalesForecastView() {
                       minLabel={`${simParams?.summary?.totalActiveAds || '?'} actual`} maxLabel="+20"
                       onChange={e => setSim(s => ({ ...s, adCount: parseInt(e.target.value) }))} />
 
-                    <SliderWithDot label="Ampliar target" value={sim.targetExpansion} min={0} max={100} step={5}
+                    <SliderWithDot label="Ampliar target" value={sim.targetExpansion} min={0} max={100} step={1}
                       sweetSpot={targetSweet} color="text-green-400"
                       valueLabel={sim.targetExpansion === 0 ? 'Actual' : '+' + sim.targetExpansion + '%'}
                       minLabel="Actual" maxLabel="+100%"
