@@ -877,66 +877,80 @@ function SalesForecastView() {
                 )}
 
                 {/* Controls */}
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                  {/* Budget */}
-                  <div className="bg-gray-900/50 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs text-gray-400">Presupuesto</label>
-                      <span className="text-xs font-mono text-blue-400">{sim.budgetMult === 1 ? 'Actual' : sim.budgetMult === 0 ? 'Sin ads' : (sim.budgetMult > 1 ? '+' : '') + Math.round((sim.budgetMult - 1) * 100) + '%'}</span>
-                    </div>
-                    <input type="range" min={0} max={3} step={0.1} value={sim.budgetMult}
-                      onChange={e => setSim(s => ({ ...s, budgetMult: parseFloat(e.target.value) }))}
-                      className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500" />
-                    <div className="flex justify-between text-[10px] text-gray-600 mt-1">
-                      <span>Sin ads</span><span>Actual</span><span>3x</span>
-                    </div>
-                  </div>
+                {(() => {
+                  // Sweet spot calculations based on campaign duration
+                  // Short campaigns can push harder, long ones need restraint
+                  const budgetSweet = simWeeks <= 2 ? 1.8 : simWeeks <= 4 ? 1.4 : simWeeks <= 8 ? 1.2 : 1.1;
+                  const adsSweet = simWeeks <= 2 ? 2 : simWeeks <= 4 ? 4 : simWeeks <= 8 ? 6 : 8;
+                  const targetSweet = simWeeks <= 2 ? 10 : simWeeks <= 4 ? 20 : simWeeks <= 8 ? 35 : 50;
 
-                  {/* Ad count */}
-                  <div className="bg-gray-900/50 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs text-gray-400">Anuncios</label>
-                      <span className="text-xs font-mono text-orange-400">{(simParams?.summary?.totalActiveAds || 0) + sim.adCount}</span>
-                    </div>
-                    <input type="range" min={0} max={20} step={1} value={sim.adCount}
-                      onChange={e => setSim(s => ({ ...s, adCount: parseInt(e.target.value) }))}
-                      className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-orange-500" />
-                    <div className="flex justify-between text-[10px] text-gray-600 mt-1">
-                      <span>{simParams?.summary?.totalActiveAds || '?'} actual</span><span>+20</span>
-                    </div>
-                  </div>
+                  // Helper: render a slider with sweet spot dot
+                  const SliderWithDot = ({ label, value, min, max, step, sweetSpot, color, valueLabel, minLabel, maxLabel, onChange }) => {
+                    const sweetPct = ((sweetSpot - min) / (max - min)) * 100;
+                    return (
+                      <div className="bg-gray-900/50 rounded-lg p-4">
+                        <div className="flex items-center justify-between mb-2">
+                          <label className="text-xs text-gray-400">{label}</label>
+                          <span className={`text-xs font-mono ${color}`}>{valueLabel}</span>
+                        </div>
+                        <div className="relative">
+                          <input type="range" min={min} max={max} step={step} value={value}
+                            onChange={onChange}
+                            className={`w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer ${color.replace('text-', 'accent-')}`} />
+                          {/* Sweet spot dot */}
+                          <div className="absolute top-1/2 -translate-y-1/2 pointer-events-none" style={{ left: `calc(${sweetPct}% - 4px)` }}
+                            title={`Punto óptimo para ${simWeeks} semanas`}>
+                            <div className="w-2 h-2 rounded-full bg-amber-400 ring-2 ring-amber-400/30" />
+                          </div>
+                        </div>
+                        <div className="flex justify-between text-[10px] text-gray-600 mt-1">
+                          <span>{minLabel}</span>
+                          <span className="text-amber-400/60">●  óptimo</span>
+                          <span>{maxLabel}</span>
+                        </div>
+                      </div>
+                    );
+                  };
 
-                  {/* Target expansion */}
-                  <div className="bg-gray-900/50 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-2">
-                      <label className="text-xs text-gray-400">Ampliar target</label>
-                      <span className="text-xs font-mono text-green-400">{sim.targetExpansion === 0 ? 'Actual' : '+' + sim.targetExpansion + '%'}</span>
-                    </div>
-                    <input type="range" min={0} max={100} step={5} value={sim.targetExpansion}
-                      onChange={e => setSim(s => ({ ...s, targetExpansion: parseInt(e.target.value) }))}
-                      className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500" />
-                    <div className="flex justify-between text-[10px] text-gray-600 mt-1">
-                      <span>Actual</span><span>+100%</span>
-                    </div>
-                  </div>
+                  return (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <SliderWithDot label="Presupuesto" value={sim.budgetMult} min={0} max={3} step={0.1}
+                      sweetSpot={budgetSweet} color="text-blue-400"
+                      valueLabel={sim.budgetMult === 1 ? 'Actual' : sim.budgetMult === 0 ? 'Sin ads' : (sim.budgetMult > 1 ? '+' : '') + Math.round((sim.budgetMult - 1) * 100) + '%'}
+                      minLabel="Sin ads" maxLabel="3x"
+                      onChange={e => setSim(s => ({ ...s, budgetMult: parseFloat(e.target.value) }))} />
 
-                  {/* Ad type */}
-                  <div className="bg-gray-900/50 rounded-lg p-4">
-                    <label className="text-xs text-gray-400 block mb-3">Tipo de anuncio</label>
-                    <div className="flex gap-1">
-                      {[
-                        ['current', `${simParams?.summary?.adTypes?.click > simParams?.summary?.adTypes?.presence ? 'Clics' : simParams?.summary?.adTypes?.presence > simParams?.summary?.adTypes?.click ? 'Presencia' : 'Mixto'} (actual)`],
-                        ['click', 'Clics'],
-                        ['presence', 'Presencia']
-                      ].map(([val, label]) => (
-                        <button key={val} onClick={() => setSim(s => ({ ...s, adType: val }))}
-                          className={`flex-1 px-2 py-1.5 rounded text-xs font-medium transition-all ${sim.adType === val ? 'bg-amber-500 text-white' : 'bg-gray-800 text-gray-500 hover:text-white'}`}>
-                          {label}
-                        </button>
-                      ))}
+                    <SliderWithDot label="Anuncios" value={sim.adCount} min={0} max={20} step={1}
+                      sweetSpot={adsSweet} color="text-orange-400"
+                      valueLabel={String((simParams?.summary?.totalActiveAds || 0) + sim.adCount)}
+                      minLabel={`${simParams?.summary?.totalActiveAds || '?'} actual`} maxLabel="+20"
+                      onChange={e => setSim(s => ({ ...s, adCount: parseInt(e.target.value) }))} />
+
+                    <SliderWithDot label="Ampliar target" value={sim.targetExpansion} min={0} max={100} step={5}
+                      sweetSpot={targetSweet} color="text-green-400"
+                      valueLabel={sim.targetExpansion === 0 ? 'Actual' : '+' + sim.targetExpansion + '%'}
+                      minLabel="Actual" maxLabel="+100%"
+                      onChange={e => setSim(s => ({ ...s, targetExpansion: parseInt(e.target.value) }))} />
+
+                    {/* Ad type — no slider, just toggle */}
+                    <div className="bg-gray-900/50 rounded-lg p-4">
+                      <label className="text-xs text-gray-400 block mb-3">Tipo de anuncio</label>
+                      <div className="flex gap-1">
+                        {[
+                          ['current', `${simParams?.summary?.adTypes?.click > simParams?.summary?.adTypes?.presence ? 'Clics' : simParams?.summary?.adTypes?.presence > simParams?.summary?.adTypes?.click ? 'Presencia' : 'Mixto'} (actual)`],
+                          ['click', 'Clics'],
+                          ['presence', 'Presencia']
+                        ].map(([val, label]) => (
+                          <button key={val} onClick={() => setSim(s => ({ ...s, adType: val }))}
+                            className={`flex-1 px-2 py-1.5 rounded text-xs font-medium transition-all ${sim.adType === val ? 'bg-amber-500 text-white' : 'bg-gray-800 text-gray-500 hover:text-white'}`}>
+                            {label}
+                          </button>
+                        ))}
+                      </div>
                     </div>
                   </div>
-                </div>
+                  );
+                })()}
 
                 <div className="flex justify-end">
                   <button onClick={() => { setSim({ budgetMult: 1, adCount: 0, adType: 'current', targetExpansion: 0 }); setSimWeeks(4); }}
