@@ -3,7 +3,7 @@ import API from '../api';
 import {
   ComposedChart, Bar, Line, Area, BarChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell
 } from 'recharts';
-import KnobControl from '../components/KnobControl';
+// KnobControl removed — using sliders instead
 
 const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6', fontSize: '13px' };
 const fmt = (n) => '$' + Math.round(n).toLocaleString('es-MX');
@@ -876,23 +876,73 @@ function SalesForecastView() {
                   </div>
                 )}
 
-                {/* Knobs row */}
-                <div className="flex flex-wrap items-start justify-center gap-6">
-                  <KnobControl label="Presupuesto" value={sim.budgetMult} min={0} max={3} step={0.1} baseline={1} color="#3B82F6" size={80} format={v => v === 1 ? 'Actual' : v === 0 ? 'Sin ads' : (v > 1 ? '+' : '') + Math.round((v - 1) * 100) + '%'} onChange={v => setSim(s => ({ ...s, budgetMult: v }))} />
-                  <KnobControl label="Anuncios" value={sim.adCount} min={0} max={20} step={1} baseline={0} color="#F97316" size={80} format={v => v === 0 ? `${simParams?.summary?.totalActiveAds || '?'}` : `${(simParams?.summary?.totalActiveAds || 0) + v}`} onChange={v => setSim(s => ({ ...s, adCount: v }))} />
-                  <KnobControl label="Ampliar target" value={sim.targetExpansion} min={0} max={100} step={5} baseline={0} color="#10B981" size={80} format={v => v === 0 ? 'Actual' : '+' + v + '%'} onChange={v => setSim(s => ({ ...s, targetExpansion: v }))} />
-                  <div className="flex flex-col items-center gap-1">
-                    <p className="text-xs text-gray-400 mb-1">Tipo de anuncio</p>
+                {/* Controls */}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                  {/* Budget */}
+                  <div className="bg-gray-900/50 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs text-gray-400">Presupuesto</label>
+                      <span className="text-xs font-mono text-blue-400">{sim.budgetMult === 1 ? 'Actual' : sim.budgetMult === 0 ? 'Sin ads' : (sim.budgetMult > 1 ? '+' : '') + Math.round((sim.budgetMult - 1) * 100) + '%'}</span>
+                    </div>
+                    <input type="range" min={0} max={3} step={0.1} value={sim.budgetMult}
+                      onChange={e => setSim(s => ({ ...s, budgetMult: parseFloat(e.target.value) }))}
+                      className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500" />
+                    <div className="flex justify-between text-[10px] text-gray-600 mt-1">
+                      <span>Sin ads</span><span>Actual</span><span>3x</span>
+                    </div>
+                  </div>
+
+                  {/* Ad count */}
+                  <div className="bg-gray-900/50 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs text-gray-400">Anuncios</label>
+                      <span className="text-xs font-mono text-orange-400">{(simParams?.summary?.totalActiveAds || 0) + sim.adCount}</span>
+                    </div>
+                    <input type="range" min={0} max={20} step={1} value={sim.adCount}
+                      onChange={e => setSim(s => ({ ...s, adCount: parseInt(e.target.value) }))}
+                      className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-orange-500" />
+                    <div className="flex justify-between text-[10px] text-gray-600 mt-1">
+                      <span>{simParams?.summary?.totalActiveAds || '?'} actual</span><span>+20</span>
+                    </div>
+                  </div>
+
+                  {/* Target expansion */}
+                  <div className="bg-gray-900/50 rounded-lg p-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <label className="text-xs text-gray-400">Ampliar target</label>
+                      <span className="text-xs font-mono text-green-400">{sim.targetExpansion === 0 ? 'Actual' : '+' + sim.targetExpansion + '%'}</span>
+                    </div>
+                    <input type="range" min={0} max={100} step={5} value={sim.targetExpansion}
+                      onChange={e => setSim(s => ({ ...s, targetExpansion: parseInt(e.target.value) }))}
+                      className="w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-green-500" />
+                    <div className="flex justify-between text-[10px] text-gray-600 mt-1">
+                      <span>Actual</span><span>+100%</span>
+                    </div>
+                  </div>
+
+                  {/* Ad type */}
+                  <div className="bg-gray-900/50 rounded-lg p-4">
+                    <label className="text-xs text-gray-400 block mb-3">Tipo de anuncio</label>
                     <div className="flex gap-1">
-                      {[['current', `${simParams?.summary?.adTypes?.click > simParams?.summary?.adTypes?.presence ? 'Clics' : simParams?.summary?.adTypes?.presence > simParams?.summary?.adTypes?.click ? 'Presencia' : 'Mixto'} (actual)`], ['click', 'Clics'], ['presence', 'Presencia']].map(([val, label]) => (
+                      {[
+                        ['current', `${simParams?.summary?.adTypes?.click > simParams?.summary?.adTypes?.presence ? 'Clics' : simParams?.summary?.adTypes?.presence > simParams?.summary?.adTypes?.click ? 'Presencia' : 'Mixto'} (actual)`],
+                        ['click', 'Clics'],
+                        ['presence', 'Presencia']
+                      ].map(([val, label]) => (
                         <button key={val} onClick={() => setSim(s => ({ ...s, adType: val }))}
-                          className={`px-2.5 py-1.5 rounded text-xs font-medium transition-all ${sim.adType === val ? 'bg-amber-500 text-white' : 'bg-gray-900/50 text-gray-500 hover:text-white'}`}>
+                          className={`flex-1 px-2 py-1.5 rounded text-xs font-medium transition-all ${sim.adType === val ? 'bg-amber-500 text-white' : 'bg-gray-800 text-gray-500 hover:text-white'}`}>
                           {label}
                         </button>
                       ))}
                     </div>
                   </div>
-                  <button onClick={() => { setSim({ budgetMult: 1, adCount: 0, adType: 'current', targetExpansion: 0 }); setSimWeeks(4); }} className="text-xs text-gray-600 hover:text-white mt-8" title="Restablecer">↺ Reset</button>
+                </div>
+
+                <div className="flex justify-end">
+                  <button onClick={() => { setSim({ budgetMult: 1, adCount: 0, adType: 'current', targetExpansion: 0 }); setSimWeeks(4); }}
+                    className="text-xs text-gray-500 hover:text-white px-3 py-1 rounded hover:bg-gray-700/50 transition-colors">
+                    ↺ Restablecer todo
+                  </button>
                 </div>
 
                 {/* Campaign week-by-week projection */}
