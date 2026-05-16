@@ -893,19 +893,18 @@ function SalesForecastView() {
                           <label className="text-xs text-gray-400">{label}</label>
                           <span className={`text-xs font-mono ${color}`}>{valueLabel}</span>
                         </div>
-                        <div className="relative">
-                          <input type="range" min={min} max={max} step={step} value={value}
-                            onChange={onChange}
-                            className={`w-full cursor-pointer ${color.replace('text-', 'accent-')}`} />
-                          {/* Sweet spot dot */}
-                          <div className="absolute top-1/2 -translate-y-1/2 pointer-events-none" style={{ left: `calc(${sweetPct}% - 4px)` }}
-                            title={`Punto óptimo para ${simWeeks} semanas`}>
-                            <div className="w-2 h-2 rounded-full bg-amber-400 ring-2 ring-amber-400/30" />
+                        <input type="range" min={min} max={max} step={step} value={value}
+                          onChange={onChange}
+                          className={`w-full cursor-pointer ${color.replace('text-', 'accent-')}`} />
+                        {/* Sweet spot marker below slider */}
+                        <div className="relative h-2 mt-0.5">
+                          <div className="absolute" style={{ left: `${sweetPct}%`, transform: 'translateX(-50%)' }}>
+                            <div className="w-1.5 h-1.5 rounded-full bg-amber-400" />
                           </div>
                         </div>
-                        <div className="flex justify-between text-[10px] text-gray-600 mt-1">
+                        <div className="flex justify-between text-[10px] text-gray-600">
                           <span>{minLabel}</span>
-                          <span className="text-amber-400/60">●  óptimo</span>
+                          <span className="text-amber-400/60">▲ óptimo</span>
                           <span>{maxLabel}</span>
                         </div>
                       </div>
