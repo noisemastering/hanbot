@@ -896,7 +896,7 @@ function SalesForecastView() {
                         <div className="relative">
                           <input type="range" min={min} max={max} step={step} value={value}
                             onChange={onChange}
-                            className={`w-full h-1.5 bg-gray-700 rounded-lg appearance-none cursor-pointer ${color.replace('text-', 'accent-')}`} />
+                            className={`w-full cursor-pointer ${color.replace('text-', 'accent-')}`} />
                           {/* Sweet spot dot */}
                           <div className="absolute top-1/2 -translate-y-1/2 pointer-events-none" style={{ left: `calc(${sweetPct}% - 4px)` }}
                             title={`Punto óptimo para ${simWeeks} semanas`}>
