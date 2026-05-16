@@ -932,9 +932,36 @@ function SalesForecastView() {
                     </div>
                   </div>
 
-                  {/* Ad type */}
+                  {/* Mini curve overview */}
                   <div className="bg-gray-900/50 rounded-lg p-4">
-                    <label className="text-xs text-gray-400 block mb-3">Tipo de anuncio</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs text-gray-400">Curva proyectada</label>
+                      {campaignProjection && (
+                        <span className="text-[10px] text-gray-500 italic">{campaignProjection.curveShape?.split('—')[0]?.trim()}</span>
+                      )}
+                    </div>
+                    {campaignProjection?.weeks?.length > 0 ? (
+                      <ResponsiveContainer width="100%" height={70}>
+                        <ComposedChart data={campaignProjection.weeks} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
+                          <Area type="monotone" dataKey="simulated" stroke="none" fill="#F59E0B" fillOpacity={0.15} />
+                          <Line type="monotone" dataKey="simulated" stroke="#F59E0B" strokeWidth={1.5} dot={false} />
+                          <Line type="monotone" dataKey="baseline" stroke="#8B5CF6" strokeWidth={1} strokeDasharray="3 3" dot={false} />
+                        </ComposedChart>
+                      </ResponsiveContainer>
+                    ) : (
+                      <div className="h-[70px] flex items-center justify-center text-[10px] text-gray-600">Ajusta un parámetro</div>
+                    )}
+                    <div className="flex items-center justify-center gap-3 text-[10px] text-gray-600 mt-0.5">
+                      <span className="flex items-center gap-1"><span className="w-2 h-px bg-purple-500 inline-block" /> Base</span>
+                      <span className="flex items-center gap-1"><span className="w-2 h-px bg-amber-500 inline-block" /> Simulación</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Ad type + reset row */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <label className="text-xs text-gray-400">Tipo de anuncio:</label>
                     <div className="flex gap-1">
                       {[
                         ['current', `${simParams?.summary?.adTypes?.click > simParams?.summary?.adTypes?.presence ? 'Clics' : simParams?.summary?.adTypes?.presence > simParams?.summary?.adTypes?.click ? 'Presencia' : 'Mixto'} (actual)`],
@@ -942,15 +969,12 @@ function SalesForecastView() {
                         ['presence', 'Presencia']
                       ].map(([val, label]) => (
                         <button key={val} onClick={() => setSim(s => ({ ...s, adType: val }))}
-                          className={`flex-1 px-2 py-1.5 rounded text-xs font-medium transition-all ${sim.adType === val ? 'bg-amber-500 text-white' : 'bg-gray-800 text-gray-500 hover:text-white'}`}>
+                          className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${sim.adType === val ? 'bg-amber-500 text-white' : 'bg-gray-900/50 text-gray-500 hover:text-white'}`}>
                           {label}
                         </button>
                       ))}
                     </div>
                   </div>
-                </div>
-
-                <div className="flex justify-end">
                   <button onClick={() => { setSim({ budgetMult: 1, adCount: 0, adType: 'current', targetExpansion: 0 }); setSimWeeks(4); }}
                     className="text-xs text-gray-500 hover:text-white px-3 py-1 rounded hover:bg-gray-700/50 transition-colors">
                     ↺ Restablecer todo
