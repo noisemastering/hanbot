@@ -932,29 +932,71 @@ function SalesForecastView() {
                     </div>
                   </div>
 
-                  {/* Mini curve overview */}
+                  {/* Theoretical curve shape */}
                   <div className="bg-gray-900/50 rounded-lg p-4">
-                    <div className="flex items-center justify-between mb-1">
-                      <label className="text-xs text-gray-400">Curva proyectada</label>
-                      {campaignProjection && (
-                        <span className="text-[10px] text-gray-500 italic">{campaignProjection.curveShape?.split('—')[0]?.trim()}</span>
-                      )}
-                    </div>
-                    {campaignProjection?.weeks?.length > 0 ? (
-                      <ResponsiveContainer width="100%" height={70}>
-                        <ComposedChart data={campaignProjection.weeks} margin={{ top: 2, right: 2, bottom: 2, left: 2 }}>
-                          <Area type="monotone" dataKey="simulated" stroke="none" fill="#F59E0B" fillOpacity={0.15} />
-                          <Line type="monotone" dataKey="simulated" stroke="#F59E0B" strokeWidth={1.5} dot={false} />
-                          <Line type="monotone" dataKey="baseline" stroke="#8B5CF6" strokeWidth={1} strokeDasharray="3 3" dot={false} />
-                        </ComposedChart>
-                      </ResponsiveContainer>
-                    ) : (
-                      <div className="h-[70px] flex items-center justify-center text-[10px] text-gray-600">Ajusta un parámetro</div>
-                    )}
-                    <div className="flex items-center justify-center gap-3 text-[10px] text-gray-600 mt-0.5">
-                      <span className="flex items-center gap-1"><span className="w-2 h-px bg-purple-500 inline-block" /> Base</span>
-                      <span className="flex items-center gap-1"><span className="w-2 h-px bg-amber-500 inline-block" /> Simulación</span>
-                    </div>
+                    <label className="text-xs text-gray-400 block mb-1">Comportamiento</label>
+                    {(() => {
+                      // Generate theoretical curve shape from parameters
+                      const w = 160, h = 70;
+                      const pts = 50;
+                      const budgetFactor = sim.budgetMult;
+                      const fatigueFactor = simWeeks > 8 ? 0.6 : simWeeks > 4 ? 0.8 : 0.95;
+                      const ceilingFactor = 1 + sim.adCount * 0.08 + sim.targetExpansion * 0.006;
+
+                      // Build normalized curve: x = time (0-1), y = revenue (0-1)
+                      const points = [];
+                      for (let i = 0; i <= pts; i++) {
+                        const t = i / pts; // 0 to 1
+                        // Fatigue decay over time
+                        const fatigue = 1 - (1 - fatigueFactor) * Math.pow(t, 0.8);
+                        // Logistic ramp-up (awareness builds)
+                        const ramp = 1 / (1 + Math.exp(-8 * (t - 0.15)));
+                        // Budget effect with diminishing returns
+                        const spend = Math.pow(budgetFactor, 0.7);
+                        // Combined: organic base + ad contribution
+                        const organic = 0.3;
+                        const adContrib = spend * ramp * fatigue * Math.min(1, ceilingFactor);
+                        const y = Math.min(1, organic + adContrib * 0.7);
+                        points.push({ x: (i / pts) * w, y: h - y * h });
+                      }
+
+                      const pathD = points.map((p, i) => (i === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`)).join(' ');
+                      const areaD = pathD + ` L ${w} ${h} L 0 ${h} Z`;
+
+                      // Determine shape label
+                      const startY = points[0].y;
+                      const midY = points[Math.floor(pts / 2)].y;
+                      const endY = points[pts].y;
+                      const isFlat = Math.abs(startY - endY) < h * 0.1;
+                      const isDeclining = endY > midY + h * 0.05;
+                      const isLinear = Math.abs((midY - startY) - (endY - midY)) < h * 0.1;
+                      const shapeLabel = isFlat ? 'Saturado' : isDeclining ? 'Fatiga' : isLinear ? 'Lineal' : 'Rendimiento decreciente';
+                      const shapeColor = isFlat ? '#EF4444' : isDeclining ? '#F97316' : isLinear ? '#10B981' : '#F59E0B';
+
+                      return (
+                        <>
+                          <svg width={w} height={h} className="w-full" viewBox={`0 0 ${w} ${h}`}>
+                            {/* Subtle grid */}
+                            <line x1={0} y1={h * 0.5} x2={w} y2={h * 0.5} stroke="#374151" strokeWidth={0.5} strokeDasharray="2 3" />
+                            <line x1={w * 0.5} y1={0} x2={w * 0.5} y2={h} stroke="#374151" strokeWidth={0.5} strokeDasharray="2 3" />
+                            {/* Ceiling line */}
+                            <line x1={0} y1={h * 0.05} x2={w} y2={h * 0.05} stroke="#EF4444" strokeWidth={0.5} strokeDasharray="3 3" opacity={0.4} />
+                            {/* Curve fill */}
+                            <path d={areaD} fill={shapeColor} fillOpacity={0.08} />
+                            {/* Curve line */}
+                            <path d={pathD} fill="none" stroke={shapeColor} strokeWidth={2} strokeLinecap="round" />
+                            {/* Start dot */}
+                            <circle cx={points[0].x} cy={points[0].y} r={2.5} fill={shapeColor} />
+                            {/* End dot */}
+                            <circle cx={points[pts].x} cy={points[pts].y} r={2.5} fill={shapeColor} />
+                          </svg>
+                          <div className="flex items-center justify-between mt-1">
+                            <span className="text-[10px] text-gray-600">Tiempo →</span>
+                            <span className="text-[10px] font-medium" style={{ color: shapeColor }}>{shapeLabel}</span>
+                          </div>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
 
