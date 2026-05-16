@@ -49,23 +49,9 @@ function SalesForecastView() {
   const [simOpen, setSimOpen] = useState(false);
   const [simWeeks, setSimWeeks] = useState(4);
   const [simParams, setSimParams] = useState(null);
-  // Live slider values (update instantly for smooth dragging)
-  const [simLive, setSimLive] = useState({
-    budgetMult: 1, adCount: 0, adType: 'current', targetExpansion: 0
-  });
-  // Debounced sim values (trigger heavy computation)
   const [sim, setSim] = useState({
     budgetMult: 1, adCount: 0, adType: 'current', targetExpansion: 0
   });
-  const simDebounce = useRef(null);
-  const updateSim = useCallback((updater) => {
-    setSimLive(prev => {
-      const next = typeof updater === 'function' ? updater(prev) : updater;
-      clearTimeout(simDebounce.current);
-      simDebounce.current = setTimeout(() => setSim(next), 150);
-      return next;
-    });
-  }, []);
 
   // Fetch product tree and sim params
   useEffect(() => {
@@ -302,7 +288,7 @@ function SalesForecastView() {
     : dailyChartData;
 
   // ── Simulation: compute "what if" forecast line ──
-  const simActive = simOpen && (simLive.budgetMult !== 1 || simLive.adCount > 0 || simLive.adType !== 'current' || simLive.targetExpansion > 0);
+  const simActive = simOpen && (sim.budgetMult !== 1 || sim.adCount > 0 || sim.adType !== 'current' || sim.targetExpansion > 0);
 
   // ── CAMPAIGN SIMULATION MODEL ──
   // Generates a week-by-week projection for a campaign of N weeks.
@@ -893,10 +879,10 @@ function SalesForecastView() {
                   <div className="bg-gray-900/50 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2">
                       <label className="text-xs text-gray-400">Presupuesto</label>
-                      <span className="text-xs font-mono text-blue-400">{simLive.budgetMult === 1 ? 'Actual' : simLive.budgetMult === 0 ? 'Sin ads' : (simLive.budgetMult > 1 ? '+' : '') + Math.round((simLive.budgetMult - 1) * 100) + '%'}</span>
+                      <span className="text-xs font-mono text-blue-400">{sim.budgetMult === 1 ? 'Actual' : sim.budgetMult === 0 ? 'Sin ads' : (sim.budgetMult > 1 ? '+' : '') + Math.round((sim.budgetMult - 1) * 100) + '%'}</span>
                     </div>
-                    <input type="range" min={0} max={3} step={0.01} value={simLive.budgetMult}
-                      onChange={e => updateSim(s => ({ ...s, budgetMult: parseFloat(e.target.value) }))}
+                    <input type="range" min={0} max={3} step={0.01} value={sim.budgetMult}
+                      onChange={e => setSim(s => ({ ...s, budgetMult: parseFloat(e.target.value) }))}
                       className="w-full cursor-pointer accent-blue-500" />
                     <div className="relative h-2 mt-0.5">
                       <div className="absolute" style={{ left: `${((simWeeks <= 2 ? 1.8 : simWeeks <= 4 ? 1.4 : simWeeks <= 8 ? 1.2 : 1.1) / 3) * 100}%`, transform: 'translateX(-50%)' }}>
@@ -912,10 +898,10 @@ function SalesForecastView() {
                   <div className="bg-gray-900/50 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2">
                       <label className="text-xs text-gray-400">Anuncios</label>
-                      <span className="text-xs font-mono text-orange-400">{(simParams?.summary?.totalActiveAds || 0) + simLive.adCount}</span>
+                      <span className="text-xs font-mono text-orange-400">{(simParams?.summary?.totalActiveAds || 0) + sim.adCount}</span>
                     </div>
-                    <input type="range" min={0} max={20} step={1} value={simLive.adCount}
-                      onChange={e => updateSim(s => ({ ...s, adCount: parseInt(e.target.value) }))}
+                    <input type="range" min={0} max={20} step={1} value={sim.adCount}
+                      onChange={e => setSim(s => ({ ...s, adCount: parseInt(e.target.value) }))}
                       className="w-full cursor-pointer accent-orange-500" />
                     <div className="relative h-2 mt-0.5">
                       <div className="absolute" style={{ left: `${((simWeeks <= 2 ? 2 : simWeeks <= 4 ? 4 : simWeeks <= 8 ? 6 : 8) / 20) * 100}%`, transform: 'translateX(-50%)' }}>
@@ -931,10 +917,10 @@ function SalesForecastView() {
                   <div className="bg-gray-900/50 rounded-lg p-4">
                     <div className="flex items-center justify-between mb-2">
                       <label className="text-xs text-gray-400">Ampliar target</label>
-                      <span className="text-xs font-mono text-green-400">{simLive.targetExpansion === 0 ? 'Actual' : '+' + simLive.targetExpansion + '%'}</span>
+                      <span className="text-xs font-mono text-green-400">{sim.targetExpansion === 0 ? 'Actual' : '+' + sim.targetExpansion + '%'}</span>
                     </div>
-                    <input type="range" min={0} max={100} step={1} value={simLive.targetExpansion}
-                      onChange={e => updateSim(s => ({ ...s, targetExpansion: parseInt(e.target.value) }))}
+                    <input type="range" min={0} max={100} step={1} value={sim.targetExpansion}
+                      onChange={e => setSim(s => ({ ...s, targetExpansion: parseInt(e.target.value) }))}
                       className="w-full cursor-pointer accent-green-500" />
                     <div className="relative h-2 mt-0.5">
                       <div className="absolute" style={{ left: `${simWeeks <= 2 ? 10 : simWeeks <= 4 ? 20 : simWeeks <= 8 ? 35 : 50}%`, transform: 'translateX(-50%)' }}>
@@ -955,8 +941,8 @@ function SalesForecastView() {
                         ['click', 'Clics'],
                         ['presence', 'Presencia']
                       ].map(([val, label]) => (
-                        <button key={val} onClick={() => updateSim(s => ({ ...s, adType: val }))}
-                          className={`flex-1 px-2 py-1.5 rounded text-xs font-medium transition-all ${simLive.adType === val ? 'bg-amber-500 text-white' : 'bg-gray-800 text-gray-500 hover:text-white'}`}>
+                        <button key={val} onClick={() => setSim(s => ({ ...s, adType: val }))}
+                          className={`flex-1 px-2 py-1.5 rounded text-xs font-medium transition-all ${sim.adType === val ? 'bg-amber-500 text-white' : 'bg-gray-800 text-gray-500 hover:text-white'}`}>
                           {label}
                         </button>
                       ))}
@@ -965,7 +951,7 @@ function SalesForecastView() {
                 </div>
 
                 <div className="flex justify-end">
-                  <button onClick={() => { const def = { budgetMult: 1, adCount: 0, adType: 'current', targetExpansion: 0 }; setSim(def); setSimLive(def); setSimWeeks(4); }}
+                  <button onClick={() => { setSim({ budgetMult: 1, adCount: 0, adType: 'current', targetExpansion: 0 }); setSimWeeks(4); }}
                     className="text-xs text-gray-500 hover:text-white px-3 py-1 rounded hover:bg-gray-700/50 transition-colors">
                     ↺ Restablecer todo
                   </button>
