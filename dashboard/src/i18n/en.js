@@ -23,6 +23,7 @@ const en = {
   "menu.segmentacion": "Segmentation",
   "menu.spendOptimization": "Optimization",
   "menu.flujos": "Flows",
+  "menu.forecast": "Forecast",
   "menu.simulador": "Simulator",
   "menu.intelligence": "Artificial Intelligence",
   "menu.mlImport": "Import Orders",

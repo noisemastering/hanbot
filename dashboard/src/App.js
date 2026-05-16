@@ -288,6 +288,14 @@ const menuItems = [
         )
       },
       {
+        id: "forecast",
+        labelKey: "menu.forecast",
+        path: "/forecast",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+        )
+      },
+      {
         id: "flujos",
         labelKey: "menu.flujos",
         path: "/flujos",
@@ -414,14 +422,6 @@ const menuItems = [
         path: "/playground/ml-import",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-        )
-      },
-      {
-        id: "playground-forecast",
-        labelKey: "menu.playgroundForecast",
-        path: "/playground/forecast",
-        icon: (
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
         )
       },
       {
@@ -2294,7 +2294,7 @@ function App() {
           <Route path="/ml-orders" element={<OrdersView />} />
           <Route path="/ml-importer" element={<MLImporterView />} />
           <Route path="/playground/mercado-libre" element={<MLPlaygroundView />} />
-          <Route path="/playground/forecast" element={<SalesForecastView />} />
+          <Route path="/forecast" element={<SalesForecastView />} />
           <Route path="/playground/conversion" element={<ConversionProbabilityView />} />
 
           {/* Bot Configuration Routes */}
