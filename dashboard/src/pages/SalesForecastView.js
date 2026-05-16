@@ -48,13 +48,24 @@ function SalesForecastView() {
   // ── Simulation ("What if") ──
   const [simOpen, setSimOpen] = useState(false);
   const [simWeeks, setSimWeeks] = useState(4);
-  const [simParams, setSimParams] = useState(null); // real campaign params from API
-  const [sim, setSim] = useState({
-    budgetMult: 1,        // multiplier on current daily budget
-    adCount: 0,           // additional ads (on top of current)
-    adType: 'current',    // 'current' | 'click' | 'presence'
-    targetExpansion: 0    // % audience expansion
+  const [simParams, setSimParams] = useState(null);
+  // Live slider values (update instantly for smooth dragging)
+  const [simLive, setSimLive] = useState({
+    budgetMult: 1, adCount: 0, adType: 'current', targetExpansion: 0
   });
+  // Debounced sim values (trigger heavy computation)
+  const [sim, setSim] = useState({
+    budgetMult: 1, adCount: 0, adType: 'current', targetExpansion: 0
+  });
+  const simDebounce = useRef(null);
+  const updateSim = useCallback((updater) => {
+    setSimLive(prev => {
+      const next = typeof updater === 'function' ? updater(prev) : updater;
+      clearTimeout(simDebounce.current);
+      simDebounce.current = setTimeout(() => setSim(next), 150);
+      return next;
+    });
+  }, []);
 
   // Fetch product tree and sim params
   useEffect(() => {
@@ -291,7 +302,7 @@ function SalesForecastView() {
     : dailyChartData;
 
   // ── Simulation: compute "what if" forecast line ──
-  const simActive = simOpen && (sim.budgetMult !== 1 || sim.adCount > 0 || sim.adType !== 'current' || sim.targetExpansion > 0);
+  const simActive = simOpen && (simLive.budgetMult !== 1 || simLive.adCount > 0 || simLive.adType !== 'current' || simLive.targetExpansion > 0);
 
   // ── CAMPAIGN SIMULATION MODEL ──
   // Generates a week-by-week projection for a campaign of N weeks.
@@ -913,23 +924,23 @@ function SalesForecastView() {
 
                   return (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
-                    <SliderWithDot label="Presupuesto" value={sim.budgetMult} min={0} max={3} step={0.01}
+                    <SliderWithDot label="Presupuesto" value={simLive.budgetMult} min={0} max={3} step={0.01}
                       sweetSpot={budgetSweet} color="text-blue-400"
-                      valueLabel={sim.budgetMult === 1 ? 'Actual' : sim.budgetMult === 0 ? 'Sin ads' : (sim.budgetMult > 1 ? '+' : '') + Math.round((sim.budgetMult - 1) * 100) + '%'}
+                      valueLabel={simLive.budgetMult === 1 ? 'Actual' : simLive.budgetMult === 0 ? 'Sin ads' : (simLive.budgetMult > 1 ? '+' : '') + Math.round((simLive.budgetMult - 1) * 100) + '%'}
                       minLabel="Sin ads" maxLabel="3x"
-                      onChange={e => setSim(s => ({ ...s, budgetMult: parseFloat(e.target.value) }))} />
+                      onChange={e => updateSim(s => ({ ...s, budgetMult: parseFloat(e.target.value) }))} />
 
-                    <SliderWithDot label="Anuncios" value={sim.adCount} min={0} max={20} step={1}
+                    <SliderWithDot label="Anuncios" value={simLive.adCount} min={0} max={20} step={1}
                       sweetSpot={adsSweet} color="text-orange-400"
-                      valueLabel={String((simParams?.summary?.totalActiveAds || 0) + sim.adCount)}
+                      valueLabel={String((simParams?.summary?.totalActiveAds || 0) + simLive.adCount)}
                       minLabel={`${simParams?.summary?.totalActiveAds || '?'} actual`} maxLabel="+20"
-                      onChange={e => setSim(s => ({ ...s, adCount: parseInt(e.target.value) }))} />
+                      onChange={e => updateSim(s => ({ ...s, adCount: parseInt(e.target.value) }))} />
 
-                    <SliderWithDot label="Ampliar target" value={sim.targetExpansion} min={0} max={100} step={1}
+                    <SliderWithDot label="Ampliar target" value={simLive.targetExpansion} min={0} max={100} step={1}
                       sweetSpot={targetSweet} color="text-green-400"
-                      valueLabel={sim.targetExpansion === 0 ? 'Actual' : '+' + sim.targetExpansion + '%'}
+                      valueLabel={simLive.targetExpansion === 0 ? 'Actual' : '+' + simLive.targetExpansion + '%'}
                       minLabel="Actual" maxLabel="+100%"
-                      onChange={e => setSim(s => ({ ...s, targetExpansion: parseInt(e.target.value) }))} />
+                      onChange={e => updateSim(s => ({ ...s, targetExpansion: parseInt(e.target.value) }))} />
 
                     {/* Ad type — no slider, just toggle */}
                     <div className="bg-gray-900/50 rounded-lg p-4">
@@ -940,8 +951,8 @@ function SalesForecastView() {
                           ['click', 'Clics'],
                           ['presence', 'Presencia']
                         ].map(([val, label]) => (
-                          <button key={val} onClick={() => setSim(s => ({ ...s, adType: val }))}
-                            className={`flex-1 px-2 py-1.5 rounded text-xs font-medium transition-all ${sim.adType === val ? 'bg-amber-500 text-white' : 'bg-gray-800 text-gray-500 hover:text-white'}`}>
+                          <button key={val} onClick={() => updateSim(s => ({ ...s, adType: val }))}
+                            className={`flex-1 px-2 py-1.5 rounded text-xs font-medium transition-all ${simLive.adType === val ? 'bg-amber-500 text-white' : 'bg-gray-800 text-gray-500 hover:text-white'}`}>
                             {label}
                           </button>
                         ))}
@@ -952,7 +963,7 @@ function SalesForecastView() {
                 })()}
 
                 <div className="flex justify-end">
-                  <button onClick={() => { setSim({ budgetMult: 1, adCount: 0, adType: 'current', targetExpansion: 0 }); setSimWeeks(4); }}
+                  <button onClick={() => { const def = { budgetMult: 1, adCount: 0, adType: 'current', targetExpansion: 0 }; setSim(def); setSimLive(def); setSimWeeks(4); }}
                     className="text-xs text-gray-500 hover:text-white px-3 py-1 rounded hover:bg-gray-700/50 transition-colors">
                     ↺ Restablecer todo
                   </button>
