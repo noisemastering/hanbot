@@ -3043,6 +3043,7 @@ const en = {
   "home.adConversions": "Conversions",
   "home.convRate": "Conv Rate",
   "home.last7d": "7d",
+  "home.last15d": "15d",
   "home.last30d": "30d",
   "home.last90d": "90d",
   "home.noData": "No data available",
