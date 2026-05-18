@@ -19,6 +19,8 @@ export default function CrossSellView() {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
+  const [mining, setMining] = useState(false);
+  const [miningProgress, setMiningProgress] = useState(null);
   const [form, setForm] = useState({
     name: '', sourceProductFamilyId: '', targetProductFamilyId: '',
     triggerType: 'in_conversation', priority: 0, message: '', active: true,
@@ -55,6 +57,32 @@ export default function CrossSellView() {
   useEffect(() => {
     Promise.all([fetchRules(), fetchFamilies()]).finally(() => setLoading(false));
   }, [fetchRules, fetchFamilies]);
+
+  const runMining = async () => {
+    setMining(true);
+    setMiningProgress({ status: 'running', phase: 'starting' });
+    try {
+      await fetch(`${API_URL}/cross-sell/mine`, { method: 'POST', headers: authHeaders(), body: JSON.stringify({ autoCreate: true }) });
+    } catch {}
+  };
+
+  useEffect(() => {
+    if (!mining) return;
+    const interval = setInterval(async () => {
+      try {
+        const res = await fetch(`${API_URL}/cross-sell/mine/progress`, { headers: authHeaders() });
+        const data = await res.json();
+        if (data.success && data.data) {
+          setMiningProgress(data.data);
+          if (data.data.status === 'completed' || data.data.status === 'error') {
+            setMining(false);
+            fetchRules();
+          }
+        }
+      } catch {}
+    }, 2000);
+    return () => clearInterval(interval);
+  }, [mining, fetchRules]);
 
   const resetForm = () => {
     setForm({ name: '', sourceProductFamilyId: '', targetProductFamilyId: '', triggerType: 'in_conversation', priority: 0, message: '', active: true, conditions: { minOrderAmount: 0, minQuantity: 0 } });
@@ -124,19 +152,57 @@ export default function CrossSellView() {
       <div className="flex justify-between items-center mb-8">
         <div>
           <h1 className="text-3xl font-bold text-white">Cross-Selling</h1>
-          <p className="text-gray-400 mt-2">Reglas de venta cruzada — el bot sugiere productos complementarios</p>
+          <p className="text-gray-400 mt-2">Descubre patrones de compra y sugiere productos complementarios</p>
         </div>
-        <button onClick={() => { resetForm(); setShowForm(true); }}
-          className="px-5 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors text-sm font-medium">
-          Nueva regla
-        </button>
+        <div className="flex gap-3">
+          <button onClick={runMining} disabled={mining}
+            className="px-5 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 disabled:opacity-50 transition-colors text-sm font-medium">
+            {mining ? 'Analizando...' : '🧠 Descubrir patrones'}
+          </button>
+          <button onClick={() => { resetForm(); setShowForm(true); }}
+            className="px-5 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors text-sm">
+            + Manual
+          </button>
+        </div>
       </div>
+
+      {/* Mining progress */}
+      {mining && miningProgress && (
+        <div className="bg-purple-500/10 border border-purple-500/30 rounded-xl p-4 mb-6">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-sm text-purple-300 font-medium">Analizando patrones de compra</span>
+            <span className="text-xs text-purple-400">
+              {miningProgress.phase === 'within_order' ? 'Compras en misma orden...' :
+               miningProgress.phase === 'cross_order' ? 'Compras del mismo cliente...' :
+               miningProgress.phase === 'ranking' ? 'Clasificando...' :
+               miningProgress.phase === 'creating_rules' ? 'Creando sugerencias...' : 'Preparando...'}
+            </span>
+          </div>
+          <div className="flex gap-4 text-xs text-gray-400">
+            {miningProgress.ordersAnalyzed > 0 && <span>{miningProgress.ordersAnalyzed.toLocaleString()} órdenes</span>}
+            {miningProgress.buyersAnalyzed > 0 && <span>{miningProgress.buyersAnalyzed.toLocaleString()} compradores</span>}
+            {miningProgress.pairsFound > 0 && <span>{miningProgress.pairsFound} patrones</span>}
+          </div>
+        </div>
+      )}
+
+      {/* Mining complete */}
+      {!mining && miningProgress?.status === 'completed' && (
+        <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 mb-6">
+          <p className="text-sm text-green-300">
+            Análisis completado: {miningProgress.pairsFound} patrones encontrados.
+            Las sugerencias se crearon como <span className="font-medium">inactivas</span> — revísalas y activa las que quieras usar.
+          </p>
+        </div>
+      )}
 
       {/* How it works */}
       <div className="bg-blue-500/10 border border-blue-500/30 rounded-xl p-4 mb-6">
         <p className="text-sm text-blue-300">
-          Define reglas para que el bot sugiera productos complementarios. Ejemplo: cuando alguien compra malla confeccionada, sugerir cuerda para instalarla.
-          Cada regla conecta un producto origen con un producto destino y define cuándo se activa la sugerencia.
+          <strong>🧠 Descubrir patrones</strong> analiza tus {'>'}100,000 órdenes históricas para encontrar productos que se compran juntos frecuentemente.
+          Usa dos métodos: 1) productos en la misma orden, 2) productos comprados por el mismo cliente en un periodo de 90 días.
+          Las sugerencias se crean automáticamente como inactivas para que las revises antes de activarlas.
+          También puedes crear reglas manuales con el botón "+ Manual".
         </p>
       </div>
 
@@ -222,7 +288,10 @@ export default function CrossSellView() {
                     <span className={`text-xs px-2 py-0.5 rounded ${rule.active ? 'bg-green-500/10 border border-green-500/30 text-green-300' : 'bg-gray-500/10 border border-gray-500/30 text-gray-400'}`}>
                       {rule.active ? 'Activa' : 'Inactiva'}
                     </span>
-                    <span className="text-xs px-2 py-0.5 rounded bg-purple-500/10 border border-purple-500/30 text-purple-300">
+                    <span className={`text-xs px-2 py-0.5 rounded ${rule.source === 'mined' ? 'bg-purple-500/10 border border-purple-500/30 text-purple-300' : 'bg-cyan-500/10 border border-cyan-500/30 text-cyan-300'}`}>
+                      {rule.source === 'mined' ? '🧠 Descubierta' : '✏️ Manual'}
+                    </span>
+                    <span className="text-xs px-2 py-0.5 rounded bg-gray-500/10 border border-gray-500/30 text-gray-400">
                       {TRIGGER_TYPES.find(t => t.value === rule.triggerType)?.label || rule.triggerType}
                     </span>
                   </div>
@@ -232,6 +301,13 @@ export default function CrossSellView() {
                     <span className="text-amber-400">{getFamilyName(rule.targetProductFamilyId)}</span>
                   </div>
                   {rule.message && <p className="text-xs text-gray-500 italic">"{rule.message}"</p>}
+                  {rule._miningData && (
+                    <div className="flex gap-3 mt-1 text-[10px] text-gray-600">
+                      <span>Confianza: {(rule._miningData.confidence * 100).toFixed(1)}%</span>
+                      <span>Co-ocurrencias: {rule._miningData.coOccurrences}</span>
+                      <span>Lift: {rule._miningData.lift}x</span>
+                    </div>
+                  )}
                 </div>
                 <div className="flex items-center gap-1 ml-4">
                   <button onClick={() => toggleActive(rule)} className="p-2 text-gray-400 hover:text-white rounded-lg hover:bg-gray-700/50" title={rule.active ? 'Desactivar' : 'Activar'}>

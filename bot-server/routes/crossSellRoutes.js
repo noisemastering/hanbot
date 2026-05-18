@@ -134,4 +134,34 @@ router.delete("/:id", authenticate, requireAdmin, async (req, res) => {
   }
 });
 
+// ── MINING ENDPOINTS ──
+
+const { minePatterns, getProgress } = require("../utils/crossSellMiner");
+
+// POST /cross-sell/mine — Run co-purchase pattern mining
+router.post("/mine", authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { minSupport, minConfidence, crossOrderWindowDays, autoCreate } = req.body;
+    // Return immediately, run in background
+    res.json({ success: true, data: { status: 'started' } });
+
+    const result = await minePatterns({
+      minSupport: minSupport || 3,
+      minConfidence: minConfidence || 0.05,
+      crossOrderWindowDays: crossOrderWindowDays || 90,
+      autoCreate: autoCreate !== false
+    });
+
+    console.log(`✅ Mining complete: ${result.qualifiedPairs} pairs, ${result.rulesCreated} rules created`);
+  } catch (err) {
+    console.error('❌ Mining failed:', err.message);
+  }
+});
+
+// GET /cross-sell/mine/progress — Check mining progress
+router.get("/mine/progress", authenticate, async (req, res) => {
+  const progress = getProgress();
+  res.json({ success: true, data: progress || { status: 'idle' } });
+});
+
 module.exports = router;
