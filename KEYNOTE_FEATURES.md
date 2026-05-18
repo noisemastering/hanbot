@@ -283,15 +283,38 @@
 
 ---
 
-## 14. Cross-Selling (En desarrollo)
+## 14. Cross-Selling Inteligente
 
-### Concepto
-- Sistema de reglas para sugerir productos complementarios automáticamente
-- Ejemplo: cliente compra malla confeccionada → bot sugiere cuerda para instalación
+### Descubrimiento automático de patrones
+- Motor de minería analiza +100,000 órdenes históricas de Mercado Libre
+- Dos métodos de detección:
+  - **Within-order**: productos comprados juntos en la misma orden (señal fuerte — el cliente literalmente compró ambos)
+  - **Cross-order**: productos comprados por el mismo cliente en diferentes órdenes dentro de 90 días (patrón "regresó por el accesorio")
+- Métricas de asociación: soporte (frecuencia), confianza (P(B|A)), lift (cuánto más probable que al azar)
+- Score combinado con bonus para co-compras en misma orden
+- Genera automáticamente las top 50 sugerencias como reglas inactivas para revisión del admin
 
-### Arquitectura preparada
-- Modelo de datos: producto origen → producto destino, tipo de disparador (post-compra, en conversación, sugerencia en carrito)
-- Condiciones configurables: monto mínimo, cantidad mínima
-- Template de mensaje personalizable
-- CRUD completo para administradores
-- Integración con el bot pendiente — scaffolding listo para activar
+### Reglas de venta cruzada
+- Cada regla conecta un producto origen → producto destino
+- 3 tipos de disparador: durante la conversación, antes de cerrar la venta, post-compra
+- Mensaje personalizable por regla
+- Prioridad configurable (las reglas de mayor puntaje se ofrecen primero)
+- Distinción visual: 🧠 Descubierta (auto-generada) vs ✏️ Manual (creada por admin)
+
+### Integración con el bot
+- **Momento de activación**: después de compartir el link de compra, cuando el cliente responde positivamente ("sí", "gracias", código postal)
+- El bot busca reglas activas que coincidan con el producto cotizado (busca en todo el árbol de familias)
+- Genera un link tracked para el producto sugerido
+- Solo ofrece una vez por producto por conversación (no repite)
+- Ejemplo: _"Los clientes que compran malla de 6x4 también suelen llevar cuerda para instalarla. 🛒 Cuerda: [link]"_
+
+### Pipeline de tracking completo
+- **Ofrecida**: se incrementa cuando el bot muestra la sugerencia
+- **Clic**: se incrementa cuando el cliente hace clic en el link de cross-sell
+- **Conversión**: se incrementa cuando ese clic se correlaciona con una venta en ML
+- **Ingresos**: revenue atribuido a cross-selling calculado desde las conversiones
+
+### Dashboard de rendimiento
+- 5 KPIs: ofertas realizadas, clics (con tasa), conversiones (con tasa), ingresos por cross-sell, reglas activas
+- Por regla: nombre, origen → destino, ofrecidas, clics, conversiones, tasas
+- Botón "🧠 Descubrir patrones" ejecuta el motor de minería con progreso en tiempo real

@@ -172,7 +172,13 @@ const sections = [
     title: 'Cross-Selling',
     icon: '🔄',
     content: [
-      { q: '¿Qué es el cross-selling?', a: 'Es una funcionalidad en desarrollo que permitirá configurar reglas de venta cruzada. Por ejemplo: cuando un cliente compra malla confeccionada, sugerirle automáticamente la cuerda para instalarla. Próximamente disponible.' }
+      { q: '¿Qué es el cross-selling?', a: 'El sistema analiza tu historial de ventas para descubrir qué productos se compran juntos frecuentemente. Cuando un cliente compra uno de esos productos, el bot automáticamente sugiere el producto complementario. Por ejemplo: "Los clientes que compran malla de 6x4 también suelen llevar cuerda para instalarla."' },
+      { q: '¿Cómo descubre los patrones?', a: 'El botón "🧠 Descubrir patrones" analiza más de 100,000 órdenes históricas de Mercado Libre con dos métodos: 1) Productos comprados juntos en la misma orden (señal fuerte). 2) Productos comprados por el mismo cliente en diferentes órdenes dentro de 90 días. Los patrones se clasifican por confianza, frecuencia y relevancia.' },
+      { q: '¿Las sugerencias se activan automáticamente?', a: 'No. El sistema las genera como inactivas. Tú revisas la lista, descartas las que no tienen sentido y activas las que sí. También puedes crear reglas manuales con el botón "+ Manual".' },
+      { q: '¿Cuándo ofrece el bot la sugerencia?', a: 'Después de compartir el link de compra, cuando el cliente responde positivamente (dice "sí", "gracias", comparte su código postal, etc.). Es el momento natural — la venta principal ya está cerrada y la sugerencia no se siente intrusiva.' },
+      { q: '¿Se repite la sugerencia?', a: 'No. El bot solo ofrece una sugerencia de cross-sell por producto por conversación. Si el cliente no responde o dice que no, no insiste.' },
+      { q: '¿Cómo se mide el rendimiento?', a: 'Cada regla trackea 3 métricas: Ofrecidas (cuántas veces se mostró), Clics (cuántas veces el cliente hizo clic en el link), Conversiones (cuántas veces ese clic resultó en una compra en Mercado Libre). También se calcula el ingreso total generado por cross-selling.' },
+      { q: '¿Qué significan las etiquetas 🧠 Descubierta y ✏️ Manual?', a: '🧠 Descubierta: la regla fue generada automáticamente por el motor de minería basándose en patrones reales de compra. Incluye datos de confianza y co-ocurrencias. ✏️ Manual: la regla fue creada por un administrador directamente, sin respaldo de datos históricos.' }
     ]
   }
 ];
