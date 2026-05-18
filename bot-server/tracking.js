@@ -81,7 +81,9 @@ async function generateClickLink(psid, originalUrl, options = {}) {
     adId: options.adId,
     userName: options.userName,
     city: options.city,
-    stateMx: options.stateMx
+    stateMx: options.stateMx,
+    reason: options.reason || null,
+    crossSellRuleId: options.crossSellRuleId || null
   });
 
   await clickLog.save();
@@ -151,7 +153,7 @@ async function getClickData(clickId) {
  * @returns {Promise<object|null>} - Updated click log entry
  */
 async function recordClick(clickId, metadata = {}) {
-  return await ClickLog.findOneAndUpdate(
+  const clickLog = await ClickLog.findOneAndUpdate(
     { clickId },
     {
       clicked: true,
@@ -163,6 +165,19 @@ async function recordClick(clickId, metadata = {}) {
     },
     { new: true }
   );
+
+  // Track cross-sell click
+  if (clickLog?.crossSellRuleId) {
+    try {
+      const CrossSellRule = require('./models/CrossSellRule');
+      await CrossSellRule.updateOne(
+        { _id: clickLog.crossSellRuleId },
+        { $inc: { 'stats.clicked': 1 } }
+      );
+    } catch {}
+  }
+
+  return clickLog;
 }
 
 /**

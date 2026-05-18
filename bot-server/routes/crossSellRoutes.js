@@ -137,6 +137,57 @@ router.delete("/:id", authenticate, requireAdmin, async (req, res) => {
 // ── MINING ENDPOINTS ──
 
 const { minePatterns, getProgress } = require("../utils/crossSellMiner");
+const ClickLog = require("../models/ClickLog");
+
+// GET /cross-sell/stats — Cross-sell performance report
+router.get("/stats", authenticate, requireAdmin, async (req, res) => {
+  try {
+    const rules = await CrossSellRule.find({ 'stats.offered': { $gt: 0 } })
+      .populate('sourceProductFamilyId', 'name')
+      .populate('targetProductFamilyId', 'name')
+      .sort({ 'stats.offered': -1 })
+      .lean();
+
+    const totalOffered = rules.reduce((s, r) => s + (r.stats?.offered || 0), 0);
+    const totalClicked = rules.reduce((s, r) => s + (r.stats?.clicked || 0), 0);
+    const totalConverted = rules.reduce((s, r) => s + (r.stats?.converted || 0), 0);
+
+    // Revenue from cross-sell conversions
+    const crossSellRevenue = await ClickLog.aggregate([
+      { $match: { crossSellRuleId: { $ne: null }, converted: true } },
+      { $group: { _id: null, revenue: { $sum: '$conversionData.totalAmount' }, count: { $sum: 1 } } }
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        summary: {
+          totalRules: await CrossSellRule.countDocuments({ active: true }),
+          totalOffered,
+          totalClicked,
+          totalConverted,
+          clickRate: totalOffered > 0 ? +(totalClicked / totalOffered * 100).toFixed(1) : 0,
+          conversionRate: totalClicked > 0 ? +(totalConverted / totalClicked * 100).toFixed(1) : 0,
+          revenue: crossSellRevenue[0]?.revenue || 0
+        },
+        rules: rules.map(r => ({
+          id: r._id,
+          name: r.name,
+          source: r.sourceProductFamilyId?.name || '—',
+          target: r.targetProductFamilyId?.name || '—',
+          offered: r.stats?.offered || 0,
+          clicked: r.stats?.clicked || 0,
+          converted: r.stats?.converted || 0,
+          clickRate: r.stats?.offered > 0 ? +((r.stats.clicked || 0) / r.stats.offered * 100).toFixed(1) : 0,
+          conversionRate: r.stats?.clicked > 0 ? +((r.stats.converted || 0) / r.stats.clicked * 100).toFixed(1) : 0,
+          active: r.active
+        }))
+      }
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // POST /cross-sell/mine — Run co-purchase pattern mining
 router.post("/mine", authenticate, requireAdmin, async (req, res) => {

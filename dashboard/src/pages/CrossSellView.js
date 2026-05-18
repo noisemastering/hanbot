@@ -21,6 +21,7 @@ export default function CrossSellView() {
   const [editing, setEditing] = useState(null);
   const [mining, setMining] = useState(false);
   const [miningProgress, setMiningProgress] = useState(null);
+  const [stats, setStats] = useState(null);
   const [form, setForm] = useState({
     name: '', sourceProductFamilyId: '', targetProductFamilyId: '',
     triggerType: 'in_conversation', priority: 0, message: '', active: true,
@@ -54,9 +55,17 @@ export default function CrossSellView() {
     } catch {}
   }, []);
 
+  const fetchStats = useCallback(async () => {
+    try {
+      const res = await fetch(`${API_URL}/cross-sell/stats`, { headers: authHeaders() });
+      const data = await res.json();
+      if (data.success) setStats(data.data);
+    } catch {}
+  }, []);
+
   useEffect(() => {
-    Promise.all([fetchRules(), fetchFamilies()]).finally(() => setLoading(false));
-  }, [fetchRules, fetchFamilies]);
+    Promise.all([fetchRules(), fetchFamilies(), fetchStats()]).finally(() => setLoading(false));
+  }, [fetchRules, fetchFamilies, fetchStats]);
 
   const runMining = async () => {
     setMining(true);
@@ -205,6 +214,32 @@ export default function CrossSellView() {
           También puedes crear reglas manuales con el botón "+ Manual".
         </p>
       </div>
+
+      {/* Performance stats */}
+      {stats?.summary && stats.summary.totalOffered > 0 && (
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4 mb-6">
+          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 text-center">
+            <p className="text-xl font-bold text-white">{stats.summary.totalOffered}</p>
+            <p className="text-xs text-gray-400 mt-1">Ofrecidas</p>
+          </div>
+          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 text-center">
+            <p className="text-xl font-bold text-blue-400">{stats.summary.totalClicked}</p>
+            <p className="text-xs text-gray-400 mt-1">Clics ({stats.summary.clickRate}%)</p>
+          </div>
+          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 text-center">
+            <p className="text-xl font-bold text-green-400">{stats.summary.totalConverted}</p>
+            <p className="text-xs text-gray-400 mt-1">Conversiones ({stats.summary.conversionRate}%)</p>
+          </div>
+          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 text-center">
+            <p className="text-xl font-bold text-amber-400">${stats.summary.revenue.toLocaleString('es-MX')}</p>
+            <p className="text-xs text-gray-400 mt-1">Ingresos por cross-sell</p>
+          </div>
+          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 text-center">
+            <p className="text-xl font-bold text-purple-400">{stats.summary.totalRules}</p>
+            <p className="text-xs text-gray-400 mt-1">Reglas activas</p>
+          </div>
+        </div>
+      )}
 
       {/* Create/Edit form */}
       {showForm && (

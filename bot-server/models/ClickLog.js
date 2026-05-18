@@ -52,6 +52,10 @@ const clickLogSchema = new mongoose.Schema(
     city: String,
     stateMx: String,
 
+    // Cross-sell tracking
+    reason: String,            // 'retail_quote', 'promo_pitch', 'cross_sell', etc.
+    crossSellRuleId: String,   // CrossSellRule._id if this link was a cross-sell offer
+
     // Click tracking
     clicked: {
       type: Boolean,

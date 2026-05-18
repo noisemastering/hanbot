@@ -552,6 +552,20 @@ async function saveCorrelation(click, order, confidence, method, details) {
 
   console.log(`   ✅ Correlated order ${orderId} with click ${click.clickId} (${confidence})`);
 
+  // Track cross-sell conversion if this click came from a cross-sell offer
+  if (click.crossSellRuleId) {
+    try {
+      const CrossSellRule = require('../models/CrossSellRule');
+      await CrossSellRule.updateOne(
+        { _id: click.crossSellRuleId },
+        { $inc: { 'stats.converted': 1 } }
+      );
+      console.log(`   🔄 Cross-sell conversion tracked for rule ${click.crossSellRuleId}`);
+    } catch (csErr) {
+      console.error(`   ⚠️ Cross-sell tracking error:`, csErr.message);
+    }
+  }
+
   return {
     success: true,
     clickLog: updatedClick,

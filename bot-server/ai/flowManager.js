@@ -10,6 +10,8 @@ const { updateConversation } = require("../conversationManager");
 const ProductFamily = require("../models/ProductFamily");
 const Ad = require("../models/Ad");
 const Campaign = require("../models/Campaign");
+const CrossSellRule = require("../models/CrossSellRule");
+const { getOrCreateClickLink } = require("../tracking");
 
 // Convo_flow system
 const convoFlow = require("./flows/convoFlow");
@@ -236,6 +238,77 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
     }
 
     if (response) {
+      // ── CROSS-SELL CHECK ──
+      // After the bot responds, check if conditions are right for a cross-sell offer:
+      // 1. A product link was previously shared (lastSharedProductId exists)
+      // 2. The customer just responded positively (sí, gracias, zip code, etc.)
+      // 3. We haven't already made a cross-sell offer for this product
+      // 4. There's an active CrossSellRule matching the shared product
+      try {
+        const hasSharedProduct = convo?.lastSharedProductId;
+        const alreadyOffered = state?.crossSellOffered === convo?.lastSharedProductId;
+
+        if (hasSharedProduct && !alreadyOffered && response.type === 'text') {
+          const isPositive = /\b(s[ií]|va|dale|gracias|claro|ok|bueno|perfecto|por\s*favor|xfavor|xfa|de\s*acuerdo)\b/i.test(userMessage);
+          const isZipCode = /^\d{5}$/.test(userMessage.trim());
+
+          if (isPositive || isZipCode) {
+            // Walk up the product family tree to find rules at any ancestor level
+            const productId = convo.lastSharedProductId;
+            const ancestorIds = [productId];
+            let currentFam = await ProductFamily.findById(productId).select('parentId').lean();
+            while (currentFam?.parentId) {
+              ancestorIds.push(String(currentFam.parentId));
+              currentFam = await ProductFamily.findById(currentFam.parentId).select('parentId').lean();
+            }
+
+            const rule = await CrossSellRule.findOne({
+              sourceProductFamilyId: { $in: ancestorIds },
+              active: true
+            }).sort({ priority: -1 }).populate('targetProductFamilyId', 'name onlineStoreLinks').lean();
+
+            if (rule && rule.targetProductFamilyId) {
+              const targetProduct = rule.targetProductFamilyId;
+              const targetName = targetProduct.name;
+
+              // Generate a tracked link for the cross-sell product if available
+              const targetUrl = targetProduct.onlineStoreLinks?.find(l => l.isPreferred)?.url
+                || targetProduct.onlineStoreLinks?.[0]?.url;
+
+              let crossSellText = rule.message || `Los clientes que compran este producto también suelen llevar ${targetName}. ¿Te interesa?`;
+
+              if (targetUrl) {
+                const trackedLink = await getOrCreateClickLink(psid, targetUrl, {
+                  productName: targetName,
+                  productId: String(rule.targetProductFamilyId._id),
+                  reason: 'cross_sell',
+                  crossSellRuleId: String(rule._id)
+                });
+                crossSellText += `\n\n🛒 ${targetName}:\n${trackedLink}`;
+              }
+
+              // Append to the response
+              response.text += `\n\n${crossSellText}`;
+
+              // Mark as offered so we don't repeat
+              state.crossSellOffered = convo.lastSharedProductId;
+              state.crossSellRuleId = String(rule._id);
+              await updateConversation(psid, { convoFlowState: state });
+
+              // Increment offered counter
+              await CrossSellRule.updateOne(
+                { _id: rule._id },
+                { $inc: { 'stats.offered': 1 }, $set: { 'stats.lastOfferedAt': new Date() } }
+              );
+
+              console.log(`🔄 Cross-sell offered: ${rule.name} (rule ${rule._id})`);
+            }
+          }
+        }
+      } catch (crossSellErr) {
+        console.error(`⚠️ Cross-sell check error (non-blocking):`, crossSellErr.message);
+      }
+
       console.log(`🎯 ===== END FLOW MANAGER (handled by convo_flow:${ref}) =====\n`);
       return { ...response, handledBy: `convo_flow:${ref}` };
     }

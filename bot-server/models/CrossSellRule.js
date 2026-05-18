@@ -33,7 +33,14 @@ const crossSellRuleSchema = new mongoose.Schema(
       coOccurrences: Number,
       minedAt: Date
     },
-    source: { type: String, enum: ['manual', 'mined'], default: 'manual' }
+    source: { type: String, enum: ['manual', 'mined'], default: 'manual' },
+    // Performance tracking
+    stats: {
+      offered: { type: Number, default: 0 },    // Times the suggestion was shown
+      clicked: { type: Number, default: 0 },     // Times the cross-sell link was clicked
+      converted: { type: Number, default: 0 },   // Times it led to a sale
+      lastOfferedAt: Date
+    }
   },
   { timestamps: true }
 );
