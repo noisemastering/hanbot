@@ -242,3 +242,56 @@
 - Facebook Marketing API (campañas, métricas, spend, targeting)
 - Mercado Libre API (órdenes, OAuth, archivadas)
 - Arquitectura preparada para Amazon, Walmart y otros marketplaces
+
+---
+
+## 12. Sistema de Tickets
+
+### Reporte de errores y solicitudes
+- Cualquier usuario puede crear un ticket con título, descripción y prioridad (baja, media, alta)
+- Sistema de comentarios: cualquier usuario puede agregar seguimiento a cualquier ticket
+- Solo administradores pueden cambiar estado y asignar responsable
+
+### Estados del ciclo de vida
+- **Abierto**: recién creado, pendiente de revisión
+- **En revisión**: un administrador lo está evaluando
+- **Trabajando**: se está solucionando activamente
+- **Resuelto**: problema solucionado
+- **Descartado**: se determinó que no procede
+
+### Interfaz
+- Vista de lista con badges de estado coloreados y prioridad
+- Filtros por pestaña: Todos, Abiertos, En revisión, Trabajando, Resueltos, Descartados
+- Detalle expandible con hilo de comentarios
+- Administradores ven controles de estado y asignación
+
+---
+
+## 13. Centro de Notificaciones
+
+### Comunicación interna
+- Administradores pueden enviar anuncios globales (a todos) o individuales (a un usuario específico)
+- Las notificaciones son de una vía — no permiten respuesta
+- Ideal para comunicar cambios, actualizaciones, alertas del sistema
+
+### Experiencia de usuario
+- Badge rojo con conteo de no leídas en el menú lateral
+- Polling automático cada 60 segundos para detectar nuevas notificaciones
+- Auto-marca como leída al expandir la notificación
+- Opción "Marcar todas como leídas"
+- Notificaciones no leídas resaltadas visualmente
+
+---
+
+## 14. Cross-Selling (En desarrollo)
+
+### Concepto
+- Sistema de reglas para sugerir productos complementarios automáticamente
+- Ejemplo: cliente compra malla confeccionada → bot sugiere cuerda para instalación
+
+### Arquitectura preparada
+- Modelo de datos: producto origen → producto destino, tipo de disparador (post-compra, en conversación, sugerencia en carrito)
+- Condiciones configurables: monto mínimo, cantidad mínima
+- Template de mensaje personalizable
+- CRUD completo para administradores
+- Integración con el bot pendiente — scaffolding listo para activar

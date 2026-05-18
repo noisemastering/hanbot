@@ -143,6 +143,37 @@ const sections = [
       { q: '¿Qué es el techo de mercado?', a: 'El ingreso máximo alcanzable sin importar cuánto inviertas. Si los ads generan menos del 10% de tus ventas, hay mucho espacio. Si ya generan más del 35%, estás cerca del límite. Agregar anuncios o ampliar target sube el techo; solo aumentar presupuesto no.' },
       { q: '¿Qué tan preciso es?', a: 'Es una guía para tomar decisiones, no una predicción exacta. Responde "¿me conviene invertir más?" mejor que "¿cuánto exactamente ganaré?". Úsalo para comparar escenarios y decidir la mejor estrategia.' }
     ]
+  },
+  {
+    id: 'tickets',
+    title: 'Tickets',
+    icon: '🎫',
+    content: [
+      { q: '¿Qué son los tickets?', a: 'Un sistema para reportar errores, solicitar mejoras o comunicar cualquier problema con la plataforma. Cualquier usuario puede crear un ticket y agregar comentarios.' },
+      { q: '¿Cómo creo un ticket?', a: 'En la sección Tickets, haz clic en "Nuevo ticket". Escribe un título descriptivo, una descripción detallada del problema y selecciona la prioridad (baja, media o alta). El ticket se crea con estado "Abierto".' },
+      { q: '¿Cuáles son los estados de un ticket?', a: 'Abierto: recién creado. En revisión: un administrador lo está evaluando. Trabajando: se está solucionando activamente. Resuelto: el problema fue solucionado. Descartado: se determinó que no procede. Solo administradores pueden cambiar el estado.' },
+      { q: '¿Puedo agregar comentarios?', a: 'Sí. Cualquier usuario puede agregar comentarios a cualquier ticket. Usa los comentarios para dar seguimiento, agregar información adicional o hacer preguntas.' },
+      { q: '¿Puedo eliminar un ticket?', a: 'Solo los administradores pueden eliminar tickets. Si creaste un ticket por error, puedes agregar un comentario pidiendo que se descarte.' }
+    ]
+  },
+  {
+    id: 'notifications',
+    title: 'Notificaciones',
+    icon: '🔔',
+    content: [
+      { q: '¿Qué son las notificaciones?', a: 'Anuncios enviados por los administradores. Pueden ser globales (para todos los usuarios) o individuales (dirigidos a un usuario específico). No se pueden responder — son comunicados de una vía.' },
+      { q: '¿Cómo sé si tengo notificaciones nuevas?', a: 'Un badge rojo con el número de notificaciones no leídas aparece en el menú lateral junto a "Notificaciones". El conteo se actualiza automáticamente cada minuto.' },
+      { q: '¿Cómo marco una notificación como leída?', a: 'Se marca automáticamente al expandir la notificación. También puedes usar "Marcar todas como leídas" para limpiar el conteo de una vez.' },
+      { q: '¿Puedo enviar notificaciones?', a: 'Solo administradores y super administradores pueden enviar notificaciones. Si necesitas comunicar algo al equipo, crea un ticket o habla con tu administrador.' }
+    ]
+  },
+  {
+    id: 'crosssell',
+    title: 'Cross-Selling',
+    icon: '🔄',
+    content: [
+      { q: '¿Qué es el cross-selling?', a: 'Es una funcionalidad en desarrollo que permitirá configurar reglas de venta cruzada. Por ejemplo: cuando un cliente compra malla confeccionada, sugerirle automáticamente la cuerda para instalarla. Próximamente disponible.' }
+    ]
   }
 ];
 
