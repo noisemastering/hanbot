@@ -1661,7 +1661,7 @@ function App() {
       } lg:translate-x-0`}>
         <div className="flex flex-col h-full">
           {/* Sidebar Header */}
-          <div className="p-6 border-b border-gray-700/50">
+          <Link to="/" className="block p-6 border-b border-gray-700/50 hover:bg-gray-800/50 transition-colors">
             <div className="flex items-center space-x-3">
               <img src="/logo192.png" alt="Hanlob" className="w-10 h-10 rounded-lg" />
               <div>
@@ -1669,7 +1669,7 @@ function App() {
                 <p className="text-xs text-gray-400">Dashboard</p>
               </div>
             </div>
-          </div>
+          </Link>
 
           {/* Menu Items */}
           <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
