@@ -75,6 +75,9 @@ import SalesSimulatorView from "./pages/SalesSimulatorView";
 import CampaignIntelligenceView from "./pages/CampaignIntelligenceView";
 import MLOrderImportView from "./pages/MLOrderImportView";
 import HelpView from "./pages/HelpView";
+import TicketsView from "./pages/TicketsView";
+import NotificationsView from "./pages/NotificationsView";
+import CrossSellView from "./pages/CrossSellView";
 import IntentsView from "./components/IntentsView";
 // FlowsView replaced by FlowPromptsView
 // FlujosView replaced by FlowPromptsView
@@ -319,6 +322,14 @@ const menuItems = [
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1" />
         )
       },
+      {
+        id: "cross-sell",
+        labelKey: "menu.crossSell",
+        path: "/cross-sell",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        )
+      },
     ]
   },
   {
@@ -451,6 +462,22 @@ const menuItems = [
     ]
   },
   {
+    id: "tickets",
+    labelKey: "menu.tickets",
+    path: "/tickets",
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+    )
+  },
+  {
+    id: "notifications",
+    labelKey: "menu.notifications",
+    path: "/notifications",
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
+    )
+  },
+  {
     id: "settings",
     labelKey: "menu.settings",
     path: "/settings",
@@ -485,6 +512,7 @@ function App() {
   const [conversationStatuses, setConversationStatuses] = useState({});
   const [handoverLoading, setHandoverLoading] = useState({});
   const [conversationFilter, _setConversationFilter] = useState(null); // eslint-disable-line no-unused-vars
+  const [notifUnreadCount, setNotifUnreadCount] = useState(0);
 
   // Products state
   const [products, setProducts] = useState([]);
@@ -1416,6 +1444,25 @@ function App() {
     }
   }, [location.pathname]);
 
+  // Fetch notification unread count periodically
+  useEffect(() => {
+    if (!user) return;
+    const fetchUnread = async () => {
+      try {
+        const token = localStorage.getItem('token');
+        if (!token) return;
+        const res = await fetch(`${API_URL}/notifications/unread-count`, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        const data = await res.json();
+        if (data.success) setNotifUnreadCount(data.count);
+      } catch (_) { /* silent */ }
+    };
+    fetchUnread();
+    const interval = setInterval(fetchUnread, 60000); // poll every 60s
+    return () => clearInterval(interval);
+  }, [user]);
+
   // Auth checks - must be AFTER all hooks
   // Show login page if not authenticated (except for login route)
   if (!authLoading && !user && location.pathname !== '/login') {
@@ -1457,6 +1504,11 @@ function App() {
     // For items with children (including CRM), check if user has access to ANY child
     if (item.children && item.children.length > 0) {
       return item.children.some(child => canAccess(child.id));
+    }
+
+    // Tickets and Notifications are visible to everyone
+    if (item.id === 'tickets' || item.id === 'notifications') {
+      return true;
     }
 
     // Overview is also visible for campaign-overview permission
@@ -1692,6 +1744,11 @@ function App() {
                     {item.icon}
                   </svg>
                   <span className="font-medium">{t(item.labelKey)}</span>
+                  {item.id === 'notifications' && notifUnreadCount > 0 && (
+                    <span className="ml-auto inline-flex items-center justify-center px-2 py-0.5 rounded-full text-xs font-bold bg-red-500 text-white min-w-[20px]">
+                      {notifUnreadCount > 99 ? '99+' : notifUnreadCount}
+                    </span>
+                  )}
                 </NavLink>
               );
             })}
@@ -2300,6 +2357,15 @@ function App() {
           {/* Bot Configuration Routes */}
           <Route path="/intents" element={<IntentsView />} />
           <Route path="/flows" element={<FlowPromptsView />} />
+
+          {/* Tickets Route */}
+          <Route path="/tickets" element={<TicketsView />} />
+
+          {/* Notifications Route */}
+          <Route path="/notifications" element={<NotificationsView />} />
+
+          {/* Cross-Selling Route */}
+          <Route path="/cross-sell" element={<CrossSellView />} />
 
           <Route path="/settings" element={<Settings />} />
           <Route path="/help" element={<HelpView />} />

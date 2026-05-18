@@ -45,6 +45,9 @@ const en = {
   "menu.playgroundSegments": "Segmentation",
   "menu.playgroundConversion": "Conversion Prob.",
   "menu.playgroundSpend": "Spend Optimization",
+  "menu.tickets": "Tickets",
+  "menu.notifications": "Notifications",
+  "menu.crossSell": "Cross-Selling",
   "menu.settings": "Settings",
   "menu.help": "Help",
 
@@ -3060,6 +3063,42 @@ const en = {
   // ── Conversions (additional charts) ────────────────────
   "conversions.confidenceChart": "Attribution Confidence",
   "conversions.topProductsChart": "Top Products by Revenue",
+
+  // ── Tickets ─────────────────────────────────────────────
+  "tickets.title": "Tickets",
+  "tickets.new": "New ticket",
+  "tickets.create": "Create ticket",
+  "tickets.titleField": "Title",
+  "tickets.titlePlaceholder": "Briefly describe the issue...",
+  "tickets.descriptionPlaceholder": "Ticket details...",
+  "tickets.priority": "Priority",
+  "tickets.assignedTo": "Assigned to",
+  "tickets.assignTo": "Assign to",
+  "tickets.comments": "comments",
+  "tickets.commentPlaceholder": "Write a comment...",
+  "tickets.send": "Send",
+  "tickets.empty": "No tickets",
+  "tickets.creatorHint": "You can edit the title and description of your tickets.",
+
+  // ── Notifications ───────────────────────────────────────
+  "notifications.title": "Notifications",
+  "notifications.new": "New notification",
+  "notifications.titlePlaceholder": "Notification title...",
+  "notifications.message": "Message",
+  "notifications.messagePlaceholder": "Notification content...",
+  "notifications.global": "Global",
+  "notifications.individual": "Individual",
+  "notifications.targetUser": "Target user",
+  "notifications.selectUser": "Select a user...",
+  "notifications.send": "Send notification",
+  "notifications.markAllRead": "Mark all as read",
+  "notifications.empty": "No notifications",
+  "notifications.sentTo": "Sent to",
+
+  // ── Cross-Selling ───────────────────────────────────────
+  "crossSell.title": "Cross-Selling",
+  "crossSell.description": "Configure cross-selling rules to automatically suggest complementary products to your customers during conversations or after a purchase.",
+  "crossSell.comingSoon": "Coming Soon",
 };
 
 export default en;

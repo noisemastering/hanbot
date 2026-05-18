@@ -45,6 +45,9 @@ const es = {
   "menu.playgroundSegments": "Segmentación",
   "menu.playgroundConversion": "Prob. Conversión",
   "menu.playgroundSpend": "Optimización de Gasto",
+  "menu.tickets": "Tickets",
+  "menu.notifications": "Notificaciones",
+  "menu.crossSell": "Cross-Selling",
   "menu.settings": "Configuración",
   "menu.help": "Ayuda",
 
@@ -2549,6 +2552,42 @@ const es = {
   // ── Conversions (additional charts) ────────────────────
   "conversions.confidenceChart": "Confianza de Atribución",
   "conversions.topProductsChart": "Productos Top por Ingresos",
+
+  // ── Tickets ─────────────────────────────────────────────
+  "tickets.title": "Tickets",
+  "tickets.new": "Nuevo ticket",
+  "tickets.create": "Crear ticket",
+  "tickets.titleField": "Título",
+  "tickets.titlePlaceholder": "Describe brevemente el tema...",
+  "tickets.descriptionPlaceholder": "Detalle del ticket...",
+  "tickets.priority": "Prioridad",
+  "tickets.assignedTo": "Asignado a",
+  "tickets.assignTo": "Asignar a",
+  "tickets.comments": "comentarios",
+  "tickets.commentPlaceholder": "Escribe un comentario...",
+  "tickets.send": "Enviar",
+  "tickets.empty": "No hay tickets",
+  "tickets.creatorHint": "Puedes editar el título y descripción de tus tickets.",
+
+  // ── Notifications ───────────────────────────────────────
+  "notifications.title": "Notificaciones",
+  "notifications.new": "Nueva notificación",
+  "notifications.titlePlaceholder": "Título de la notificación...",
+  "notifications.message": "Mensaje",
+  "notifications.messagePlaceholder": "Contenido de la notificación...",
+  "notifications.global": "Global",
+  "notifications.individual": "Individual",
+  "notifications.targetUser": "Usuario destino",
+  "notifications.selectUser": "Selecciona un usuario...",
+  "notifications.send": "Enviar notificación",
+  "notifications.markAllRead": "Marcar todo como leído",
+  "notifications.empty": "No hay notificaciones",
+  "notifications.sentTo": "Enviado a",
+
+  // ── Cross-Selling ───────────────────────────────────────
+  "crossSell.title": "Cross-Selling",
+  "crossSell.description": "Configura reglas de venta cruzada para sugerir productos complementarios a tus clientes automáticamente durante la conversación o después de una compra.",
+  "crossSell.comingSoon": "Próximamente",
 };
 
 export default es;
