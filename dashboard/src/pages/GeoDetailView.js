@@ -139,7 +139,7 @@ function GeoDetailView() {
           </FeatureTip>
         </div>
         <div className="flex gap-2">
-          {[7, 30, 90].map((d) => (
+          {[7, 15, 30, 90].map((d) => (
             <button
               key={d}
               onClick={() => setRange(d)}

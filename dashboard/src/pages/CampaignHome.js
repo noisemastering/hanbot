@@ -283,7 +283,7 @@ function CampaignHome() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
         <h1 className="text-2xl font-bold text-white">Panel de Campañas</h1>
         <div className="flex gap-2">
-          {[7, 30, 90].map((d) => (
+          {[7, 15, 30, 90].map((d) => (
             <button
               key={d}
               onClick={() => setRange(d)}

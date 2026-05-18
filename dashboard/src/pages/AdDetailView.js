@@ -160,7 +160,7 @@ function AdDetailView() {
           </div>
         </div>
         <div className="flex gap-2">
-          {[7, 30, 90].map((d) => (
+          {[7, 15, 30, 90].map((d) => (
             <button key={d} onClick={() => setRange(d)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${range === d ? 'bg-purple-600 text-white' : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700/50'}`}>
               {d}d
             </button>

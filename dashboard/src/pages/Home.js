@@ -275,7 +275,7 @@ function Home() {
         <h1 className="text-2xl font-bold text-white">{t("home.pageTitle")}</h1>
         <FeatureTip id="home-date-range" title="Periodo de tiempo" text="Cambia el periodo para ver datos de 7, 30 o 90 días." position="bottom">
           <div className="flex gap-2">
-            {[7, 30, 90].map((d) => (
+            {[7, 15, 30, 90].map((d) => (
               <button
                 key={d}
                 onClick={() => setRange(d)}
