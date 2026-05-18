@@ -389,6 +389,14 @@ const menuItems = [
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
         )
+      },
+      {
+        id: "ml-import",
+        labelKey: "menu.mlImport",
+        path: "/ml-import",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+        )
       }
     ]
   },
@@ -433,14 +441,6 @@ const menuItems = [
         path: "/playground/mercado-libre",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
-        )
-      },
-      {
-        id: "playground-import",
-        labelKey: "menu.mlImport",
-        path: "/playground/ml-import",
-        icon: (
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
         )
       },
       {
@@ -2224,7 +2224,7 @@ function App() {
           <Route path="/flujos" element={<FlowPromptsView />} />
           <Route path="/playground/simulador" element={<SalesSimulatorView />} />
           <Route path="/inteligencia-artificial" element={<CampaignIntelligenceView />} />
-          <Route path="/playground/ml-import" element={<MLOrderImportView />} />
+          <Route path="/ml-import" element={<MLOrderImportView />} />
 
           {/* Master Catalog Route */}
           <Route path="/master-catalog" element={
