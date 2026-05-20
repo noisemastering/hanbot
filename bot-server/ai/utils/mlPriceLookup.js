@@ -45,16 +45,50 @@ async function getMLPrice(mlUrl, dbPrice) {
 
   try {
     const token = await getValidAccessToken(ML_SELLER_ID);
-    const res = await axios.get(`https://api.mercadolibre.com/items/${mlItemId}`, {
+
+    // Use the Prices endpoint — the Items endpoint doesn't show marketplace promotions
+    const res = await axios.get(`https://api.mercadolibre.com/items/${mlItemId}/prices`, {
       headers: { Authorization: `Bearer ${token}` },
       timeout: 3000
     });
 
-    const item = res.data;
-    const price = item.price;
-    const originalPrice = item.original_price || null;
-    const hasDiscount = originalPrice && originalPrice > price;
-    const discountPercent = hasDiscount ? Math.round((1 - price / originalPrice) * 100) : 0;
+    const prices = res.data?.prices || [];
+
+    // Find the active promotion price (channel_marketplace)
+    const now = new Date();
+    const promoPrice = prices.find(p =>
+      p.type === 'promotion' &&
+      p.amount &&
+      (!p.conditions?.start_time || new Date(p.conditions.start_time) <= now) &&
+      (!p.conditions?.end_time || new Date(p.conditions.end_time) > now)
+    );
+
+    // Standard/base price
+    const standardPrice = prices.find(p => p.type === 'standard');
+
+    let price, originalPrice, hasDiscount, discountPercent;
+
+    if (promoPrice && standardPrice) {
+      price = promoPrice.amount;
+      originalPrice = promoPrice.regular_amount || standardPrice.amount;
+      hasDiscount = originalPrice > price;
+      discountPercent = hasDiscount ? Math.round((1 - price / originalPrice) * 100) : 0;
+    } else if (standardPrice) {
+      price = standardPrice.amount;
+      originalPrice = null;
+      hasDiscount = false;
+      discountPercent = 0;
+    } else {
+      // Fallback to items endpoint
+      const itemRes = await axios.get(`https://api.mercadolibre.com/items/${mlItemId}`, {
+        headers: { Authorization: `Bearer ${token}` },
+        timeout: 3000
+      });
+      price = itemRes.data.price;
+      originalPrice = itemRes.data.original_price || null;
+      hasDiscount = originalPrice && originalPrice > price;
+      discountPercent = hasDiscount ? Math.round((1 - price / originalPrice) * 100) : 0;
+    }
 
     const result = {
       price,
