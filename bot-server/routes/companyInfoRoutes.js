@@ -11,7 +11,7 @@ const authenticate = async (req, res, next) => {
     const token = req.headers.authorization?.replace("Bearer ", "");
     if (!token) return res.status(401).json({ success: false, error: "No token provided" });
     const decoded = jwt.verify(token, JWT_SECRET);
-    const user = await DashboardUser.findById(decoded.id).select("-password").populate("roleId");
+    const user = await DashboardUser.findById(decoded.id).select("-password");
     if (!user || !user.active) return res.status(401).json({ success: false, error: "Invalid token" });
     req.user = user;
     next();
@@ -19,7 +19,7 @@ const authenticate = async (req, res, next) => {
 };
 
 const requireAdmin = (req, res, next) => {
-  const role = req.user?.roleId?.name || req.user?.role;
+  const role = req.user?.role;
   if (role !== 'super_admin' && role !== 'admin') {
     return res.status(403).json({ success: false, error: "Admin access required" });
   }

@@ -75,7 +75,19 @@ export default function CompanyInfoView() {
     return <div className="p-8 text-center"><div className="inline-block w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full animate-spin" /></div>;
   }
 
-  if (!data) return <p className="text-gray-400">No se pudo cargar la información</p>;
+  if (!data) {
+    // No data yet — initialize with empty structure so the form can render
+    setData({
+      name: '', legalName: '', tagline: '', rfc: '', industry: '', website: '', description: '',
+      phones: [{ label: 'Ventas', number: '' }],
+      emails: [{ label: 'General', email: '' }],
+      address: '', city: '', state: '', zipCode: '', googleMapsUrl: '',
+      schedule: DAYS.map(d => ({ day: d, open: d === 'Domingo' ? '' : '08:00', close: d === 'Domingo' ? '' : '18:00', closed: d === 'Domingo' })),
+      scheduleNotes: '', social: {}, marketplaces: []
+    });
+    setEditing(true);
+    return null;
+  }
 
   return (
     <div>
