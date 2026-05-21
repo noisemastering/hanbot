@@ -53,6 +53,7 @@ const en = {
   "menu.tickets": "Tickets",
   "menu.notifications": "Notifications",
   "menu.crossSell": "Cross-Selling",
+  "menu.companyInfo": "Company Info",
   "menu.settings": "Settings",
   "menu.help": "Help",
 
