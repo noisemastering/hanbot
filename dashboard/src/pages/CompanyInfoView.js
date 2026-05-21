@@ -71,7 +71,6 @@ export default function CompanyInfoView() {
   const EMAIL_LABELS = ['Ventas', 'General', 'Soporte', 'Facturación', 'Otro'];
 
   const inputClass = "w-full px-3 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500";
-  const selectClass = "px-3 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white text-sm focus:outline-none focus:ring-2 focus:ring-primary-500";
   const labelClass = "block text-xs text-gray-400 mb-1";
   const readClass = "text-sm text-white";
 
@@ -169,16 +168,17 @@ export default function CompanyInfoView() {
             {(data.phones || []).map((p, i) => (
               <div key={i} className="flex items-center gap-2">
                 {editing ? (
-                  <>
-                    <select className={selectClass + ' w-36'} value={p.label || ''}
-                      onChange={e => { const phones = [...(data.phones || [])]; phones[i] = { ...phones[i], label: e.target.value }; updateField('phones', phones); }}>
-                      <option value="">Tipo...</option>
-                      {PHONE_LABELS.map(l => <option key={l} value={l}>{l}</option>)}
-                    </select>
+                  <div className="flex items-center gap-2 flex-1">
+                    <div className="flex gap-1">
+                      {PHONE_LABELS.map(l => (
+                        <button key={l} type="button" onClick={() => { const phones = [...(data.phones || [])]; phones[i] = { ...phones[i], label: l }; updateField('phones', phones); }}
+                          className={`px-2 py-1 rounded text-xs transition-all ${p.label === l ? 'bg-primary-500 text-white' : 'bg-gray-800 text-gray-500 hover:text-white'}`}>{l}</button>
+                      ))}
+                    </div>
                     <input className={inputClass + ' flex-1'} value={p.number || ''} placeholder="Número"
                       onChange={e => { const phones = [...(data.phones || [])]; phones[i] = { ...phones[i], number: e.target.value }; updateField('phones', phones); }} />
                     <button onClick={() => updateField('phones', data.phones.filter((_, j) => j !== i))} className="text-red-400 text-xs px-2 hover:underline">Quitar</button>
-                  </>
+                  </div>
                 ) : (
                   p.number && <p className={readClass}><span className="text-gray-500">{p.label}:</span> {p.number}</p>
                 )}
@@ -191,16 +191,17 @@ export default function CompanyInfoView() {
             {(data.emails || []).map((e, i) => (
               <div key={i} className="flex items-center gap-2">
                 {editing ? (
-                  <>
-                    <select className={selectClass + ' w-36'} value={e.label || ''}
-                      onChange={ev => { const emails = [...(data.emails || [])]; emails[i] = { ...emails[i], label: ev.target.value }; updateField('emails', emails); }}>
-                      <option value="">Tipo...</option>
-                      {EMAIL_LABELS.map(l => <option key={l} value={l}>{l}</option>)}
-                    </select>
+                  <div className="flex items-center gap-2 flex-1">
+                    <div className="flex gap-1">
+                      {EMAIL_LABELS.map(l => (
+                        <button key={l} type="button" onClick={() => { const emails = [...(data.emails || [])]; emails[i] = { ...emails[i], label: l }; updateField('emails', emails); }}
+                          className={`px-2 py-1 rounded text-xs transition-all ${e.label === l ? 'bg-primary-500 text-white' : 'bg-gray-800 text-gray-500 hover:text-white'}`}>{l}</button>
+                      ))}
+                    </div>
                     <input className={inputClass + ' flex-1'} value={e.email || ''} placeholder="correo@ejemplo.com"
                       onChange={ev => { const emails = [...(data.emails || [])]; emails[i] = { ...emails[i], email: ev.target.value }; updateField('emails', emails); }} />
                     <button onClick={() => updateField('emails', data.emails.filter((_, j) => j !== i))} className="text-red-400 text-xs px-2 hover:underline">Quitar</button>
-                  </>
+                  </div>
                 ) : (
                   e.email && <p className={readClass}><span className="text-gray-500">{e.label}:</span> {e.email}</p>
                 )}
