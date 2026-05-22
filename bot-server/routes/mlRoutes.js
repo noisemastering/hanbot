@@ -1237,10 +1237,22 @@ router.get('/spend-optimization', async (req, res) => {
       adProductMap[adId].push({ product: shortName, count: row.count, revenue: Math.round(row.revenue) });
     }
 
-    // Get ad target product from Ad model (convoFlowRef + promoId)
+    // Also get stored metrics as fallback (from FB sync)
     const Ad = require('../models/Ad');
     require('../models/Promo');
-    const adDocs = await Ad.find({}, 'fbAdId name convoFlowRef promoId').populate('promoId', 'name promoProductIds').lean();
+    const adDocs = await Ad.find({}, 'fbAdId name convoFlowRef promoId metrics').populate('promoId', 'name promoProductIds').lean();
+
+    // Build stored metrics fallback map
+    const storedMetricsMap = {};
+    adDocs.forEach(a => {
+      if (a.fbAdId && a.metrics) {
+        storedMetricsMap[a.fbAdId] = {
+          spend: a.metrics.spend || 0,
+          impressions: a.metrics.impressions || 0,
+          clicks: a.metrics.clicks || 0
+        };
+      }
+    });
     const adTargetMap = {};
     adDocs.forEach(a => {
       let target = null;
@@ -1249,9 +1261,26 @@ router.get('/spend-optimization', async (req, res) => {
       adTargetMap[a.fbAdId] = target;
     });
 
+    // Also include ads from stored DB that FB Insights didn't return (paused, old, etc.)
+    const fbAdIds = new Set((fbData.data || []).map(r => r.ad_id));
+    const missingAds = adDocs
+      .filter(a => a.fbAdId && !fbAdIds.has(a.fbAdId) && (a.metrics?.spend > 0 || convMap[a.fbAdId]))
+      .map(a => ({
+        ad_id: a.fbAdId,
+        ad_name: a.name,
+        spend: String(a.metrics?.spend || 0),
+        impressions: String(a.metrics?.impressions || 0),
+        clicks: String(a.metrics?.clicks || 0),
+        _fromStored: true
+      }));
+
+    const allFbData = [...(fbData.data || []), ...missingAds];
+
     // Merge and analyze
-    const ads = (fbData.data || []).map(row => {
-      const spend = parseFloat(row.spend || 0);
+    const ads = allFbData.map(row => {
+      const fbSpend = parseFloat(row.spend || 0);
+      const stored = storedMetricsMap[row.ad_id];
+      const spend = fbSpend > 0 ? fbSpend : (stored?.spend || 0);
       const conv = convMap[row.ad_id] || { conversions: 0, revenue: 0 };
       const cpa = conv.conversions > 0 ? spend / conv.conversions : null;
       const roi = spend > 0 ? conv.revenue / spend : 0;
@@ -1300,8 +1329,8 @@ router.get('/spend-optimization', async (req, res) => {
         adId: row.ad_id,
         name: row.ad_name,
         spend: Math.round(spend),
-        impressions: parseInt(row.impressions || 0),
-        fbClicks: parseInt(row.clicks || 0),
+        impressions: parseInt(row.impressions || 0) || (stored?.impressions || 0),
+        fbClicks: parseInt(row.clicks || 0) || (stored?.clicks || 0),
         conversions: conv.conversions,
         revenue: Math.round(conv.revenue),
         cpa: cpa !== null ? Math.round(cpa) : null,
