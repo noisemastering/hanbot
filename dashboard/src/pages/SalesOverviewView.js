@@ -59,15 +59,17 @@ function SalesOverviewView() {
   // Determine which months fall within the selected period for highlighting
   const getMonthlyChartData = () => {
     if (!data?.monthly) return [];
+    // Filter out months with zero revenue
+    const nonEmpty = data.monthly.filter(m => m.revenue > 0);
     if (period === 'all') {
-      return data.monthly.map(m => ({ ...m, inPeriod: true }));
+      return nonEmpty.map(m => ({ ...m, inPeriod: true }));
     }
     const days = parseInt(period, 10);
-    if (isNaN(days)) return data.monthly.map(m => ({ ...m, inPeriod: true }));
+    if (isNaN(days)) return nonEmpty.map(m => ({ ...m, inPeriod: true }));
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - days);
     const cutoffMonth = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}`;
-    return data.monthly.map(m => ({
+    return nonEmpty.map(m => ({
       ...m,
       inPeriod: m.month >= cutoffMonth
     }));
