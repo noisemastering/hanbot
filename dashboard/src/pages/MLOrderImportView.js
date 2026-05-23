@@ -115,12 +115,12 @@ export default function MLOrderImportView() {
     return () => clearInterval(interval);
   }, [progress?.status, fetchAll]);
 
-  const startImport = async () => {
+  const startImport = async (fullResync = false) => {
     try {
       const res = await fetch(`${API_URL}/ml/import/start/${SELLER_ID}`, {
         method: 'POST',
         headers: authHeaders(),
-        body: JSON.stringify({})
+        body: JSON.stringify({ fullResync })
       });
       const data = await res.json();
       if (data.success) {
@@ -224,10 +224,17 @@ export default function MLOrderImportView() {
         </div>
         <div className="flex items-center gap-3">
           {!isRunning ? (
-            <button onClick={startImport}
-              className="px-5 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors text-sm font-medium">
-              Iniciar importación
-            </button>
+            <div className="flex gap-2">
+              <button onClick={() => startImport(false)}
+                className="px-5 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors text-sm font-medium">
+                Importar nuevas
+              </button>
+              <button onClick={() => startImport(true)}
+                className="px-5 py-2 bg-amber-600 text-white rounded-lg hover:bg-amber-700 transition-colors text-sm font-medium"
+                title="Re-importa todo con ventanas semanales para capturar órdenes faltantes">
+                Resync completo
+              </button>
+            </div>
           ) : (
             <button onClick={stopImportAction}
               className="px-5 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 transition-colors text-sm font-medium">

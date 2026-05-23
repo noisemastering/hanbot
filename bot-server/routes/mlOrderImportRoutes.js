@@ -25,9 +25,10 @@ const { bootstrapFromExistingLinks, normalizeUnmapped, applyMappingsToOrders, ge
 router.post("/import/start/:sellerId", authenticate, async (req, res) => {
   try {
     const { sellerId } = req.params;
-    const { startDate } = req.body; // Optional: ISO date string
+    const { startDate, fullResync } = req.body;
     const result = await importAllOrders(sellerId, {
-      startDate: startDate ? new Date(startDate) : undefined
+      startDate: startDate ? new Date(startDate) : undefined,
+      fullResync: fullResync || false
     });
     if (result.error) return res.status(409).json({ success: false, error: result.error });
     res.json({ success: true, ...result });

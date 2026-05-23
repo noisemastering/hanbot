@@ -21,21 +21,22 @@ function toMLDate(date) {
 }
 
 /**
- * Generate monthly date windows from startDate to now.
+ * Generate date windows from startDate to now.
+ * Uses weekly windows to stay under ML's 10,000 offset limit.
  */
-function generateMonthlyWindows(startDate) {
+function generateWeeklyWindows(startDate) {
   const windows = [];
   const now = new Date();
   let current = new Date(startDate);
 
   while (current < now) {
     const from = new Date(current);
-    const to = new Date(current.getFullYear(), current.getMonth() + 1, 0, 23, 59, 59);
+    const to = new Date(current.getTime() + 7 * 24 * 60 * 60 * 1000 - 1);
     windows.push({
-      from: from > now ? now : from,
+      from: from,
       to: to > now ? now : to
     });
-    current = new Date(current.getFullYear(), current.getMonth() + 1, 1);
+    current = new Date(current.getTime() + 7 * 24 * 60 * 60 * 1000);
   }
 
   return windows;
@@ -158,22 +159,30 @@ async function importAllOrders(sellerId, options = {}) {
     return { error: 'Import already running', batchId: existing.batchId };
   }
 
-  // Smart start date: resume from last imported order, or go back 5 years
+  // Start date: use provided date, or go back 5 years for full import
+  // Always do a full sweep with weekly windows to catch missing orders
   let startDate = options.startDate;
   if (!startDate) {
-    const latest = await MLOrder.findOne({ sellerId }).sort({ dateCreated: -1 }).select('dateCreated').lean();
-    if (latest?.dateCreated) {
-      // Start from 1 day before the last imported order (overlap to catch stragglers)
-      startDate = new Date(latest.dateCreated.getTime() - 24 * 60 * 60 * 1000);
-      console.log(`📅 Resuming import from ${startDate.toISOString().split('T')[0]} (last order: ${latest.dateCreated.toISOString().split('T')[0]})`);
+    if (options.fullResync) {
+      // Full resync — start from earliest known order
+      const earliest = await MLOrder.findOne({ sellerId }).sort({ dateCreated: 1 }).select('dateCreated').lean();
+      startDate = earliest?.dateCreated || new Date(Date.now() - 5 * 365 * 24 * 60 * 60 * 1000);
+      console.log(`📅 Full resync from ${startDate.toISOString().split('T')[0]}`);
     } else {
-      startDate = new Date(Date.now() - 5 * 365 * 24 * 60 * 60 * 1000); // 5 years ago
-      console.log(`📅 Fresh import starting from ${startDate.toISOString().split('T')[0]}`);
+      // Resume from last imported order
+      const latest = await MLOrder.findOne({ sellerId }).sort({ dateCreated: -1 }).select('dateCreated').lean();
+      if (latest?.dateCreated) {
+        startDate = new Date(latest.dateCreated.getTime() - 24 * 60 * 60 * 1000);
+        console.log(`📅 Resuming import from ${startDate.toISOString().split('T')[0]} (last order: ${latest.dateCreated.toISOString().split('T')[0]})`);
+      } else {
+        startDate = new Date(Date.now() - 5 * 365 * 24 * 60 * 60 * 1000);
+        console.log(`📅 Fresh import starting from ${startDate.toISOString().split('T')[0]}`);
+      }
     }
   }
 
   const batchId = `import_${Date.now()}`;
-  const windows = generateMonthlyWindows(startDate);
+  const windows = generateWeeklyWindows(startDate);
   const totalPages = windows.length * 2; // rough estimate, 2 phases
 
   const progress = {
@@ -258,35 +267,8 @@ async function processWindows(sellerId, windows, endpoint, batchId, source, prog
         if (result.imported > 0) windowAllExisting = false;
       }
 
-      // Smart skip: if first page is 100% existing and this is a re-import,
-      // check one more page. If also all existing, skip the rest of this window.
-      if (windowAllExisting && total > PAGE_SIZE * 2) {
-        await sleep(DELAY_BETWEEN_PAGES);
-        const checkPage = await fetchPage(sellerId, accessToken, {
-          endpoint,
-          offset: PAGE_SIZE,
-          dateFrom: toMLDate(window.from),
-          dateTo: toMLDate(window.to)
-        });
-        if (checkPage.results?.length > 0) {
-          const checkResult = await saveOrderBatch(checkPage.results, batchId, source);
-          progress.imported += checkResult.imported;
-          progress.skipped += checkResult.skipped;
-          progress.pagesProcessed++;
-          if (checkResult.imported === 0) {
-            // Both pages all existing — skip rest of this window
-            console.log(`⏭️  Skipping ${total - PAGE_SIZE * 2} existing orders in ${progress.currentWindow}`);
-            progress.skipped += total - PAGE_SIZE * 2;
-            progress.pagesProcessed += windowPages - 2;
-            progress.windowsDone++;
-            await sleep(DELAY_BETWEEN_WINDOWS);
-            continue;
-          }
-        }
-      }
-
-      // Paginate remaining
-      const startOffset = windowAllExisting ? PAGE_SIZE * 2 : PAGE_SIZE; // skip pages we already checked
+      // Paginate remaining — weekly windows keep us under 10K limit
+      const startOffset = PAGE_SIZE;
       const maxOffset = Math.min(total, 10000);
       for (let offset = startOffset; offset < maxOffset; offset += PAGE_SIZE) {
         if (progress.status !== 'running') break;
