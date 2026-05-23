@@ -148,6 +148,7 @@ const ticketRoutes = require('./routes/ticketRoutes');
 const notificationRoutes = require('./routes/notificationRoutes');
 const crossSellRoutes = require('./routes/crossSellRoutes');
 const companyInfoRoutes = require('./routes/companyInfoRoutes');
+const salesOverviewRoutes = require('./routes/salesOverviewRoutes');
 
 // Auth routes (no prefix, will be /auth/login, /auth/me, etc.)
 app.use('/auth', authRoutes);
@@ -188,6 +189,7 @@ app.use('/tickets', ticketRoutes);
 app.use('/notifications', notificationRoutes);
 app.use('/cross-sell', crossSellRoutes);
 app.use('/company-info', companyInfoRoutes);
+app.use('/sales-overview', salesOverviewRoutes);
 
 // ============================================
 // Global Error Handler (returns JSON, not HTML)

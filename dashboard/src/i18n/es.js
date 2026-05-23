@@ -51,6 +51,7 @@ const es = {
   "menu.playgroundConversion": "Prob. Conversión",
   "menu.playgroundSpend": "Optimización de Gasto",
   "menu.tickets": "Tickets",
+  "menu.salesOverview": "Resumen de Ventas",
   "menu.notifications": "Notificaciones",
   "menu.crossSell": "Cross-Selling",
   "menu.companyInfo": "Información General",
