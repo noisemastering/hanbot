@@ -65,14 +65,19 @@ async function fetchPage(sellerId, accessToken, params, retries = 0) {
         'User-Agent': 'HanlobBot/1.0'
       },
       proxy: false,
+      timeout: 30000, // 30s timeout — avoid infinite hangs
       validateStatus: (status) => status < 500
     });
 
     if (response.status === 429) {
-      const retryAfter = parseInt(response.headers['retry-after'] || '5') * 1000;
-      console.log(`⏳ Rate limited, waiting ${retryAfter}ms`);
+      const retryAfter = Math.min(60000, parseInt(response.headers['retry-after'] || '5') * 1000);
+      console.log(`⏳ Rate limited, waiting ${retryAfter}ms (attempt ${retries + 1})`);
       await sleep(retryAfter);
-      return fetchPage(sellerId, accessToken, params, retries);
+      // Increment retries — otherwise we can loop forever on 429
+      if (retries < MAX_RETRIES) {
+        return fetchPage(sellerId, accessToken, params, retries + 1);
+      }
+      throw new Error('Rate limited too many times, giving up on this page');
     }
 
     if (response.status >= 400) {
@@ -256,6 +261,12 @@ async function processWindows(sellerId, windows, endpoint, batchId, source, prog
       const windowPages = Math.ceil(total / PAGE_SIZE);
       progress.pagesTotal += windowPages;
       progress.totalEstimate += total;
+
+      // Warn if window exceeds ML's 10K offset limit
+      if (total > 10000) {
+        progress.errors.push(`⚠️ Window ${progress.currentWindow} has ${total} orders, only first 10000 will be imported`);
+        console.warn(`⚠️ Window ${progress.currentWindow} has ${total} orders — splitting into smaller chunks needed`);
+      }
 
       // Save first page
       let windowAllExisting = true;
