@@ -69,10 +69,10 @@ function SalesOverviewView() {
     const cutoff = new Date();
     cutoff.setDate(cutoff.getDate() - days);
     const cutoffMonth = `${cutoff.getFullYear()}-${String(cutoff.getMonth() + 1).padStart(2, '0')}`;
-    return nonEmpty.map(m => ({
-      ...m,
-      inPeriod: m.month >= cutoffMonth
-    }));
+    // Filter to only show months within the selected period
+    return nonEmpty
+      .filter(m => m.month >= cutoffMonth)
+      .map(m => ({ ...m, inPeriod: true }));
   };
 
   const channelPieData = data ? [
@@ -206,22 +206,19 @@ function SalesOverviewView() {
                 <Tooltip
                   contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
                   labelStyle={{ color: '#e5e7eb' }}
-                  formatter={(val) => [fmt(val), 'Ingresos']}
+                  formatter={(val, name) => name === 'revenue' ? [fmt(val), 'Ingresos'] : [val.toLocaleString('es-MX'), 'Órdenes']}
                 />
-                <Bar dataKey="revenue" radius={[4, 4, 0, 0]}>
+                <Bar dataKey="revenue" radius={[4, 4, 0, 0]} name="revenue">
                   {monthlyChartData.map((entry, idx) => (
-                    <Cell
-                      key={idx}
-                      fill={entry.inPeriod ? '#3b82f6' : '#374151'}
-                    />
+                    <Cell key={idx} fill="#3b82f6" />
                   ))}
                 </Bar>
-                <Line type="monotone" dataKey="orders" stroke="#facc15" strokeWidth={2} dot={false} yAxisId="right" />
+                <Line type="monotone" dataKey="orders" stroke="#facc15" strokeWidth={2} dot={false} yAxisId="right" name="orders" />
                 <YAxis yAxisId="right" orientation="right" tick={{ fill: '#9ca3af', fontSize: 11 }} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
-          <p className="text-gray-500 text-xs mt-2">Barras azules = periodo seleccionado | Barras grises = fuera del periodo | Linea amarilla = ordenes</p>
+          <p className="text-gray-500 text-xs mt-2">Barras azules = ingresos | Linea amarilla = órdenes</p>
         </div>
       )}
 
