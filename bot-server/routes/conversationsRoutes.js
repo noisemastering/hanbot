@@ -122,10 +122,46 @@ router.get('/grouped', async (req, res) => {
     if (adFilterPsids) {
       matchStage.psid = { ...matchStage.psid, $in: adFilterPsids };
     }
+    // Multi-word keyword search: find PSIDs whose conversations contain ALL words
+    // (words can span across different messages within the same conversation)
     if (keyword && keyword.trim().length >= 2) {
-      // Escape regex special chars
-      const escaped = keyword.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-      matchStage.text = { $regex: escaped, $options: 'i' };
+      const tokens = keyword
+        .trim()
+        .toLowerCase()
+        .split(/\s+/)
+        .filter(w => w.length >= 2)  // ignore very short words
+        .map(w => w.replace(/[.,!?¿¡;:]/g, '')) // strip punctuation
+        .filter(Boolean);
+
+      if (tokens.length > 0) {
+        // For each token, find all PSIDs that have at least one message containing it
+        const psidSetsPerToken = await Promise.all(
+          tokens.map(async (token) => {
+            const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const psids = await Message.distinct('psid', {
+              text: { $regex: escaped, $options: 'i' }
+            });
+            return new Set(psids);
+          })
+        );
+
+        // Intersect all sets — conversations that have ALL tokens
+        const keywordPsids = [...psidSetsPerToken[0]].filter(psid =>
+          psidSetsPerToken.every(set => set.has(psid))
+        );
+
+        if (keywordPsids.length === 0) {
+          return res.json({
+            conversations: [],
+            pagination: { page: 1, limit: limitNum, total: 0, pages: 0 }
+          });
+        }
+
+        // Combine with existing psid filter
+        matchStage.psid = matchStage.psid
+          ? { ...matchStage.psid, $in: keywordPsids }
+          : { $in: keywordPsids };
+      }
     }
     if (Object.keys(matchStage).length > 0) pipeline.push({ $match: matchStage });
 

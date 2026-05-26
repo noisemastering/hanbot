@@ -704,32 +704,77 @@ function Messages() {
         </div>
       )}
 
-      {/* Filters Bar */}
-      <div style={{ marginBottom: "1rem", display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-        {/* Keyword search */}
-        <form onSubmit={(e) => { e.preventDefault(); setKeywordFilter(keywordInput.trim()); }} style={{ display: "flex", gap: "0.25rem" }}>
-          <input
-            type="text"
-            placeholder="Buscar en mensajes..."
+      {/* Dedicated Content Search Tool */}
+      <div style={{
+        marginBottom: "1.5rem",
+        padding: "1rem",
+        backgroundColor: "rgba(16, 185, 129, 0.05)",
+        border: keywordFilter ? "2px solid #10b981" : "1px solid #374151",
+        borderRadius: "12px"
+      }}>
+        <label style={{ color: "#9ca3af", fontSize: "0.85rem", display: "block", marginBottom: "0.5rem" }}>
+          🔍 Buscar en el contenido de las conversaciones
+        </label>
+        <div style={{ display: "flex", gap: "0.5rem", alignItems: "stretch" }}>
+          <textarea
+            placeholder='Ej: "cuánto cuesta una de 5x4 y en dónde están ubicado" — busca convos que contengan TODAS las palabras'
             value={keywordInput}
             onChange={(e) => setKeywordInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                e.preventDefault();
+                setKeywordFilter(keywordInput.trim());
+              }
+            }}
+            rows={2}
             style={{
-              padding: "0.5rem 0.75rem",
-              backgroundColor: "rgba(255, 255, 255, 0.1)",
+              flex: 1,
+              padding: "0.6rem 0.8rem",
+              backgroundColor: "rgba(255, 255, 255, 0.08)",
               color: "white",
-              border: keywordFilter ? "2px solid #10b981" : "1px solid #555",
+              border: "1px solid #555",
               borderRadius: "8px",
-              fontSize: "0.9rem",
-              width: "240px"
+              fontSize: "0.95rem",
+              resize: "vertical",
+              fontFamily: "inherit"
             }}
           />
-          {keywordFilter && (
-            <button type="button" onClick={() => { setKeywordInput(''); setKeywordFilter(''); }}
-              style={{ padding: "0.5rem 0.75rem", backgroundColor: "#7f1d1d", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "0.85rem" }}>
-              ✕
+          <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+            <button
+              onClick={() => setKeywordFilter(keywordInput.trim())}
+              disabled={!keywordInput.trim() || keywordInput.trim() === keywordFilter}
+              style={{
+                padding: "0.5rem 1.2rem",
+                backgroundColor: (!keywordInput.trim() || keywordInput.trim() === keywordFilter) ? "#374151" : "#10b981",
+                color: "white",
+                border: "none",
+                borderRadius: "8px",
+                cursor: (!keywordInput.trim() || keywordInput.trim() === keywordFilter) ? "not-allowed" : "pointer",
+                fontSize: "0.9rem",
+                fontWeight: "bold",
+                flex: 1,
+                minWidth: "100px"
+              }}>
+              Buscar
             </button>
-          )}
-        </form>
+            {keywordFilter && (
+              <button onClick={() => { setKeywordInput(''); setKeywordFilter(''); }}
+                style={{ padding: "0.4rem 1rem", backgroundColor: "#7f1d1d", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "0.85rem" }}>
+                Limpiar
+              </button>
+            )}
+          </div>
+        </div>
+        {keywordFilter && (
+          <p style={{ color: "#10b981", fontSize: "0.8rem", marginTop: "0.5rem", marginBottom: 0 }}>
+            Filtrando por: <strong>{keywordFilter}</strong> ({keywordFilter.split(/\s+/).filter(w => w.length >= 2).length} palabras, todas deben aparecer en la convo)
+          </p>
+        )}
+      </div>
+
+      {/* Constraint filters bar */}
+      <div style={{ marginBottom: "1rem", display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ color: "#6b7280", fontSize: "0.8rem", marginRight: "0.25rem" }}>Filtros adicionales:</span>
 
         {/* Ad filter */}
         <select value={adFilter} onChange={(e) => setAdFilter(e.target.value)}
@@ -817,14 +862,14 @@ function Messages() {
           <option value="human_handling" style={{ backgroundColor: "#1a1a1a" }}>En humano</option>
         </select>
 
-        {/* Clear all */}
-        {(keywordFilter || adFilter || purchaseIntentFilter || productInterestFilter || sharedProductFilter || handoffFilter || stateFilter) && (
+        {/* Clear all (only the dropdown filters, not keyword) */}
+        {(adFilter || purchaseIntentFilter || productInterestFilter || sharedProductFilter || handoffFilter || stateFilter) && (
           <button onClick={() => {
-            setKeywordInput(''); setKeywordFilter(''); setAdFilter('');
+            setAdFilter('');
             setPurchaseIntentFilter(''); setProductInterestFilter('');
             setSharedProductFilter(''); setHandoffFilter(''); setStateFilter('');
           }} style={{ padding: "0.5rem 0.75rem", backgroundColor: "#374151", color: "white", border: "1px solid #555", borderRadius: "8px", cursor: "pointer", fontSize: "0.85rem" }}>
-            Limpiar filtros
+            Limpiar
           </button>
         )}
       </div>
