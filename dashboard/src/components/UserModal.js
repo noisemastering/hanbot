@@ -277,16 +277,15 @@ function UserModal({ user, onClose, onSave }) {
                   className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
                   required
                 >
+                  <option value="" style={{ backgroundColor: '#1a1a1a', color: 'white' }}>Selecciona un rol...</option>
                   {roles
                     .filter(role => {
-                      // Super admins can see all roles
                       if (currentUser?.role === 'super_admin') return true;
-                      // Admins can only see non-admin roles
                       return role.name !== 'super_admin' && role.name !== 'admin';
                     })
                     .map(role => (
-                      <option key={role._id} value={role.name}>
-                        {role.label}
+                      <option key={role._id} value={role.name} style={{ backgroundColor: '#1a1a1a', color: 'white' }}>
+                        {role.label || role.name}
                       </option>
                     ))}
                 </select>
