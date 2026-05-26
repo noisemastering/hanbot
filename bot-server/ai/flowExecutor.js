@@ -517,12 +517,8 @@ async function abandonFlow(psid, convo, reason = 'abandoned') {
 
       // Handle onAbandon if defined
       if (flow.onAbandon?.action === 'handoff') {
-        await updateConversation(psid, {
-          handoffRequested: true,
-          handoffReason: `Flow abandonado: ${flow.name}`,
-          handoffTimestamp: new Date(),
-          state: "needs_human"
-        });
+        const { triggerHandoff } = require("../services/pushNotifications");
+        await triggerHandoff(psid, `Flow abandonado: ${flow.name}`);
       }
 
       await clearFlowState(psid);

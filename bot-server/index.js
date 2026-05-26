@@ -1748,12 +1748,9 @@ app.post("/webhook", async (req, res) => {
                   await saveMessage(senderPsid, "[Imagen recibida fuera de horario - pendiente de revisión]", "bot");
 
                   // Mark for follow-up
-                  await updateConversation(senderPsid, {
-                    lastIntent: "image_pending_review",
-                    handoffRequested: true,
-                    handoffReason: "Imagen recibida fuera de horario laboral",
-                    handoffTimestamp: new Date()
-                  });
+                  await updateConversation(senderPsid, { lastIntent: "image_pending_review" });
+                  const { triggerHandoff } = require("./services/pushNotifications");
+                  await triggerHandoff(senderPsid, "Imagen recibida fuera de horario laboral");
                 }
               }
             })();

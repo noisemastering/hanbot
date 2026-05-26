@@ -45,12 +45,10 @@ async function handleIntentFromDB(intentKey, classification, psid, convo, userMe
 
       case 'human_handoff':
         console.log(`🤝 Intent triggers human handoff`);
-        await updateConversation(psid, {
-          handoffRequested: true,
-          handoffReason: `Intent: ${intent.name}`,
-          handoffTimestamp: new Date(),
-          state: "needs_human"
-        });
+        {
+          const { triggerHandoff } = require("../../services/pushNotifications");
+          await triggerHandoff(psid, `Intent: ${intent.name}`);
+        }
         return {
           type: "text",
           text: intent.responseTemplate || `Te comunico con un especialista. ${getHandoffTimingMessage()}`,

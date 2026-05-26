@@ -786,13 +786,9 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
     if (isRolloContext) {
       console.log("📦 ML question in rollo context - collecting data for human handoff");
-      await updateConversation(psid, {
-        lastIntent: "rollo_ml_inquiry",
-        handoffRequested: true,
-        handoffReason: "Rollo inquiry asking about ML - needs quote",
-        handoffTimestamp: new Date(),
-        state: "needs_human"
-      });
+      await updateConversation(psid, { lastIntent: "rollo_ml_inquiry" });
+      const { triggerHandoff } = require("../../services/pushNotifications");
+      await triggerHandoff(psid, "Rollo inquiry asking about ML - needs quote");
 
       return {
         type: "text",

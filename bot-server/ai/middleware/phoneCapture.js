@@ -7,7 +7,7 @@
  */
 
 module.exports = async function phoneCapture(ctx, next) {
-  const { classification } = ctx;
+  const { classification, psid } = ctx;
 
   // Bail if classification is missing – nothing to inspect
   if (!classification) return await next();
@@ -19,12 +19,10 @@ module.exports = async function phoneCapture(ctx, next) {
     await ctx.updateConvo({
       "leadData.contact": phone,
       "leadData.contactType": "phone",
-      "leadData.capturedAt": new Date(),
-      handoffRequested: true,
-      handoffReason: `Cliente compartió su teléfono: ${phone}`,
-      handoffTimestamp: new Date(),
-      state: "needs_human"
+      "leadData.capturedAt": new Date()
     });
+    const { triggerHandoff } = require("../../services/pushNotifications");
+    await triggerHandoff(psid, `Cliente compartió su teléfono: ${phone}`);
 
     const VIDEO_LINK = "https://youtube.com/shorts/XLGydjdE7mY";
     ctx.response = {

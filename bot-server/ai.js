@@ -475,13 +475,9 @@ Si no tienes información sobre algo, discúlpate de forma amable (sin usar emoj
 
     if (newUnknownCount >= 2) {
       const info = await getBusinessInfo();
-      await updateConversation(psid, {
-        unknownCount: 0,
-        state: "needs_human",
-        handoffRequested: true,
-        handoffReason: "Bot unable to help after 2 unknown messages",
-        handoffTimestamp: new Date()
-      });
+      await updateConversation(psid, { unknownCount: 0 });
+      const { triggerHandoff } = require("./services/pushNotifications");
+      await triggerHandoff(psid, "Bot unable to help after 2 unknown messages");
 
       const whatsappLink = "https://wa.me/524425957432";
 

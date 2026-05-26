@@ -328,7 +328,10 @@ async function generateReply(userMessage, psid, referral = null) {
       const convoUpdate = { unknownCount: 0 };
       if (location.city) convoUpdate.city = location.city;
       if (location.state) convoUpdate.stateMx = location.state;
-      if (location.zipcode) convoUpdate.zipcode = location.zipcode;
+      if (location.zipcode) {
+        convoUpdate.zipcode = location.zipcode;
+        convoUpdate.zipCode = location.zipcode; // canonical field
+      }
       await updateConversation(psid, convoUpdate);
       await syncLocationToUser(psid, location, 'shipping_question');
 
@@ -557,12 +560,10 @@ async function generateReply(userMessage, psid, referral = null) {
     await updateConversation(psid, {
       'leadData.contact': phone,
       'leadData.contactType': 'phone',
-      'leadData.capturedAt': new Date(),
-      handoffRequested: true,
-      handoffReason: `Cliente compartió su teléfono: ${phone}`,
-      handoffTimestamp: new Date(),
-      state: "needs_human"
+      'leadData.capturedAt': new Date()
     });
+    const { triggerHandoff } = require("../services/pushNotifications");
+    await triggerHandoff(psid, `Cliente compartió su teléfono: ${phone}`);
 
     return {
       type: "text",

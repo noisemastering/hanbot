@@ -64,4 +64,37 @@ async function sendHandoffNotification(psid, convo, reason) {
   }
 }
 
-module.exports = { sendHandoffNotification };
+/**
+ * Centralized handoff trigger: updates conversation state AND sends push notification.
+ * Use this anywhere a bot needs to hand off to a human — guarantees notification fires.
+ */
+async function triggerHandoff(psid, reason, options = {}) {
+  const Conversation = require("../models/Conversation");
+  const { updateConversation } = require("../conversationManager");
+
+  const updates = {
+    handoffRequested: true,
+    handoffReason: reason,
+    handoffTimestamp: new Date(),
+    state: options.state || "needs_human",
+    ...(options.extraUpdates || {})
+  };
+
+  try {
+    await updateConversation(psid, updates);
+  } catch (err) {
+    console.error("❌ Failed to update conversation for handoff:", err.message);
+  }
+
+  // Fire notification (don't block on failure)
+  try {
+    const convo = await Conversation.findOne({ psid });
+    sendHandoffNotification(psid, convo, reason).catch(err => {
+      console.error("❌ Failed to send handoff push notification:", err.message);
+    });
+  } catch (err) {
+    console.error("❌ Failed to load convo for handoff notification:", err.message);
+  }
+}
+
+module.exports = { sendHandoffNotification, triggerHandoff };
