@@ -70,7 +70,15 @@ router.get('/ads', async (req, res) => {
 
 router.get('/grouped', async (req, res) => {
   try {
-    const { start, end, page = 1, limit = 30, excludePsids, adId } = req.query;
+    const {
+      start, end, page = 1, limit = 30, excludePsids, adId,
+      keyword,           // search in message content
+      purchaseIntent,    // 'high' | 'medium' | 'low'
+      productInterest,   // product type ID
+      sharedProduct,     // 'yes' | 'no' — whether bot shared a product link
+      handoff,           // 'yes' | 'no' — whether human handoff was requested
+      state              // 'new' | 'active' | 'closed' | 'needs_human' | 'human_handling'
+    } = req.query;
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
 
@@ -82,10 +90,20 @@ router.get('/grouped', async (req, res) => {
     // Build exclude list
     const excludeList = excludePsids ? excludePsids.split(',').filter(Boolean) : [];
 
-    // If filtering by ad, first get psids from conversations with that adId
+    // Pre-filter by Conversation properties — get matching PSIDs
+    const convFilter = {};
+    if (adId) convFilter.adId = adId;
+    if (purchaseIntent) convFilter.purchaseIntent = purchaseIntent;
+    if (productInterest) convFilter.productInterest = productInterest;
+    if (sharedProduct === 'yes') convFilter.lastSharedProductId = { $ne: null };
+    if (sharedProduct === 'no') convFilter.lastSharedProductId = null;
+    if (handoff === 'yes') convFilter.handoffRequested = true;
+    if (handoff === 'no') convFilter.handoffRequested = { $ne: true };
+    if (state) convFilter.state = state;
+
     let adFilterPsids = null;
-    if (adId) {
-      adFilterPsids = await Conversation.distinct('psid', { adId });
+    if (Object.keys(convFilter).length > 0) {
+      adFilterPsids = await Conversation.distinct('psid', convFilter);
       if (adFilterPsids.length === 0) {
         return res.json({
           conversations: [],
@@ -97,12 +115,17 @@ router.get('/grouped', async (req, res) => {
     const hasDateFilter = !!(start || end);
     const pipeline = [];
 
-    // 1. Optional date filter on messages + ad filter
+    // 1. Optional date filter on messages + ad filter + keyword filter
     const matchStage = {};
     if (hasDateFilter) matchStage.timestamp = dateMatch;
     if (excludeList.length > 0) matchStage.psid = { $nin: excludeList };
     if (adFilterPsids) {
       matchStage.psid = { ...matchStage.psid, $in: adFilterPsids };
+    }
+    if (keyword && keyword.trim().length >= 2) {
+      // Escape regex special chars
+      const escaped = keyword.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      matchStage.text = { $regex: escaped, $options: 'i' };
     }
     if (Object.keys(matchStage).length > 0) pipeline.push({ $match: matchStage });
 
@@ -111,7 +134,7 @@ router.get('/grouped', async (req, res) => {
 
     // 2b. For unfiltered queries (quick actions), pre-limit to recent messages
     // to avoid scanning the entire collection. 500 messages covers 10+ conversations easily.
-    if (!hasDateFilter && excludeList.length === 0 && !adFilterPsids) {
+    if (!hasDateFilter && excludeList.length === 0 && !adFilterPsids && !keyword) {
       pipeline.push({ $limit: 500 });
     }
 
@@ -161,7 +184,7 @@ router.get('/grouped', async (req, res) => {
     pipeline.push({ $sort: { lastMessageAt: -1 } });
 
     // Count total for paginated queries
-    const shouldCount = hasDateFilter || !!adFilterPsids;
+    const shouldCount = hasDateFilter || !!adFilterPsids || !!keyword;
     let total = 0;
     if (shouldCount) {
       const countPipeline = [...pipeline, { $count: 'total' }];

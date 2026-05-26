@@ -48,11 +48,24 @@ function Messages() {
   const [loadingFiltered, setLoadingFiltered] = useState(false);
   const [adFilter, setAdFilter] = useState('');
   const [availableAds, setAvailableAds] = useState([]);
+  const [keywordFilter, setKeywordFilter] = useState('');
+  const [keywordInput, setKeywordInput] = useState('');
+  const [purchaseIntentFilter, setPurchaseIntentFilter] = useState('');
+  const [productInterestFilter, setProductInterestFilter] = useState('');
+  const [sharedProductFilter, setSharedProductFilter] = useState('');
+  const [handoffFilter, setHandoffFilter] = useState('');
+  const [stateFilter, setStateFilter] = useState('');
 
   const quickActionPsidsRef = useRef([]);
   const currentPageRef = useRef(1);
   const dateFilterRef = useRef('today');
   const adFilterRef = useRef('');
+  const keywordFilterRef = useRef('');
+  const purchaseIntentFilterRef = useRef('');
+  const productInterestFilterRef = useRef('');
+  const sharedProductFilterRef = useRef('');
+  const handoffFilterRef = useRef('');
+  const stateFilterRef = useRef('');
 
   // Helper function to show message excerpt
   const getMessageExcerpt = (text, maxLength = 60) => {
@@ -252,9 +265,13 @@ function Messages() {
       if (exclude.length > 0) {
         params.set('excludePsids', exclude.join(','));
       }
-      if (adFilterRef.current) {
-        params.set('adId', adFilterRef.current);
-      }
+      if (adFilterRef.current) params.set('adId', adFilterRef.current);
+      if (keywordFilterRef.current) params.set('keyword', keywordFilterRef.current);
+      if (purchaseIntentFilterRef.current) params.set('purchaseIntent', purchaseIntentFilterRef.current);
+      if (productInterestFilterRef.current) params.set('productInterest', productInterestFilterRef.current);
+      if (sharedProductFilterRef.current) params.set('sharedProduct', sharedProductFilterRef.current);
+      if (handoffFilterRef.current) params.set('handoff', handoffFilterRef.current);
+      if (stateFilterRef.current) params.set('state', stateFilterRef.current);
       const res = await API.get(`/conversations/grouped?${params}`);
       const convs = res.data.conversations || [];
       setFilteredConversations(convs);
@@ -318,6 +335,21 @@ function Messages() {
       fetchFilteredPage(1);
     }
   }, [dateFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Refetch when content filters change
+  useEffect(() => {
+    keywordFilterRef.current = keywordFilter;
+    purchaseIntentFilterRef.current = purchaseIntentFilter;
+    productInterestFilterRef.current = productInterestFilter;
+    sharedProductFilterRef.current = sharedProductFilter;
+    handoffFilterRef.current = handoffFilter;
+    stateFilterRef.current = stateFilter;
+    if (!initialLoading) {
+      setCurrentPage(1);
+      currentPageRef.current = 1;
+      fetchFilteredPage(1);
+    }
+  }, [keywordFilter, purchaseIntentFilter, productInterestFilter, sharedProductFilter, handoffFilter, stateFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTakeover = async (psid) => {
     setLoading(prev => ({ ...prev, [psid]: true }));
@@ -672,29 +704,129 @@ function Messages() {
         </div>
       )}
 
-      {/* Ad Filter — applies to both sections */}
-      <div style={{ marginBottom: "1rem" }}>
-        <select
-          value={adFilter}
-          onChange={(e) => setAdFilter(e.target.value)}
+      {/* Filters Bar */}
+      <div style={{ marginBottom: "1rem", display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+        {/* Keyword search */}
+        <form onSubmit={(e) => { e.preventDefault(); setKeywordFilter(keywordInput.trim()); }} style={{ display: "flex", gap: "0.25rem" }}>
+          <input
+            type="text"
+            placeholder="Buscar en mensajes..."
+            value={keywordInput}
+            onChange={(e) => setKeywordInput(e.target.value)}
+            style={{
+              padding: "0.5rem 0.75rem",
+              backgroundColor: "rgba(255, 255, 255, 0.1)",
+              color: "white",
+              border: keywordFilter ? "2px solid #10b981" : "1px solid #555",
+              borderRadius: "8px",
+              fontSize: "0.9rem",
+              width: "240px"
+            }}
+          />
+          {keywordFilter && (
+            <button type="button" onClick={() => { setKeywordInput(''); setKeywordFilter(''); }}
+              style={{ padding: "0.5rem 0.75rem", backgroundColor: "#7f1d1d", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "0.85rem" }}>
+              ✕
+            </button>
+          )}
+        </form>
+
+        {/* Ad filter */}
+        <select value={adFilter} onChange={(e) => setAdFilter(e.target.value)}
           style={{
             padding: "0.5rem 0.75rem",
             backgroundColor: adFilter ? "#7c4dff" : "rgba(255, 255, 255, 0.1)",
-            color: "white",
-            border: adFilter ? "2px solid #7c4dff" : "1px solid #555",
-            borderRadius: "8px",
-            cursor: "pointer",
-            fontSize: "0.9rem",
-            maxWidth: "300px"
-          }}
-        >
+            color: "white", border: adFilter ? "2px solid #7c4dff" : "1px solid #555",
+            borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem", maxWidth: "200px"
+          }}>
           <option value="" style={{ backgroundColor: "#1a1a1a" }}>{t('messages.allAds')}</option>
           {availableAds.map(ad => (
-            <option key={ad.adId} value={ad.adId} style={{ backgroundColor: "#1a1a1a" }}>
-              {ad.name}
-            </option>
+            <option key={ad.adId} value={ad.adId} style={{ backgroundColor: "#1a1a1a" }}>{ad.name}</option>
           ))}
         </select>
+
+        {/* Purchase intent */}
+        <select value={purchaseIntentFilter} onChange={(e) => setPurchaseIntentFilter(e.target.value)}
+          style={{
+            padding: "0.5rem 0.75rem",
+            backgroundColor: purchaseIntentFilter ? "#3b82f6" : "rgba(255, 255, 255, 0.1)",
+            color: "white", border: purchaseIntentFilter ? "2px solid #3b82f6" : "1px solid #555",
+            borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem"
+          }}>
+          <option value="" style={{ backgroundColor: "#1a1a1a" }}>Intención: todas</option>
+          <option value="high" style={{ backgroundColor: "#1a1a1a" }}>Alta</option>
+          <option value="medium" style={{ backgroundColor: "#1a1a1a" }}>Media</option>
+          <option value="low" style={{ backgroundColor: "#1a1a1a" }}>Baja</option>
+        </select>
+
+        {/* Product interest */}
+        <select value={productInterestFilter} onChange={(e) => setProductInterestFilter(e.target.value)}
+          style={{
+            padding: "0.5rem 0.75rem",
+            backgroundColor: productInterestFilter ? "#f59e0b" : "rgba(255, 255, 255, 0.1)",
+            color: "white", border: productInterestFilter ? "2px solid #f59e0b" : "1px solid #555",
+            borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem"
+          }}>
+          <option value="" style={{ backgroundColor: "#1a1a1a" }}>Producto: todos</option>
+          <option value="malla_sombra" style={{ backgroundColor: "#1a1a1a" }}>Malla sombra</option>
+          <option value="borde_separador" style={{ backgroundColor: "#1a1a1a" }}>Borde separador</option>
+          <option value="rollo" style={{ backgroundColor: "#1a1a1a" }}>Rollo</option>
+          <option value="ground_cover" style={{ backgroundColor: "#1a1a1a" }}>Ground cover</option>
+          <option value="confeccionada" style={{ backgroundColor: "#1a1a1a" }}>Confeccionada</option>
+        </select>
+
+        {/* Shared product */}
+        <select value={sharedProductFilter} onChange={(e) => setSharedProductFilter(e.target.value)}
+          style={{
+            padding: "0.5rem 0.75rem",
+            backgroundColor: sharedProductFilter ? "#06b6d4" : "rgba(255, 255, 255, 0.1)",
+            color: "white", border: sharedProductFilter ? "2px solid #06b6d4" : "1px solid #555",
+            borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem"
+          }}>
+          <option value="" style={{ backgroundColor: "#1a1a1a" }}>Link compartido: todos</option>
+          <option value="yes" style={{ backgroundColor: "#1a1a1a" }}>Sí compartió</option>
+          <option value="no" style={{ backgroundColor: "#1a1a1a" }}>No compartió</option>
+        </select>
+
+        {/* Handoff */}
+        <select value={handoffFilter} onChange={(e) => setHandoffFilter(e.target.value)}
+          style={{
+            padding: "0.5rem 0.75rem",
+            backgroundColor: handoffFilter ? "#ef4444" : "rgba(255, 255, 255, 0.1)",
+            color: "white", border: handoffFilter ? "2px solid #ef4444" : "1px solid #555",
+            borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem"
+          }}>
+          <option value="" style={{ backgroundColor: "#1a1a1a" }}>Handoff: todos</option>
+          <option value="yes" style={{ backgroundColor: "#1a1a1a" }}>Pidió humano</option>
+          <option value="no" style={{ backgroundColor: "#1a1a1a" }}>No pidió</option>
+        </select>
+
+        {/* State */}
+        <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}
+          style={{
+            padding: "0.5rem 0.75rem",
+            backgroundColor: stateFilter ? "#8b5cf6" : "rgba(255, 255, 255, 0.1)",
+            color: "white", border: stateFilter ? "2px solid #8b5cf6" : "1px solid #555",
+            borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem"
+          }}>
+          <option value="" style={{ backgroundColor: "#1a1a1a" }}>Estado: todos</option>
+          <option value="new" style={{ backgroundColor: "#1a1a1a" }}>Nueva</option>
+          <option value="active" style={{ backgroundColor: "#1a1a1a" }}>Activa</option>
+          <option value="closed" style={{ backgroundColor: "#1a1a1a" }}>Cerrada</option>
+          <option value="needs_human" style={{ backgroundColor: "#1a1a1a" }}>Necesita humano</option>
+          <option value="human_handling" style={{ backgroundColor: "#1a1a1a" }}>En humano</option>
+        </select>
+
+        {/* Clear all */}
+        {(keywordFilter || adFilter || purchaseIntentFilter || productInterestFilter || sharedProductFilter || handoffFilter || stateFilter) && (
+          <button onClick={() => {
+            setKeywordInput(''); setKeywordFilter(''); setAdFilter('');
+            setPurchaseIntentFilter(''); setProductInterestFilter('');
+            setSharedProductFilter(''); setHandoffFilter(''); setStateFilter('');
+          }} style={{ padding: "0.5rem 0.75rem", backgroundColor: "#374151", color: "white", border: "1px solid #555", borderRadius: "8px", cursor: "pointer", fontSize: "0.85rem" }}>
+            Limpiar filtros
+          </button>
+        )}
       </div>
 
       {/* SECTION 1: Recent Activity Table */}
