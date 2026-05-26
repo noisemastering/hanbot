@@ -117,6 +117,12 @@ async function getConversation(psid) {
     if (convoObj.extractedName && !convoObj.userName) {
       convoObj.userName = convoObj.extractedName;
     }
+    // Customer-self-introduced name (from conversational extraction) takes
+    // precedence over FB Instant Reply harvest, since it's what the customer
+    // actually wants to be called.
+    if (convoObj.customerName && !convoObj.userName) {
+      convoObj.userName = convoObj.customerName;
+    }
 
     return convoObj; // 🔥 devuelve snapshot limpio del documento actualizado
   } catch (err) {

@@ -290,6 +290,26 @@ async function saveMessage(psid, text, senderType, messageId = null) {
     } catch (err) {
       console.error('Frustration detector error:', err.message);
     }
+
+    // Name extraction — capture customer name from conversational mentions and persist
+    try {
+      const { extractName } = require('./utils/nameExtractor');
+      const Conversation = require('./models/Conversation');
+      const convo = await Conversation.findOne({ psid }).select('customerName extractedName userName').lean();
+      // Only try to extract if we don't already have a name from any source
+      if (convo && !convo.customerName && !convo.extractedName && !convo.userName) {
+        const name = extractName(text);
+        if (name) {
+          await Conversation.updateOne(
+            { psid },
+            { $set: { customerName: name } }
+          );
+          console.log(`👤 Extracted name from message for ${psid}: ${name}`);
+        }
+      }
+    } catch (err) {
+      console.error('Name extractor error:', err.message);
+    }
   }
 
   io.emit("new_message", msg); // <-- Notifica al dashboard
