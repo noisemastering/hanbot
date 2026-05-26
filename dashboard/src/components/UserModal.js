@@ -70,7 +70,8 @@ function UserModal({ user, onClose, onSave }) {
       });
       const data = await res.json();
       if (data.success) {
-        setRoles(data.roles.filter(r => r.active));
+        const rolesList = data.roles || data.data || [];
+        setRoles(rolesList.filter(r => r.active));
       }
     } catch (error) {
       console.error('Error fetching roles:', error);
@@ -89,7 +90,8 @@ function UserModal({ user, onClose, onSave }) {
       });
       const data = await res.json();
       if (data.success) {
-        setProfiles(data.profiles.filter(p => p.active));
+        const profilesList = data.profiles || data.data || [];
+        setProfiles(profilesList.filter(p => p.active));
       }
     } catch (error) {
       console.error('Error fetching profiles:', error);
