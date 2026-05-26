@@ -258,12 +258,17 @@ function Messages() {
       const exclude = excludePsids || quickActionPsidsRef.current;
       const params = new URLSearchParams({
         page: String(page),
-        limit: '20',
-        start: start.toISOString(),
-        end: end.toISOString()
+        limit: '20'
       });
-      if (exclude.length > 0) {
-        params.set('excludePsids', exclude.join(','));
+      // When keyword search is active, search across ALL dates — user wants
+      // to find specific content regardless of when it happened.
+      // Also don't exclude quick-action PSIDs in that case.
+      if (!keywordFilterRef.current) {
+        params.set('start', start.toISOString());
+        params.set('end', end.toISOString());
+        if (exclude.length > 0) {
+          params.set('excludePsids', exclude.join(','));
+        }
       }
       if (adFilterRef.current) params.set('adId', adFilterRef.current);
       if (keywordFilterRef.current) params.set('keyword', keywordFilterRef.current);
