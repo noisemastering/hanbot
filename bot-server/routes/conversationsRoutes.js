@@ -4,7 +4,27 @@ const router = express.Router();
 const axios = require('axios');
 const Message = require('../models/Message');
 const Conversation = require('../models/Conversation');
-const { sendTextMessage: sendWhatsAppText } = require('../channels/whatsapp/api');
+const { sendTextMessage: sendWhatsAppText, sendImageMessage: sendWhatsAppImage, sendDocumentMessage: sendWhatsAppDocument } = require('../channels/whatsapp/api');
+const { cloudinary } = require('../config/cloudinary');
+const multer = require('multer');
+
+// Multer in-memory storage for attachments (we'll upload to Cloudinary manually
+// to use the right resource_type per file type)
+const attachmentUpload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 16 * 1024 * 1024 } // 16MB max (WhatsApp limit for docs)
+});
+
+// Helper: upload buffer to Cloudinary using stream
+function uploadBufferToCloudinary(buffer, options) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(options, (err, result) => {
+      if (err) return reject(err);
+      resolve(result);
+    });
+    stream.end(buffer);
+  });
+}
 
 /**
  * Send a message via Facebook Messenger
@@ -17,6 +37,35 @@ async function sendMessengerMessage(psid, text) {
     {
       recipient: { id: psid },
       message: { text },
+    },
+    {
+      headers: {
+        Authorization: `Bearer ${FB_PAGE_TOKEN}`,
+        "Content-Type": "application/json",
+      },
+    }
+  );
+
+  return response.data;
+}
+
+/**
+ * Send a Messenger attachment (image or file).
+ * attachmentType: 'image' | 'file' | 'video' | 'audio'
+ */
+async function sendMessengerAttachment(psid, url, attachmentType = 'image') {
+  const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN;
+
+  const response = await axios.post(
+    "https://graph.facebook.com/v18.0/me/messages",
+    {
+      recipient: { id: psid },
+      message: {
+        attachment: {
+          type: attachmentType,
+          payload: { url, is_reusable: false }
+        }
+      }
     },
     {
       headers: {
@@ -628,6 +677,90 @@ router.post('/reply', async (req, res) => {
       success: false,
       error: error.message || 'Failed to send reply'
     });
+  }
+});
+
+// POST /conversations/reply-attachment - Send a file (image or PDF) to a user
+router.post('/reply-attachment', attachmentUpload.single('file'), async (req, res) => {
+  try {
+    const { psid, caption } = req.body;
+    const file = req.file;
+
+    if (!psid || !file) {
+      return res.status(400).json({ success: false, error: 'Missing psid or file' });
+    }
+
+    // Detect type from mimetype
+    const isImage = file.mimetype.startsWith('image/');
+    const isPdf = file.mimetype === 'application/pdf';
+
+    if (!isImage && !isPdf) {
+      return res.status(400).json({ success: false, error: 'Only images and PDFs are supported' });
+    }
+
+    // Upload to Cloudinary
+    const folder = isImage ? 'hanlob/conversation-images' : 'hanlob/conversation-docs';
+    const resourceType = isImage ? 'image' : 'raw';
+    const publicId = `${Date.now()}_${file.originalname.replace(/[^a-zA-Z0-9.]/g, '_')}`;
+
+    const uploaded = await uploadBufferToCloudinary(file.buffer, {
+      folder,
+      resource_type: resourceType,
+      public_id: publicId,
+      use_filename: true
+    });
+
+    const fileUrl = uploaded.secure_url;
+    console.log(`📎 Uploaded ${isImage ? 'image' : 'PDF'} to Cloudinary: ${fileUrl}`);
+
+    // Get channel
+    const conversation = await Conversation.findOne({ psid }).lean();
+    const channel = conversation?.channel || 'facebook';
+
+    // Send via appropriate channel
+    if (channel === 'whatsapp') {
+      const phoneNumber = psid.startsWith('wa:') ? psid.substring(3) : psid;
+      if (isImage) {
+        await sendWhatsAppImage(phoneNumber, fileUrl, caption || null);
+      } else {
+        await sendWhatsAppDocument(phoneNumber, fileUrl, file.originalname, caption || null);
+      }
+    } else {
+      // Messenger
+      await sendMessengerAttachment(psid, fileUrl, isImage ? 'image' : 'file');
+      // Messenger doesn't support captions on attachments — send caption as separate text
+      if (caption) {
+        await sendMessengerMessage(psid, caption);
+      }
+    }
+
+    // Save message (use a marker so the UI can show the attachment)
+    const messageText = caption
+      ? `[${isImage ? 'Imagen' : 'PDF'}: ${fileUrl}] ${caption}`
+      : `[${isImage ? 'Imagen' : 'PDF'}: ${fileUrl}]`;
+
+    const message = await Message.create({
+      psid,
+      text: messageText,
+      senderType: 'human',
+      timestamp: new Date()
+    });
+
+    await Conversation.findOneAndUpdate(
+      { psid },
+      {
+        lastMessageAt: new Date(),
+        state: 'human_active',
+        handoffResolved: true,
+        handoffResolvedAt: new Date()
+      }
+    );
+
+    console.log(`✅ Attachment sent via ${channel}`);
+    res.json({ success: true, message, channel, url: fileUrl });
+  } catch (error) {
+    console.error('❌ Error sending attachment:', error.response?.data || error.message);
+    res.status(500).json({ success: false, error: error.message || 'Failed to send attachment' });
   }
 });
 

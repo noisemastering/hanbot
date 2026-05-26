@@ -444,6 +444,50 @@ function Messages() {
     }
   };
 
+  // Send attachment (image or PDF) to user
+  const handleSendAttachment = async (file) => {
+    if (!file || !selectedPsid) return;
+
+    setSendingReply(true);
+    try {
+      const formData = new FormData();
+      formData.append('psid', selectedPsid);
+      formData.append('file', file);
+      if (replyText.trim()) {
+        formData.append('caption', replyText.trim());
+      }
+
+      const response = await API.post('/conversations/reply-attachment', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+
+      if (response.data.success) {
+        const isImage = file.type.startsWith('image/');
+        const caption = replyText.trim();
+        const text = caption
+          ? `[${isImage ? 'Imagen' : 'PDF'}: ${response.data.url}] ${caption}`
+          : `[${isImage ? 'Imagen' : 'PDF'}: ${response.data.url}]`;
+
+        setFullConversation(prev => [...prev, {
+          text,
+          senderType: 'human',
+          timestamp: new Date().toISOString()
+        }]);
+
+        setReplyText('');
+        setConversationStatuses(prev => ({
+          ...prev,
+          [selectedPsid]: { ...prev[selectedPsid], humanActive: true }
+        }));
+      }
+    } catch (err) {
+      console.error("Error sending attachment:", err);
+      alert(`Error al enviar archivo: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setSendingReply(false);
+    }
+  };
+
   // Send reply to user (works for both Messenger and WhatsApp)
   const handleSendReply = async () => {
     if (!replyText.trim() || !selectedPsid) return;
@@ -1496,7 +1540,26 @@ function Messages() {
                     <span>{msg.senderType === "bot" ? `🤖 ${t('messages.bot')}` : msg.senderType === "human" ? `👨‍💼 ${t('messages.agent')}` : `👤 ${t('messages.user')}`}</span>
                     <span>{new Date(msg.timestamp).toLocaleString()}</span>
                   </div>
-                  <p style={{ margin: 0, whiteSpace: "pre-wrap", color: "white" }}>{msg.text}</p>
+                  {(() => {
+                    // Parse attachment marker: "[Imagen: <url>] caption" or "[PDF: <url>] caption"
+                    const match = msg.text?.match(/^\[(Imagen|PDF):\s*(https?:\/\/[^\]]+)\]\s*(.*)$/s);
+                    if (match) {
+                      const [, type, url, caption] = match;
+                      return (
+                        <div>
+                          {type === 'Imagen' ? (
+                            <img src={url} alt="" style={{ maxWidth: "100%", maxHeight: "300px", borderRadius: "6px", marginBottom: caption ? "0.5rem" : 0 }} />
+                          ) : (
+                            <a href={url} target="_blank" rel="noreferrer" style={{ display: "inline-block", padding: "0.5rem 0.75rem", backgroundColor: "rgba(0,0,0,0.3)", borderRadius: "6px", color: "white", textDecoration: "none", marginBottom: caption ? "0.5rem" : 0 }}>
+                              📄 Ver PDF
+                            </a>
+                          )}
+                          {caption && <p style={{ margin: 0, whiteSpace: "pre-wrap", color: "white" }}>{caption}</p>}
+                        </div>
+                      );
+                    }
+                    return <p style={{ margin: 0, whiteSpace: "pre-wrap", color: "white" }}>{msg.text}</p>;
+                  })()}
                 </div>
               ))}
             </div>
@@ -1504,6 +1567,37 @@ function Messages() {
             {/* Reply Input */}
             <div style={{ padding: "1rem", borderTop: "1px solid #2a2a2a" }}>
               <div style={{ display: "flex", gap: "0.5rem" }}>
+                {/* Hidden file input */}
+                <input
+                  type="file"
+                  id="attachment-input"
+                  accept="image/*,application/pdf"
+                  style={{ display: 'none' }}
+                  onChange={(e) => {
+                    const file = e.target.files?.[0];
+                    if (file) handleSendAttachment(file);
+                    e.target.value = ''; // reset so same file can be re-selected
+                  }}
+                  disabled={sendingReply}
+                />
+                {/* Attachment button */}
+                <button
+                  type="button"
+                  onClick={() => document.getElementById('attachment-input').click()}
+                  disabled={sendingReply}
+                  title="Adjuntar imagen o PDF"
+                  style={{
+                    padding: "12px 14px",
+                    borderRadius: "8px",
+                    border: `2px solid ${getChannelDisplay(selectedChannel).color}40`,
+                    backgroundColor: "#2a2a2a",
+                    color: "white",
+                    cursor: sendingReply ? 'not-allowed' : 'pointer',
+                    fontSize: "1.2rem",
+                    opacity: sendingReply ? 0.6 : 1
+                  }}>
+                  📎
+                </button>
                 <input
                   type="text"
                   value={replyText}

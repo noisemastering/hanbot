@@ -76,6 +76,19 @@ async function sendImageMessage(recipientPhone, imageUrl, caption = null) {
 }
 
 /**
+ * Send a document (PDF, etc) with optional caption + filename
+ */
+async function sendDocumentMessage(recipientPhone, documentUrl, filename = null, caption = null) {
+  const docData = {
+    type: 'document',
+    document: { link: documentUrl }
+  };
+  if (filename) docData.document.filename = filename;
+  if (caption) docData.document.caption = caption;
+  return sendWhatsAppMessage(recipientPhone, docData);
+}
+
+/**
  * Mark a message as read
  */
 async function markMessageAsRead(messageId) {
@@ -105,6 +118,7 @@ module.exports = {
   sendWhatsAppMessage,
   sendTextMessage,
   sendImageMessage,
+  sendDocumentMessage,
   markMessageAsRead,
   getWhatsAppConfig
 };
