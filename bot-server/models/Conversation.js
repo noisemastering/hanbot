@@ -77,6 +77,11 @@ const conversationSchema = new mongoose.Schema({
   customOrderPurpose: { type: String, default: null },  // What they want to protect
   customOrderZipcode: { type: String, default: null },  // Their zip code
 
+  // Follow-up suppression — set when customer is angry, complained, or asked to be left alone
+  doNotFollowUp: { type: Boolean, default: false },
+  doNotFollowUpReason: { type: String, default: null }, // 'angry', 'complaint', 'manual', etc.
+  doNotFollowUpAt: { type: Date, default: null },
+
   // Human handoff tracking
   handoffRequested: { type: Boolean, default: false },  // User explicitly requested human
   handoffReason: { type: String, default: null },      // Why handoff was triggered

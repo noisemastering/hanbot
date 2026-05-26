@@ -133,7 +133,9 @@ FORMATO:
 - ${multiProduct ? 'Máximo 3-4 oraciones en total. NO incluyas links cuando hay rango — espera a que el cliente elija la medida.' : 'Máximo 2-4 oraciones por producto. Incluye siempre el precio y el link de compra.'}
 - Escribe las URLs como texto plano (ejemplo: https://ejemplo.com)
 - El envío ya está incluido — ve directo al precio
-- Usa solo los datos proporcionados, nada inventado
+- Usa SOLO el precio listado en PRODUCTOS. Si el historial menciona OTRO precio (por ejemplo un precio promocional de otra medida), ese precio NO APLICA aquí — corresponde a un producto distinto.
+- Usa SOLO el link listado en PRODUCTOS. NUNCA reutilices links de mensajes anteriores.
+- Si en el historial se mencionó un precio promocional, esa promoción es ESPECÍFICA de la medida promocional y no aplica a otras medidas.
 - Solo menciona los productos proporcionados
 - NUNCA te disculpes ni digas "lamento la confusión" o "disculpa" — no hay nada de qué disculparse
 - Solo devuelve el mensaje, nada más`;
@@ -154,7 +156,39 @@ Genera el mensaje de cotización.`;
       max_tokens: 500
     });
 
-    return response.choices[0].message.content.trim();
+    let aiText = response.choices[0].message.content.trim();
+
+    // Price/link sanity check — verify the AI didn't hallucinate a wrong price or link
+    const validPrices = products.map(p => Math.round(p.price)).filter(Boolean);
+    const validLinks = products.map(p => p.link).filter(Boolean);
+
+    // Find $XXX patterns in the response
+    const pricesInText = [...aiText.matchAll(/\$\s?(\d{2,5}(?:[.,]\d{1,2})?)/g)].map(m => Math.round(parseFloat(m[1].replace(',', '.'))));
+    const linksInText = [...aiText.matchAll(/https?:\/\/[^\s]+/g)].map(m => m[0]);
+
+    // Check for prices that don't match any valid product price (allow ±$1 tolerance)
+    const badPrice = pricesInText.find(p => !validPrices.some(vp => Math.abs(vp - p) <= 1));
+    if (badPrice && validPrices.length > 0) {
+      console.warn(`⚠️ [retail] AI quoted invalid price $${badPrice}. Valid: ${validPrices.join(', ')}. Regenerating with strict prompt.`);
+      // Force a deterministic fallback
+      return products.map(p => {
+        let msg = `${p.name} - $${p.price}`;
+        if (p.link) msg += `\n${p.link}`;
+        return msg;
+      }).join('\n\n');
+    }
+
+    // Check for links that aren't in the current product list
+    const badLink = linksInText.find(l => !validLinks.includes(l) && !l.includes('hanlob.com.mx/r/'));
+    // The /r/ links are tracked, so just verify the exact match
+    const wrongTrackedLink = linksInText.find(l => l.includes('/r/') && !validLinks.includes(l));
+    if (wrongTrackedLink) {
+      console.warn(`⚠️ [retail] AI used wrong tracked link ${wrongTrackedLink}. Valid: ${validLinks.join(', ')}.`);
+      // Replace with the correct link
+      aiText = aiText.replace(wrongTrackedLink, validLinks[0] || '');
+    }
+
+    return aiText;
   } catch (err) {
     console.error('❌ [retail] AI quote error:', err.message);
     // Fallback: build a simple text quote

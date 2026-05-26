@@ -245,6 +245,9 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
       // 3. We haven't already made a cross-sell offer for this product
       // 4. There's an active CrossSellRule matching the shared product
       try {
+        // Skip cross-sell entirely for flagged conversations (angry, opted-out, etc.)
+        if (convo?.doNotFollowUp) return response;
+
         const hasSharedProduct = convo?.lastSharedProductId;
         const alreadyOffered = state?.crossSellOffered === convo?.lastSharedProductId;
 

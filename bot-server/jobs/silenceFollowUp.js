@@ -36,6 +36,12 @@ async function scheduleFollowUpIfNeeded(psid, botResponseText) {
   const convo = await Conversation.findOne({ psid });
   if (!convo) return;
 
+  // Skip if customer is flagged as angry / opted-out
+  if (convo.doNotFollowUp) {
+    console.log(`🚫 Skip follow-up scheduling for ${psid} (doNotFollowUp: ${convo.doNotFollowUpReason})`);
+    return;
+  }
+
   // Skip if already sent for this conversation
   if (convo.silenceFollowUpSent) return;
 
@@ -90,7 +96,8 @@ async function runSilenceFollowUpJob() {
     const conversations = await Conversation.find({
       silenceFollowUpAt: { $lte: now, $ne: null },
       silenceFollowUpSent: { $ne: true },
-      state: { $in: ['active', 'new'] }
+      state: { $in: ['active', 'new'] },
+      doNotFollowUp: { $ne: true }
     }).lean();
 
     if (conversations.length === 0) return;
@@ -221,7 +228,8 @@ async function runLinkFollowUpJob() {
 
     const conversations = await Conversation.find({
       linkFollowUpAt: { $lte: now, $ne: null },
-      state: { $in: ['active', 'new'] }
+      state: { $in: ['active', 'new'] },
+      doNotFollowUp: { $ne: true }
     }).lean();
 
     if (conversations.length === 0) return;

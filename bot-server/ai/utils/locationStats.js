@@ -126,8 +126,8 @@ async function appendStatsQuestionToResponse(responseText, convo, psid) {
     return { text: responseText, askedStats: false };
   }
 
-  // Don't ask if we already have their location
-  if (convo.city && convo.stateMx) {
+  // Don't ask if we already have their location (city/state OR just zip)
+  if ((convo.city && convo.stateMx) || convo.zipcode || convo.customOrderZipcode) {
     return { text: responseText, askedStats: false };
   }
 
@@ -338,7 +338,10 @@ async function handleLocationStatsResponse(message, psid, convo) {
   const convoUpdate = {};
   if (location.city) convoUpdate.city = location.city;
   if (location.state) convoUpdate.stateMx = location.state;
-  if (location.zipcode) convoUpdate.zipcode = location.zipcode;
+  if (location.zipcode) {
+    convoUpdate.zipcode = location.zipcode;
+    convoUpdate.zipCode = location.zipcode; // canonical field for downstream guards
+  }
 
   if (Object.keys(convoUpdate).length > 0) {
     await updateConversation(psid, convoUpdate);

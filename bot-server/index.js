@@ -264,6 +264,34 @@ async function saveMessage(psid, text, senderType, messageId = null) {
     );
   }
 
+  // Frustration detection on user messages — auto-flag for no follow-up if angry
+  if (senderType === 'user' && text && text !== '[image]') {
+    try {
+      const { analyzeMessage, shouldFlagConversation } = require('./utils/frustrationDetector');
+      const Conversation = require('./models/Conversation');
+      const convo = await Conversation.findOne({ psid }).lean();
+      if (convo && !convo.doNotFollowUp) {
+        const analysis = analyzeMessage(text);
+        if (analysis.severity !== 'none') {
+          // Get recent user messages to check repeated frustration
+          const recentMsgs = await Message.find({ psid, senderType: 'user' })
+            .sort({ timestamp: -1 }).limit(10).select('text').lean();
+          const recentTexts = recentMsgs.map(m => m.text).filter(Boolean);
+          const flagReason = shouldFlagConversation(analysis, recentTexts);
+          if (flagReason) {
+            await Conversation.updateOne(
+              { psid },
+              { $set: { doNotFollowUp: true, doNotFollowUpReason: flagReason, doNotFollowUpAt: new Date() } }
+            );
+            console.log(`🚫 Auto-flagged ${psid} for no follow-up. Reason: ${flagReason}. Signals: ${analysis.signals.map(s => s.match).join(', ')}`);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Frustration detector error:', err.message);
+    }
+  }
+
   io.emit("new_message", msg); // <-- Notifica al dashboard
   return msg;
 }
@@ -1061,10 +1089,13 @@ app.post("/webhook", async (req, res) => {
         // If user is mid-conversation AND this is the exact same ad they already
         // clicked, skip — they likely re-clicked accidentally. Otherwise always
         // process the referral (the ad IS the entry point and sets the flow).
+        // Extended to 24h to handle multi-day conversations where the user
+        // re-engages with the same ad mid-conversation.
         const minutesSinceLast = hoursSinceLast * 60;
         const isSameAd = convo?.adId && convo.adId === referral.ad_id;
-        if (minutesSinceLast < 30 && isSameAd) {
-          console.log(`🛡️ User ${senderPsid} re-clicked same ad ${referral.ad_id} (${minutesSinceLast.toFixed(0)}min ago), skipping reset & greeting`);
+        // Skip reset if same ad AND any recent activity (≤24h)
+        if (hoursSinceLast < 24 && isSameAd) {
+          console.log(`🛡️ User ${senderPsid} re-clicked same ad ${referral.ad_id} (${minutesSinceLast.toFixed(0)}min / ${hoursSinceLast.toFixed(1)}h ago), preserving conversation state`);
           adGreetingSent = true; // prevent greeting, let message handler run normally
         } else {
         // ---- Normal ad-entry flow: reset + greet ----

@@ -316,6 +316,36 @@ router.get('/pending-handoffs', async (req, res) => {
   }
 });
 
+// POST /conversations/:psid/do-not-follow-up - Toggle follow-up suppression
+router.post('/:psid/do-not-follow-up', async (req, res) => {
+  try {
+    const { psid } = req.params;
+    const { enabled, reason } = req.body;
+
+    const update = enabled
+      ? {
+          doNotFollowUp: true,
+          doNotFollowUpReason: reason || 'manual',
+          doNotFollowUpAt: new Date(),
+          silenceFollowUpAt: null,
+          linkFollowUpAt: null
+        }
+      : {
+          doNotFollowUp: false,
+          doNotFollowUpReason: null,
+          doNotFollowUpAt: null
+        };
+
+    const result = await Conversation.findOneAndUpdate({ psid }, { $set: update }, { new: true });
+    if (!result) return res.status(404).json({ success: false, error: 'Conversation not found' });
+
+    res.json({ success: true, doNotFollowUp: result.doNotFollowUp, reason: result.doNotFollowUpReason });
+  } catch (error) {
+    console.error('Error toggling doNotFollowUp:', error);
+    res.status(500).json({ success: false, error: 'Failed to toggle' });
+  }
+});
+
 // POST /conversations/:psid/resolve-handoff - Mark a handoff as resolved
 router.post('/:psid/resolve-handoff', async (req, res) => {
   try {

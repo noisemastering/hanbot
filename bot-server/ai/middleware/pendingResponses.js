@@ -49,7 +49,10 @@ module.exports = async function pendingResponses(ctx, next) {
       const convoUpdate = { unknownCount: 0 };
       if (location.city) convoUpdate.city = location.city;
       if (location.state) convoUpdate.stateMx = location.state;
-      if (location.zipcode) convoUpdate.zipcode = location.zipcode;
+      if (location.zipcode) {
+        convoUpdate.zipcode = location.zipcode;
+        convoUpdate.zipCode = location.zipcode; // canonical field for downstream guards
+      }
       await updateConversation(psid, convoUpdate);
       await syncLocationToUser(psid, location, "shipping_question");
 
