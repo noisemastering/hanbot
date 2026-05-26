@@ -122,40 +122,52 @@ router.get('/grouped', async (req, res) => {
     if (adFilterPsids) {
       matchStage.psid = { ...matchStage.psid, $in: adFilterPsids };
     }
-    // Multi-word keyword search: find PSIDs whose conversations contain ALL words
-    // (words can span across different messages within the same conversation)
+    // Multi-word keyword search: find MESSAGES that contain ALL words within
+    // a single message (AND search per message). Then show the matching message.
+    let keywordMatchedMessages = null; // psid → matching message text
     if (keyword && keyword.trim().length >= 2) {
       const tokens = keyword
         .trim()
         .toLowerCase()
         .split(/\s+/)
-        .filter(w => w.length >= 2)  // ignore very short words
-        .map(w => w.replace(/[.,!?¿¡;:]/g, '')) // strip punctuation
+        .filter(w => w.length >= 2)
+        .map(w => w.replace(/[.,!?¿¡;:]/g, ''))
         .filter(Boolean);
 
       if (tokens.length > 0) {
-        // For each token, find all PSIDs that have at least one message containing it
-        const psidSetsPerToken = await Promise.all(
-          tokens.map(async (token) => {
-            const escaped = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-            const psids = await Message.distinct('psid', {
-              text: { $regex: escaped, $options: 'i' }
-            });
-            return new Set(psids);
-          })
-        );
+        // Build regex that requires ALL tokens within one message using lookaheads
+        const lookaheads = tokens
+          .map(t => `(?=.*${t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')})`)
+          .join('');
+        const allTokensRegex = `${lookaheads}.*`;
 
-        // Intersect all sets — conversations that have ALL tokens
-        const keywordPsids = [...psidSetsPerToken[0]].filter(psid =>
-          psidSetsPerToken.every(set => set.has(psid))
-        );
+        // Find matching messages: only USER messages by default (not bot/human replies)
+        // because bot/human messages have boilerplate that pollutes results
+        const matchingMessages = await Message.find({
+          text: { $regex: allTokensRegex, $options: 'is' },
+          senderType: 'user'  // only user-sent messages
+        })
+          .sort({ timestamp: -1 })
+          .select('psid text timestamp')
+          .limit(2000)
+          .lean();
 
-        if (keywordPsids.length === 0) {
+        if (matchingMessages.length === 0) {
           return res.json({
             conversations: [],
             pagination: { page: 1, limit: limitNum, total: 0, pages: 0 }
           });
         }
+
+        // Build psid → latest matching message
+        keywordMatchedMessages = {};
+        for (const msg of matchingMessages) {
+          if (!keywordMatchedMessages[msg.psid]) {
+            keywordMatchedMessages[msg.psid] = { text: msg.text, timestamp: msg.timestamp };
+          }
+        }
+
+        const keywordPsids = Object.keys(keywordMatchedMessages);
 
         // Combine with existing psid filter
         matchStage.psid = matchStage.psid
@@ -232,7 +244,17 @@ router.get('/grouped', async (req, res) => {
     pipeline.push({ $skip: (pageNum - 1) * limitNum });
     pipeline.push({ $limit: limitNum });
 
-    const conversations = await Message.aggregate(pipeline);
+    let conversations = await Message.aggregate(pipeline);
+
+    // If keyword search active, override lastMessage with the matching user message
+    if (keywordMatchedMessages) {
+      conversations = conversations.map(c => ({
+        ...c,
+        lastMessage: keywordMatchedMessages[c.psid]?.text || c.lastMessage,
+        matchedSearch: true,
+        senderType: 'user'  // matching message is from user
+      }));
+    }
 
     res.json({
       conversations,
