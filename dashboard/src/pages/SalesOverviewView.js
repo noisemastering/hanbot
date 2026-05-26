@@ -208,7 +208,7 @@ function SalesOverviewView() {
                   labelStyle={{ color: '#e5e7eb' }}
                   formatter={(val, name) => name === 'revenue' ? [fmt(val), 'Ingresos'] : [val.toLocaleString('es-MX'), 'Órdenes']}
                 />
-                <Bar dataKey="revenue" radius={[4, 4, 0, 0]} name="revenue">
+                <Bar dataKey="revenue" radius={[4, 4, 0, 0]} name="revenue" fill="#3b82f6">
                   {monthlyChartData.map((entry, idx) => (
                     <Cell key={idx} fill="#3b82f6" />
                   ))}
