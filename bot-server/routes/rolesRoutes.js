@@ -42,9 +42,8 @@ const requireSuperAdmin = (req, res, next) => {
 
 // Apply authentication to all routes
 router.use(authenticate);
-router.use(requireSuperAdmin);
 
-// GET /roles - Get all roles
+// GET /roles - Get all roles (any authenticated user — needed to populate dropdowns)
 router.get("/", async (req, res) => {
   try {
     const roles = await Role.find()
@@ -65,7 +64,7 @@ router.get("/", async (req, res) => {
 });
 
 // POST /roles - Create a new role
-router.post("/", async (req, res) => {
+router.post("/", requireSuperAdmin, async (req, res) => {
   try {
     const { name, label, description, permissions, allowsProfiles } = req.body;
 
@@ -113,7 +112,7 @@ router.post("/", async (req, res) => {
 });
 
 // PUT /roles/:id - Update a role
-router.put("/:id", async (req, res) => {
+router.put("/:id", requireSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
     const { label, description, permissions, allowsProfiles, active } = req.body;
@@ -157,7 +156,7 @@ router.put("/:id", async (req, res) => {
 });
 
 // DELETE /roles/:id - Delete a role
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", requireSuperAdmin, async (req, res) => {
   try {
     const { id } = req.params;
 
