@@ -1423,13 +1423,16 @@ router.get('/spend-optimization', async (req, res) => {
       const targetProduct = adTargetMap[row.ad_id] || null;
       const totalOrders = products.reduce((s, p) => s + p.count, 0);
 
-      // Determine on-target vs cross-sell
-      // Strategy: use the set of sizes from the targeted ProductFamily tree.
-      // If the sold item's size is in that set → on-target.
-      // Fallback to keyword match if no size set is available.
-      let onTarget = 0;
+      // Variety analysis for category-targeted ads:
+      //   X = total variants/sizes available in the targeted category
+      //   Y = distinct variants the ad actually moved
+      //   Z = sales from outside the category (true cross-sell)
+      let inCategorySales = 0;
+      let distinctInCategory = 0;
       let crossSell = [];
-      const targetSizes = adTargetSizesMap[row.ad_id]; // Set<"WxHm"> or undefined
+      const targetSizes = adTargetSizesMap[row.ad_id]; // Set<"WxHm">
+      const categoryTotalVariants = targetSizes ? targetSizes.size : 0;
+
       if (products.length > 0 && (targetSizes || targetProduct)) {
         const targetLower = (targetProduct || '').toLowerCase().trim();
         const stopwords = new Set(['retail', 'mayoreo', 'wholesale', 'de', 'del', 'la', 'el', 'los', 'las', 'y', 'con', 'sin']);
@@ -1439,23 +1442,33 @@ router.get('/spend-optimization', async (req, res) => {
           .map(t => t.trim())
           .filter(t => t.length >= 3 && !stopwords.has(t));
 
+        const distinctSeen = new Set();
+
         products.forEach(p => {
           const sizeLabel = (p.product || '').toLowerCase();
           const fullLower = (p.fullTitle || p.product || '').toLowerCase();
 
-          let isOnTarget = false;
+          let isInCategory = false;
           if (targetSizes && targetSizes.size > 0) {
-            // Best match: sold size is one of the target family's descendant sizes
-            isOnTarget = targetSizes.has(sizeLabel);
+            isInCategory = targetSizes.has(sizeLabel);
           } else if (categoryTokens.length > 0) {
-            // Fallback: category keyword match against full title
-            isOnTarget = categoryTokens.some(tok => fullLower.includes(tok));
+            isInCategory = categoryTokens.some(tok => fullLower.includes(tok));
           }
 
-          if (isOnTarget) onTarget += p.count;
-          else crossSell.push(p);
+          if (isInCategory) {
+            inCategorySales += p.count;
+            distinctSeen.add(sizeLabel);
+          } else {
+            crossSell.push(p);
+          }
         });
+
+        distinctInCategory = distinctSeen.size;
       }
+
+      // Backwards-compat aliases for the frontend's older shape
+      const onTarget = inCategorySales;
+      const crossSellCount = totalOrders - inCategorySales;
 
       return {
         adId: row.ad_id,
@@ -1472,8 +1485,12 @@ router.get('/spend-optimization', async (req, res) => {
         targetProduct,
         products: products.slice(0, 5),
         onTarget,
-        crossSellCount: totalOrders - onTarget,
-        crossSellPct: totalOrders > 0 ? Math.round((totalOrders - onTarget) / totalOrders * 100) : 0
+        crossSellCount,
+        crossSellPct: totalOrders > 0 ? Math.round((crossSellCount / totalOrders) * 100) : 0,
+        // Variety stats: X variants in target category, Y distinct sold, Z out-of-category sales
+        categoryTotalVariants,
+        distinctInCategory,
+        outOfCategorySales: crossSellCount
       };
     }).filter(a => a.spend > 0).sort((a, b) => b.revenue - a.revenue);
 

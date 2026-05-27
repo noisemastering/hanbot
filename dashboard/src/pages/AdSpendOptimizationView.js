@@ -166,9 +166,16 @@ function AdSpendOptimizationView() {
                     <td className="px-4 py-3 text-right text-sm text-green-400">{a.conversions}</td>
                     <td className="px-4 py-3 text-right text-sm">
                       {a.conversions > 0 ? (
-                        <span className={a.crossSellPct > 30 ? 'text-amber-400' : 'text-green-400'}>
-                          {a.onTarget} <span className="text-gray-500">({100 - a.crossSellPct}%)</span>
-                        </span>
+                        a.categoryTotalVariants > 0 ? (
+                          <span className="text-green-400" title="Medidas distintas vendidas / total disponibles en la categoría">
+                            {a.distinctInCategory}<span className="text-gray-500">/{a.categoryTotalVariants}</span>
+                            {a.outOfCategorySales > 0 && <span className="text-amber-400"> +{a.outOfCategorySales}</span>}
+                          </span>
+                        ) : (
+                          <span className={a.crossSellPct > 30 ? 'text-amber-400' : 'text-green-400'}>
+                            {a.onTarget} <span className="text-gray-500">({100 - a.crossSellPct}%)</span>
+                          </span>
+                        )
                       ) : '—'}
                     </td>
                     <td className="px-4 py-3 text-right text-sm text-white">{a.cpa !== null ? fmt(a.cpa) : '—'}</td>
@@ -194,10 +201,22 @@ function AdSpendOptimizationView() {
                               </div>
                             ))}
                           </div>
-                          {a.crossSellPct > 0 && (
+                          {/* Variety summary: distinct variants sold from category + out-of-category sales */}
+                          {a.categoryTotalVariants > 0 && (
+                            <p className="text-xs text-gray-300">
+                              📊 Vendiste <span className="text-white font-semibold">{a.distinctInCategory}</span> de las <span className="text-white font-semibold">{a.categoryTotalVariants}</span> medidas disponibles en <span className="text-white">{a.targetProduct}</span>.
+                              {a.outOfCategorySales > 0 ? (
+                                <span className="text-amber-400">
+                                  {' '}También se vendieron <span className="font-semibold">{a.outOfCategorySales}</span> productos de otras categorías (cross-sell).
+                                </span>
+                              ) : (
+                                <span className="text-green-400"> {' '}100% de las ventas dentro de la categoría objetivo.</span>
+                              )}
+                            </p>
+                          )}
+                          {!a.categoryTotalVariants && a.crossSellPct > 30 && (
                             <p className="text-xs text-amber-400">
-                              ⚠️ {a.crossSellPct}% de las ventas fueron de un producto diferente al objetivo del anuncio.
-                              {a.crossSellPct > 30 && ' Considera ajustar el contenido del anuncio o redirigir el flujo.'}
+                              ⚠️ {a.crossSellPct}% de las ventas fueron de un producto diferente. Considera ajustar el contenido del anuncio o redirigir el flujo.
                             </p>
                           )}
                         </div>
