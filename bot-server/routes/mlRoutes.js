@@ -1307,8 +1307,56 @@ router.get('/spend-optimization', async (req, res) => {
 
     // Also get stored metrics as fallback (from FB sync)
     const Ad = require('../models/Ad');
+    const ConvoFlowManifest = require('../models/ConvoFlowManifest');
+    const ProductFamily = require('../models/ProductFamily');
     require('../models/Promo');
     const adDocs = await Ad.find({}, 'fbAdId name convoFlowRef promoId metrics').populate('promoId', 'name promoProductIds').lean();
+
+    // Build per-ad set of on-target SIZES by walking the targeted ProductFamily tree.
+    // Sizes are normalized to lower-case "WxHm" form for comparison against the sold item's size.
+    const normalizeSize = (str) => {
+      if (!str) return null;
+      const m = String(str).toLowerCase().match(/(\d+(?:\.\d+)?)\s*m?\s*[xX×]\s*(\d+(?:\.\d+)?)\s*m?/);
+      return m ? `${m[1]}x${m[2]}m` : null;
+    };
+
+    // Collect all distinct ConvoFlow refs used by ads
+    const convoFlowRefs = [...new Set(adDocs.map(a => a.convoFlowRef).filter(Boolean))];
+    const manifestByName = {};
+    if (convoFlowRefs.length > 0) {
+      const manifests = await ConvoFlowManifest.find({ name: { $in: convoFlowRefs } })
+        .populate('products', '_id name')
+        .lean();
+      manifests.forEach(m => { manifestByName[m.name] = m; });
+    }
+
+    // For each manifest, fetch the descendant sellable products and collect their sizes
+    const adTargetSizesMap = {}; // fbAdId -> Set<sizeStr>
+    for (const ad of adDocs) {
+      if (!ad.fbAdId) continue;
+      const manifest = ad.convoFlowRef ? manifestByName[ad.convoFlowRef] : null;
+      if (!manifest?.products?.length) continue;
+      const rootIds = manifest.products.map(p => p._id);
+      // BFS down the tree to gather all descendant family names
+      let frontier = rootIds;
+      const allNames = new Set();
+      const safetyMax = 5; // up to 5 levels deep
+      for (let depth = 0; depth < safetyMax && frontier.length > 0; depth++) {
+        const families = await ProductFamily.find({ _id: { $in: frontier } }).select('_id name').lean();
+        families.forEach(f => { if (f.name) allNames.add(f.name); });
+        const children = await ProductFamily.find({ parentId: { $in: frontier } }).select('_id name').lean();
+        if (children.length === 0) break;
+        children.forEach(c => { if (c.name) allNames.add(c.name); });
+        frontier = children.map(c => c._id);
+      }
+      // Extract sizes from family names
+      const sizes = new Set();
+      allNames.forEach(n => {
+        const s = normalizeSize(n);
+        if (s) sizes.add(s);
+      });
+      if (sizes.size > 0) adTargetSizesMap[ad.fbAdId] = sizes;
+    }
 
     // Build stored metrics fallback map
     const storedMetricsMap = {};
@@ -1376,21 +1424,17 @@ router.get('/spend-optimization', async (req, res) => {
       const totalOrders = products.reduce((s, p) => s + p.count, 0);
 
       // Determine on-target vs cross-sell
-      // Strategy:
-      //   - If target specifies a size (e.g. "6x4m"), match by exact size
-      //   - Otherwise match by category keyword(s) (e.g. "confeccionada",
-      //     "borde separador", "ground cover") against the FULL ML item title
+      // Strategy: use the set of sizes from the targeted ProductFamily tree.
+      // If the sold item's size is in that set → on-target.
+      // Fallback to keyword match if no size set is available.
       let onTarget = 0;
       let crossSell = [];
-      if (targetProduct && products.length > 0) {
+      const targetSizes = adTargetSizesMap[row.ad_id]; // Set<"WxHm"> or undefined
+      if (products.length > 0 && (targetSizes || targetProduct)) {
         const targetLower = (targetProduct || '').toLowerCase().trim();
-        const sizeMatch = targetLower.match(/(\d+)\s*x\s*(\d+)/);
-
-        // Build category keywords from target — strip "retail", "wholesale",
-        // numbers, common stopwords, then keep meaningful tokens
         const stopwords = new Set(['retail', 'mayoreo', 'wholesale', 'de', 'del', 'la', 'el', 'los', 'las', 'y', 'con', 'sin']);
         const categoryTokens = targetLower
-          .replace(/[0-9]+\s*x\s*[0-9]+\s*m?/g, '') // strip sizes
+          .replace(/[0-9]+\s*x\s*[0-9]+\s*m?/g, '')
           .split(/\s+/)
           .map(t => t.trim())
           .filter(t => t.length >= 3 && !stopwords.has(t));
@@ -1400,11 +1444,11 @@ router.get('/spend-optimization', async (req, res) => {
           const fullLower = (p.fullTitle || p.product || '').toLowerCase();
 
           let isOnTarget = false;
-          if (sizeMatch) {
-            // Target has explicit size — match by size in label
-            isOnTarget = sizeLabel.includes(`${sizeMatch[1]}x${sizeMatch[2]}`);
+          if (targetSizes && targetSizes.size > 0) {
+            // Best match: sold size is one of the target family's descendant sizes
+            isOnTarget = targetSizes.has(sizeLabel);
           } else if (categoryTokens.length > 0) {
-            // Category match — at least one significant token appears in full title
+            // Fallback: category keyword match against full title
             isOnTarget = categoryTokens.some(tok => fullLower.includes(tok));
           }
 
