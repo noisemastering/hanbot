@@ -749,23 +749,29 @@ async function generateReply(userMessage, psid, referral = null) {
   }
 
   // ====== PAY-ON-DELIVERY POST-CHECK ======
-  // If user mentioned contra-entrega but the response doesn't address it, append clarification.
-  // This is a safety net that covers ALL paths (active flow, multi-question, dispatcher, etc.)
+  // Safety net: if AI wrongly AFFIRMS we offer COD, REPLACE the response.
+  // If it didn't address payment at all, APPEND a clarification.
   if (response && response.text && payOnDeliveryPattern.test(userMessage)) {
-    if (!/contra\s*entrega|no manejamos.*(pago|contra)|pago.*(adelantado|al\s+ordenar)/i.test(response.text)) {
-      const isNonML = convo?.currentFlow === 'rollo' ||
-        convo?.currentFlow === 'groundcover' ||
-        convo?.currentFlow === 'monofilamento' ||
-        convo?.productInterest === 'rollo' ||
-        convo?.productInterest === 'groundcover' ||
-        convo?.productInterest === 'monofilamento' ||
-        convo?.isWholesaleInquiry;
+    const isNonML = convo?.currentFlow === 'rollo' ||
+      convo?.currentFlow === 'groundcover' ||
+      convo?.currentFlow === 'monofilamento' ||
+      convo?.productInterest === 'rollo' ||
+      convo?.productInterest === 'groundcover' ||
+      convo?.productInterest === 'monofilamento' ||
+      convo?.isWholesaleInquiry;
 
-      const contraEntregaNote = isNonML
-        ? 'Sobre el pago: no manejamos contra entrega. El pago se realiza al ordenar, mediante transferencia o depósito bancario.'
-        : 'Sobre el pago: no manejamos contra entrega. El pago se realiza al ordenar en Mercado Libre y tu compra es segura: si no recibes tu artículo, se devuelve tu dinero.';
+    const correctAnswer = isNonML
+      ? 'No manejamos pago contra entrega. El pago se realiza al ordenar, mediante transferencia o depósito bancario. La única excepción es si pasas por tu pedido directamente a nuestra planta en Querétaro: ahí sí puedes pagar en persona al recoger.'
+      : 'No manejamos pago contra entrega. El pago se realiza al ordenar en Mercado Libre (tarjeta, OXXO, transferencia, meses sin intereses) y tu compra está protegida: si no recibes el artículo, se devuelve tu dinero. La única excepción es si pasas por tu pedido directamente a nuestra planta en Querétaro: ahí sí puedes pagar en persona al recoger.';
 
-      response.text += '\n\n' + contraEntregaNote;
+    const wrongAffirmation = /\b(s[ií]\s+(tenemos|ofrecemos|manejamos|disponemos|hay|aceptamos|contamos\s+con)|claro\s+(que\s+)?(s[ií]|tenemos)|por\s+supuesto\s+que\s+(s[ií]|tenemos)|tenemos\s+(pago\s+)?contra\s*entrega|ofrecemos\s+(pago\s+)?contra\s*entrega|aceptamos\s+(pago\s+)?contra\s*entrega|contra\s*entrega.{0,80}(disponible|disponemos|querétaro|queretaro)|querétaro.{0,80}contra\s*entrega|queretaro.{0,80}contra\s*entrega)\b/i;
+    const correctlyDenies = /\b(no\s+(manejamos|ofrecemos|tenemos|aceptamos)\s+(pago\s+)?contra\s*entrega|no\s+hay\s+(pago\s+)?contra\s*entrega|pago\s+(es|debe\s+ser|se\s+(hace|realiza))\s+(por\s+)?adelantad[ao]|pago\s+al\s+ordenar|pago\s+anticipad[ao])\b/i;
+
+    if (wrongAffirmation.test(response.text)) {
+      console.log(`🛑 Post-check: AI wrongly affirmed COD — replacing response`);
+      response.text = correctAnswer;
+    } else if (!correctlyDenies.test(response.text)) {
+      response.text += '\n\n' + correctAnswer;
       console.log(`💳 Post-check: appended contra-entrega clarification to response`);
     }
   }
