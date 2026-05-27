@@ -29,11 +29,34 @@ function CustomerSegmentationView() {
 
   const fmt = (n) => '$' + Math.round(n).toLocaleString('es-MX');
 
+  // Tendency badge — small arrow + %, color-coded
+  const TrendBadge = ({ trend, size = 'sm' }) => {
+    if (!trend || trend.direction === 'new') {
+      return <span className={`inline-flex items-center gap-1 ${size === 'lg' ? 'text-sm' : 'text-xs'} text-blue-400`}>● Nuevo</span>;
+    }
+    const { pct, direction } = trend;
+    if (pct === null || pct === undefined) return null;
+    const colors = {
+      up: 'text-green-400',
+      down: 'text-red-400',
+      flat: 'text-gray-500'
+    };
+    const arrows = { up: '▲', down: '▼', flat: '●' };
+    const label = pct === 0 ? 'sin cambio' : `${pct > 0 ? '+' : ''}${pct}%`;
+    return (
+      <span className={`inline-flex items-center gap-1 ${size === 'lg' ? 'text-sm' : 'text-xs'} ${colors[direction]} font-medium`}>
+        {arrows[direction]} {label}
+      </span>
+    );
+  };
+
   if (loading) return <div className="p-6 flex justify-center min-h-[60vh]"><div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-purple-400"></div></div>;
 
   const stateGender = data?.stateGender || [];
   const topSizes = data?.topSizes || [];
   const g = data?.genderTotals || { male: 0, female: 0, unknown: 0 };
+  const genderTrends = data?.genderTrends || {};
+  const previousPeriod = data?.previousPeriod || {};
   const total = g.male + g.female + g.unknown || 1;
 
   return (
@@ -47,7 +70,13 @@ function CustomerSegmentationView() {
             <FeatureTip id="seg-overview" title="Segmentación de clientes" text="Muestra quiénes compran tus productos, dónde están y qué género predomina por estado. Úsalo para decidir a quién dirigir tus campañas de Facebook." position="bottom" step="Nuevo">
               <h1 className="text-2xl font-bold text-white">Segmentación de Clientes</h1>
             </FeatureTip>
-            <p className="text-sm text-gray-400">{data?.totalCustomers?.toLocaleString() || 0} órdenes únicas analizadas</p>
+            <p className="text-sm text-gray-400 flex items-center gap-2">
+              {data?.totalCustomers?.toLocaleString() || 0} órdenes únicas analizadas
+              <TrendBadge trend={genderTrends.total} />
+              {previousPeriod.totalCustomers > 0 && (
+                <span className="text-xs text-gray-600">vs. {previousPeriod.totalCustomers.toLocaleString()} periodo anterior</span>
+              )}
+            </p>
           </div>
         </div>
         <div className="flex gap-2">
@@ -60,15 +89,24 @@ function CustomerSegmentationView() {
       {/* Global gender summary */}
       <div className="grid grid-cols-3 gap-4">
         <div className="bg-gray-800/50 border border-blue-500/20 rounded-xl p-5">
-          <p className="text-xs text-gray-400">Hombres</p>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs text-gray-400">Hombres</p>
+            <TrendBadge trend={genderTrends.male} />
+          </div>
           <p className="text-2xl font-bold text-blue-400">{g.male.toLocaleString()} <span className="text-lg text-gray-500">({Math.round(g.male / total * 100)}%)</span></p>
         </div>
         <div className="bg-gray-800/50 border border-pink-500/20 rounded-xl p-5">
-          <p className="text-xs text-gray-400">Mujeres</p>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs text-gray-400">Mujeres</p>
+            <TrendBadge trend={genderTrends.female} />
+          </div>
           <p className="text-2xl font-bold text-pink-400">{g.female.toLocaleString()} <span className="text-lg text-gray-500">({Math.round(g.female / total * 100)}%)</span></p>
         </div>
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5">
-          <p className="text-xs text-gray-400">Sin determinar</p>
+          <div className="flex items-center justify-between mb-1">
+            <p className="text-xs text-gray-400">Sin determinar</p>
+            <TrendBadge trend={genderTrends.unknown} />
+          </div>
           <p className="text-2xl font-bold text-gray-400">{g.unknown.toLocaleString()} <span className="text-lg text-gray-500">({Math.round(g.unknown / total * 100)}%)</span></p>
         </div>
       </div>
@@ -121,6 +159,7 @@ function CustomerSegmentationView() {
                 <tr className="text-left text-xs text-gray-400 uppercase">
                   <th className="px-6 py-3">Estado</th>
                   <th className="px-4 py-3 text-right">Total</th>
+                  <th className="px-4 py-3 text-right">Tendencia</th>
                   <th className="px-4 py-3 text-right">Hombres</th>
                   <th className="px-4 py-3 text-right">Mujeres</th>
                   <th className="px-4 py-3 text-right">Ticket Prom.</th>
@@ -132,6 +171,7 @@ function CustomerSegmentationView() {
                   <tr key={i} className="hover:bg-gray-700/20">
                     <td className="px-6 py-3 text-sm text-white font-medium">{s.state}</td>
                     <td className="px-4 py-3 text-right text-sm text-white">{s.total}</td>
+                    <td className="px-4 py-3 text-right"><TrendBadge trend={s.trend} /></td>
                     <td className="px-4 py-3 text-right text-sm text-blue-400">{s.male} ({s.malePercent}%)</td>
                     <td className="px-4 py-3 text-right text-sm text-pink-400">{s.female} ({s.femalePercent}%)</td>
                     <td className="px-4 py-3 text-right text-sm text-gray-300">{fmt(s.avgOrder)}</td>
@@ -176,6 +216,18 @@ function CustomerSegmentationView() {
                 <Bar dataKey="female" name="Mujeres" stackId="gender" fill="#EC4899" radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+          </div>
+          {/* Size trends grid */}
+          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mt-4">
+            {topSizes.map((s, i) => (
+              <div key={i} className="bg-gray-900/40 border border-gray-700/30 rounded-lg p-3">
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-sm font-medium text-white">{s.size}</span>
+                  <TrendBadge trend={s.trend} />
+                </div>
+                <p className="text-xs text-gray-500">{s.total} órdenes · {fmt(s.avgOrder)} prom.</p>
+              </div>
+            ))}
           </div>
         </div>
       )}

@@ -972,91 +972,142 @@ router.get('/forecast-by-product', async (req, res) => {
 
 // ─── 2. CUSTOMER SEGMENTATION ───────────────────────────────────────────────
 // Cross-tab analysis: State × Gender × Product Size breakdown.
+// Helper: fetch orders for a date range
+async function fetchSegmentOrders(dateFrom, dateTo) {
+  const dateMatch = {};
+  if (dateFrom) dateMatch.$gte = new Date(dateFrom);
+  if (dateTo) dateMatch.$lte = new Date(dateTo);
+  const hasDate = Object.keys(dateMatch).length > 0;
+
+  return ClickLog.aggregate([
+    { $match: { converted: true, 'conversionData.orderId': { $ne: null }, ...(hasDate ? { createdAt: dateMatch } : {}) } },
+    { $group: {
+      _id: '$conversionData.orderId',
+      revenue: { $first: '$conversionData.totalAmount' },
+      state: { $first: '$conversionData.shippingState' },
+      gender: { $first: '$conversionData.buyerGender' },
+      item: { $first: '$conversionData.itemTitle' }
+    }}
+  ]);
+}
+
+// Helper: compute aggregates from a list of orders
+function computeSegments(orders) {
+  const getSize = (title) => {
+    if (!title) return 'Otro';
+    const m = title.match(/(\d+)\s*m?\s*[xX×]\s*(\d+)\s*m/);
+    return m ? `${m[1]}x${m[2]}m` : 'Otro';
+  };
+
+  const stateGenderRaw = {};
+  const sizeGenderRaw = {};
+  const genderTotals = { male: 0, female: 0, unknown: 0 };
+  orders.forEach(o => {
+    const state = o.state || 'Desconocido';
+    const gender = o.gender || 'unknown';
+    if (!stateGenderRaw[state]) stateGenderRaw[state] = { male: 0, female: 0, unknown: 0, total: 0, revenue: 0 };
+    stateGenderRaw[state][gender]++;
+    stateGenderRaw[state].total++;
+    stateGenderRaw[state].revenue += (o.revenue || 0);
+
+    const size = getSize(o.item);
+    if (!sizeGenderRaw[size]) sizeGenderRaw[size] = { male: 0, female: 0, unknown: 0, total: 0, revenue: 0 };
+    sizeGenderRaw[size][gender]++;
+    sizeGenderRaw[size].total++;
+    sizeGenderRaw[size].revenue += (o.revenue || 0);
+
+    genderTotals[gender]++;
+  });
+
+  return { stateGenderRaw, sizeGenderRaw, genderTotals, totalCustomers: orders.length };
+}
+
+// Helper: percentage delta between current and previous (positive = up)
+function trend(current, previous) {
+  if (!previous) return current > 0 ? { pct: null, direction: 'new' } : { pct: 0, direction: 'flat' };
+  const delta = current - previous;
+  const pct = Math.round((delta / previous) * 100);
+  let direction = 'flat';
+  if (pct >= 5) direction = 'up';
+  else if (pct <= -5) direction = 'down';
+  return { pct, direction };
+}
+
 router.get('/segments', async (req, res) => {
   try {
     const { dateFrom, dateTo } = req.query;
-    const dateMatch = {};
-    if (dateFrom) dateMatch.$gte = new Date(dateFrom);
-    if (dateTo) dateMatch.$lte = new Date(dateTo);
-    const hasDate = Object.keys(dateMatch).length > 0;
 
-    // Get all converted orders deduplicated
-    const orders = await ClickLog.aggregate([
-      { $match: { converted: true, 'conversionData.orderId': { $ne: null }, ...(hasDate ? { createdAt: dateMatch } : {}) } },
-      { $group: {
-        _id: '$conversionData.orderId',
-        revenue: { $first: '$conversionData.totalAmount' },
-        state: { $first: '$conversionData.shippingState' },
-        gender: { $first: '$conversionData.buyerGender' },
-        item: { $first: '$conversionData.itemTitle' }
-      }}
+    // Compute previous period (same length, immediately before)
+    let prevFrom = null, prevTo = null;
+    if (dateFrom && dateTo) {
+      const from = new Date(dateFrom);
+      const to = new Date(dateTo);
+      const lengthMs = to - from;
+      prevTo = new Date(from.getTime() - 1).toISOString();
+      prevFrom = new Date(from.getTime() - lengthMs - 1).toISOString();
+    }
+
+    const [orders, prevOrders] = await Promise.all([
+      fetchSegmentOrders(dateFrom, dateTo),
+      prevFrom ? fetchSegmentOrders(prevFrom, prevTo) : Promise.resolve([])
     ]);
 
     if (orders.length < 20) {
-      return res.json({ success: true, data: { stateGender: [], topSizes: [], totalCustomers: 0 } });
+      return res.json({ success: true, data: { stateGender: [], topSizes: [], totalCustomers: 0, trends: null } });
     }
 
-    // Extract size from item title
-    const getSize = (title) => {
-      if (!title) return 'Otro';
-      const m = title.match(/(\d+)\s*m?\s*[xX×]\s*(\d+)\s*m/);
-      return m ? `${m[1]}x${m[2]}m` : 'Otro';
-    };
+    const current = computeSegments(orders);
+    const previous = computeSegments(prevOrders);
 
-    // 1. State × Gender cross-tab (top 10 states)
-    const stateGenderRaw = {};
-    orders.forEach(o => {
-      const state = o.state || 'Desconocido';
-      const gender = o.gender || 'unknown';
-      if (!stateGenderRaw[state]) stateGenderRaw[state] = { male: 0, female: 0, unknown: 0, total: 0, revenue: 0 };
-      stateGenderRaw[state][gender]++;
-      stateGenderRaw[state].total++;
-      stateGenderRaw[state].revenue += (o.revenue || 0);
-    });
-
-    const stateGender = Object.entries(stateGenderRaw)
+    // 1. State × Gender cross-tab (top 12 states) — with trend per state
+    const stateGender = Object.entries(current.stateGenderRaw)
       .sort((a, b) => b[1].total - a[1].total)
       .slice(0, 12)
-      .map(([state, data]) => ({
-        state,
-        male: data.male,
-        female: data.female,
-        unknown: data.unknown,
-        total: data.total,
-        revenue: Math.round(data.revenue),
-        malePercent: Math.round(data.male / data.total * 100),
-        femalePercent: Math.round(data.female / data.total * 100),
-        avgOrder: Math.round(data.revenue / data.total)
-      }));
+      .map(([state, data]) => {
+        const prev = previous.stateGenderRaw[state];
+        return {
+          state,
+          male: data.male,
+          female: data.female,
+          unknown: data.unknown,
+          total: data.total,
+          revenue: Math.round(data.revenue),
+          malePercent: Math.round(data.male / data.total * 100),
+          femalePercent: Math.round(data.female / data.total * 100),
+          avgOrder: Math.round(data.revenue / data.total),
+          trend: trend(data.total, prev?.total || 0),
+          revenueTrend: trend(data.revenue, prev?.revenue || 0)
+        };
+      });
 
-    // 2. Top product sizes with gender split
-    const sizeGenderRaw = {};
-    orders.forEach(o => {
-      const size = getSize(o.item);
-      const gender = o.gender || 'unknown';
-      if (!sizeGenderRaw[size]) sizeGenderRaw[size] = { male: 0, female: 0, unknown: 0, total: 0, revenue: 0 };
-      sizeGenderRaw[size][gender]++;
-      sizeGenderRaw[size].total++;
-      sizeGenderRaw[size].revenue += (o.revenue || 0);
-    });
-
-    const topSizes = Object.entries(sizeGenderRaw)
+    // 2. Top product sizes with gender split — with trend per size
+    const topSizes = Object.entries(current.sizeGenderRaw)
       .sort((a, b) => b[1].total - a[1].total)
       .slice(0, 10)
-      .map(([size, data]) => ({
-        size,
-        male: data.male,
-        female: data.female,
-        total: data.total,
-        revenue: Math.round(data.revenue),
-        malePercent: Math.round(data.male / data.total * 100),
-        femalePercent: Math.round(data.female / data.total * 100),
-        avgOrder: Math.round(data.revenue / data.total)
-      }));
+      .map(([size, data]) => {
+        const prev = previous.sizeGenderRaw[size];
+        return {
+          size,
+          male: data.male,
+          female: data.female,
+          total: data.total,
+          revenue: Math.round(data.revenue),
+          malePercent: Math.round(data.male / data.total * 100),
+          femalePercent: Math.round(data.female / data.total * 100),
+          avgOrder: Math.round(data.revenue / data.total),
+          trend: trend(data.total, prev?.total || 0),
+          revenueTrend: trend(data.revenue, prev?.revenue || 0)
+        };
+      });
 
-    // 3. Global gender split
-    const genderTotals = { male: 0, female: 0, unknown: 0 };
-    orders.forEach(o => { genderTotals[o.gender || 'unknown']++; });
+    // 3. Global gender split — with trend
+    const genderTotals = current.genderTotals;
+    const genderTrends = {
+      male: trend(genderTotals.male, previous.genderTotals.male),
+      female: trend(genderTotals.female, previous.genderTotals.female),
+      unknown: trend(genderTotals.unknown, previous.genderTotals.unknown),
+      total: trend(orders.length, prevOrders.length)
+    };
 
     res.json({
       success: true,
@@ -1064,7 +1115,13 @@ router.get('/segments', async (req, res) => {
         stateGender,
         topSizes,
         genderTotals,
-        totalCustomers: orders.length
+        genderTrends,
+        totalCustomers: orders.length,
+        previousPeriod: {
+          totalCustomers: prevOrders.length,
+          dateFrom: prevFrom,
+          dateTo: prevTo
+        }
       }
     });
   } catch (err) {
