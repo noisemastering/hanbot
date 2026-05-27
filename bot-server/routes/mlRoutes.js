@@ -1280,30 +1280,55 @@ router.get('/spend-optimization', async (req, res) => {
     const convMap = {};
     convData.forEach(c => convMap[c._id] = c);
 
-    // Product breakdown per ad — what actually sold vs what the ad promoted
-    const productBreakdown = await ClickLog.aggregate([
+    // Product breakdown per ad — JOIN ClickLog with MLOrder to get the canonical
+    // productFamilyId for each sale (no regex, no string parsing of titles).
+    const MLOrder = require('../models/MLOrder');
+    const productBreakdownRaw = await ClickLog.aggregate([
       { $match: { converted: true, adId: { $ne: null }, ...(hasDate ? { createdAt: dateMatch } : {}) } },
-      { $group: { _id: { orderId: '$conversionData.orderId', adId: '$adId' }, item: { $first: '$conversionData.itemTitle' }, revenue: { $first: '$conversionData.totalAmount' } } },
-      { $group: { _id: { adId: '$_id.adId', item: '$item' }, count: { $sum: 1 }, revenue: { $sum: '$revenue' } } },
+      { $group: {
+        _id: { orderId: '$conversionData.orderId', adId: '$adId' },
+        item: { $first: '$conversionData.itemTitle' },
+        revenue: { $first: '$conversionData.totalAmount' }
+      } },
+      // Look up the matching MLOrder for productFamilyId
+      { $lookup: {
+        from: 'mlorders',
+        localField: '_id.orderId',
+        foreignField: 'mlOrderId',
+        as: 'order'
+      } },
+      { $unwind: { path: '$order', preserveNullAndEmptyArrays: true } },
+      // Take the first item's productFamilyId
+      { $addFields: { productFamilyId: { $arrayElemAt: ['$order.items.productFamilyId', 0] } } },
+      // Group by ad + family (canonical) — collapse all sales of the same family
+      { $group: {
+        _id: { adId: '$_id.adId', familyId: '$productFamilyId' },
+        sampleTitle: { $first: '$item' },
+        count: { $sum: 1 },
+        revenue: { $sum: '$revenue' }
+      } },
       { $sort: { count: -1 } }
     ]);
 
-    // Build per-ad product map — keep both short label and the original title
-    // so we can match by category keywords (e.g. "confeccionada"), not just size.
-    // Size regex: WxH with optional "m" after either number (handles "6x7", "6mx7m",
-    // "6x7m", "6 x 7", "7mx5m", etc.). Negative lookahead avoids matching pieces
-    // of larger numbers like "606x70".
-    const SIZE_RE = /(\d+(?:\.\d+)?)\s*m?\s*[xX×]\s*(\d+(?:\.\d+)?)\s*m?(?!\d)/;
+    // Resolve family names from ProductFamily for display
+    const familyIds = [...new Set(productBreakdownRaw.map(r => r._id.familyId).filter(Boolean))];
+    const familyDocs = familyIds.length > 0
+      ? await ProductFamily.find({ _id: { $in: familyIds } }).select('_id name parentId').lean()
+      : [];
+    const familyById = {};
+    familyDocs.forEach(f => { familyById[String(f._id)] = f; });
+
+    // Build per-ad product map using canonical family data
     const adProductMap = {};
-    for (const row of productBreakdown) {
+    for (const row of productBreakdownRaw) {
       const adId = row._id.adId;
+      const fid = row._id.familyId ? String(row._id.familyId) : null;
+      const family = fid ? familyById[fid] : null;
       if (!adProductMap[adId]) adProductMap[adId] = [];
-      const title = row._id.item || '';
-      const sizeMatch = title.match(SIZE_RE);
-      const shortName = sizeMatch ? `${sizeMatch[1]}x${sizeMatch[2]}m` : title.slice(0, 30);
       adProductMap[adId].push({
-        product: shortName,
-        fullTitle: title,
+        familyId: fid,
+        product: family?.name || row.sampleTitle?.slice(0, 30) || 'Sin categoría',
+        fullTitle: row.sampleTitle || '',
         count: row.count,
         revenue: Math.round(row.revenue)
       });
@@ -1316,15 +1341,8 @@ router.get('/spend-optimization', async (req, res) => {
     require('../models/Promo');
     const adDocs = await Ad.find({}, 'fbAdId name convoFlowRef promoId metrics').populate('promoId', 'name promoProductIds').lean();
 
-    // Build per-ad set of on-target SIZES by walking the targeted ProductFamily tree.
-    // Sizes are normalized to lower-case "WxHm" form for comparison against the sold item's size.
-    const normalizeSize = (str) => {
-      if (!str) return null;
-      const m = String(str).toLowerCase().match(/(\d+(?:\.\d+)?)\s*m?\s*[xX×]\s*(\d+(?:\.\d+)?)\s*m?/);
-      return m ? `${m[1]}x${m[2]}m` : null;
-    };
-
-    // Collect all distinct ConvoFlow refs used by ads
+    // Build per-ad set of on-target ProductFamily IDs by walking the tree.
+    // Match canonical IDs — no string parsing required.
     const convoFlowRefs = [...new Set(adDocs.map(a => a.convoFlowRef).filter(Boolean))];
     const manifestByName = {};
     if (convoFlowRefs.length > 0) {
@@ -1334,32 +1352,22 @@ router.get('/spend-optimization', async (req, res) => {
       manifests.forEach(m => { manifestByName[m.name] = m; });
     }
 
-    // For each manifest, fetch the descendant sellable products and collect their sizes
-    const adTargetSizesMap = {}; // fbAdId -> Set<sizeStr>
+    const adTargetFamilyIdsMap = {}; // fbAdId -> Set<String(familyId)>
     for (const ad of adDocs) {
       if (!ad.fbAdId) continue;
       const manifest = ad.convoFlowRef ? manifestByName[ad.convoFlowRef] : null;
       if (!manifest?.products?.length) continue;
-      const rootIds = manifest.products.map(p => p._id);
-      // BFS down the tree to gather all descendant family names
-      let frontier = rootIds;
-      const allNames = new Set();
-      const safetyMax = 5; // up to 5 levels deep
+      // BFS down the tree, collect every descendant family ID (including roots)
+      let frontier = manifest.products.map(p => p._id);
+      const allIds = new Set(frontier.map(id => String(id)));
+      const safetyMax = 5;
       for (let depth = 0; depth < safetyMax && frontier.length > 0; depth++) {
-        const families = await ProductFamily.find({ _id: { $in: frontier } }).select('_id name').lean();
-        families.forEach(f => { if (f.name) allNames.add(f.name); });
-        const children = await ProductFamily.find({ parentId: { $in: frontier } }).select('_id name').lean();
+        const children = await ProductFamily.find({ parentId: { $in: frontier } }).select('_id').lean();
         if (children.length === 0) break;
-        children.forEach(c => { if (c.name) allNames.add(c.name); });
+        children.forEach(c => allIds.add(String(c._id)));
         frontier = children.map(c => c._id);
       }
-      // Extract sizes from family names
-      const sizes = new Set();
-      allNames.forEach(n => {
-        const s = normalizeSize(n);
-        if (s) sizes.add(s);
-      });
-      if (sizes.size > 0) adTargetSizesMap[ad.fbAdId] = sizes;
+      if (allIds.size > 0) adTargetFamilyIdsMap[ad.fbAdId] = allIds;
     }
 
     // Build stored metrics fallback map
@@ -1427,50 +1435,33 @@ router.get('/spend-optimization', async (req, res) => {
       const targetProduct = adTargetMap[row.ad_id] || null;
       const totalOrders = products.reduce((s, p) => s + p.count, 0);
 
-      // Variety analysis for category-targeted ads:
-      //   X = total variants/sizes available in the targeted category
-      //   Y = distinct variants the ad actually moved
-      //   Z = sales from outside the category (true cross-sell)
+      // Variety analysis using canonical ProductFamily IDs (no string parsing):
+      //   X = total descendant families in the target tree
+      //   Y = distinct families the ad actually moved
+      //   Z = sales whose family is OUTSIDE the target tree (true cross-sell)
       let inCategorySales = 0;
       let distinctInCategory = 0;
       let crossSell = [];
-      const targetSizes = adTargetSizesMap[row.ad_id]; // Set<"WxHm">
-      const categoryTotalVariants = targetSizes ? targetSizes.size : 0;
+      const targetIds = adTargetFamilyIdsMap[row.ad_id]; // Set<String(familyId)>
+      const categoryTotalVariants = targetIds ? targetIds.size : 0;
 
-      if (products.length > 0 && (targetSizes || targetProduct)) {
-        const targetLower = (targetProduct || '').toLowerCase().trim();
-        const stopwords = new Set(['retail', 'mayoreo', 'wholesale', 'de', 'del', 'la', 'el', 'los', 'las', 'y', 'con', 'sin']);
-        const categoryTokens = targetLower
-          .replace(/[0-9]+\s*x\s*[0-9]+\s*m?/g, '')
-          .split(/\s+/)
-          .map(t => t.trim())
-          .filter(t => t.length >= 3 && !stopwords.has(t));
-
+      if (products.length > 0 && targetIds && targetIds.size > 0) {
         const distinctSeen = new Set();
-
         products.forEach(p => {
-          const sizeLabel = (p.product || '').toLowerCase();
-          const fullLower = (p.fullTitle || p.product || '').toLowerCase();
-
-          let isInCategory = false;
-          if (targetSizes && targetSizes.size > 0) {
-            isInCategory = targetSizes.has(sizeLabel);
-          } else if (categoryTokens.length > 0) {
-            isInCategory = categoryTokens.some(tok => fullLower.includes(tok));
-          }
-
+          const isInCategory = p.familyId && targetIds.has(p.familyId);
           if (isInCategory) {
             inCategorySales += p.count;
-            distinctSeen.add(sizeLabel);
+            distinctSeen.add(p.familyId);
           } else {
             crossSell.push(p);
           }
         });
-
         distinctInCategory = distinctSeen.size;
+      } else if (products.length > 0) {
+        // No resolvable target tree — count everything as cross-sell
+        crossSell = products;
       }
 
-      // Backwards-compat aliases for the frontend's older shape
       const onTarget = inCategorySales;
       const crossSellCount = totalOrders - inCategorySales;
 
