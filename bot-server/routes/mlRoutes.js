@@ -1346,7 +1346,6 @@ router.get('/spend-optimization', async (req, res) => {
     // Also get stored metrics as fallback (from FB sync)
     const Ad = require('../models/Ad');
     const ConvoFlowManifest = require('../models/ConvoFlowManifest');
-    const ProductFamily = require('../models/ProductFamily');
     require('../models/Promo');
     const adDocs = await Ad.find({}, 'fbAdId name convoFlowRef promoId metrics').populate('promoId', 'name promoProductIds').lean();
 
