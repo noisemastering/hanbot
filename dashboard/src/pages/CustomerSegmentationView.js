@@ -29,23 +29,31 @@ function CustomerSegmentationView() {
 
   const fmt = (n) => '$' + Math.round(n).toLocaleString('es-MX');
 
-  // Tendency badge — small arrow + %, color-coded
+  // Tendency badge — shows how this segment's SHARE of total is shifting
+  // (composition tilt, not absolute volume — volume might drop globally
+  // while one segment gains relative share)
   const TrendBadge = ({ trend, size = 'sm' }) => {
-    if (!trend || trend.direction === 'new') {
+    if (!trend) return null;
+    if (trend.direction === 'new') {
       return <span className={`inline-flex items-center gap-1 ${size === 'lg' ? 'text-sm' : 'text-xs'} text-blue-400`}>● Nuevo</span>;
     }
-    const { pct, direction } = trend;
-    if (pct === null || pct === undefined) return null;
+    const { pp, direction } = trend;
+    if (pp === null || pp === undefined) return null;
     const colors = {
-      up: 'text-green-400',
-      down: 'text-red-400',
+      gaining: 'text-green-400',
+      losing: 'text-red-400',
       flat: 'text-gray-500'
     };
-    const arrows = { up: '▲', down: '▼', flat: '●' };
-    const label = pct === 0 ? 'sin cambio' : `${pct > 0 ? '+' : ''}${pct}%`;
+    const arrows = { gaining: '▲', losing: '▼', flat: '●' };
+    const labels = {
+      gaining: `+${pp}pp`,
+      losing: `${pp}pp`,
+      flat: pp === 0 ? '=' : `${pp > 0 ? '+' : ''}${pp}pp`
+    };
     return (
-      <span className={`inline-flex items-center gap-1 ${size === 'lg' ? 'text-sm' : 'text-xs'} ${colors[direction]} font-medium`}>
-        {arrows[direction]} {label}
+      <span className={`inline-flex items-center gap-1 ${size === 'lg' ? 'text-sm' : 'text-xs'} ${colors[direction]} font-medium`}
+        title={`${trend.previousShare}% → ${trend.currentShare}% del total`}>
+        {arrows[direction]} {labels[direction]}
       </span>
     );
   };
@@ -72,11 +80,11 @@ function CustomerSegmentationView() {
             </FeatureTip>
             <p className="text-sm text-gray-400 flex items-center gap-2">
               {data?.totalCustomers?.toLocaleString() || 0} órdenes únicas analizadas
-              <TrendBadge trend={genderTrends.total} />
               {previousPeriod.totalCustomers > 0 && (
-                <span className="text-xs text-gray-600">vs. {previousPeriod.totalCustomers.toLocaleString()} periodo anterior</span>
+                <span className="text-xs text-gray-600">· {previousPeriod.totalCustomers.toLocaleString()} en el periodo anterior</span>
               )}
             </p>
+            <p className="text-xs text-gray-500 mt-1">Las flechas indican hacia qué grupo se está inclinando la mezcla (puntos porcentuales del total).</p>
           </div>
         </div>
         <div className="flex gap-2">

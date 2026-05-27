@@ -1022,15 +1022,21 @@ function computeSegments(orders) {
   return { stateGenderRaw, sizeGenderRaw, genderTotals, totalCustomers: orders.length };
 }
 
-// Helper: percentage delta between current and previous (positive = up)
-function trend(current, previous) {
-  if (!previous) return current > 0 ? { pct: null, direction: 'new' } : { pct: 0, direction: 'flat' };
-  const delta = current - previous;
-  const pct = Math.round((delta / previous) * 100);
+// Helper: SHARE-of-total delta — measures composition shift, not volume.
+// Returns percentage-point change in this segment's share of all orders.
+// Useful to detect "tilting toward X" even when absolute numbers all drop.
+function shareTrend(currentCount, currentTotal, previousCount, previousTotal) {
+  if (!currentTotal) return { pp: 0, direction: 'flat', currentShare: 0, previousShare: 0 };
+  const currentShare = (currentCount / currentTotal) * 100;
+  if (!previousTotal || previousCount === undefined) {
+    return { pp: null, direction: 'new', currentShare: Math.round(currentShare * 10) / 10, previousShare: 0 };
+  }
+  const previousShare = (previousCount / previousTotal) * 100;
+  const pp = Math.round((currentShare - previousShare) * 10) / 10; // percentage points, 1 decimal
   let direction = 'flat';
-  if (pct >= 5) direction = 'up';
-  else if (pct <= -5) direction = 'down';
-  return { pct, direction };
+  if (pp >= 2) direction = 'gaining';
+  else if (pp <= -2) direction = 'losing';
+  return { pp, direction, currentShare: Math.round(currentShare * 10) / 10, previousShare: Math.round(previousShare * 10) / 10 };
 }
 
 router.get('/segments', async (req, res) => {
@@ -1059,7 +1065,10 @@ router.get('/segments', async (req, res) => {
     const current = computeSegments(orders);
     const previous = computeSegments(prevOrders);
 
-    // 1. State × Gender cross-tab (top 12 states) — with trend per state
+    const currentTotal = orders.length;
+    const previousTotal = prevOrders.length;
+
+    // 1. State × Gender cross-tab (top 12 states) — with SHARE trend per state
     const stateGender = Object.entries(current.stateGenderRaw)
       .sort((a, b) => b[1].total - a[1].total)
       .slice(0, 12)
@@ -1075,12 +1084,11 @@ router.get('/segments', async (req, res) => {
           malePercent: Math.round(data.male / data.total * 100),
           femalePercent: Math.round(data.female / data.total * 100),
           avgOrder: Math.round(data.revenue / data.total),
-          trend: trend(data.total, prev?.total || 0),
-          revenueTrend: trend(data.revenue, prev?.revenue || 0)
+          trend: shareTrend(data.total, currentTotal, prev?.total || 0, previousTotal)
         };
       });
 
-    // 2. Top product sizes with gender split — with trend per size
+    // 2. Top product sizes — with SHARE trend per size
     const topSizes = Object.entries(current.sizeGenderRaw)
       .sort((a, b) => b[1].total - a[1].total)
       .slice(0, 10)
@@ -1095,18 +1103,16 @@ router.get('/segments', async (req, res) => {
           malePercent: Math.round(data.male / data.total * 100),
           femalePercent: Math.round(data.female / data.total * 100),
           avgOrder: Math.round(data.revenue / data.total),
-          trend: trend(data.total, prev?.total || 0),
-          revenueTrend: trend(data.revenue, prev?.revenue || 0)
+          trend: shareTrend(data.total, currentTotal, prev?.total || 0, previousTotal)
         };
       });
 
-    // 3. Global gender split — with trend
+    // 3. Global gender split — SHARE trends (who's tilting toward whom?)
     const genderTotals = current.genderTotals;
     const genderTrends = {
-      male: trend(genderTotals.male, previous.genderTotals.male),
-      female: trend(genderTotals.female, previous.genderTotals.female),
-      unknown: trend(genderTotals.unknown, previous.genderTotals.unknown),
-      total: trend(orders.length, prevOrders.length)
+      male: shareTrend(genderTotals.male, currentTotal, previous.genderTotals.male, previousTotal),
+      female: shareTrend(genderTotals.female, currentTotal, previous.genderTotals.female, previousTotal),
+      unknown: shareTrend(genderTotals.unknown, currentTotal, previous.genderTotals.unknown, previousTotal)
     };
 
     res.json({
