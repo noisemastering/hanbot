@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import API from '../api';
 import toast from 'react-hot-toast';
+import FlowWizard from '../components/FlowWizard';
 
 const FLOW_LABELS = {
   masterFlow: 'Master Flow',
@@ -18,6 +19,7 @@ function FlowPromptsView() {
   const [editing, setEditing] = useState(null); // { id, prompt }
   const [saving, setSaving] = useState(false);
   const [expandedFlows, setExpandedFlows] = useState(new Set(['masterFlow']));
+  const [showWizard, setShowWizard] = useState(false);
 
   const fetchPrompts = useCallback(async () => {
     try {
@@ -76,8 +78,25 @@ function FlowPromptsView() {
 
   return (
     <div>
-      <h1 className="text-3xl font-bold text-white mb-2">Prompts de Flujos</h1>
-      <p className="text-gray-400 mb-6">Edita los prompts de IA de cada bloque del bot. Los cambios se aplican en tiempo real.</p>
+      <div className="flex justify-between items-start mb-6">
+        <div>
+          <h1 className="text-3xl font-bold text-white mb-2">Prompts de Flujos</h1>
+          <p className="text-gray-400">Edita los prompts de IA de cada bloque del bot. Los cambios se aplican en tiempo real.</p>
+        </div>
+        <button onClick={() => setShowWizard(true)}
+          className="px-5 py-2.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition-colors text-sm font-medium flex items-center gap-2">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" /></svg>
+          Nuevo flujo
+        </button>
+      </div>
+
+      {showWizard && (
+        <FlowWizard
+          editing={null}
+          onSave={() => { setShowWizard(false); fetchPrompts(); toast.success('Flujo creado'); }}
+          onClose={() => setShowWizard(false)}
+        />
+      )}
 
       {/* Editing modal */}
       {editing && (
