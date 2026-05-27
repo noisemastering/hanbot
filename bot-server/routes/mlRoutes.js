@@ -1490,7 +1490,17 @@ router.get('/spend-optimization', async (req, res) => {
         // Variety stats: X variants in target category, Y distinct sold, Z out-of-category sales
         categoryTotalVariants,
         distinctInCategory,
-        outOfCategorySales: crossSellCount
+        outOfCategorySales: crossSellCount,
+        // The actual out-of-category items (for the popup)
+        crossSellItems: crossSell
+          .sort((a, b) => b.count - a.count)
+          .slice(0, 20)
+          .map(p => ({
+            product: p.product,
+            fullTitle: p.fullTitle,
+            count: p.count,
+            revenue: p.revenue
+          }))
       };
     }).filter(a => a.spend > 0).sort((a, b) => b.revenue - a.revenue);
 

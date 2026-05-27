@@ -14,6 +14,7 @@ function AdSpendOptimizationView() {
   const [loading, setLoading] = useState(true);
   const [range, setRange] = useState(30);
   const [expandedAd, setExpandedAd] = useState(null);
+  const [crossSellPopup, setCrossSellPopup] = useState(null); // { items, targetProduct }
 
   const dateFrom = useMemo(() => getDaysAgo(range), [range]);
   const dateTo = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -38,6 +39,54 @@ function AdSpendOptimizationView() {
 
   return (
     <div className="p-6 space-y-6">
+      {/* Cross-sell items popup */}
+      {crossSellPopup && (
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4"
+          onClick={() => setCrossSellPopup(null)}>
+          <div className="bg-gray-800 border border-gray-700 rounded-xl max-w-2xl w-full max-h-[80vh] overflow-hidden flex flex-col"
+            onClick={(e) => e.stopPropagation()}>
+            <div className="px-6 py-4 border-b border-gray-700 flex justify-between items-start">
+              <div>
+                <h3 className="text-white font-semibold">Ventas fuera de la categoría objetivo</h3>
+                <p className="text-xs text-gray-400 mt-1">
+                  El anuncio promovía <span className="text-white">{crossSellPopup.targetProduct}</span> pero estos {crossSellPopup.total} productos también se vendieron a través de él.
+                </p>
+              </div>
+              <button onClick={() => setCrossSellPopup(null)} className="text-gray-400 hover:text-white text-xl leading-none">×</button>
+            </div>
+            <div className="overflow-y-auto p-4">
+              {crossSellPopup.items.length === 0 ? (
+                <p className="text-sm text-gray-400 text-center py-6">No hay detalles disponibles para estos productos.</p>
+              ) : (
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-xs text-gray-400 uppercase border-b border-gray-700">
+                      <th className="px-3 py-2">Producto</th>
+                      <th className="px-3 py-2 text-right">Ventas</th>
+                      <th className="px-3 py-2 text-right">Ingresos</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-700/50">
+                    {crossSellPopup.items.map((it, i) => (
+                      <tr key={i} className="hover:bg-gray-700/30">
+                        <td className="px-3 py-2 text-white">
+                          <div className="font-medium">{it.product}</div>
+                          {it.fullTitle && it.fullTitle !== it.product && (
+                            <div className="text-xs text-gray-500 mt-0.5">{it.fullTitle}</div>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 text-right text-amber-400 font-medium">{it.count}</td>
+                        <td className="px-3 py-2 text-right text-green-400">{fmt(it.revenue)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-3">
           <button onClick={() => navigate(-1)} className="text-gray-400 hover:text-white" title="Volver">
@@ -206,9 +255,12 @@ function AdSpendOptimizationView() {
                             <p className="text-xs text-gray-300">
                               📊 Vendiste <span className="text-white font-semibold">{a.distinctInCategory}</span> de las <span className="text-white font-semibold">{a.categoryTotalVariants}</span> medidas disponibles en <span className="text-white">{a.targetProduct}</span>.
                               {a.outOfCategorySales > 0 ? (
-                                <span className="text-amber-400">
-                                  {' '}También se vendieron <span className="font-semibold">{a.outOfCategorySales}</span> productos de otras categorías (cross-sell).
-                                </span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => { e.stopPropagation(); setCrossSellPopup({ items: a.crossSellItems || [], targetProduct: a.targetProduct, total: a.outOfCategorySales }); }}
+                                  className="ml-1 text-amber-400 hover:text-amber-300 underline decoration-dotted">
+                                  También se vendieron <span className="font-semibold">{a.outOfCategorySales}</span> productos de otras categorías (cross-sell) →
+                                </button>
                               ) : (
                                 <span className="text-green-400"> {' '}100% de las ventas dentro de la categoría objetivo.</span>
                               )}
