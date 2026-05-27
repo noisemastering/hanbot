@@ -632,7 +632,7 @@ function Messages() {
 
   // Gallery modal
   const galleryModal = showGallery && (
-    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}
+    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}
       onClick={() => setShowGallery(false)}>
       <div onClick={e => e.stopPropagation()} style={{ backgroundColor: '#1a1a1a', borderRadius: '12px', border: '1px solid #2a2a2a', maxWidth: '900px', width: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
         {/* Header */}
