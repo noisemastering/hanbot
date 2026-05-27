@@ -304,15 +304,31 @@ function create(manifest) {
     // ── CONVERSATION CONTEXT (retrieved once, passed to all flows) ──
     const conversationHistory = await getConversationContext(psid);
 
-    // ── CLEAR STUCK LEGACY pendingHandoff ──
-    // The convo_flow system does not use the legacy pre-handoff zip-collection state.
-    // If a previous flow set pendingHandoff and the conversation has since been routed
-    // to a convo_flow, clear it so we don't ask "Para calcular el envío..." in a loop.
+    // ── RESUME PENDING HANDOFF ──
+    // executeHandoff() asks for the customer's zip before escalating to a human.
+    // When the customer replies with their zip/city, we MUST resume the handoff
+    // — otherwise the oversize/special-quote request silently gets lost and the
+    // bot falls back to ordinary responses without escalating.
     if (convo?.pendingHandoff) {
-      console.log(`🧹 [convo] Clearing stuck legacy pendingHandoff`);
-      await updateConversation(psid, { pendingHandoff: false, pendingHandoffInfo: null });
-      convo.pendingHandoff = false;
-      convo.pendingHandoffInfo = null;
+      try {
+        const { resumePendingHandoff } = require('../utils/executeHandoff');
+        const resumed = await resumePendingHandoff(psid, convo, userMessage);
+        if (resumed) {
+          console.log(`📍 [convo] Resumed pending handoff from zip response`);
+          return { response: resumed, state: flowState };
+        }
+        // resumePendingHandoff returned null → couldn't parse location;
+        // pendingHandoff has been cleared by handlePendingZipResponse, fall through.
+        console.log(`🧹 [convo] pendingHandoff cleared (no location parsed)`);
+        convo.pendingHandoff = false;
+        convo.pendingHandoffInfo = null;
+      } catch (err) {
+        console.error('❌ [convo] resumePendingHandoff error:', err.message);
+        // Defensive: clear the flag so we don't loop forever
+        await updateConversation(psid, { pendingHandoff: false, pendingHandoffInfo: null });
+        convo.pendingHandoff = false;
+        convo.pendingHandoffInfo = null;
+      }
     }
 
     // ── PENDING SWITCH CONFIRMATION (Protocol #1 — different product) ──
