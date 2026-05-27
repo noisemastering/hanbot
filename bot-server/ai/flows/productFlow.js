@@ -18,6 +18,55 @@ const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
  * @param {Array<string>} familyIds - ProductFamily ObjectIds from manifest
  * @returns {Promise<Array>} Loaded product data
  */
+/**
+ * Load every salable product across the entire catalog (no family restriction).
+ * Used by the not_offered fallback so the bot can quote anything we actually
+ * sell, even if the customer entered through a restricted promo flow.
+ */
+async function loadAllSalableProducts() {
+  try {
+    const all = await ProductFamily.find({ active: true, sellable: true }).lean();
+    const products = await Product.find({
+      familyId: { $in: all.map(f => f._id) }
+    }).lean();
+    const allMap = new Map(all.map(f => [String(f._id), f]));
+
+    return all.map(fam => {
+      const linkedProducts = products.filter(p => String(p.familyId) === String(fam._id));
+      const preferredLink = fam.onlineStoreLinks?.find(l => l.isPreferred)?.url
+        || fam.onlineStoreLinks?.[0]?.url
+        || null;
+      const familyPath = [];
+      let current = fam;
+      while (current?.parentId) {
+        const parent = allMap.get(String(current.parentId));
+        if (parent) {
+          familyPath.unshift(parent.name);
+          current = parent;
+        } else break;
+      }
+      return {
+        productId: String(fam._id),
+        name: fam.name,
+        familyName: familyPath.length > 0 ? familyPath.join(' > ') : null,
+        description: fam.description || null,
+        price: fam.price || null,
+        mlPrice: fam.mlPrice || null,
+        link: preferredLink,
+        size: fam.size || null,
+        colors: linkedProducts.map(p => p.name).filter(Boolean),
+        variants: linkedProducts.map(p => ({
+          id: String(p._id), name: p.name, price: p.price, size: p.size, link: p.mLink || null
+        })),
+        attributes: fam.attributes || {}
+      };
+    });
+  } catch (err) {
+    console.error('❌ [product] loadAllSalableProducts error:', err.message);
+    return [];
+  }
+}
+
 async function loadProducts(familyIds) {
   if (!familyIds || familyIds.length === 0) return [];
 
@@ -489,6 +538,7 @@ async function handle(userMessage, convo, psid, context = {}) {
 module.exports = {
   handle,
   loadProducts,
+  loadAllSalableProducts,
   findProduct,
   findFlowForProduct,
   checkWholesaleThreshold

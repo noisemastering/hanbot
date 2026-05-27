@@ -670,37 +670,70 @@ function create(manifest) {
 
       // Not offered
       if (productResult.type === 'not_offered') {
-        // Detect: if customer mentioned a size of malla sombra, escalate to human
-        // rather than telling them "no tenemos" — we DO sell malla sombra in
-        // other sizes, just not in this specific promo flow's catalog.
-        const sizeMentioned = /\b(\d{1,2})\s*[xX×]\s*(\d{1,2})\b/.test(userMessage);
-        const categoryMentioned = /\b(malla\s*sombra|malla|sombra|raschel|tela\s*sombra)\b/i.test(userMessage);
-
-        if (sizeMentioned || categoryMentioned) {
-          // Customer asked for a size/category we sell — escalate, don't deny
-          const handoffResp = await executeHandoff(psid, convo, userMessage, {
-            reason: 'size_or_category_outside_promo_flow',
-            responsePrefix: 'Te paso con un especialista que te puede cotizar esa medida al instante.',
-            lastIntent: 'size_outside_flow_handoff',
-            timingStyle: 'standard'
+        // Before deflecting, check the ENTIRE Hanlob catalog. The current flow
+        // may only carry a promo subset, but we sell more than that. If the
+        // requested item exists anywhere in our catalog, quote it from there.
+        try {
+          const allCatalog = await productFlow.loadAllSalableProducts();
+          const catalogSearch = await productFlow.findProduct(userMessage, allCatalog, {
+            basket: flowState.basket,
+            lastBotResponse: convo?.lastBotResponse || null,
+            customerName: convo?.userName || null,
+            lastQuotedProducts: flowState.lastQuotedProducts || [],
+            conversationHistory
           });
-          return { response: handoffResp, state: flowState };
+
+          if (catalogSearch.matches && catalogSearch.matches.length > 0) {
+            console.log(`🏛️ [convo] not_offered → found ${catalogSearch.matches.length} match(es) in master catalog, quoting from there`);
+            let quotableProducts = await Promise.all(
+              catalogSearch.matches.map(p => enrichWithMLPrice(p))
+            );
+            if (manifest.salesChannel === 'retail' && quotableProducts.length === 1) {
+              quotableProducts = await Promise.all(quotableProducts.map(async p => {
+                if (p.link) {
+                  const tracked = await getOrCreateClickLink(psid, p.link, {
+                    productName: p.name, productId: p.productId, reason: 'catalog_fallback_quote'
+                  });
+                  return { ...p, link: tracked };
+                }
+                return p;
+              }));
+            }
+            flowState.lastQuotedProducts = quotableProducts;
+
+            const salesResult = await salesFlow.handle(userMessage, convo, psid, {
+              products: quotableProducts,
+              voice: manifest.voice || 'casual',
+              salesChannel: manifest.salesChannel === 'retail' ? 'mercado_libre' : 'direct',
+              customerName,
+              clientData: flowState.clientData,
+              conversationHistory
+            });
+
+            if (salesResult) {
+              if (salesResult.products) flowState.lastQuotedProducts = salesResult.products;
+              const sharedProduct = quotableProducts.find(p => p.link);
+              if (sharedProduct) {
+                await updateConversation(psid, {
+                  lastSharedProductId: sharedProduct.productId,
+                  lastSharedProductLink: sharedProduct.link
+                });
+              }
+              return { response: salesResult, state: flowState };
+            }
+          }
+        } catch (err) {
+          console.error('❌ [convo] catalog fallback error:', err.message);
         }
 
-        // Genuinely different product (toldo, lonas, etc.) — explain what we offer
+        // Truly outside our catalog (matchbox, toldo, lona, geomembrana, etc.)
+        // — deflect politely, mention what we sell, ask if they want it.
         try {
-          const ourProductsSummary = productCache.map(p => {
-            let s = p.name;
-            if (p.familyName) s = `${p.familyName} ${p.name}`;
-            if (p.size) s += ` (${p.size})`;
-            return s;
-          }).join(', ');
-
           const aiResponse = await _openai.chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [
-              { role: 'system', content: `Eres asesora de ventas de Hanlob. El cliente preguntó por un producto que NO manejamos (ej: toldos, lonas, geomembrana). Responde con honestidad: dile que ese producto específico no lo tenemos. Menciona brevemente que SÍ manejamos malla sombra (lo que tenemos en esta promoción) y pregunta si le interesa. NUNCA digas "no manejamos malla sombra" ni niegues que vendemos malla sombra — siempre la vendemos. Máximo 2-3 oraciones, natural.` },
-              { role: 'user', content: `Productos disponibles en esta promoción: ${ourProductsSummary}\n\nMensaje del cliente: ${userMessage}` }
+              { role: 'system', content: `Eres asesora de ventas de Hanlob, fabricante de malla sombra. El cliente preguntó por un producto que GENUINAMENTE no manejamos (ej: toldos, lonas, geomembrana, cajitas de cerillos). Hanlob solo fabrica y vende MALLA SOMBRA y accesorios relacionados (rollos, bordes, separadores). Responde con honestidad: dile que ese producto específico no lo tenemos, menciona que somos fabricantes de malla sombra y pregunta si le interesa. NUNCA digas "no manejamos malla sombra" — siempre la vendemos. Máximo 2-3 oraciones, natural.` },
+              { role: 'user', content: `Mensaje del cliente: ${userMessage}` }
             ],
             temperature: 0.4,
             max_tokens: 200
