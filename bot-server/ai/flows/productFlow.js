@@ -172,6 +172,34 @@ async function findProduct(userMessage, products, conversationContext = {}) {
 
   const { basket = [], lastBotResponse = null, customerName = null, lastQuotedProducts = [], conversationHistory = '' } = conversationContext;
 
+  // Normalize multiplication sign and Unicode variants → ASCII 'x' so size patterns match
+  const normalizedMessage = userMessage
+    .replace(/[×✕✖x✗]/g, 'x')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // ── SIZE PATTERN FAST-PATH ──
+  // If the user mentioned a dimension like "6x4" / "6 x 4" / "6 por 4",
+  // try to deterministically match against the product list before asking the AI.
+  // This prevents the AI from flagging legit size queries as outsideRealm.
+  const sizeMatch = normalizedMessage.match(/\b(\d{1,2})(?:\s*[x×]\s*|\s+por\s+)(\d{1,2})\b/i);
+  if (sizeMatch) {
+    const w = parseInt(sizeMatch[1], 10);
+    const h = parseInt(sizeMatch[2], 10);
+    // Try both orientations (6x4 or 4x6)
+    const directMatch = products.filter(p => {
+      if (!p.size) return false;
+      const sm = String(p.size).match(/(\d{1,2})x(\d{1,2})/i);
+      if (!sm) return false;
+      const pw = parseInt(sm[1], 10), ph = parseInt(sm[2], 10);
+      return (pw === w && ph === h) || (pw === h && ph === w);
+    });
+    if (directMatch.length > 0) {
+      console.log(`🏛️ [product] Direct size match: ${w}x${h} → ${directMatch.length} product(s)`);
+      return { matches: directMatch, outsideRealm: false, confidence: 'high' };
+    }
+  }
+
   const productSummary = products.map((p, i) => {
     let entry = `${i}: `;
     if (p.familyName) entry += `[${p.familyName}] `;
@@ -220,7 +248,7 @@ FORMATO:
 PRODUCTOS DISPONIBLES:
 ${productSummary}
 ${conversationHistory ? `\n${conversationHistory}` : ''}
-Mensaje del cliente: ${userMessage}`;
+Mensaje del cliente: ${normalizedMessage}`;
 
     const response = await _openai.chat.completions.create({
       model: "gpt-4o-mini",
@@ -236,13 +264,20 @@ Mensaje del cliente: ${userMessage}`;
     const result = JSON.parse(response.choices[0].message.content);
 
     if (result.outsideRealm) {
-      // Safety guard: never flag our own product category as outsideRealm.
-      // Even if AI got confused, "malla sombra" / "malla" / "raschel" / "sombra"
-      // are NEVER outside our realm — that's literally what we sell.
-      const lower = (userMessage || '').toLowerCase();
+      // Safety guard 1: never flag our own product category as outsideRealm.
+      const lower = normalizedMessage.toLowerCase();
       const isOurCategory = /\b(malla\s*sombra|malla|sombra|raschel|tela\s*sombra)\b/.test(lower);
       if (isOurCategory) {
         console.log(`🏛️ [product] Overriding outsideRealm — message mentions our category: "${userMessage}"`);
+        return { matches: [], outsideRealm: false, confidence: 'low' };
+      }
+      // Safety guard 2: if the message contains a size pattern, it's a size
+      // query — never outside our realm (we sell malla sombra in many sizes).
+      // The fast-path above already tried direct match; if we got here, the
+      // size isn't in the current flow's list, but the master-catalog fallback
+      // in convoFlow will handle it.
+      if (/\b\d{1,2}\s*[x×]\s*\d{1,2}\b/i.test(normalizedMessage)) {
+        console.log(`🏛️ [product] Overriding outsideRealm — message contains size pattern: "${userMessage}"`);
         return { matches: [], outsideRealm: false, confidence: 'low' };
       }
       return { matches: [], outsideRealm: true };
