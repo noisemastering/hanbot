@@ -6,6 +6,8 @@ import {
 // KnobControl removed — using sliders instead
 
 const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6', fontSize: '13px' };
+const tooltipLabelStyle = { color: '#F3F4F6', fontWeight: 600 };
+const tooltipItemStyle = { color: '#F3F4F6' };
 const fmt = (n) => '$' + Math.round(n).toLocaleString('es-MX');
 const MONTH_LABELS = ['Ene','Feb','Mar','Abr','May','Jun','Jul','Ago','Sep','Oct','Nov','Dic'];
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
@@ -1157,7 +1159,7 @@ function SalesForecastView() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis dataKey="month" tick={{ fill: '#9CA3AF', fontSize: 11 }} />
                     <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} domain={[0, 'auto']} />
-                    <Tooltip contentStyle={tooltipStyle}
+                    <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle}
                       formatter={(v, name, props) => [v.toFixed(2) + 'x', props.payload.season]}
                     />
                     <ReferenceLine y={1} stroke="#6B7280" strokeDasharray="4 4" />
@@ -1191,7 +1193,7 @@ function SalesForecastView() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis dataKey="day" tick={{ fill: '#9CA3AF', fontSize: 11 }} />
                     <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-                    <Tooltip contentStyle={tooltipStyle} formatter={v => [fmt(v), 'Promedio']} />
+                    <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} formatter={v => [fmt(v), 'Promedio']} />
                     <Bar dataKey="avg" name="Promedio" radius={[4, 4, 0, 0]}>
                       {data.dowSummary.map((d, i) => (
                         <Cell key={i}
