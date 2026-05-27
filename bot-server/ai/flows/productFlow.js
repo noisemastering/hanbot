@@ -235,8 +235,29 @@ function checkWholesaleThreshold(product, quantity) {
 async function findFlowForProduct(userMessage, manifests) {
   if (!manifests || manifests.length === 0) return null;
 
-  const manifestSummary = manifests.map((m, i) =>
-    `${i}: ${m.name} — productos: ${(m.products || []).join(', ')}`
+  // Enrich each manifest with actual product names/sizes so the AI can match
+  // by what the products ARE, not by opaque ObjectIds.
+  const ProductFamily = require('../../models/ProductFamily');
+  const enriched = await Promise.all(manifests.map(async (m, i) => {
+    let productLabels = [];
+    if (m.products && m.products.length > 0) {
+      try {
+        const fams = await ProductFamily.find({ _id: { $in: m.products } })
+          .select('name size')
+          .lean();
+        productLabels = fams.map(f => f.size ? `${f.name} (${f.size})` : f.name).filter(Boolean);
+      } catch {}
+    }
+    return {
+      idx: i,
+      name: m.name,
+      label: m.label || m.name,
+      productLabels
+    };
+  }));
+
+  const manifestSummary = enriched.map(e =>
+    `${e.idx}: ${e.label} — productos: ${e.productLabels.join(', ') || '(sin productos cargados)'}`
   ).join('\n');
 
   try {
@@ -245,19 +266,19 @@ async function findFlowForProduct(userMessage, manifests) {
       messages: [
         {
           role: "system",
-          content: `Identifica cuál flujo maneja EXACTAMENTE el producto que pide el cliente.
+          content: `Identifica cuál flujo maneja el producto que pide el cliente.
 
-FLUJOS DISPONIBLES (cada uno maneja una familia de productos específica):
+FLUJOS DISPONIBLES:
 ${manifestSummary}
 
 Responde con JSON:
-{ "matchIndex": <índice del flujo que MANEJA EXACTAMENTE ese producto, o -1 si ninguno lo maneja> }
+{ "matchIndex": <índice del flujo que maneja ese producto, o -1 si ninguno lo maneja> }
 
-REGLAS CRÍTICAS:
-- Solo devuelve un matchIndex >= 0 si el flujo realmente maneja ese producto específico
-- NO emparejes por palabra clave parcial (ej. "malla pájaros" NO es lo mismo que "malla sombra" ni "malla raschel")
-- NO supongas. Si no tienes certeza absoluta de que el flujo maneja exactamente ese producto, devuelve -1
-- ANTE LA DUDA → -1
+REGLAS:
+- Si el cliente pide una medida específica (ej: "6x4", "4x3 metros"), busca el flujo que tiene esa medida en sus productos
+- Si el cliente pide una categoría (ej: "malla sombra", "raschel"), busca un flujo que maneje esa categoría
+- NO emparejes por palabra clave parcial (ej. "malla pájaros" NO es lo mismo que "malla sombra")
+- ANTE LA DUDA con un producto que es claramente malla sombra/raschel → elige el flujo más general (con más productos), no uno promocional
 - Solo devuelve JSON`
         },
         { role: "user", content: userMessage }

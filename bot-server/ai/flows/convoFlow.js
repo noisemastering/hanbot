@@ -670,8 +670,24 @@ function create(manifest) {
 
       // Not offered
       if (productResult.type === 'not_offered') {
-        // Generate a helpful response that acknowledges we don't have what they asked for
-        // but mentions what this convo_flow DOES handle, so the customer isn't left empty-handed.
+        // Detect: if customer mentioned a size of malla sombra, escalate to human
+        // rather than telling them "no tenemos" — we DO sell malla sombra in
+        // other sizes, just not in this specific promo flow's catalog.
+        const sizeMentioned = /\b(\d{1,2})\s*[xX×]\s*(\d{1,2})\b/.test(userMessage);
+        const categoryMentioned = /\b(malla\s*sombra|malla|sombra|raschel|tela\s*sombra)\b/i.test(userMessage);
+
+        if (sizeMentioned || categoryMentioned) {
+          // Customer asked for a size/category we sell — escalate, don't deny
+          const handoffResp = await executeHandoff(psid, convo, userMessage, {
+            reason: 'size_or_category_outside_promo_flow',
+            responsePrefix: 'Te paso con un especialista que te puede cotizar esa medida al instante.',
+            lastIntent: 'size_outside_flow_handoff',
+            timingStyle: 'standard'
+          });
+          return { response: handoffResp, state: flowState };
+        }
+
+        // Genuinely different product (toldo, lonas, etc.) — explain what we offer
         try {
           const ourProductsSummary = productCache.map(p => {
             let s = p.name;
@@ -683,8 +699,8 @@ function create(manifest) {
           const aiResponse = await _openai.chat.completions.create({
             model: 'gpt-4o-mini',
             messages: [
-              { role: 'system', content: `Eres asesora de ventas de Hanlob. El cliente preguntó por un producto que NO manejamos. Responde con honestidad: dile que ese producto no lo tenemos, pero menciona brevemente lo que SÍ manejamos en este flujo y pregunta si le interesa. Máximo 2-3 oraciones, natural, como mensaje de WhatsApp. No inventes nada.` },
-              { role: 'user', content: `Productos que SÍ manejamos: ${ourProductsSummary}\n\nMensaje del cliente: ${userMessage}` }
+              { role: 'system', content: `Eres asesora de ventas de Hanlob. El cliente preguntó por un producto que NO manejamos (ej: toldos, lonas, geomembrana). Responde con honestidad: dile que ese producto específico no lo tenemos. Menciona brevemente que SÍ manejamos malla sombra (lo que tenemos en esta promoción) y pregunta si le interesa. NUNCA digas "no manejamos malla sombra" ni niegues que vendemos malla sombra — siempre la vendemos. Máximo 2-3 oraciones, natural.` },
+              { role: 'user', content: `Productos disponibles en esta promoción: ${ourProductsSummary}\n\nMensaje del cliente: ${userMessage}` }
             ],
             temperature: 0.4,
             max_tokens: 200
