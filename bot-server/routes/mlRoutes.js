@@ -1281,8 +1281,9 @@ router.get('/spend-optimization', async (req, res) => {
     convData.forEach(c => convMap[c._id] = c);
 
     // Product breakdown per ad — JOIN ClickLog with MLOrder to get the canonical
-    // productFamilyId for each sale (no regex, no string parsing of titles).
-    const MLOrder = require('../models/MLOrder');
+    // productFamilyId for each sale. When the matching MLOrder hasn't been imported
+    // yet (recent conversions), fall back to grouping by title.
+    require('../models/MLOrder');
     const productBreakdownRaw = await ClickLog.aggregate([
       { $match: { converted: true, adId: { $ne: null }, ...(hasDate ? { createdAt: dateMatch } : {}) } },
       { $group: {
@@ -1290,7 +1291,6 @@ router.get('/spend-optimization', async (req, res) => {
         item: { $first: '$conversionData.itemTitle' },
         revenue: { $first: '$conversionData.totalAmount' }
       } },
-      // Look up the matching MLOrder for productFamilyId
       { $lookup: {
         from: 'mlorders',
         localField: '_id.orderId',
@@ -1298,11 +1298,20 @@ router.get('/spend-optimization', async (req, res) => {
         as: 'order'
       } },
       { $unwind: { path: '$order', preserveNullAndEmptyArrays: true } },
-      // Take the first item's productFamilyId
-      { $addFields: { productFamilyId: { $arrayElemAt: ['$order.items.productFamilyId', 0] } } },
-      // Group by ad + family (canonical) — collapse all sales of the same family
+      { $addFields: {
+        productFamilyId: { $arrayElemAt: ['$order.items.productFamilyId', 0] },
+        // Use familyId when available, otherwise the title — keeps unmatched sales
+        // separate per title instead of collapsing them all into a null bucket.
+        groupKey: {
+          $ifNull: [
+            { $toString: { $arrayElemAt: ['$order.items.productFamilyId', 0] } },
+            { $concat: ['title:', { $ifNull: ['$item', 'unknown'] }] }
+          ]
+        }
+      } },
       { $group: {
-        _id: { adId: '$_id.adId', familyId: '$productFamilyId' },
+        _id: { adId: '$_id.adId', key: '$groupKey' },
+        familyId: { $first: '$productFamilyId' },
         sampleTitle: { $first: '$item' },
         count: { $sum: 1 },
         revenue: { $sum: '$revenue' }
@@ -1311,23 +1320,23 @@ router.get('/spend-optimization', async (req, res) => {
     ]);
 
     // Resolve family names from ProductFamily for display
-    const familyIds = [...new Set(productBreakdownRaw.map(r => r._id.familyId).filter(Boolean))];
+    const familyIds = [...new Set(productBreakdownRaw.map(r => r.familyId).filter(Boolean))];
     const familyDocs = familyIds.length > 0
       ? await ProductFamily.find({ _id: { $in: familyIds } }).select('_id name parentId').lean()
       : [];
     const familyById = {};
     familyDocs.forEach(f => { familyById[String(f._id)] = f; });
 
-    // Build per-ad product map using canonical family data
+    // Build per-ad product map. Use family name when mapped; fall back to title.
     const adProductMap = {};
     for (const row of productBreakdownRaw) {
       const adId = row._id.adId;
-      const fid = row._id.familyId ? String(row._id.familyId) : null;
+      const fid = row.familyId ? String(row.familyId) : null;
       const family = fid ? familyById[fid] : null;
       if (!adProductMap[adId]) adProductMap[adId] = [];
       adProductMap[adId].push({
         familyId: fid,
-        product: family?.name || row.sampleTitle?.slice(0, 30) || 'Sin categoría',
+        product: family?.name || (row.sampleTitle || 'Sin categoría').slice(0, 60),
         fullTitle: row.sampleTitle || '',
         count: row.count,
         revenue: Math.round(row.revenue)
@@ -1445,11 +1454,17 @@ router.get('/spend-optimization', async (req, res) => {
       const targetIds = adTargetFamilyIdsMap[row.ad_id]; // Set<String(familyId)>
       const categoryTotalVariants = targetIds ? targetIds.size : 0;
 
+      let unmappedSales = 0; // sales whose MLOrder hasn't been imported yet
       if (products.length > 0 && targetIds && targetIds.size > 0) {
         const distinctSeen = new Set();
         products.forEach(p => {
-          const isInCategory = p.familyId && targetIds.has(p.familyId);
-          if (isInCategory) {
+          if (!p.familyId) {
+            // No mapping yet — don't classify either way, but keep visible
+            unmappedSales += p.count;
+            crossSell.push({ ...p, unmapped: true });
+            return;
+          }
+          if (targetIds.has(p.familyId)) {
             inCategorySales += p.count;
             distinctSeen.add(p.familyId);
           } else {
@@ -1458,7 +1473,7 @@ router.get('/spend-optimization', async (req, res) => {
         });
         distinctInCategory = distinctSeen.size;
       } else if (products.length > 0) {
-        // No resolvable target tree — count everything as cross-sell
+        // No resolvable target tree — show items but don't classify
         crossSell = products;
       }
 
@@ -1486,6 +1501,7 @@ router.get('/spend-optimization', async (req, res) => {
         categoryTotalVariants,
         distinctInCategory,
         outOfCategorySales: crossSellCount,
+        unmappedSales,
         // The actual out-of-category items (for the popup)
         crossSellItems: crossSell
           .sort((a, b) => b.count - a.count)
