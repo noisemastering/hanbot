@@ -149,7 +149,9 @@ async function findProduct(userMessage, products, conversationContext = {}) {
     : '';
 
   try {
-    const systemContent = `Eres un sistema de búsqueda de productos. Identifica cuál(es) producto(s) de la lista corresponden a lo que el cliente busca.
+    const systemContent = `Eres un sistema de búsqueda de productos para Hanlob, fabricante mexicano de MALLA SOMBRA. Identifica cuál(es) producto(s) de la lista corresponden a lo que el cliente busca.
+
+REGLA CRÍTICA: La categoría de Hanlob es "malla sombra" (también llamada raschel, malla raschel, raschel 90%, malla 90%, malla, sombra, tela sombra). TODOS nuestros productos son malla sombra o accesorios para malla sombra. NUNCA marques "malla sombra" / "raschel" / "malla" / "sombra" como outsideRealm — son nuestra categoría principal.
 
 Los productos tienen un nombre de familia entre corchetes [Familia]. Si el cliente pide la familia por nombre (ej: "borde separador"), TODOS los productos de esa familia coinciden. Si pide una medida específica, solo el producto que coincida.
 
@@ -158,10 +160,11 @@ Responde con JSON:
 
 FORMATO:
 - Familia por nombre → devuelve TODOS los productos de esa familia
-- Pregunta de seguimiento ("¿cuánto cuesta?", "me interesa", "ese") → usa el CONTEXTO para identificar el producto referido
-- Producto fuera de la lista (ej: "quiero un toldo", "tienen lonas?") → outsideRealm: true, matches: []
+- Pregunta de seguimiento ("¿cuánto cuesta?", "me interesa", "ese", "solo X", "nada más X") → usa el CONTEXTO para identificar el producto referido. "Solo malla sombra" / "Nomás la malla" = confirmación de alcance, NO una solicitud nueva
+- Producto fuera de la lista — SOLO productos genuinamente diferentes (ej: "quiero un toldo", "tienen lonas?", "venden plástico?", "tienen geomembrana?") → outsideRealm: true, matches: []
 - Preguntas generales de precio, interés o información sobre los productos de la lista (ej: "pongan los precios", "cuánto cuestan", "me interesan", "precios?") → outsideRealm: false, matches: [], confidence: "low" (NO son outsideRealm — el cliente pregunta por nuestros productos pero sin especificar cuál)
-- Ante la duda → confidence: "low"
+- "malla sombra", "malla", "sombra", "raschel", "tela sombra" → JAMÁS outsideRealm. Si no hay producto específico que matchee, devuelve matches: [], outsideRealm: false, confidence: "low"
+- Ante la duda → confidence: "low", outsideRealm: false
 - Solo devuelve JSON`;
 
     const userContent = `${contextBlock}
@@ -184,6 +187,15 @@ Mensaje del cliente: ${userMessage}`;
     const result = JSON.parse(response.choices[0].message.content);
 
     if (result.outsideRealm) {
+      // Safety guard: never flag our own product category as outsideRealm.
+      // Even if AI got confused, "malla sombra" / "malla" / "raschel" / "sombra"
+      // are NEVER outside our realm — that's literally what we sell.
+      const lower = (userMessage || '').toLowerCase();
+      const isOurCategory = /\b(malla\s*sombra|malla|sombra|raschel|tela\s*sombra)\b/.test(lower);
+      if (isOurCategory) {
+        console.log(`🏛️ [product] Overriding outsideRealm — message mentions our category: "${userMessage}"`);
+        return { matches: [], outsideRealm: false, confidence: 'low' };
+      }
       return { matches: [], outsideRealm: true };
     }
 
