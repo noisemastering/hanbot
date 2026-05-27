@@ -68,6 +68,7 @@ import MLImporterView from "./pages/MLImporterView";
 import MLPlaygroundView from "./pages/MLPlaygroundView";
 import SalesForecastView from "./pages/SalesForecastView";
 import FlowPromptsView from "./pages/FlowPromptsView";
+import ConvoFlowsView from "./pages/ConvoFlowsView";
 import CustomerSegmentationView from "./pages/CustomerSegmentationView";
 import ConversionProbabilityView from "./pages/ConversionProbabilityView";
 import AdSpendOptimizationView from "./pages/AdSpendOptimizationView";
@@ -265,6 +266,14 @@ const menuItems = [
         path: "/cross-sell",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        )
+      },
+      {
+        id: "convo-flows",
+        labelKey: "menu.convoFlows",
+        path: "/convo-flows",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
         )
       },
       {
@@ -2260,6 +2269,7 @@ function App() {
 
           {/* Flujos Route */}
           <Route path="/flujos" element={<FlowPromptsView />} />
+          <Route path="/convo-flows" element={<ConvoFlowsView />} />
           <Route path="/playground/simulador" element={<SalesSimulatorView />} />
           <Route path="/inteligencia-artificial" element={<CampaignIntelligenceView />} />
           <Route path="/ml-import" element={<MLOrderImportView />} />
