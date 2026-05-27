@@ -1290,12 +1290,16 @@ router.get('/spend-optimization', async (req, res) => {
 
     // Build per-ad product map — keep both short label and the original title
     // so we can match by category keywords (e.g. "confeccionada"), not just size.
+    // Size regex: WxH with optional "m" after either number (handles "6x7", "6mx7m",
+    // "6x7m", "6 x 7", "7mx5m", etc.). Negative lookahead avoids matching pieces
+    // of larger numbers like "606x70".
+    const SIZE_RE = /(\d+(?:\.\d+)?)\s*m?\s*[xX×]\s*(\d+(?:\.\d+)?)\s*m?(?!\d)/;
     const adProductMap = {};
     for (const row of productBreakdown) {
       const adId = row._id.adId;
       if (!adProductMap[adId]) adProductMap[adId] = [];
       const title = row._id.item || '';
-      const sizeMatch = title.match(/(\d+)\s*m?\s*[xX×]\s*(\d+)\s*m/);
+      const sizeMatch = title.match(SIZE_RE);
       const shortName = sizeMatch ? `${sizeMatch[1]}x${sizeMatch[2]}m` : title.slice(0, 30);
       adProductMap[adId].push({
         product: shortName,
