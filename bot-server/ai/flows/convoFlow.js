@@ -686,9 +686,90 @@ function create(manifest) {
 
       // Not offered
       if (productResult.type === 'not_offered') {
-        // Before deflecting, check the ENTIRE Hanlob catalog. The current flow
-        // may only carry a promo subset, but we sell more than that. If the
-        // requested item exists anywhere in our catalog, quote it from there.
+        // STEP 1: If the customer mentioned "promo" / "promoción" / "oferta" /
+        // "descuento", check ACTIVE PROMOS for one matching their request.
+        // We may have multiple active promos across different sizes — if the
+        // customer is asking for a different one, hand them THAT promo's
+        // product + price + link, not a regular-price quote.
+        try {
+          const mentionsPromo = /\b(promo|promoci[oó]n|oferta|descuento|rebaja)\b/i.test(userMessage);
+          if (mentionsPromo) {
+            const Promo = require('../../models/Promo');
+            const activePromos = await Promo.find({ active: true }).lean();
+            if (activePromos.length > 0) {
+              // Get product info for each promo's products
+              const PF = require('../../models/ProductFamily');
+              const allPromoProductIds = activePromos.flatMap(p => p.promoProductIds || []);
+              const promoProductDocs = allPromoProductIds.length > 0
+                ? await PF.find({ _id: { $in: allPromoProductIds } }).select('name size price onlineStoreLinks').lean()
+                : [];
+              const productById = new Map(promoProductDocs.map(p => [String(p._id), p]));
+
+              // Build "promo X handles size Y" matrix
+              const promoOptions = activePromos.flatMap(promo =>
+                (promo.promoProductIds || []).map(pid => {
+                  const prod = productById.get(String(pid));
+                  return prod ? { promo, product: prod } : null;
+                }).filter(Boolean)
+              );
+
+              // Match by size or name (handle "6 m", "6x4", "la de 6", "promo del 6")
+              const sizeMatch = userMessage
+                .replace(/[×✕✖x✗]/g, 'x')
+                .match(/\b(\d{1,2})(?:\s*x\s*(\d{1,2}))?\b/);
+              let matchedOption = null;
+              if (sizeMatch) {
+                const reqW = parseInt(sizeMatch[1], 10);
+                const reqH = sizeMatch[2] ? parseInt(sizeMatch[2], 10) : null;
+                // Find a promo whose product's size contains the requested dim
+                matchedOption = promoOptions.find(opt => {
+                  const sm = String(opt.product.size || '').match(/(\d{1,2})x(\d{1,2})/i);
+                  if (!sm) return false;
+                  const pw = parseInt(sm[1], 10), ph = parseInt(sm[2], 10);
+                  if (reqH !== null) {
+                    return (pw === reqW && ph === reqH) || (pw === reqH && ph === reqW);
+                  }
+                  return pw === reqW || ph === reqW;
+                });
+              }
+
+              if (matchedOption) {
+                console.log(`🎁 [convo] Found other active promo for "${userMessage}": ${matchedOption.promo.name}`);
+                const prod = matchedOption.product;
+                const link = prod.onlineStoreLinks?.find(l => l.isPreferred)?.url
+                  || prod.onlineStoreLinks?.[0]?.url || null;
+                const trackedLink = link
+                  ? await getOrCreateClickLink(psid, link, {
+                      productName: prod.name, productId: String(prod._id), reason: 'other_promo_redirect'
+                    })
+                  : null;
+
+                // Apply promo price if defined, else regular price
+                const promoPriceEntry = (matchedOption.promo.promoPrices || []).find(pp =>
+                  String(pp.productId) === String(prod._id)
+                );
+                const finalPrice = promoPriceEntry?.price ?? prod.price;
+                const sizeStr = prod.size || prod.name;
+
+                const text = `¡Claro! Esa promoción es de ${sizeStr} a $${finalPrice} con envío incluido.${trackedLink ? `\n\n🛒 Cómprala aquí:\n${trackedLink}` : ''}`;
+
+                if (trackedLink) {
+                  await updateConversation(psid, {
+                    lastSharedProductId: String(prod._id),
+                    lastSharedProductLink: trackedLink
+                  });
+                }
+                return { response: { type: 'text', text }, state: flowState };
+              }
+            }
+          }
+        } catch (err) {
+          console.error('❌ [convo] other-promo lookup error:', err.message);
+        }
+
+        // STEP 2: Check the ENTIRE Hanlob catalog. The current flow may only
+        // carry a promo subset, but we sell more than that. If the requested
+        // item exists anywhere in our catalog, quote it from there.
         try {
           const allCatalog = await productFlow.loadAllSalableProducts();
           const catalogSearch = await productFlow.findProduct(userMessage, allCatalog, {
