@@ -1288,16 +1288,21 @@ router.get('/spend-optimization', async (req, res) => {
       { $sort: { count: -1 } }
     ]);
 
-    // Build per-ad product map
+    // Build per-ad product map — keep both short label and the original title
+    // so we can match by category keywords (e.g. "confeccionada"), not just size.
     const adProductMap = {};
     for (const row of productBreakdown) {
       const adId = row._id.adId;
       if (!adProductMap[adId]) adProductMap[adId] = [];
-      // Extract size from title
       const title = row._id.item || '';
       const sizeMatch = title.match(/(\d+)\s*m?\s*[xX×]\s*(\d+)\s*m/);
       const shortName = sizeMatch ? `${sizeMatch[1]}x${sizeMatch[2]}m` : title.slice(0, 30);
-      adProductMap[adId].push({ product: shortName, count: row.count, revenue: Math.round(row.revenue) });
+      adProductMap[adId].push({
+        product: shortName,
+        fullTitle: title,
+        count: row.count,
+        revenue: Math.round(row.revenue)
+      });
     }
 
     // Also get stored metrics as fallback (from FB sync)
@@ -1371,18 +1376,38 @@ router.get('/spend-optimization', async (req, res) => {
       const totalOrders = products.reduce((s, p) => s + p.count, 0);
 
       // Determine on-target vs cross-sell
+      // Strategy:
+      //   - If target specifies a size (e.g. "6x4m"), match by exact size
+      //   - Otherwise match by category keyword(s) (e.g. "confeccionada",
+      //     "borde separador", "ground cover") against the FULL ML item title
       let onTarget = 0;
       let crossSell = [];
       if (targetProduct && products.length > 0) {
-        // Match target by checking if product name contains the target keyword
-        const targetLower = (targetProduct || '').toLowerCase();
+        const targetLower = (targetProduct || '').toLowerCase().trim();
+        const sizeMatch = targetLower.match(/(\d+)\s*x\s*(\d+)/);
+
+        // Build category keywords from target — strip "retail", "wholesale",
+        // numbers, common stopwords, then keep meaningful tokens
+        const stopwords = new Set(['retail', 'mayoreo', 'wholesale', 'de', 'del', 'la', 'el', 'los', 'las', 'y', 'con', 'sin']);
+        const categoryTokens = targetLower
+          .replace(/[0-9]+\s*x\s*[0-9]+\s*m?/g, '') // strip sizes
+          .split(/\s+/)
+          .map(t => t.trim())
+          .filter(t => t.length >= 3 && !stopwords.has(t));
+
         products.forEach(p => {
-          const pLower = (p.product || '').toLowerCase();
-          // Simple match: if target mentions a size, match by size; otherwise match by keyword
-          const sizeMatch = targetLower.match(/(\d+)\s*x\s*(\d+)/);
-          const isOnTarget = sizeMatch
-            ? pLower.includes(`${sizeMatch[1]}x${sizeMatch[2]}`)
-            : pLower.includes(targetLower.split(' ')[0]);
+          const sizeLabel = (p.product || '').toLowerCase();
+          const fullLower = (p.fullTitle || p.product || '').toLowerCase();
+
+          let isOnTarget = false;
+          if (sizeMatch) {
+            // Target has explicit size — match by size in label
+            isOnTarget = sizeLabel.includes(`${sizeMatch[1]}x${sizeMatch[2]}`);
+          } else if (categoryTokens.length > 0) {
+            // Category match — at least one significant token appears in full title
+            isOnTarget = categoryTokens.some(tok => fullLower.includes(tok));
+          }
+
           if (isOnTarget) onTarget += p.count;
           else crossSell.push(p);
         });
