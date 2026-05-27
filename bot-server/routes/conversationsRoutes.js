@@ -764,6 +764,133 @@ router.post('/reply-attachment', attachmentUpload.single('file'), async (req, re
   }
 });
 
+// GET /conversations/attachments/gallery - List previously uploaded files from Cloudinary
+// for reuse in conversations (no re-upload needed)
+router.get('/attachments/gallery', async (req, res) => {
+  try {
+    // Pull from the folders we use for conversation attachments + catalogs + product images
+    const folders = [
+      'hanlob/conversation-images',
+      'hanlob/conversation-docs',
+      'hanlob/catalogs',
+      'hanlob/images'
+    ];
+
+    const items = [];
+    for (const folder of folders) {
+      // Images
+      try {
+        const imgResult = await cloudinary.search
+          .expression(`folder:${folder} AND resource_type:image`)
+          .sort_by('created_at', 'desc')
+          .max_results(50)
+          .execute();
+        imgResult.resources.forEach(r => {
+          items.push({
+            type: 'image',
+            url: r.secure_url,
+            publicId: r.public_id,
+            filename: r.public_id.split('/').pop(),
+            size: r.bytes,
+            createdAt: r.created_at,
+            folder
+          });
+        });
+      } catch {}
+
+      // Raw files (PDFs)
+      try {
+        const rawResult = await cloudinary.search
+          .expression(`folder:${folder} AND resource_type:raw`)
+          .sort_by('created_at', 'desc')
+          .max_results(50)
+          .execute();
+        rawResult.resources.forEach(r => {
+          items.push({
+            type: 'pdf',
+            url: r.secure_url,
+            publicId: r.public_id,
+            filename: r.public_id.split('/').pop(),
+            size: r.bytes,
+            createdAt: r.created_at,
+            folder
+          });
+        });
+      } catch {}
+    }
+
+    // Sort all items by date (newest first)
+    items.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+
+    res.json({ success: true, items });
+  } catch (error) {
+    console.error('❌ Error fetching gallery:', error.message);
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// POST /conversations/reply-from-url - Send an existing Cloudinary file (no upload)
+router.post('/reply-from-url', async (req, res) => {
+  try {
+    const { psid, url, filename, type, caption } = req.body;
+
+    if (!psid || !url || !type) {
+      return res.status(400).json({ success: false, error: 'Missing psid, url or type' });
+    }
+
+    const isImage = type === 'image';
+    const isPdf = type === 'pdf';
+
+    if (!isImage && !isPdf) {
+      return res.status(400).json({ success: false, error: 'Type must be image or pdf' });
+    }
+
+    const conversation = await Conversation.findOne({ psid }).lean();
+    const channel = conversation?.channel || 'facebook';
+
+    if (channel === 'whatsapp') {
+      const phoneNumber = psid.startsWith('wa:') ? psid.substring(3) : psid;
+      if (isImage) {
+        await sendWhatsAppImage(phoneNumber, url, caption || null);
+      } else {
+        await sendWhatsAppDocument(phoneNumber, url, filename || 'documento.pdf', caption || null);
+      }
+    } else {
+      await sendMessengerAttachment(psid, url, isImage ? 'image' : 'file');
+      if (caption) {
+        await sendMessengerMessage(psid, caption);
+      }
+    }
+
+    const messageText = caption
+      ? `[${isImage ? 'Imagen' : 'PDF'}: ${url}] ${caption}`
+      : `[${isImage ? 'Imagen' : 'PDF'}: ${url}]`;
+
+    const message = await Message.create({
+      psid,
+      text: messageText,
+      senderType: 'human',
+      timestamp: new Date()
+    });
+
+    await Conversation.findOneAndUpdate(
+      { psid },
+      {
+        lastMessageAt: new Date(),
+        state: 'human_active',
+        handoffResolved: true,
+        handoffResolvedAt: new Date()
+      }
+    );
+
+    console.log(`✅ Reused attachment sent via ${channel}`);
+    res.json({ success: true, message, channel, url });
+  } catch (error) {
+    console.error('❌ Error sending from URL:', error.response?.data || error.message);
+    res.status(500).json({ success: false, error: error.message || 'Failed to send' });
+  }
+});
+
 // POST /conversations/:psid/mark-followed-up - Mark a lead as followed up
 router.post('/:psid/mark-followed-up', async (req, res) => {
   try {

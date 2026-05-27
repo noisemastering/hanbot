@@ -444,6 +444,59 @@ function Messages() {
     }
   };
 
+  // Gallery state
+  const [showGallery, setShowGallery] = useState(false);
+  const [galleryItems, setGalleryItems] = useState([]);
+  const [galleryLoading, setGalleryLoading] = useState(false);
+  const [galleryFilter, setGalleryFilter] = useState('all'); // 'all' | 'image' | 'pdf'
+
+  const fetchGallery = async () => {
+    setGalleryLoading(true);
+    try {
+      const res = await API.get('/conversations/attachments/gallery');
+      setGalleryItems(res.data.items || []);
+    } catch (err) {
+      console.error('Error loading gallery:', err);
+    } finally {
+      setGalleryLoading(false);
+    }
+  };
+
+  const openGallery = () => {
+    setShowGallery(true);
+    fetchGallery();
+  };
+
+  const handleSendFromGallery = async (item) => {
+    if (!selectedPsid) return;
+    setSendingReply(true);
+    setShowGallery(false);
+    try {
+      const response = await API.post('/conversations/reply-from-url', {
+        psid: selectedPsid,
+        url: item.url,
+        filename: item.filename,
+        type: item.type,
+        caption: replyText.trim() || undefined
+      });
+      if (response.data.success) {
+        const caption = replyText.trim();
+        const label = item.type === 'image' ? 'Imagen' : 'PDF';
+        const text = caption ? `[${label}: ${item.url}] ${caption}` : `[${label}: ${item.url}]`;
+        setFullConversation(prev => [...prev, { text, senderType: 'human', timestamp: new Date().toISOString() }]);
+        setReplyText('');
+        setConversationStatuses(prev => ({
+          ...prev,
+          [selectedPsid]: { ...prev[selectedPsid], humanActive: true }
+        }));
+      }
+    } catch (err) {
+      alert(`Error al enviar: ${err.response?.data?.error || err.message}`);
+    } finally {
+      setSendingReply(false);
+    }
+  };
+
   // Send attachment (image or PDF) to user
   const handleSendAttachment = async (file) => {
     if (!file || !selectedPsid) return;
@@ -577,8 +630,82 @@ function Messages() {
     );
   }
 
+  // Gallery modal
+  const galleryModal = showGallery && (
+    <div style={{ position: 'fixed', inset: 0, backgroundColor: 'rgba(0,0,0,0.7)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '2rem' }}
+      onClick={() => setShowGallery(false)}>
+      <div onClick={e => e.stopPropagation()} style={{ backgroundColor: '#1a1a1a', borderRadius: '12px', border: '1px solid #2a2a2a', maxWidth: '900px', width: '100%', maxHeight: '80vh', display: 'flex', flexDirection: 'column' }}>
+        {/* Header */}
+        <div style={{ padding: '1rem 1.5rem', borderBottom: '1px solid #2a2a2a', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <div>
+            <h3 style={{ color: 'white', margin: 0, fontSize: '1.1rem' }}>📁 Galería de archivos</h3>
+            <p style={{ color: '#888', margin: '4px 0 0', fontSize: '0.8rem' }}>Reutiliza un archivo o sube uno nuevo</p>
+          </div>
+          <button onClick={() => setShowGallery(false)} style={{ background: 'none', border: 'none', color: '#888', fontSize: '1.5rem', cursor: 'pointer' }}>✕</button>
+        </div>
+
+        {/* Filter + Upload row */}
+        <div style={{ padding: '0.75rem 1.5rem', borderBottom: '1px solid #2a2a2a', display: 'flex', gap: '0.5rem', alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ display: 'flex', gap: '0.25rem' }}>
+            {['all', 'image', 'pdf'].map(f => (
+              <button key={f} onClick={() => setGalleryFilter(f)}
+                style={{ padding: '0.4rem 0.8rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '0.85rem',
+                  backgroundColor: galleryFilter === f ? '#7c4dff' : '#2a2a2a', color: 'white' }}>
+                {f === 'all' ? 'Todos' : f === 'image' ? 'Imágenes' : 'PDFs'}
+              </button>
+            ))}
+          </div>
+          <div style={{ flex: 1 }} />
+          <button onClick={() => { setShowGallery(false); document.getElementById('attachment-input').click(); }}
+            style={{ padding: '0.5rem 1rem', borderRadius: '6px', border: 'none', cursor: 'pointer', fontSize: '0.85rem', backgroundColor: '#4caf50', color: 'white', fontWeight: 600 }}>
+            ⬆️ Subir nuevo
+          </button>
+        </div>
+
+        {/* Gallery grid */}
+        <div style={{ flex: 1, overflow: 'auto', padding: '1rem 1.5rem' }}>
+          {galleryLoading ? (
+            <div style={{ textAlign: 'center', padding: '3rem', color: '#888' }}>Cargando galería…</div>
+          ) : galleryItems.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '3rem', color: '#888' }}>No hay archivos subidos aún. Sube uno para empezar.</div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))', gap: '0.75rem' }}>
+              {galleryItems
+                .filter(i => galleryFilter === 'all' || i.type === galleryFilter)
+                .map((item, idx) => (
+                <div key={idx} onClick={() => handleSendFromGallery(item)}
+                  style={{ cursor: 'pointer', backgroundColor: '#222', borderRadius: '8px', overflow: 'hidden', border: '1px solid #333', transition: 'border-color 0.15s' }}
+                  onMouseEnter={e => e.currentTarget.style.borderColor = '#7c4dff'}
+                  onMouseLeave={e => e.currentTarget.style.borderColor = '#333'}>
+                  {item.type === 'image' ? (
+                    <img src={item.url} alt={item.filename} style={{ width: '100%', height: '110px', objectFit: 'cover', display: 'block' }} />
+                  ) : (
+                    <div style={{ height: '110px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '3rem', backgroundColor: '#2a2a2a' }}>📄</div>
+                  )}
+                  <div style={{ padding: '0.4rem 0.5rem', fontSize: '0.7rem', color: '#ccc', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                    {item.filename}
+                  </div>
+                  <div style={{ padding: '0 0.5rem 0.4rem', fontSize: '0.65rem', color: '#666' }}>
+                    {item.folder.replace('hanlob/', '')}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {replyText.trim() && (
+          <div style={{ padding: '0.5rem 1.5rem', borderTop: '1px solid #2a2a2a', backgroundColor: '#0f0f0f', fontSize: '0.8rem', color: '#888' }}>
+            💬 Se enviará con el caption: <span style={{ color: '#ccc' }}>"{replyText.trim()}"</span>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   return (
     <div>
+      {galleryModal}
       {/* Refresh Button */}
       <div style={{ marginBottom: "1.5rem", display: "flex", justifyContent: "flex-end" }}>
         <button
@@ -1580,12 +1707,12 @@ function Messages() {
                   }}
                   disabled={sendingReply}
                 />
-                {/* Attachment button */}
+                {/* Attachment button - opens gallery */}
                 <button
                   type="button"
-                  onClick={() => document.getElementById('attachment-input').click()}
+                  onClick={openGallery}
                   disabled={sendingReply}
-                  title="Adjuntar imagen o PDF"
+                  title="Adjuntar imagen o PDF (galería + subir nuevo)"
                   style={{
                     padding: "12px 14px",
                     borderRadius: "8px",
