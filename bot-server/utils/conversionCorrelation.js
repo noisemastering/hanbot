@@ -642,7 +642,7 @@ async function saveOrphanCorrelation(user, order, confidence, matchDetails, ship
  * @param {string} sellerId - Seller ID
  * @returns {Promise<object>} - Summary of correlations
  */
-async function correlateOrders(orders, sellerId) {
+async function correlateOrders(orders, sellerId, onProgress = null) {
   const results = {
     total: orders.length,
     correlated: 0,
@@ -652,7 +652,8 @@ async function correlateOrders(orders, sellerId) {
     details: []
   };
 
-  for (const order of orders) {
+  for (let i = 0; i < orders.length; i++) {
+    const order = orders[i];
     const result = await correlateOrder(order, sellerId);
 
     if (result?.alreadyCorrelated) {
@@ -668,6 +669,11 @@ async function correlateOrders(orders, sellerId) {
       results.errors++;
     } else {
       results.noMatch++;
+    }
+
+    // Report progress every 5 orders
+    if (onProgress && (i % 5 === 0 || i === orders.length - 1)) {
+      onProgress(i + 1, results.correlated);
     }
 
     // Small delay to avoid rate limiting

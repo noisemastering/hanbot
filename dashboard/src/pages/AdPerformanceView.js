@@ -43,6 +43,7 @@ function AdPerformanceView() {
   const [fbSpend, setFbSpend] = useState([]);
   const [fbSpendTotals, setFbSpendTotals] = useState({ spend: 0, impressions: 0, clicks: 0 });
   const [correlating, setCorrelating] = useState(false);
+  const [correlationProgress, setCorrelationProgress] = useState(null);
 
   const dateFrom = useMemo(() => getDaysAgo(range), [range]);
   const dateTo = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -84,27 +85,84 @@ function AdPerformanceView() {
 
   const runCorrelation = async () => {
     setCorrelating(true);
+    setCorrelationProgress({ phase: 'starting', ordersTotal: 0, ordersProcessed: 0 });
+
+    // Poll progress every second
+    const pollInterval = setInterval(async () => {
+      try {
+        const res = await API.get('/analytics/correlate-conversions/progress?sellerId=482595248');
+        if (res.data?.status) {
+          setCorrelationProgress(res.data);
+          if (res.data.status === 'completed' || res.data.status === 'error') {
+            clearInterval(pollInterval);
+          }
+        }
+      } catch {}
+    }, 1000);
+
     try {
       await API.post('/analytics/correlate-conversions', { sellerId: '482595248', dateFrom, dateTo });
       await fetchData();
     } catch (err) {
       console.error('Correlation failed:', err);
     } finally {
+      clearInterval(pollInterval);
       setCorrelating(false);
+      // Keep progress visible briefly so user sees the completion
+      setTimeout(() => setCorrelationProgress(null), 2500);
     }
   };
 
-  const CorrelateButton = () => (
-    <div className="flex justify-end mt-3">
-      <button
-        onClick={runCorrelation}
-        disabled={correlating}
-        className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50 transition-all"
-      >
-        {correlating ? "Correlacionando..." : "Correlacionar"}
-      </button>
-    </div>
-  );
+  const CorrelateButton = () => {
+    const p = correlationProgress;
+    const isDone = p?.status === 'completed';
+    const isError = p?.status === 'error';
+    const total = p?.ordersTotal || 0;
+    const processed = p?.ordersProcessed || 0;
+    const pct = total > 0 ? Math.round((processed / total) * 100) : 0;
+    const phaseLabel = {
+      fetching_orders: 'Obteniendo órdenes de ML',
+      correlating: 'Correlacionando órdenes',
+      done: 'Completado',
+      starting: 'Iniciando…'
+    }[p?.phase] || 'Procesando';
+
+    return (
+      <div className="flex flex-col items-end gap-2 mt-3">
+        <button
+          onClick={runCorrelation}
+          disabled={correlating}
+          className="bg-purple-600 text-white px-4 py-2 rounded-lg text-sm font-medium hover:bg-purple-700 disabled:opacity-50 transition-all"
+        >
+          {correlating ? "Correlacionando..." : "Correlacionar"}
+        </button>
+
+        {p && (
+          <div className="w-full max-w-md bg-gray-800/60 border border-gray-700/50 rounded-lg p-3">
+            <div className="flex justify-between items-center mb-2">
+              <span className={`text-xs font-medium ${isError ? 'text-red-400' : isDone ? 'text-green-400' : 'text-purple-300'}`}>
+                {isError ? '❌ Error' : isDone ? '✅ ' + phaseLabel : '⏳ ' + phaseLabel}
+              </span>
+              <span className="text-xs text-gray-400">
+                {p.phase === 'correlating' ? `${processed} / ${total}` : (p.ordersTotal ? `${p.ordersTotal} órdenes` : '')}
+                {p.matched > 0 && ` · ${p.matched} match${p.matched !== 1 ? 'es' : ''}`}
+              </span>
+            </div>
+            <div className="w-full h-2 bg-gray-900/60 rounded-full overflow-hidden">
+              <div
+                className={`h-full transition-all duration-300 ${isError ? 'bg-red-500' : isDone ? 'bg-green-500' : 'bg-purple-500'}`}
+                style={{
+                  width: p.phase === 'fetching_orders' ? '15%' : isDone ? '100%' : `${pct}%`,
+                  animation: p.phase === 'fetching_orders' && !isDone ? 'pulse 1.5s ease-in-out infinite' : 'none'
+                }}
+              />
+            </div>
+            {isError && p.error && <p className="text-xs text-red-400 mt-1">{p.error}</p>}
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return '$0';
