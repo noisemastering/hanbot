@@ -134,9 +134,9 @@ function AdSpendOptimizationView() {
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
           <h2 className="text-lg font-semibold text-white mb-1">Inversión vs Ingresos por anuncio</h2>
           <p className="text-sm text-gray-500 mb-4">Rojo = lo que gastas · Verde = lo que vendes · Si el verde es mayor, estás ganando dinero</p>
-          <div className="h-80 overflow-x-auto">
+          <div className="h-96 overflow-x-auto">
             <div style={{ minWidth: Math.max(600, ads.filter(a => a.conversions > 0).length * 80) }}>
-              <ResponsiveContainer width="100%" height={320}>
+              <ResponsiveContainer width="100%" height={380}>
                 <BarChart
                   data={ads.filter(a => a.spend > 0).slice(0, 15).map(a => ({
                     name: a.name.length > 18 ? a.name.substring(0, 18) + '...' : a.name,
@@ -145,10 +145,10 @@ function AdSpendOptimizationView() {
                     revenue: a.revenue,
                     roi: a.roi
                   }))}
-                  margin={{ top: 5, right: 20, bottom: 60, left: 10 }}
+                  margin={{ top: 5, right: 20, bottom: 30, left: 10 }}
                 >
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="name" tick={{ fill: '#9CA3AF', fontSize: 10 }} axisLine={{ stroke: '#374151' }} angle={-35} textAnchor="end" height={60} />
+                  <XAxis dataKey="name" tick={{ fill: '#9CA3AF', fontSize: 10 }} axisLine={{ stroke: '#374151' }} angle={-35} textAnchor="end" height={100} interval={0} />
                   <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} tickFormatter={v => v >= 1000 ? `$${(v/1000).toFixed(0)}k` : `$${v}`} />
                   <Tooltip
                     contentStyle={tooltipStyle}
@@ -170,7 +170,7 @@ function AdSpendOptimizationView() {
                       );
                     }}
                   />
-                  <Legend wrapperStyle={{ color: '#9CA3AF' }} />
+                  <Legend wrapperStyle={{ color: '#9CA3AF', paddingTop: 8, position: 'relative', marginTop: 0 }} verticalAlign="bottom" />
                   <Bar dataKey="spend" name="Inversión" fill="#EF4444" fillOpacity={0.7} radius={[4, 4, 0, 0]} />
                   <Bar dataKey="revenue" name="Ingresos" fill="#10B981" fillOpacity={0.7} radius={[4, 4, 0, 0]} />
                 </BarChart>
