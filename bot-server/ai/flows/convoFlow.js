@@ -838,8 +838,56 @@ function create(manifest) {
           console.error('❌ [convo] catalog fallback error:', err.message);
         }
 
-        // Truly outside our catalog (matchbox, toldo, lona, geomembrana, etc.)
-        // — deflect politely, mention what we sell, ask if they want it.
+        // STEP 3: PRODUCT-FAMILY EXISTENCE CHECK.
+        // The product wasn't quotable from the salable catalog, and wasn't a
+        // matching active promo. Before deflecting, check if the requested
+        // thing exists ANYWHERE in our ProductFamily tree — even if marked
+        // sellable:false or active:false. If it does, the item is part of our
+        // realm even though we can't auto-quote it; escalate to a human who
+        // CAN handle it (custom order, dormant SKU, etc.).
+        try {
+          const PF = require('../../models/ProductFamily');
+          const allFamilies = await PF.find({}).select('name description attributes sellable active').lean();
+
+          // Ask the same AI matcher used elsewhere if any family matches the
+          // request. Use the family display name + description as the corpus.
+          const familyEntries = allFamilies.map((f, i) => {
+            const attrText = f.attributes ? JSON.stringify(f.attributes).slice(0, 100) : '';
+            return `${i}: ${f.name}${f.description ? ' — ' + f.description.slice(0, 80) : ''}${attrText ? ' [' + attrText + ']' : ''}`;
+          }).join('\n');
+
+          const matchRes = await _openai.chat.completions.create({
+            model: 'gpt-4o-mini',
+            messages: [
+              { role: 'system', content: `Identifica si el mensaje del cliente corresponde a alguna familia de productos de Hanlob (incluso si no está activa o vendible automáticamente). Hanlob fabrica MALLA SOMBRA en distintos porcentajes (35%, 50%, 70%, 80%, 90%), tamaños y formatos (confeccionada, rollo, groundcover). Si la familia encaja con lo que pide el cliente, responde con su índice. Si NO existe nada parecido en la lista, responde -1.
+
+Responde JSON: {"matchIndex": <índice o -1>}` },
+              { role: 'user', content: `FAMILIAS:\n${familyEntries}\n\nMensaje del cliente: ${userMessage}` }
+            ],
+            temperature: 0.1,
+            max_tokens: 30,
+            response_format: { type: 'json_object' }
+          });
+
+          const matchResult = JSON.parse(matchRes.choices[0].message.content);
+          if (matchResult.matchIndex >= 0 && matchResult.matchIndex < allFamilies.length) {
+            const matched = allFamilies[matchResult.matchIndex];
+            console.log(`🏛️ [convo] not_offered → matched family "${matched.name}" (sellable=${matched.sellable}, active=${matched.active}) — handing off`);
+            const handoffResp = await executeHandoff(psid, convo, userMessage, {
+              reason: `Family exists but not quotable in current flow: ${matched.name}`,
+              responsePrefix: `Sí manejamos ${matched.name}. Te conecto con un especialista que te puede cotizar al detalle.`,
+              specsText: `Cliente pregunta por: ${matched.name}. `,
+              lastIntent: 'family_match_handoff',
+              timingStyle: 'standard'
+            });
+            return { response: handoffResp, state: flowState };
+          }
+        } catch (err) {
+          console.error('❌ [convo] family-existence check error:', err.message);
+        }
+
+        // STEP 4: Truly outside our catalog (matchbox, toldo, lona, geomembrana,
+        // etc.) — deflect politely, mention what we sell, ask if they want it.
         try {
           const aiResponse = await _openai.chat.completions.create({
             model: 'gpt-4o-mini',
