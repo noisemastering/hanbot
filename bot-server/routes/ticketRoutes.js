@@ -48,6 +48,44 @@ router.get("/", authenticate, async (req, res) => {
 });
 
 // POST /tickets — create a ticket
+// Helper: send a web-push payload to a specific set of userIds.
+// Drops dead subscriptions (410/404) and skips itself if vapid is missing.
+async function notifyUsers(userIds, payload, logTag = '') {
+  if (!process.env.VAPID_PUBLIC_KEY || !process.env.VAPID_PRIVATE_KEY) return;
+  const uniqueIds = [...new Set(userIds.map(id => id?.toString()).filter(Boolean))];
+  if (uniqueIds.length === 0) return;
+  try {
+    const webpush = require("web-push");
+    const PushSubscription = require("../models/PushSubscription");
+    const subs = await PushSubscription.find({ userId: { $in: uniqueIds } });
+    if (subs.length === 0) return;
+    await Promise.allSettled(subs.map(sub =>
+      webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload)
+        .catch(async (err) => {
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            await PushSubscription.deleteOne({ endpoint: sub.endpoint });
+          }
+        })
+    ));
+    console.log(`📣 ${logTag}push fanned out to ${subs.length} subscription(s) (${uniqueIds.length} user(s))`);
+  } catch (err) {
+    console.error(`⚠️ ${logTag}push failed:`, err.message);
+  }
+}
+
+// Resolve the "ticket support team" — super_admin + admin users.
+// These get notified on creation and on every status change.
+async function getSupportTeamUserIds(excludeUserId = null) {
+  const DashboardUser = require("../models/DashboardUser");
+  const users = await DashboardUser.find({
+    role: { $in: ['super_admin', 'admin'] },
+    active: true
+  }).select('_id').lean();
+  return users
+    .map(u => u._id.toString())
+    .filter(id => id !== excludeUserId?.toString());
+}
+
 router.post("/", authenticate, async (req, res) => {
   try {
     const { title, description, priority } = req.body;
@@ -69,35 +107,18 @@ router.post("/", authenticate, async (req, res) => {
       .populate("createdBy", "firstName lastName username")
       .populate("assignedTo", "firstName lastName username");
 
-    // Push notification to all dashboard subscribers
-    try {
-      const webpush = require("web-push");
-      const PushSubscription = require("../models/PushSubscription");
-      if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
-        const subs = await PushSubscription.find();
-        const author = populated.createdBy
-          ? `${populated.createdBy.firstName || ''} ${populated.createdBy.lastName || ''}`.trim() || populated.createdBy.username
-          : 'Alguien';
-        const payload = JSON.stringify({
-          title: `🎫 Ticket nuevo: ${title}`,
-          body: `${author} reportó: ${description.slice(0, 120)}${description.length > 120 ? '…' : ''}`,
-          icon: '/logo192.png',
-          badge: '/logo192.png',
-          data: { url: '/tickets', ticketId: ticket._id.toString() }
-        });
-        await Promise.allSettled(subs.map(sub =>
-          webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload)
-            .catch(async (err) => {
-              if (err.statusCode === 410 || err.statusCode === 404) {
-                await PushSubscription.deleteOne({ endpoint: sub.endpoint });
-              }
-            })
-        ));
-        console.log(`📣 Ticket notification fanned out to ${subs.length} subscriber(s)`);
-      }
-    } catch (notifyErr) {
-      console.error("⚠️ Ticket push notification failed:", notifyErr.message);
-    }
+    // Notify the support team (super_admin + admin), excluding the author
+    const author = populated.createdBy
+      ? `${populated.createdBy.firstName || ''} ${populated.createdBy.lastName || ''}`.trim() || populated.createdBy.username
+      : 'Alguien';
+    const supportTeamIds = await getSupportTeamUserIds(req.user._id);
+    await notifyUsers(supportTeamIds, JSON.stringify({
+      title: `🎫 Ticket nuevo: ${title}`,
+      body: `${author} reportó: ${description.slice(0, 120)}${description.length > 120 ? '…' : ''}`,
+      icon: '/logo192.png',
+      badge: '/logo192.png',
+      data: { url: '/tickets', ticketId: ticket._id.toString(), type: 'ticket_created' }
+    }), '[ticket-created] ');
 
     res.status(201).json({ success: true, data: populated });
   } catch (error) {
@@ -140,53 +161,41 @@ router.put("/:id", authenticate, async (req, res) => {
       .populate("assignedTo", "firstName lastName username")
       .populate("comments.author", "firstName lastName username");
 
-    // Status-change push notification to the original author
-    // (don't notify when the author themselves changed it)
+    // Status-change push: notify the original creator + the support team.
+    // Skip the actor making the change so they don't ping themselves.
     const statusChanged = status && status !== previousStatus;
-    const authorIsCurrentUser = populated.createdBy?._id?.toString() === req.user._id.toString();
-    if (statusChanged && !authorIsCurrentUser) {
-      try {
-        const webpush = require("web-push");
-        const PushSubscription = require("../models/PushSubscription");
-        if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
-          const subs = await PushSubscription.find();
-          const STATUS_LABEL = {
-            open: "Abierto", review: "En revisión", working: "Trabajando",
-            solved: "Resuelto", dismissed: "Descartado"
-          };
-          const fromLabel = STATUS_LABEL[previousStatus] || previousStatus;
-          const toLabel = STATUS_LABEL[status] || status;
-          const actor = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || req.user.username;
-          const author = populated.createdBy
-            ? `${populated.createdBy.firstName || ''} ${populated.createdBy.lastName || ''}`.trim() || populated.createdBy.username
-            : 'el reportante';
-          const payload = JSON.stringify({
-            title: `🎫 ${toLabel}: ${populated.title}`,
-            body: `${actor} cambió el estado del ticket de ${author} (${fromLabel} → ${toLabel})`,
-            icon: '/logo192.png',
-            badge: '/logo192.png',
-            data: {
-              url: '/tickets',
-              ticketId: ticket._id.toString(),
-              type: 'status_change',
-              authorId: populated.createdBy?._id?.toString(),
-              fromStatus: previousStatus,
-              toStatus: status
-            }
-          });
-          await Promise.allSettled(subs.map(sub =>
-            webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload)
-              .catch(async (err) => {
-                if (err.statusCode === 410 || err.statusCode === 404) {
-                  await PushSubscription.deleteOne({ endpoint: sub.endpoint });
-                }
-              })
-          ));
-          console.log(`📣 Ticket status-change notification: ${fromLabel} → ${toLabel} (ticket ${ticket._id})`);
+    if (statusChanged) {
+      const STATUS_LABEL = {
+        open: "Abierto", review: "En revisión", working: "Trabajando",
+        solved: "Resuelto", dismissed: "Descartado"
+      };
+      const fromLabel = STATUS_LABEL[previousStatus] || previousStatus;
+      const toLabel = STATUS_LABEL[status] || status;
+      const actor = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || req.user.username;
+      const author = populated.createdBy
+        ? `${populated.createdBy.firstName || ''} ${populated.createdBy.lastName || ''}`.trim() || populated.createdBy.username
+        : 'el reportante';
+
+      // Recipients: ticket creator + support team, minus the actor
+      const supportTeamIds = await getSupportTeamUserIds(req.user._id);
+      const creatorId = populated.createdBy?._id?.toString();
+      const recipients = [...supportTeamIds];
+      if (creatorId && creatorId !== req.user._id.toString()) recipients.push(creatorId);
+
+      await notifyUsers(recipients, JSON.stringify({
+        title: `🎫 ${toLabel}: ${populated.title}`,
+        body: `${actor} cambió el estado del ticket de ${author} (${fromLabel} → ${toLabel})`,
+        icon: '/logo192.png',
+        badge: '/logo192.png',
+        data: {
+          url: '/tickets',
+          ticketId: ticket._id.toString(),
+          type: 'status_change',
+          authorId: creatorId,
+          fromStatus: previousStatus,
+          toStatus: status
         }
-      } catch (notifyErr) {
-        console.error("⚠️ Status-change notification failed:", notifyErr.message);
-      }
+      }), `[ticket-status ${fromLabel}→${toLabel}] `);
     }
 
     res.json({ success: true, data: populated });
