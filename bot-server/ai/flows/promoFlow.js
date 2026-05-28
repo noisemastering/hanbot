@@ -313,7 +313,17 @@ async function handle(userMessage, convo, psid, context = {}) {
 
   // ── PRESENT PROMO (first interaction) ──
   if (!pitchSent && products.length > 0) {
-    const pricedProducts = applyPromoPrices(products, promoPrices);
+    // ── ML-PRICE REQUIREMENT ──
+    // Only pitch products with a live Mercado Libre price. If ML lookup failed
+    // (priceSource === 'db') we have no business quoting a price the customer
+    // might see different on ML itself.
+    const liveProducts = products.filter(p => !p.priceSource || p.priceSource === 'ml');
+    if (liveProducts.length === 0) {
+      console.warn(`⚠️ [promo] No products have live ML price — skipping pitch`);
+      return null; // Let convo_flow fall through
+    }
+
+    const pricedProducts = applyPromoPrices(liveProducts, promoPrices);
     const pitchText = await buildPromoPitch(pricedProducts, {
       voice, customerName, expiryText, terms, salesChannel, colorNote, conversationHistory
     });
@@ -324,7 +334,7 @@ async function handle(userMessage, convo, psid, context = {}) {
         unknownCount: 0
       });
 
-      console.log(`🏛️ [promo] Pitch delivered (${pricedProducts.length} product(s))`);
+      console.log(`🏛️ [promo] Pitch delivered (${pricedProducts.length} ML-sourced product(s))`);
       return { type: 'text', text: pitchText, pitchSent: true, products: pricedProducts };
     }
   }

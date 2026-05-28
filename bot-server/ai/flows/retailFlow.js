@@ -222,8 +222,25 @@ async function handle(userMessage, convo, psid, context = {}) {
     return { type: 'flow_switch', action: 'wholesale', reason: 'Cliente pregunta por mayoreo' };
   }
 
+  // ── ML-PRICE REQUIREMENT ──
+  // Policy: only quote prices fetched in real time from Mercado Libre.
+  // If a product's priceSource is 'db' (ML lookup failed or no ML link),
+  // escalate to a human instead of risking a stale/incorrect price.
+  const productsWithoutMLPrice = products.filter(p => p.priceSource && p.priceSource !== 'ml');
+  if (productsWithoutMLPrice.length > 0 && productsWithoutMLPrice.length === products.length) {
+    console.log(`🏛️ [retail] All products lack live ML price (sources: ${productsWithoutMLPrice.map(p => p.priceSource).join(',')}) — handoff`);
+    return await executeHandoff(psid, convo, userMessage, {
+      reason: 'ML price unavailable — cannot quote',
+      responsePrefix: 'Déjame confirmarte el precio actualizado con un especialista, es solo un momento.',
+      lastIntent: 'retail_handoff_no_ml_price',
+      timingStyle: 'standard'
+    });
+  }
+  // If some have ML price and some don't, drop the non-ML ones from the quote
+  const quotableProducts = products.filter(p => !p.priceSource || p.priceSource === 'ml');
+
   // ── HANDOFF RULES — check each product ──
-  for (const product of products) {
+  for (const product of quotableProducts) {
     const handoff = checkHandoffRules(product);
     if (handoff) {
       console.log(`🏛️ [retail] Handoff triggered: ${handoff.reason}`);
@@ -237,7 +254,7 @@ async function handle(userMessage, convo, psid, context = {}) {
   }
 
   // ── PRODUCT NOT FOUND — handoff ──
-  if (products.length === 0) {
+  if (quotableProducts.length === 0) {
     console.log('🏛️ [retail] No products available — handoff');
     return await executeHandoff(psid, convo, userMessage, {
       reason: 'Producto no disponible en catálogo',
@@ -248,21 +265,21 @@ async function handle(userMessage, convo, psid, context = {}) {
   }
 
   // ── QUOTE — build AI-generated message ──
-  const quoteText = await buildQuoteMessage(products, { voice, customerName, salesChannel, colorNote, conversationHistory });
+  const quoteText = await buildQuoteMessage(quotableProducts, { voice, customerName, salesChannel, colorNote, conversationHistory });
 
   // Only store lastSharedProductLink for single-product quotes where we actually
   // shared a specific tracked link. For multi-product range presentations, don't
   // store anything — the customer hasn't picked a size yet and the follow-up job
   // would re-share a random product's raw URL.
-  const singleProductLink = products.length === 1 ? products[0]?.link : null;
+  const singleProductLink = quotableProducts.length === 1 ? quotableProducts[0]?.link : null;
   await updateConversation(psid, {
     lastIntent: 'retail_quote',
     ...(singleProductLink ? { lastSharedProductLink: singleProductLink } : {}),
     unknownCount: 0
   });
 
-  console.log(`🏛️ [retail] Quote generated for ${products.length} product(s)`);
-  return { type: 'text', text: quoteText, products };
+  console.log(`🏛️ [retail] Quote generated for ${quotableProducts.length} product(s) (ML-sourced)`);
+  return { type: 'text', text: quoteText, products: quotableProducts };
 }
 
 module.exports = {

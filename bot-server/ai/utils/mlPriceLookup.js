@@ -112,11 +112,18 @@ async function getMLPrice(mlUrl, dbPrice) {
  * Enrich a product object with real-time ML pricing.
  * Overwrites the DB price with the ML price and adds discount info.
  *
+ * IMPORTANT: priceSource will be 'ml' if the price came from a live ML call,
+ * or 'db' if it fell back to the DB price (network/auth failure).
+ * Quote handlers MUST refuse to quote when priceSource !== 'ml'.
+ *
  * @param {Object} product - Product from productFlow.loadProducts()
- * @returns {Promise<Object>} Same product with updated price fields
+ * @returns {Promise<Object>} Same product with updated price fields + priceSource
  */
 async function enrichWithMLPrice(product) {
-  if (!product?.link) return product;
+  if (!product?.link) {
+    // No ML link at all — mark as DB-sourced so quote logic refuses
+    return { ...product, priceSource: 'db' };
+  }
 
   const mlPrice = await getMLPrice(product.link, product.price);
 
@@ -130,4 +137,19 @@ async function enrichWithMLPrice(product) {
   };
 }
 
-module.exports = { getMLPrice, enrichWithMLPrice, extractMLItemId };
+/**
+ * Filter a product list to only items with live ML pricing.
+ * Returns { quotable, nonQuotable } so the caller can decide whether to
+ * escalate / skip / explain.
+ */
+function partitionQuotable(products) {
+  const quotable = [];
+  const nonQuotable = [];
+  for (const p of products || []) {
+    if (p?.priceSource === 'ml') quotable.push(p);
+    else nonQuotable.push(p);
+  }
+  return { quotable, nonQuotable };
+}
+
+module.exports = { getMLPrice, enrichWithMLPrice, partitionQuotable, extractMLItemId };

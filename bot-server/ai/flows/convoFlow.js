@@ -738,28 +738,43 @@ function create(manifest) {
                 const prod = matchedOption.product;
                 const link = prod.onlineStoreLinks?.find(l => l.isPreferred)?.url
                   || prod.onlineStoreLinks?.[0]?.url || null;
-                const trackedLink = link
-                  ? await getOrCreateClickLink(psid, link, {
-                      productName: prod.name, productId: String(prod._id), reason: 'other_promo_redirect'
-                    })
-                  : null;
 
-                // Apply promo price if defined, else regular price
-                const promoPriceEntry = (matchedOption.promo.promoPrices || []).find(pp =>
-                  String(pp.productId) === String(prod._id)
-                );
-                const finalPrice = promoPriceEntry?.price ?? prod.price;
-                const sizeStr = prod.size || prod.name;
+                if (!link) {
+                  console.warn(`⚠️ [convo] Promo product ${prod._id} has no ML link — cannot quote, falling through`);
+                } else {
+                  // Get LIVE ML price — never trust DB price for quoting
+                  const { getMLPrice } = require('../utils/mlPriceLookup');
+                  const mlPrice = await getMLPrice(link, null);
+                  if (mlPrice.source !== 'ml') {
+                    console.warn(`⚠️ [convo] ML price lookup failed for ${prod._id} — handoff instead of stale DB quote`);
+                    return {
+                      response: await executeHandoff(psid, convo, userMessage, {
+                        reason: 'Other promo product — ML price unavailable',
+                        responsePrefix: 'Déjame confirmarte el precio actualizado con un especialista, dame un momento.',
+                        lastIntent: 'other_promo_handoff_no_ml',
+                        timingStyle: 'standard'
+                      }),
+                      state: flowState
+                    };
+                  }
 
-                const text = `¡Claro! Esa promoción es de ${sizeStr} a $${finalPrice} con envío incluido.${trackedLink ? `\n\n🛒 Cómprala aquí:\n${trackedLink}` : ''}`;
+                  const trackedLink = await getOrCreateClickLink(psid, link, {
+                    productName: prod.name, productId: String(prod._id), reason: 'other_promo_redirect'
+                  });
+                  const finalPrice = mlPrice.price;
+                  const sizeStr = prod.size || prod.name;
+                  const discountSuffix = mlPrice.hasDiscount && mlPrice.originalPrice
+                    ? ` (antes $${mlPrice.originalPrice}, ${mlPrice.discountPercent}% OFF)`
+                    : '';
 
-                if (trackedLink) {
+                  const text = `¡Claro! Esa promoción es de ${sizeStr} a $${finalPrice}${discountSuffix} con envío incluido.\n\n🛒 Cómprala aquí:\n${trackedLink}`;
+
                   await updateConversation(psid, {
                     lastSharedProductId: String(prod._id),
                     lastSharedProductLink: trackedLink
                   });
+                  return { response: { type: 'text', text }, state: flowState };
                 }
-                return { response: { type: 'text', text }, state: flowState };
               }
             }
           }
