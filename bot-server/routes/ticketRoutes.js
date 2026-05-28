@@ -69,6 +69,36 @@ router.post("/", authenticate, async (req, res) => {
       .populate("createdBy", "firstName lastName username")
       .populate("assignedTo", "firstName lastName username");
 
+    // Push notification to all dashboard subscribers
+    try {
+      const webpush = require("web-push");
+      const PushSubscription = require("../models/PushSubscription");
+      if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+        const subs = await PushSubscription.find();
+        const author = populated.createdBy
+          ? `${populated.createdBy.firstName || ''} ${populated.createdBy.lastName || ''}`.trim() || populated.createdBy.username
+          : 'Alguien';
+        const payload = JSON.stringify({
+          title: `🎫 Ticket nuevo: ${title}`,
+          body: `${author} reportó: ${description.slice(0, 120)}${description.length > 120 ? '…' : ''}`,
+          icon: '/logo192.png',
+          badge: '/logo192.png',
+          data: { url: '/tickets', ticketId: ticket._id.toString() }
+        });
+        await Promise.allSettled(subs.map(sub =>
+          webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload)
+            .catch(async (err) => {
+              if (err.statusCode === 410 || err.statusCode === 404) {
+                await PushSubscription.deleteOne({ endpoint: sub.endpoint });
+              }
+            })
+        ));
+        console.log(`📣 Ticket notification fanned out to ${subs.length} subscriber(s)`);
+      }
+    } catch (notifyErr) {
+      console.error("⚠️ Ticket push notification failed:", notifyErr.message);
+    }
+
     res.status(201).json({ success: true, data: populated });
   } catch (error) {
     console.error("Error creating ticket:", error);

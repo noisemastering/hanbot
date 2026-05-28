@@ -1,6 +1,7 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from '../i18n';
+import toast from 'react-hot-toast';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -43,6 +44,8 @@ export default function TicketsView() {
   const [dashboardUsers, setDashboardUsers] = useState([]);
 
   const getToken = () => localStorage.getItem('token');
+  const knownIdsRef = useRef(null); // null on first load → don't toast initial set
+  const initialLoadedRef = useRef(false);
 
   const fetchTickets = useCallback(async () => {
     try {
@@ -52,13 +55,38 @@ export default function TicketsView() {
         headers: { Authorization: `Bearer ${token}` }
       });
       const data = await res.json();
-      if (data.success) setTickets(data.data);
+      if (data.success) {
+        // Detect new tickets vs the last seen set (skip on first load)
+        if (initialLoadedRef.current && knownIdsRef.current) {
+          const newOnes = data.data.filter(t2 =>
+            !knownIdsRef.current.has(t2._id) && t2.createdBy?._id !== user?._id
+          );
+          newOnes.forEach(nt => {
+            const author = nt.createdBy
+              ? `${nt.createdBy.firstName || ''} ${nt.createdBy.lastName || ''}`.trim() || nt.createdBy.username
+              : 'Alguien';
+            toast.success(`🎫 Ticket nuevo de ${author}: ${nt.title}`, { duration: 8000, icon: '🎫' });
+            if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+              try {
+                new Notification(`Ticket nuevo: ${nt.title}`, {
+                  body: `${author} reportó: ${(nt.description || '').slice(0, 120)}`,
+                  icon: '/logo192.png',
+                  tag: `ticket-${nt._id}`
+                });
+              } catch {}
+            }
+          });
+        }
+        knownIdsRef.current = new Set(data.data.map(t2 => t2._id));
+        initialLoadedRef.current = true;
+        setTickets(data.data);
+      }
     } catch (err) {
       console.error('Error fetching tickets:', err);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [user?._id]);
 
   const fetchUsers = useCallback(async () => {
     try {
@@ -77,6 +105,15 @@ export default function TicketsView() {
   useEffect(() => {
     fetchTickets();
     if (isAdminUser) fetchUsers();
+
+    // Ask for browser notification permission once
+    if (typeof Notification !== 'undefined' && Notification.permission === 'default') {
+      Notification.requestPermission().catch(() => {});
+    }
+
+    // Poll every 15 seconds for real-time sync
+    const interval = setInterval(() => fetchTickets(), 15000);
+    return () => clearInterval(interval);
   }, [fetchTickets, fetchUsers, isAdminUser]);
 
   const handleCreate = async (e) => {
