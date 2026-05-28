@@ -2,6 +2,12 @@
 // Mexican states and major cities for location detection
 
 const ZipCode = require('./models/ZipCode');
+const { OpenAI } = require('openai');
+const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
+
+// Tiny in-memory cache so we don't pay the AI call for repeats of the same string
+const _locationClassifierCache = new Map();
+const _LOCATION_CACHE_MAX = 500;
 
 const MEXICAN_STATES = [
   'aguascalientes', 'baja california', 'baja california sur', 'campeche',
@@ -184,20 +190,84 @@ function detectMexicanLocation(message) {
  * @param {string} message
  * @returns {boolean}
  */
-function isLikelyLocationName(message) {
-  const cleaned = message.toLowerCase().trim();
+/**
+ * AI-based check: is this customer message a Mexican location name
+ * (city, town, state, neighborhood) — as opposed to a question, product
+ * attribute, greeting, etc.?
+ *
+ * Replaces the previous regex-based heuristic that kept missing cases
+ * (e.g. "Colores" matching as a location because the exclusion list was
+ * incomplete). The regex couldn't scale — every new edge case meant
+ * another keyword to add.
+ *
+ * Returns true ONLY if the message is clearly a Mexican place name.
+ * Defaults to false on errors or ambiguity (safer to ask again than to
+ * confidently misinterpret a product question as a location).
+ *
+ * @param {string} message
+ * @returns {Promise<boolean>}
+ */
+async function isLikelyLocationName(message) {
+  if (!message || typeof message !== 'string') return false;
+  const cleaned = message.trim();
+  if (cleaned.length < 2 || cleaned.length > 80) return false;
 
-  // Exclude common non-location words (precio/medida/color and their plural/variants,
-  // product attributes, time references, common short replies).
-  const excludedWords = /\b(precio|precios|cuanto|cuesta|cuestan|medida|medidas|tamaño|tamaños|tamano|tamanos|dimension|dimensiones|tiene|tienen|hay|vende|venden|fabrica|fabricas|fabrican|color|colores|hola|ola|buenos|buenas|que\s+tal|gracias|si|no|ok|okay|bien|mal|cuando|donde|cómo|como|quien|quién|para|por|con|sin|muy|poco|poca|pocas|pocos|mucho|mucha|muchos|muchas|env[ií]o|env[ií]os|env[ií]a|env[ií]an|costo|costos|cu[aá]nt[ao]s?|foto|fotos|imagen|imagenes|im[aá]genes|catalogo|cat[aá]logo|material|materiales|calidad|garant[ií]a|durab|grosor|peso|metro|metros|m2|porcentaje|porcentajes|sombra|raschel|malla|mallas|rollo|rollos|borde|bordes|disponible|disponibles|stock|estoc|inventario|opciones|opcion|opci[oó]n|tipos?|modelos?|alguna|algun|algún|alguno|algunos|algunas|prueba|test|prob|quer[ií]a|querias?|quiero|quieres|quieren|necesito|necesitas|necesita|busco|buscas|busca|me\s+interesa|interesad[ao]|comprar|compro|cuento|tienes|tiene|pago|pagar|paga|forma\s+de\s+pago|cobr[ao])\b/i;
+  // Pure numbers (zip codes) are handled by detectZipCode, not here
+  if (/^\d+$/.test(cleaned)) return false;
 
-  if (excludedWords.test(cleaned)) {
-    return false;
+  // Cache by lowercased text
+  const key = cleaned.toLowerCase();
+  if (_locationClassifierCache.has(key)) {
+    return _locationClassifierCache.get(key);
   }
 
-  // Short (1-4 words), could be a city/state name
-  const wordCount = cleaned.split(/\s+/).length;
-  return cleaned.length > 2 && cleaned.length < 50 && wordCount <= 4;
+  try {
+    const res = await _openai.chat.completions.create({
+      model: 'gpt-4o-mini',
+      messages: [
+        {
+          role: 'system',
+          content: `Eres un clasificador. Decide si el mensaje del usuario es ÚNICAMENTE el nombre de un lugar en México (ciudad, pueblo, colonia, estado, municipio, delegación) — no una pregunta, ni un producto, ni un saludo, ni un atributo (color, medida, etc.).
+
+Responde JSON: {"isLocation": true|false}
+
+Ejemplos:
+- "Zapopan" → {"isLocation": true}
+- "Querétaro" → {"isLocation": true}
+- "CDMX" → {"isLocation": true}
+- "Pueblo Nuevo" → {"isLocation": true}
+- "Tlalpan" → {"isLocation": true}
+- "Colores" → {"isLocation": false}
+- "Color beige" → {"isLocation": false}
+- "Precio" → {"isLocation": false}
+- "Cuánto?" → {"isLocation": false}
+- "Foto" → {"isLocation": false}
+- "Necesito una" → {"isLocation": false}
+- "Si gracias" → {"isLocation": false}
+- "45079 Zapopan" → {"isLocation": true}
+- "tengo dudas" → {"isLocation": false}
+- "alguna promo?" → {"isLocation": false}`
+        },
+        { role: 'user', content: cleaned }
+      ],
+      temperature: 0,
+      max_tokens: 20,
+      response_format: { type: 'json_object' }
+    });
+
+    const parsed = JSON.parse(res.choices[0].message.content);
+    const result = parsed.isLocation === true;
+
+    // Cache
+    if (_locationClassifierCache.size >= _LOCATION_CACHE_MAX) {
+      _locationClassifierCache.delete(_locationClassifierCache.keys().next().value);
+    }
+    _locationClassifierCache.set(key, result);
+    return result;
+  } catch (err) {
+    console.error('❌ isLikelyLocationName AI error:', err.message);
+    return false;  // Safe default: don't confidently treat as location on error
+  }
 }
 
 /**
@@ -255,7 +325,7 @@ async function detectLocationEnhanced(message) {
 
   // Finally, try database lookup for city names not in hardcoded list
   const cleaned = message.toLowerCase().trim();
-  if (isLikelyLocationName(message)) {
+  if (await isLikelyLocationName(message)) {
     const dbResult = await validateLocationFromDB(cleaned);
     if (dbResult) {
       return {

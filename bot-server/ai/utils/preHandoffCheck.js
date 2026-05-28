@@ -130,10 +130,10 @@ async function handlePendingZipResponse(psid, convo, userMessage) {
     return { proceed: true, zipInfo: { city: locationDetected.normalized || locationDetected.location, state: locationDetected.state } };
   }
 
-  // Fuzzy fallback: if message looks like a location name (short, no product words),
+  // Fuzzy fallback: if message looks like a location name (AI-classified),
   // accept it as-is to avoid asking for zip again in a loop
   const { isLikelyLocationName } = require("../../mexicanLocations");
-  if (isLikelyLocationName(userMessage)) {
+  if (await isLikelyLocationName(userMessage)) {
     const cityName = userMessage.trim();
     console.log(`📍 Accepting unrecognized location as-is: "${cityName}"`);
     await updateConversation(psid, {

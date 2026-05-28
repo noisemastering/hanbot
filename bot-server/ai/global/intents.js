@@ -1074,7 +1074,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     const potentialLocation = locationOnlyMatch[2] || locationOnlyMatch[0];
     const locationDetected = await detectLocationEnhanced(potentialLocation);
 
-    if (locationDetected && (isLikelyLocationName(msg) || locationDetected.type === 'zipcode')) {
+    if (locationDetected && ((await isLikelyLocationName(msg)) || locationDetected.type === 'zipcode')) {
       console.log("📍 Location detected:", locationDetected.normalized, locationDetected.type === 'zipcode' ? `(CP: ${locationDetected.code})` : '');
 
       const locationUpdate = {
@@ -2247,7 +2247,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
   const acceptCityAfterMeasure = convo.lastIntent === "specific_measure" && convo.requestedSize;
   const hasZipCode = detectZipCode(msg);
   const locationContextActive = convo.lastIntent === "shipping_info" || convo.lastIntent === "location_info" || convo.lastIntent === "city_provided" || convo.lastIntent === "awaiting_zipcode" || acceptCityAfterMeasure;
-  const standaloneLocation = isLikelyLocationName(msg) || hasZipCode ? await detectLocationEnhanced(msg) : null;
+  const standaloneLocation = (await isLikelyLocationName(msg)) || hasZipCode ? await detectLocationEnhanced(msg) : null;
 
   // If standalone city detected but no location context, just save it and return null
   if (standaloneLocation && !locationContextActive) {
@@ -2266,7 +2266,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
 
   if (locationContextActive) {
     // Check if message is likely a location name (short, not a question) or contains a zipcode
-    if (isLikelyLocationName(msg) || hasZipCode) {
+    if ((await isLikelyLocationName(msg)) || hasZipCode) {
       // Try to detect actual Mexican location (already done above if standalone)
       const location = standaloneLocation || await detectLocationEnhanced(msg);
 
