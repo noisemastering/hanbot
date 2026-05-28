@@ -187,8 +187,9 @@ function detectMexicanLocation(message) {
 function isLikelyLocationName(message) {
   const cleaned = message.toLowerCase().trim();
 
-  // Exclude common non-location words
-  const excludedWords = /\b(precio|cuanto|cuesta|medida|tamaño|dimension|tiene|hay|vende|fabrica|color|hola|ola|buenos|buenas|que tal|gracias|si|no|ok|bien|mal|cuando|donde|como|quien|para|por|con|sin|muy|poco|mucho)\b/i;
+  // Exclude common non-location words (precio/medida/color and their plural/variants,
+  // product attributes, time references, common short replies).
+  const excludedWords = /\b(precio|precios|cuanto|cuesta|cuestan|medida|medidas|tamaño|tamaños|tamano|tamanos|dimension|dimensiones|tiene|tienen|hay|vende|venden|fabrica|fabricas|fabrican|color|colores|hola|ola|buenos|buenas|que\s+tal|gracias|si|no|ok|okay|bien|mal|cuando|donde|cómo|como|quien|quién|para|por|con|sin|muy|poco|poca|pocas|pocos|mucho|mucha|muchos|muchas|env[ií]o|env[ií]os|env[ií]a|env[ií]an|costo|costos|cu[aá]nt[ao]s?|foto|fotos|imagen|imagenes|im[aá]genes|catalogo|cat[aá]logo|material|materiales|calidad|garant[ií]a|durab|grosor|peso|metro|metros|m2|porcentaje|porcentajes|sombra|raschel|malla|mallas|rollo|rollos|borde|bordes|disponible|disponibles|stock|estoc|inventario|opciones|opcion|opci[oó]n|tipos?|modelos?|alguna|algun|algún|alguno|algunos|algunas|prueba|test|prob|quer[ií]a|querias?|quiero|quieres|quieren|necesito|necesitas|necesita|busco|buscas|busca|me\s+interesa|interesad[ao]|comprar|compro|cuento|tienes|tiene|pago|pagar|paga|forma\s+de\s+pago|cobr[ao])\b/i;
 
   if (excludedWords.test(cleaned)) {
     return false;
