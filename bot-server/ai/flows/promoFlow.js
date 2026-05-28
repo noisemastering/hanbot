@@ -171,6 +171,8 @@ FORMATO:
 - Usa máximo 1 emoji, solo si es natural
 - Tono tranquilo y directo, como vendedora real por chat
 - NUNCA te disculpes ni digas "lamento la confusión", "entiendo la confusión", "disculpa" — no hay nada de qué disculparse. El cliente quiere comprar, no necesita una disculpa.
+- ⚠️ CRÍTICO: La medida del producto EN PROMOCIÓN es la que aparece en la lista. NO inventes una medida diferente porque el cliente preguntó por otra. Si el cliente pidió 6x15 pero la promo es de 6x4, NUNCA digas "Para la medida de 6 x 15 m, tenemos malla a precio promocional..." — eso es mentira. Menciona EXPLÍCITAMENTE la medida real que está en promoción (ej: "Esta promoción es de 6x4m"). Si la medida que pidió el cliente NO está en la lista, NO menciones esa medida del cliente como si estuviera en promo.
+- ⚠️ CRÍTICO: NUNCA inventes precios ni porcentajes de descuento. Usa EXACTAMENTE los valores listados en PRODUCTOS EN PROMOCIÓN.
 - Solo devuelve el mensaje, nada más`;
 
   const userPrompt = `PRODUCTOS EN PROMOCIÓN:
@@ -189,7 +191,57 @@ Presenta la promoción.`;
       max_tokens: 500
     });
 
-    return response.choices[0].message.content.trim();
+    let aiText = response.choices[0].message.content.trim();
+
+    // ── POST-GENERATION VALIDATION ──
+    // Catch hallucinations: wrong size labels, fake prices, wrong discount %.
+    const validPrices = products.flatMap(p => [p.price, p.originalPrice].filter(Boolean).map(v => Math.round(v)));
+    const validSizes = products.map(p => p.size).filter(Boolean);
+    const validLinks = products.map(p => p.link).filter(Boolean);
+
+    // Extract sizes mentioned in the AI text (e.g. "6 x 15 m", "6x15", "6 por 15")
+    const sizesInText = [...aiText.matchAll(/\b(\d{1,2})\s*[x×]\s*(\d{1,2})\s*m?\b/gi)].map(m => `${m[1]}x${m[2]}m`);
+    const hasWrongSize = sizesInText.some(s => {
+      const lower = s.toLowerCase();
+      return !validSizes.some(vs => {
+        const v = String(vs).toLowerCase();
+        // Match either orientation
+        const sm = lower.match(/(\d+)x(\d+)/);
+        const vm = v.match(/(\d+)x(\d+)/);
+        if (!sm || !vm) return false;
+        return (sm[1] === vm[1] && sm[2] === vm[2]) || (sm[1] === vm[2] && sm[2] === vm[1]);
+      });
+    });
+
+    // Extract prices in text
+    const pricesInText = [...aiText.matchAll(/\$\s?(\d{2,5}(?:[.,]\d{1,2})?)/g)].map(m => Math.round(parseFloat(m[1].replace(',', '.'))));
+    const hasWrongPrice = validPrices.length > 0 && pricesInText.some(p => !validPrices.some(vp => Math.abs(vp - p) <= 1));
+
+    if (hasWrongSize || hasWrongPrice) {
+      console.warn(`⚠️ [promo] Hallucination detected (wrong size: ${hasWrongSize}, wrong price: ${hasWrongPrice}). Falling back to deterministic pitch.`);
+      // Deterministic fallback — only describes what's actually in the promo
+      return products.map(p => {
+        let msg = `Promoción: ${p.size || p.name}`;
+        if (p.isPromoPrice && p.originalPrice) {
+          msg += ` — antes $${p.originalPrice}, hoy $${p.price}`;
+        } else if (p.price) {
+          msg += ` — $${p.price}`;
+        }
+        if (p.link) msg += `\n${p.link}`;
+        msg += '\nEnvío incluido.';
+        return msg;
+      }).join('\n\n');
+    }
+
+    // Wrong tracked link guard
+    const linksInText = [...aiText.matchAll(/https?:\/\/[^\s]+/g)].map(m => m[0]);
+    const wrongTrackedLink = linksInText.find(l => l.includes('/r/') && !validLinks.includes(l));
+    if (wrongTrackedLink && validLinks.length > 0) {
+      console.warn(`⚠️ [promo] Wrong tracked link ${wrongTrackedLink} → replacing with valid one`);
+      aiText = aiText.replace(wrongTrackedLink, validLinks[0]);
+    }
+
+    return aiText;
   } catch (err) {
     console.error('❌ [promo] AI pitch error:', err.message);
     // Fallback
