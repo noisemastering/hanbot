@@ -45,6 +45,7 @@ export default function TicketsView() {
 
   const getToken = () => localStorage.getItem('token');
   const knownIdsRef = useRef(null); // null on first load → don't toast initial set
+  const lastStatusByIdRef = useRef({}); // ticketId → last status seen
   const initialLoadedRef = useRef(false);
 
   const fetchTickets = useCallback(async () => {
@@ -56,7 +57,7 @@ export default function TicketsView() {
       });
       const data = await res.json();
       if (data.success) {
-        // Detect new tickets vs the last seen set (skip on first load)
+        // Detect new tickets and status changes vs the last seen state
         if (initialLoadedRef.current && knownIdsRef.current) {
           const newOnes = data.data.filter(t2 =>
             !knownIdsRef.current.has(t2._id) && t2.createdBy?._id !== user?._id
@@ -76,8 +77,41 @@ export default function TicketsView() {
               } catch {}
             }
           });
+
+          // Detect status changes since last poll
+          const STATUS_LABEL = {
+            open: 'Abierto', review: 'En revisión', working: 'Trabajando',
+            solved: 'Resuelto', dismissed: 'Descartado'
+          };
+          data.data.forEach(t2 => {
+            const previous = lastStatusByIdRef.current[t2._id];
+            if (previous && previous !== t2.status) {
+              const author = t2.createdBy
+                ? `${t2.createdBy.firstName || ''} ${t2.createdBy.lastName || ''}`.trim() || t2.createdBy.username
+                : 'el reportante';
+              const fromL = STATUS_LABEL[previous] || previous;
+              const toL = STATUS_LABEL[t2.status] || t2.status;
+              const isAuthor = t2.createdBy?._id === user?._id;
+              const msg = isAuthor
+                ? `🎫 Tu ticket "${t2.title}" cambió de ${fromL} → ${toL}`
+                : `🎫 Ticket de ${author} "${t2.title}" cambió de ${fromL} → ${toL}`;
+              toast(msg, { duration: 7000, icon: '🔄' });
+              if (typeof Notification !== 'undefined' && Notification.permission === 'granted') {
+                try {
+                  new Notification(`${toL}: ${t2.title}`, {
+                    body: isAuthor
+                      ? `Tu ticket cambió de ${fromL} → ${toL}`
+                      : `Ticket de ${author}: ${fromL} → ${toL}`,
+                    icon: '/logo192.png',
+                    tag: `ticket-status-${t2._id}-${t2.status}`
+                  });
+                } catch {}
+              }
+            }
+          });
         }
         knownIdsRef.current = new Set(data.data.map(t2 => t2._id));
+        lastStatusByIdRef.current = Object.fromEntries(data.data.map(t2 => [t2._id, t2.status]));
         initialLoadedRef.current = true;
         setTickets(data.data);
       }

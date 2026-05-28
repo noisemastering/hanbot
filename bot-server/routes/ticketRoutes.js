@@ -115,6 +115,7 @@ router.put("/:id", authenticate, async (req, res) => {
     }
 
     const { title, description, status, priority, assignedTo } = req.body;
+    const previousStatus = ticket.status;
 
     // Admin+ can change status, priority, and assignment
     if (isAdmin(req.user)) {
@@ -138,6 +139,55 @@ router.put("/:id", authenticate, async (req, res) => {
       .populate("createdBy", "firstName lastName username")
       .populate("assignedTo", "firstName lastName username")
       .populate("comments.author", "firstName lastName username");
+
+    // Status-change push notification to the original author
+    // (don't notify when the author themselves changed it)
+    const statusChanged = status && status !== previousStatus;
+    const authorIsCurrentUser = populated.createdBy?._id?.toString() === req.user._id.toString();
+    if (statusChanged && !authorIsCurrentUser) {
+      try {
+        const webpush = require("web-push");
+        const PushSubscription = require("../models/PushSubscription");
+        if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
+          const subs = await PushSubscription.find();
+          const STATUS_LABEL = {
+            open: "Abierto", review: "En revisión", working: "Trabajando",
+            solved: "Resuelto", dismissed: "Descartado"
+          };
+          const fromLabel = STATUS_LABEL[previousStatus] || previousStatus;
+          const toLabel = STATUS_LABEL[status] || status;
+          const actor = `${req.user.firstName || ''} ${req.user.lastName || ''}`.trim() || req.user.username;
+          const author = populated.createdBy
+            ? `${populated.createdBy.firstName || ''} ${populated.createdBy.lastName || ''}`.trim() || populated.createdBy.username
+            : 'el reportante';
+          const payload = JSON.stringify({
+            title: `🎫 ${toLabel}: ${populated.title}`,
+            body: `${actor} cambió el estado del ticket de ${author} (${fromLabel} → ${toLabel})`,
+            icon: '/logo192.png',
+            badge: '/logo192.png',
+            data: {
+              url: '/tickets',
+              ticketId: ticket._id.toString(),
+              type: 'status_change',
+              authorId: populated.createdBy?._id?.toString(),
+              fromStatus: previousStatus,
+              toStatus: status
+            }
+          });
+          await Promise.allSettled(subs.map(sub =>
+            webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload)
+              .catch(async (err) => {
+                if (err.statusCode === 410 || err.statusCode === 404) {
+                  await PushSubscription.deleteOne({ endpoint: sub.endpoint });
+                }
+              })
+          ));
+          console.log(`📣 Ticket status-change notification: ${fromLabel} → ${toLabel} (ticket ${ticket._id})`);
+        }
+      } catch (notifyErr) {
+        console.error("⚠️ Status-change notification failed:", notifyErr.message);
+      }
+    }
 
     res.json({ success: true, data: populated });
   } catch (error) {
