@@ -151,7 +151,32 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
   console.log(`\n🎯 ===== FLOW MANAGER =====`);
 
   // ─── Resolve which convo_flow handles this conversation ──
-  const ref = sourceContext?.ad?.convoFlowRef || convo?.convoFlowRef;
+  let ref = sourceContext?.ad?.convoFlowRef || convo?.convoFlowRef;
+
+  // ─── COLD-START INTENT INFERENCE ──
+  // For conversations without an ad-bound convoFlowRef, infer a flow from
+  // the user message itself. This rescues direct-message customers asking
+  // about rolls / groundcover / borde from the AI fallback (which doesn't
+  // know they need wholesale handoff).
+  if (!ref) {
+    const lower = (userMessage || '').toLowerCase();
+
+    // Rollo intent: explicit "rollo" mention OR malla sombra at any non-90%
+    // percentage (35/50/70/80). Confeccionada is 90% only — anything else
+    // means rolls, which are wholesale.
+    const mentionsRollo = /\b(rollo|rollos|el\s+rollo|en\s+rollo|por\s+rollo)\b/i.test(lower);
+    const pctMatch = lower.match(/\b(\d{2,3})\s*%/);
+    const nonNinetyPercent = pctMatch && [35, 50, 70, 80].includes(parseInt(pctMatch[1], 10));
+
+    if (mentionsRollo || nonNinetyPercent) {
+      console.log(`🎯 Cold-start intent → rollo wholesale (mentionsRollo=${mentionsRollo}, nonNinetyPct=${nonNinetyPercent})`);
+      ref = 'convo_rolloRaschelWholesale';
+      await updateConversation(psid, { convoFlowRef: ref, currentFlow: `convo:${ref}` });
+      convo.convoFlowRef = ref;
+      convo.currentFlow = `convo:${ref}`;
+    }
+  }
+
   if (!ref) {
     console.log(`🎯 No convoFlowRef — falling through to AI fallback`);
     console.log(`🎯 ===== END FLOW MANAGER =====\n`);
