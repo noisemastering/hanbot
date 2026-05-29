@@ -588,14 +588,27 @@ router.get("/products", async (req, res) => {
 
     let filter = {};
     if (search) {
-      const regex = new RegExp(search, 'i');
-      filter = {
-        $or: [
-          { name: regex },
-          { description: regex },
-          { category: regex }
-        ]
-      };
+      const escapeRe = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      // If the search looks like a dimension (e.g. "2x6", "6mx2m", "6 x 2 m"),
+      // also match the swapped order — 6x2 and 2x6 are the same product —
+      // and tolerate common format variants (with/without m, with/without spaces).
+      const dimMatch = search.match(/^\s*(\d+(?:\.\d+)?)\s*m?\s*[xX×]\s*(\d+(?:\.\d+)?)\s*m?\s*$/);
+      let regexes;
+      if (dimMatch) {
+        const a = dimMatch[1];
+        const b = dimMatch[2];
+        // Match "AxB" or "BxA" in any common form
+        const variant = (w, h) => `${escapeRe(w)}\\s*m?\\s*[xX×]\\s*${escapeRe(h)}\\s*m?`;
+        const dimRegex = new RegExp(`(?:${variant(a, b)}|${variant(b, a)})`, 'i');
+        regexes = [dimRegex];
+      } else {
+        regexes = [new RegExp(escapeRe(search), 'i')];
+      }
+      const ors = [];
+      regexes.forEach(rx => {
+        ors.push({ name: rx }, { description: rx }, { category: rx });
+      });
+      filter = { $or: ors };
     }
 
     const products = await Product.find(filter)
