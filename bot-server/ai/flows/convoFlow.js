@@ -378,6 +378,30 @@ function create(manifest) {
       productCache = await productFlow.loadProducts(manifest.products);
     }
 
+    // ── MULTI-SIZE DETECTION ──
+    // If the customer mentions 2+ distinct sizes in one message (e.g. "10x10 o
+    // 15x15"), the single-size parser will return null and we'd fall through
+    // to AI fallback which fabricates a quote. Detect this and escalate.
+    {
+      const dimPattern = /\b(\d{1,2})\s*[xX×]\s*(\d{1,2})\b/g;
+      const dimsFound = [...userMessage.matchAll(dimPattern)];
+      const uniqueSizes = new Set(dimsFound.map(m => {
+        const a = parseInt(m[1], 10), b = parseInt(m[2], 10);
+        return `${Math.min(a, b)}x${Math.max(a, b)}`;
+      }));
+      if (uniqueSizes.size >= 2) {
+        console.log(`📏 [convo] Multi-size detected (${[...uniqueSizes].join(', ')}) — handoff`);
+        const handoffResp = await executeHandoff(psid, convo, userMessage, {
+          reason: `Multi-size inquiry: ${[...uniqueSizes].join(', ')}`,
+          responsePrefix: `Para cotizarte ${uniqueSizes.size} medidas distintas (${[...uniqueSizes].join(', ')}) te paso con un especialista, así te dan precios precisos por cada una.`,
+          specsText: `Cliente pregunta por ${uniqueSizes.size} medidas: ${[...uniqueSizes].join(', ')}. `,
+          lastIntent: 'multi_size_handoff',
+          timingStyle: 'standard'
+        });
+        return { response: handoffResp, state: flowState };
+      }
+    }
+
     // ── DIMENSION PRE-PROCESSING (runs BEFORE everything — like the old custom handlers) ──
     // If the user message contains dimensions (e.g. "3.60 x 2.50"), handle it directly
     // without going through masterFlow/promoFlow which would intercept and give wrong answers.

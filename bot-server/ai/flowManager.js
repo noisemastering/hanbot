@@ -168,18 +168,18 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
     const pctMatch = lower.match(/\b(\d{2,3})\s*%/);
     const nonNinetyPercent = pctMatch && [35, 50, 70, 80].includes(parseInt(pctMatch[1], 10));
 
-    // Confeccionada intent: mentions malla sombra (90% or unspecified) with a
-    // specific dimension. Routes to confeccionada retail, which then handles
-    // catalog match / oversize / size_not_found via dimension_handoff —
-    // instead of the AI fallback giving a generic store link.
-    const mentionsCategory = /\b(malla|maya|sombra|raschel)\b/i.test(lower);
+    // Confeccionada intent: a dimension mention is enough — Hanlob only sells
+    // malla sombra, so any "NxM" / "N metros x M metros" is asking for a
+    // confeccionada size. Routes to convo_confeccionadaRetail, which then
+    // handles catalog match / oversize / size_not_found via dimension_handoff
+    // (instead of the AI fallback fabricating a quote).
     const hasDimension = /\b\d{1,2}\s*[xX×]\s*\d{1,2}\b|\d{1,2}\s*(?:m|mt|mts|mtrs?|metros?)\s*(?:x|por|×)\s*\d{1,2}\s*(?:m|mt|mts|mtrs?|metros?)?/i.test(lower);
 
     if (mentionsRollo || nonNinetyPercent) {
       console.log(`🎯 Cold-start intent → rollo wholesale (mentionsRollo=${mentionsRollo}, nonNinetyPct=${nonNinetyPercent})`);
       ref = 'convo_rolloRaschelWholesale';
-    } else if (mentionsCategory && hasDimension) {
-      console.log(`🎯 Cold-start intent → confeccionada retail (category + dimension)`);
+    } else if (hasDimension) {
+      console.log(`🎯 Cold-start intent → confeccionada retail (dimension detected)`);
       ref = 'convo_confeccionadaRetail';
     }
 
