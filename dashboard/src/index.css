@@ -15,3 +15,18 @@ code {
   font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
     monospace;
 }
+
+/* Workflow builder inputs */
+.wf-input {
+  width: 100%;
+  background: #0f172a;
+  border: 1px solid #374151;
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.6rem;
+  color: #fff;
+  font-size: 0.8rem;
+}
+.wf-input:focus {
+  outline: none;
+  border-color: #6366f1;
+}
