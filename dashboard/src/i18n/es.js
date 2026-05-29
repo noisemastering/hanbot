@@ -44,7 +44,7 @@ const es = {
   "menu.importer": "Importador",
   "menu.bot": "Bot",
   "menu.intents": "Intents",
-  "menu.flows": "Flows",
+  "menu.flows": "Estructura de flujos",
   "menu.playground": "Playground",
   "menu.playgroundML": "Mercado Libre",
   "menu.playgroundForecast": "Pronóstico de Ventas",
