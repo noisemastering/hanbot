@@ -789,6 +789,30 @@ async function generateReply(userMessage, psid, referral = null) {
   }
   // ====== END LOCATION STATS QUESTION ======
 
+  // ====== SHADE PERCENTAGE TRUTH CHECK ======
+  // Hanlob only sells 90% (confeccionada) and 35/50/70/80% (rollos). If the AI
+  // affirmed any other percentage from the customer's message, replace the
+  // response with a correction. The bot is here to correct, not to humor.
+  if (response && response.text) {
+    const VALID_PERCENTAGES = new Set([35, 50, 70, 80, 90]);
+    // Match "X% de sombra" / "cubre el X%" / "al X% de sombra" / "X porciento"
+    const pctRegex = /\b(\d{2,3})\s*(?:%|por\s*cient[oa]s?|porcient[oa]s?)/gi;
+    const matches = [...response.text.matchAll(pctRegex)].map(m => parseInt(m[1], 10));
+    const bogusPercentage = matches.find(p => p >= 30 && p <= 100 && !VALID_PERCENTAGES.has(p));
+
+    if (bogusPercentage) {
+      // Check the AI text is affirmatively talking about the bogus % as ours
+      const lower = response.text.toLowerCase();
+      const affirmsBogus = new RegExp(`(cubre|tenemos|ofrecemos|manejamos|disponible|al)\\s+(el\\s+|al\\s+|del\\s+)?${bogusPercentage}\\s*(%|por\\s*cient|porcient)`, 'i').test(lower);
+
+      if (affirmsBogus) {
+        console.log(`🛑 Post-check: AI affirmed ${bogusPercentage}% — we don't sell that. Replacing.`);
+        response.text = `Nuestra malla sombra cubre 90% (confeccionada, lista para instalar) y también la tenemos en rollos al 35%, 50%, 70% y 80%. No manejamos otros porcentajes. ¿Cuál te sirve para tu uso?`;
+      }
+    }
+  }
+  // ====== END SHADE PERCENTAGE TRUTH CHECK ======
+
   // Check for repetition and escalate if needed
   return await checkForRepetition(response, psid, convo);
 }

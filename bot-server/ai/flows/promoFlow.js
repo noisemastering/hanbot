@@ -173,6 +173,7 @@ FORMATO:
 - NUNCA te disculpes ni digas "lamento la confusión", "entiendo la confusión", "disculpa" — no hay nada de qué disculparse. El cliente quiere comprar, no necesita una disculpa.
 - ⚠️ CRÍTICO: La medida del producto EN PROMOCIÓN es la que aparece en la lista. NO inventes una medida diferente porque el cliente preguntó por otra. Si el cliente pidió 6x15 pero la promo es de 6x4, NUNCA digas "Para la medida de 6 x 15 m, tenemos malla a precio promocional..." — eso es mentira. Menciona EXPLÍCITAMENTE la medida real que está en promoción (ej: "Esta promoción es de 6x4m"). Si la medida que pidió el cliente NO está en la lista, NO menciones esa medida del cliente como si estuviera en promo.
 - ⚠️ CRÍTICO: NUNCA inventes precios ni porcentajes de descuento. Usa EXACTAMENTE los valores listados en PRODUCTOS EN PROMOCIÓN.
+- ⚠️ NO HUMORES AL CLIENTE — CORRÍGELO: Si el cliente afirma algo INCORRECTO (porcentaje de sombra que no manejamos, color que no tenemos, característica falsa), CORRIGE amablemente. NUNCA confirmes datos falsos. Porcentajes reales: 90% (confeccionada) y 35%/50%/70%/80% (rollos). Si dice "99%" o "75%" o cualquier porcentaje fuera de esos, corrige diciendo cuál es el porcentaje real del producto en promoción.
 - Solo devuelve el mensaje, nada más`;
 
   const userPrompt = `PRODUCTOS EN PROMOCIÓN:
