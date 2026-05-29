@@ -1319,38 +1319,17 @@ router.get('/spend-optimization', async (req, res) => {
       { $sort: { count: -1 } }
     ]);
 
-    // Resolve family names from ProductFamily for display
-    const familyIds = [...new Set(productBreakdownRaw.map(r => r.familyId).filter(Boolean))];
-    const familyDocs = familyIds.length > 0
-      ? await ProductFamily.find({ _id: { $in: familyIds } }).select('_id name parentId').lean()
-      : [];
-    const familyById = {};
-    familyDocs.forEach(f => { familyById[String(f._id)] = f; });
-
-    // Build per-ad product map. Use family name when mapped; fall back to title.
-    const adProductMap = {};
-    for (const row of productBreakdownRaw) {
-      const adId = row._id.adId;
-      const fid = row.familyId ? String(row.familyId) : null;
-      const family = fid ? familyById[fid] : null;
-      if (!adProductMap[adId]) adProductMap[adId] = [];
-      adProductMap[adId].push({
-        familyId: fid,
-        product: family?.name || (row.sampleTitle || 'Sin categoría').slice(0, 60),
-        fullTitle: row.sampleTitle || '',
-        count: row.count,
-        revenue: Math.round(row.revenue)
-      });
-    }
-
     // Also get stored metrics as fallback (from FB sync)
     const Ad = require('../models/Ad');
     const ConvoFlowManifest = require('../models/ConvoFlowManifest');
     require('../models/Promo');
     const adDocs = await Ad.find({}, 'fbAdId name convoFlowRef promoId metrics').populate('promoId', 'name promoProductIds').lean();
 
-    // Build per-ad set of on-target ProductFamily IDs by walking the tree.
-    // Match canonical IDs — no string parsing required.
+    // Build per-ad target family ID set + per-ad size→familyId lookup.
+    // We walk the target ProductFamily tree, gather every descendant's id AND
+    // its name (which often contains a size like "6 m x 4 m"). The size lookup
+    // lets us reconcile sales whose MLOrder hasn't been imported yet so
+    // products that should appear as one card don't get split.
     const convoFlowRefs = [...new Set(adDocs.map(a => a.convoFlowRef).filter(Boolean))];
     const manifestByName = {};
     if (convoFlowRefs.length > 0) {
@@ -1360,23 +1339,89 @@ router.get('/spend-optimization', async (req, res) => {
       manifests.forEach(m => { manifestByName[m.name] = m; });
     }
 
+    const SIZE_RE = /(\d+(?:\.\d+)?)\s*m?\s*[xX×]\s*(\d+(?:\.\d+)?)\s*m?(?!\d)/;
+    const normalizeSize = (s) => {
+      if (!s) return null;
+      const m = String(s).toLowerCase().match(SIZE_RE);
+      return m ? `${m[1]}x${m[2]}m` : null;
+    };
+
     const adTargetFamilyIdsMap = {}; // fbAdId -> Set<String(familyId)>
+    const adSizeToFamilyMap = {};    // fbAdId -> { sizeStr -> familyId }
+    const familyById = {};           // global familyId -> { _id, name }
     for (const ad of adDocs) {
       if (!ad.fbAdId) continue;
       const manifest = ad.convoFlowRef ? manifestByName[ad.convoFlowRef] : null;
       if (!manifest?.products?.length) continue;
-      // BFS down the tree, collect every descendant family ID (including roots)
       let frontier = manifest.products.map(p => p._id);
       const allIds = new Set(frontier.map(id => String(id)));
+      const sizeMap = {};
       const safetyMax = 5;
       for (let depth = 0; depth < safetyMax && frontier.length > 0; depth++) {
-        const children = await ProductFamily.find({ parentId: { $in: frontier } }).select('_id').lean();
+        const docs = await ProductFamily.find({ _id: { $in: frontier } }).select('_id name parentId').lean();
+        docs.forEach(d => {
+          familyById[String(d._id)] = d;
+          const sz = normalizeSize(d.name);
+          if (sz && !sizeMap[sz]) sizeMap[sz] = String(d._id);
+        });
+        const children = await ProductFamily.find({ parentId: { $in: frontier } }).select('_id name parentId').lean();
         if (children.length === 0) break;
-        children.forEach(c => allIds.add(String(c._id)));
+        children.forEach(c => {
+          allIds.add(String(c._id));
+          familyById[String(c._id)] = c;
+          const sz = normalizeSize(c.name);
+          if (sz && !sizeMap[sz]) sizeMap[sz] = String(c._id);
+        });
         frontier = children.map(c => c._id);
       }
       if (allIds.size > 0) adTargetFamilyIdsMap[ad.fbAdId] = allIds;
+      adSizeToFamilyMap[ad.fbAdId] = sizeMap;
     }
+
+    // Fill familyById with any extra families referenced directly by the lookup
+    const directIds = [...new Set(productBreakdownRaw.map(r => r.familyId).filter(Boolean).map(id => String(id)))];
+    const missingIds = directIds.filter(id => !familyById[id]);
+    if (missingIds.length > 0) {
+      const extras = await ProductFamily.find({ _id: { $in: missingIds } }).select('_id name parentId').lean();
+      extras.forEach(f => { familyById[String(f._id)] = f; });
+    }
+
+    // Build per-ad product map. Reconcile unmapped sales by parsing their
+    // size and looking up the matching descendant family in the ad's tree.
+    // Then merge duplicates (same familyId or same size) into a single card.
+    const adProductMap = {};
+    for (const row of productBreakdownRaw) {
+      const adId = row._id.adId;
+      let fid = row.familyId ? String(row.familyId) : null;
+      if (!fid) {
+        // Fallback: parse size from title and look up against the ad's tree
+        const titleSize = normalizeSize(row.sampleTitle);
+        const sizeMap = adSizeToFamilyMap[adId] || {};
+        if (titleSize && sizeMap[titleSize]) {
+          fid = sizeMap[titleSize];
+        }
+      }
+      if (!adProductMap[adId]) adProductMap[adId] = {};
+      const bucketKey = fid || `title:${row.sampleTitle || 'unknown'}`;
+      const bucket = adProductMap[adId][bucketKey];
+      if (bucket) {
+        bucket.count += row.count;
+        bucket.revenue += Math.round(row.revenue);
+      } else {
+        const family = fid ? familyById[fid] : null;
+        adProductMap[adId][bucketKey] = {
+          familyId: fid,
+          product: family?.name || (row.sampleTitle || 'Sin categoría').slice(0, 60),
+          fullTitle: row.sampleTitle || '',
+          count: row.count,
+          revenue: Math.round(row.revenue)
+        };
+      }
+    }
+    // Convert the buckets back to arrays, sorted by count desc
+    Object.keys(adProductMap).forEach(adId => {
+      adProductMap[adId] = Object.values(adProductMap[adId]).sort((a, b) => b.count - a.count);
+    });
 
     // Build stored metrics fallback map
     const storedMetricsMap = {};
