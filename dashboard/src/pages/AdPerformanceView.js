@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import API from '../api';
 import FeatureTip from '../components/FeatureTip';
+import PeriodSelector from '../components/PeriodSelector';
 import {
   ComposedChart,
   Bar,
@@ -22,16 +23,23 @@ const tooltipStyle = {
   color: '#F3F4F6',
 };
 
-function getDaysAgo(days) {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString().split('T')[0];
-}
 
 function AdPerformanceView() {
   const navigate = useNavigate();
   const canSeeSales = true;
-  const [range, setRange] = useState(30);
+  const todayISO = () => new Date().toISOString().split('T')[0];
+  const daysAgoISO = (n) => {
+    const dt = new Date();
+    dt.setDate(dt.getDate() - n);
+    return dt.toISOString().split('T')[0];
+  };
+  const [dateFrom, setDateFrom] = useState(daysAgoISO(30));
+  const [dateTo, setDateTo] = useState(todayISO());
+  // Days span derived from the selected range (used by legacy endpoints expecting ?days=N)
+  const range = useMemo(() => {
+    const ms = new Date(dateTo).getTime() - new Date(dateFrom).getTime();
+    return Math.max(1, Math.round(ms / (24 * 60 * 60 * 1000)));
+  }, [dateFrom, dateTo]);
   const [loading, setLoading] = useState(true);
   const [ads, setAds] = useState([]);
   const [directDaily, setDirectDaily] = useState([]);
@@ -44,9 +52,6 @@ function AdPerformanceView() {
   const [fbSpendTotals, setFbSpendTotals] = useState({ spend: 0, impressions: 0, clicks: 0 });
   const [correlating, setCorrelating] = useState(false);
   const [correlationProgress, setCorrelationProgress] = useState(null);
-
-  const dateFrom = useMemo(() => getDaysAgo(range), [range]);
-  const dateTo = useMemo(() => new Date().toISOString().split('T')[0], []);
 
   const fetchData = async () => {
     setLoading(true);
@@ -81,7 +86,7 @@ function AdPerformanceView() {
   useEffect(() => {
     fetchData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range]);
+  }, [dateFrom, dateTo]);
 
   const runCorrelation = async () => {
     setCorrelating(true);
@@ -245,21 +250,11 @@ function AdPerformanceView() {
             <h1 className="text-2xl font-bold text-white">Rendimiento de Anuncios</h1>
           </FeatureTip>
         </div>
-        <div className="flex gap-2">
-          {[7, 15, 30, 90].map((d) => (
-            <button
-              key={d}
-              onClick={() => setRange(d)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                range === d
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700/50'
-              }`}
-            >
-              {d}d
-            </button>
-          ))}
-        </div>
+        <PeriodSelector
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onChange={({ from, to }) => { setDateFrom(from); setDateTo(to); }}
+        />
       </div>
 
       {/* Summary Cards */}

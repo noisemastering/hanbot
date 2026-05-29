@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import API from '../api';
 import FeatureTip from '../components/FeatureTip';
+import PeriodSelector from '../components/PeriodSelector';
 import {
   PieChart,
   Pie,
@@ -47,21 +48,16 @@ const tooltipStyle = {
   color: '#F3F4F6',
 };
 
-function getDaysAgo(days) {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString().split('T')[0];
-}
 
 function GeoDetailView() {
   const navigate = useNavigate();
-  const [range, setRange] = useState(30);
+  const todayISO = () => new Date().toISOString().split('T')[0];
+  const daysAgoISO = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().split('T')[0]; };
+  const [dateFrom, setDateFrom] = useState(daysAgoISO(30));
+  const [dateTo, setDateTo] = useState(todayISO());
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState(null);
   const [tab, setTab] = useState('states'); // states | cities
-
-  const dateFrom = useMemo(() => getDaysAgo(range), [range]);
-  const dateTo = useMemo(() => new Date().toISOString().split('T')[0], []);
 
   const fetchData = async () => {
     setLoading(true);
@@ -80,7 +76,7 @@ function GeoDetailView() {
   useEffect(() => {
     fetchData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range]);
+  }, [dateFrom, dateTo]);
 
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return '$0';
@@ -138,21 +134,11 @@ function GeoDetailView() {
             <h1 className="text-2xl font-bold text-white">Distribución Geográfica</h1>
           </FeatureTip>
         </div>
-        <div className="flex gap-2">
-          {[7, 15, 30, 90].map((d) => (
-            <button
-              key={d}
-              onClick={() => setRange(d)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                range === d
-                  ? 'bg-purple-600 text-white'
-                  : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700/50'
-              }`}
-            >
-              {d}d
-            </button>
-          ))}
-        </div>
+        <PeriodSelector
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onChange={({ from, to }) => { setDateFrom(from); setDateTo(to); }}
+        />
       </div>
 
       {/* Summary Cards */}

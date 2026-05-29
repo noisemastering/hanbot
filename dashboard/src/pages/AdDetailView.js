@@ -2,6 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import API from '../api';
 import { abbrState } from '../utils/stateAbbr';
+import PeriodSelector from '../components/PeriodSelector';
 import {
   ComposedChart, Bar, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
@@ -16,16 +17,17 @@ const tooltipStyle = {
   color: '#F3F4F6',
 };
 
-function getDaysAgo(days) {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString().split('T')[0];
-}
-
 function AdDetailView() {
   const { fbAdId } = useParams();
   const navigate = useNavigate();
-  const [range, setRange] = useState(30);
+  const todayISO = () => new Date().toISOString().split('T')[0];
+  const daysAgoISO = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().split('T')[0]; };
+  const [dateFrom, setDateFrom] = useState(daysAgoISO(30));
+  const [dateTo, setDateTo] = useState(todayISO());
+  const range = useMemo(() => {
+    const ms = new Date(dateTo).getTime() - new Date(dateFrom).getTime();
+    return Math.max(1, Math.round(ms / (24 * 60 * 60 * 1000)));
+  }, [dateFrom, dateTo]);
   const [loading, setLoading] = useState(true);
   const [ad, setAd] = useState(null);
   const [adInfo, setAdInfo] = useState(null);
@@ -38,8 +40,6 @@ function AdDetailView() {
   const [deviceData, setDeviceData] = useState([]);
   const [adSpend, setAdSpend] = useState(null);
 
-  const dateFrom = useMemo(() => getDaysAgo(range), [range]);
-  const dateTo = useMemo(() => new Date().toISOString().split('T')[0], []);
 
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return '$0';
@@ -92,7 +92,7 @@ function AdDetailView() {
     };
     fetchData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range, fbAdId]);
+  }, [dateFrom, dateTo, fbAdId]);
 
   const chartData = useMemo(() => {
     if (!ad?.daily) return [];
@@ -159,13 +159,11 @@ function AdDetailView() {
             </div>
           </div>
         </div>
-        <div className="flex gap-2">
-          {[7, 15, 30, 90].map((d) => (
-            <button key={d} onClick={() => setRange(d)} className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${range === d ? 'bg-purple-600 text-white' : 'bg-gray-800/50 text-gray-400 hover:bg-gray-700/50'}`}>
-              {d}d
-            </button>
-          ))}
-        </div>
+        <PeriodSelector
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onChange={({ from, to }) => { setDateFrom(from); setDateTo(to); }}
+        />
       </div>
 
       {/* Summary Cards */}

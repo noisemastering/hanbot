@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import API from "../api";
 import { abbrState } from "../utils/stateAbbr";
 import FeatureTip from "../components/FeatureTip";
+import PeriodSelector from "../components/PeriodSelector";
 import {
   ComposedChart,
   Bar,
@@ -41,15 +42,13 @@ const tooltipStyle = {
   color: "#F3F4F6",
 };
 
-function getDaysAgo(days) {
-  const d = new Date();
-  d.setDate(d.getDate() - days);
-  return d.toISOString().split("T")[0];
-}
 
 function CampaignHome() {
   const navigate = useNavigate();
-  const [range, setRange] = useState(30);
+  const todayISO = () => new Date().toISOString().split('T')[0];
+  const daysAgoISO = (n) => { const d = new Date(); d.setDate(d.getDate() - n); return d.toISOString().split('T')[0]; };
+  const [dateFrom, setDateFrom] = useState(daysAgoISO(30));
+  const [dateTo, setDateTo] = useState(todayISO());
   const [loading, setLoading] = useState(true);
 
   const [correlating, setCorrelating] = useState(false);
@@ -78,8 +77,6 @@ function CampaignHome() {
   const [generating, setGenerating] = useState(false);
   const [copySuccess, setCopySuccess] = useState(false);
 
-  const dateFrom = useMemo(() => getDaysAgo(range), [range]);
-  const dateTo = useMemo(() => new Date().toISOString().split("T")[0], []);
 
   const periodLabel = useMemo(() => {
     const fmt = (iso) => {
@@ -214,7 +211,7 @@ function CampaignHome() {
       .then(() => fetchAll())
       .catch(err => console.error('Auto-sync failed:', err));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range]);
+  }, [dateFrom, dateTo]);
 
   // Aggregated totals from ad performance data
   const totals = useMemo(() => {
@@ -282,21 +279,11 @@ function CampaignHome() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
         <h1 className="text-2xl font-bold text-white">Panel de Campañas</h1>
-        <div className="flex gap-2">
-          {[7, 15, 30, 90].map((d) => (
-            <button
-              key={d}
-              onClick={() => setRange(d)}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all ${
-                range === d
-                  ? "bg-purple-600 text-white"
-                  : "bg-gray-800/50 text-gray-400 hover:bg-gray-700/50"
-              }`}
-            >
-              {d}d
-            </button>
-          ))}
-        </div>
+        <PeriodSelector
+          dateFrom={dateFrom}
+          dateTo={dateTo}
+          onChange={({ from, to }) => { setDateFrom(from); setDateTo(to); }}
+        />
       </div>
 
       {/* KPI Cards */}
