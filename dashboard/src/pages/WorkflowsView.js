@@ -14,6 +14,7 @@ import toast from "react-hot-toast";
 import API from "../api";
 import WorkflowBuilder from "../components/workflow/WorkflowBuilder";
 import SandboxTester from "../components/workflow/SandboxTester";
+import SetupFields from "../components/workflow/SetupFields";
 
 const TABS = [
   { id: "workflow", label: "Workflow" },
@@ -212,6 +213,16 @@ function WorkflowsView() {
               <Labeled label="Global prompt (estilo + formato; siempre aplica)">
                 <textarea className="wf-input" rows={8} value={draft.globalPrompt || ""} onChange={(e) => patch({ globalPrompt: e.target.value })} />
               </Labeled>
+
+              <div className="border border-gray-700 rounded-lg p-3">
+                <p className="text-xs uppercase text-gray-400 mb-2">Setup vars (defaults)</p>
+                <p className="text-[11px] text-gray-500 mb-3">
+                  Moldean el comportamiento. Cuando el workflow se asigna a un anuncio, el producto/promo/audiencia
+                  del anuncio sobreescriben estos valores por conversación.
+                </p>
+                <SetupFields value={draft.setup} onChange={(s) => patch({ setup: s })} />
+              </div>
+
               <VariablesEditor draft={draft} patch={patch} />
             </div>
           )}
@@ -268,6 +279,7 @@ function Labeled({ label, children }) {
     </label>
   );
 }
+
 
 function VariablesEditor({ draft, patch }) {
   const vars = draft.variables || [];

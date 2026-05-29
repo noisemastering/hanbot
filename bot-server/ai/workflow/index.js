@@ -16,14 +16,16 @@
 //   5. append the assistant reply, return updated state + diagnostics
 const { route } = require("./router");
 const { executeNode } = require("./nodeExecutor");
+const { resolveSetupContext } = require("./setupContext");
 
 // Build a fresh state object for a brand-new conversation on this workflow.
-function initState(workflow, vars = {}) {
+function initState(workflow, vars = {}, setupOverrides = {}) {
   return {
     workflowId: workflow._id ? String(workflow._id) : null,
     nodeId: workflow.getStartNodeId(),
     history: [], // [{ role: 'user'|'assistant', text, nodeId, at }]
     vars,
+    setupOverrides, // per-conversation overrides for setup vars (ad assignment / sandbox)
   };
 }
 
@@ -38,6 +40,23 @@ function initState(workflow, vars = {}) {
 async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   const vars = state.vars || {};
   const history = Array.isArray(state.history) ? [...state.history] : [];
+
+  // Resolve the setup CONTEXT once per conversation (stable across turns).
+  if (state.contextBlock === undefined) {
+    try {
+      const { contextBlock, product, priceInfo } = await resolveSetupContext(
+        workflow.setup,
+        state.setupOverrides
+      );
+      state.contextBlock = contextBlock || "";
+      state.product = product || null;
+      state.priceInfo = priceInfo || null;
+    } catch (err) {
+      console.error("⚠️ setup context resolution failed:", err.message);
+      state.contextBlock = "";
+    }
+  }
+  const contextBlock = state.contextBlock || "";
 
   // Resolve current node (heal if missing/stale).
   let currentNode = workflow.getNode(state.nodeId) || workflow.getNode(workflow.getStartNodeId());
@@ -55,7 +74,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   }
 
   // 2. route
-  const decision = await route(workflow, currentNode, history);
+  const decision = await route(workflow, currentNode, history, contextBlock);
   const movedTo = workflow.getNode(decision.nextNodeId) || currentNode;
 
   // 3 + 4. execute the (possibly new) active node
@@ -66,8 +85,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     handoffRequested: false,
     lead: state.lead || null,
     location: state.location || null,
+    product: state.product || null,
+    priceInfo: state.priceInfo || null,
   };
-  const { text, toolCalls } = await executeNode(workflow, movedTo, history, vars, ctx);
+  const { text, toolCalls } = await executeNode(workflow, movedTo, history, vars, ctx, contextBlock);
 
   // 5. record the reply
   if (text) {

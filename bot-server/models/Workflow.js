@@ -80,6 +80,24 @@ const workflowSchema = new mongoose.Schema(
       default: [],
     },
 
+    // Setup vars that shape behavior. These are DEFAULTS; when a workflow is
+    // assigned to an ad, the ad's preloaded product/promo/audience override them
+    // per-conversation. Resolved into a CONTEXT block the router + nodes read.
+    setup: {
+      buyer: { type: String, enum: [null, "", "end_user", "reseller"], default: null },
+      purchaseType: { type: String, enum: [null, "", "retail", "wholesale"], default: null },
+      saleChannel: { type: String, enum: [null, "", "marketplace", "manual"], default: null },
+      productSpecific: {
+        kind: { type: String, enum: [null, "", "product", "family"], default: null },
+        id: { type: String, default: null },
+      },
+      hasPromo: { type: mongoose.Schema.Types.Mixed, default: null }, // promo id / items, or null
+      catalog: {
+        kind: { type: String, enum: [null, "", "pdf", "store_link"], default: null },
+        value: { type: String, default: null }, // URL to PDF or store
+      },
+    },
+
     // Versions tab — lightweight immutable snapshots taken on save.
     versions: {
       type: [

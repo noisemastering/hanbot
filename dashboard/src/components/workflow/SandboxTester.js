@@ -6,6 +6,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import toast from "react-hot-toast";
 import API from "../../api";
+import SetupFields from "./SetupFields";
 
 function newSessionId() {
   return `sbx_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -22,6 +23,8 @@ export default function SandboxTester({ workflowId, dirty }) {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [currentNode, setCurrentNode] = useState(null);
+  const [setup, setSetup] = useState({});
+  const [setupOpen, setSetupOpen] = useState(false);
   const sessionRef = useRef(newSessionId());
   const scrollRef = useRef(null);
 
@@ -54,6 +57,7 @@ export default function SandboxTester({ workflowId, dirty }) {
         sessionId: sessionRef.current,
         message: text,
         scenario,
+        setup,
         reset: messages.length === 0,
       });
       const data = res.data || {};
@@ -105,11 +109,33 @@ export default function SandboxTester({ workflowId, dirty }) {
         <button onClick={reset} className="px-3 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 text-white">
           Reiniciar
         </button>
+        <button
+          onClick={() => setSetupOpen((o) => !o)}
+          className="px-3 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 text-white"
+        >
+          {setupOpen ? "▾ Setup (override)" : "▸ Setup (override)"}
+        </button>
         <p className="text-xs text-amber-300/80 flex-1 min-w-[200px]">
           ⓘ {SCENARIOS.find((s) => s.value === scenario)?.hint}
           {dirty && <span className="text-amber-400"> · Tienes cambios sin guardar; el sandbox usa la versión guardada.</span>}
         </p>
       </div>
+
+      {setupOpen && (
+        <div className="bg-gray-800/40 border border-gray-700 rounded-lg p-3 mb-3">
+          <p className="text-[11px] text-gray-500 mb-2">
+            Simula la asignación a un anuncio: estos valores sobreescriben los defaults del workflow para esta prueba.
+            Cambiarlos reinicia la conversación.
+          </p>
+          <SetupFields
+            value={setup}
+            onChange={(s) => {
+              setSetup(s);
+              reset();
+            }}
+          />
+        </div>
+      )}
 
       <div className="bg-gray-900 border border-gray-700 rounded-xl overflow-hidden flex flex-col" style={{ height: "55vh" }}>
         <div className="px-4 py-2 border-b border-gray-800 bg-gray-800/40 flex items-center justify-between text-xs">

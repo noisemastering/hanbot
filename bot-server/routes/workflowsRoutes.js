@@ -143,7 +143,10 @@ router.post("/:id/sandbox", async (req, res) => {
     const sessionId = req.body.sessionId || `sbx_${req.user.id}_${req.params.id}`;
     let session = sandboxSessions.get(sessionId);
     if (req.body.reset || !session || session.workflowId !== String(wf._id)) {
-      session = { workflowId: String(wf._id), state: initState(wf, req.body.vars || {}) };
+      session = {
+        workflowId: String(wf._id),
+        state: initState(wf, req.body.vars || {}, req.body.setup || {}),
+      };
       sandboxSessions.set(sessionId, session);
     }
     if (req.body.vars) session.state.vars = { ...session.state.vars, ...req.body.vars };

@@ -1,11 +1,11 @@
 // ai/workflow/nodeExecutor.js
 //
-// Runs the ACTIVE node to produce the assistant's reply. The global prompt
-// (style + format) is the stable, cached system layer; the node prompt layers
-// on top as the turn-specific behavior. Only the node's allowed tools are
-// exposed; the runtime executes any tool calls and loops until the model
-// produces its final text.
-const { getClient, buildSystem, NODE_MODEL } = require("./claudeClient");
+// Runs the ACTIVE node to produce the assistant's reply (OpenAI chat
+// completions). The global prompt (style + format) + resolved setup CONTEXT form
+// the system layer; the node prompt layers on top as turn-specific behavior.
+// Only the node's allowed tools are exposed; tool calls are executed and looped
+// until the model produces its final text.
+const { getClient, CHAT_MODEL } = require("./llmClient");
 const { toolDefsFor, runTool } = require("./tools");
 
 // Replace [key] placeholders (e.g. [first_name]) from the vars bag.
@@ -17,23 +17,33 @@ function applyVars(text, vars = {}) {
   });
 }
 
-function buildStableSystem(workflow, vars) {
-  let stable = applyVars(workflow.globalPrompt || "", vars);
+function buildSystem(workflow, node, vars, contextBlock) {
+  let sys = applyVars(workflow.globalPrompt || "", vars);
   if (workflow.knowledge && workflow.knowledge.length) {
     const kb = workflow.knowledge
       .filter((k) => k && (k.title || k.content))
       .map((k) => `### ${k.title || "Nota"}\n${k.content || ""}`)
       .join("\n\n");
-    if (kb) stable += `\n\n## KNOWLEDGE BASE\n${kb}`;
+    if (kb) sys += `\n\n## KNOWLEDGE BASE\n${kb}`;
   }
-  return stable.trim();
+  if (contextBlock) sys += `\n\n## CONTEXT (setup de esta conversación)\n${contextBlock}`;
+  sys += `\n\n## CURRENT STAGE: ${node.name}\n${applyVars(node.prompt || "", vars)}`;
+  return sys.trim();
+}
+
+// Map our (Anthropic-style) tool registry definitions to OpenAI function tools.
+function toOpenAITools(allowed) {
+  return toolDefsFor(allowed).map((d) => ({
+    type: "function",
+    function: { name: d.name, description: d.description, parameters: d.input_schema },
+  }));
 }
 
 /**
  * Generate the reply for the active node.
- * @returns {Promise<{text: string, toolCalls: Array}>}
+ * @returns {Promise<{text: string|null, toolCalls: Array}>}
  */
-async function executeNode(workflow, node, history, vars, ctx) {
+async function executeNode(workflow, node, history, vars, ctx, contextBlock = "") {
   // Auto nodes short-circuit the LLM entirely.
   if (node.kind === "auto") {
     const action = node.autoAction || {};
@@ -45,18 +55,14 @@ async function executeNode(workflow, node, history, vars, ctx) {
     return { text: applyVars(action.text || "", vars), toolCalls: [] };
   }
 
-  const stableSystem = buildStableSystem(workflow, vars);
-  const nodeInstruction = `## CURRENT STAGE: ${node.name}\n${applyVars(node.prompt || "", vars)}`;
-  const tools = toolDefsFor(node.toolsAllowed || []);
+  const system = buildSystem(workflow, node, vars, contextBlock);
+  const tools = toOpenAITools(node.toolsAllowed || []);
 
-  const messages = history.map((m) => ({
-    role: m.role === "user" ? "user" : "assistant",
-    content: m.text,
-  }));
-  // Conversations must start with a user turn.
-  if (!messages.length || messages[0].role !== "user") {
-    messages.unshift({ role: "user", content: "(inicio de conversación)" });
+  const messages = [{ role: "system", content: system }];
+  for (const m of history) {
+    messages.push({ role: m.role === "user" ? "user" : "assistant", content: m.text });
   }
+  if (history.length === 0) messages.push({ role: "user", content: "(inicio de conversación)" });
 
   const client = getClient();
   const toolCalls = [];
@@ -65,34 +71,36 @@ async function executeNode(workflow, node, history, vars, ctx) {
   for (let i = 0; i < 4; i++) {
     let resp;
     try {
-      resp = await client.messages.create({
-        model: NODE_MODEL,
-        max_tokens: 1024,
-        output_config: { effort: "medium" },
-        system: buildSystem(stableSystem, nodeInstruction),
-        ...(tools.length ? { tools } : {}),
+      resp = await client.chat.completions.create({
+        model: CHAT_MODEL,
+        temperature: 0.5,
+        max_tokens: 600,
         messages,
+        ...(tools.length ? { tools, tool_choice: "auto" } : {}),
       });
     } catch (err) {
       console.error("⚠️ Workflow nodeExecutor error:", err.message);
       return { text: finalText || null, toolCalls };
     }
 
-    const textParts = resp.content.filter((b) => b.type === "text").map((b) => b.text);
-    if (textParts.length) finalText = textParts.join("\n").trim();
+    const msg = resp.choices?.[0]?.message;
+    if (!msg) break;
+    if (msg.content) finalText = msg.content.trim();
 
-    if (resp.stop_reason !== "tool_use") break;
+    if (!msg.tool_calls || msg.tool_calls.length === 0) break;
 
-    const toolUses = resp.content.filter((b) => b.type === "tool_use");
-    messages.push({ role: "assistant", content: resp.content });
-
-    const results = [];
-    for (const tu of toolUses) {
-      toolCalls.push({ name: tu.name, input: tu.input });
-      const out = await runTool(tu.name, tu.input, ctx);
-      results.push({ type: "tool_result", tool_use_id: tu.id, content: String(out) });
+    messages.push(msg); // assistant turn carrying the tool_calls
+    for (const tc of msg.tool_calls) {
+      let args = {};
+      try {
+        args = JSON.parse(tc.function.arguments || "{}");
+      } catch {
+        /* ignore malformed args */
+      }
+      toolCalls.push({ name: tc.function.name, input: args });
+      const out = await runTool(tc.function.name, args, ctx);
+      messages.push({ role: "tool", tool_call_id: tc.id, content: String(out) });
     }
-    messages.push({ role: "user", content: results });
   }
 
   return { text: finalText || null, toolCalls };

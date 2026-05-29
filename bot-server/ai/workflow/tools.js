@@ -27,13 +27,21 @@ const REGISTRY = {
     },
     async execute(input, ctx) {
       ctx.actions.push({ tool: "share_product_link", input });
-      // TODO(hands-on): resolve a real tracked ML link via the existing helpers.
-      const link = ctx.sandbox
-        ? `https://example.test/link/${encodeURIComponent(input.product || "producto")}`
-        : null;
-      return link
-        ? `Link listo: ${link}`
-        : "Link pendiente de resolución (no resuelto en este entorno).";
+      const pi = ctx.priceInfo;
+      // Enforce the quoting hierarchy: sellable-but-no-price → human, never invent.
+      if (pi && pi.handoff) {
+        ctx.handoffRequested = true;
+        return "Este producto no tiene precio disponible. NO inventes un precio: ofrece pasar con un asesor.";
+      }
+      const link = pi?.link || null;
+      if (link) {
+        const price = pi?.amount ? ` Precio: $${pi.amount}${pi.source === "ml" ? "" : " (inventario)"}.` : "";
+        return `Link de compra: ${link}.${price}`;
+      }
+      // TODO(hands-on): when no preloaded product, resolve via free-text product identification.
+      return ctx.sandbox
+        ? "No hay producto precargado en este test; asigna product_specific en Setup para obtener link/precio reales."
+        : "Link pendiente de resolución (sin producto precargado).";
     },
   },
 

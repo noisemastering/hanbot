@@ -1,0 +1,111 @@
+// ai/workflow/setupContext.js
+//
+// Resolves a workflow's setup vars (merged with per-conversation overrides from
+// an ad assignment or the sandbox) into a human-readable CONTEXT block that the
+// router and node prompts read each turn. Also resolves the price for the
+// preloaded product via the quoting hierarchy (ML → Inventario → handoff).
+const mongoose = require("mongoose");
+const { resolvePrice } = require("./priceResolver");
+
+const pick = (a, b) => (a !== undefined && a !== null && a !== "" ? a : b);
+
+// Merge workflow.setup defaults with per-conversation overrides (override wins).
+function mergeSetup(base = {}, override = {}) {
+  const o = override || {};
+  return {
+    buyer: pick(o.buyer, base.buyer),
+    purchaseType: pick(o.purchaseType, base.purchaseType),
+    saleChannel: pick(o.saleChannel, base.saleChannel),
+    productSpecific: {
+      kind: pick(o.productSpecific?.kind, base.productSpecific?.kind),
+      id: pick(o.productSpecific?.id, base.productSpecific?.id),
+    },
+    hasPromo: pick(o.hasPromo, base.hasPromo),
+    catalog: {
+      kind: pick(o.catalog?.kind, base.catalog?.kind),
+      value: pick(o.catalog?.value, base.catalog?.value),
+    },
+  };
+}
+
+const LABELS = {
+  buyer: { end_user: "comprador final", reseller: "revendedor" },
+  purchaseType: { retail: "menudeo (retail)", wholesale: "mayoreo (wholesale)" },
+  saleChannel: {
+    marketplace: "marketplace (Mercado Libre, link de compra + compra protegida)",
+    manual: "venta manual (datos + transferencia/depósito, cierra un asesor)",
+  },
+};
+
+async function loadProductDoc(productSpecific) {
+  if (!productSpecific?.kind || !productSpecific?.id) return null;
+  if (!mongoose.isValidObjectId(productSpecific.id)) return null;
+  try {
+    if (productSpecific.kind === "family") {
+      return await mongoose
+        .model("ProductFamily")
+        .findById(productSpecific.id)
+        .select("name price mlPrice onlineStoreLinks sellable active")
+        .lean();
+    }
+    return await mongoose.model("Product").findById(productSpecific.id).select("name price").lean();
+  } catch {
+    return null;
+  }
+}
+
+async function resolvePromo(hasPromo) {
+  if (!hasPromo) return null;
+  if (typeof hasPromo === "string" && mongoose.isValidObjectId(hasPromo)) {
+    try {
+      const p = await mongoose.model("Promo").findById(hasPromo).select("name").lean();
+      if (p) return `promoción activa: "${p.name}"`;
+    } catch {
+      /* ignore */
+    }
+  }
+  return "hay una promoción activa";
+}
+
+/**
+ * @returns {Promise<{ setup: object, contextBlock: string, product: object|null, priceInfo: object|null }>}
+ */
+async function resolveSetupContext(workflowSetup, overrides) {
+  const setup = mergeSetup(workflowSetup, overrides);
+  const lines = [];
+
+  if (setup.buyer) lines.push(`- Tipo de cliente: ${LABELS.buyer[setup.buyer] || setup.buyer}`);
+  if (setup.purchaseType) lines.push(`- Tipo de compra: ${LABELS.purchaseType[setup.purchaseType] || setup.purchaseType}`);
+  if (setup.saleChannel) lines.push(`- Canal de venta: ${LABELS.saleChannel[setup.saleChannel] || setup.saleChannel}`);
+
+  // Resolve the preloaded product + its price via the hierarchy.
+  const product = await loadProductDoc(setup.productSpecific);
+  let priceInfo = null;
+  if (product) {
+    lines.push(`- Producto de interés (precargado): "${product.name}". No preguntes qué producto; ya lo sabes.`);
+    priceInfo = await resolvePrice(product);
+    if (priceInfo.source === "ml") {
+      lines.push(
+        `- PRECIO: $${priceInfo.amount} (fuente: Mercado Libre${priceInfo.hasDiscount ? `, con descuento desde $${priceInfo.originalPrice}` : ""}). Cotiza este precio. Link: ${priceInfo.link || "(usa la herramienta)"}.`
+      );
+    } else if (priceInfo.source === "inventario") {
+      lines.push(`- PRECIO: $${priceInfo.amount} (fuente: Inventario). Cotiza este precio.`);
+    } else if (priceInfo.handoff) {
+      lines.push(
+        `- PRECIO: NO disponible. El producto es vendible pero no tiene precio. NUNCA inventes un precio: ofrece pasar con un asesor (usa request_handoff).`
+      );
+    }
+  }
+
+  const promo = await resolvePromo(setup.hasPromo);
+  if (promo) lines.push(`- Promoción: ${promo}. Preséntala cuando sea oportuno.`);
+
+  if (setup.catalog?.value) {
+    const what = setup.catalog.kind === "pdf" ? "catálogo en PDF" : "enlace a la tienda";
+    lines.push(`- Catálogo disponible (${what}): ${setup.catalog.value}. Compártelo si lo piden o si aplica.`);
+  }
+
+  return { setup, contextBlock: lines.join("\n"), product: product || null, priceInfo };
+}
+
+module.exports = { resolveSetupContext, mergeSetup };
