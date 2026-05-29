@@ -73,7 +73,7 @@ import WorkflowsView from "./pages/WorkflowsView";
 import CustomerSegmentationView from "./pages/CustomerSegmentationView";
 import ConversionProbabilityView from "./pages/ConversionProbabilityView";
 import AdSpendOptimizationView from "./pages/AdSpendOptimizationView";
-import SalesSimulatorView from "./pages/SalesSimulatorView";
+import ConvoSimulatorView from "./pages/ConvoSimulatorView";
 import CampaignIntelligenceView from "./pages/CampaignIntelligenceView";
 import MLOrderImportView from "./pages/MLOrderImportView";
 import HelpView from "./pages/HelpView";
@@ -2272,7 +2272,7 @@ function App() {
           <Route path="/flujos" element={<FlowPromptsView />} />
           <Route path="/convo-flows" element={<ConvoFlowsView />} />
           <Route path="/workflows" element={<WorkflowsView />} />
-          <Route path="/playground/simulador" element={<SalesSimulatorView />} />
+          <Route path="/playground/simulador" element={<ConvoSimulatorView />} />
           <Route path="/inteligencia-artificial" element={<CampaignIntelligenceView />} />
           <Route path="/ml-import" element={<MLOrderImportView />} />
 
