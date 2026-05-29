@@ -120,7 +120,7 @@ function containsMLLink(responseText) {
  * @param {string} psid - User's PSID
  * @returns {object} { text, askedStats: boolean }
  */
-async function appendStatsQuestionToResponse(responseText, convo, psid) {
+async function appendStatsQuestionToResponse(responseText, convo, psid, userMessage = null) {
   // Don't ask if already asked
   if (convo.askedLocationStats) {
     return { text: responseText, askedStats: false };
@@ -128,6 +128,12 @@ async function appendStatsQuestionToResponse(responseText, convo, psid) {
 
   // Don't ask if we already have their location (city/state OR just zip)
   if ((convo.city && convo.stateMx) || convo.zipcode || convo.customOrderZipcode) {
+    return { text: responseText, askedStats: false };
+  }
+
+  // Don't ask if the customer's CURRENT message contains a zip code
+  // (it hasn't been persisted to convo yet at this point in the pipeline)
+  if (userMessage && /\b\d{5}\b/.test(userMessage)) {
     return { text: responseText, askedStats: false };
   }
 
@@ -191,8 +197,8 @@ async function askLocationStatsQuestion(psid, convo) {
 }
 
 // Keep old function name for backwards compatibility
-async function appendStatsQuestionIfNeeded(responseText, convo, psid) {
-  return await appendStatsQuestionToResponse(responseText, convo, psid);
+async function appendStatsQuestionIfNeeded(responseText, convo, psid, userMessage = null) {
+  return await appendStatsQuestionToResponse(responseText, convo, psid, userMessage);
 }
 
 /**

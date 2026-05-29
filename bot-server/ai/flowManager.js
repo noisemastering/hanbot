@@ -156,8 +156,8 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
   // ─── COLD-START INTENT INFERENCE ──
   // For conversations without an ad-bound convoFlowRef, infer a flow from
   // the user message itself. This rescues direct-message customers asking
-  // about rolls / groundcover / borde from the AI fallback (which doesn't
-  // know they need wholesale handoff).
+  // about rolls / groundcover / confeccionada from the AI fallback
+  // (which gives a generic store link instead of routing properly).
   if (!ref) {
     const lower = (userMessage || '').toLowerCase();
 
@@ -168,9 +168,22 @@ async function processMessage(userMessage, psid, convo, classification, sourceCo
     const pctMatch = lower.match(/\b(\d{2,3})\s*%/);
     const nonNinetyPercent = pctMatch && [35, 50, 70, 80].includes(parseInt(pctMatch[1], 10));
 
+    // Confeccionada intent: mentions malla sombra (90% or unspecified) with a
+    // specific dimension. Routes to confeccionada retail, which then handles
+    // catalog match / oversize / size_not_found via dimension_handoff —
+    // instead of the AI fallback giving a generic store link.
+    const mentionsCategory = /\b(malla|maya|sombra|raschel)\b/i.test(lower);
+    const hasDimension = /\b\d{1,2}\s*[xX×]\s*\d{1,2}\b|\d{1,2}\s*(?:m|mt|mts|mtrs?|metros?)\s*(?:x|por|×)\s*\d{1,2}\s*(?:m|mt|mts|mtrs?|metros?)?/i.test(lower);
+
     if (mentionsRollo || nonNinetyPercent) {
       console.log(`🎯 Cold-start intent → rollo wholesale (mentionsRollo=${mentionsRollo}, nonNinetyPct=${nonNinetyPercent})`);
       ref = 'convo_rolloRaschelWholesale';
+    } else if (mentionsCategory && hasDimension) {
+      console.log(`🎯 Cold-start intent → confeccionada retail (category + dimension)`);
+      ref = 'convo_confeccionadaRetail';
+    }
+
+    if (ref) {
       await updateConversation(psid, { convoFlowRef: ref, currentFlow: `convo:${ref}` });
       convo.convoFlowRef = ref;
       convo.currentFlow = `convo:${ref}`;
