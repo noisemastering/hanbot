@@ -118,6 +118,30 @@ router.put("/:id", async (req, res) => {
   }
 });
 
+// PATCH /workflows/:id/prompts — lightweight live edits from the simulator.
+// Updates the global prompt and/or a single node's prompt WITHOUT snapshotting a
+// version (the full studio Save still versions). The sandbox re-reads the
+// workflow each turn, so changes apply to the next message.
+router.patch("/:id/prompts", async (req, res) => {
+  try {
+    const wf = await Workflow.findById(req.params.id);
+    if (!wf) return res.status(404).json({ success: false, error: "Workflow not found" });
+
+    if (typeof req.body.globalPrompt === "string") wf.globalPrompt = req.body.globalPrompt;
+
+    if (req.body.node && req.body.node.id) {
+      const node = wf.nodes.find((n) => n.id === req.body.node.id);
+      if (!node) return res.status(404).json({ success: false, error: "Node not found" });
+      if (typeof req.body.node.prompt === "string") node.prompt = req.body.node.prompt;
+    }
+
+    await wf.save();
+    res.json({ success: true, data: wf });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
 // DELETE /workflows/:id
 router.delete("/:id", async (req, res) => {
   try {
