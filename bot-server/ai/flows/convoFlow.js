@@ -500,6 +500,40 @@ function create(manifest) {
           masterResultEarly.text += `\n\n📽️ Conoce más sobre nuestra malla sombra:\n${VIDEO_LINK}`;
         }
       }
+
+      // Promo link injection: if this is an ad-driven conversation with an
+      // active promo and we haven't shared the link yet, attach the buy link
+      // to masterFlow's answer. Customer asking about shipping/payment/etc. is
+      // in buying mode — give them the link with the answer, not in some
+      // hypothetical future turn.
+      const activePromoEarly = flowState._adPromo || manifest.promo;
+      if (activePromoEarly && !flowState.pitchSent && masterResultEarly.text &&
+          !/agente\.hanlob\.com\.mx\/r\//.test(masterResultEarly.text)) {
+        try {
+          let promoProds = activePromoEarly.promoProductIds
+            ? productCache.filter(p => activePromoEarly.promoProductIds.includes(String(p.productId)))
+            : productCache.slice(0, 1);
+          promoProds = await Promise.all(promoProds.map(p => enrichWithMLPrice(p)));
+          // Only attach a link from a product with a live ML price
+          const liveProd = promoProds.find(p => p.priceSource === 'ml' && p.link);
+          if (liveProd) {
+            const trackedLink = await getOrCreateClickLink(psid, liveProd.link, {
+              productName: liveProd.name, productId: liveProd.productId, reason: 'master_with_promo_link'
+            });
+            const sizeStr = liveProd.size || liveProd.name;
+            masterResultEarly.text += `\n\nLa malla de ${sizeStr} está a $${liveProd.price}.\n\n🛒 Cómprala aquí:\n${trackedLink}`;
+            flowState.pitchSent = true;
+            await updateConversation(psid, {
+              lastSharedProductId: liveProd.productId,
+              lastSharedProductLink: trackedLink
+            });
+            console.log(`🎁 [convo] Attached promo link to masterFlow answer (${liveProd.name})`);
+          }
+        } catch (err) {
+          console.error('❌ [convo] master+promo link inject error:', err.message);
+        }
+      }
+
       return { response: masterResultEarly, state: flowState };
     }
 
