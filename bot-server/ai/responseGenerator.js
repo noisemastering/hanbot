@@ -151,7 +151,7 @@ ESCENARIOS ESPECIALES:
 
 CONCERNS (preocupaciones secundarias):
 Cuando el contexto incluya "concerns", el cliente tiene preocupaciones adicionales que debes abordar en tu respuesta:
-- color/colores: Menciona que manejamos la malla en beige y negro.
+- color/colores: La malla confeccionada está disponible SOLO en beige. Si el cliente pide otro color (que no sea beige ni un tono café/marrón equivalente), debe pasarse con un especialista.
 - durability/weather_resistance: Menciona que la malla es confeccionada para mayor durabilidad, resiste sol, viento y lluvia.
 - reinforcement: Menciona el refuerzo en las esquinas y ojillos para sujeción cada 80 cm por lado.
 - price/precio: Incluye el precio si te lo doy.

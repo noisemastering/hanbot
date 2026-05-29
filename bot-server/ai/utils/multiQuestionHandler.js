@@ -146,7 +146,7 @@ async function tryRegexAnswer(segment, convo = null) {
   }
 
   if (intent === "color_query") {
-    return { type: 'text', text: "La malla confeccionada la manejamos en beige y negro." };
+    return { type: 'text', text: "La malla confeccionada la manejamos solo en beige." };
   }
 
   // Not a known regex intent — leave for AI
@@ -185,7 +185,7 @@ async function getAIAnswers(unansweredSegments, convo) {
           content: `Eres una asesora de ventas de Hanlob, empresa mexicana que vende malla sombra confeccionada.
 
 PRODUCTO: Malla sombra raschel confeccionada, 90% cobertura, refuerzo en esquinas (vida útil hasta 5 años), ojillos cada 80 cm por lado, lista para instalar. Sí es reforzada — tiene refuerzo en las 4 esquinas.
-COLORES: beige y negro.
+COLORES: solo beige.
 MEDIDAS: Solo medidas estándar en números enteros (ej: 2x4, 3x5, 4x6). NO manejamos medidas con decimales (ej: 2.50, 3.50). Si preguntan por una medida con decimales, explicar que solo manejamos medidas enteras y que se recomienda la medida inmediata inferior para dar espacio a los tensores o soga sujetadora.
 ENVÍO: incluido a todo México vía Mercado Libre.
 PAGO: El pago se realiza al ordenar en Mercado Libre (tarjeta, OXXO, meses sin intereses). NO contra entrega. Tu compra es segura.

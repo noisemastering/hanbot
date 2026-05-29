@@ -378,6 +378,52 @@ function create(manifest) {
       productCache = await productFlow.loadProducts(manifest.products);
     }
 
+    // ── COLOR INTENT (early — runs before everything else so we either
+    //    pivot to beige or escalate before any pricing/sizing fires) ──
+    {
+      const { classifyColorIntent } = require('../utils/colorIntent');
+      const colorIntent = await classifyColorIntent(userMessage);
+
+      if (colorIntent.kind === 'other') {
+        // ANY color other than beige / brown-family → handoff
+        const requested = colorIntent.requestedColor || 'ese color';
+        console.log(`🎨 [convo] Non-beige color requested (${requested}) — handoff`);
+        const handoffResp = await executeHandoff(psid, convo, userMessage, {
+          reason: `Color request: ${requested}`,
+          responsePrefix: `Para color ${requested} te paso con un especialista que te puede confirmar disponibilidad y opciones.`,
+          specsText: `Cliente pidió color: ${requested}. `,
+          lastIntent: 'color_other_handoff',
+          timingStyle: 'standard'
+        });
+        return { response: handoffResp, state: flowState };
+      }
+
+      if (colorIntent.kind === 'brown_family') {
+        // Customer asked for a brown shade (café, chocolate, marrón, etc.).
+        // We sell beige which IS in that family — offer it explicitly so the
+        // rest of the flow doesn't deny the request.
+        const requested = colorIntent.requestedColor || 'café';
+        console.log(`🎨 [convo] Brown-family color requested (${requested}) → offering beige`);
+        // If this is a standalone color question (no other intent like price/size),
+        // answer it now. Otherwise, let downstream handlers proceed but stash a
+        // note in flowState so prompts can reference it.
+        flowState.brownFamilyRequested = requested;
+        // Quick standalone check: if the message is essentially just the color
+        // question, answer directly with the beige offer.
+        const isShortColorQuery = userMessage.trim().split(/\s+/).length <= 6 &&
+          /\b(color|colores|tono|en\s+|hay\s+en|tienen\s+en|tienes\s+en)\b/i.test(userMessage);
+        if (isShortColorQuery) {
+          return {
+            response: {
+              type: 'text',
+              text: `Sí, manejamos beige — es un tono ${requested} claro. ¿Qué medida te interesa?`
+            },
+            state: flowState
+          };
+        }
+      }
+    }
+
     // ── MULTI-SIZE DETECTION ──
     // If the customer mentions 2+ distinct sizes in one message (e.g. "10x10 o
     // 15x15"), the single-size parser will return null and we'd fall through

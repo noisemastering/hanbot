@@ -659,7 +659,7 @@ async function formatProductResponse(product, options = {}) {
   if (concerns && concerns.length > 0) {
     const concernNotes = [];
     for (const c of concerns) {
-      if (c === 'color' || c === 'colores') concernNotes.push('La manejamos en beige y negro.');
+      if (c === 'color' || c === 'colores') concernNotes.push('La manejamos solo en beige.');
       else if (c === 'durability' || c === 'weather_resistance') concernNotes.push('Resiste sol, viento y lluvia.');
       else if (c === 'reinforcement') concernNotes.push('Cuenta con ojillos para sujeción cada 80 cm por lado.');
       else if (c === 'installation') concernNotes.push('Viene lista para instalar.');
