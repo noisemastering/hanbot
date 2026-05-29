@@ -813,56 +813,6 @@ async function generateReply(userMessage, psid, referral = null) {
   }
   // ====== END SHADE PERCENTAGE TRUTH CHECK ======
 
-  // ====== AD-DRIVEN BUY LINK INJECTION ======
-  // If the customer came from an ad with a specific product, every response
-  // before the first link share should INCLUDE the buy link. Customer asking
-  // about shipping/payment/timing is in buying mode — give them the link now,
-  // not in some future turn.
-  if (response && response.text && convo?.adId && !convo?.lastSharedProductLink) {
-    try {
-      // Skip if the response already contains a Hanlob tracked link
-      if (!/agente\.hanlob\.com\.mx\/r\//.test(response.text)) {
-        const Ad = require('../models/Ad');
-        require('../models/Promo');
-        const ad = await Ad.findOne({ fbAdId: convo.adId }).populate('promoId').lean();
-        const promoProductId = ad?.promoId?.promoProductIds?.[0];
-        if (promoProductId) {
-          const PF = require('../models/ProductFamily');
-          const prod = await PF.findById(promoProductId).select('name size onlineStoreLinks').lean();
-          const rawLink = prod?.onlineStoreLinks?.find(l => l.isPreferred)?.url
-            || prod?.onlineStoreLinks?.[0]?.url
-            || null;
-
-          if (rawLink) {
-            const { getMLPrice } = require('./utils/mlPriceLookup');
-            const mlPrice = await getMLPrice(rawLink, null);
-            // Only inject if ML price is live (per ML-only pricing policy)
-            if (mlPrice.source === 'ml') {
-              const { getOrCreateClickLink } = require('../tracking');
-              const trackedLink = await getOrCreateClickLink(psid, rawLink, {
-                productName: prod.name,
-                productId: String(prod._id),
-                reason: 'ad_buy_link_injection'
-              });
-              const sizeStr = prod.size || prod.name;
-              response.text += `\n\nLa malla de ${sizeStr} está a $${mlPrice.price}.\n\n🛒 Cómprala aquí:\n${trackedLink}`;
-              await updateConversation(psid, {
-                lastSharedProductId: String(prod._id),
-                lastSharedProductLink: trackedLink
-              });
-              console.log(`🔗 Injected ad-promo buy link for ${prod.name} (${sizeStr})`);
-            } else {
-              console.log(`⚠️ Skipping ad-link injection — ML price unavailable`);
-            }
-          }
-        }
-      }
-    } catch (err) {
-      console.error('❌ Ad-link injection error:', err.message);
-    }
-  }
-  // ====== END AD-DRIVEN BUY LINK INJECTION ======
-
   // Check for repetition and escalate if needed
   return await checkForRepetition(response, psid, convo);
 }
