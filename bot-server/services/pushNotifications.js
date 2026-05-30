@@ -1,6 +1,7 @@
 // services/pushNotifications.js
 const webpush = require("web-push");
 const PushSubscription = require("../models/PushSubscription");
+const { buildClientBrief } = require("../utils/clientBrief");
 
 // Configure web-push
 if (process.env.VAPID_PUBLIC_KEY && process.env.VAPID_PRIVATE_KEY) {
@@ -21,14 +22,17 @@ async function sendHandoffNotification(psid, convo, reason) {
       return;
     }
 
+    const brief = buildClientBrief(convo);
+    const reasonText = reason || "Un cliente requiere asistencia humana";
     const payload = JSON.stringify({
       title: "Cliente necesita ayuda",
-      body: reason || "Un cliente requiere asistencia humana",
+      body: brief ? `${reasonText}\n\n${brief}` : reasonText,
       icon: "/logo192.png",
       badge: "/logo192.png",
       data: {
         url: "/messages",
-        psid: psid
+        psid: psid,
+        brief
       }
     });
 

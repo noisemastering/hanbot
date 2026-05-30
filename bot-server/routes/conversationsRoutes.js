@@ -436,7 +436,8 @@ router.get('/pending-handoffs', async (req, res) => {
         lastMessageAt: conv.lastMessageAt,
         purchaseIntent: conv.purchaseIntent,
         isAfterHours,
-        waitTimeMinutes
+        waitTimeMinutes,
+        brief: buildClientBrief(conv)
       };
     });
 
