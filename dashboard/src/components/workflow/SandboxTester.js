@@ -17,7 +17,7 @@ const SCENARIOS = [
   { value: "returning", label: "returning", hint: "Cliente que regresa a una conversación previa." },
 ];
 
-export default function SandboxTester({ workflowId, dirty, onCurrentNode }) {
+export default function SandboxTester({ workflowId, dirty, onCurrentNode, familyId = null }) {
   const [scenario, setScenario] = useState("cold");
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -131,6 +131,7 @@ export default function SandboxTester({ workflowId, dirty, onCurrentNode }) {
           </p>
           <SetupFields
             value={setup}
+            familyId={familyId}
             onChange={(s) => {
               setSetup(s);
               reset();

@@ -112,6 +112,18 @@ router.put("/:id", async (req, res) => {
 
     const { versions, _id, createdAt, ...patch } = req.body;
     sanitizeWorkflowPatch(patch);
+
+    // Mandatory: every workflow must have a product family/subfamily attached.
+    // No rogue flows. (family is in the patch when edited, else keep existing.)
+    const effectiveFamilyId =
+      patch.family && "id" in patch.family ? patch.family.id : existing.family?.id;
+    if (!effectiveFamilyId) {
+      return res.status(400).json({
+        success: false,
+        error: "Un workflow debe tener una familia o subfamilia de producto asignada (pestaña Config).",
+      });
+    }
+
     Object.assign(existing, patch);
     existing.version = (existing.version || 1) + 1;
     await existing.save();

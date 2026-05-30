@@ -91,6 +91,19 @@ const workflowSchema = new mongoose.Schema(
         kind: { type: String, enum: [null, "", "product", "family"], default: null },
         id: { type: String, default: null },
       },
+      // Multi-product override: specific measures or sub-families WITHIN the
+      // flow's family. Sellable leaves OR families/subfamilies are allowed here
+      // (unlike the flow-level `family`, which must be a non-sellable family).
+      products: {
+        type: [
+          {
+            kind: { type: String, enum: [null, "", "product", "family"], default: null },
+            id: { type: String, default: null },
+            name: { type: String, default: null },
+          },
+        ],
+        default: [],
+      },
       hasPromo: { type: mongoose.Schema.Types.Mixed, default: null }, // promo id / items, or null
       tone: { type: String, enum: [null, "", "casual", "professional", "technical"], default: null },
       catalog: {

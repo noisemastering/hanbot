@@ -226,7 +226,7 @@ function WorkflowsView() {
                   Moldean el comportamiento. Cuando el workflow se asigna a un anuncio, el producto/promo/audiencia
                   del anuncio sobreescriben estos valores por conversación.
                 </p>
-                <SetupFields value={draft.setup} onChange={(s) => patch({ setup: s })} />
+                <SetupFields value={draft.setup} onChange={(s) => patch({ setup: s })} familyId={draft.family?.id} />
               </div>
 
               <VariablesEditor draft={draft} patch={patch} />
@@ -250,7 +250,7 @@ function WorkflowsView() {
             </div>
           )}
 
-          {tab === "tester" && <SandboxTester workflowId={selectedId} dirty={dirty} />}
+          {tab === "tester" && <SandboxTester workflowId={selectedId} dirty={dirty} familyId={draft.family?.id} />}
         </>
       )}
 
