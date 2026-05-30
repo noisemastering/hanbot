@@ -21,6 +21,12 @@ function mergeSetup(base = {}, override = {}) {
       kind: pick(o.productSpecific?.kind, base.productSpecific?.kind),
       id: pick(o.productSpecific?.id, base.productSpecific?.id),
     },
+    products:
+      Array.isArray(o.products) && o.products.length
+        ? o.products
+        : Array.isArray(base.products)
+        ? base.products
+        : [],
     hasPromo: pick(o.hasPromo, base.hasPromo),
     tone: pick(o.tone, base.tone),
     catalog: {
