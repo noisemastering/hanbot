@@ -1885,6 +1885,11 @@ function Messages() {
               </div>
             </div>
 
+            {/* Commerce status + report-as-ticket */}
+            <div style={{ padding: "0 1rem 1rem 1rem" }}>
+              <ConversationCommercePanel psid={selectedPsid} />
+            </div>
+
             {/* Tracked Link Generator */}
             {showLinkGenerator && (
               <div style={{ padding: "0 1rem 1rem 1rem" }}>
