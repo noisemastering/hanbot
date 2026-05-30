@@ -107,6 +107,8 @@ router.put("/:id", async (req, res) => {
       savedAt: new Date(),
       savedBy: req.user.username || req.user.email,
     });
+    // Keep only the last 20 snapshots so the doc never approaches the 16MB BSON limit.
+    if (existing.versions.length > 20) existing.versions = existing.versions.slice(-20);
 
     const { versions, _id, createdAt, ...patch } = req.body;
     sanitizeWorkflowPatch(patch);
