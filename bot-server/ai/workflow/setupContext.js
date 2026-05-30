@@ -6,6 +6,7 @@
 // preloaded product via the quoting hierarchy (ML → Inventario → handoff).
 const mongoose = require("mongoose");
 const { resolvePrice } = require("./priceResolver");
+const { getBusinessInfo } = require("../../businessInfoManager");
 
 const pick = (a, b) => (a !== undefined && a !== null && a !== "" ? a : b);
 
@@ -99,6 +100,27 @@ async function resolveFamilyRealm(family) {
 async function resolveSetupContext(workflowSetup, overrides, family) {
   const setup = mergeSetup(workflowSetup, overrides);
   const lines = [];
+
+  // Company info — always available so any node can answer "¿dónde están?",
+  // "¿horario?", "¿teléfono?" accurately. Single source of truth: CompanyInfo DB.
+  try {
+    const biz = await getBusinessInfo();
+    if (biz) {
+      const ci = [];
+      if (biz.name) ci.push(`  - Nombre: ${biz.name}`);
+      if (biz.fullAddress) ci.push(`  - Dirección: ${biz.fullAddress}`);
+      if (biz.hours) ci.push(`  - Horario: ${biz.hours}`);
+      if (biz.phones && biz.phones.length) ci.push(`  - Teléfonos: ${biz.phones.join(" / ")}`);
+      if (biz.website) ci.push(`  - Sitio web: ${biz.website}`);
+      if (biz.googleMapsUrl) ci.push(`  - Google Maps: ${biz.googleMapsUrl}`);
+      if (ci.length) {
+        lines.push("DATOS DE LA EMPRESA (compártelos si el cliente los pide):");
+        lines.push(ci.join("\n"));
+      }
+    }
+  } catch (e) {
+    /* non-fatal: company info just won't be in context */
+  }
 
   const realm = await resolveFamilyRealm(family);
   if (realm) {
