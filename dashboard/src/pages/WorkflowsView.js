@@ -24,7 +24,7 @@ const TABS = [
   { id: "tester", label: "Tester" },
 ];
 
-const CORE_KEYS = ["name", "description", "active", "globalPrompt", "variables", "knowledge", "nodes", "edges", "startNode"];
+const CORE_KEYS = ["name", "description", "active", "globalPrompt", "variables", "knowledge", "nodes", "edges", "startNode", "setup", "family"];
 const coreString = (d) => {
   const o = {};
   CORE_KEYS.forEach((k) => {
