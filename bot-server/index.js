@@ -108,7 +108,7 @@ app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 
 // Middleware - Parse JSON payloads (MUST come before routes)
-app.use(bodyParser.json());
+app.use(bodyParser.json({ limit: '5mb' }));
 
 // Register routes AFTER CORS and body-parser middleware
 const productRoutes = require('./routes/productsRoutes');
