@@ -48,13 +48,15 @@ async function loadProductDoc(productSpecific) {
   if (!productSpecific?.kind || !productSpecific?.id) return null;
   if (!mongoose.isValidObjectId(productSpecific.id)) return null;
   try {
-    if (productSpecific.kind === "family") {
-      return await mongoose
-        .model("ProductFamily")
-        .findById(productSpecific.id)
-        .select("name price mlPrice onlineStoreLinks sellable active")
-        .lean();
-    }
+    // The product picker selects from the ProductFamily tree (sellable leaves
+    // included), so resolve against ProductFamily for BOTH kinds. Fall back to
+    // the legacy Product model only if the id is not a ProductFamily.
+    const fam = await mongoose
+      .model("ProductFamily")
+      .findById(productSpecific.id)
+      .select("name price mlPrice onlineStoreLinks sellable active")
+      .lean();
+    if (fam) return fam;
     return await mongoose.model("Product").findById(productSpecific.id).select("name price").lean();
   } catch {
     return null;
@@ -139,7 +141,11 @@ async function resolveSetupContext(workflowSetup, overrides, family) {
   const product = await loadProductDoc(setup.productSpecific);
   let priceInfo = null;
   if (product) {
-    lines.push(`- Producto de interés (precargado): "${product.name}". No preguntes qué producto; ya lo sabes.`);
+    const prodPath = await resolveFamilyRealm({ id: product._id, name: product.name });
+    lines.push(
+      `- Producto de interés (precargado): ${prodPath || product.name}. El cliente YA está hablando de ESTE producto. ` +
+        `Si pide "información", precio, medidas, colores, fotos, etc., asume que se refiere a este producto; NUNCA preguntes "¿de qué producto?" ni "¿qué información?".`
+    );
     priceInfo = await resolvePrice(product);
     if (priceInfo.source === "ml") {
       lines.push(
