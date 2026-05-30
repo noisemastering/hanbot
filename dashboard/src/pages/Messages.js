@@ -2,6 +2,7 @@ import React, { useEffect, useState, useRef, useCallback } from "react";
 import API from "../api";
 import TrackedLinkGenerator from "../components/TrackedLinkGenerator";
 import ManualSaleForm from "../components/ManualSaleForm";
+import ConversationCommercePanel from "../components/ConversationCommercePanel";
 import { useTranslation } from '../i18n';
 import FeatureTip from '../components/FeatureTip';
 

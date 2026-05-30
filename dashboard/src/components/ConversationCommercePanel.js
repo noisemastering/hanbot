@@ -1,0 +1,186 @@
+// components/ConversationCommercePanel.js
+//
+// Shown when a conversation is open. Surfaces whether the shared link was
+// clicked and purchased (with a manual ML re-sync), and lets the agent report
+// the conversation as a ticket with a categorized reason.
+import React, { useState, useEffect, useCallback } from "react";
+import toast from "react-hot-toast";
+import API from "../api";
+
+const TICKET_REASONS = [
+  { value: "wrong_info", label: "Información incorrecta" },
+  { value: "wrong_price", label: "Precio equivocado" },
+  { value: "wrong_product", label: "Producto/variante equivocado" },
+  { value: "out_of_family", label: "Ofreció algo fuera de la familia" },
+  { value: "missed_handoff", label: "Debió pasar a un humano y no lo hizo" },
+  { value: "bad_tone", label: "Tono inapropiado" },
+  { value: "hallucination", label: "Inventó información / política" },
+  { value: "ignored_question", label: "No respondió lo que se preguntó" },
+  { value: "loop_repetition", label: "Se repitió / se atoró" },
+  { value: "language_issue", label: "Problema de idioma / gramática" },
+  { value: "other", label: "Otro" },
+];
+
+export default function ConversationCommercePanel({ psid }) {
+  const [status, setStatus] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [syncing, setSyncing] = useState(false);
+  const [modalOpen, setModalOpen] = useState(false);
+  const [reason, setReason] = useState("");
+  const [note, setNote] = useState("");
+  const [submitting, setSubmitting] = useState(false);
+
+  const load = useCallback(
+    async (sync) => {
+      if (!psid) return;
+      sync ? setSyncing(true) : setLoading(true);
+      try {
+        const res = await API.get(`/conversations/${psid}/commerce-status${sync ? "?sync=true" : ""}`);
+        setStatus(res.data);
+      } catch (err) {
+        toast.error(err.response?.data?.error || "No se pudo cargar el estado de compra");
+      } finally {
+        setLoading(false);
+        setSyncing(false);
+      }
+    },
+    [psid]
+  );
+
+  useEffect(() => {
+    setStatus(null);
+    load(false);
+  }, [load]);
+
+  const submitTicket = async () => {
+    if (!reason) {
+      toast.error("Elige un motivo");
+      return;
+    }
+    setSubmitting(true);
+    try {
+      const reasonLabel = TICKET_REASONS.find((r) => r.value === reason)?.label || reason;
+      await API.post("/tickets", {
+        title: `Conversación reportada: ${reasonLabel}`,
+        description:
+          `Conversación ${psid} reportada por el agente.\n` +
+          `Motivo: ${reasonLabel}\n` +
+          (note ? `Detalle: ${note}` : ""),
+        priority: "medium",
+        psid,
+        category: reason,
+        source: "conversation_report",
+      });
+      toast.success("Conversación reportada como ticket");
+      setModalOpen(false);
+      setReason("");
+      setNote("");
+    } catch (err) {
+      toast.error(err.response?.data?.error || "No se pudo crear el ticket");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (!psid) return null;
+
+  return (
+    <div className="border border-gray-700 rounded-lg p-3 bg-gray-800/40 text-sm">
+      <div className="flex items-center justify-between mb-2">
+        <span className="text-xs uppercase text-gray-400">Estado comercial</span>
+        <button
+          onClick={() => load(true)}
+          disabled={syncing}
+          className="text-xs px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-white disabled:opacity-50"
+          title="Sincroniza pedidos recientes de Mercado Libre y vuelve a correlacionar"
+        >
+          {syncing ? "Sincronizando…" : "↻ Sincronizar ML"}
+        </button>
+      </div>
+
+      {loading ? (
+        <p className="text-gray-500 text-xs">Cargando…</p>
+      ) : status ? (
+        <div className="space-y-1">
+          <Indicator
+            on={status.clicked}
+            onLabel={`Link clickeado${status.clickedAt ? ` (${new Date(status.clickedAt).toLocaleDateString()})` : ""}`}
+            offLabel={status.hasLink ? "Link enviado, sin clic aún" : "No se ha enviado link"}
+          />
+          <Indicator
+            on={status.purchased}
+            onLabel={
+              status.purchased
+                ? `Compró${status.conversion?.totalAmount ? ` — $${status.conversion.totalAmount}` : ""}` +
+                  `${status.conversion?.confidence ? ` (${status.conversion.confidence})` : ""}`
+                : ""
+            }
+            offLabel="Sin compra registrada"
+          />
+          {status.purchased && status.conversion?.itemTitle && (
+            <p className="text-[11px] text-gray-400 pl-4">{status.conversion.itemTitle}</p>
+          )}
+        </div>
+      ) : (
+        <p className="text-gray-500 text-xs">—</p>
+      )}
+
+      <button
+        onClick={() => setModalOpen(true)}
+        className="mt-3 w-full text-xs px-2 py-1.5 rounded bg-red-600/80 hover:bg-red-600 text-white"
+      >
+        🚩 Reportar esta conversación
+      </button>
+
+      {modalOpen && (
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-gray-800 border border-gray-700 rounded-xl p-4 w-full max-w-md">
+            <h3 className="text-white font-semibold mb-2">Reportar conversación</h3>
+            <label className="block text-xs text-gray-400 mb-1">¿Qué estuvo mal?</label>
+            <select
+              className="wf-input w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm mb-3"
+              value={reason}
+              onChange={(e) => setReason(e.target.value)}
+            >
+              <option value="">— elige un motivo —</option>
+              {TICKET_REASONS.map((r) => (
+                <option key={r.value} value={r.value}>
+                  {r.label}
+                </option>
+              ))}
+            </select>
+            <label className="block text-xs text-gray-400 mb-1">Detalle (opcional)</label>
+            <textarea
+              className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm mb-3"
+              rows={3}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              placeholder="Contexto adicional…"
+            />
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setModalOpen(false)} className="px-3 py-2 text-sm rounded-lg bg-gray-700 text-white">
+                Cancelar
+              </button>
+              <button
+                onClick={submitTicket}
+                disabled={submitting}
+                className="px-3 py-2 text-sm rounded-lg bg-primary-600 text-white disabled:opacity-50"
+              >
+                {submitting ? "Enviando…" : "Crear ticket"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Indicator({ on, onLabel, offLabel }) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className={on ? "text-emerald-400" : "text-gray-500"}>{on ? "●" : "○"}</span>
+      <span className={on ? "text-gray-100" : "text-gray-500"}>{on ? onLabel : offLabel}</span>
+    </div>
+  );
+}

@@ -88,7 +88,7 @@ async function getSupportTeamUserIds(excludeUserId = null) {
 
 router.post("/", authenticate, async (req, res) => {
   try {
-    const { title, description, priority } = req.body;
+    const { title, description, priority, psid, category, source } = req.body;
 
     if (!title || !description) {
       return res.status(400).json({ success: false, error: "Title and description are required" });
@@ -98,7 +98,10 @@ router.post("/", authenticate, async (req, res) => {
       title,
       description,
       priority: priority || "medium",
-      createdBy: req.user._id
+      createdBy: req.user._id,
+      psid: psid || null,
+      category: category || null,
+      source: source || "manual"
     });
 
     await ticket.save();

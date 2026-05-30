@@ -92,6 +92,7 @@ const workflowSchema = new mongoose.Schema(
         id: { type: String, default: null },
       },
       hasPromo: { type: mongoose.Schema.Types.Mixed, default: null }, // promo id / items, or null
+      tone: { type: String, enum: [null, "", "casual", "professional", "technical"], default: null },
       catalog: {
         kind: { type: String, enum: [null, "", "pdf", "store_link"], default: null },
         value: { type: String, default: null }, // URL to PDF or store

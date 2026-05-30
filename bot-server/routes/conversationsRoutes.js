@@ -1137,4 +1137,64 @@ router.post('/:psid/register-sale', async (req, res) => {
   }
 });
 
+// GET /conversations/:psid/commerce-status - did this user click a shared link, and did they buy?
+// Reads ClickLog (clicked/converted are kept fresh by ML webhooks + analytics jobs).
+// Pass ?sync=true to refresh recent ML orders and re-run correlation on demand.
+router.get('/:psid/commerce-status', async (req, res) => {
+  try {
+    const { psid } = req.params;
+    const ClickLog = require('../models/ClickLog');
+    let synced = false;
+
+    if (req.query.sync === 'true') {
+      try {
+        const MercadoLibreAuth = require('../models/MercadoLibreAuth');
+        const { getOrders } = require('../utils/mercadoLibreOrders');
+        const { correlateOrders } = require('../utils/conversionCorrelation');
+        const auth = await MercadoLibreAuth.findOne({ active: true }).lean();
+        if (auth?.sellerId) {
+          const dateFrom = new Date(Date.now() - 14 * 24 * 60 * 60 * 1000).toISOString();
+          const result = await getOrders(auth.sellerId, { dateFrom, limit: 50 });
+          const orders = (result?.orders || result || []).filter(
+            (o) => o.status === 'paid' || o.status === 'delivered' || o.paidAmount > 0
+          );
+          if (orders.length) await correlateOrders(orders, auth.sellerId);
+          synced = true;
+        }
+      } catch (syncErr) {
+        console.error('commerce-status sync failed:', syncErr.message);
+      }
+    }
+
+    const clicks = await ClickLog.find({ psid }).sort({ createdAt: -1 }).lean();
+    const clickedLog = clicks.find((c) => c.clicked);
+    const convertedLog = clicks.find((c) => c.converted && c.correlatedOrderId);
+
+    res.json({
+      success: true,
+      synced,
+      hasLink: clicks.length > 0,
+      clicked: !!clickedLog,
+      clickedAt: clickedLog?.clickedAt || null,
+      link: (clickedLog || clicks[0])?.originalUrl || null,
+      productName: (clickedLog || clicks[0])?.productName || null,
+      purchased: !!convertedLog,
+      conversion: convertedLog
+        ? {
+            orderId: convertedLog.correlatedOrderId,
+            confidence: convertedLog.correlationConfidence,
+            method: convertedLog.correlationMethod,
+            totalAmount: convertedLog.conversionData?.totalAmount || null,
+            currency: convertedLog.conversionData?.currency || null,
+            orderDate: convertedLog.conversionData?.orderDate || convertedLog.convertedAt || null,
+            itemTitle: convertedLog.conversionData?.itemTitle || null,
+          }
+        : null,
+    });
+  } catch (error) {
+    console.error('Error fetching commerce status:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch commerce status' });
+  }
+});
+
 module.exports = router;

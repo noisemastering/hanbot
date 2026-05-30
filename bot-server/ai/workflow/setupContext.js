@@ -21,6 +21,7 @@ function mergeSetup(base = {}, override = {}) {
       id: pick(o.productSpecific?.id, base.productSpecific?.id),
     },
     hasPromo: pick(o.hasPromo, base.hasPromo),
+    tone: pick(o.tone, base.tone),
     catalog: {
       kind: pick(o.catalog?.kind, base.catalog?.kind),
       value: pick(o.catalog?.value, base.catalog?.value),
@@ -34,6 +35,11 @@ const LABELS = {
   saleChannel: {
     marketplace: "marketplace (Mercado Libre, link de compra + compra protegida)",
     manual: "venta manual (datos + transferencia/depósito, cierra un asesor)",
+  },
+  tone: {
+    casual: "casual y cercano (como un amigo que sabe del tema)",
+    professional: "profesional y claro (asesor formal pero amable)",
+    technical: "técnico y detallado (especificaciones, datos, precisión)",
   },
 };
 
@@ -105,6 +111,7 @@ async function resolveSetupContext(workflowSetup, overrides, family) {
   if (setup.buyer) lines.push(`- Tipo de cliente: ${LABELS.buyer[setup.buyer] || setup.buyer}`);
   if (setup.purchaseType) lines.push(`- Tipo de compra: ${LABELS.purchaseType[setup.purchaseType] || setup.purchaseType}`);
   if (setup.saleChannel) lines.push(`- Canal de venta: ${LABELS.saleChannel[setup.saleChannel] || setup.saleChannel}`);
+  if (setup.tone) lines.push(`- Tono de la conversación: ${LABELS.tone[setup.tone] || setup.tone}. Mantén este tono en todas tus respuestas.`);
 
   // Resolve the preloaded product + its price via the hierarchy.
   const product = await loadProductDoc(setup.productSpecific);
