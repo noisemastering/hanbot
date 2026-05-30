@@ -731,11 +731,19 @@ function create(manifest) {
         }
 
         // Feed the matched products through the sales flow
+        // Dedup by productId (AI matcher sometimes returns duplicates)
+        const _seenIds = new Set();
+        const _deduped = productResult.products.filter(p => {
+          const id = String(p.productId || p._id || p.name);
+          if (_seenIds.has(id)) return false;
+          _seenIds.add(id);
+          return true;
+        });
         // Enrich with real-time ML prices (ML is source of truth)
         let quotableProducts = await Promise.all(
-          productResult.products.map(p => enrichWithMLPrice(p))
+          _deduped.map(p => enrichWithMLPrice(p))
         );
-        if (manifest.salesChannel === 'retail' && quotableProducts.length === 1) {
+        if (manifest.salesChannel === 'retail') {
           quotableProducts = await Promise.all(quotableProducts.map(async p => {
             if (p.link) {
               const tracked = await getOrCreateClickLink(psid, p.link, {
@@ -1017,12 +1025,25 @@ Responde JSON: {"matchIndex": <índice o -1>}` },
 
       // Products found — pass to sales flow with the matched products
       if (productResult.type === 'products_found' && productResult.products.length > 0) {
+        // Dedup by productId — AI matcher sometimes returns the same product
+        // twice (e.g. customer said "necesito dos mallas" with no new size).
+        const seenIds = new Set();
+        const dedupedProducts = productResult.products.filter(p => {
+          const id = String(p.productId || p._id || p.name);
+          if (seenIds.has(id)) return false;
+          seenIds.add(id);
+          return true;
+        });
+
         // Enrich with real-time ML prices (ML is source of truth)
         let quotableProducts = await Promise.all(
-          productResult.products.map(p => enrichWithMLPrice(p))
+          dedupedProducts.map(p => enrichWithMLPrice(p))
         );
-        if (manifest.salesChannel === 'retail' && productResult.products.length === 1) {
-          quotableProducts = await Promise.all(productResult.products.map(async p => {
+        // Always generate a tracked link for retail products — single OR
+        // multi. The previous "length === 1" gate meant duplicate-list paths
+        // showed raw ML URLs instead of trackable Hanlob links.
+        if (manifest.salesChannel === 'retail') {
+          quotableProducts = await Promise.all(quotableProducts.map(async p => {
             if (p.link) {
               const tracked = await getOrCreateClickLink(psid, p.link, {
                 productName: p.name, productId: p.productId, reason: 'retail_quote'
