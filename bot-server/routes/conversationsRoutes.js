@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const axios = require('axios');
 const Message = require('../models/Message');
+const { buildClientBrief } = require('../utils/clientBrief');
 const Conversation = require('../models/Conversation');
 const { sendTextMessage: sendWhatsAppText, sendImageMessage: sendWhatsAppImage, sendDocumentMessage: sendWhatsAppDocument } = require('../channels/whatsapp/api');
 const { cloudinary } = require('../config/cloudinary');
