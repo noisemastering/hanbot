@@ -158,8 +158,10 @@ function PromoPicker({ familyId, value, onChange }) {
     if (!familySet) return promos; // no family → don't filter
     const promoIds = (pr) => {
       const ids = [];
-      (pr.products || []).forEach((x) => ids.push(String(x?._id || x)));
-      (pr.items || []).forEach((x) => x?.productFamilyId && ids.push(String(x.productFamilyId)));
+      // Real Promo model: promoProductIds[] (ProductFamily refs, populated to
+      // objects by the route) + promoPrices[].productId.
+      (pr.promoProductIds || []).forEach((x) => ids.push(String(x?._id || x)));
+      (pr.promoPrices || []).forEach((x) => x?.productId && ids.push(String(x.productId?._id || x.productId)));
       return ids;
     };
     return promos.filter((pr) => promoIds(pr).some((id) => familySet.has(id)));
