@@ -25,6 +25,7 @@ const TOOL_KEYS = [
   "capture_lead",
   "ask_location",
   "note",
+  "check_product_scope",
 ];
 
 // --- custom node renderer (compact card like the reference UI) ---

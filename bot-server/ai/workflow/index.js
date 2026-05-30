@@ -88,6 +88,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     location: state.location || null,
     product: state.product || null,
     priceInfo: state.priceInfo || null,
+    family: workflow.family || null, // this flow's product realm (for scope checks)
   };
   const { text, toolCalls } = await executeNode(workflow, movedTo, history, vars, ctx, contextBlock);
 

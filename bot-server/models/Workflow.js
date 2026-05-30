@@ -17,6 +17,7 @@ const TOOL_KEYS = [
   "capture_lead",       // record name/phone/email
   "ask_location",       // ask for and capture city/zip
   "note",               // attach an internal note (not shown to the customer)
+  "check_product_scope", // check if an out-of-scope product is sold / handled elsewhere
 ];
 
 const nodeSchema = new mongoose.Schema(
