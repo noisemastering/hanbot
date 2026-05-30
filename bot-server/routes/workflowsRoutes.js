@@ -109,6 +109,7 @@ router.put("/:id", async (req, res) => {
     });
 
     const { versions, _id, createdAt, ...patch } = req.body;
+    sanitizeWorkflowPatch(patch);
     Object.assign(existing, patch);
     existing.version = (existing.version || 1) + 1;
     await existing.save();
@@ -196,5 +197,22 @@ router.post("/:id/sandbox", async (req, res) => {
     res.status(500).json({ success: false, error: err.message });
   }
 });
+
+// Coerce empty-string ObjectId fields to null so Mongoose validators don't 500
+// when the dashboard echoes back an unset family / product reference.
+function sanitizeWorkflowPatch(patch) {
+  if (!patch || typeof patch !== "object") return;
+  if (patch.family && (patch.family.id === "" || patch.family.id === undefined)) {
+    patch.family.id = null;
+  }
+  if (patch.setup && patch.setup.productSpecific) {
+    const ps = patch.setup.productSpecific;
+    if (ps.id === "") ps.id = null;
+    if (ps.kind === "") ps.kind = null;
+  }
+  // Drop meta fields that must never be $set via save()
+  delete patch.__v;
+  delete patch.updatedAt;
+}
 
 module.exports = router;
