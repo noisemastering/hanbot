@@ -143,16 +143,33 @@ async function resolveSetupContext(workflowSetup, overrides, family) {
   if (setup.saleChannel) lines.push(`- Canal de venta: ${LABELS.saleChannel[setup.saleChannel] || setup.saleChannel}`);
   if (setup.tone) lines.push(`- Tono de la conversación: ${LABELS.tone[setup.tone] || setup.tone}. Mantén este tono en todas tus respuestas.`);
 
-  // Resolve the preloaded product + its price via the hierarchy.
-  const product = await loadProductDoc(setup.productSpecific);
+  // Resolve preloaded product(s). New multi shape setup.products[]; falls back
+  // to the legacy single setup.productSpecific.
+  const specs =
+    Array.isArray(setup.products) && setup.products.length
+      ? setup.products
+      : setup.productSpecific && setup.productSpecific.id
+      ? [setup.productSpecific]
+      : [];
+  const resolved = [];
+  for (const spec of specs) {
+    const doc = await loadProductDoc(spec);
+    if (doc) resolved.push(doc);
+  }
+
   let priceInfo = null;
-  if (product) {
+  let product = null;
+  const priceTxt = (pi) =>
+    pi && (pi.source === "ml" || pi.source === "inventario") ? ` ($${pi.amount})` : "";
+
+  if (resolved.length === 1) {
+    product = resolved[0];
     const prodPath = await resolveFamilyRealm({ id: product._id, name: product.name });
+    priceInfo = await resolvePrice(product);
     lines.push(
-      `- Producto de interés (precargado): ${prodPath || product.name}. El cliente YA está hablando de ESTE producto. ` +
+      `- Producto de interés (precargado): ${prodPath || product.name}${priceTxt(priceInfo)}. El cliente YA está hablando de ESTE producto. ` +
         `Si pide "información", precio, medidas, colores, fotos, etc., asume que se refiere a este producto; NUNCA preguntes "¿de qué producto?" ni "¿qué información?".`
     );
-    priceInfo = await resolvePrice(product);
     if (priceInfo.source === "ml") {
       lines.push(
         `- PRECIO: $${priceInfo.amount} (fuente: Mercado Libre${priceInfo.hasDiscount ? `, con descuento desde $${priceInfo.originalPrice}` : ""}). Cotiza este precio. Link: ${priceInfo.link || "(usa la herramienta)"}.`
@@ -164,6 +181,19 @@ async function resolveSetupContext(workflowSetup, overrides, family) {
         `- PRECIO: NO disponible. El producto es vendible pero no tiene precio. NUNCA inventes un precio: ofrece pasar con un asesor (usa request_handoff).`
       );
     }
+  } else if (resolved.length > 1) {
+    product = resolved[0];
+    priceInfo = await resolvePrice(product); // tool back-compat: default to first
+    const items = [];
+    for (const p of resolved) {
+      const pi = await resolvePrice(p);
+      items.push(`${p.name}${priceTxt(pi)}`);
+    }
+    lines.push(
+      `- Productos de interés (precargados): ${items.join(", ")}. El cliente está interesado en ESTAS medidas/variantes. ` +
+        `Si pide "información" o precio, habla de estas opciones concretas; NUNCA preguntes "¿de qué producto?" ni "¿qué medida?". ` +
+        `Cotiza solo los precios mostrados arriba; si una opción no tiene precio, no lo inventes.`
+    );
   }
 
   const promo = await resolvePromo(setup.hasPromo);
