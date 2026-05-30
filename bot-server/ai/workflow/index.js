@@ -46,7 +46,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     try {
       const { contextBlock, product, priceInfo } = await resolveSetupContext(
         workflow.setup,
-        state.setupOverrides
+        state.setupOverrides,
+        workflow.family
       );
       state.contextBlock = contextBlock || "";
       state.product = product || null;

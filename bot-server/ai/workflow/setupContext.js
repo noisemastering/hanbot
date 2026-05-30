@@ -70,9 +70,37 @@ async function resolvePromo(hasPromo) {
 /**
  * @returns {Promise<{ setup: object, contextBlock: string, product: object|null, priceInfo: object|null }>}
  */
-async function resolveSetupContext(workflowSetup, overrides) {
+// Resolve a family's full ancestry path (root > ... > leaf) for the realm line.
+async function resolveFamilyRealm(family) {
+  if (!family || !family.id) return null;
+  if (!mongoose.isValidObjectId(family.id)) return family.name || null;
+  try {
+    const PF = mongoose.model("ProductFamily");
+    const names = [];
+    let cur = await PF.findById(family.id).select("name parentId").lean();
+    let guard = 0;
+    while (cur && guard++ < 10) {
+      names.unshift(cur.name);
+      if (!cur.parentId) break;
+      cur = await PF.findById(cur.parentId).select("name parentId").lean();
+    }
+    return names.length ? names.join(" > ") : (family.name || null);
+  } catch {
+    return family.name || null;
+  }
+}
+
+async function resolveSetupContext(workflowSetup, overrides, family) {
   const setup = mergeSetup(workflowSetup, overrides);
   const lines = [];
+
+  const realm = await resolveFamilyRealm(family);
+  if (realm) {
+    lines.push(
+      `- Familia / realm de este flujo: ${realm}. SOLO ofrece productos y variantes DENTRO de esta familia. ` +
+        `NUNCA ofrezcas presentaciones o variantes que estén fuera de ella (por ejemplo, si la familia es "con refuerzo", no ofrezcas "sin refuerzo"; si es una forma específica como "Rectangular", no ofrezcas otras formas). Da por hecho la variante de la familia.`
+    );
+  }
 
   if (setup.buyer) lines.push(`- Tipo de cliente: ${LABELS.buyer[setup.buyer] || setup.buyer}`);
   if (setup.purchaseType) lines.push(`- Tipo de compra: ${LABELS.purchaseType[setup.purchaseType] || setup.purchaseType}`);
