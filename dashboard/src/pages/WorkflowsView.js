@@ -210,6 +210,12 @@ function WorkflowsView() {
               <Labeled label="Descripción">
                 <input className="wf-input" value={draft.description || ""} onChange={(e) => patch({ description: e.target.value })} />
               </Labeled>
+              <Labeled label="Familia / Subfamilia (global)">
+                <FamilyPicker value={draft.family} onChange={(f) => patch({ family: f })} />
+                <span className="block text-[11px] text-gray-500 mt-1">
+                  Realm de producto para todo el workflow (familia raíz o subfamilia). Es global, no por conversación.
+                </span>
+              </Labeled>
               <Labeled label="Global prompt (estilo + formato; siempre aplica)">
                 <textarea className="wf-input" rows={8} value={draft.globalPrompt || ""} onChange={(e) => patch({ globalPrompt: e.target.value })} />
               </Labeled>
@@ -280,7 +286,93 @@ function Labeled({ label, children }) {
   );
 }
 
+// Global family/subfamily picker - expandable tree (from /product-families/tree).
+// Click any node (root family or nested subfamily) to assign it to the workflow.
+function FamilyPicker({ value, onChange }) {
+  const [tree, setTree] = useState([]);
+  const [expanded, setExpanded] = useState({});
+  const [loading, setLoading] = useState(true);
 
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await API.get("/product-families/tree");
+        const data = res.data?.data || [];
+        setTree(data);
+        if (value?.id) setExpanded(pathToNode(data, value.id) || {});
+      } catch {
+        /* non-fatal */
+      } finally {
+        setLoading(false);
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const toggle = (id) => setExpanded((e) => ({ ...e, [id]: !e[id] }));
+
+  const renderNode = (node, depth) => {
+    const kids = node.children || [];
+    const open = expanded[node._id];
+    const selected = String(value?.id) === String(node._id);
+    return (
+      <div key={node._id}>
+        <div className="flex items-center gap-1" style={{ paddingLeft: depth * 14 }}>
+          {kids.length > 0 ? (
+            <button type="button" onClick={() => toggle(node._id)} className="text-gray-400 w-4 text-xs">
+              {open ? "v" : ">"}
+            </button>
+          ) : (
+            <span className="w-4 inline-block" />
+          )}
+          <button
+            type="button"
+            onClick={() => onChange({ id: node._id, name: node.name })}
+            className={"text-left text-sm px-1.5 py-0.5 rounded " + (selected ? "bg-primary-600 text-white" : "text-gray-200 hover:bg-gray-700")}
+          >
+            {node.name}
+          </button>
+        </div>
+        {open && kids.map((k) => renderNode(k, depth + 1))}
+      </div>
+    );
+  };
+
+  return (
+    <div>
+      <div className="text-xs text-gray-400 mb-1">
+        Seleccionada: <span className="text-emerald-300">{value?.name || "(ninguna)"}</span>
+        {value?.id && (
+          <button type="button" onClick={() => onChange({ id: null, name: null })} className="text-red-400 ml-2">
+            quitar
+          </button>
+        )}
+      </div>
+      <div className="border border-gray-700 rounded-lg p-2 max-h-64 overflow-y-auto bg-gray-900">
+        {loading ? (
+          <p className="text-xs text-gray-500">Cargando arbol...</p>
+        ) : tree.length === 0 ? (
+          <p className="text-xs text-gray-500">Sin familias.</p>
+        ) : (
+          tree.map((r) => renderNode(r, 0))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Build an {id: true} expansion map for every ancestor of the target node.
+function pathToNode(nodes, targetId, acc = {}) {
+  for (const n of nodes) {
+    if (String(n._id) === String(targetId)) return acc;
+    const kids = n.children || [];
+    if (kids.length) {
+      const found = pathToNode(kids, targetId, { ...acc, [n._id]: true });
+      if (found) return found;
+    }
+  }
+  return null;
+}
 function VariablesEditor({ draft, patch }) {
   const vars = draft.variables || [];
   const update = (i, field, val) => patch({ variables: vars.map((v, j) => (j === i ? { ...v, [field]: val } : v)) });

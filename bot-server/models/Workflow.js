@@ -98,6 +98,15 @@ const workflowSchema = new mongoose.Schema(
       },
     },
 
+    // Global product realm for the whole workflow: a ProductFamily that is
+    // either a root family or a subfamily (a ProductFamily with a parentId).
+    // Design-time assignment (set at create/edit), distinct from the
+    // per-conversation setup.productSpecific override.
+    family: {
+      id: { type: mongoose.Schema.Types.ObjectId, ref: "ProductFamily", default: null },
+      name: { type: String, default: null }, // cached for display
+    },
+
     // Versions tab — lightweight immutable snapshots taken on save.
     versions: {
       type: [
