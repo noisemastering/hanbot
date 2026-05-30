@@ -62,8 +62,21 @@ router.get("/", authenticate, async (req, res) => {
 // PUT /company-info — Update company info (admin+ only)
 router.put("/", authenticate, requireAdmin, async (req, res) => {
   try {
-    const update = { ...req.body, lastEditedBy: req.user._id, lastEditedAt: new Date() };
-    delete update._id; // Don't allow changing the ID
+    const update = { ...req.body };
+    // Never trust meta fields echoed back from a GET — they cause cast/validator 500s.
+    ["_id", "id", "__v", "createdAt", "updatedAt", "lastEditedBy"].forEach((k) => delete update[k]);
+    // Coerce number fields: drop empties, cast the rest (a non-numeric string would 500).
+    ["founded", "employeeCount"].forEach((k) => {
+      if (update[k] === "" || update[k] === null || update[k] === undefined) {
+        delete update[k];
+      } else {
+        const n = Number(update[k]);
+        if (Number.isNaN(n)) delete update[k];
+        else update[k] = n;
+      }
+    });
+    update.lastEditedBy = req.user._id;
+    update.lastEditedAt = new Date();
 
     const info = await CompanyInfo.findByIdAndUpdate(
       'hanlob',
