@@ -208,14 +208,38 @@ const REGISTRY = {
         }
       }
 
-      // 3) Sold (sellable exists) but no flow handles it → human.
-      const sellable = matches.find((m) => m.sellable && m.active !== false);
-      if (sellable) {
+      // 3) Sold but no flow handles it → human. A match can be a sellable leaf
+      // OR a family/group whose SUBTREE contains sellable products (e.g. the
+      // customer says "borde separador" = the family, sold via its measures).
+      let soldMatch = matches.find((m) => m.sellable && m.active !== false);
+      if (!soldMatch) {
+        for (const m of matches) {
+          const kids = await PF.find({ parentId: m._id }).select("_id sellable active").lean();
+          const hasSellableDescendant = async (id) => {
+            const queue = [id];
+            let guard = 0;
+            while (queue.length && guard++ < 200) {
+              const cid = queue.shift();
+              const ch = await PF.find({ parentId: cid }).select("_id sellable active").lean();
+              for (const c of ch) {
+                if (c.sellable && c.active !== false) return true;
+                queue.push(c._id);
+              }
+            }
+            return false;
+          };
+          if (kids.some((k) => k.sellable && k.active !== false) || (await hasSellableDescendant(m._id))) {
+            soldMatch = m;
+            break;
+          }
+        }
+      }
+      if (soldMatch) {
         ctx.handoffRequested = true;
-        return `VENDIDO SIN FLUJO: sí manejamos "${sellable.name}", pero requiere atención de un asesor. Ofrécele pasar con un humano (usa request_handoff).`;
+        return `VENDIDO SIN FLUJO: sí manejamos "${soldMatch.name}", pero requiere atención de un asesor. Ofrécele pasar con un humano (usa request_handoff). NO digas que no lo vendemos.`;
       }
 
-      // 4) Found in catalog but not sellable/active.
+      // 4) Found in catalog but not sellable/active anywhere in its subtree.
       return `NO DISPONIBLE: "${matches[0].name}" existe en el catálogo pero no está disponible para venta directa. Ofrece pasar con un asesor si insiste.`;
     },
   },
