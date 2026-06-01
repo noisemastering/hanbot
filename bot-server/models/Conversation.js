@@ -76,6 +76,8 @@ const conversationSchema = new mongoose.Schema({
   customOrderSize: { type: String, default: null },     // Requested size e.g. "10x12m"
   customOrderPurpose: { type: String, default: null },  // What they want to protect
   customOrderZipcode: { type: String, default: null },  // Their zip code
+  customOrderQuantity: { type: Number, default: null }, // How many pieces
+  customOrderAwaiting: { type: Boolean, default: false }, // Bot asked for 3-point info, waiting for response
 
   // Follow-up suppression — set when customer is angry, complained, or asked to be left alone
   doNotFollowUp: { type: Boolean, default: false },

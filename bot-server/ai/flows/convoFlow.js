@@ -378,12 +378,79 @@ function create(manifest) {
       productCache = await productFlow.loadProducts(manifest.products);
     }
 
+    // ── CUSTOM ORDER GATHERING (3-point response) ──
+    // If we previously asked the customer for: exact size, zip code, quantity,
+    // their next message likely contains those details. Extract whatever they
+    // provided, save to convo, then fire the handoff with the full client
+    // brief so the salesperson sees the data in the push notification.
+    if (convo?.customOrderAwaiting) {
+      try {
+        const extractRes = await _openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: `Extrae datos de pedido especial del mensaje del cliente. Responde JSON:
+{ "size": "<medida en formato NxM en metros, o null>", "zip": "<código postal de 5 dígitos, o null>", "quantity": <número entero, o null> }
+
+REGLAS:
+- size: cualquier forma "1.6 x 1.3", "1.6x1.3m", "1.6 por 1.3", "uno punto seis por uno punto tres" → "1.6x1.3"
+- zip: solo 5 dígitos
+- quantity: si dice "una"/"un" → 1; "dos" → 2; etc. Sólo si menciona cantidad
+- Si un campo no aparece → null
+- Solo JSON`
+            },
+            { role: 'user', content: userMessage }
+          ],
+          temperature: 0,
+          max_tokens: 80,
+          response_format: { type: 'json_object' }
+        });
+        const parsed = JSON.parse(extractRes.choices[0].message.content);
+
+        // Save whatever the customer provided
+        const updates = { customOrderAwaiting: false };
+        if (parsed.size) updates.customOrderSize = parsed.size;
+        if (parsed.zip) {
+          updates.customOrderZipcode = parsed.zip;
+          updates.zipCode = parsed.zip;
+        }
+        if (parsed.quantity) updates.customOrderQuantity = parsed.quantity;
+        // Also reflect into productSpecs so buildClientBrief shows them
+        const newSpecs = { ...(convo.productSpecs || {}) };
+        if (parsed.size) newSpecs.size = parsed.size;
+        if (parsed.quantity) newSpecs.quantity = parsed.quantity;
+        updates.productSpecs = newSpecs;
+        await updateConversation(psid, updates);
+
+        // Build a specsText summary for the handoff notification
+        const finalSize = parsed.size || convo.customOrderSize || convo.lastFractionalSize || 's/d';
+        const finalZip = parsed.zip || convo.customOrderZipcode || convo.zipCode || 's/d';
+        const finalQty = parsed.quantity || convo.customOrderQuantity || 's/d';
+        const specsText = `Pedido especial — Medida: ${finalSize} · CP: ${finalZip} · Cantidad: ${finalQty}. `;
+
+        console.log(`📏 [convo] Custom order data collected → handoff. ${specsText}`);
+        const handoffResp = await executeHandoff(psid, convo, userMessage, {
+          reason: `Pedido especial (medida ${finalSize})`,
+          responsePrefix: `Gracias por los datos. Un asesor se pondrá en contacto contigo para confirmar la cotización a medida.`,
+          specsText,
+          lastIntent: 'custom_order_handoff',
+          timingStyle: 'standard',
+          skipChecklist: true // we already collected what we need
+        });
+        return { response: handoffResp, state: flowState };
+      } catch (err) {
+        console.error('❌ [convo] custom-order extraction error:', err.message);
+      }
+    }
+
     // ── FRACTIONAL-SIZE INSISTENCE ──
     // If the customer was previously offered a rounded size for a fractional
     // request (e.g. asked 1.6x1.3 → offered 2x2) AND they're now insisting
-    // they need the EXACT size we don't carry, escalate to a human. This
-    // protocol pre-dates the AI-classifier era — we mustn't keep listing
-    // ranges and lose the customer.
+    // they need the EXACT size we don't carry, ask for the 3 things a
+    // salesperson needs (exact size, zip, quantity) and set
+    // customOrderAwaiting. Next message goes through the extraction branch
+    // above and fires the handoff with the full brief.
     if (convo?.lastFractionalSize) {
       try {
         const insistRes = await _openai.chat.completions.create({
@@ -406,15 +473,18 @@ NO insiste si: acepta la propuesta, hace otra pregunta sin volver al tema, cambi
         });
         const insisting = JSON.parse(insistRes.choices[0].message.content).insisting === true;
         if (insisting) {
-          console.log(`📏 [convo] Customer insisting on exact fractional size ${convo.lastFractionalSize}m — handoff`);
-          const handoffResp = await executeHandoff(psid, convo, userMessage, {
-            reason: `fractional_insist: ${convo.lastFractionalSize}m`,
-            responsePrefix: `Para fabricar la medida exacta de ${convo.lastFractionalSize}m te paso con un especialista. Ellos pueden cotizar a medida.`,
-            specsText: `Cliente insiste en medida exacta: ${convo.lastFractionalSize}m. `,
-            lastIntent: 'fractional_insist_handoff',
-            timingStyle: 'standard'
+          console.log(`📏 [convo] Customer insisting on exact fractional size ${convo.lastFractionalSize}m — asking 3-point details`);
+          await updateConversation(psid, {
+            customOrderAwaiting: true,
+            customOrderSize: convo.lastFractionalSize
           });
-          return { response: handoffResp, state: flowState };
+          return {
+            response: {
+              type: 'text',
+              text: `De acuerdo, entiendo que necesitas una medida exacta. Esa medida corresponde a una confección especial, por lo que un asesor se pondrá en contacto contigo para revisar los detalles y cotizarte.\n\nPara avanzar con tu solicitud, por favor compártenos:\n• Medida exacta requerida\n• Código postal\n• Cantidad de piezas`
+            },
+            state: flowState
+          };
         }
       } catch (err) {
         console.error('❌ [convo] fractional insistence check error:', err.message);
