@@ -813,6 +813,69 @@ async function generateReply(userMessage, psid, referral = null) {
   }
   // ====== END SHADE PERCENTAGE TRUTH CHECK ======
 
+  // ====== GLOBAL PRICE TRUTH CHECK ======
+  // Every "$X" the bot mentions must match a real product price in our DB
+  // (any sellable ProductFamily, any Product variant, OR the live ML price
+  // of any product). This is the catch-all that finally enforces the
+  // "NO TE INVENTES PRECIOS" rule across every code path — including the
+  // AI fallback which has no per-flow validation. If a quoted price has no
+  // match, the response gets replaced with a safe deterministic message.
+  if (response && response.text) {
+    try {
+      // Pull every "$X" the bot wrote (ignore amounts < $50 — those are usually
+      // discount %, weights, etc., not product prices)
+      const priceMatches = [...response.text.matchAll(/\$\s?(\d{2,5}(?:[.,]\d{1,2})?)/g)]
+        .map(m => Math.round(parseFloat(m[1].replace(',', '.'))))
+        .filter(p => p >= 50);
+
+      if (priceMatches.length > 0) {
+        // Cache the catalog prices for 5 min so this doesn't hit DB on every msg
+        if (!global._priceCatalogCache || Date.now() > global._priceCatalogCache.expiresAt) {
+          const PF = require('../models/ProductFamily');
+          const Product = require('../models/Product');
+          const [families, products] = await Promise.all([
+            PF.find({}).select('price mlPrice').lean(),
+            Product.find({}).select('price').lean()
+          ]);
+          const all = new Set();
+          for (const f of families) {
+            if (f.price) all.add(Math.round(f.price));
+            if (f.mlPrice) all.add(Math.round(f.mlPrice));
+          }
+          for (const p of products) {
+            if (p.price) all.add(Math.round(p.price));
+          }
+          global._priceCatalogCache = { prices: all, expiresAt: Date.now() + 5 * 60 * 1000 };
+        }
+        const validPrices = global._priceCatalogCache.prices;
+
+        // Any price ±$2 of a real product is OK. Anything else = invented.
+        const isPriceValid = (p) => {
+          for (const vp of validPrices) {
+            if (Math.abs(vp - p) <= 2) return true;
+          }
+          return false;
+        };
+        const bogusPrice = priceMatches.find(p => !isPriceValid(p));
+
+        if (bogusPrice) {
+          console.warn(`🛑 Global price check: \$${bogusPrice} doesn't match ANY product in catalog. Replacing response.`);
+          // Don't let the AI keep lying. Hand off to a human who can quote.
+          const { executeHandoff } = require('./utils/executeHandoff');
+          response = await executeHandoff(psid, convo, userMessage, {
+            reason: 'AI quoted invented price — handoff for accurate quote',
+            responsePrefix: 'Déjame confirmarte el precio exacto con un especialista, es solo un momento.',
+            lastIntent: 'invented_price_handoff',
+            timingStyle: 'standard'
+          });
+        }
+      }
+    } catch (err) {
+      console.error('❌ Global price truth check error:', err.message);
+    }
+  }
+  // ====== END GLOBAL PRICE TRUTH CHECK ======
+
   // Check for repetition and escalate if needed
   return await checkForRepetition(response, psid, convo);
 }
