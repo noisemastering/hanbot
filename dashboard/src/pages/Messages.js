@@ -1558,10 +1558,11 @@ function Messages() {
               borderRadius: "8px",
               width: "90%",
               maxWidth: "800px",
-              maxHeight: "80vh",
+              maxHeight: "92vh",
               display: "flex",
               flexDirection: "column",
-              border: "1px solid #2a2a2a"
+              border: "1px solid #2a2a2a",
+              overflow: "hidden"
             }}
           >
             {/* Header */}
@@ -1653,7 +1654,7 @@ function Messages() {
             </div>
 
             {/* Messages */}
-            <div style={{ flex: 1, overflowY: "auto", padding: "1rem" }}>
+            <div style={{ flex: "1 1 200px", minHeight: "120px", overflowY: "auto", padding: "1rem" }}>
               {fullConversation.map((msg, i) => (
                 <div
                   key={i}
@@ -1692,8 +1693,10 @@ function Messages() {
               ))}
             </div>
 
+            {/* Bottom stack: reply + action buttons + optional panels — scrollable as a group */}
+            <div style={{ flex: "0 0 auto", maxHeight: "55vh", overflowY: "auto", borderTop: "1px solid #2a2a2a" }}>
             {/* Reply Input */}
-            <div style={{ padding: "1rem", borderTop: "1px solid #2a2a2a" }}>
+            <div style={{ padding: "1rem" }}>
               <div style={{ display: "flex", gap: "0.5rem" }}>
                 {/* Hidden file input */}
                 <input
@@ -1910,6 +1913,7 @@ function Messages() {
                 />
               </div>
             )}
+            </div>
           </div>
         </div>
       )}
