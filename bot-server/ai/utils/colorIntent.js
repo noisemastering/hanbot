@@ -38,8 +38,8 @@ async function classifyColorIntent(message) {
 Decide la categoría del color que pide el cliente en su mensaje:
 
 - "beige": el cliente menciona "beige" directamente (cualquier variante: beis, beiges)
-- "brown_family": el cliente pide un tono de la familia café/marrón que para fines prácticos es equivalente a nuestro beige. Incluye: café (claro o sin matiz), chocolate, marrón, marron, arena, crema, kraft, tan, ocre, camel, beige tostado, color tierra, terracota suave
-- "other": el cliente pide CUALQUIER otro color (verde, negro, blanco, azul, rojo, amarillo, gris, naranja, morado, rosa, transparente, dorado, plata, etc.)
+- "brown_family": el cliente pide un tono de la familia café/marrón/amarillo que para fines prácticos es equivalente a nuestro beige. Incluye: café (claro o sin matiz), chocolate, marrón, marron, arena, crema, kraft, tan, ocre, camel, beige tostado, color tierra, terracota suave, amarillo, amarilla, amarillento, mostaza, mostaza claro, paja
+- "other": el cliente pide CUALQUIER otro color (verde, negro, blanco, azul, rojo, gris, naranja, morado, rosa, transparente, dorado, plata, etc.)
 - "none": el cliente NO menciona color alguno
 
 Responde JSON: {"kind": "beige"|"brown_family"|"other"|"none", "requestedColor": "<color exacto que pidió el cliente o null>"}
@@ -52,7 +52,9 @@ Ejemplos:
 - "y en negro?" → {"kind": "other", "requestedColor": "negro"}
 - "qué precio tiene?" → {"kind": "none", "requestedColor": null}
 - "color crema" → {"kind": "brown_family", "requestedColor": "crema"}
-- "blanco hueso" → {"kind": "other", "requestedColor": "blanco hueso"}`
+- "blanco hueso" → {"kind": "other", "requestedColor": "blanco hueso"}
+- "lo tienes en amarillo?" → {"kind": "brown_family", "requestedColor": "amarillo"}
+- "color mostaza" → {"kind": "brown_family", "requestedColor": "mostaza"}`
         },
         { role: 'user', content: message }
       ],
