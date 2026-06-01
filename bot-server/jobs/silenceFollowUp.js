@@ -187,9 +187,32 @@ async function runSilenceFollowUpJob() {
             followUpText = '¿Te puedo ayudar con algo más? Recuerda que estamos para servirte.';
           }
 
-          // Re-share the product link if one was previously shared
+          // Re-share the product link ONLY if it still corresponds to the
+          // size the customer last asked about. Otherwise the customer sees
+          // "te decidiste por 8x13?" with a link that goes to a 6x4 listing.
           if (convo.lastSharedProductLink) {
-            followUpText += `\n\n${convo.lastSharedProductLink}`;
+            let safeToShareLink = true;
+            if (convo.lastSharedProductId && convo.productSpecs?.size) {
+              try {
+                const ProductFamily = require('../models/ProductFamily');
+                const linkedProduct = await ProductFamily.findById(convo.lastSharedProductId)
+                  .select('size').lean();
+                if (linkedProduct?.size) {
+                  // Normalize both for comparison (drop trailing "m")
+                  const linkSize = String(linkedProduct.size).toLowerCase().replace(/m$/, '');
+                  const askedSize = String(convo.productSpecs.size).toLowerCase().replace(/m$/, '');
+                  if (linkSize !== askedSize) {
+                    console.log(`🔕 Follow-up: link is for ${linkSize} but customer asked ${askedSize} — skipping link`);
+                    safeToShareLink = false;
+                  }
+                }
+              } catch (err) {
+                console.error('❌ Follow-up link size check error:', err.message);
+              }
+            }
+            if (safeToShareLink) {
+              followUpText += `\n\n${convo.lastSharedProductLink}`;
+            }
           }
 
           if (channel === 'whatsapp') {
