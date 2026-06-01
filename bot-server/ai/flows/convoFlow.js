@@ -537,32 +537,88 @@ NO insiste si: acepta la propuesta, hace otra pregunta sin volver al tema, cambi
       }
     }
 
-    // ── ROLL-SIZE DETECTION ──
-    // Confeccionada maxes out at ~7x10m. Any dimension > 12m means the
-    // customer is asking about a ROLLO (rolls are 3x100, 4x100, etc.).
-    // Hand off to a specialist instead of trying to fake-quote it.
-    // Only triggers in retail/confeccionada flows — wholesale rollo flows
-    // are already set up to handle these.
-    if (manifest.salesChannel === 'retail') {
-      const dimPattern = /\b(\d{1,3})\s*[xX×]\s*(\d{1,3})\b/g;
-      const dimsFound = [...userMessage.matchAll(dimPattern)];
-      const rollDims = dimsFound
-        .map(m => ({ a: parseInt(m[1], 10), b: parseInt(m[2], 10) }))
-        .filter(d => Math.max(d.a, d.b) > 12);
-      if (rollDims.length > 0) {
-        const d = rollDims[0];
-        const rollSize = `${Math.min(d.a, d.b)}x${Math.max(d.a, d.b)}`;
-        console.log(`📦 [convo] Roll-size detected in retail flow: ${rollSize}m — handoff`);
-        const handoffResp = await executeHandoff(psid, convo, userMessage, {
-          reason: `Rollo de malla sombra: ${rollSize}m (no confeccionada)`,
-          responsePrefix: `La medida ${rollSize}m corresponde a un rollo de malla sombra. Para cotización de rollos te comunico con un especialista.`,
-          specsText: `Rollo de ${rollSize}m. `,
-          lastIntent: 'roll_handoff',
-          notificationText: `Rollo ${rollSize}m desde flujo confeccionada`,
-          extraState: { productInterest: 'rollo' },
-          timingStyle: 'standard'
+    // ── DIMENSION / WHOLESALE-SPECS DETECTION (AI) ──
+    // Two rules:
+    //   (a) RETAIL flow + any dim > 12m  → it's a rollo, hand off
+    //   (b) WHOLESALE flow + specs given → hand off to specialist
+    //       (these flows have endpointOfSale: 'human' — never fake-quote)
+    //
+    // AI-based detection covers Spanish prose like "100 metros de largo por
+    // 7 de ancho" / "50 por 4" / "3 x 5", not just "NxM" regex matches.
+    {
+      const isWholesaleFlow = manifest.endpointOfSale === 'human';
+      try {
+        const dimRes = await _openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: `Extrae dimensiones (ancho y largo en metros) y porcentaje de sombra del mensaje del cliente. Responde JSON:
+{ "hasDims": true|false, "dim1": <número|null>, "dim2": <número|null>, "percentage": <número|null> }
+
+REGLAS:
+- Captura formatos en prosa: "100 metros de largo por 7 de ancho", "50 por 4", "3x5", "7 mts de ancho y 100 de largo", etc.
+- dim1/dim2: en metros. Si la unidad es pies/feet, igual devuelve los números (los procesa otra parte).
+- percentage: solo si el cliente menciona porcentaje de sombra/cobertura (35, 50, 70, 80, 90). Ignora porcentajes que claramente no son sombra (ej. descuentos).
+- Si no hay dimensiones → hasDims: false, dim1/dim2: null.
+- Si solo hay UN número de medida (ej "rollo de 100") → hasDims: false.
+- Solo JSON.`
+            },
+            { role: 'user', content: userMessage }
+          ],
+          temperature: 0,
+          max_tokens: 80,
+          response_format: { type: 'json_object' }
         });
-        return { response: handoffResp, state: flowState };
+        const dims = JSON.parse(dimRes.choices[0].message.content);
+
+        if (dims.hasDims && dims.dim1 && dims.dim2) {
+          const a = Math.min(dims.dim1, dims.dim2);
+          const b = Math.max(dims.dim1, dims.dim2);
+          const sizeStr = `${a}x${b}m`;
+
+          // (a) retail flow + roll-sized dim → handoff
+          if (manifest.salesChannel === 'retail' && b > 12) {
+            console.log(`📦 [convo] Roll-size detected in retail flow: ${sizeStr} — handoff`);
+            const handoffResp = await executeHandoff(psid, convo, userMessage, {
+              reason: `Rollo de malla sombra: ${sizeStr} (no confeccionada)`,
+              responsePrefix: `La medida ${sizeStr} corresponde a un rollo de malla sombra. Para cotización de rollos te comunico con un especialista.`,
+              specsText: `Rollo de ${sizeStr}${dims.percentage ? ` al ${dims.percentage}%` : ''}. `,
+              lastIntent: 'roll_handoff',
+              notificationText: `Rollo ${sizeStr} desde flujo confeccionada`,
+              extraState: { productInterest: 'rollo' },
+              timingStyle: 'standard'
+            });
+            return { response: handoffResp, state: flowState };
+          }
+
+          // (b) wholesale flow + dims → handoff (always human-endpoint)
+          if (isWholesaleFlow) {
+            const pctText = dims.percentage ? ` al ${dims.percentage}%` : '';
+            console.log(`📦 [convo] Wholesale specs given (${sizeStr}${pctText}) — handoff`);
+            // Save specs so buildClientBrief surfaces them
+            const specsUpdate = {
+              productSpecs: {
+                ...(convo.productSpecs || {}),
+                size: `${a}x${b}`,
+                width: a,
+                length: b,
+                ...(dims.percentage ? { percentage: dims.percentage } : {})
+              }
+            };
+            await updateConversation(psid, specsUpdate);
+            const handoffResp = await executeHandoff(psid, convo, userMessage, {
+              reason: `Pedido mayoreo: rollo ${sizeStr}${pctText}`,
+              responsePrefix: `Para una cotización de rollo a la medida ${sizeStr}${pctText} te paso con un especialista de mayoreo. Tendrás respuesta a la brevedad.`,
+              specsText: `Rollo ${sizeStr}${pctText}. `,
+              lastIntent: 'wholesale_specs_handoff',
+              timingStyle: 'standard'
+            });
+            return { response: handoffResp, state: flowState };
+          }
+        }
+      } catch (err) {
+        console.error('❌ [convo] dim/wholesale detection error:', err.message);
       }
     }
 
