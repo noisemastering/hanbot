@@ -157,7 +157,18 @@ function ConvoSimulatorView() {
         <div className="flex flex-col lg:flex-row gap-4">
           {/* Chat */}
           <div className="flex-1 min-w-0">
-            <SandboxTester workflowId={selectedId} dirty={false} onCurrentNode={setCurrentNode} familyId={workflow?.family?.id} />
+            <SandboxTester
+              workflowId={selectedId}
+              dirty={false}
+              onCurrentNode={setCurrentNode}
+              familyIds={
+                workflow?.families && workflow.families.length
+                  ? workflow.families.filter((f) => f && f.id).map((f) => f.id)
+                  : workflow?.family?.id
+                  ? [workflow.family.id]
+                  : []
+              }
+            />
           </div>
 
           {/* Live editor */}

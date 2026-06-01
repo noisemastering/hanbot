@@ -183,14 +183,21 @@ router.put("/:id", async (req, res) => {
     const { versions, _id, createdAt, ...patch } = req.body;
     sanitizeWorkflowPatch(patch);
 
-    // Mandatory: every workflow must have a product family/subfamily attached.
-    // No rogue flows. (family is in the patch when edited, else keep existing.)
-    const effectiveFamilyId =
-      patch.family && "id" in patch.family ? patch.family.id : existing.family?.id;
-    if (!effectiveFamilyId) {
+    // Mandatory: every workflow must have at least one family/subfamily. No rogue
+    // flows. Accept the new families[] or the legacy single family, from the patch
+    // when edited, else from the existing doc.
+    const famsFromPatch = Array.isArray(patch.families)
+      ? patch.families.filter((f) => f && f.id)
+      : null;
+    const singleFromPatch = patch.family && "id" in patch.family ? patch.family.id : undefined;
+    const hasFamily =
+      (famsFromPatch && famsFromPatch.length > 0) ||
+      (famsFromPatch === null && (existing.families || []).some((f) => f && f.id)) ||
+      (singleFromPatch ? true : singleFromPatch === undefined ? !!existing.family?.id : false);
+    if (!hasFamily) {
       return res.status(400).json({
         success: false,
-        error: "Un workflow debe tener una familia o subfamilia de producto asignada (pestaña Config).",
+        error: "Un workflow debe tener al menos una familia o subfamilia de producto asignada (pestaña Config).",
       });
     }
 
@@ -288,6 +295,10 @@ function sanitizeWorkflowPatch(patch) {
   if (!patch || typeof patch !== "object") return;
   if (patch.family && (patch.family.id === "" || patch.family.id === undefined)) {
     patch.family.id = null;
+  }
+  // families[]: drop entries with empty/invalid ids.
+  if (Array.isArray(patch.families)) {
+    patch.families = patch.families.filter((f) => f && f.id && f.id !== "");
   }
   if (patch.setup && patch.setup.productSpecific) {
     const ps = patch.setup.productSpecific;

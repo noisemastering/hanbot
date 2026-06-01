@@ -64,10 +64,12 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // Resolve the setup CONTEXT once per (flow within a) conversation.
   if (state.contextBlock === undefined) {
     try {
+      const Workflow = require("../../models/Workflow");
+      const familyList = Workflow.familyListOf(workflow);
       const { contextBlock, product, priceInfo } = await resolveSetupContext(
         workflow.setup,
         state.setupOverrides,
-        workflow.family
+        familyList
       );
       state.contextBlock = contextBlock || "";
       state.product = product || null;
@@ -105,7 +107,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     location: state.location || null,
     product: state.product || null,
     priceInfo: state.priceInfo || null,
-    family: workflow.family || null, // this flow's product realm (for scope checks)
+    families: require("../../models/Workflow").familyListOf(workflow), // realm (for scope checks)
   };
   const { text, toolCalls } = await executeNode(workflow, movedTo, history, vars, ctx, contextBlock);
 

@@ -24,7 +24,16 @@ const TABS = [
   { id: "tester", label: "Tester" },
 ];
 
-const CORE_KEYS = ["name", "description", "active", "globalPrompt", "variables", "knowledge", "nodes", "edges", "startNode", "setup", "family"];
+const CORE_KEYS = ["name", "description", "active", "globalPrompt", "variables", "knowledge", "nodes", "edges", "startNode", "setup", "family", "families"];
+
+// Normalized array of the flow's family ids (families[] or legacy single family).
+function familyIdsOf(draft) {
+  if (!draft) return [];
+  if (Array.isArray(draft.families) && draft.families.length) {
+    return draft.families.filter((f) => f && f.id).map((f) => f.id);
+  }
+  return draft.family?.id ? [draft.family.id] : [];
+}
 const coreString = (d) => {
   const o = {};
   CORE_KEYS.forEach((k) => {
@@ -229,7 +238,10 @@ function WorkflowsView() {
                 <input className="wf-input" value={draft.description || ""} onChange={(e) => patch({ description: e.target.value })} />
               </Labeled>
               <Labeled label="Familia / Subfamilia (global)">
-                <FamilyPicker value={draft.family} onChange={(f) => patch({ family: f })} />
+                <FamilyPicker
+                  value={draft.families && draft.families.length ? draft.families : draft.family?.id ? [draft.family] : []}
+                  onChange={(arr) => patch({ families: arr, family: { id: null, name: null } })}
+                />
                 <span className="block text-[11px] text-gray-500 mt-1">
                   Realm de producto para todo el workflow (familia raíz o subfamilia). Es global, no por conversación.
                 </span>
@@ -244,7 +256,7 @@ function WorkflowsView() {
                   Moldean el comportamiento. Cuando el workflow se asigna a un anuncio, el producto/promo/audiencia
                   del anuncio sobreescriben estos valores por conversación.
                 </p>
-                <SetupFields value={draft.setup} onChange={(s) => patch({ setup: s })} familyId={draft.family?.id} />
+                <SetupFields value={draft.setup} onChange={(s) => patch({ setup: s })} familyIds={familyIdsOf(draft)} />
               </div>
 
               <VariablesEditor draft={draft} patch={patch} />
@@ -268,7 +280,7 @@ function WorkflowsView() {
             </div>
           )}
 
-          {tab === "tester" && <SandboxTester workflowId={selectedId} dirty={dirty} familyId={draft.family?.id} />}
+          {tab === "tester" && <SandboxTester workflowId={selectedId} dirty={dirty} familyIds={familyIdsOf(draft)} />}
         </>
       )}
 
@@ -305,11 +317,16 @@ function Labeled({ label, children }) {
 }
 
 // Global family/subfamily picker - expandable tree (from /product-families/tree).
-// Click any node (root family or nested subfamily) to assign it to the workflow.
+// MULTI-select: tick one or more families/subfamilies (e.g. Rollo under each
+// shade %). Sellable products are not eligible as a flow family. `value` is an
+// array [{id, name}]; onChange receives the updated array.
 function FamilyPicker({ value, onChange }) {
   const [tree, setTree] = useState([]);
   const [expanded, setExpanded] = useState({});
   const [loading, setLoading] = useState(true);
+
+  const selected = Array.isArray(value) ? value : value && value.id ? [value] : [];
+  const isOn = (id) => selected.some((f) => String(f.id) === String(id));
 
   useEffect(() => {
     (async () => {
@@ -317,7 +334,12 @@ function FamilyPicker({ value, onChange }) {
         const res = await API.get("/product-families/tree");
         const data = res.data?.data || [];
         setTree(data);
-        if (value?.id) setExpanded(pathToNode(data, value.id) || {});
+        // expand paths to every currently-selected family
+        let exp = {};
+        selected.forEach((f) => {
+          exp = { ...exp, ...(pathToNode(data, f.id) || {}) };
+        });
+        setExpanded(exp);
       } catch {
         /* non-fatal */
       } finally {
@@ -327,31 +349,45 @@ function FamilyPicker({ value, onChange }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const toggle = (id) => setExpanded((e) => ({ ...e, [id]: !e[id] }));
+  const toggleExpand = (id) => setExpanded((e) => ({ ...e, [id]: !e[id] }));
 
-  const renderNode = (node, depth) => {
+  // Build "Root > Sub > Leaf" label so multiple same-named nodes (Rollo) differ.
+  const labelFor = (node, ancestry) => [...ancestry, node.name].join(" > ");
+
+  const toggleSelect = (node, ancestry) => {
+    const id = String(node._id);
+    if (isOn(id)) {
+      onChange(selected.filter((f) => String(f.id) !== id));
+    } else {
+      onChange([...selected, { id, name: labelFor(node, ancestry) }]);
+    }
+  };
+
+  const renderNode = (node, depth, ancestry) => {
     const kids = node.children || [];
     const open = expanded[node._id];
-    const selected = String(value?.id) === String(node._id);
     return (
       <div key={node._id}>
         <div className="flex items-center gap-1" style={{ paddingLeft: depth * 14 }}>
           {kids.length > 0 ? (
-            <button type="button" onClick={() => toggle(node._id)} className="text-gray-400 w-4 text-xs">
+            <button type="button" onClick={() => toggleExpand(node._id)} className="text-gray-400 w-4 text-xs">
               {open ? "v" : ">"}
             </button>
           ) : (
             <span className="w-4 inline-block" />
           )}
-          <button
-            type="button"
-            onClick={() => onChange({ id: node._id, name: node.name })}
-            className={"text-left text-sm px-1.5 py-0.5 rounded " + (selected ? "bg-primary-600 text-white" : "text-gray-200 hover:bg-gray-700")}
-          >
-            {node.name}
-          </button>
+          {node.sellable ? (
+            <span className="text-sm px-1.5 py-0.5 text-gray-600 cursor-not-allowed" title="Un producto vendible no puede ser la familia del flujo; elige una familia o subfamilia">
+              {node.name} <span className="text-[10px]">(producto)</span>
+            </span>
+          ) : (
+            <label className="flex items-center gap-1.5 text-sm text-gray-200 cursor-pointer">
+              <input type="checkbox" checked={isOn(node._id)} onChange={() => toggleSelect(node, ancestry)} />
+              {node.name}
+            </label>
+          )}
         </div>
-        {open && kids.map((k) => renderNode(k, depth + 1))}
+        {open && kids.map((k) => renderNode(k, depth + 1, [...ancestry, node.name]))}
       </div>
     );
   };
@@ -359,11 +395,16 @@ function FamilyPicker({ value, onChange }) {
   return (
     <div>
       <div className="text-xs text-gray-400 mb-1">
-        Seleccionada: <span className="text-emerald-300">{value?.name || "(ninguna)"}</span>
-        {value?.id && (
-          <button type="button" onClick={() => onChange({ id: null, name: null })} className="text-red-400 ml-2">
-            quitar
-          </button>
+        {selected.length ? (
+          <>
+            Seleccionadas ({selected.length}):{" "}
+            <span className="text-emerald-300">{selected.map((f) => f.name).join("  ·  ")}</span>
+            <button type="button" onClick={() => onChange([])} className="text-red-400 ml-2">
+              limpiar
+            </button>
+          </>
+        ) : (
+          <span className="text-amber-400/80">Ninguna — selecciona al menos una familia/subfamilia.</span>
         )}
       </div>
       <div className="border border-gray-700 rounded-lg p-2 max-h-64 overflow-y-auto bg-gray-900">
@@ -372,7 +413,7 @@ function FamilyPicker({ value, onChange }) {
         ) : tree.length === 0 ? (
           <p className="text-xs text-gray-500">Sin familias.</p>
         ) : (
-          tree.map((r) => renderNode(r, 0))
+          tree.map((r) => renderNode(r, 0, []))
         )}
       </div>
     </div>

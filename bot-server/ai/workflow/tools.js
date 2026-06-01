@@ -177,34 +177,42 @@ const REGISTRY = {
         return chain;
       };
 
-      const flowFamilyId = ctx.family && ctx.family.id ? String(ctx.family.id) : null;
+      // This flow's realm = the UNION of its families' ids (multi-family).
+      // Back-compat: also accept a single ctx.family.
+      const flowFamilyIds = new Set(
+        (Array.isArray(ctx.families) ? ctx.families : ctx.family ? [ctx.family] : [])
+          .filter((f) => f && f.id)
+          .map((f) => String(f.id))
+      );
 
-      // 1) In THIS flow's family?
-      if (flowFamilyId) {
+      // 1) In THIS flow's realm (any of its families)?
+      if (flowFamilyIds.size) {
         for (const m of matches) {
           const chain = await ancestors(m._id);
-          if (chain.includes(flowFamilyId)) {
-            return `EN ESTE FLUJO: "${m.name}" pertenece a la familia de este flujo. Atiéndelo normalmente aquí.`;
+          if (chain.some((c) => flowFamilyIds.has(c))) {
+            return `EN ESTE FLUJO: "${m.name}" pertenece a la(s) familia(s) de este flujo. Atiéndelo normalmente aquí.`;
           }
         }
       }
 
-      // 2) In another ACTIVE workflow's family?
+      // 2) In another ACTIVE workflow's realm (any of its families)?
+      const WorkflowModel = require("../../models/Workflow");
       let workflows = [];
       try {
-        workflows = await mongoose
-          .model("Workflow")
-          .find({ active: true, "family.id": { $ne: null } })
-          .select("name family")
+        workflows = await WorkflowModel.find({ active: true })
+          .select("name family families")
           .lean();
       } catch {
         /* ignore */
       }
       for (const m of matches) {
         const chain = await ancestors(m._id);
-        const other = workflows.find(
-          (w) => w.family && chain.includes(String(w.family.id)) && String(w.family.id) !== flowFamilyId
-        );
+        const chainSet = new Set(chain);
+        const other = workflows.find((w) => {
+          const fams = WorkflowModel.familyListOf(w).map((f) => String(f.id));
+          // matches one of w's families AND that family isn't part of THIS flow
+          return fams.some((id) => chainSet.has(id) && !flowFamilyIds.has(id));
+        });
         if (other) {
           // Surface a switch target. The conversation confirms, then switch_flow
           // hands over to that flow (carrying the basket + client data).

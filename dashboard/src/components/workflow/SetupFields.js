@@ -49,10 +49,12 @@ function subtreeIds(node, acc = new Set()) {
   return acc;
 }
 
-// Multi-select picker over the family's subtree (sellable leaves + sub-families).
-function ProductsPicker({ familyId, selected, onChange }) {
+// Multi-select picker over the flow's family subtrees (union of all flow
+// families). Sellable leaves + sub-families both selectable.
+function ProductsPicker({ familyIds, selected, onChange }) {
   const [tree, setTree] = useState([]);
   const [expanded, setExpanded] = useState({});
+  const ids = Array.isArray(familyIds) ? familyIds.filter(Boolean) : familyIds ? [familyIds] : [];
 
   useEffect(() => {
     (async () => {
@@ -65,12 +67,13 @@ function ProductsPicker({ familyId, selected, onChange }) {
     })();
   }, []);
 
-  // The roots to render: the flow's family subtree, or the whole tree if no family.
+  // Roots to render: the subtrees of EACH flow family (union). Each flow-family
+  // node is shown as a labeled group so multiple same-named nodes (Rollo) differ.
   const roots = useMemo(() => {
-    if (!familyId) return tree;
-    const node = findNode(tree, familyId);
-    return node ? (node.children?.length ? node.children : [node]) : [];
-  }, [tree, familyId]);
+    if (!ids.length) return tree;
+    return ids.map((fid) => findNode(tree, fid)).filter(Boolean);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tree, JSON.stringify(ids)]);
 
   const sel = Array.isArray(selected) ? selected : [];
   const isOn = (id) => sel.some((p) => String(p.id) === String(id));
@@ -119,10 +122,10 @@ function ProductsPicker({ familyId, selected, onChange }) {
         )}
       </div>
       <div className="border border-gray-700 rounded-lg p-2 max-h-56 overflow-y-auto bg-gray-900">
-        {!familyId ? (
-          <p className="text-xs text-amber-400/80">Asigna primero una familia al flujo (pestaña Config).</p>
+        {!ids.length ? (
+          <p className="text-xs text-amber-400/80">Asigna primero una o más familias al flujo (pestaña Config).</p>
         ) : roots.length === 0 ? (
-          <p className="text-xs text-gray-500">La familia del flujo no tiene elementos.</p>
+          <p className="text-xs text-gray-500">Las familias del flujo no tienen elementos.</p>
         ) : (
           roots.map((r) => renderNode(r, 0))
         )}
@@ -131,10 +134,11 @@ function ProductsPicker({ familyId, selected, onChange }) {
   );
 }
 
-// Promo picker constrained to promos that fall within the flow's family subtree.
-function PromoPicker({ familyId, value, onChange }) {
+// Promo picker constrained to promos within the flow's family subtrees (union).
+function PromoPicker({ familyIds, value, onChange }) {
   const [promos, setPromos] = useState([]);
   const [tree, setTree] = useState([]);
+  const ids = Array.isArray(familyIds) ? familyIds.filter(Boolean) : familyIds ? [familyIds] : [];
 
   useEffect(() => {
     (async () => {
@@ -149,10 +153,15 @@ function PromoPicker({ familyId, value, onChange }) {
   }, []);
 
   const familySet = useMemo(() => {
-    if (!familyId) return null;
-    const node = findNode(tree, familyId);
-    return node ? subtreeIds(node) : new Set();
-  }, [tree, familyId]);
+    if (!ids.length) return null;
+    const set = new Set();
+    ids.forEach((fid) => {
+      const node = findNode(tree, fid);
+      if (node) subtreeIds(node, set);
+    });
+    return set;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tree, JSON.stringify(ids)]);
 
   const eligible = useMemo(() => {
     if (!familySet) return promos; // no family → don't filter
@@ -180,7 +189,7 @@ function PromoPicker({ familyId, value, onChange }) {
   );
 }
 
-export default function SetupFields({ value = {}, onChange, familyId = null }) {
+export default function SetupFields({ value = {}, onChange, familyIds = null }) {
   const v = value || {};
   const set = (patch) => onChange({ ...v, ...patch });
   const setNested = (key, patch) => onChange({ ...v, [key]: { ...(v[key] || {}), ...patch } });
@@ -196,11 +205,11 @@ export default function SetupFields({ value = {}, onChange, familyId = null }) {
         opts={[{ value: "", label: "— (sin definir)" }, { value: "marketplace", label: "marketplace" }, { value: "manual", label: "manual" }]} />
       <div className="col-span-2">
         <Labeled label="productos (medidas/grupos dentro de la familia del flujo — varios permitidos)">
-          <ProductsPicker familyId={familyId} selected={v.products} onChange={(arr) => set({ products: arr })} />
+          <ProductsPicker familyIds={familyIds} selected={v.products} onChange={(arr) => set({ products: arr })} />
         </Labeled>
       </div>
       <Labeled label="promo (dentro de la familia)">
-        <PromoPicker familyId={familyId} value={v.hasPromo} onChange={(x) => set({ hasPromo: x })} />
+        <PromoPicker familyIds={familyIds} value={v.hasPromo} onChange={(x) => set({ hasPromo: x })} />
       </Labeled>
       <Sel label="catalog (tipo)" val={v.catalog?.kind} onChange={(x) => setNested("catalog", { kind: x })}
         opts={[{ value: "", label: "— (nil)" }, { value: "pdf", label: "pdf" }, { value: "store_link", label: "store_link" }]} />

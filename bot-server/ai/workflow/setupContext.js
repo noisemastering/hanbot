@@ -105,9 +105,12 @@ async function resolveFamilyRealm(family) {
   }
 }
 
-async function resolveSetupContext(workflowSetup, overrides, family) {
+async function resolveSetupContext(workflowSetup, overrides, families) {
   const setup = mergeSetup(workflowSetup, overrides);
   const lines = [];
+
+  // Accept either a single family object (legacy) or an array of families.
+  const familyList = Array.isArray(families) ? families.filter((f) => f && f.id) : families && families.id ? [families] : [];
 
   // Flow switch: this conversation was handed over from another flow. Don't
   // greet again — continue seamlessly with the product the client asked for.
@@ -139,11 +142,21 @@ async function resolveSetupContext(workflowSetup, overrides, family) {
     /* non-fatal: company info just won't be in context */
   }
 
-  const realm = await resolveFamilyRealm(family);
-  if (realm) {
+  const realms = [];
+  for (const f of familyList) {
+    const r = await resolveFamilyRealm(f);
+    if (r) realms.push(r);
+  }
+  if (realms.length === 1) {
     lines.push(
-      `- Familia / realm de este flujo: ${realm}. SOLO ofrece productos y variantes DENTRO de esta familia. ` +
+      `- Familia / realm de este flujo: ${realms[0]}. SOLO ofrece productos y variantes DENTRO de esta familia. ` +
         `NUNCA ofrezcas presentaciones o variantes que estén fuera de ella (por ejemplo, si la familia es "con refuerzo", no ofrezcas "sin refuerzo"; si es una forma específica como "Rectangular", no ofrezcas otras formas). Da por hecho la variante de la familia.`
+    );
+  } else if (realms.length > 1) {
+    lines.push(
+      `- Familias / realm de este flujo (este flujo cubre VARIAS):\n` +
+        realms.map((r) => `    • ${r}`).join("\n") +
+        `\n  SOLO ofrece productos dentro de ESTAS familias. NUNCA ofrezcas nada fuera de ellas. Si el cliente no especifica, ayúdale a elegir entre estas opciones.`
     );
   }
 

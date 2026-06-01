@@ -114,13 +114,23 @@ const workflowSchema = new mongoose.Schema(
       },
     },
 
-    // Global product realm for the whole workflow: a ProductFamily that is
-    // either a root family or a subfamily (a ProductFamily with a parentId).
-    // Design-time assignment (set at create/edit), distinct from the
-    // per-conversation setup.productSpecific override.
+    // Global product realm for the whole workflow: ONE OR MORE ProductFamily
+    // nodes (root families or subfamilies). The realm is the UNION of their
+    // subtrees — e.g. "Rollo (90%)" + "Rollo (80%)" + … for an all-rollos flow.
+    // Design-time assignment, distinct from per-conversation setup overrides.
+    families: {
+      type: [
+        {
+          id: { type: mongoose.Schema.Types.ObjectId, ref: "ProductFamily", default: null },
+          name: { type: String, default: null }, // cached for display (full path when useful)
+        },
+      ],
+      default: [],
+    },
+    // Legacy single-family field (kept for back-compat; new code reads families[]).
     family: {
       id: { type: mongoose.Schema.Types.ObjectId, ref: "ProductFamily", default: null },
-      name: { type: String, default: null }, // cached for display
+      name: { type: String, default: null },
     },
 
     // Versions tab — lightweight immutable snapshots taken on save.
@@ -162,6 +172,22 @@ workflowSchema.methods.outgoingEdges = function (nodeId) {
   return this.edges.filter((e) => e.from === nodeId);
 };
 
+// Normalized list of the flow's realm families [{id, name}]. Reads families[]
+// if set, else falls back to the legacy single family. Static so it also works
+// on lean() objects (engine often loads lean).
+function familyListOf(wf) {
+  if (!wf) return [];
+  if (Array.isArray(wf.families) && wf.families.length) {
+    return wf.families.filter((f) => f && f.id).map((f) => ({ id: f.id, name: f.name }));
+  }
+  if (wf.family && wf.family.id) return [{ id: wf.family.id, name: wf.family.name }];
+  return [];
+}
+workflowSchema.methods.familyList = function () {
+  return familyListOf(this);
+};
+
 const Workflow = mongoose.model("Workflow", workflowSchema);
+Workflow.familyListOf = familyListOf;
 Workflow.TOOL_KEYS = TOOL_KEYS;
 module.exports = Workflow;
