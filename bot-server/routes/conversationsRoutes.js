@@ -157,7 +157,8 @@ router.get('/grouped', async (req, res) => {
       productInterest,   // product type ID
       sharedProduct,     // 'yes' | 'no' — whether bot shared a product link
       handoff,           // 'yes' | 'no' — whether human handoff was requested
-      state              // 'new' | 'active' | 'closed' | 'needs_human' | 'human_handling'
+      state,             // 'new' | 'active' | 'closed' | 'needs_human' | 'human_handling'
+      psid               // user identifier search (FB PSID or WhatsApp number)
     } = req.query;
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
@@ -180,6 +181,20 @@ router.get('/grouped', async (req, res) => {
     if (handoff === 'yes') convFilter.handoffRequested = true;
     if (handoff === 'no') convFilter.handoffRequested = { $ne: true };
     if (state) convFilter.state = state;
+
+    // PSID search — accept either FB Messenger PSIDs or WhatsApp numbers
+    // (with or without the "wa:" prefix, with or without country code separators).
+    if (psid && psid.trim().length >= 3) {
+      const raw = psid.trim();
+      const digitsOnly = raw.replace(/[^0-9]/g, ''); // strips +, spaces, dashes, etc.
+      const escaped = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const orClauses = [{ psid: { $regex: escaped(raw), $options: 'i' } }];
+      if (digitsOnly && digitsOnly !== raw) {
+        // Also match the digits-only form, useful when the user pasted "+52 1 442…"
+        orClauses.push({ psid: { $regex: escaped(digitsOnly), $options: 'i' } });
+      }
+      convFilter.$or = orClauses;
+    }
 
     let adFilterPsids = null;
     if (Object.keys(convFilter).length > 0) {

@@ -56,6 +56,7 @@ function Messages() {
   const [sharedProductFilter, setSharedProductFilter] = useState('');
   const [handoffFilter, setHandoffFilter] = useState('');
   const [stateFilter, setStateFilter] = useState('');
+  const [psidFilter, setPsidFilter] = useState('');
 
   const quickActionPsidsRef = useRef([]);
   const currentPageRef = useRef(1);
@@ -67,6 +68,7 @@ function Messages() {
   const sharedProductFilterRef = useRef('');
   const handoffFilterRef = useRef('');
   const stateFilterRef = useRef('');
+  const psidFilterRef = useRef('');
 
   // Helper function to show message excerpt
   const getMessageExcerpt = (text, maxLength = 60) => {
@@ -261,10 +263,11 @@ function Messages() {
         page: String(page),
         limit: '20'
       });
-      // When keyword search is active, search across ALL dates — user wants
-      // to find specific content regardless of when it happened.
-      // Also don't exclude quick-action PSIDs in that case.
-      if (!keywordFilterRef.current) {
+      // When keyword OR PSID search is active, search across ALL dates and
+      // don't exclude recent PSIDs — the user wants to find a specific convo
+      // regardless of when it happened or whether it's also in Quick Actions.
+      const searchActive = !!keywordFilterRef.current || !!psidFilterRef.current;
+      if (!searchActive) {
         params.set('start', start.toISOString());
         params.set('end', end.toISOString());
         if (exclude.length > 0) {
@@ -278,6 +281,7 @@ function Messages() {
       if (sharedProductFilterRef.current) params.set('sharedProduct', sharedProductFilterRef.current);
       if (handoffFilterRef.current) params.set('handoff', handoffFilterRef.current);
       if (stateFilterRef.current) params.set('state', stateFilterRef.current);
+      if (psidFilterRef.current) params.set('psid', psidFilterRef.current);
       const res = await API.get(`/conversations/grouped?${params}`);
       const convs = res.data.conversations || [];
       setFilteredConversations(convs);
@@ -350,12 +354,13 @@ function Messages() {
     sharedProductFilterRef.current = sharedProductFilter;
     handoffFilterRef.current = handoffFilter;
     stateFilterRef.current = stateFilter;
+    psidFilterRef.current = psidFilter;
     if (!initialLoading) {
       setCurrentPage(1);
       currentPageRef.current = 1;
       fetchFilteredPage(1);
     }
-  }, [keywordFilter, purchaseIntentFilter, productInterestFilter, sharedProductFilter, handoffFilter, stateFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [keywordFilter, purchaseIntentFilter, productInterestFilter, sharedProductFilter, handoffFilter, stateFilter, psidFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTakeover = async (psid) => {
     setLoading(prev => ({ ...prev, [psid]: true }));
@@ -952,6 +957,31 @@ function Messages() {
       {/* Constraint filters bar */}
       <div style={{ marginBottom: "1rem", display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
         <span style={{ color: "#6b7280", fontSize: "0.8rem", marginRight: "0.25rem" }}>Filtros adicionales:</span>
+
+        {/* PSID / phone search */}
+        <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
+          <input
+            type="text"
+            placeholder="ID o teléfono…"
+            value={psidFilter}
+            onChange={(e) => setPsidFilter(e.target.value.trim())}
+            title="Busca por PSID de Messenger o número de WhatsApp (con o sin prefijo wa:)"
+            style={{
+              padding: "0.5rem 0.75rem",
+              backgroundColor: psidFilter ? "rgba(124, 77, 255, 0.15)" : "rgba(255, 255, 255, 0.1)",
+              color: "white",
+              border: psidFilter ? "2px solid #7c4dff" : "1px solid #555",
+              borderRadius: "8px",
+              fontSize: "0.85rem",
+              width: "180px"
+            }}
+          />
+          {psidFilter && (
+            <button onClick={() => setPsidFilter('')}
+              style={{ padding: "0.4rem 0.6rem", backgroundColor: "rgba(255,255,255,0.05)", color: "#aaa", border: "1px solid #555", borderRadius: "8px", cursor: "pointer", fontSize: "0.85rem" }}
+              title="Limpiar">✕</button>
+          )}
+        </div>
 
         {/* Ad filter */}
         <select value={adFilter} onChange={(e) => setAdFilter(e.target.value)}
