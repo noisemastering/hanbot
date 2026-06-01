@@ -26,6 +26,7 @@ const TOOL_KEYS = [
   "ask_location",
   "note",
   "check_product_scope",
+  "switch_flow",
 ];
 
 // --- custom node renderer (compact card like the reference UI) ---

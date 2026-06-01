@@ -109,6 +109,15 @@ async function resolveSetupContext(workflowSetup, overrides, family) {
   const setup = mergeSetup(workflowSetup, overrides);
   const lines = [];
 
+  // Flow switch: this conversation was handed over from another flow. Don't
+  // greet again — continue seamlessly with the product the client asked for.
+  if (overrides && overrides.comesFromFlowSwitch) {
+    lines.push(
+      "CONTINUACIÓN DE FLUJO: el cliente ya venía conversando y fue transferido a este flujo por el producto que pidió. " +
+        "NO saludes de nuevo ni te presentes; continúa la conversación directamente sobre ese producto."
+    );
+  }
+
   // Company info — always available so any node can answer "¿dónde están?",
   // "¿horario?", "¿teléfono?" accurately. Single source of truth: CompanyInfo DB.
   try {

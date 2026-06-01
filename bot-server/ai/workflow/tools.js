@@ -136,7 +136,10 @@ const REGISTRY = {
       const q = (input.query || "").trim();
       if (!q) return "Sin término de búsqueda.";
 
-      const PF = mongoose.model("ProductFamily");
+      // Require the models explicitly so this never depends on load order
+      // (mongoose.model("X") throws MissingSchemaError if X wasn't required yet).
+      const PF = require("../../models/ProductFamily");
+      require("../../models/Workflow");
       // Build a loose regex from the query words (data-driven; no hardcoded products).
       const words = q
         .toLowerCase()
@@ -203,8 +206,15 @@ const REGISTRY = {
           (w) => w.family && chain.includes(String(w.family.id)) && String(w.family.id) !== flowFamilyId
         );
         if (other) {
-          ctx.handoffRequested = true; // until cross-flow switching exists, route to a human
-          return `OTRO FLUJO: "${m.name}" lo maneja el flujo "${other.name}". Por ahora, pasa la conversación a un asesor para continuar con ese producto (usa request_handoff).`;
+          // Surface a switch target. The conversation confirms, then switch_flow
+          // hands over to that flow (carrying the basket + client data).
+          ctx.scopeResult = {
+            verdict: "other_flow",
+            product: { kind: m.sellable ? "product" : "family", id: String(m._id), name: m.name },
+            toWorkflowId: String(other._id),
+            toName: other.name,
+          };
+          return `OTRO FLUJO: "${m.name}" lo maneja el flujo "${other.name}". Confirma con el cliente que quiere cambiar a ese producto y, si acepta, usa la herramienta switch_flow para continuar allí. NO inventes información de ese producto tú misma.`;
         }
       }
 
@@ -241,6 +251,35 @@ const REGISTRY = {
 
       // 4) Found in catalog but not sellable/active anywhere in its subtree.
       return `NO DISPONIBLE: "${matches[0].name}" existe en el catálogo pero no está disponible para venta directa. Ofrece pasar con un asesor si insiste.`;
+    },
+  },
+
+  switch_flow: {
+    definition: {
+      name: "switch_flow",
+      description:
+        "Hand the conversation over to another flow that handles a product outside this flow's scope. Call this ONLY after check_product_scope returned an OTRO FLUJO verdict AND the customer confirmed they want that other product. The target flow takes over seamlessly (no greeting), keeping the conversation and any collected data.",
+      input_schema: {
+        type: "object",
+        properties: {
+          confirmed: { type: "boolean", description: "true only if the customer confirmed the switch" },
+        },
+        required: ["confirmed"],
+        additionalProperties: false,
+      },
+    },
+    async execute(input, ctx) {
+      ctx.actions.push({ tool: "switch_flow", input });
+      const sr = ctx.scopeResult;
+      if (!sr || sr.verdict !== "other_flow" || !sr.toWorkflowId) {
+        return "No hay un flujo destino identificado. Usa primero check_product_scope.";
+      }
+      if (input.confirmed === false) {
+        return "El cliente no confirmó el cambio. Continúa en este flujo.";
+      }
+      // Signal the orchestrator to hand over after this turn.
+      ctx.switchTo = { toWorkflowId: sr.toWorkflowId, toName: sr.toName, product: sr.product };
+      return `Cambiando al flujo "${sr.toName}" para continuar con "${sr.product?.name || "ese producto"}".`;
     },
   },
 

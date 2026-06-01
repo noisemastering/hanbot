@@ -18,6 +18,7 @@ const TOOL_KEYS = [
   "ask_location",       // ask for and capture city/zip
   "note",               // attach an internal note (not shown to the customer)
   "check_product_scope", // check if an out-of-scope product is sold / handled elsewhere
+  "switch_flow",        // hand over to another flow (after scope check + confirmation)
 ];
 
 const nodeSchema = new mongoose.Schema(
