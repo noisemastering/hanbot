@@ -28,55 +28,85 @@ function uploadBufferToCloudinary(buffer, options) {
 }
 
 /**
- * Send a message via Facebook Messenger
+ * Low-level Messenger Send API caller. Tries messaging_type=RESPONSE first
+ * (works inside the 24h customer-initiated window), and on the typical FB
+ * error code for "message sent outside allowed window" automatically falls
+ * back to messaging_type=MESSAGE_TAG with tag=HUMAN_AGENT (allowed up to 7d
+ * after the customer's last message, requires the page to have the
+ * Human Agent permission approved).
  */
-async function sendMessengerMessage(psid, text) {
+async function postToMessengerSendAPI(psid, messagePayload) {
   const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN;
+  const url = "https://graph.facebook.com/v18.0/me/messages";
+  const headers = {
+    Authorization: `Bearer ${FB_PAGE_TOKEN}`,
+    "Content-Type": "application/json"
+  };
 
-  const response = await axios.post(
-    "https://graph.facebook.com/v18.0/me/messages",
-    {
-      recipient: { id: psid },
-      message: { text },
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${FB_PAGE_TOKEN}`,
-        "Content-Type": "application/json",
-      },
+  const attempt = async (body) => {
+    try {
+      const response = await axios.post(url, body, { headers });
+      return { ok: true, data: response.data };
+    } catch (err) {
+      const fbErr = err.response?.data?.error;
+      return {
+        ok: false,
+        status: err.response?.status,
+        code: fbErr?.code,
+        subcode: fbErr?.error_subcode,
+        message: fbErr?.message || err.message,
+        raw: err.response?.data
+      };
     }
-  );
+  };
 
-  return response.data;
+  // 1st try: RESPONSE (inside 24h)
+  const first = await attempt({
+    recipient: { id: psid },
+    messaging_type: "RESPONSE",
+    message: messagePayload
+  });
+  if (first.ok) return first.data;
+
+  // FB error codes that indicate the 24h window expired:
+  //  10 / subcode 2018278 = "This message is sent outside the allowed window"
+  //  613 = rate limit (don't retry with tag, just throw)
+  //  10 (general policy) often correlates with window expiration
+  const isWindowExpired =
+    first.code === 10 && (first.subcode === 2018278 || /outside.*allowed.*window/i.test(first.message || ''));
+
+  if (isWindowExpired) {
+    console.log(`⏰ 24h window expired for ${psid}, retrying with HUMAN_AGENT tag`);
+    const second = await attempt({
+      recipient: { id: psid },
+      messaging_type: "MESSAGE_TAG",
+      tag: "HUMAN_AGENT",
+      message: messagePayload
+    });
+    if (second.ok) return second.data;
+    // Fall through to throw with both errors visible
+    const err = new Error(`Messenger send failed: ${second.message || first.message}`);
+    err.fbError = second;
+    err.firstError = first;
+    throw err;
+  }
+
+  const err = new Error(`Messenger send failed: ${first.message}`);
+  err.fbError = first;
+  throw err;
 }
 
-/**
- * Send a Messenger attachment (image or file).
- * attachmentType: 'image' | 'file' | 'video' | 'audio'
- */
+async function sendMessengerMessage(psid, text) {
+  return postToMessengerSendAPI(psid, { text });
+}
+
 async function sendMessengerAttachment(psid, url, attachmentType = 'image') {
-  const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN;
-
-  const response = await axios.post(
-    "https://graph.facebook.com/v18.0/me/messages",
-    {
-      recipient: { id: psid },
-      message: {
-        attachment: {
-          type: attachmentType,
-          payload: { url, is_reusable: false }
-        }
-      }
-    },
-    {
-      headers: {
-        Authorization: `Bearer ${FB_PAGE_TOKEN}`,
-        "Content-Type": "application/json",
-      },
+  return postToMessengerSendAPI(psid, {
+    attachment: {
+      type: attachmentType,
+      payload: { url, is_reusable: false }
     }
-  );
-
-  return response.data;
+  });
 }
 
 // GET /conversations/grouped - Grouped conversations with pagination (replaces old / + N status calls)
@@ -674,10 +704,23 @@ router.post('/reply', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('❌ Error sending reply:', error);
+    const fb = error.fbError || error.firstError;
+    console.error('❌ Error sending reply:', fb || error.message);
+    // Try to give the agent something useful to act on
+    let userMessage = error.message || 'Failed to send reply';
+    if (fb?.code === 10 && (fb.subcode === 2018278 || /outside.*allowed.*window/i.test(fb.message || ''))) {
+      userMessage = 'Han pasado más de 7 días sin que el cliente escriba. Messenger no permite enviar el mensaje. Pídele al cliente que escriba primero.';
+    } else if (fb?.code === 613) {
+      userMessage = 'Límite de envío alcanzado en Messenger. Espera un momento e intenta de nuevo.';
+    } else if (fb?.code === 100) {
+      userMessage = 'PSID inválido o el usuario bloqueó la página.';
+    } else if (fb?.message) {
+      userMessage = `Messenger: ${fb.message}`;
+    }
     res.status(500).json({
       success: false,
-      error: error.message || 'Failed to send reply'
+      error: userMessage,
+      fbError: fb || null
     });
   }
 });
