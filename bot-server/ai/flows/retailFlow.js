@@ -226,11 +226,11 @@ async function handle(userMessage, convo, psid, context = {}) {
 
   // ── ML-PRICE REQUIREMENT ──
   // Policy: only quote prices fetched in real time from Mercado Libre.
-  // If a product's priceSource is 'db' (ML lookup failed or no ML link),
-  // escalate to a human instead of risking a stale/incorrect price.
-  const productsWithoutMLPrice = products.filter(p => p.priceSource && p.priceSource !== 'ml');
-  if (productsWithoutMLPrice.length > 0 && productsWithoutMLPrice.length === products.length) {
-    console.log(`🏛️ [retail] All products lack live ML price (sources: ${productsWithoutMLPrice.map(p => p.priceSource).join(',')}) — handoff`);
+  // priceSource MUST be 'ml'. Anything else (including undefined → product
+  // wasn't enriched at all) means we don't trust the price → handoff or drop.
+  const productsWithMLPrice = products.filter(p => p.priceSource === 'ml');
+  if (products.length > 0 && productsWithMLPrice.length === 0) {
+    console.log(`🏛️ [retail] No products have live ML price (sources: ${products.map(p => p.priceSource || 'undefined').join(',')}) — handoff`);
     return await executeHandoff(psid, convo, userMessage, {
       reason: 'ML price unavailable — cannot quote',
       responsePrefix: 'Déjame confirmarte el precio actualizado con un especialista, es solo un momento.',
@@ -238,8 +238,8 @@ async function handle(userMessage, convo, psid, context = {}) {
       timingStyle: 'standard'
     });
   }
-  // If some have ML price and some don't, drop the non-ML ones from the quote
-  const quotableProducts = products.filter(p => !p.priceSource || p.priceSource === 'ml');
+  // Drop any product without live ML price — never quote DB-sourced numbers
+  const quotableProducts = productsWithMLPrice;
 
   // ── HANDOFF RULES — check each product ──
   for (const product of quotableProducts) {

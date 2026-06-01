@@ -1320,7 +1320,14 @@ Responde JSON: {"matchIndex": <índice o -1>}` },
       // (intro/range), so the sales flow will present "desde X hasta Y" without per-product
       // links. Generating N tracked links upfront created N stale ClickLogs the customer
       // never sees. Tracked links are minted on demand when the customer picks a specific size.
-      const availableProducts = productCache;
+      //
+      // ML PRICE ENRICHMENT (critical): every product passed to salesFlow MUST go through
+      // enrichWithMLPrice so prices match what the customer will see on ML. Skipping this
+      // step let DB-sourced prices slip through retailFlow's ML-only filter (because
+      // priceSource was undefined, which the filter treats as a pass-through).
+      const availableProducts = await Promise.all(
+        productCache.map(p => enrichWithMLPrice(p))
+      );
 
       const salesResult = await salesFlow.handle(userMessage, convo, psid, {
         products: availableProducts,
