@@ -121,6 +121,23 @@ function WorkflowsView() {
     }
   };
 
+  const duplicate = async () => {
+    if (!selectedId) {
+      toast.error("Selecciona un flujo para duplicar");
+      return;
+    }
+    const name = window.prompt("Nombre del nuevo flujo (copia):", `${draft?.name || "Flujo"} (copia)`);
+    if (!name) return;
+    try {
+      const res = await API.post(`/workflows/${selectedId}/duplicate`, { name });
+      await loadList();
+      setSelectedId(res.data.data._id);
+      toast.success("Flujo duplicado (inactivo) — ajusta familia/producto y guarda");
+    } catch (err) {
+      toast.error(err.response?.data?.error || "No se pudo duplicar");
+    }
+  };
+
   const doImport = async () => {
     try {
       const parsed = JSON.parse(importText);
@@ -162,6 +179,7 @@ function WorkflowsView() {
           ))}
         </select>
         <button onClick={createNew} className="px-3 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 text-white">+ Nuevo</button>
+        <button onClick={duplicate} disabled={!selectedId} className="px-3 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 text-white disabled:opacity-40">Duplicar</button>
         <button onClick={() => setImportOpen(true)} className="px-3 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 text-white">Importar JSON</button>
         <button
           onClick={save}

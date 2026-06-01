@@ -92,6 +92,76 @@ router.post("/import", async (req, res) => {
   }
 });
 
+// POST /workflows/:id/duplicate — copy an existing flow into a new INACTIVE one.
+// Carries nodes/edges/setup/family/globalPrompt/knowledge; drops versions/metrics.
+router.post("/:id/duplicate", async (req, res) => {
+  try {
+    const src = await Workflow.findById(req.params.id).lean();
+    if (!src) return res.status(404).json({ success: false, error: "Workflow not found" });
+
+    const { _id, version, versions, metrics, createdAt, updatedAt, createdBy, ...rest } = src;
+
+    const copy = new Workflow({
+      ...rest,
+      name: req.body.name || `${src.name} (copia)`,
+      active: false, // duplicates always start inactive
+      version: 1,
+      versions: [],
+      metrics: { conversations: 0, completions: 0 },
+      createdBy: req.user.username || req.user.email,
+    });
+    await copy.save();
+    res.status(201).json({ success: true, data: copy });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// ===== Node templates (reusable node library) =====
+const WorkflowNodeTemplate = require("../models/WorkflowNodeTemplate");
+
+// GET /workflows/node-templates/all — list saved node templates
+router.get("/node-templates/all", async (req, res) => {
+  try {
+    const list = await WorkflowNodeTemplate.find().sort({ updatedAt: -1 });
+    res.json({ success: true, data: list });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// POST /workflows/node-templates — save a node as a template
+router.post("/node-templates", async (req, res) => {
+  try {
+    const b = req.body || {};
+    if (!b.name) return res.status(400).json({ success: false, error: "Template requires a name" });
+    const tpl = await WorkflowNodeTemplate.create({
+      name: b.name,
+      description: b.description || "",
+      prompt: b.prompt || "",
+      kind: b.kind === "auto" ? "auto" : "llm",
+      terminal: !!b.terminal,
+      autoAction: b.autoAction || { type: null, text: "" },
+      toolsAllowed: Array.isArray(b.toolsAllowed) ? b.toolsAllowed : [],
+      createdBy: req.user.username || req.user.email,
+    });
+    res.status(201).json({ success: true, data: tpl });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
+
+// DELETE /workflows/node-templates/:tid — remove a template
+router.delete("/node-templates/:tid", async (req, res) => {
+  try {
+    const t = await WorkflowNodeTemplate.findByIdAndDelete(req.params.tid);
+    if (!t) return res.status(404).json({ success: false, error: "Template not found" });
+    res.json({ success: true });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // PUT /workflows/:id — snapshot the previous version, then update
 router.put("/:id", async (req, res) => {
   try {
