@@ -378,6 +378,49 @@ function create(manifest) {
       productCache = await productFlow.loadProducts(manifest.products);
     }
 
+    // ── FRACTIONAL-SIZE INSISTENCE ──
+    // If the customer was previously offered a rounded size for a fractional
+    // request (e.g. asked 1.6x1.3 → offered 2x2) AND they're now insisting
+    // they need the EXACT size we don't carry, escalate to a human. This
+    // protocol pre-dates the AI-classifier era — we mustn't keep listing
+    // ranges and lose the customer.
+    if (convo?.lastFractionalSize) {
+      try {
+        const insistRes = await _openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: `Al cliente se le ofreció una medida redondeada porque pidió una medida con decimales (${convo.lastFractionalSize}m). ¿En este mensaje el cliente está INSISTIENDO en que necesita esa medida exacta (rechaza la redondeada) o aceptando/cambiando de tema?
+
+Responde JSON: {"insisting": true|false}
+
+INSISTE si: "ocupo la medida exacta", "necesito esa medida", "no me sirve más grande", "tiene que ser de X", "no puedo cortarla", "no tengo cómo sujetarla", "es justo esa medida", "es de ese tamaño exacto", etc.
+NO insiste si: acepta la propuesta, hace otra pregunta sin volver al tema, cambia de tema, pide otro tamaño, da código postal, agradece, etc.`
+            },
+            { role: 'user', content: userMessage }
+          ],
+          temperature: 0,
+          max_tokens: 20,
+          response_format: { type: 'json_object' }
+        });
+        const insisting = JSON.parse(insistRes.choices[0].message.content).insisting === true;
+        if (insisting) {
+          console.log(`📏 [convo] Customer insisting on exact fractional size ${convo.lastFractionalSize}m — handoff`);
+          const handoffResp = await executeHandoff(psid, convo, userMessage, {
+            reason: `fractional_insist: ${convo.lastFractionalSize}m`,
+            responsePrefix: `Para fabricar la medida exacta de ${convo.lastFractionalSize}m te paso con un especialista. Ellos pueden cotizar a medida.`,
+            specsText: `Cliente insiste en medida exacta: ${convo.lastFractionalSize}m. `,
+            lastIntent: 'fractional_insist_handoff',
+            timingStyle: 'standard'
+          });
+          return { response: handoffResp, state: flowState };
+        }
+      } catch (err) {
+        console.error('❌ [convo] fractional insistence check error:', err.message);
+      }
+    }
+
     // ── COLOR INTENT (early — runs before everything else so we either
     //    pivot to beige or escalate before any pricing/sizing fires) ──
     {
