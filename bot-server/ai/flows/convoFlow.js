@@ -537,6 +537,35 @@ NO insiste si: acepta la propuesta, hace otra pregunta sin volver al tema, cambi
       }
     }
 
+    // ── ROLL-SIZE DETECTION ──
+    // Confeccionada maxes out at ~7x10m. Any dimension > 12m means the
+    // customer is asking about a ROLLO (rolls are 3x100, 4x100, etc.).
+    // Hand off to a specialist instead of trying to fake-quote it.
+    // Only triggers in retail/confeccionada flows — wholesale rollo flows
+    // are already set up to handle these.
+    if (manifest.salesChannel === 'retail') {
+      const dimPattern = /\b(\d{1,3})\s*[xX×]\s*(\d{1,3})\b/g;
+      const dimsFound = [...userMessage.matchAll(dimPattern)];
+      const rollDims = dimsFound
+        .map(m => ({ a: parseInt(m[1], 10), b: parseInt(m[2], 10) }))
+        .filter(d => Math.max(d.a, d.b) > 12);
+      if (rollDims.length > 0) {
+        const d = rollDims[0];
+        const rollSize = `${Math.min(d.a, d.b)}x${Math.max(d.a, d.b)}`;
+        console.log(`📦 [convo] Roll-size detected in retail flow: ${rollSize}m — handoff`);
+        const handoffResp = await executeHandoff(psid, convo, userMessage, {
+          reason: `Rollo de malla sombra: ${rollSize}m (no confeccionada)`,
+          responsePrefix: `La medida ${rollSize}m corresponde a un rollo de malla sombra. Para cotización de rollos te comunico con un especialista.`,
+          specsText: `Rollo de ${rollSize}m. `,
+          lastIntent: 'roll_handoff',
+          notificationText: `Rollo ${rollSize}m desde flujo confeccionada`,
+          extraState: { productInterest: 'rollo' },
+          timingStyle: 'standard'
+        });
+        return { response: handoffResp, state: flowState };
+      }
+    }
+
     // ── MULTI-SIZE DETECTION ──
     // If the customer mentions 2+ distinct sizes in one message (e.g. "10x10 o
     // 15x15"), the single-size parser will return null and we'd fall through
