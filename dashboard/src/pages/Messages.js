@@ -348,14 +348,28 @@ function Messages() {
     }
   }, [dateFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Deep link: ?psid=… pre-populates the PSID filter so jumping in from a
-  // ticket (or anywhere else) opens the right conversation context.
+  // Deep link: ?psid=… opens that specific conversation in the chat modal
+  // (e.g. when arriving from a ticket). No list filtering required.
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const incomingPsid = params.get('psid');
-    if (incomingPsid && incomingPsid !== psidFilter) {
-      setPsidFilter(incomingPsid);
-    }
+    if (!incomingPsid) return;
+    if (incomingPsid === selectedPsid) return;
+    (async () => {
+      try {
+        // Resolve channel from the conversation doc, then open the modal
+        const res = await API.get('/conversations/grouped?limit=1&psid=' + encodeURIComponent(incomingPsid));
+        const match = res.data?.conversations?.find(c => c.psid === incomingPsid) || res.data?.conversations?.[0];
+        const channel = match?.channel || (incomingPsid.startsWith('wa:') ? 'whatsapp' : 'facebook');
+        setSelectedPsid(incomingPsid);
+        setSelectedChannel(channel);
+        fetchFullConversation(incomingPsid);
+      } catch (err) {
+        console.error('Failed to open conversation from deep link:', err);
+        // Fall back to filter mode so the user can still find it manually
+        setPsidFilter(incomingPsid);
+      }
+    })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.search]);
 
