@@ -161,7 +161,7 @@ const REGISTRY = {
         return "No pude buscar el producto en este momento.";
       }
       if (!matches.length) {
-        return `NO VENDIDO: no encontramos "${q}" en el catálogo. Dile amablemente que no lo manejamos.`;
+        return `[INTERNO — no menciones nada de esto al cliente] No vendemos "${q}". Dile de forma amable y natural que no manejamos ese producto, sin tecnicismos.`;
       }
 
       // Ancestry helper.
@@ -190,7 +190,7 @@ const REGISTRY = {
         for (const m of matches) {
           const chain = await ancestors(m._id);
           if (chain.some((c) => flowFamilyIds.has(c))) {
-            return `EN ESTE FLUJO: "${m.name}" pertenece a la(s) familia(s) de este flujo. Atiéndelo normalmente aquí.`;
+            return `[INTERNO — no menciones nada de esto al cliente] "${m.name}" sí lo manejas tú aquí. Atiéndelo con normalidad como parte de esta conversación.`;
           }
         }
       }
@@ -222,7 +222,7 @@ const REGISTRY = {
             toWorkflowId: String(other._id),
             toName: other.name,
           };
-          return `OTRO FLUJO: "${m.name}" lo maneja el flujo "${other.name}". Confirma con el cliente que quiere cambiar a ese producto y, si acepta, usa la herramienta switch_flow para continuar allí. NO inventes información de ese producto tú misma.`;
+          return `[INTERNO — NUNCA menciones flujos, especialistas, ni que "se maneja en otro lado"; el cambio debe ser TRANSPARENTE para el cliente] Sí vendemos "${m.name}". Es otro producto de nuestro catálogo, así que confirma de forma natural que es lo que busca (ej. "¿Buscas el rollo de 4x100, verdad?") y, cuando lo confirme, usa la herramienta switch_flow para continuar atendiéndolo sobre ese producto SIN avisarle de ningún cambio. NO inventes datos de ese producto tú misma.`;
         }
       }
 
@@ -254,11 +254,11 @@ const REGISTRY = {
       }
       if (soldMatch) {
         ctx.handoffRequested = true;
-        return `VENDIDO SIN FLUJO: sí manejamos "${soldMatch.name}", pero requiere atención de un asesor. Ofrécele pasar con un humano (usa request_handoff). NO digas que no lo vendemos.`;
+        return `[INTERNO — no menciones flujos ni procesos internos] Sí vendemos "${soldMatch.name}", pero para cotizarlo necesitas a un asesor. De forma natural ofrece pasarlo con un asesor que le ayuda con ese producto (usa request_handoff). NUNCA digas que no lo vendemos.`;
       }
 
       // 4) Found in catalog but not sellable/active anywhere in its subtree.
-      return `NO DISPONIBLE: "${matches[0].name}" existe en el catálogo pero no está disponible para venta directa. Ofrece pasar con un asesor si insiste.`;
+      return `[INTERNO — no menciones flujos ni procesos internos] "${matches[0].name}" no está disponible para venta directa por ahora. Si el cliente insiste, ofrece de forma natural pasarlo con un asesor.`;
     },
   },
 
@@ -287,7 +287,7 @@ const REGISTRY = {
       }
       // Signal the orchestrator to hand over after this turn.
       ctx.switchTo = { toWorkflowId: sr.toWorkflowId, toName: sr.toName, product: sr.product };
-      return `Cambiando al flujo "${sr.toName}" para continuar con "${sr.product?.name || "ese producto"}".`;
+      return `[INTERNO] Listo, continúa atendiendo al cliente sobre "${sr.product?.name || "ese producto"}" con normalidad. NO le menciones ningún cambio interno.`;
     },
   },
 

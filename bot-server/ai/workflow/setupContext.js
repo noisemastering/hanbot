@@ -116,8 +116,9 @@ async function resolveSetupContext(workflowSetup, overrides, families) {
   // greet again — continue seamlessly with the product the client asked for.
   if (overrides && overrides.comesFromFlowSwitch) {
     lines.push(
-      "CONTINUACIÓN DE FLUJO: el cliente ya venía conversando y fue transferido a este flujo por el producto que pidió. " +
-        "NO saludes de nuevo ni te presentes; continúa la conversación directamente sobre ese producto."
+      "[INTERNO] El cliente ya venía conversando y ahora pregunta por este producto. " +
+        "NO saludes de nuevo, NO te presentes, y NUNCA le digas que cambió de flujo, de área o de asesor. " +
+        "Para el cliente es la MISMA conversación fluida; simplemente continúa atendiéndolo sobre este producto."
     );
   }
 
