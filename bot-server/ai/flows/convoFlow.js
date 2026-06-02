@@ -602,12 +602,12 @@ NO insiste si: acepta la propuesta, hace otra pregunta sin volver al tema, cambi
 
     // ── DIMENSION / WHOLESALE-SPECS DETECTION (AI) ──
     // Two rules:
-    //   (a) RETAIL flow + any dim > 12m  → it's a rollo, hand off
-    //   (b) WHOLESALE flow + specs given → hand off to specialist
-    //       (these flows have endpointOfSale: 'human' — never fake-quote)
+    //   (a) RETAIL flow + any dim > 11m  → custom/rollo, hand off
+    //   (b) WHOLESALE flow + ANY product intent (length, qty, price ask) →
+    //       hand off (these flows have endpointOfSale: 'human' — never quote)
     //
-    // AI-based detection covers Spanish prose like "100 metros de largo por
-    // 7 de ancho" / "50 por 4" / "3 x 5", not just "NxM" regex matches.
+    // AI-based detection covers Spanish prose, single-length mentions
+    // ("rollo de 54 m"), price asks, and any other buying intent.
     {
       const isWholesaleFlow = manifest.endpointOfSale === 'human';
       try {
@@ -616,24 +616,55 @@ NO insiste si: acepta la propuesta, hace otra pregunta sin volver al tema, cambi
           messages: [
             {
               role: 'system',
-              content: `Extrae dimensiones (ancho y largo en metros) y porcentaje de sombra del mensaje del cliente. Responde JSON:
-{ "hasDims": true|false, "dim1": <número|null>, "dim2": <número|null>, "percentage": <número|null> }
+              content: `Analiza el mensaje del cliente. Responde JSON:
+{ "hasDims": true|false, "dim1": <número|null>, "dim2": <número|null>, "percentage": <número|null>, "singleLength": <número|null>, "buyingIntent": true|false }
 
 REGLAS:
-- Captura formatos en prosa: "100 metros de largo por 7 de ancho", "50 por 4", "3x5", "7 mts de ancho y 100 de largo", etc.
-- dim1/dim2: en metros. Si la unidad es pies/feet, igual devuelve los números (los procesa otra parte).
-- percentage: solo si el cliente menciona porcentaje de sombra/cobertura (35, 50, 70, 80, 90). Ignora porcentajes que claramente no son sombra (ej. descuentos).
-- Si no hay dimensiones → hasDims: false, dim1/dim2: null.
-- Si solo hay UN número de medida (ej "rollo de 100") → hasDims: false.
+- hasDims true SOLO si hay DOS dimensiones (ancho x largo). Ej: "100 metros de largo por 7 de ancho", "50 por 4", "3x5".
+- singleLength: si menciona UNA sola medida en metros (ej "rollo de 54 metros", "54 m de borde", "quiero 18 m") → el número. Si no, null.
+- percentage: porcentaje de sombra/cobertura (35/50/70/80/90), si lo menciona. Ignora descuentos.
+- buyingIntent: true si el cliente expresa intención de comprar/cotizar (quiero, necesito, cuánto cuesta, costo, precio, lo pido, me lo mandas, lo quiero), false si solo saluda o pregunta info general.
+- Si UNIDAD es pies/feet, devuelve igualmente los números.
 - Solo JSON.`
             },
             { role: 'user', content: userMessage }
           ],
           temperature: 0,
-          max_tokens: 80,
+          max_tokens: 100,
           response_format: { type: 'json_object' }
         });
         const dims = JSON.parse(dimRes.choices[0].message.content);
+
+        // (c) WHOLESALE flow with ANY product/buying signal → handoff,
+        //     regardless of whether it's a NxM dim or just a single length
+        //     or just buying intent. These flows exist to capture leads.
+        if (isWholesaleFlow && (dims.hasDims || dims.singleLength || dims.buyingIntent || dims.percentage)) {
+          const lengthText = dims.singleLength ? `${dims.singleLength} m` :
+            (dims.hasDims ? `${Math.min(dims.dim1, dims.dim2)}x${Math.max(dims.dim1, dims.dim2)}m` : null);
+          const pctText = dims.percentage ? ` al ${dims.percentage}%` : '';
+          const descr = lengthText ? `${lengthText}${pctText}` : (dims.percentage ? `${dims.percentage}%` : 'cotización a medida');
+          console.log(`📦 [convo] Wholesale flow product intent (${descr}) — handoff`);
+          // Save what we have
+          const newSpecs = { ...(convo.productSpecs || {}) };
+          if (dims.hasDims) {
+            newSpecs.size = `${Math.min(dims.dim1, dims.dim2)}x${Math.max(dims.dim1, dims.dim2)}`;
+            newSpecs.width = Math.min(dims.dim1, dims.dim2);
+            newSpecs.length = Math.max(dims.dim1, dims.dim2);
+          } else if (dims.singleLength) {
+            newSpecs.length = dims.singleLength;
+            newSpecs.size = `${dims.singleLength}m`;
+          }
+          if (dims.percentage) newSpecs.percentage = dims.percentage;
+          await updateConversation(psid, { productSpecs: newSpecs });
+          const handoffResp = await executeHandoff(psid, convo, userMessage, {
+            reason: `Pedido mayoreo: ${descr}`,
+            responsePrefix: `Para cotizarte ${descr} te paso con un especialista de mayoreo. Tendrás respuesta a la brevedad.`,
+            specsText: `Mayoreo: ${descr}. `,
+            lastIntent: 'wholesale_product_handoff',
+            timingStyle: 'standard'
+          });
+          return { response: handoffResp, state: flowState };
+        }
 
         if (dims.hasDims && dims.dim1 && dims.dim2) {
           const a = Math.min(dims.dim1, dims.dim2);
@@ -662,30 +693,7 @@ REGLAS:
             return { response: handoffResp, state: flowState };
           }
 
-          // (b) wholesale flow + dims → handoff (always human-endpoint)
-          if (isWholesaleFlow) {
-            const pctText = dims.percentage ? ` al ${dims.percentage}%` : '';
-            console.log(`📦 [convo] Wholesale specs given (${sizeStr}${pctText}) — handoff`);
-            // Save specs so buildClientBrief surfaces them
-            const specsUpdate = {
-              productSpecs: {
-                ...(convo.productSpecs || {}),
-                size: `${a}x${b}`,
-                width: a,
-                length: b,
-                ...(dims.percentage ? { percentage: dims.percentage } : {})
-              }
-            };
-            await updateConversation(psid, specsUpdate);
-            const handoffResp = await executeHandoff(psid, convo, userMessage, {
-              reason: `Pedido mayoreo: rollo ${sizeStr}${pctText}`,
-              responsePrefix: `Para una cotización de rollo a la medida ${sizeStr}${pctText} te paso con un especialista de mayoreo. Tendrás respuesta a la brevedad.`,
-              specsText: `Rollo ${sizeStr}${pctText}. `,
-              lastIntent: 'wholesale_specs_handoff',
-              timingStyle: 'standard'
-            });
-            return { response: handoffResp, state: flowState };
-          }
+          // (b) wholesale + NxM dims is already handled by branch (c) above
         }
       } catch (err) {
         console.error('❌ [convo] dim/wholesale detection error:', err.message);
