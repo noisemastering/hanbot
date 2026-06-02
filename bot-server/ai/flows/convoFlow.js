@@ -331,6 +331,69 @@ function create(manifest) {
       }
     }
 
+    // ── POST-FOLLOWUP PURCHASE CONFIRMATION ──
+    // If we already sent a re-marketing follow-up ("¿Te decidiste por la
+    // malla de X?") and the customer's next message is affirmative or
+    // indicates they already ordered, DON'T re-pitch with a fresh link.
+    // Treat as purchase confirmation and offer support instead.
+    if (convo?.silenceFollowUpSent && !convo?.purchaseAcknowledged) {
+      try {
+        const intentRes = await _openai.chat.completions.create({
+          model: 'gpt-4o-mini',
+          messages: [
+            {
+              role: 'system',
+              content: `El bot envió una pregunta de re-marketing ("¿Te decidiste por la malla de XxYm? Recuerda que estamos para servirte" más un link). ¿En este nuevo mensaje el cliente está confirmando que la va a comprar / ya la compró, está pidiendo ayuda post-venta, o está rechazando / cambiando de tema?
+
+Responde JSON: {"intent": "confirming"|"already_bought"|"post_sale"|"rejecting"|"other"}
+
+- "confirming": "sí", "claro", "ok", "voy a comprarla", "me la quedo", "perfecto", "dale", "va", "listo"
+- "already_bought": "ya la compré", "ya la pagué", "ya la encargué", "ya la ordené", "ya fue", "hecho"
+- "post_sale": pregunta sobre envío/tiempo de entrega/factura/seguimiento ("cuándo llega", "tracking", "factura")
+- "rejecting": "no", "ya no", "mejor no", "lo voy a pensar"
+- "other": pregunta nueva sobre producto, otra medida, etc.`
+            },
+            { role: 'user', content: userMessage }
+          ],
+          temperature: 0,
+          max_tokens: 30,
+          response_format: { type: 'json_object' }
+        });
+        const intent = JSON.parse(intentRes.choices[0].message.content).intent;
+
+        if (intent === 'confirming' || intent === 'already_bought') {
+          console.log(`✅ [convo] Post-followup purchase confirmation (intent=${intent}) — no re-pitch`);
+          await updateConversation(psid, { purchaseAcknowledged: true });
+          const text = intent === 'already_bought'
+            ? '¡Excelente! Tu pedido está en proceso. Si necesitas algo con el envío, factura o cualquier duda, aquí estoy.'
+            : '¡Genial! Aquí estoy si necesitas algo con tu pedido, el envío, o cualquier duda.';
+          return { response: { type: 'text', text }, state: flowState };
+        }
+
+        if (intent === 'rejecting') {
+          console.log(`👋 [convo] Post-followup rejection — graceful close`);
+          await updateConversation(psid, { purchaseAcknowledged: true, silenceFollowUpAt: null });
+          return {
+            response: {
+              type: 'text',
+              text: 'Entiendo, gracias por avisar. Si más adelante te interesa, aquí estamos. ¡Que tengas excelente día!'
+            },
+            state: flowState
+          };
+        }
+
+        if (intent === 'post_sale') {
+          // Mark as acknowledged so future turns don't keep re-pitching, then
+          // fall through to normal handling — masterFlow can answer the
+          // shipping/factura/tracking question.
+          await updateConversation(psid, { purchaseAcknowledged: true });
+        }
+        // intent === 'other' → fall through to normal flow
+      } catch (err) {
+        console.error('❌ [convo] post-followup intent check error:', err.message);
+      }
+    }
+
     // ── PENDING SWITCH CONFIRMATION (Protocol #1 — different product) ──
     if (flowState.pendingSwitch) {
       try {

@@ -168,6 +168,7 @@ const conversationSchema = new mongoose.Schema({
   lastLinkSentAt: { type: Date, default: null },               // When we last sent an ML link
   silenceFollowUpAt: { type: Date, default: null },            // When to send silence follow-up (null = not scheduled)
   silenceFollowUpSent: { type: Boolean, default: false },       // Whether silence follow-up was already sent
+  purchaseAcknowledged: { type: Boolean, default: false },      // Customer confirmed they bought/will buy after follow-up — no more re-pitch
 
   // Pre-handoff zip code collection (dynamic fields used by preHandoffCheck)
   pendingHandoff: { type: Boolean, default: false },
