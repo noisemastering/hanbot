@@ -289,8 +289,11 @@ async function generateReply(userMessage, psid, referral = null) {
   // These handle common patterns before the main flow system
   const cleanMsg = userMessage.toLowerCase().trim();
 
-  // 📊 LOCATION STATS: Check if user is answering our "de qué ciudad?" question
-  if (convo.pendingLocationResponse) {
+  // 📊 LOCATION STATS: Check if user is answering our "de qué ciudad?" question.
+  // SKIP this when there's a pending handoff — the zip the customer just gave
+  // is needed to COMPLETE the handoff, not to satisfy a stats request. The
+  // pending-handoff resume in flowManager/convoFlow takes priority.
+  if (convo.pendingLocationResponse && !convo.pendingHandoff) {
     const locationResponse = await handleLocationStatsResponse(userMessage, psid, convo);
     if (locationResponse) {
       return await checkForRepetition(locationResponse, psid, convo);

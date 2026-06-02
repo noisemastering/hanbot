@@ -91,7 +91,7 @@ async function checkZipBeforeHandoff(psid, convo, userMessage, handoffInfo = {})
 
   return {
     type: "text",
-    text: "Para calcular el envío, ¿me compartes tu código postal o ciudad?"
+    text: "¿Me compartes tu código postal o ciudad para canalizarte con el asesor adecuado?"
   };
 }
 

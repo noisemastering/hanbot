@@ -641,15 +641,22 @@ REGLAS:
           const sizeStr = `${a}x${b}m`;
 
           // (a) retail flow + roll-sized dim → handoff
-          if (manifest.salesChannel === 'retail' && b > 12) {
-            console.log(`📦 [convo] Roll-size detected in retail flow: ${sizeStr} — handoff`);
+          //     Confeccionada catalog max dim is 11 (5x11). Anything > 11 is
+          //     either a rollo or a custom order — escalate either way.
+          if (manifest.salesChannel === 'retail' && b > 11) {
+            console.log(`📦 [convo] Oversize/roll dim detected in retail flow: ${sizeStr} — handoff`);
+            const isRollSize = b > 50; // truly roll-length (e.g. 4x100)
             const handoffResp = await executeHandoff(psid, convo, userMessage, {
-              reason: `Rollo de malla sombra: ${sizeStr} (no confeccionada)`,
-              responsePrefix: `La medida ${sizeStr} corresponde a un rollo de malla sombra. Para cotización de rollos te comunico con un especialista.`,
-              specsText: `Rollo de ${sizeStr}${dims.percentage ? ` al ${dims.percentage}%` : ''}. `,
-              lastIntent: 'roll_handoff',
-              notificationText: `Rollo ${sizeStr} desde flujo confeccionada`,
-              extraState: { productInterest: 'rollo' },
+              reason: isRollSize
+                ? `Rollo de malla sombra: ${sizeStr} (no confeccionada)`
+                : `Medida especial confeccionada: ${sizeStr} (fuera de catálogo)`,
+              responsePrefix: isRollSize
+                ? `La medida ${sizeStr} corresponde a un rollo de malla sombra. Para cotización de rollos te comunico con un especialista.`
+                : `La medida ${sizeStr} es una confección a medida especial. Te comunico con un asesor para cotizarla.`,
+              specsText: `${isRollSize ? 'Rollo' : 'Confección a medida'} de ${sizeStr}${dims.percentage ? ` al ${dims.percentage}%` : ''}. `,
+              lastIntent: isRollSize ? 'roll_handoff' : 'custom_size_handoff',
+              notificationText: `${isRollSize ? 'Rollo' : 'Medida especial'} ${sizeStr}`,
+              extraState: isRollSize ? { productInterest: 'rollo' } : {},
               timingStyle: 'standard'
             });
             return { response: handoffResp, state: flowState };
