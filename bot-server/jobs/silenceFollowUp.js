@@ -8,6 +8,7 @@ const { sendTextMessage: sendWhatsAppText, sendWhatsAppMessage } = require('../c
 const { sendCatalog } = require('../utils/sendCatalog');
 const { getCatalogUrl } = require('../ai/flowManager');
 const { generateClickLink } = require('../tracking');
+const { sweepRecentOrdersOnce, getClickStatusForPsid } = require('./utils/clickConversionStatus');
 const FOLLOW_UP_DELAY_MS = 23 * 60 * 60 * 1000; // 23 hours
 const LINK_FOLLOW_UP_DELAY_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -104,6 +105,15 @@ async function runSilenceFollowUpJob() {
 
     console.log(`🔕 Silence follow-up job: found ${conversations.length} conversation(s) to process`);
 
+    // Belt-and-suspenders: pull any ML orders from the last hour and run
+    // the correlator. Webhooks normally keep this fresh, but a sale at
+    // hour 22:55 might not be propagated when the 23h job ticks. ONE
+    // ML API call per batch, then everything downstream reads from DB.
+    const sweep = await sweepRecentOrdersOnce({ minutes: 60 });
+    if (sweep.swept > 0) {
+      console.log(`🔄 ML recent-orders sweep: ${sweep.correlated} newly correlated, ${sweep.alreadyCorrelated} already (${sweep.swept} paid)`);
+    }
+
     for (const convo of conversations) {
       try {
         // Atomically claim this conversation to prevent duplicate sends
@@ -145,6 +155,7 @@ async function runSilenceFollowUpJob() {
         // Determine channel
         const channel = convo.channel || (convo.psid.startsWith('wa:') ? 'whatsapp' : 'facebook');
         let followUpText;
+        let followUpVariant = 'contextual';
 
         if (WHOLESALE_FLOWS.includes(convo.currentFlow)) {
           // --- Wholesale follow-up: pitch + catalog PDF ---
@@ -169,6 +180,23 @@ async function runSilenceFollowUpJob() {
             }
           }
         } else {
+          // --- Check click + conversion state first ---
+          // - converted   → already bought; send thank-you (or skip)
+          // - abandoned   → clicked but no purchase; nudge gently
+          // - no_click    → fall through to the original contextual message
+          const clickStatus = await getClickStatusForPsid(convo.psid);
+
+          if (clickStatus.state === 'converted') {
+            followUpVariant = 'thank_you';
+            const orderInfo = clickStatus.click?.conversionData || {};
+            const item = orderInfo.itemTitle ? ` (${orderInfo.itemTitle})` : '';
+            followUpText = `¡Gracias por tu compra${item}! Tu pedido ya está en proceso. Si necesitas el seguimiento del envío o tienes alguna duda, aquí estamos para ayudarte. 🙌`;
+          } else if (clickStatus.state === 'abandoned') {
+            followUpVariant = 'abandoned';
+            const productName = clickStatus.click?.productName;
+            const productHint = productName ? ` de ${productName}` : '';
+            followUpText = `Vi que abriste el link${productHint} pero no completaste la compra. ¿Hubo algo con el pago, la medida o el envío en lo que te pueda ayudar? Cualquier duda, aquí estoy. 😊`;
+          } else {
           // --- Contextual follow-up based on what the customer was looking at ---
           const specs = convo.productSpecs || {};
           const isBorde = convo.currentFlow === 'borde_separador' || convo.productInterest === 'borde_separador';
@@ -214,6 +242,7 @@ async function runSilenceFollowUpJob() {
               followUpText += `\n\n${convo.lastSharedProductLink}`;
             }
           }
+          } // end no_click branch
 
           if (channel === 'whatsapp') {
             const phone = convo.psid.replace('wa:', '');
@@ -231,7 +260,10 @@ async function runSilenceFollowUpJob() {
           senderType: 'bot'
         });
 
-        console.log(`✅ Silence follow-up sent to ${convo.psid} (${WHOLESALE_FLOWS.includes(convo.currentFlow) ? 'wholesale' : 'contextual'})`);
+        const variantTag = WHOLESALE_FLOWS.includes(convo.currentFlow)
+          ? 'wholesale'
+          : (typeof followUpVariant === 'string' ? followUpVariant : 'contextual');
+        console.log(`✅ Silence follow-up sent to ${convo.psid} (${variantTag})`);
       } catch (err) {
         console.error(`❌ Error sending silence follow-up to ${convo.psid}:`, err.message);
       }
