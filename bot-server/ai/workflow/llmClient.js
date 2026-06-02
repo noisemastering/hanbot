@@ -5,8 +5,11 @@
 // module if we move the engine to another provider later.
 const { OpenAI } = require("openai");
 
-// Workflow-specific overrides fall back to the bot-wide settings.
-const CHAT_MODEL = process.env.WORKFLOW_MODEL || process.env.AI_MODEL || "gpt-4o";
+// The workflow engine ALWAYS uses gpt-4o (good tool-calling judgment). We do NOT
+// fall back to AI_MODEL, because that var may be a weaker/legacy model
+// (gpt-4o-mini / gpt-3.5) used elsewhere — inheriting it once made the engine
+// behave badly. Override only via an explicit WORKFLOW_MODEL.
+const CHAT_MODEL = process.env.WORKFLOW_MODEL || "gpt-4o";
 
 let _client = null;
 function getClient() {
