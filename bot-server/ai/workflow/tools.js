@@ -10,6 +10,60 @@
 // (ML links, handoff trigger, lead capture, location stats) happens hands-on
 // later — kept behind this single seam so the engine doesn't change.
 
+// Normalize a measure/product query to comparable dimension tokens.
+// "4x3", "4 x 3 m", "4 por 3", "de 4x3 metros" → ["4","3"] (sorted for order-insensitivity).
+function dimsOf(text) {
+  if (!text) return null;
+  // Strip metric units, including 'm' glued to a digit ("6m" → "6").
+  const m = String(text)
+    .toLowerCase()
+    .replace(/(\d)\s*(?:m\b|mts?\b|metros?\b)/g, "$1 ")
+    .replace(/\bmts?\.?\b|\bmetros?\b|\bm\b/g, " ")
+    .match(/(\d+(?:\.\d+)?)\s*(?:[x×*]|por)\s*(\d+(?:\.\d+)?)/);
+  if (!m) return null;
+  // Sort numerically so "6x4" and "4x6" compare equal regardless of order.
+  return [m[1], m[2]].map(Number).sort((a, b) => a - b);
+}
+
+// Find a sellable product in the flow's family subtrees that matches the
+// customer's requested measure/name. Returns the ProductFamily doc or null.
+async function findProductInFamilies(query, familyList) {
+  if (!query) return null;
+  const PF = require("../../models/ProductFamily");
+  const ids = (Array.isArray(familyList) ? familyList : familyList ? [familyList] : [])
+    .filter((f) => f && f.id)
+    .map((f) => String(f.id));
+  if (!ids.length) return null;
+
+  // Gather all sellable descendants of the flow families (BFS, bounded).
+  const queue = [...ids];
+  const candidates = [];
+  let guard = 0;
+  while (queue.length && guard++ < 500) {
+    const pid = queue.shift();
+    const kids = await PF.find({ parentId: pid })
+      .select("name sellable active price mlPrice onlineStoreLinks parentId")
+      .lean();
+    for (const k of kids) {
+      if (k.sellable && k.active !== false) candidates.push(k);
+      queue.push(k._id);
+    }
+    // also consider the family node itself if it's sellable
+  }
+
+  const wantDims = dimsOf(query);
+  if (wantDims) {
+    const hit = candidates.find((c) => {
+      const cd = dimsOf(c.name);
+      return cd && cd[0] === wantDims[0] && cd[1] === wantDims[1];
+    });
+    if (hit) return hit;
+  }
+  // Fallback: loose name contains (e.g. a named variant, not a measure).
+  const q = query.toLowerCase();
+  return candidates.find((c) => (c.name || "").toLowerCase().includes(q)) || null;
+}
+
 const REGISTRY = {
   share_product_link: {
     definition: {
@@ -27,21 +81,53 @@ const REGISTRY = {
     },
     async execute(input, ctx) {
       ctx.actions.push({ tool: "share_product_link", input });
-      const pi = ctx.priceInfo;
-      // Enforce the quoting hierarchy: sellable-but-no-price → human, never invent.
-      if (pi && pi.handoff) {
+      const { resolvePrice } = require("./priceResolver");
+      const requested = (input.product || "").trim();
+      const pi = ctx.priceInfo; // preloaded product (a default/shortcut, NOT a lock)
+
+      // Decide which product to quote:
+      //  - If the customer named a specific measure/product, resolve THAT within
+      //    the flow's families (any measure is available, not just the preloaded one).
+      //  - Else fall back to the preloaded product as a convenient default.
+      let priceInfo = null;
+      let resolvedName = null;
+
+      if (requested) {
+        const doc = await findProductInFamilies(requested, ctx.families);
+        if (doc) {
+          priceInfo = await resolvePrice(doc);
+          resolvedName = doc.name;
+        } else {
+          // Customer named a SPECIFIC product/measure we couldn't find in this
+          // flow's families. NEVER fall back to the preloaded product (that would
+          // quote the wrong thing). Tell the model to clarify, not invent.
+          return `[INTERNO] No encontré "${requested}" entre las medidas/variantes de este flujo. ` +
+            `Si el cliente dio una medida, confírmala o pídela exacta (ancho x largo); NO compartas el link del producto precargado ni inventes precio.`;
+        }
+      } else if (pi) {
+        // No specific product named → use the preloaded one as a default shortcut.
+        priceInfo = pi;
+      }
+
+      if (!priceInfo) {
+        return "Pregunta al cliente qué medida necesita para poder cotizar.";
+      }
+
+      // Quoting hierarchy: sellable-but-no-price → human, never invent.
+      if (priceInfo.handoff) {
         ctx.handoffRequested = true;
-        return "Este producto no tiene precio disponible. NO inventes un precio: ofrece pasar con un asesor.";
+        return `${resolvedName ? `"${resolvedName}"` : "Ese producto"} no tiene precio disponible. NO inventes un precio: ofrece pasar con un asesor.`;
       }
-      const link = pi?.link || null;
-      if (link) {
-        const price = pi?.amount ? ` Precio: $${pi.amount}${pi.source === "ml" ? "" : " (inventario)"}.` : "";
-        return `Link de compra: ${link}.${price}`;
+      if (priceInfo.link || priceInfo.amount) {
+        const price = priceInfo.amount
+          ? ` Precio: $${priceInfo.amount}${priceInfo.source === "ml" ? "" : " (inventario)"}.`
+          : "";
+        const linkPart = priceInfo.link ? `Link de compra: ${priceInfo.link}.` : "";
+        return `${resolvedName ? resolvedName + " — " : ""}${linkPart}${price}`.trim();
       }
-      // TODO(hands-on): when no preloaded product, resolve via free-text product identification.
       return ctx.sandbox
-        ? "No hay producto precargado en este test; asigna product_specific en Setup para obtener link/precio reales."
-        : "Link pendiente de resolución (sin producto precargado).";
+        ? "No hay producto resoluble en este test; asigna familia/productos en Setup."
+        : "No pude resolver el link de compra. Pide la medida exacta al cliente.";
     },
   },
 
