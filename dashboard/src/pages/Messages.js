@@ -895,61 +895,85 @@ function Messages() {
         borderRadius: "12px"
       }}>
         <label style={{ color: "#9ca3af", fontSize: "0.85rem", display: "block", marginBottom: "0.5rem" }}>
-          🔍 Buscar en el contenido de las conversaciones
+          🔍 Buscar en el contenido o por ID/teléfono del cliente
         </label>
         <div style={{ display: "flex", gap: "0.5rem", alignItems: "stretch" }}>
-          <textarea
-            placeholder='Ej: "cuánto cuesta una de 5x4 y en dónde están ubicado" — busca convos que contengan TODAS las palabras'
-            value={keywordInput}
-            onChange={(e) => setKeywordInput(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-                e.preventDefault();
-                setKeywordFilter(keywordInput.trim());
+          {(() => {
+            // Heuristic: if the input is a single token of mostly digits (or wa: prefix),
+            // we treat it as a USER ID lookup rather than a content search.
+            const trimmed = keywordInput.trim();
+            const looksLikeId = trimmed && /^(wa:)?[\d\s+\-()]{6,}$/.test(trimmed) && !/[a-z]{2}/i.test(trimmed.replace(/^wa:/i, ''));
+            const submit = () => {
+              if (looksLikeId) {
+                setPsidFilter(trimmed.replace(/^wa:/i, '').replace(/[^0-9]/g, '') ? trimmed : trimmed);
+                setKeywordFilter(''); // clear content search so it doesn't fight
+              } else {
+                setKeywordFilter(trimmed);
+                setPsidFilter('');
               }
-            }}
-            rows={2}
-            style={{
-              flex: 1,
-              padding: "0.6rem 0.8rem",
-              backgroundColor: "rgba(255, 255, 255, 0.08)",
-              color: "white",
-              border: "1px solid #555",
-              borderRadius: "8px",
-              fontSize: "0.95rem",
-              resize: "vertical",
-              fontFamily: "inherit"
-            }}
-          />
-          <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
-            <button
-              onClick={() => setKeywordFilter(keywordInput.trim())}
-              disabled={!keywordInput.trim() || keywordInput.trim() === keywordFilter}
+            };
+            return (
+              <>
+                <textarea
+                  placeholder='Ej: "cuánto cuesta una de 5x4" (contenido) o "26625314740484739" / "wa:524425957432" (ID o teléfono)'
+                  value={keywordInput}
+                  onChange={(e) => setKeywordInput(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+                      e.preventDefault();
+                      submit();
+                    }
+                  }}
+                  rows={2}
+                  style={{
+                    flex: 1,
+                    padding: "0.6rem 0.8rem",
+                    backgroundColor: "rgba(255, 255, 255, 0.08)",
+                    color: "white",
+                    border: looksLikeId ? "2px solid #7c4dff" : "1px solid #555",
+                    borderRadius: "8px",
+                    fontSize: "0.95rem",
+                    resize: "vertical",
+                    fontFamily: "inherit"
+                  }}
+                />
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.25rem" }}>
+                  <button
+                    onClick={submit}
+                    disabled={!trimmed || (looksLikeId ? trimmed === psidFilter : trimmed === keywordFilter)}
               style={{
-                padding: "0.5rem 1.2rem",
-                backgroundColor: (!keywordInput.trim() || keywordInput.trim() === keywordFilter) ? "#374151" : "#10b981",
-                color: "white",
-                border: "none",
-                borderRadius: "8px",
-                cursor: (!keywordInput.trim() || keywordInput.trim() === keywordFilter) ? "not-allowed" : "pointer",
-                fontSize: "0.9rem",
-                fontWeight: "bold",
-                flex: 1,
-                minWidth: "100px"
-              }}>
-              Buscar
-            </button>
-            {keywordFilter && (
-              <button onClick={() => { setKeywordInput(''); setKeywordFilter(''); }}
-                style={{ padding: "0.4rem 1rem", backgroundColor: "#7f1d1d", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "0.85rem" }}>
-                Limpiar
-              </button>
-            )}
-          </div>
+                    padding: "0.5rem 1.2rem",
+                    backgroundColor: (!trimmed || (looksLikeId ? trimmed === psidFilter : trimmed === keywordFilter)) ? "#374151" : (looksLikeId ? "#7c4dff" : "#10b981"),
+                    color: "white",
+                    border: "none",
+                    borderRadius: "8px",
+                    cursor: (!trimmed || (looksLikeId ? trimmed === psidFilter : trimmed === keywordFilter)) ? "not-allowed" : "pointer",
+                    fontSize: "0.9rem",
+                    fontWeight: "bold",
+                    flex: 1,
+                    minWidth: "100px"
+                  }}>
+                  {looksLikeId ? '🆔 Buscar' : 'Buscar'}
+                </button>
+                {(keywordFilter || psidFilter) && (
+                  <button onClick={() => { setKeywordInput(''); setKeywordFilter(''); setPsidFilter(''); }}
+                    style={{ padding: "0.4rem 1rem", backgroundColor: "#7f1d1d", color: "white", border: "none", borderRadius: "8px", cursor: "pointer", fontSize: "0.85rem" }}>
+                    Limpiar
+                  </button>
+                )}
+              </div>
+            </>
+            );
+          })()}
         </div>
         {keywordFilter && (
           <p style={{ color: "#10b981", fontSize: "0.8rem", marginTop: "0.5rem", marginBottom: 0 }}>
-            Filtrando por: <strong>{keywordFilter}</strong> ({keywordFilter.split(/\s+/).filter(w => w.length >= 2).length} palabras, todas deben aparecer en la convo)
+            Filtrando por contenido: <strong>{keywordFilter}</strong> ({keywordFilter.split(/\s+/).filter(w => w.length >= 2).length} palabras, todas deben aparecer en la convo)
+          </p>
+        )}
+        {psidFilter && (
+          <p style={{ color: "#a78bfa", fontSize: "0.8rem", marginTop: "0.5rem", marginBottom: 0 }}>
+            Filtrando por ID/teléfono: <strong>{psidFilter}</strong>
           </p>
         )}
       </div>
