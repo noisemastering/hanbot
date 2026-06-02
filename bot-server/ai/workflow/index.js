@@ -128,6 +128,34 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     }
   }
 
+  // 1.6 ENGINE-SIDE IN-FAMILY MEASURE PRICING (does not rely on the model calling
+  // share_product_link). If the customer named a measure that exists in THIS
+  // flow's families, resolve its price/link now and inject it into this turn's
+  // context, so the model quotes it deterministically instead of vague-replying
+  // or escalating to a human.
+  let turnPriceInfo = state.priceInfo || null;
+  let turnContextExtra = "";
+  if (userMessage) {
+    try {
+      const found = await resolveInFamilyMeasure(String(userMessage), familyList);
+      if (found && found.priceInfo) {
+        turnPriceInfo = found.priceInfo;
+        const pi = found.priceInfo;
+        if (pi.handoff) {
+          turnContextExtra =
+            `\n- COTIZACIÓN SOLICITADA: "${found.name}" no tiene precio disponible. NO inventes precio; ofrece pasar con un asesor.`;
+        } else if (pi.amount) {
+          turnContextExtra =
+            `\n- COTIZACIÓN SOLICITADA AHORA: el cliente pregunta por "${found.name}". Precio $${pi.amount}${pi.source === "ml" ? " (Mercado Libre)" : " (inventario)"}.` +
+            (pi.link ? ` Link: ${pi.link}.` : "") +
+            ` Cotiza ESTE producto con su precio y link; NO escales a un humano ni pidas la medida de nuevo.`;
+        }
+      }
+    } catch (err) {
+      console.error("⚠️ in-family measure pricing failed:", err.message);
+    }
+  }
+
   // 2. route
   const decision = await route(workflow, currentNode, history, contextBlock);
   const movedTo = workflow.getNode(decision.nextNodeId) || currentNode;
@@ -142,10 +170,17 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     lead: state.lead || null,
     location: state.location || null,
     product: state.product || null,
-    priceInfo: state.priceInfo || null,
-    families: require("../../models/Workflow").familyListOf(workflow), // realm (for scope checks)
+    priceInfo: turnPriceInfo, // turn-scoped: the measure the client just asked for
+    families: familyList, // realm (for scope checks)
   };
-  const { text, toolCalls } = await executeNode(workflow, movedTo, history, vars, ctx, contextBlock);
+  const { text, toolCalls } = await executeNode(
+    workflow,
+    movedTo,
+    history,
+    vars,
+    ctx,
+    contextBlock + turnContextExtra
+  );
 
   // 5. record the reply
   if (text) {
@@ -226,6 +261,19 @@ async function detectFlowSwitch(message, familyList, currentWorkflow) {
     return { toWorkflowId: sr.toWorkflowId, toName: sr.toName, product: sr.product };
   }
   return null;
+}
+
+// If the customer's message contains a measure (e.g. "4x3") that exists in this
+// flow's families, resolve its price/link. Returns { name, priceInfo } or null.
+// Only fires for measure-like messages so plain "precio" keeps the preloaded one.
+async function resolveInFamilyMeasure(message, familyList) {
+  const toolsMod = require("./tools");
+  // reuse the dimension parser to gate: no measure → skip (don't override preload)
+  if (!toolsMod.dimsOf || !toolsMod.dimsOf(message)) return null;
+  const doc = await toolsMod.findProductInFamilies(message, familyList);
+  if (!doc) return null;
+  const { resolvePrice } = require("./priceResolver");
+  return { name: doc.name, priceInfo: await resolvePrice(doc) };
 }
 
 // Carry the conversation over to flow B and run its opening turn. Shared by the

@@ -435,4 +435,4 @@ async function runTool(name, input, ctx) {
   }
 }
 
-module.exports = { REGISTRY, toolDefsFor, runTool };
+module.exports = { REGISTRY, toolDefsFor, runTool, dimsOf, findProductInFamilies };
