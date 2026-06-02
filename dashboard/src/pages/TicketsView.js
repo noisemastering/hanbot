@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 import { useTranslation } from '../i18n';
 import toast from 'react-hot-toast';
@@ -29,9 +30,27 @@ const STATUS_TABS = [
 ];
 
 export default function TicketsView() {
+  const navigate = useNavigate();
   const { user, canManageUsers } = useAuth();
   const { t } = useTranslation();
   const isAdminUser = canManageUsers();
+
+  // Extract a PSID from a ticket: prefer the explicit field, otherwise grep
+  // the description/title for a long digit string or a wa:<digits> token.
+  const extractPsid = (ticket) => {
+    if (ticket?.psid) return ticket.psid;
+    const haystack = `${ticket?.title || ''} ${ticket?.description || ''}`;
+    const wa = haystack.match(/wa:(\d{6,})/i);
+    if (wa) return `wa:${wa[1]}`;
+    const longDigits = haystack.match(/\b(\d{12,})\b/);
+    if (longDigits) return longDigits[1];
+    return null;
+  };
+
+  const goToConversation = (psid) => {
+    if (!psid) return;
+    navigate(`/conversations?psid=${encodeURIComponent(psid)}`);
+  };
 
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -408,6 +427,21 @@ export default function TicketsView() {
                       <h4 className="text-xs text-gray-500 uppercase tracking-wider mb-1">{t('common.description')}</h4>
                       <p className="text-gray-300 text-sm whitespace-pre-wrap">{ticket.description}</p>
                     </div>
+
+                    {/* Jump-to-conversation button if the ticket references one */}
+                    {(() => {
+                      const psid = extractPsid(ticket);
+                      if (!psid) return null;
+                      return (
+                        <button
+                          onClick={() => goToConversation(psid)}
+                          className="inline-flex items-center gap-2 px-3 py-1.5 bg-purple-600/20 hover:bg-purple-600/30 border border-purple-500/40 text-purple-300 rounded-lg text-sm transition-colors"
+                          title={`Ir a la conversación ${psid}`}>
+                          💬 Ver conversación
+                          <span className="text-xs text-purple-400/70 font-mono">{psid.length > 20 ? psid.slice(0, 18) + '…' : psid}</span>
+                        </button>
+                      );
+                    })()}
 
                     {/* Assigned to */}
                     {ticket.assignedTo && (

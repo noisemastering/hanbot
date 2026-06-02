@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import API from "../api";
 import TrackedLinkGenerator from "../components/TrackedLinkGenerator";
 import ManualSaleForm from "../components/ManualSaleForm";
@@ -28,6 +29,7 @@ function friendlyProduct(value) {
 
 function Messages() {
   const { t, locale } = useTranslation();
+  const location = useLocation();
   const [quickActions, setQuickActions] = useState([]);
   const [filteredConversations, setFilteredConversations] = useState([]);
   const [conversationStatuses, setConversationStatuses] = useState({});
@@ -345,6 +347,17 @@ function Messages() {
       fetchFilteredPage(1);
     }
   }, [dateFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Deep link: ?psid=… pre-populates the PSID filter so jumping in from a
+  // ticket (or anywhere else) opens the right conversation context.
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const incomingPsid = params.get('psid');
+    if (incomingPsid && incomingPsid !== psidFilter) {
+      setPsidFilter(incomingPsid);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location.search]);
 
   // Refetch when content filters change
   useEffect(() => {
