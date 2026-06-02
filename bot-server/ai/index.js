@@ -731,25 +731,34 @@ async function generateReply(userMessage, psid, referral = null) {
     if (pendingResult) response = pendingResult;
   }
 
-  // ====== FINAL FALLBACK — AI-POWERED ======
+  // ════════════════════════════════════════════════════════════════════════
+  // 🛑 AI-FALLBACK-KILL-SWITCH — INTRODUCED 2026-06-02
+  // ════════════════════════════════════════════════════════════════════════
+  // The AI fallback (handleFallback) was the source of ~80% of customer-
+  // facing hallucinations: invented prices, denied products we sell,
+  // confused COD policy, and generally made things up when no handler
+  // matched. We replaced it with an immediate human handoff.
+  //
+  // TO REVERT: replace the block below with the previous AI-fallback path:
+  //   response = await handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME);
+  //   if (!response) { /* static handoff */ }
+  // Original code preserved in commit history. handleFallback() and its
+  // dependencies (core/fallback.js, tryUnderstandMessage, etc.) remain in
+  // the codebase — unused — for an easy revert.
+  // ════════════════════════════════════════════════════════════════════════
   if (!response) {
-    console.log(`🔴 No handler matched, escalating to AI fallback: "${userMessage}"`);
-    try {
-      response = await handleFallback(userMessage, psid, convo, openai, BOT_PERSONA_NAME);
-    } catch (fbErr) {
-      console.error(`❌ handleFallback error:`, fbErr.message);
-    }
-
-    // If AI fallback also failed, use static last resort
-    if (!response) {
-      const { executeHandoff } = require('./utils/executeHandoff');
-      response = await executeHandoff(psid, convo, userMessage, {
-        reason: 'Static fallback handoff',
-        responsePrefix: 'Déjame comunicarte con un especialista que pueda ayudarte mejor.\n\n',
-        lastIntent: 'fallback_handoff'
-      });
-    }
+    console.log(`🤝 No handler matched — direct human handoff (AI fallback disabled): "${userMessage}"`);
+    const { executeHandoff } = require('./utils/executeHandoff');
+    response = await executeHandoff(psid, convo, userMessage, {
+      reason: 'No handler matched — handing off to specialist',
+      responsePrefix: 'Déjame canalizarte con un asesor que pueda atenderte mejor. Te respondemos a la brevedad.',
+      lastIntent: 'no_handler_handoff',
+      timingStyle: 'standard'
+    });
   }
+  // ════════════════════════════════════════════════════════════════════════
+  // END AI-FALLBACK-KILL-SWITCH
+  // ════════════════════════════════════════════════════════════════════════
 
   // ====== PAY-ON-DELIVERY POST-CHECK ======
   // Safety net: if AI wrongly AFFIRMS we offer COD, REPLACE the response.
