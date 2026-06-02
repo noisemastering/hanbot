@@ -226,26 +226,49 @@ const REGISTRY = {
       // (mongoose.model("X") throws MissingSchemaError if X wasn't required yet).
       const PF = require("../../models/ProductFamily");
       require("../../models/Workflow");
-      // Build a loose regex from the query words (data-driven; no hardcoded products).
+      // Build loose, plural-tolerant stems from the query words. Catalog names
+      // are singular ("Rollo"), customers say plural ("rollos") — match the stem.
+      // Skip generic filler words so "tienes rollos" matches on "rollo", not "tienes".
+      const STOP = new Set([
+        "tienes","tiene","quiero","busco","buscas","necesito","manejan","manejas",
+        "venden","vendes","hay","una","uno","unos","unas","del","los","las","para",
+        "con","sin","que","como","cual","cuales","malla","sombra","producto","productos",
+        "metros","metro","medida","medidas","color","precio",
+      ]);
+      const stem = (w) => w.replace(/(es|s)$/i, ""); // rollos→rollo, redes→red
       const words = q
         .toLowerCase()
         .normalize("NFD")
         .replace(/[̀-ͯ]/g, "")
         .replace(/[^a-z0-9\s]/g, " ")
         .split(/\s+/)
+        .filter((w) => w.length >= 3 && !STOP.has(w))
+        .map(stem)
         .filter((w) => w.length >= 3);
-      if (!words.length) return "Búsqueda demasiado corta.";
+      if (!words.length) return "[INTERNO] No identifiqué un producto en el mensaje; pide al cliente que aclare qué busca.";
 
       let matches = [];
       try {
+        // Match the stem as a prefix so "rollo" hits "Rollo" / "Rollos" / "Rollo raschel".
         const rx = words.map((w) => new RegExp(w, "i"));
         matches = await PF.find({ $or: rx.map((r) => ({ name: r })) })
+          .collation({ locale: "es", strength: 1 }) // accent- & case-insensitive
           .select("name parentId active sellable")
           .limit(10)
           .lean();
       } catch {
         return "No pude buscar el producto en este momento.";
       }
+      // Before declaring "not sold": if the query is a MEASURE (e.g. "6x4") and a
+      // matching sellable product exists in THIS flow's families, it's in-scope.
+      const inFamilyByDims = await findProductInFamilies(
+        q,
+        Array.isArray(ctx.families) ? ctx.families : ctx.family ? [ctx.family] : []
+      );
+      if (inFamilyByDims) {
+        return `[INTERNO — no menciones nada de esto al cliente] "${inFamilyByDims.name}" sí lo manejas tú aquí. Atiéndelo con normalidad.`;
+      }
+
       if (!matches.length) {
         return `[INTERNO — no menciones nada de esto al cliente] No vendemos "${q}". Dile de forma amable y natural que no manejamos ese producto, sin tecnicismos.`;
       }
