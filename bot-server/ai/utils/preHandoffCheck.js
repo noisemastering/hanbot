@@ -144,9 +144,23 @@ async function handlePendingZipResponse(psid, convo, userMessage) {
     return { proceed: true, zipInfo: { city: cityName } };
   }
 
-  // Couldn't parse location — customer is probably asking something else.
-  // Clear pendingHandoff so we don't loop, but DON'T proceed with handoff.
-  // Let the flow handle the message normally; zip ask will recur on next handoff.
+  // Short affirmations like "claro", "sí", "ok", "listo", "dale", "va"
+  // mean the user is acknowledging the ask and ABOUT to send the ZIP.
+  // Keep pendingHandoff alive so the next message (which is likely the ZIP)
+  // still resumes the handoff. Re-prompt briefly.
+  const t = (userMessage || '').trim().toLowerCase().replace(/[.,!¡¿?]/g, '');
+  const isAffirmation = /^(s[ií]|claro|ok+|okay|listo|dale|va+le?|por\s+supuesto|seguro|aj[áa]|aha|de\s+acuerdo|perfecto|órale|ya)$/i.test(t);
+  if (isAffirmation) {
+    return {
+      proceed: false,
+      stillWaiting: true,
+      response: { type: 'text', text: '¿Cuál es tu código postal o ciudad?' }
+    };
+  }
+
+  // Couldn't parse location and it doesn't look like an affirmation —
+  // customer is probably asking something else. Clear pendingHandoff so we
+  // don't loop. Zip ask will recur on next handoff trigger.
   await updateConversation(psid, {
     pendingHandoff: false,
     pendingHandoffInfo: null

@@ -122,7 +122,14 @@ async function resumePendingHandoff(psid, convo, userMessage) {
   console.log(`📍 resumePendingHandoff — processing zip/city response`);
 
   const zipResult = await handlePendingZipResponse(psid, convo, userMessage);
-  if (!zipResult.proceed) return null;
+  if (!zipResult.proceed) {
+    // Customer answered with an affirmation ("claro", "sí", "ok") — we're
+    // still waiting for the actual ZIP, so re-prompt instead of giving up.
+    if (zipResult.stillWaiting && zipResult.response) {
+      return zipResult.response;
+    }
+    return null;
+  }
 
   const info = convo.pendingHandoffInfo || {};
 
