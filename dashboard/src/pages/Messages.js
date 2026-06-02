@@ -1118,8 +1118,8 @@ function Messages() {
         )}
       </div>
 
-      {/* SECTION 1: Recent Activity Table — hidden when keyword search is active */}
-      {!keywordFilter && <div style={{ marginBottom: "2.5rem" }}>
+      {/* SECTION 1: Recent Activity Table — hidden when a search filter is active */}
+      {!keywordFilter && !psidFilter && <div style={{ marginBottom: "2.5rem" }}>
         <h2 style={{ color: "white", marginBottom: "1rem", fontSize: "1.3rem", fontWeight: "bold" }}>
           ⚡ {t('messages.recentActivity')}
         </h2>
