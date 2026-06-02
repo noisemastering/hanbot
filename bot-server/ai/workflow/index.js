@@ -92,6 +92,42 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     history.push({ role: "user", text: String(userMessage), nodeId: currentNode.id, at: new Date() });
   }
 
+  const familyList = require("../../models/Workflow").familyListOf(workflow);
+
+  // 1.5 ENGINE-SIDE OUT-OF-FAMILY DETECTION (does not rely on the model calling a
+  // tool). If the customer's message points at a product handled by ANOTHER active
+  // flow, switch deterministically — product switches need no confirmation.
+  if (userMessage && (opts._switchDepth || 0) < 2 && !opts.sandboxNoAutoSwitch) {
+    try {
+      const det = await detectFlowSwitch(String(userMessage), familyList, workflow);
+      if (det && det.toWorkflowId) {
+        const handover = await performSwitch(det, {
+          history,
+          vars,
+          lead: state.lead || null,
+          location: state.location || null,
+          basket: state.basket || [],
+          opts,
+        });
+        if (handover) {
+          return {
+            reply: handover.reply,
+            state: handover.state,
+            diagnostics: {
+              workflow: { id: String(workflow._id), name: workflow.name },
+              autoSwitch: true,
+              switchedTo: { id: det.toWorkflowId, name: det.toName },
+              detectedProduct: det.product?.name,
+              afterSwitch: handover.diagnostics,
+            },
+          };
+        }
+      }
+    } catch (err) {
+      console.error("⚠️ auto flow-switch detection failed:", err.message);
+    }
+  }
+
   // 2. route
   const decision = await route(workflow, currentNode, history, contextBlock);
   const movedTo = workflow.getNode(decision.nextNodeId) || currentNode;
@@ -139,47 +175,88 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     handoffRequested: ctx.handoffRequested,
   };
 
-  // 6. FLOW SWITCH — a tool decided to hand the conversation to another flow.
-  // Load flow B, carry over the conversation + basket + client data + the product
-  // the client asked for, mark comesFromFlowSwitch (no greeting), and run B's
-  // opening turn now so the customer gets a seamless continuation.
+  // 6. FLOW SWITCH — a TOOL (model-invoked) decided to hand off to another flow.
+  // (The engine-side auto-detect in step 1.5 handles the common case; this covers
+  // an explicit switch_flow tool call.)
   if (ctx.switchTo && ctx.switchTo.toWorkflowId && (opts._switchDepth || 0) < 2) {
-    const target = await loadWorkflowById(ctx.switchTo.toWorkflowId);
-    if (target) {
-      const carried = { comesFromFlowSwitch: true };
-      if (ctx.switchTo.product && ctx.switchTo.product.id) {
-        carried.products = [ctx.switchTo.product];
-      }
-      const bState = {
-        workflowId: String(target._id),
-        nodeId: target.getStartNodeId(),
-        history, // carry the whole conversation
-        vars,
-        setupOverrides: carried,
-        lead: ctx.lead,
-        location: ctx.location,
-        basket: newState.basket,
-        // contextBlock intentionally undefined → re-resolved for flow B
-      };
-      const bTurn = await runWorkflowTurn(target, bState, "", {
-        ...opts,
-        _switchDepth: (opts._switchDepth || 0) + 1,
-      });
-      // A's confirmation line (if any) + B's opening, so the switch reads naturally.
-      const combined = [text, bTurn.reply].filter(Boolean).join("\n\n");
+    const handover = await performSwitch(ctx.switchTo, {
+      history,
+      vars,
+      lead: ctx.lead,
+      location: ctx.location,
+      basket: newState.basket,
+      opts,
+      prefixReply: text, // include A's line before B's opening
+    });
+    if (handover) {
       return {
-        reply: combined || bTurn.reply || text || null,
-        state: bTurn.state,
-        diagnostics: {
-          ...diagnostics,
-          switchedTo: { id: String(target._id), name: target.name },
-          afterSwitch: bTurn.diagnostics,
-        },
+        reply: handover.reply,
+        state: handover.state,
+        diagnostics: { ...diagnostics, switchedTo: handover.switchedTo, afterSwitch: handover.diagnostics },
       };
     }
   }
 
   return { reply: text, state: newState, diagnostics };
+}
+
+// Detect whether the customer's message points at a product handled by ANOTHER
+// active flow. Reuses check_product_scope's logic via a throwaway ctx; returns
+// the switch target { toWorkflowId, toName, product } or null.
+async function detectFlowSwitch(message, familyList, currentWorkflow) {
+  // Heuristic gate: only bother when the message plausibly names a product, to
+  // avoid an LLM/DB pass on every "sí"/"gracias". check_product_scope itself is
+  // DB-only (no LLM), so this is cheap, but skip very short confirmations.
+  if (!message || message.trim().length < 3) return null;
+  const { REGISTRY } = require("./tools");
+  const probe = {
+    actions: [],
+    notes: [],
+    handoffRequested: false,
+    families: familyList,
+    _autoProbe: true,
+  };
+  try {
+    await REGISTRY.check_product_scope.execute({ query: message }, probe);
+  } catch {
+    return null;
+  }
+  const sr = probe.scopeResult;
+  if (sr && sr.verdict === "other_flow" && sr.toWorkflowId && String(sr.toWorkflowId) !== String(currentWorkflow._id)) {
+    return { toWorkflowId: sr.toWorkflowId, toName: sr.toName, product: sr.product };
+  }
+  return null;
+}
+
+// Carry the conversation over to flow B and run its opening turn. Shared by the
+// engine auto-detect (step 1.5) and the explicit switch_flow tool (step 6).
+async function performSwitch(switchTo, { history, vars, lead, location, basket, opts, prefixReply }) {
+  const target = await loadWorkflowById(switchTo.toWorkflowId);
+  if (!target) return null;
+  const carried = { comesFromFlowSwitch: true };
+  if (switchTo.product && switchTo.product.id) carried.products = [switchTo.product];
+  const bState = {
+    workflowId: String(target._id),
+    nodeId: target.getStartNodeId(),
+    history, // carry the whole conversation
+    vars,
+    setupOverrides: carried,
+    lead,
+    location,
+    basket: basket || [],
+    // contextBlock intentionally undefined → re-resolved for flow B
+  };
+  const bTurn = await runWorkflowTurn(target, bState, "", {
+    ...opts,
+    _switchDepth: (opts._switchDepth || 0) + 1,
+  });
+  const reply = [prefixReply, bTurn.reply].filter(Boolean).join("\n\n") || bTurn.reply || prefixReply || null;
+  return {
+    reply,
+    state: bTurn.state,
+    switchedTo: { id: String(target._id), name: target.name },
+    diagnostics: bTurn.diagnostics,
+  };
 }
 
 module.exports = { runWorkflowTurn, initState };
