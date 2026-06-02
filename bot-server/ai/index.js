@@ -767,11 +767,14 @@ async function generateReply(userMessage, psid, referral = null) {
       ? 'No manejamos pago contra entrega. El pago se realiza al ordenar, mediante transferencia o depósito bancario. La única excepción es si pasas por tu pedido directamente a nuestra planta en Querétaro: ahí sí puedes pagar en persona al recoger.'
       : 'No manejamos pago contra entrega. El pago se realiza al ordenar en Mercado Libre (tarjeta, OXXO, transferencia, meses sin intereses) y tu compra está protegida: si no recibes el artículo, se devuelve tu dinero. La única excepción es si pasas por tu pedido directamente a nuestra planta en Querétaro: ahí sí puedes pagar en persona al recoger.';
 
-    const wrongAffirmation = /\b(s[ií]\s+(tenemos|ofrecemos|manejamos|disponemos|hay|aceptamos|contamos\s+con)|claro\s+(que\s+)?(s[ií]|tenemos)|por\s+supuesto\s+que\s+(s[ií]|tenemos)|tenemos\s+(pago\s+)?contra\s*entrega|ofrecemos\s+(pago\s+)?contra\s*entrega|aceptamos\s+(pago\s+)?contra\s*entrega|contra\s*entrega.{0,80}(disponible|disponemos|querétaro|queretaro)|querétaro.{0,80}contra\s*entrega|queretaro.{0,80}contra\s*entrega)\b/i;
     const correctlyDenies = /\b(no\s+(manejamos|ofrecemos|tenemos|aceptamos)\s+(pago\s+)?contra\s*entrega|no\s+hay\s+(pago\s+)?contra\s*entrega|pago\s+(es|debe\s+ser|se\s+(hace|realiza))\s+(por\s+)?adelantad[ao]|pago\s+al\s+ordenar|pago\s+anticipad[ao])\b/i;
+    const mentionsCOD = /\b(contra\s*entrega|contraentrega|pago\s+(al\s+)?(recibir|entregar?)|pago\s+a\s+la\s+entrega)\b/i.test(response.text);
 
-    if (wrongAffirmation.test(response.text)) {
-      console.log(`🛑 Post-check: AI wrongly affirmed COD — replacing response`);
+    // Any mention of COD must be paired with an explicit denial. Otherwise
+    // it's an affirmation, hedge, or ambiguity — all of which read as "yes
+    // we have it" to the customer. Replace with the canonical denial.
+    if (mentionsCOD && !correctlyDenies.test(response.text)) {
+      console.log(`🛑 Post-check: response mentions COD without denial — replacing`);
       response.text = correctAnswer;
     } else if (!correctlyDenies.test(response.text)) {
       response.text += '\n\n' + correctAnswer;

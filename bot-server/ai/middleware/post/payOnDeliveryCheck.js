@@ -46,14 +46,20 @@ module.exports = async function payOnDeliveryCheck(ctx) {
     ? 'No manejamos pago contra entrega. El pago se realiza al ordenar, mediante transferencia o depósito bancario. La única excepción es si pasas por tu pedido directamente a nuestra planta en Querétaro: ahí sí puedes pagar en persona al recoger.'
     : 'No manejamos pago contra entrega. El pago se realiza al ordenar en Mercado Libre (tarjeta, OXXO, transferencia, meses sin intereses) y tu compra está protegida: si no recibes el artículo, se devuelve tu dinero. La única excepción es si pasas por tu pedido directamente a nuestra planta en Querétaro: ahí sí puedes pagar en persona al recoger.';
 
-  // ── CASE 1: AI wrongly affirms we offer COD → REPLACE response ──
-  if (wrongAffirmationPattern.test(response.text)) {
-    console.log('🛑 Post-check: AI wrongly affirmed COD — replacing response');
+  // INVERTED LOGIC: any mention of contra-entrega / pago-al-recibir in the
+  // response MUST be paired with an explicit denial. Otherwise the AI is
+  // either affirming, hedging, or being ambiguous — all of which the user
+  // hears as "yes we have it". Default action: REPLACE with the deterministic
+  // denial.
+  const mentionsCOD = /\b(contra\s*entrega|contraentrega|pago\s+(al\s+)?(recibir|entregar?)|pago\s+a\s+la\s+entrega)\b/i.test(response.text);
+
+  if (mentionsCOD && !correctlyDeniesPattern.test(response.text)) {
+    console.log('🛑 Post-check: response mentions COD without explicit denial — replacing');
     response.text = correctAnswer;
     return;
   }
 
-  // ── CASE 2: AI didn't mention payment / didn't correctly deny COD → APPEND ──
+  // Response didn't address payment at all → APPEND
   if (!correctlyDeniesPattern.test(response.text)) {
     response.text += '\n\n' + correctAnswer;
     console.log('💳 Post-check: appended contra-entrega clarification');
