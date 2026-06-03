@@ -6,7 +6,7 @@ import FeatureTip from './FeatureTip';
 const API_URL = process.env.REACT_APP_API_URL || 'https://hanbot-production.up.railway.app';
 
 // Recursive component to render a single product node and its children
-function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, onDetails, level = 0, expandedNodes, onToggleExpand, parentChain = [] }) {
+function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, onDetails, onDuplicateColor, level = 0, expandedNodes, onToggleExpand, parentChain = [] }) {
   const { t } = useTranslation();
   const isExpanded = expandedNodes.has(product._id);
   const hasChildren = product.children && product.children.length > 0;
@@ -163,6 +163,17 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, 
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
             </svg>
           </button>
+          {product.sellable && onDuplicateColor && (
+            <button
+              onClick={() => onDuplicateColor(product)}
+              className="p-2 text-pink-400 hover:bg-pink-500/20 rounded-lg transition-colors"
+              title="Duplicar como nuevo color"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21a4 4 0 01-4-4V5a2 2 0 012-2h4a2 2 0 012 2v12a4 4 0 01-4 4zm0 0h12a2 2 0 002-2v-4a2 2 0 00-2-2h-2.343M11 7.343l1.657-1.657a2 2 0 012.828 0l2.829 2.829a2 2 0 010 2.828l-8.486 8.485M7 17h.01" />
+              </svg>
+            </button>
+          )}
           <button
             onClick={() => !product.sellable && onImport(product)}
             disabled={product.sellable}
@@ -220,6 +231,7 @@ function ProductNode({ product, onEdit, onDelete, onAddChild, onCopy, onImport, 
               onCopy={onCopy}
               onImport={onImport}
               onDetails={onDetails}
+              onDuplicateColor={onDuplicateColor}
               level={level + 1}
               expandedNodes={expandedNodes}
               onToggleExpand={onToggleExpand}
@@ -242,6 +254,7 @@ function ProductFamilyTreeView({
   onCopy,
   onImport,
   onDetails,
+  onDuplicateColor,
   editingProduct
 }) {
   // Manage expanded nodes state (Set of product IDs)
@@ -409,6 +422,7 @@ function ProductFamilyTreeView({
                 onCopy={onCopy}
                 onImport={onImport}
                 onDetails={onDetails}
+                onDuplicateColor={onDuplicateColor}
                 level={0}
                 expandedNodes={expandedNodes}
                 onToggleExpand={handleToggleExpand}

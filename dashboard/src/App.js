@@ -34,6 +34,7 @@ import UsosModal from "./components/UsosModal";
 import GruposModal from "./components/GruposModal";
 import ProductFamilyTreeView from "./components/ProductFamilyTreeView";
 import CopyProductModal from "./components/CopyProductModal";
+import DuplicateAsColorModal from "./components/DuplicateAsColorModal";
 import ProductDetailsModal from "./components/ProductDetailsModal";
 import ProductFamilyModal from "./components/ProductFamilyModal";
 import ImportProductsModal from "./components/ImportProductsModal";
@@ -624,6 +625,7 @@ function App() {
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showImportModal, setShowImportModal] = useState(false);
   const [productToCopy, setProductToCopy] = useState(null);
+  const [productToColorDuplicate, setProductToColorDuplicate] = useState(null);
   const [productToShowDetails, setProductToShowDetails] = useState(null);
   const [productDetailsParentChain, setProductDetailsParentChain] = useState([]);
   const [importTargetFamily, setImportTargetFamily] = useState(null);
@@ -1369,6 +1371,21 @@ function App() {
       console.error('Error copying product:', error);
       alert(t('alert.errorCopyProduct'));
     }
+  };
+
+  const handleDuplicateAsColor = async ({ newColor, mlLink }) => {
+    if (!productToColorDuplicate) return;
+    const res = await fetch(`${API_URL}/product-families/${productToColorDuplicate._id}/duplicate-as-color`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newColor, mlLink })
+    });
+    const data = await res.json();
+    if (!data.success) {
+      throw new Error(data.error || 'Error al duplicar');
+    }
+    fetchProductFamilies();
+    setProductToColorDuplicate(null);
   };
 
   const fetchConversationStatus = async (psid) => {
@@ -2364,6 +2381,9 @@ function App() {
                 setProductToCopy(product);
                 setShowCopyModal(true);
               }}
+              onDuplicateColor={(product) => {
+                setProductToColorDuplicate(product);
+              }}
               onImport={(product) => {
                 setImportTargetFamily(product);
                 setShowImportModal(true);
@@ -2793,6 +2813,15 @@ function App() {
               setShowCopyModal(false);
               setProductToCopy(null);
             }}
+          />
+        )}
+
+        {/* Duplicate as Color Modal */}
+        {productToColorDuplicate && (
+          <DuplicateAsColorModal
+            product={productToColorDuplicate}
+            onConfirm={handleDuplicateAsColor}
+            onCancel={() => setProductToColorDuplicate(null)}
           />
         )}
 

@@ -311,6 +311,74 @@ router.post("/:id/copy", async (req, res) => {
 
 // Import products from /products collection into ProductFamily tree
 // Creates NEW ProductFamily documents (not linking - copying data)
+// POST /:id/duplicate-as-color — Clone a sellable leaf as a sibling with a
+// different color. Copies every field except the ones that are color-
+// dependent (sku) and bumps the name/color attribute. The optional mlLink
+// in the body replaces the source onlineStoreLinks; otherwise we keep them
+// so the user just tweaks the URL after the fact.
+router.post("/:id/duplicate-as-color", async (req, res) => {
+  try {
+    const { newColor, mlLink } = req.body || {};
+    if (!newColor || !String(newColor).trim()) {
+      return res.status(400).json({ success: false, error: "Se requiere newColor" });
+    }
+    const newColorClean = String(newColor).trim();
+
+    const source = await ProductFamily.findById(req.params.id).lean();
+    if (!source) return res.status(404).json({ success: false, error: "Producto fuente no encontrado" });
+
+    // Known Spanish color tokens — we replace whichever one appears in the
+    // source name (case-insensitive) with the new color. If none found, we
+    // append the new color so the user never ends up with two identical
+    // sibling names.
+    const KNOWN_COLORS = [
+      'negro','blanco','beige','gris','verde','azul','rojo','amarillo',
+      'naranja','rosa','morado','marron','marrón','café','cafe','plata',
+      'dorado','transparente','crema','arena','khaki','caqui','vino',
+      'turquesa','olivo','terracota'
+    ];
+    const lowerName = (source.name || '').toLowerCase();
+    let newName = source.name || `Color ${newColorClean}`;
+    const matched = KNOWN_COLORS.find(c => new RegExp(`\\b${c}\\b`, 'i').test(source.name || ''));
+    if (matched) {
+      // Preserve original casing pattern by replacing the matched token
+      newName = source.name.replace(new RegExp(`\\b${matched}\\b`, 'gi'), newColorClean);
+    } else if (/^color\s+/i.test(lowerName)) {
+      newName = `Color ${newColorClean}`;
+    } else {
+      newName = `${source.name} - ${newColorClean}`.trim();
+    }
+
+    // Build the doc — strip identifiers and color-specific stuff, copy the
+    // rest verbatim
+    const {
+      _id, createdAt, updatedAt, __v,
+      sku, mlPrice, mlPriceUpdatedAt,
+      ...rest
+    } = source;
+
+    const newDoc = {
+      ...rest,
+      name: newName,
+      // attributes is a Mongoose Map → comes back as a plain object on .lean()
+      attributes: { ...(source.attributes || {}), color: newColorClean }
+    };
+
+    // If the caller supplied a new ML link, replace the preferred link.
+    // Otherwise keep the source links — user can edit after.
+    if (mlLink && String(mlLink).trim()) {
+      const url = String(mlLink).trim();
+      newDoc.onlineStoreLinks = [{ url, store: 'Mercado Libre', isPreferred: true }];
+    }
+
+    const created = await ProductFamily.create(newDoc);
+    res.json({ success: true, data: created });
+  } catch (err) {
+    console.error("Error duplicating as color:", err);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.post("/:id/import", async (req, res) => {
   try {
     const { productIds = [] } = req.body;  // Array of Product IDs to import
