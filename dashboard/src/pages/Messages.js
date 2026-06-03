@@ -359,10 +359,17 @@ function Messages() {
     if (incomingPsid === selectedPsid) return;
 
     // Strip ?psid= from the URL immediately — keeps reloads clean even if
-    // the resolve below takes a few hundred ms.
+    // the resolve below takes a few hundred ms. Use window.history directly
+    // so the address bar update happens BEFORE any React state change can
+    // cause a re-render.
     params.delete('psid');
-    const cleaned = params.toString();
-    navigate(`${location.pathname}${cleaned ? '?' + cleaned : ''}`, { replace: true });
+    const cleanedSearch = params.toString();
+    const newUrl = `${location.pathname}${cleanedSearch ? '?' + cleanedSearch : ''}`;
+    if (typeof window !== 'undefined' && window.history?.replaceState) {
+      window.history.replaceState(null, '', newUrl);
+    }
+    // Belt-and-suspenders: also let React Router know
+    try { navigate(newUrl, { replace: true }); } catch {}
 
     (async () => {
       try {
