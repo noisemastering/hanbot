@@ -152,7 +152,7 @@ async function buildCatalogMessage(products, options = {}) {
   const productList = products.map((p, i) => {
     let entry = `${i + 1}. ${p.name}`;
     if (p.description) entry += ` — ${p.description}`;
-    if (p.price) entry += ` ($${p.price})`;
+    if (p.price) entry += ` ($${p.price} + IVA)`;
     return entry;
   }).join('\n');
 
@@ -162,8 +162,12 @@ ${voiceInstructions[voice] || voiceInstructions.professional}
 Presenta el catálogo de productos disponibles al cliente de forma natural y clara.
 ${customerName ? `El cliente se llama ${customerName}.` : ''}
 
+REGLA DE PRECIO (MAYOREO):
+- Los precios de mayoreo NO incluyen IVA. SIEMPRE incluye la nota "+ IVA" o "más IVA" junto al precio (ej: "\$1,599 + IVA", "desde \$X más IVA hasta \$Y más IVA").
+- Es OBLIGATORIO que el cliente sepa que es precio sin IVA. Nunca omitas esta nota.
+
 FORMATO:
-- Si hay más de 3 productos, muestra un rango "desde X hasta Y" en lugar de listar todos
+- Si hay más de 3 productos, muestra un rango "desde X más IVA hasta Y más IVA" en lugar de listar todos
 - Invita al cliente a indicar cuál le interesa
 - Solo devuelve el mensaje, nada más`;
 

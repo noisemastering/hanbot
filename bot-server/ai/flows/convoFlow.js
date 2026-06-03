@@ -664,7 +664,7 @@ REGLAS:
           await updateConversation(psid, { productSpecs: newSpecs });
           const handoffResp = await executeHandoff(psid, convo, userMessage, {
             reason: `Pedido mayoreo: ${descr}`,
-            responsePrefix: `Para cotizarte ${descr} te paso con un especialista de mayoreo. Tendrás respuesta a la brevedad.`,
+            responsePrefix: `Para cotizarte ${descr} te paso con un especialista de mayoreo (los precios de rollo son sin IVA, se agrega al cotizar). Tendrás respuesta a la brevedad.`,
             specsText: `Mayoreo: ${descr}. `,
             lastIntent: 'wholesale_product_handoff',
             timingStyle: 'standard'
