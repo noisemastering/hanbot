@@ -1166,6 +1166,15 @@ app.post("/webhook", async (req, res) => {
           lastQuotedProducts: null,
           requestedSize: null,
           lastUnavailableSize: null,
+          // Clear follow-up / acknowledgment state — a fresh ad click is a
+          // fresh sale opportunity. Without this, returning customers who had
+          // silenceFollowUpSent=true got their ad CTA ("Comprar Promoción 4x3")
+          // misclassified by the post-followup intent check as a purchase
+          // confirmation, and the bot replied "¡Genial!" instead of pitching.
+          silenceFollowUpSent: false,
+          silenceFollowUpAt: null,
+          linkFollowUpAt: null,
+          purchaseAcknowledged: false,
         });
 
         // 🔍 Look up ad with inheritance (Campaign → AdSet → Ad)

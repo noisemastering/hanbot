@@ -336,7 +336,13 @@ function create(manifest) {
     // malla de X?") and the customer's next message is affirmative or
     // indicates they already ordered, DON'T re-pitch with a fresh link.
     // Treat as purchase confirmation and offer support instead.
-    if (convo?.silenceFollowUpSent && !convo?.purchaseAcknowledged) {
+    //
+    // SAFETY: skip if this turn is an ad re-entry. The CTA text from a fresh
+    // ad click ("Comprar Promoción 4x3 m") sounds confirmatory to the AI but
+    // is actually a fresh buying intent — should hit the promo pitch path.
+    // (Ad handler clears silenceFollowUpSent on entry too, but defense in
+    // depth.)
+    if (convo?.silenceFollowUpSent && !convo?.purchaseAcknowledged && convo?.lastIntent !== 'ad_entry') {
       try {
         const intentRes = await _openai.chat.completions.create({
           model: 'gpt-4o-mini',
