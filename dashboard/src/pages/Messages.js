@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
-import { useLocation } from "react-router-dom";
+import { useLocation, useNavigate } from "react-router-dom";
 import API from "../api";
 import TrackedLinkGenerator from "../components/TrackedLinkGenerator";
 import ManualSaleForm from "../components/ManualSaleForm";
@@ -30,6 +30,7 @@ function friendlyProduct(value) {
 function Messages() {
   const { t, locale } = useTranslation();
   const location = useLocation();
+  const navigate = useNavigate();
   const [quickActions, setQuickActions] = useState([]);
   const [filteredConversations, setFilteredConversations] = useState([]);
   const [conversationStatuses, setConversationStatuses] = useState({});
@@ -349,12 +350,20 @@ function Messages() {
   }, [dateFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Deep link: ?psid=… opens that specific conversation in the chat modal
-  // (e.g. when arriving from a ticket). No list filtering required.
+  // (e.g. when arriving from a ticket). After firing once we strip the
+  // param from the URL so reloads don't keep re-opening the modal.
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const incomingPsid = params.get('psid');
     if (!incomingPsid) return;
     if (incomingPsid === selectedPsid) return;
+
+    // Strip ?psid= from the URL immediately — keeps reloads clean even if
+    // the resolve below takes a few hundred ms.
+    params.delete('psid');
+    const cleaned = params.toString();
+    navigate(`${location.pathname}${cleaned ? '?' + cleaned : ''}`, { replace: true });
+
     (async () => {
       try {
         // Resolve channel from the conversation doc, then open the modal
