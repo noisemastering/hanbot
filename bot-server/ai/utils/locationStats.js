@@ -338,6 +338,21 @@ async function handleLocationStatsResponse(message, psid, convo) {
     return null; // Not a location, let normal flow handle it
   }
 
+  // ── VALIDATE soft matches with AI ──
+  // parseLocationResponse has a "last resort" branch that accepts any 1-3
+  // word phrase without numbers as a city. That falsely matched "Pago al
+  // recivir" as a city. When we don't have a zip code and don't have a
+  // recognized state, run the AI classifier to verify it's actually a
+  // Mexican place name before pretending the customer shared a location.
+  if (!location.zipcode && !location.state) {
+    const { isLikelyLocationName } = require("../../mexicanLocations");
+    const isReallyLocation = await isLikelyLocationName(message);
+    if (!isReallyLocation) {
+      console.log(`📊 parseLocationResponse soft-matched "${message}" as city, but AI classifier rejected — not a location`);
+      return null;
+    }
+  }
+
   console.log("📊 Location parsed from stats response:", location);
 
   // Update conversation with location

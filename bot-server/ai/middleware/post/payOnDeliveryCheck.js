@@ -31,7 +31,17 @@ module.exports = async function payOnDeliveryCheck(ctx) {
   const { response, userMessage, convo } = ctx;
 
   if (!response || !response.text) return;
-  if (!payOnDeliveryPattern.test(userMessage)) return;
+
+  // AI-classified COD intent — catches typos ("recivir"), creative phrasings,
+  // and English. Falls back to regex if AI fails.
+  const { asksAboutCOD } = require("../../utils/codIntent");
+  let userAskingCOD = false;
+  try {
+    userAskingCOD = await asksAboutCOD(userMessage);
+  } catch {
+    userAskingCOD = payOnDeliveryPattern.test(userMessage);
+  }
+  if (!userAskingCOD && !payOnDeliveryPattern.test(userMessage)) return;
 
   const isNonML =
     convo?.currentFlow === 'rollo' ||

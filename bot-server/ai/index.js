@@ -763,7 +763,17 @@ async function generateReply(userMessage, psid, referral = null) {
   // ====== PAY-ON-DELIVERY POST-CHECK ======
   // Safety net: if AI wrongly AFFIRMS we offer COD, REPLACE the response.
   // If it didn't address payment at all, APPEND a clarification.
-  if (response && response.text && payOnDeliveryPattern.test(userMessage)) {
+  // Detection now AI-based (handles typos like "recivir") with regex fallback.
+  let userAskingCOD_safety = false;
+  if (response && response.text) {
+    try {
+      const { asksAboutCOD } = require('./utils/codIntent');
+      userAskingCOD_safety = await asksAboutCOD(userMessage);
+    } catch {
+      userAskingCOD_safety = payOnDeliveryPattern.test(userMessage);
+    }
+  }
+  if (response && response.text && (userAskingCOD_safety || payOnDeliveryPattern.test(userMessage))) {
     const isNonML = convo?.currentFlow === 'rollo' ||
       convo?.currentFlow === 'groundcover' ||
       convo?.currentFlow === 'monofilamento' ||
