@@ -76,8 +76,11 @@ async function maybeRunAdWorkflow(userMessage, psid) {
     .lean();
   if (!convo || !convo.adId) return null;
 
-  // Don't let the engine speak over a live human handoff.
-  if (convo.state === "needs_human" || convo.state === "human_handling") return null;
+  // Don't let the engine speak over a live human handoff. Use the same state
+  // names the rest of the app uses (human_active is the real one; needs_human/
+  // human_takeover/human_handling included for completeness).
+  const HUMAN_STATES = new Set(["needs_human", "human_active", "human_takeover", "human_handling"]);
+  if (HUMAN_STATES.has(convo.state)) return null;
 
   const Ad = require("../models/Ad");
   const ad = await Ad.findOne({ fbAdId: convo.adId })
