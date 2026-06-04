@@ -79,6 +79,11 @@ const conversationSchema = new mongoose.Schema({
   customOrderQuantity: { type: Number, default: null }, // How many pieces
   customOrderAwaiting: { type: Boolean, default: false }, // Bot asked for 3-point info, waiting for response
 
+  // Pre-handoff checklist (name + zip + quantity). Tracks how many times
+  // we've asked so we don't loop forever if the customer ignores or only
+  // partially answers. Max 2 attempts, then proceed with whatever we have.
+  preHandoffAttempts: { type: Number, default: 0 },
+
   // Follow-up suppression — set when customer is angry, complained, or asked to be left alone
   doNotFollowUp: { type: Boolean, default: false },
   doNotFollowUpReason: { type: String, default: null }, // 'angry', 'complaint', 'manual', etc.

@@ -43,55 +43,97 @@ async function parseAndLookupZipCode(msg) {
 }
 
 /**
- * Check if we should ask for zip/city before handing off.
- * Call this just before setting state: "needs_human".
+ * UNIFIED PRE-HANDOFF CHECKLIST.
+ * Collects three fields before handing off to a human: name, zip code,
+ * quantity. The agent then sees all of them in the buildClientBrief
+ * push notification instead of starting from scratch.
  *
- * @param {string} psid - User PSID
- * @param {object} convo - Conversation object
- * @param {string} userMessage - Current user message
- * @param {object} handoffInfo - { reason, specsText } context for the pending handoff
- * @returns {object|null} Response object if we need to ask for zip, null if handoff should proceed
+ * Logic per call:
+ *  1. Try to extract any of (name, zip, qty) from the current message
+ *  2. Save whatever was extracted
+ *  3. Recompute what's still missing
+ *  4. If everything is present → return null (executeHandoff completes)
+ *  5. If anything is missing → ask for the missing fields, set
+ *     pendingHandoff so the next message resumes
+ *  6. After 2 ask cycles, give up and proceed with what we have (don't
+ *     loop forever if the customer ignores or only partially answers).
+ *
+ * @param {string} psid
+ * @param {object} convo
+ * @param {string} userMessage
+ * @param {object} handoffInfo - { reason, specsText }
+ * @returns {object|null} response object if we need to ask, null if handoff should proceed
  */
 async function checkZipBeforeHandoff(psid, convo, userMessage, handoffInfo = {}) {
-  // Already have location info — proceed with handoff
-  if (convo?.zipCode || convo?.city) {
+  // 1. Try to extract from current message (AI for name/qty; regex+DB for zip)
+  const { extractPreHandoffData } = require("./preHandoffExtractor");
+  const aiExtract = await extractPreHandoffData(userMessage);
+  const zipInfo = await parseAndLookupZipCode(userMessage);
+  const cityInfo = !zipInfo ? detectMexicanLocation(userMessage) : null;
+
+  const updates = {};
+  if (aiExtract.name && !(convo?.customerName || convo?.extractedName || convo?.userName)) {
+    updates.customerName = aiExtract.name;
+  }
+  if (zipInfo) {
+    updates.zipCode = zipInfo.code;
+    updates.city = zipInfo.city;
+    updates.stateMx = zipInfo.state;
+  } else if (aiExtract.zip && !convo?.zipCode) {
+    updates.zipCode = aiExtract.zip;
+  } else if (cityInfo) {
+    updates.city = cityInfo.normalized || cityInfo.location;
+    updates.stateMx = cityInfo.state;
+  }
+  if (aiExtract.quantity && !(convo?.customOrderQuantity || convo?.productSpecs?.quantity)) {
+    updates.customOrderQuantity = aiExtract.quantity;
+    const newSpecs = { ...(convo?.productSpecs || {}), quantity: aiExtract.quantity };
+    updates.productSpecs = newSpecs;
+  }
+  if (Object.keys(updates).length > 0) {
+    await updateConversation(psid, updates);
+    Object.assign(convo, updates);
+  }
+
+  // 2. What's still missing?
+  const hasName = !!(convo.customerName || convo.extractedName || convo.userName);
+  const hasZipOrCity = !!(convo.zipCode || convo.city);
+  const hasQuantity = !!(convo.customOrderQuantity || convo.productSpecs?.quantity);
+
+  const missing = [];
+  if (!hasName) missing.push('Nombre');
+  if (!hasZipOrCity) missing.push('Código postal o ciudad');
+  if (!hasQuantity) missing.push('Cantidad de piezas');
+
+  // 3. All collected — proceed
+  if (missing.length === 0) {
+    if (convo.preHandoffAttempts) {
+      await updateConversation(psid, { preHandoffAttempts: 0 });
+    }
     return null;
   }
 
-  // Try to extract from the current message before asking
-  const zipInfo = await parseAndLookupZipCode(userMessage);
-  if (zipInfo) {
-    await updateConversation(psid, {
-      zipCode: zipInfo.code,
-      city: zipInfo.city,
-      stateMx: zipInfo.state
-    });
-    return null; // Proceed with handoff
+  // 4. After 2 ask cycles, give up and proceed
+  const attempts = (convo.preHandoffAttempts || 0);
+  if (attempts >= 2) {
+    console.log(`📋 preHandoff: max attempts reached, proceeding with partial data (missing: ${missing.join(', ')})`);
+    await updateConversation(psid, { preHandoffAttempts: 0, pendingHandoff: false, pendingHandoffInfo: null });
+    return null;
   }
 
-  // Try city detection from current message
-  const locationDetected = detectMexicanLocation(userMessage);
-  if (locationDetected) {
-    await updateConversation(psid, {
-      city: locationDetected.normalized || locationDetected.location,
-      stateMx: locationDetected.state
-    });
-    return null; // Proceed with handoff
-  }
-
-  // Note: we don't use isLikelyLocationName here because this is the FIRST check
-  // — the user hasn't been asked for location yet, so a short message could be anything.
-  // The fuzzy fallback is in handlePendingZipResponse (AFTER we've asked).
-
-  // No location info — save pending handoff and ask
+  // 5. Ask for missing fields
   await updateConversation(psid, {
     pendingHandoff: true,
-    pendingHandoffInfo: handoffInfo
+    pendingHandoffInfo: handoffInfo,
+    preHandoffAttempts: attempts + 1
   });
 
+  const introText = attempts === 0
+    ? 'Para canalizarte con el asesor adecuado y agilizar tu cotización, por favor compártenos:'
+    : 'Aún me faltan estos datos para canalizarte:';
   return {
     type: "text",
-    text: "¿Me compartes tu código postal o ciudad para canalizarte con el asesor adecuado?"
+    text: `${introText}\n${missing.map(m => `• ${m}`).join('\n')}`
   };
 }
 
@@ -105,67 +147,19 @@ async function checkZipBeforeHandoff(psid, convo, userMessage, handoffInfo = {})
  * @returns {object} { proceed: true, zipInfo: object|null }
  */
 async function handlePendingZipResponse(psid, convo, userMessage) {
-  // Try to parse zip code
-  const zipInfo = await parseAndLookupZipCode(userMessage);
-  if (zipInfo) {
-    await updateConversation(psid, {
-      zipCode: zipInfo.code,
-      city: zipInfo.city,
-      stateMx: zipInfo.state,
-      pendingHandoff: false,
-      pendingHandoffInfo: null
-    });
+  // Reuse the unified pre-handoff checker. If it returns null, all data
+  // collected → proceed. If it returns a response, we're still gathering.
+  const askResponse = await checkZipBeforeHandoff(psid, convo, userMessage, convo.pendingHandoffInfo || {});
+  if (!askResponse) {
+    // All data collected, proceed
+    await updateConversation(psid, { pendingHandoff: false, pendingHandoffInfo: null });
+    const zipInfo = convo.zipCode ? { code: convo.zipCode, city: convo.city, state: convo.stateMx }
+      : convo.city ? { city: convo.city, state: convo.stateMx } : null;
     return { proceed: true, zipInfo };
   }
 
-  // Try city detection
-  const locationDetected = detectMexicanLocation(userMessage);
-  if (locationDetected) {
-    await updateConversation(psid, {
-      city: locationDetected.normalized || locationDetected.location,
-      stateMx: locationDetected.state,
-      pendingHandoff: false,
-      pendingHandoffInfo: null
-    });
-    return { proceed: true, zipInfo: { city: locationDetected.normalized || locationDetected.location, state: locationDetected.state } };
-  }
-
-  // Fuzzy fallback: if message looks like a location name (AI-classified),
-  // accept it as-is to avoid asking for zip again in a loop
-  const { isLikelyLocationName } = require("../../mexicanLocations");
-  if (await isLikelyLocationName(userMessage)) {
-    const cityName = userMessage.trim();
-    console.log(`📍 Accepting unrecognized location as-is: "${cityName}"`);
-    await updateConversation(psid, {
-      city: cityName,
-      pendingHandoff: false,
-      pendingHandoffInfo: null
-    });
-    return { proceed: true, zipInfo: { city: cityName } };
-  }
-
-  // Short affirmations like "claro", "sí", "ok", "listo", "dale", "va"
-  // mean the user is acknowledging the ask and ABOUT to send the ZIP.
-  // Keep pendingHandoff alive so the next message (which is likely the ZIP)
-  // still resumes the handoff. Re-prompt briefly.
-  const t = (userMessage || '').trim().toLowerCase().replace(/[.,!¡¿?]/g, '');
-  const isAffirmation = /^(s[ií]|claro|ok+|okay|listo|dale|va+le?|por\s+supuesto|seguro|aj[áa]|aha|de\s+acuerdo|perfecto|órale|ya)$/i.test(t);
-  if (isAffirmation) {
-    return {
-      proceed: false,
-      stillWaiting: true,
-      response: { type: 'text', text: '¿Cuál es tu código postal o ciudad?' }
-    };
-  }
-
-  // Couldn't parse location and it doesn't look like an affirmation —
-  // customer is probably asking something else. Clear pendingHandoff so we
-  // don't loop. Zip ask will recur on next handoff trigger.
-  await updateConversation(psid, {
-    pendingHandoff: false,
-    pendingHandoffInfo: null
-  });
-  return { proceed: false };
+  // Still gathering — return the ask back to convoFlow
+  return { proceed: false, stillWaiting: true, response: askResponse };
 }
 
 /**
