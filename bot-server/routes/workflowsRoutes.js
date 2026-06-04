@@ -47,8 +47,11 @@ const sandboxSessions = new Map(); // sessionId -> { workflowId, state }
 // Registered BEFORE the generic "/:id" routes so GET /ads is not swallowed by /:id.
 
 // GET /workflows/ads?q= — search ads for the assignment picker (name or fbAdId).
-// Ordered by date (most recent first). Limit is generous so the default browse
-// list isn't silently truncated when there are many ads; search narrows by name/id.
+// Ordered newest-ad-first. NOTE: createdAt/updatedAt are SYNC timestamps (most
+// ads land in one bulk sync, so they cluster and don't reflect real ad age).
+// Facebook ad IDs increase monotonically with creation, so fbAdId desc is the
+// reliable "newest ad first" ordering. Limit is generous so the default browse
+// list isn't truncated; search narrows by name/id.
 router.get("/ads", async (req, res) => {
   try {
     const q = (req.query.q || "").trim();
@@ -62,7 +65,7 @@ router.get("/ads", async (req, res) => {
     const total = await Ad.countDocuments(filter);
     const ads = await Ad.find(filter)
       .select("name fbAdId status workflowId workflowEnabled workflowSetup")
-      .sort({ updatedAt: -1 })
+      .sort({ fbAdId: -1 })
       .limit(300)
       .populate("workflowId", "name active")
       .lean();
