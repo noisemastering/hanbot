@@ -708,15 +708,25 @@ REGLAS:
 
     // ── MULTI-SIZE DETECTION ──
     // If the customer mentions 2+ distinct sizes in one message (e.g. "10x10 o
-    // 15x15"), the single-size parser will return null and we'd fall through
-    // to AI fallback which fabricates a quote. Detect this and escalate.
+    // 15x15", "5.50x3.5 y 5.50x1.50"), the single-size parser returns null
+    // and we'd fall through. Detect this and escalate.
+    //
+    // Regex handles decimals: 5.50, 5, 5.5 etc. Uses parseFloat, then
+    // normalises with min/max + toFixed(2) so 5.50x3.5 and 3.5x5.5 collapse
+    // to the same canonical size.
     {
-      const dimPattern = /\b(\d{1,2})\s*[xX×]\s*(\d{1,2})\b/g;
+      // Trailing \b would fail on "3.5mts" (5/m boundary), so use a lookahead
+      // that accepts unit words, whitespace, or end-of-string instead.
+      const dimPattern = /\b(\d{1,3}(?:\.\d{1,2})?)\s*[xX×]\s*(\d{1,3}(?:\.\d{1,2})?)(?=\s|$|m|c|y|,|\.|;|\?|!|\)|\/)/gi;
       const dimsFound = [...userMessage.matchAll(dimPattern)];
       const uniqueSizes = new Set(dimsFound.map(m => {
-        const a = parseInt(m[1], 10), b = parseInt(m[2], 10);
-        return `${Math.min(a, b)}x${Math.max(a, b)}`;
-      }));
+        const a = parseFloat(m[1]), b = parseFloat(m[2]);
+        if (!isFinite(a) || !isFinite(b)) return null;
+        const lo = Math.min(a, b), hi = Math.max(a, b);
+        // Trim trailing zeros for clean display ("3.50" → "3.5")
+        const fmt = n => n.toString();
+        return `${fmt(lo)}x${fmt(hi)}`;
+      }).filter(Boolean));
       if (uniqueSizes.size >= 2) {
         console.log(`📏 [convo] Multi-size detected (${[...uniqueSizes].join(', ')}) — handoff`);
         const handoffResp = await executeHandoff(psid, convo, userMessage, {
