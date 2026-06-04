@@ -25,6 +25,8 @@ export default function AdWorkflowAssignView() {
   const [ads, setAds] = useState([]);
   const [loadingAds, setLoadingAds] = useState(false);
   const [selectedAd, setSelectedAd] = useState(null);
+  const [syncing, setSyncing] = useState(false);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   // Draft attachment for the selected ad.
   const [workflowId, setWorkflowId] = useState("");
@@ -44,7 +46,8 @@ export default function AdWorkflowAssignView() {
     })();
   }, []);
 
-  // Search ads (debounced).
+  // Search ads (debounced). refreshTick lets us reload after a Facebook re-sync
+  // without changing the query.
   useEffect(() => {
     const t = setTimeout(async () => {
       setLoadingAds(true);
@@ -58,7 +61,28 @@ export default function AdWorkflowAssignView() {
       }
     }, 300);
     return () => clearTimeout(t);
-  }, [query]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [query, refreshTick]);
+
+  // Pull fresh campaigns/ad sets/ads from the Facebook Marketing API (reuses the
+  // existing sync), then reload the ad list so new/updated ads appear here.
+  const reSyncFacebook = async () => {
+    setSyncing(true);
+    const toastId = toast.loading("Sincronizando con Facebook…");
+    try {
+      const res = await API.post("/campaigns/sync-facebook");
+      const a = res.data?.results?.ads || {};
+      toast.success(
+        `Facebook sincronizado · anuncios: ${a.created || 0} nuevos, ${a.updated || 0} actualizados`,
+        { id: toastId }
+      );
+      setRefreshTick((t) => t + 1); // reload the list with current query
+    } catch (err) {
+      toast.error(err.response?.data?.error || "No se pudo sincronizar con Facebook", { id: toastId });
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const selectedWorkflow = useMemo(
     () => workflows.find((w) => String(w._id) === String(workflowId)) || null,
@@ -123,6 +147,14 @@ export default function AdWorkflowAssignView() {
       <div className="flex flex-col lg:flex-row gap-4">
         {/* Ad list */}
         <div className="w-full lg:w-80 shrink-0">
+          <button
+            onClick={reSyncFacebook}
+            disabled={syncing}
+            className="w-full mb-2 px-3 py-2 text-sm rounded-lg bg-blue-600 hover:bg-blue-500 text-white disabled:opacity-50 flex items-center justify-center gap-2"
+            title="Trae campañas, conjuntos y anuncios nuevos/actualizados desde Facebook"
+          >
+            {syncing ? "Sincronizando…" : "↻ Re-sincronizar con Facebook"}
+          </button>
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
