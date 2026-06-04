@@ -91,12 +91,14 @@ const REGISTRY = {
       //  - Else fall back to the preloaded product as a convenient default.
       let priceInfo = null;
       let resolvedName = null;
+      let resolvedId = null;
 
       if (requested) {
         const doc = await findProductInFamilies(requested, ctx.families);
         if (doc) {
           priceInfo = await resolvePrice(doc);
           resolvedName = doc.name;
+          resolvedId = String(doc._id);
         } else {
           // Customer named a SPECIFIC product/measure we couldn't find in this
           // flow's families. NEVER fall back to the preloaded product (that would
@@ -107,6 +109,7 @@ const REGISTRY = {
       } else if (pi) {
         // No specific product named → use the preloaded one as a default shortcut.
         priceInfo = pi;
+        resolvedId = ctx.product && ctx.product._id ? String(ctx.product._id) : null;
       }
 
       if (!priceInfo) {
@@ -119,10 +122,18 @@ const REGISTRY = {
         return `${resolvedName ? `"${resolvedName}"` : "Ese producto"} no tiene precio disponible. NO inventes un precio: ofrece pasar con un asesor.`;
       }
       if (priceInfo.link || priceInfo.amount) {
+        // psid-traceable redirect so the click is attributed in commerce-status.
+        const { trackedLink } = require("./priceResolver");
+        const link = await trackedLink(priceInfo.link, {
+          psid: ctx.psid,
+          sandbox: ctx.sandbox,
+          productName: resolvedName || ctx.product?.name,
+          productId: resolvedId,
+        });
         const price = priceInfo.amount
           ? ` Precio: $${priceInfo.amount}${priceInfo.source === "ml" ? "" : " (inventario)"}.`
           : "";
-        const linkPart = priceInfo.link ? `Link de compra: ${priceInfo.link}.` : "";
+        const linkPart = link ? `Link de compra: ${link}.` : "";
         return `${resolvedName ? resolvedName + " — " : ""}${linkPart}${price}`.trim();
       }
       return ctx.sandbox
@@ -139,7 +150,14 @@ const REGISTRY = {
     },
     async execute(input, ctx) {
       ctx.actions.push({ tool: "share_store_link", input });
-      return "https://www.mercadolibre.com.mx/perfil/DISTRIBUIDORA+HANLOB";
+      const STORE_URL = "https://www.mercadolibre.com.mx/perfil/DISTRIBUIDORA+HANLOB";
+      const { trackedLink } = require("./priceResolver");
+      const link = await trackedLink(STORE_URL, {
+        psid: ctx.psid,
+        sandbox: ctx.sandbox,
+        productName: "Tienda Distribuidora Hanlob",
+      });
+      return link || STORE_URL;
     },
   },
 

@@ -69,7 +69,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       const { contextBlock, product, priceInfo } = await resolveSetupContext(
         workflow.setup,
         state.setupOverrides,
-        familyList
+        familyList,
+        { psid: opts.psid || null, sandbox: !!opts.sandbox }
       );
       state.contextBlock = contextBlock || "";
       state.product = product || null;
@@ -145,9 +146,17 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           turnContextExtra =
             `\n- COTIZACIÓN SOLICITADA: "${found.name}" no tiene precio disponible. NO inventes precio; ofrece pasar con un asesor.`;
         } else if (pi.amount) {
+          // psid-traceable link so a click here is attributed (commerce-status).
+          const { trackedLink } = require("./priceResolver");
+          const link = await trackedLink(pi.link, {
+            psid: opts.psid || null,
+            sandbox: !!opts.sandbox,
+            productName: found.name,
+            productId: found.id,
+          });
           turnContextExtra =
             `\n- COTIZACIÓN SOLICITADA AHORA: el cliente pregunta por "${found.name}". Precio $${pi.amount}${pi.source === "ml" ? " (Mercado Libre)" : " (inventario)"}.` +
-            (pi.link ? ` Link: ${pi.link}.` : "") +
+            (link ? ` Link: ${link}.` : "") +
             ` Cotiza ESTE producto con su precio y link; NO escales a un humano ni pidas la medida de nuevo.`;
         }
       }
@@ -172,6 +181,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     product: state.product || null,
     priceInfo: turnPriceInfo, // turn-scoped: the measure the client just asked for
     families: familyList, // realm (for scope checks)
+    psid: opts.psid || null, // enables psid-traceable links in share_* tools
   };
   const { text, toolCalls } = await executeNode(
     workflow,
@@ -273,7 +283,7 @@ async function resolveInFamilyMeasure(message, familyList) {
   const doc = await toolsMod.findProductInFamilies(message, familyList);
   if (!doc) return null;
   const { resolvePrice } = require("./priceResolver");
-  return { name: doc.name, priceInfo: await resolvePrice(doc) };
+  return { name: doc.name, id: String(doc._id), priceInfo: await resolvePrice(doc) };
 }
 
 // Carry the conversation over to flow B and run its opening turn. Shared by the

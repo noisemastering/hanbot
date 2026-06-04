@@ -105,7 +105,7 @@ async function resolveFamilyRealm(family) {
   }
 }
 
-async function resolveSetupContext(workflowSetup, overrides, families) {
+async function resolveSetupContext(workflowSetup, overrides, families, opts = {}) {
   const setup = mergeSetup(workflowSetup, overrides);
   const lines = [];
 
@@ -194,8 +194,16 @@ async function resolveSetupContext(workflowSetup, overrides, families) {
         `Si pide "información", precio, medidas, colores, fotos, etc., asume que se refiere a este producto; NUNCA preguntes "¿de qué producto?" ni "¿qué información?".`
     );
     if (priceInfo.source === "ml") {
+      // psid-traceable redirect so a click on the preloaded link is attributed.
+      const { trackedLink } = require("./priceResolver");
+      const plink = await trackedLink(priceInfo.link, {
+        psid: opts.psid || null,
+        sandbox: !!opts.sandbox,
+        productName: product.name,
+        productId: product._id ? String(product._id) : null,
+      });
       lines.push(
-        `- PRECIO: $${priceInfo.amount} (fuente: Mercado Libre${priceInfo.hasDiscount ? `, con descuento desde $${priceInfo.originalPrice}` : ""}). Cotiza este precio. Link: ${priceInfo.link || "(usa la herramienta)"}.`
+        `- PRECIO: $${priceInfo.amount} (fuente: Mercado Libre${priceInfo.hasDiscount ? `, con descuento desde $${priceInfo.originalPrice}` : ""}). Cotiza este precio. Link: ${plink || "(usa la herramienta)"}.`
       );
     } else if (priceInfo.source === "inventario") {
       lines.push(`- PRECIO: $${priceInfo.amount} (fuente: Inventario). Cotiza este precio.`);

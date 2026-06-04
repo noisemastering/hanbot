@@ -101,7 +101,8 @@ async function maybeRunAdWorkflow(userMessage, psid) {
   const { reply, state: newState, diagnostics } = await runWorkflowTurn(
     workflow,
     state,
-    userMessage
+    userMessage,
+    { psid } // enable psid-traceable links (commerce-status attribution)
   );
 
   await updateConversation(psid, {

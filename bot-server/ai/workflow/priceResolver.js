@@ -64,4 +64,28 @@ async function resolvePrice(product) {
   return { ...empty, link };
 }
 
-module.exports = { resolvePrice, mlLinkOf };
+/**
+ * Wrap a raw destination URL in a psid-traceable redirect (/r/{clickId}) so clicks
+ * from workflow conversations are recorded in ClickLog and surface in
+ * commerce-status. Returns the raw url unchanged when there is no psid (e.g. the
+ * sandbox) or no url. getOrCreateClickLink reuses an existing unclicked link for
+ * the same psid+url and auto-fills adId/campaign/channel from the conversation.
+ * @param {string|null} rawUrl
+ * @param {{psid?: string|null, sandbox?: boolean, productName?: string, productId?: string}} [opts]
+ * @returns {Promise<string|null>}
+ */
+async function trackedLink(rawUrl, opts = {}) {
+  if (!rawUrl || !opts.psid || opts.sandbox) return rawUrl || null;
+  try {
+    const { getOrCreateClickLink } = require("../../tracking");
+    return await getOrCreateClickLink(opts.psid, rawUrl, {
+      productName: opts.productName,
+      productId: opts.productId,
+    });
+  } catch (err) {
+    console.error("⚠️ trackedLink failed, using raw url:", err.message);
+    return rawUrl;
+  }
+}
+
+module.exports = { resolvePrice, mlLinkOf, trackedLink };
