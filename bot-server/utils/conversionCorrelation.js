@@ -432,6 +432,8 @@ async function correlateOrder(order, sellerId) {
           correlatedOrderId: String(orderId)
         });
         console.log(`   ✅ Updated existing correlation for order ${orderId} (${method}, ${confidence})`);
+        // One order → one converted click.
+        await demoteOtherClicksForOrder(orderId, existingCorrelation._id);
         return { alreadyCorrelated: true, clickLog: existingCorrelation, method, confidence };
       }
       console.log(`   ❌ No suitable match found for order ${orderId} (best score: ${bestScore})`);
@@ -499,6 +501,25 @@ async function correlateOrder(order, sellerId) {
 /**
  * Save correlation to ClickLog
  */
+/**
+ * Enforce ONE order → ONE converted click. A popular/hero listing can match
+ * several clicks for the same ML order; only the best match (keepClickId, just
+ * saved by correlateOrder) should be credited. Any other click still crediting
+ * this order is released back to a plain (clicked, not converted) state so a
+ * single sale can't be counted against multiple people.
+ */
+async function demoteOtherClicksForOrder(orderId, keepClickId) {
+  if (!orderId) return 0;
+  const res = await ClickLog.updateMany(
+    { _id: { $ne: keepClickId }, correlatedOrderId: String(orderId), converted: true },
+    { $set: { converted: false, convertedAt: null, correlatedOrderId: null, correlationConfidence: null, correlationMethod: null } }
+  );
+  if (res.modifiedCount) {
+    console.log(`   🧹 Dedup: released ${res.modifiedCount} duplicate click credit(s) for order ${orderId}`);
+  }
+  return res.modifiedCount || 0;
+}
+
 async function saveCorrelation(click, order, confidence, method, details) {
   const orderId = order.id || order.orderId;
   const orderDate = new Date(order.date_created || order.orderDate);
@@ -551,6 +572,9 @@ async function saveCorrelation(click, order, confidence, method, details) {
   );
 
   console.log(`   ✅ Correlated order ${orderId} with click ${click.clickId} (${confidence})`);
+
+  // One order → one converted click: release any other clicks crediting this order.
+  await demoteOtherClicksForOrder(orderId, click._id);
 
   // Track cross-sell conversion if this click came from a cross-sell offer
   if (click.crossSellRuleId) {
@@ -623,6 +647,9 @@ async function saveOrphanCorrelation(user, order, confidence, matchDetails, ship
   await orphanClick.save();
 
   console.log(`   ✅ ORPHAN correlation: order ${orderId} → user ${user.firstName || user.first_name} (${confidence})`);
+
+  // One order → one converted click (release any prior credits for this order).
+  await demoteOtherClicksForOrder(orderId, orphanClick._id);
 
   return {
     success: true,

@@ -56,10 +56,28 @@ async function sweepRecentOrdersOnce({ minutes = MAX_RECENT_MINUTES, sellerId = 
 }
 
 /**
+ * Whether a `converted` ClickLog is trustworthy enough to TELL the customer they
+ * bought ("¡Gracias por tu compra!"). This is INTENTIONALLY stricter than the
+ * stored `correlationConfidence` used for sales reporting: that field rates an
+ * ML-item-id match as 'high' (a real order, kept for reporting), but item-id
+ * alone can credit the wrong clicker on a popular listing (Pita ← Leonardo's
+ * order). Before asserting a purchase to a PERSON, require a corroborating
+ * identity signal — buyer name/nickname matched, or an exact shipping zip.
+ * (City/state alone is too coarse.) Missing matchDetails → not trustworthy.
+ *
+ * Gates the MESSAGE only; reporting/attribution is unchanged on purpose.
+ */
+function isConversionHighConfidence(click) {
+  const md = click && click.matchDetails;
+  if (!md || typeof md !== "object") return false;
+  return !!(md.nameMatch || md.nicknameMatch || md.zipMatch);
+}
+
+/**
  * Resolve the click/conversion state for a single PSID by reading the latest
  * ClickLog row for them. No ML calls — pure DB lookup.
  *
- * @returns {Promise<{ state: 'no_click'|'abandoned'|'converted', click?: object }>}
+ * @returns {Promise<{ state: 'no_click'|'abandoned'|'converted', click?: object, highConfidence?: boolean }>}
  */
 async function getClickStatusForPsid(psid) {
   if (!psid) return { state: "no_click" };
@@ -67,17 +85,20 @@ async function getClickStatusForPsid(psid) {
   // Most recent click record for this PSID (any link)
   const latest = await ClickLog.findOne({ psid })
     .sort({ createdAt: -1 })
-    .select("clicked clickedAt converted convertedAt conversionData productName")
+    .select("clicked clickedAt converted convertedAt conversionData productName matchDetails correlationMethod")
     .lean();
 
   if (!latest) return { state: "no_click" };
 
-  if (latest.converted) return { state: "converted", click: latest };
+  if (latest.converted) {
+    return { state: "converted", click: latest, highConfidence: isConversionHighConfidence(latest) };
+  }
   if (latest.clicked) return { state: "abandoned", click: latest };
   return { state: "no_click", click: latest };
 }
 
 module.exports = {
   sweepRecentOrdersOnce,
-  getClickStatusForPsid
+  getClickStatusForPsid,
+  isConversionHighConfidence
 };

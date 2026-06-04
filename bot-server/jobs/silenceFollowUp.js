@@ -186,11 +186,24 @@ async function runSilenceFollowUpJob() {
           // - no_click    → fall through to the original contextual message
           const clickStatus = await getClickStatusForPsid(convo.psid);
 
-          if (clickStatus.state === 'converted') {
+          // Only assert "¡Gracias por tu compra!" when the conversion is
+          // high-confidence (a name/zip signal corroborated the ML-item match).
+          // A bare item-id match on a popular listing credits every clicker when
+          // anyone buys it — so a LOW-confidence "converted" is downgraded to the
+          // neutral abandoned nudge: we never tell the wrong person they bought.
+          if (clickStatus.state === 'converted' && clickStatus.highConfidence) {
             followUpVariant = 'thank_you';
             const orderInfo = clickStatus.click?.conversionData || {};
             const item = orderInfo.itemTitle ? ` (${orderInfo.itemTitle})` : '';
             followUpText = `¡Gracias por tu compra${item}! Tu pedido ya está en proceso. Si necesitas el seguimiento del envío o tienes alguna duda, aquí estamos para ayudarte. 🙌`;
+          } else if (clickStatus.state === 'converted' && !clickStatus.highConfidence) {
+            // Clicked + a same-listing order landed, but we can't confidently tie
+            // it to THIS person. Don't claim a purchase; nudge gently instead.
+            followUpVariant = 'abandoned';
+            console.log(`   ⚠️ Low-confidence conversion for ${convo.psid} (method=${clickStatus.click?.correlationMethod}) — suppressing purchase confirmation, sending neutral nudge`);
+            const productName = clickStatus.click?.productName;
+            const productHint = productName ? ` con la malla de ${productName}` : '';
+            followUpText = `Hola, ¿hay algo en lo que te pueda ayudar${productHint}? Si tienes alguna duda con el pago, la medida o el envío, aquí estoy. 😊`;
           } else if (clickStatus.state === 'abandoned') {
             followUpVariant = 'abandoned';
             const productName = clickStatus.click?.productName;
