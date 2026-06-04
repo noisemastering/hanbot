@@ -119,6 +119,7 @@ const REGISTRY = {
       // Quoting hierarchy: sellable-but-no-price → human, never invent.
       if (priceInfo.handoff) {
         ctx.handoffRequested = true;
+        ctx.handoffReason = `Producto vendible sin precio: ${resolvedName || "(producto del flujo)"} — requiere cotización de un asesor`;
         return `${resolvedName ? `"${resolvedName}"` : "Ese producto"} no tiene precio disponible. NO inventes un precio: ofrece pasar con un asesor.`;
       }
       if (priceInfo.link || priceInfo.amount) {
@@ -175,6 +176,7 @@ const REGISTRY = {
     async execute(input, ctx) {
       ctx.actions.push({ tool: "request_handoff", input });
       ctx.handoffRequested = true;
+      ctx.handoffReason = input.reason || ctx.handoffReason || "El cliente necesita atención de un asesor";
       return "Handoff registrado: un asesor continuará la conversación.";
     },
   },
@@ -381,6 +383,7 @@ const REGISTRY = {
       }
       if (soldMatch) {
         ctx.handoffRequested = true;
+        ctx.handoffReason = `Cliente pidió "${q}" — sí se vende ("${soldMatch.name}") pero no hay flujo; requiere asesor`;
         return `[INTERNO — no menciones flujos ni procesos internos] Sí vendemos "${soldMatch.name}", pero para cotizarlo necesitas a un asesor. De forma natural ofrece pasarlo con un asesor que le ayuda con ese producto (usa request_handoff). NUNCA digas que no lo vendemos.`;
       }
 

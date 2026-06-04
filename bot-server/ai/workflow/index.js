@@ -218,6 +218,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     toolCalls,
     actions: ctx.actions,
     handoffRequested: ctx.handoffRequested,
+    handoffReason: ctx.handoffReason || null,
   };
 
   // 6. FLOW SWITCH — a TOOL (model-invoked) decided to hand off to another flow.

@@ -72,7 +72,7 @@ async function maybeRunAdWorkflow(userMessage, psid) {
   // Cheap, side-effect-free read first (getConversation may upsert/hydrate).
   const Conversation = require("../models/Conversation");
   const convo = await Conversation.findOne({ psid })
-    .select("adId state workflowState")
+    .select("adId state workflowState extractedName city zipcode productInterest")
     .lean();
   if (!convo || !convo.adId) return null;
 
@@ -108,15 +108,45 @@ async function maybeRunAdWorkflow(userMessage, psid) {
     { psid } // enable psid-traceable links (commerce-status attribution)
   );
 
-  await updateConversation(psid, {
+  // Map what the engine collected (lead / location / product) onto the
+  // Conversation so the human-handoff brief, commerce-status and zip attribution
+  // have it. Don't clobber values the conversation already has.
+  const lead = newState.lead || {};
+  const loc = newState.location || {};
+  const handoff = !!diagnostics?.handoffRequested;
+  const persist = {
     workflowState: newState,
     currentFlow: `workflow:${workflow.name}`,
-    lastIntent: "workflow_turn",
+    lastIntent: handoff ? "handoff_requested" : "workflow_turn",
     lastMessageAt: new Date(),
-  }).catch((e) => console.error("⚠️ workflowState persist failed:", e.message));
+  };
+  if (loc.city && !convo.city) persist.city = loc.city;
+  if ((loc.zip || loc.zipcode) && !convo.zipcode) persist.zipcode = loc.zip || loc.zipcode;
+  if (lead.phone || lead.email) persist.leadData = { contact: lead.phone || lead.email };
+  if (lead.name && !convo.extractedName) persist.extractedName = lead.name;
+  if (newState.product?.name && !convo.productInterest) persist.productInterest = newState.product.name;
+  await updateConversation(psid, persist).catch((e) =>
+    console.error("⚠️ workflowState persist failed:", e.message)
+  );
+
+  // REAL HANDOFF: when the flow decided to escalate (request_handoff, or a scope
+  // check that needs a human), take it over throughout the system — set
+  // needs_human, alert the dashboard, and hand the client brief to the human.
+  if (handoff) {
+    try {
+      const { triggerHandoff } = require("../services/pushNotifications");
+      await triggerHandoff(
+        psid,
+        diagnostics.handoffReason || "El flujo pasó la conversación con un asesor"
+      );
+      console.log(`🙋 [workflow] handoff escalated for ${psid}: ${diagnostics.handoffReason || "(sin motivo)"}`);
+    } catch (e) {
+      console.error("⚠️ engine handoff trigger failed:", e.message);
+    }
+  }
 
   console.log(
-    `🧩 [workflow] ad="${ad.name || convo.adId}" flow="${workflow.name}" → node="${diagnostics?.toNode?.name || "?"}"`
+    `🧩 [workflow] ad="${ad.name || convo.adId}" flow="${workflow.name}" → node="${diagnostics?.toNode?.name || "?"}"${handoff ? " [HANDOFF]" : ""}`
   );
 
   return { handled: true, reply: reply ? { type: "text", text: reply } : null };
