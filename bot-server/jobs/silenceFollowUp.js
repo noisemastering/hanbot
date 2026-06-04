@@ -194,8 +194,10 @@ async function runSilenceFollowUpJob() {
           } else if (clickStatus.state === 'abandoned') {
             followUpVariant = 'abandoned';
             const productName = clickStatus.click?.productName;
-            const productHint = productName ? ` de ${productName}` : '';
-            followUpText = `Vi que abriste el link${productHint} pero no completaste la compra. ¿Hubo algo con el pago, la medida o el envío en lo que te pueda ayudar? Cualquier duda, aquí estoy. 😊`;
+            const productHint = productName ? ` con la malla de ${productName}` : '';
+            // Friendly, neutral check-in — never disclose that we tracked the
+            // click or that we know the purchase wasn't completed.
+            followUpText = `Hola, ¿hay algo en lo que te pueda ayudar${productHint}? Si tienes alguna duda con el pago, la medida o el envío, aquí estoy. 😊`;
           } else {
           // --- Contextual follow-up based on what the customer was looking at ---
           const specs = convo.productSpecs || {};
