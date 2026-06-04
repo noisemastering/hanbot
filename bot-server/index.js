@@ -1046,9 +1046,16 @@ app.post("/webhook", async (req, res) => {
         console.log(`   Text: ${messageText.slice(0, 100)}`);
         console.log(`   App ID: ${appId || 'native inbox'}`);
 
-        // If no app_id, it was sent through Facebook's native Page Inbox (human agent)
-        // If app_id matches our bot, it's our own message (ignore)
-        const isFromBot = appId === process.env.FB_APP_ID;
+        // A human replying from Facebook's native Page Inbox produces an echo with
+        // NO app_id. An echo WITH an app_id was sent by an app (our bot via the
+        // Send API), so it is NOT a human takeover. If FB_APP_ID is configured we
+        // match it exactly; otherwise any app_id counts as our own message. This
+        // prevents the bot's own replies from being misread as a human agent
+        // (which silently flipped conversations to human_active and made the bot
+        // "stop answering").
+        const isFromBot = appId
+          ? (process.env.FB_APP_ID ? appId === process.env.FB_APP_ID : true)
+          : false;
 
         if (!isFromBot) {
           console.log(`👨‍💼 Human agent message detected via echo - marking conversation as human_active`);
