@@ -75,6 +75,7 @@ import CustomerSegmentationView from "./pages/CustomerSegmentationView";
 import ConversionProbabilityView from "./pages/ConversionProbabilityView";
 import AdSpendOptimizationView from "./pages/AdSpendOptimizationView";
 import ConvoSimulatorView from "./pages/ConvoSimulatorView";
+import AdWorkflowAssignView from "./pages/AdWorkflowAssignView";
 import CampaignIntelligenceView from "./pages/CampaignIntelligenceView";
 import MLOrderImportView from "./pages/MLOrderImportView";
 import HelpView from "./pages/HelpView";
@@ -507,6 +508,14 @@ const menuItems = [
         path: "/workflows",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM15 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2h-2zM9 6h6m-3 5v-1m0 0V9m3 5h.01" />
+        )
+      },
+      {
+        id: "ad-workflow",
+        labelKey: "menu.adWorkflow",
+        path: "/playground/anuncio-flujo",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
         )
       },
     ]
@@ -2290,6 +2299,7 @@ function App() {
           <Route path="/convo-flows" element={<ConvoFlowsView />} />
           <Route path="/workflows" element={<WorkflowsView />} />
           <Route path="/playground/simulador" element={<ConvoSimulatorView />} />
+          <Route path="/playground/anuncio-flujo" element={<AdWorkflowAssignView />} />
           <Route path="/inteligencia-artificial" element={<CampaignIntelligenceView />} />
           <Route path="/ml-import" element={<MLOrderImportView />} />
 

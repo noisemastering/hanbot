@@ -58,10 +58,86 @@ async function generateReplyPipeline(userMessage, psid, referral = null) {
 }
 
 /**
+ * If this conversation entered through an ad that has a Conversation Workflow
+ * attached and enabled, drive one turn of the router+node engine and return its
+ * reply. Returns { handled: true, reply } when the workflow took over, or null
+ * when it did not (no ad / no workflow / disabled / human handling / error) so
+ * the caller falls through to the legacy bot.
+ *
+ * State persists on Conversation.workflowState across messages. A fresh state is
+ * built (seeded with the ad's setup vars) on the first turn, or whenever the ad's
+ * attached workflow changes.
+ */
+async function maybeRunAdWorkflow(userMessage, psid) {
+  // Cheap, side-effect-free read first (getConversation may upsert/hydrate).
+  const Conversation = require("../models/Conversation");
+  const convo = await Conversation.findOne({ psid })
+    .select("adId state workflowState")
+    .lean();
+  if (!convo || !convo.adId) return null;
+
+  // Don't let the engine speak over a live human handoff.
+  if (convo.state === "needs_human" || convo.state === "human_handling") return null;
+
+  const Ad = require("../models/Ad");
+  const ad = await Ad.findOne({ fbAdId: convo.adId })
+    .select("name workflowId workflowEnabled workflowSetup")
+    .lean();
+  if (!ad || !ad.workflowEnabled || !ad.workflowId) return null;
+
+  const Workflow = require("../models/Workflow");
+  const workflow = await Workflow.findById(ad.workflowId);
+  if (!workflow) return null;
+
+  const { runWorkflowTurn, initState } = require("./workflow");
+
+  // Reuse persisted state only if it belongs to THIS workflow; otherwise start
+  // fresh, seeding the ad's setup vars as per-conversation overrides.
+  let state = convo.workflowState;
+  if (!state || String(state.workflowId) !== String(workflow._id)) {
+    state = initState(workflow, {}, ad.workflowSetup || {});
+  }
+
+  const { reply, state: newState, diagnostics } = await runWorkflowTurn(
+    workflow,
+    state,
+    userMessage
+  );
+
+  await updateConversation(psid, {
+    workflowState: newState,
+    currentFlow: `workflow:${workflow.name}`,
+    lastIntent: "workflow_turn",
+    lastMessageAt: new Date(),
+  }).catch((e) => console.error("⚠️ workflowState persist failed:", e.message));
+
+  console.log(
+    `🧩 [workflow] ad="${ad.name || convo.adId}" flow="${workflow.name}" → node="${diagnostics?.toNode?.name || "?"}"`
+  );
+
+  return { handled: true, reply: reply ? { type: "text", text: reply } : null };
+}
+
+/**
  * Main entry point for generating bot responses.
  * Uses pipeline when USE_PIPELINE=true, otherwise uses the monolith.
  */
 async function generateReply(userMessage, psid, referral = null) {
+  // ===== AD-ASSIGNED WORKFLOW TAKEOVER (opt-in per ad; super_admin) =====
+  // If this conversation entered through an ad that has a Conversation Workflow
+  // attached AND enabled, the router+node engine handles the turn and the legacy
+  // flow system is bypassed entirely. Re-checked every message, so flipping the
+  // ad's toggle OFF reverts its traffic to the current bot on the next message.
+  // Covers BOTH channels (FB + WhatsApp both funnel through generateReply and both
+  // stamp convo.adId on ad entry). Any error falls through to the legacy bot.
+  try {
+    const taken = await maybeRunAdWorkflow(userMessage, psid);
+    if (taken && taken.handled) return taken.reply;
+  } catch (err) {
+    console.error("❌ ad-workflow takeover failed; falling back to legacy:", err.message);
+  }
+  // ===== END WORKFLOW TAKEOVER =====
+
   if (USE_PIPELINE) {
     return generateReplyPipeline(userMessage, psid, referral);
   }

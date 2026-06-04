@@ -46,6 +46,7 @@ const en = {
   "menu.intents": "Intents",
   "menu.flows": "Flow Structure",
   "menu.workflows": "Workflows (beta)",
+  "menu.adWorkflow": "Workflow on ad (beta)",
   "menu.playground": "Playground",
   "menu.playgroundML": "Mercado Libre",
   "menu.playgroundForecast": "Sales Forecast",

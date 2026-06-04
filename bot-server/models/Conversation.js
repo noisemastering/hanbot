@@ -10,6 +10,12 @@ const conversationSchema = new mongoose.Schema({
 
   // Flow tracking - every conversation is always in a flow
   currentFlow: { type: String, default: "default" },  // default | malla_sombra | rollo | borde_separador | groundcover | monofilamento
+
+  // Conversation Workflow engine state (only set when this convo is driven by the
+  // router+node engine via an ad with workflowEnabled). Holds the full engine
+  // state object: { workflowId, nodeId, history[], vars, setupOverrides, basket[],
+  // lead, location, contextBlock }. Null for legacy-flow conversations.
+  workflowState: { type: mongoose.Schema.Types.Mixed, default: null },
   flowTransferredFrom: { type: String, default: null }, // Previous flow (for context)
   flowTransferredAt: { type: Date, default: null },
   lastGreetTime: { type: Number, default: 0 },

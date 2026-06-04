@@ -125,6 +125,17 @@ const adSchema = new mongoose.Schema(
     // When set, the promo config is injected into the convo_flow's manifest.promo at runtime.
     promoId: { type: mongoose.Schema.Types.ObjectId, ref: "Promo", default: null },
 
+    // ====== WORKFLOW ENGINE TAKEOVER (opt-in, super_admin only) ======
+    // When workflowEnabled is true and workflowId is set, conversations that enter
+    // through THIS ad are handled by the router+node Conversation Workflow engine
+    // instead of the legacy flow system. Flipping workflowEnabled off reverts the
+    // ad's traffic to the current bot on the very next message (instant rollback).
+    // workflowSetup mirrors Workflow.setup and is applied as per-conversation
+    // setupOverrides (buyer/purchaseType/saleChannel/products[]/hasPromo/tone/catalog).
+    workflowId: { type: mongoose.Schema.Types.ObjectId, ref: "Workflow", default: null },
+    workflowEnabled: { type: Boolean, default: false },
+    workflowSetup: { type: mongoose.Schema.Types.Mixed, default: null },
+
     // Catalog override (inherits from AdSet/Campaign if not set)
     catalog: {
       url: { type: String },

@@ -7,6 +7,7 @@ const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
 const Workflow = require("../models/Workflow");
+const Ad = require("../models/Ad");
 const DashboardUser = require("../models/DashboardUser");
 const { runWorkflowTurn, initState } = require("../ai/workflow");
 
@@ -41,6 +42,62 @@ router.use(requireSuperAdmin);
 
 // --- ephemeral sandbox sessions (in-memory, lost on restart — fine for testing) ---
 const sandboxSessions = new Map(); // sessionId -> { workflowId, state }
+
+// ===== Ad → workflow assignment (attach a flow to an ad + set vars + toggle) =====
+// Registered BEFORE the generic "/:id" routes so GET /ads is not swallowed by /:id.
+
+// GET /workflows/ads?q= — search ads for the assignment picker (name or fbAdId).
+router.get("/ads", async (req, res) => {
+  try {
+    const q = (req.query.q || "").trim();
+    const filter = {};
+    if (q) {
+      filter.$or = [
+        { name: { $regex: q, $options: "i" } },
+        { fbAdId: { $regex: q, $options: "i" } },
+      ];
+    }
+    const ads = await Ad.find(filter)
+      .select("name fbAdId status workflowId workflowEnabled workflowSetup")
+      .sort({ updatedAt: -1 })
+      .limit(50)
+      .populate("workflowId", "name active")
+      .lean();
+    res.json({ success: true, data: ads });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// PATCH /workflows/ads/:adId — attach/detach a workflow, set its vars, toggle on/off.
+// Body: { workflowId?, workflowSetup?, workflowEnabled? }
+router.patch("/ads/:adId", async (req, res) => {
+  try {
+    const ad = await Ad.findById(req.params.adId);
+    if (!ad) return res.status(404).json({ success: false, error: "Ad not found" });
+
+    const b = req.body || {};
+    if ("workflowId" in b) ad.workflowId = b.workflowId || null;
+    if ("workflowSetup" in b) ad.workflowSetup = b.workflowSetup || null;
+    if ("workflowEnabled" in b) ad.workflowEnabled = !!b.workflowEnabled;
+
+    // Can't turn the takeover on without a workflow attached.
+    if (ad.workflowEnabled && !ad.workflowId) {
+      return res
+        .status(400)
+        .json({ success: false, error: "Asigna un workflow antes de activarlo." });
+    }
+
+    await ad.save();
+    const out = await Ad.findById(ad._id)
+      .select("name fbAdId status workflowId workflowEnabled workflowSetup")
+      .populate("workflowId", "name active")
+      .lean();
+    res.json({ success: true, data: out });
+  } catch (err) {
+    res.status(400).json({ success: false, error: err.message });
+  }
+});
 
 // GET /workflows
 router.get("/", async (req, res) => {
