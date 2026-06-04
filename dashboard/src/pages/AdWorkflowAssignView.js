@@ -23,6 +23,7 @@ export default function AdWorkflowAssignView() {
   const [workflows, setWorkflows] = useState([]);
   const [query, setQuery] = useState("");
   const [ads, setAds] = useState([]);
+  const [totalAds, setTotalAds] = useState(0);
   const [loadingAds, setLoadingAds] = useState(false);
   const [selectedAd, setSelectedAd] = useState(null);
   const [syncing, setSyncing] = useState(false);
@@ -54,6 +55,7 @@ export default function AdWorkflowAssignView() {
       try {
         const res = await API.get("/workflows/ads", { params: { q: query } });
         setAds(res.data?.data || []);
+        setTotalAds(res.data?.total ?? (res.data?.data || []).length);
       } catch (err) {
         toast.error(err.response?.data?.error || "No se pudieron cargar los anuncios");
       } finally {
@@ -159,8 +161,13 @@ export default function AdWorkflowAssignView() {
             value={query}
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Buscar anuncio por nombre o ID…"
-            className="wf-input mb-2"
+            className="wf-input mb-1"
           />
+          <p className="text-[11px] text-gray-500 mb-2">
+            {query
+              ? `${ads.length} resultado(s)`
+              : `Mostrando ${ads.length} de ${totalAds} anuncios · escribe nombre o ID para buscar entre todos`}
+          </p>
           <div className="border border-gray-700 rounded-xl divide-y divide-gray-800 max-h-[70vh] overflow-y-auto">
             {loadingAds ? (
               <p className="text-gray-500 text-sm p-4">Cargando…</p>
