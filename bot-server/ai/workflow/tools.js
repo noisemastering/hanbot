@@ -64,6 +64,74 @@ async function findProductInFamilies(query, familyList) {
   return candidates.find((c) => (c.name || "").toLowerCase().includes(q)) || null;
 }
 
+// AI-based product-scope classifier. Replaces the old stopword + name-regex
+// matcher (which misrouted on attribute words). Given the customer's message
+// and the catalog of active flows, decides which flow handles the product they
+// asked about — or that the message names no product at all.
+//
+// Returns { verdict, targetFlow, productName }:
+//   - "no_product"  → message doesn't name a concrete product (greeting, color,
+//                     filler, "qué hago"). Don't switch, don't deny.
+//   - "current"     → product belongs to the flow they're already in.
+//   - "other_flow"  → belongs to a DIFFERENT active flow (targetFlow = its name).
+//   - "needs_human" → Hanlob sells it but no active flow covers it → human.
+//   - "not_sold"    → genuinely not our category (toldo, lona, geomembrana…).
+// On any error: "no_product" (safest — no false switch, no false denial).
+async function aiClassifyProductScope(query, currentFlowName, flowCatalog) {
+  const { getClient, CHAT_MODEL } = require("./llmClient");
+  const flowsDesc = (flowCatalog || [])
+    .map(
+      (f) =>
+        `- "${f.name}"${f.isCurrent ? " (FLUJO ACTUAL)" : ""}: ${
+          f.families && f.families.length ? f.families.join(", ") : "(sin familias)"
+        }`
+    )
+    .join("\n");
+
+  try {
+    const client = getClient();
+    const res = await client.chat.completions.create({
+      model: CHAT_MODEL,
+      messages: [
+        {
+          role: "system",
+          content: `Eres un clasificador de alcance de producto para Hanlob (fabricante mexicano de malla sombra).
+
+Tu trabajo: decidir a qué FLUJO de venta pertenece el producto que pide el cliente, o si no aplica. NO interpretes colores, saludos ni preguntas tipo "qué hago" como productos.
+
+FLUJOS ACTIVOS Y LO QUE VENDE CADA UNO:
+${flowsDesc || "(ninguno)"}
+
+${currentFlowName ? `El cliente está actualmente en el flujo: "${currentFlowName}".` : ""}
+
+REGLAS:
+- "no_product": el mensaje NO nombra un producto concreto. Saludos, agradecimientos, un color suelto (beige/negro/verde…), o preguntas como "¿qué hago?", "me interesa", "info" → no_product. Los COLORES son ATRIBUTOS, nunca productos.
+- "current": el producto pertenece al FLUJO ACTUAL (misma categoría que ya está atendiendo).
+- "other_flow": pertenece claramente a OTRO flujo activo distinto del actual. Pon su nombre EXACTO en targetFlow.
+- "needs_human": es malla sombra o algo que Hanlob fabrica, pero ningún flujo activo lo cubre.
+- "not_sold": algo que Hanlob NO vende (toldo, lona impermeable, geomembrana, plástico agrícola, etc.).
+
+Responde SOLO JSON: {"verdict":"no_product|current|other_flow|needs_human|not_sold","targetFlow":"<nombre exacto del flujo o null>","productName":"<el producto que pidió o null>"}`,
+        },
+        { role: "user", content: query },
+      ],
+      temperature: 0,
+      max_tokens: 120,
+      response_format: { type: "json_object" },
+    });
+    const parsed = JSON.parse(res.choices[0].message.content);
+    const valid = ["no_product", "current", "other_flow", "needs_human", "not_sold"];
+    return {
+      verdict: valid.includes(parsed.verdict) ? parsed.verdict : "no_product",
+      targetFlow: parsed.targetFlow || null,
+      productName: parsed.productName || null,
+    };
+  } catch (err) {
+    console.error("❌ aiClassifyProductScope error:", err.message);
+    return { verdict: "no_product", targetFlow: null, productName: null };
+  }
+}
+
 const REGISTRY = {
   share_product_link: {
     definition: {
@@ -238,59 +306,22 @@ const REGISTRY = {
     },
     async execute(input, ctx) {
       ctx.actions.push({ tool: "check_product_scope", input });
-      const mongoose = require("mongoose");
       const q = (input.query || "").trim();
       if (!q) return "Sin término de búsqueda.";
 
-      // Require the models explicitly so this never depends on load order
-      // (mongoose.model("X") throws MissingSchemaError if X wasn't required yet).
       const PF = require("../../models/ProductFamily");
-      require("../../models/Workflow");
-      // Build loose, plural-tolerant stems from the query words. Catalog names
-      // are singular ("Rollo"), customers say plural ("rollos") — match the stem.
-      // Skip generic filler words so "tienes rollos" matches on "rollo", not "tienes".
-      const STOP = new Set([
-        "tienes","tiene","quiero","busco","buscas","necesito","manejan","manejas",
-        "venden","vendes","hay","una","uno","unos","unas","del","los","las","para",
-        "con","sin","que","como","cual","cuales","malla","sombra","producto","productos",
-        "metros","metro","medida","medidas","color","colores","precio",
-        // Colors are ATTRIBUTES, not products. They appear as leaf family names
-        // ("Color Beige", "Color Negro") across multiple flows, so matching on
-        // them caused false flow-switches (retail buyer saying "color beige"
-        // got switched into the rollo flow). Never treat a color as a product.
-        "beige","beis","negro","negra","verde","blanco","blanca","azul","rojo","roja",
-        "gris","cafe","chocolate","marron","crema","arena","amarillo","amarilla",
-        // Generic intent / filler words that aren't products
-        "gracias","interesa","interesan","interesado","interesada","hacer","hago",
-        "ese","esa","esos","esas","este","esta","aqui","ahi","favor","ayuda","info",
-        "informacion","saber","ver","mas","muy","bien","ok","hola","buenas","buenos",
-      ]);
-      const stem = (w) => w.replace(/(es|s)$/i, ""); // rollos→rollo, redes→red
-      const words = q
-        .toLowerCase()
-        .normalize("NFD")
-        .replace(/[̀-ͯ]/g, "")
-        .replace(/[^a-z0-9\s]/g, " ")
-        .split(/\s+/)
-        .filter((w) => w.length >= 3 && !STOP.has(w))
-        .map(stem)
-        .filter((w) => w.length >= 3);
-      if (!words.length) return "[INTERNO] No identifiqué un producto en el mensaje; pide al cliente que aclare qué busca.";
+      const WorkflowModel = require("../../models/Workflow");
 
-      let matches = [];
-      try {
-        // Match the stem as a prefix so "rollo" hits "Rollo" / "Rollos" / "Rollo raschel".
-        const rx = words.map((w) => new RegExp(w, "i"));
-        matches = await PF.find({ $or: rx.map((r) => ({ name: r })) })
-          .collation({ locale: "es", strength: 1 }) // accent- & case-insensitive
-          .select("name parentId active sellable")
-          .limit(10)
-          .lean();
-      } catch {
-        return "No pude buscar el producto en este momento.";
-      }
-      // Before declaring "not sold": if the query is a MEASURE (e.g. "6x4") and a
-      // matching sellable product exists in THIS flow's families, it's in-scope.
+      // This flow's realm = the UNION of its families' ids (multi-family).
+      const flowFamilyIds = new Set(
+        (Array.isArray(ctx.families) ? ctx.families : ctx.family ? [ctx.family] : [])
+          .filter((f) => f && f.id)
+          .map((f) => String(f.id))
+      );
+
+      // FAST PATH (dimension-only, no name matching): if the customer named a
+      // MEASURE (e.g. "6x4") that exists as a sellable product in THIS flow's
+      // families, it's in-scope. Pure numeric dimension comparison.
       const inFamilyByDims = await findProductInFamilies(
         q,
         Array.isArray(ctx.families) ? ctx.families : ctx.family ? [ctx.family] : []
@@ -299,43 +330,11 @@ const REGISTRY = {
         return `[INTERNO — no menciones nada de esto al cliente] "${inFamilyByDims.name}" sí lo manejas tú aquí. Atiéndelo con normalidad.`;
       }
 
-      if (!matches.length) {
-        return `[INTERNO — no menciones nada de esto al cliente] No vendemos "${q}". Dile de forma amable y natural que no manejamos ese producto, sin tecnicismos.`;
-      }
-
-      // Ancestry helper.
-      const ancestors = async (id) => {
-        const chain = [];
-        let cur = await PF.findById(id).select("name parentId").lean();
-        let guard = 0;
-        while (cur && guard++ < 10) {
-          chain.push(String(cur._id));
-          if (!cur.parentId) break;
-          cur = await PF.findById(cur.parentId).select("name parentId").lean();
-        }
-        return chain;
-      };
-
-      // This flow's realm = the UNION of its families' ids (multi-family).
-      // Back-compat: also accept a single ctx.family.
-      const flowFamilyIds = new Set(
-        (Array.isArray(ctx.families) ? ctx.families : ctx.family ? [ctx.family] : [])
-          .filter((f) => f && f.id)
-          .map((f) => String(f.id))
-      );
-
-      // 1) In THIS flow's realm (any of its families)?
-      if (flowFamilyIds.size) {
-        for (const m of matches) {
-          const chain = await ancestors(m._id);
-          if (chain.some((c) => flowFamilyIds.has(c))) {
-            return `[INTERNO — no menciones nada de esto al cliente] "${m.name}" sí lo manejas tú aquí. Atiéndelo con normalidad como parte de esta conversación.`;
-          }
-        }
-      }
-
-      // 2) In another ACTIVE workflow's realm (any of its families)?
-      const WorkflowModel = require("../../models/Workflow");
+      // Build the catalog of active flows for the AI classifier. The previous
+      // implementation regex-matched the message words against ProductFamily
+      // names, which misrouted on attribute words ("color beige" → the rollo
+      // "Color Beige" leaf). Now an AI classifier decides which flow (if any)
+      // handles the product, with NO keyword/regex matching.
       let workflows = [];
       try {
         workflows = await WorkflowModel.find({ active: true })
@@ -344,61 +343,59 @@ const REGISTRY = {
       } catch {
         /* ignore */
       }
-      for (const m of matches) {
-        const chain = await ancestors(m._id);
-        const chainSet = new Set(chain);
-        const other = workflows.find((w) => {
-          const fams = WorkflowModel.familyListOf(w).map((f) => String(f.id));
-          // matches one of w's families AND that family isn't part of THIS flow
-          return fams.some((id) => chainSet.has(id) && !flowFamilyIds.has(id));
-        });
+
+      const flowCatalog = await Promise.all(
+        workflows.map(async (w) => {
+          const fams = WorkflowModel.familyListOf(w) || [];
+          const names = [];
+          for (const f of fams) {
+            if (f.name) names.push(f.name);
+            else if (f.id) {
+              const doc = await PF.findById(f.id).select("name").lean();
+              if (doc?.name) names.push(doc.name);
+            }
+          }
+          const isCurrent = fams.some((f) => flowFamilyIds.has(String(f.id)));
+          return { id: String(w._id), name: w.name, families: names, isCurrent };
+        })
+      );
+
+      const verdict = await aiClassifyProductScope(q, ctx.currentFlowName || null, flowCatalog);
+
+      // no_product → the message didn't name a concrete product (greeting,
+      // color, filler). Don't switch, don't deny — just continue.
+      if (verdict.verdict === "no_product") {
+        return "[INTERNO — no menciones nada de esto al cliente] El mensaje no nombra un producto distinto; continúa la conversación normalmente sin cambiar de tema ni de flujo.";
+      }
+
+      // current → product belongs to this flow.
+      if (verdict.verdict === "current") {
+        return `[INTERNO — no menciones nada de esto al cliente] Eso sí lo manejas tú aquí. Atiéndelo con normalidad como parte de esta conversación.`;
+      }
+
+      // other_flow → belongs to a different active flow → surface switch target.
+      if (verdict.verdict === "other_flow" && verdict.targetFlow) {
+        const other = flowCatalog.find((f) => f.name === verdict.targetFlow && !f.isCurrent);
         if (other) {
-          // Surface a switch target. The conversation confirms, then switch_flow
-          // hands over to that flow (carrying the basket + client data).
           ctx.scopeResult = {
             verdict: "other_flow",
-            product: { kind: m.sellable ? "product" : "family", id: String(m._id), name: m.name },
-            toWorkflowId: String(other._id),
+            product: verdict.productName ? { kind: "product", name: verdict.productName } : null,
+            toWorkflowId: other.id,
             toName: other.name,
           };
-          return `[INTERNO — NUNCA menciones flujos, especialistas, ni que "se maneja en otro lado"; el cambio debe ser TRANSPARENTE para el cliente] Sí vendemos "${m.name}". Es otro producto de nuestro catálogo, así que confirma de forma natural que es lo que busca (ej. "¿Buscas el rollo de 4x100, verdad?") y, cuando lo confirme, usa la herramienta switch_flow para continuar atendiéndolo sobre ese producto SIN avisarle de ningún cambio. NO inventes datos de ese producto tú misma.`;
+          return `[INTERNO — NUNCA menciones flujos, especialistas, ni que "se maneja en otro lado"; el cambio debe ser TRANSPARENTE para el cliente] Sí vendemos ${verdict.productName ? `"${verdict.productName}"` : "ese producto"}. Es otro producto de nuestro catálogo, así que confirma de forma natural que es lo que busca y, cuando lo confirme, usa la herramienta switch_flow para continuar atendiéndolo sobre ese producto SIN avisarle de ningún cambio. NO inventes datos de ese producto tú misma.`;
         }
       }
 
-      // 3) Sold but no flow handles it → human. A match can be a sellable leaf
-      // OR a family/group whose SUBTREE contains sellable products (e.g. the
-      // customer says "borde separador" = the family, sold via its measures).
-      let soldMatch = matches.find((m) => m.sellable && m.active !== false);
-      if (!soldMatch) {
-        for (const m of matches) {
-          const kids = await PF.find({ parentId: m._id }).select("_id sellable active").lean();
-          const hasSellableDescendant = async (id) => {
-            const queue = [id];
-            let guard = 0;
-            while (queue.length && guard++ < 200) {
-              const cid = queue.shift();
-              const ch = await PF.find({ parentId: cid }).select("_id sellable active").lean();
-              for (const c of ch) {
-                if (c.sellable && c.active !== false) return true;
-                queue.push(c._id);
-              }
-            }
-            return false;
-          };
-          if (kids.some((k) => k.sellable && k.active !== false) || (await hasSellableDescendant(m._id))) {
-            soldMatch = m;
-            break;
-          }
-        }
-      }
-      if (soldMatch) {
+      // needs_human → sold but no active flow handles it → human.
+      if (verdict.verdict === "needs_human") {
         ctx.handoffRequested = true;
-        ctx.handoffReason = `Cliente pidió "${q}" — sí se vende ("${soldMatch.name}") pero no hay flujo; requiere asesor`;
-        return `[INTERNO — no menciones flujos ni procesos internos] Sí vendemos "${soldMatch.name}", pero para cotizarlo necesitas a un asesor. De forma natural ofrece pasarlo con un asesor que le ayuda con ese producto (usa request_handoff). NUNCA digas que no lo vendemos.`;
+        ctx.handoffReason = `Cliente pidió "${q}" — sí se vende pero no hay flujo; requiere asesor`;
+        return `[INTERNO — no menciones flujos ni procesos internos] Sí lo vendemos, pero para cotizarlo necesitas a un asesor. De forma natural ofrece pasarlo con un asesor (usa request_handoff). NUNCA digas que no lo vendemos.`;
       }
 
-      // 4) Found in catalog but not sellable/active anywhere in its subtree.
-      return `[INTERNO — no menciones flujos ni procesos internos] "${matches[0].name}" no está disponible para venta directa por ahora. Si el cliente insiste, ofrece de forma natural pasarlo con un asesor.`;
+      // not_sold → genuinely not our category.
+      return `[INTERNO — no menciones nada de esto al cliente] No vendemos "${q}". Dile de forma amable y natural que no manejamos ese producto, sin tecnicismos.`;
     },
   },
 

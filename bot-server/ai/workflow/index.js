@@ -181,6 +181,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     product: state.product || null,
     priceInfo: turnPriceInfo, // turn-scoped: the measure the client just asked for
     families: familyList, // realm (for scope checks)
+    currentFlowName: workflow.name, // for the AI product-scope classifier
     psid: opts.psid || null, // enables psid-traceable links in share_* tools
   };
   const { text, toolCalls } = await executeNode(
@@ -250,9 +251,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
 // active flow. Reuses check_product_scope's logic via a throwaway ctx; returns
 // the switch target { toWorkflowId, toName, product } or null.
 async function detectFlowSwitch(message, familyList, currentWorkflow) {
-  // Heuristic gate: only bother when the message plausibly names a product, to
-  // avoid an LLM/DB pass on every "sí"/"gracias". check_product_scope itself is
-  // DB-only (no LLM), so this is cheap, but skip very short confirmations.
+  // Gate: skip very short confirmations ("sí"/"ok"). check_product_scope now
+  // uses an AI classifier (one cheap gpt-4o call) to decide product scope —
+  // no keyword/regex matching — so attribute words like "beige" no longer
+  // trigger false flow-switches.
   if (!message || message.trim().length < 3) return null;
   const { REGISTRY } = require("./tools");
   const probe = {
@@ -260,6 +262,7 @@ async function detectFlowSwitch(message, familyList, currentWorkflow) {
     notes: [],
     handoffRequested: false,
     families: familyList,
+    currentFlowName: currentWorkflow?.name || null,
     _autoProbe: true,
   };
   try {
