@@ -165,6 +165,13 @@ async function maybeRunAdWorkflow(userMessage, psid) {
     } catch (e) {
       console.error("⚠️ workflow link sanitize failed:", e.message);
     }
+    // Phone guard: never hand out a fabricated number.
+    try {
+      const { sanitizePhones } = require("./utils/phoneGuard");
+      safeText = await sanitizePhones(safeText);
+    } catch (e) {
+      console.error("⚠️ workflow phoneGuard failed:", e.message);
+    }
   }
 
   return { handled: true, reply: safeText ? { type: "text", text: safeText } : null };
@@ -1028,6 +1035,20 @@ async function generateReply(userMessage, psid, referral = null) {
     }
   }
   // ====== END GLOBAL PRICE TRUTH CHECK ======
+
+  // ====== PHONE GUARD ======
+  // Hard backstop: never let a fabricated phone number reach the customer.
+  // Any phone-shaped number that isn't one of our real CompanyInfo numbers
+  // gets replaced. Covers every path that produced this `response`.
+  if (response && response.text) {
+    try {
+      const { sanitizePhones } = require("./utils/phoneGuard");
+      response.text = await sanitizePhones(response.text);
+    } catch (e) {
+      console.error("⚠️ phoneGuard failed:", e.message);
+    }
+  }
+  // ====== END PHONE GUARD ======
 
   // Check for repetition and escalate if needed
   return await checkForRepetition(response, psid, convo);
