@@ -5,7 +5,7 @@
 // router and node prompts read each turn. Also resolves the price for the
 // preloaded product via the quoting hierarchy (ML → Inventario → handoff).
 const mongoose = require("mongoose");
-const { resolvePrice } = require("./priceResolver");
+const { resolvePrice, mlLinkOf } = require("./priceResolver");
 const { getBusinessInfo } = require("../../businessInfoManager");
 
 const pick = (a, b) => (a !== undefined && a !== null && a !== "" ? a : b);
@@ -69,17 +69,44 @@ async function loadProductDoc(productSpecific) {
   }
 }
 
+// Resolve the promo: its name AND its featured product (so a promo-driven ad can
+// use that product as the DEFAULT measure). Returns { text, name, product, priceInfo }.
 async function resolvePromo(hasPromo) {
   if (!hasPromo) return null;
   if (typeof hasPromo === "string" && mongoose.isValidObjectId(hasPromo)) {
     try {
-      const p = await mongoose.model("Promo").findById(hasPromo).select("name").lean();
-      if (p) return `promoción activa: "${p.name}"`;
+      const p = await mongoose
+        .model("Promo")
+        .findById(hasPromo)
+        .select("name promoProductIds promoPrices")
+        .lean();
+      if (!p) return { text: "hay una promoción activa", product: null, priceInfo: null };
+
+      let product = null;
+      let priceInfo = null;
+      const pid = (p.promoProductIds || [])[0]; // featured product
+      if (pid) {
+        const doc = await mongoose
+          .model("ProductFamily")
+          .findById(pid)
+          .select("name price mlPrice onlineStoreLinks sellable active")
+          .lean();
+        if (doc) {
+          product = doc;
+          const override = (p.promoPrices || []).find(
+            (x) => String(x.productId) === String(pid)
+          )?.price;
+          priceInfo = override
+            ? { amount: override, source: "promo", handoff: false, link: mlLinkOf(doc) }
+            : await resolvePrice(doc);
+        }
+      }
+      return { text: `promoción activa: "${p.name}"`, name: p.name, product, priceInfo };
     } catch {
       /* ignore */
     }
   }
-  return "hay una promoción activa";
+  return { text: "hay una promoción activa", product: null, priceInfo: null };
 }
 
 /**
@@ -183,35 +210,50 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
   let priceInfo = null;
   let product = null;
   const priceTxt = (pi) =>
-    pi && (pi.source === "ml" || pi.source === "inventario") ? ` ($${pi.amount})` : "";
+    pi && (pi.source === "ml" || pi.source === "inventario" || pi.source === "promo")
+      ? ` ($${pi.amount})`
+      : "";
 
-  if (resolved.length === 1) {
-    product = resolved[0];
-    const prodPath = await resolveFamilyRealm({ id: product._id, name: product.name });
-    priceInfo = await resolvePrice(product);
+  // Resolve the promo up front — a promo-driven ad uses the promo's featured
+  // product as the DEFAULT measure when no specific measure is preloaded.
+  const promo = await resolvePromo(setup.hasPromo);
+
+  // Push the "this is the default measure — assume it, don't ask which" lines.
+  const pushDefault = async (prod, pi, promoLabel) => {
+    const prodPath = await resolveFamilyRealm({ id: prod._id, name: prod.name });
     lines.push(
-      `- Producto de interés (precargado): ${prodPath || product.name}${priceTxt(priceInfo)}. El cliente YA está hablando de ESTE producto. ` +
-        `Si pide "información", precio, medidas, colores, fotos, etc., asume que se refiere a este producto; NUNCA preguntes "¿de qué producto?" ni "¿qué información?".`
+      `- ${promoLabel ? `PRODUCTO EN PROMOCIÓN (medida por defecto): "${promoLabel}" → ` : "Producto de interés (precargado): "}` +
+        `${prodPath || prod.name}${priceTxt(pi)}. El cliente YA está hablando de ESTA medida. ` +
+        `Si pide información, precio, colores, fotos, etc., asume que se refiere a ESTA medida; NUNCA preguntes "¿de qué producto?" ni "¿qué medida?". ` +
+        `Solo si el cliente pide explícitamente OTRA medida, cotiza esa.`
     );
-    if (priceInfo.source === "ml") {
-      // psid-traceable redirect so a click on the preloaded link is attributed.
+    if (pi && pi.source === "ml") {
       const { trackedLink } = require("./priceResolver");
-      const plink = await trackedLink(priceInfo.link, {
+      const plink = await trackedLink(pi.link, {
         psid: opts.psid || null,
         sandbox: !!opts.sandbox,
-        productName: product.name,
-        productId: product._id ? String(product._id) : null,
+        productName: prod.name,
+        productId: prod._id ? String(prod._id) : null,
       });
       lines.push(
-        `- PRECIO: $${priceInfo.amount} (fuente: Mercado Libre${priceInfo.hasDiscount ? `, con descuento desde $${priceInfo.originalPrice}` : ""}). Cotiza este precio. Link: ${plink || "(usa la herramienta)"}.`
+        `- PRECIO: $${pi.amount} (fuente: Mercado Libre${pi.hasDiscount ? `, con descuento desde $${pi.originalPrice}` : ""}). Cotiza este precio. Link: ${plink || "(usa la herramienta)"}.`
       );
-    } else if (priceInfo.source === "inventario") {
-      lines.push(`- PRECIO: $${priceInfo.amount} (fuente: Inventario). Cotiza este precio.`);
-    } else if (priceInfo.handoff) {
+    } else if (pi && pi.source === "inventario") {
+      lines.push(`- PRECIO: $${pi.amount} (fuente: Inventario). Cotiza este precio.`);
+    } else if (pi && pi.source === "promo") {
+      lines.push(`- PRECIO: $${pi.amount} (precio de promoción). Cotiza este precio.`);
+    } else if (pi && pi.handoff) {
       lines.push(
         `- PRECIO: NO disponible. El producto es vendible pero no tiene precio. NUNCA inventes un precio: ofrece pasar con un asesor (usa request_handoff).`
       );
     }
+  };
+
+  if (resolved.length === 1 && resolved[0].sellable === true) {
+    // A single SPECIFIC measure was preloaded → it's the default.
+    product = resolved[0];
+    priceInfo = await resolvePrice(product);
+    await pushDefault(product, priceInfo);
   } else if (resolved.length > 1) {
     product = resolved[0];
     priceInfo = await resolvePrice(product); // tool back-compat: default to first
@@ -227,8 +269,15 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     );
   }
 
-  const promo = await resolvePromo(setup.hasPromo);
-  if (promo) lines.push(`- Promoción: ${promo}. Preséntala cuando sea oportuno.`);
+  // No specific measure preloaded (e.g. only a FAMILY was selected), but the ad
+  // has a promo with a featured product → use THAT product as the default measure.
+  if ((!product || product.sellable !== true) && promo && promo.product && promo.product.sellable) {
+    product = promo.product;
+    priceInfo = promo.priceInfo || (await resolvePrice(product));
+    await pushDefault(product, priceInfo, promo.name || "promoción");
+  }
+
+  if (promo) lines.push(`- Promoción: ${promo.text}. Preséntala cuando sea oportuno.`);
 
   if (setup.catalog?.value) {
     const what = setup.catalog.kind === "pdf" ? "catálogo en PDF" : "enlace a la tienda";
