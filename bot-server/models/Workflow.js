@@ -61,6 +61,12 @@ const workflowSchema = new mongoose.Schema(
     name: { type: String, required: true, unique: true },
     description: { type: String, default: "" },
     active: { type: Boolean, default: false },
+    // Cold-start: when true, THIS workflow handles conversations that arrive
+    // WITHOUT a routing ad (organic DMs, page messages, etc.). Only one
+    // workflow may hold this flag — the route enforces single-winner. Off by
+    // default; when no cold-start workflow is set, non-ad traffic falls
+    // through to the legacy bot as before.
+    isColdStart: { type: Boolean, default: false },
     version: { type: Number, default: 1 },
 
     // Always-on system layer: style + JSON format. Node prompts layer on top.

@@ -267,6 +267,16 @@ router.put("/:id", async (req, res) => {
     Object.assign(existing, patch);
     existing.version = (existing.version || 1) + 1;
     await existing.save();
+
+    // Single-winner: only ONE workflow may be the cold-start handler. If this
+    // save turned the flag ON, clear it on every other workflow.
+    if (existing.isColdStart) {
+      await Workflow.updateMany(
+        { _id: { $ne: existing._id }, isColdStart: true },
+        { $set: { isColdStart: false } }
+      );
+    }
+
     res.json({ success: true, data: existing });
   } catch (err) {
     res.status(400).json({ success: false, error: err.message });

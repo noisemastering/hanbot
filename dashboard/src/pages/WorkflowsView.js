@@ -231,6 +231,15 @@ function WorkflowsView() {
                 <input type="checkbox" checked={!!draft.active} onChange={(e) => patch({ active: e.target.checked })} />
                 Activo
               </label>
+              <label className="flex items-center gap-2 text-sm text-gray-200">
+                <input type="checkbox" checked={!!draft.isColdStart} onChange={(e) => patch({ isColdStart: e.target.checked })} />
+                Flujo de arranque en frío (cold-start)
+              </label>
+              {draft.isColdStart && (
+                <p className="text-[11px] text-amber-300/90 -mt-2 ml-6">
+                  Este flujo atenderá TODAS las conversaciones que NO vengan de un anuncio (mensajes orgánicos). Solo un flujo puede tener esta marca; activarla aquí la quita de los demás. Debe estar también <b>Activo</b>.
+                </p>
+              )}
               <Labeled label="Nombre">
                 <input className="wf-input" value={draft.name || ""} onChange={(e) => patch({ name: e.target.value })} />
               </Labeled>

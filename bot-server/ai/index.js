@@ -68,37 +68,20 @@ async function generateReplyPipeline(userMessage, psid, referral = null) {
  * built (seeded with the ad's setup vars) on the first turn, or whenever the ad's
  * attached workflow changes.
  */
-async function maybeRunAdWorkflow(userMessage, psid) {
-  // Cheap, side-effect-free read first (getConversation may upsert/hydrate).
-  const Conversation = require("../models/Conversation");
-  const convo = await Conversation.findOne({ psid })
-    .select("adId state workflowState extractedName city zipcode productInterest")
-    .lean();
-  if (!convo || !convo.adId) return null;
-
-  // Don't let the engine speak over a live human handoff. Use the same state
-  // names the rest of the app uses (human_active is the real one; needs_human/
-  // human_takeover/human_handling included for completeness).
-  const HUMAN_STATES = new Set(["needs_human", "human_active", "human_takeover", "human_handling"]);
-  if (HUMAN_STATES.has(convo.state)) return null;
-
-  const Ad = require("../models/Ad");
-  const ad = await Ad.findOne({ fbAdId: convo.adId })
-    .select("name workflowId workflowEnabled workflowSetup")
-    .lean();
-  if (!ad || !ad.workflowEnabled || !ad.workflowId) return null;
-
-  const Workflow = require("../models/Workflow");
-  const workflow = await Workflow.findById(ad.workflowId);
-  if (!workflow) return null;
-
+// Shared engine runner. Given a resolved workflow + the conversation, runs one
+// turn, persists collected data, fires a real handoff if requested, and
+// sanitizes the reply (link tracking + phone guard). Used by BOTH the ad path
+// and the cold-start path.
+//   sourceLabel: a string for logs ("ad=… " or "coldstart")
+//   initOverrides: setup vars to seed a fresh state (ad.workflowSetup or {})
+async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLabel, initOverrides = {} }) {
   const { runWorkflowTurn, initState } = require("./workflow");
 
   // Reuse persisted state only if it belongs to THIS workflow; otherwise start
-  // fresh, seeding the ad's setup vars as per-conversation overrides.
+  // fresh, seeding the setup vars as per-conversation overrides.
   let state = convo.workflowState;
   if (!state || String(state.workflowId) !== String(workflow._id)) {
-    state = initState(workflow, {}, ad.workflowSetup || {});
+    state = initState(workflow, {}, initOverrides || {});
   }
 
   const { reply, state: newState, diagnostics } = await runWorkflowTurn(
@@ -146,7 +129,7 @@ async function maybeRunAdWorkflow(userMessage, psid) {
   }
 
   console.log(
-    `🧩 [workflow] ad="${ad.name || convo.adId}" flow="${workflow.name}" → node="${diagnostics?.toNode?.name || "?"}"${handoff ? " [HANDOFF]" : ""}`
+    `🧩 [workflow] ${sourceLabel} flow="${workflow.name}" → node="${diagnostics?.toNode?.name || "?"}"${handoff ? " [HANDOFF]" : ""}`
   );
 
   // SAFETY NET: if the model pasted a raw Mercado Libre URL into its reply
@@ -177,6 +160,59 @@ async function maybeRunAdWorkflow(userMessage, psid) {
   return { handled: true, reply: safeText ? { type: "text", text: safeText } : null };
 }
 
+// Same human-handling states everywhere: the engine must never speak over a
+// live human takeover.
+const WORKFLOW_HUMAN_STATES = new Set(["needs_human", "human_active", "human_takeover", "human_handling"]);
+
+async function maybeRunAdWorkflow(userMessage, psid) {
+  // Cheap, side-effect-free read first (getConversation may upsert/hydrate).
+  const Conversation = require("../models/Conversation");
+  const convo = await Conversation.findOne({ psid })
+    .select("adId state workflowState extractedName city zipcode productInterest")
+    .lean();
+  if (!convo || !convo.adId) return null;
+  if (WORKFLOW_HUMAN_STATES.has(convo.state)) return null;
+
+  const Ad = require("../models/Ad");
+  const ad = await Ad.findOne({ fbAdId: convo.adId })
+    .select("name workflowId workflowEnabled workflowSetup")
+    .lean();
+  if (!ad || !ad.workflowEnabled || !ad.workflowId) return null;
+
+  const Workflow = require("../models/Workflow");
+  const workflow = await Workflow.findById(ad.workflowId);
+  if (!workflow) return null;
+
+  return runEngineWorkflow(workflow, convo, psid, userMessage, {
+    sourceLabel: `ad="${ad.name || convo.adId}"`,
+    initOverrides: ad.workflowSetup || {},
+  });
+}
+
+// COLD-START WORKFLOW: handles conversations that arrive WITHOUT a routing ad
+// (organic DMs, page messages). Runs only when exactly one workflow is flagged
+// isColdStart (and active). No flag → returns null → legacy bot handles it,
+// exactly as before. Off-switch is the flag itself.
+async function maybeRunColdStartWorkflow(userMessage, psid) {
+  const Conversation = require("../models/Conversation");
+  const convo = await Conversation.findOne({ psid })
+    .select("adId state workflowState extractedName city zipcode productInterest")
+    .lean();
+  if (!convo) return null;
+  // Ad-routed conversations are handled by maybeRunAdWorkflow, not here.
+  if (convo.adId) return null;
+  if (WORKFLOW_HUMAN_STATES.has(convo.state)) return null;
+
+  const Workflow = require("../models/Workflow");
+  const workflow = await Workflow.findOne({ isColdStart: true, active: true });
+  if (!workflow) return null;
+
+  return runEngineWorkflow(workflow, convo, psid, userMessage, {
+    sourceLabel: "coldstart",
+    initOverrides: {},
+  });
+}
+
 /**
  * Main entry point for generating bot responses.
  * Uses pipeline when USE_PIPELINE=true, otherwise uses the monolith.
@@ -196,6 +232,19 @@ async function generateReply(userMessage, psid, referral = null) {
     console.error("❌ ad-workflow takeover failed; falling back to legacy:", err.message);
   }
   // ===== END WORKFLOW TAKEOVER =====
+
+  // ===== COLD-START WORKFLOW TAKEOVER (non-ad traffic; opt-in via flag) =====
+  // Conversations WITHOUT a routing ad (organic DMs/page messages) are handled
+  // by the workflow flagged isColdStart, if any. No flag → falls through to the
+  // legacy bot, unchanged. Re-checked every message, so flipping the flag OFF
+  // reverts organic traffic to the legacy bot on the next message.
+  try {
+    const taken = await maybeRunColdStartWorkflow(userMessage, psid);
+    if (taken && taken.handled) return taken.reply;
+  } catch (err) {
+    console.error("❌ cold-start workflow failed; falling back to legacy:", err.message);
+  }
+  // ===== END COLD-START TAKEOVER =====
 
   if (USE_PIPELINE) {
     return generateReplyPipeline(userMessage, psid, referral);
