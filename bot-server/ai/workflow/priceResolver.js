@@ -88,4 +88,37 @@ async function trackedLink(rawUrl, opts = {}) {
   }
 }
 
-module.exports = { resolvePrice, mlLinkOf, trackedLink };
+// Safety net: the model sometimes pastes a raw Mercado Libre URL straight into
+// its reply instead of calling share_product_link (which would attribute the
+// click to the psid). This scans the outgoing text for raw ML links and swaps
+// each for a psid-traceable redirect, so a click is always attributable.
+// NOTE: this is mechanical URL detection (find the substring, swap it) — not a
+// semantic decision. It only rewrites mercadolibre.com links and never touches
+// our own agente.hanlob.com.mx/r/ redirects.
+async function sanitizeMarketplaceLinks(text, opts = {}) {
+  if (!text || !opts.psid || opts.sandbox) return text;
+  const found = text.match(/https?:\/\/[^\s)]+/g) || [];
+  let out = text;
+  for (const rawMatch of found) {
+    const url = rawMatch.replace(/[.,;:!?]+$/, ""); // trim trailing punctuation
+    if (/agente\.hanlob\.com\.mx\/r\//i.test(url)) continue; // already tracked
+    if (!/mercadolibre\.com/i.test(url)) continue; // only marketplace links
+    try {
+      const tracked = await trackedLink(url, {
+        psid: opts.psid,
+        sandbox: opts.sandbox,
+        productName: opts.productName || null,
+        productId: opts.productId || null,
+      });
+      if (tracked && tracked !== url) {
+        out = out.split(url).join(tracked);
+        console.log(`🔗 [workflow] rewrote raw ML link → tracked (${opts.psid})`);
+      }
+    } catch {
+      /* leave the raw url as-is on failure */
+    }
+  }
+  return out;
+}
+
+module.exports = { resolvePrice, mlLinkOf, trackedLink, sanitizeMarketplaceLinks };

@@ -149,7 +149,25 @@ async function maybeRunAdWorkflow(userMessage, psid) {
     `🧩 [workflow] ad="${ad.name || convo.adId}" flow="${workflow.name}" → node="${diagnostics?.toNode?.name || "?"}"${handoff ? " [HANDOFF]" : ""}`
   );
 
-  return { handled: true, reply: reply ? { type: "text", text: reply } : null };
+  // SAFETY NET: if the model pasted a raw Mercado Libre URL into its reply
+  // (instead of calling share_product_link), rewrite it to a psid-tracked
+  // redirect so the click is attributed. Single chokepoint for every
+  // workflow reply (main, switched, prefixed).
+  let safeText = reply;
+  if (reply) {
+    try {
+      const { sanitizeMarketplaceLinks } = require("./workflow/priceResolver");
+      safeText = await sanitizeMarketplaceLinks(reply, {
+        psid,
+        productName: newState.product?.name || null,
+        productId: newState.product?._id ? String(newState.product._id) : null,
+      });
+    } catch (e) {
+      console.error("⚠️ workflow link sanitize failed:", e.message);
+    }
+  }
+
+  return { handled: true, reply: safeText ? { type: "text", text: safeText } : null };
 }
 
 /**
