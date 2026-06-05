@@ -12,6 +12,17 @@ const { sweepRecentOrdersOnce, getClickStatusForPsid } = require('./utils/clickC
 const FOLLOW_UP_DELAY_MS = 23 * 60 * 60 * 1000; // 23 hours
 const LINK_FOLLOW_UP_DELAY_MS = 30 * 60 * 1000; // 30 minutes
 
+// ════════════════════════════════════════════════════════════════════════
+// REMARKETING KILL-SWITCH — disabled per user request (2026-06-05).
+// All within-24h proactive follow-ups (silence follow-up + link follow-up)
+// are OFF unless REMARKETING_ENABLED=true is set in the environment.
+// When disabled: nothing is scheduled and the periodic jobs no-op.
+// To re-enable: set REMARKETING_ENABLED=true on the server.
+// ════════════════════════════════════════════════════════════════════════
+function isRemarketingEnabled() {
+  return process.env.REMARKETING_ENABLED === 'true' || process.env.REMARKETING_ENABLED === '1';
+}
+
 /** Flows considered wholesale — prefer catalog + pitch over ML store link */
 const WHOLESALE_FLOWS = ['rollo', 'groundcover', 'monofilamento'];
 
@@ -34,6 +45,7 @@ Te comparto nuestra lista de precios.`;
  * @param {string} botResponseText - The text the bot just sent
  */
 async function scheduleFollowUpIfNeeded(psid, botResponseText) {
+  if (!isRemarketingEnabled()) return; // remarketing disabled — never schedule
   const convo = await Conversation.findOne({ psid });
   if (!convo) return;
 
@@ -91,6 +103,7 @@ async function sendMessengerMessage(psid, text) {
  * and send the store link.
  */
 async function runSilenceFollowUpJob() {
+  if (!isRemarketingEnabled()) return; // remarketing disabled — never send
   try {
     const now = new Date();
 
@@ -293,6 +306,7 @@ async function runSilenceFollowUpJob() {
  * and auto-send purchase links from lastQuotedProducts.
  */
 async function runLinkFollowUpJob() {
+  if (!isRemarketingEnabled()) return; // remarketing disabled — never send
   try {
     const now = new Date();
 

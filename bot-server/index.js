@@ -2219,15 +2219,22 @@ function scheduleMLPriceSync() {
 // Start ML price sync scheduler after 1 minute (let server fully initialize)
 setTimeout(scheduleMLPriceSync, 60000);
 
-// Silence follow-up job - sends store link after 10min of customer inactivity
-setTimeout(() => {
-  const { runSilenceFollowUpJob, runLinkFollowUpJob } = require('./jobs/silenceFollowUp');
-  console.log('⏰ Silence follow-up job scheduled (every 60s)');
-  runSilenceFollowUpJob();
-  runLinkFollowUpJob();
-  setInterval(runSilenceFollowUpJob, 60 * 1000);
-  setInterval(runLinkFollowUpJob, 60 * 1000);
-}, 90000);
+// Silence / link follow-up jobs (within-24h remarketing).
+// DISABLED per user request — gated behind REMARKETING_ENABLED. The timers
+// don't even start unless the flag is set. Set REMARKETING_ENABLED=true to
+// turn remarketing back on.
+if (process.env.REMARKETING_ENABLED === 'true' || process.env.REMARKETING_ENABLED === '1') {
+  setTimeout(() => {
+    const { runSilenceFollowUpJob, runLinkFollowUpJob } = require('./jobs/silenceFollowUp');
+    console.log('⏰ Silence follow-up job scheduled (every 60s)');
+    runSilenceFollowUpJob();
+    runLinkFollowUpJob();
+    setInterval(runSilenceFollowUpJob, 60 * 1000);
+    setInterval(runLinkFollowUpJob, 60 * 1000);
+  }, 90000);
+} else {
+  console.log('🚫 Remarketing follow-up jobs DISABLED (set REMARKETING_ENABLED=true to enable)');
+}
 
 // Health check - monitors tracking domain, emails alert on SSL/DNS/HTTP failure
 setTimeout(() => {
