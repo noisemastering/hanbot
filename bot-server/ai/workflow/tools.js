@@ -253,7 +253,17 @@ const REGISTRY = {
         "tienes","tiene","quiero","busco","buscas","necesito","manejan","manejas",
         "venden","vendes","hay","una","uno","unos","unas","del","los","las","para",
         "con","sin","que","como","cual","cuales","malla","sombra","producto","productos",
-        "metros","metro","medida","medidas","color","precio",
+        "metros","metro","medida","medidas","color","colores","precio",
+        // Colors are ATTRIBUTES, not products. They appear as leaf family names
+        // ("Color Beige", "Color Negro") across multiple flows, so matching on
+        // them caused false flow-switches (retail buyer saying "color beige"
+        // got switched into the rollo flow). Never treat a color as a product.
+        "beige","beis","negro","negra","verde","blanco","blanca","azul","rojo","roja",
+        "gris","cafe","chocolate","marron","crema","arena","amarillo","amarilla",
+        // Generic intent / filler words that aren't products
+        "gracias","interesa","interesan","interesado","interesada","hacer","hago",
+        "ese","esa","esos","esas","este","esta","aqui","ahi","favor","ayuda","info",
+        "informacion","saber","ver","mas","muy","bien","ok","hola","buenas","buenos",
       ]);
       const stem = (w) => w.replace(/(es|s)$/i, ""); // rollos→rollo, redes→red
       const words = q
