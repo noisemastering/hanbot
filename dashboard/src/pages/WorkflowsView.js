@@ -147,6 +147,26 @@ function WorkflowsView() {
     }
   };
 
+  const remove = async () => {
+    if (!selectedId) return;
+    const nm = draft?.name || "este flujo";
+    if (!window.confirm(`¿Eliminar "${nm}"? Esta acción no se puede deshacer.`)) return;
+    try {
+      await API.delete(`/workflows/${selectedId}`);
+      setSelectedId("");
+      setDraft(null);
+      await loadList();
+      toast.success("Flujo eliminado");
+    } catch (err) {
+      const data = err.response?.data;
+      if (err.response?.status === 409 && data?.ads?.length) {
+        toast.error(`${data.error}\nAnuncios: ${data.ads.join(", ")}`, { duration: 7000 });
+      } else {
+        toast.error(data?.error || "No se pudo eliminar");
+      }
+    }
+  };
+
   const doImport = async () => {
     try {
       const parsed = JSON.parse(importText);
@@ -189,6 +209,7 @@ function WorkflowsView() {
         </select>
         <button onClick={createNew} className="px-3 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 text-white">+ Nuevo</button>
         <button onClick={duplicate} disabled={!selectedId} className="px-3 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 text-white disabled:opacity-40">Duplicar</button>
+        <button onClick={remove} disabled={!selectedId} className="px-3 py-2 text-sm rounded-lg bg-red-900/60 hover:bg-red-800 text-red-200 disabled:opacity-40">Eliminar</button>
         <button onClick={() => setImportOpen(true)} className="px-3 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 text-white">Importar JSON</button>
         <button
           onClick={save}

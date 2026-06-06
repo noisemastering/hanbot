@@ -310,8 +310,26 @@ router.patch("/:id/prompts", async (req, res) => {
 // DELETE /workflows/:id
 router.delete("/:id", async (req, res) => {
   try {
-    const wf = await Workflow.findByIdAndDelete(req.params.id);
+    const wf = await Workflow.findById(req.params.id);
     if (!wf) return res.status(404).json({ success: false, error: "Workflow not found" });
+
+    // GUARD: a workflow can't be deleted while any ad still points to it.
+    // Untie it from every ad first (Asignación de anuncios), then delete.
+    const Ad = require("../models/Ad");
+    const tiedAds = await Ad.find({ workflowId: wf._id })
+      .select("name fbAdId")
+      .limit(25)
+      .lean();
+    if (tiedAds.length > 0) {
+      const names = tiedAds.map((a) => a.name || a.fbAdId).filter(Boolean);
+      return res.status(409).json({
+        success: false,
+        error: `No se puede eliminar: este flujo está asignado a ${tiedAds.length} anuncio(s). Desvincúlalo primero.`,
+        ads: names,
+      });
+    }
+
+    await Workflow.findByIdAndDelete(wf._id);
     res.json({ success: true });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
