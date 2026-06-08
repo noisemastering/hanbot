@@ -54,14 +54,21 @@ async function getMLPrice(mlUrl, dbPrice) {
 
     const prices = res.data?.prices || [];
 
-    // Find the active promotion price (channel_marketplace)
+    // Find the active promotion price. ML can return MULTIPLE overlapping
+    // active promotions (e.g. a long-running deal + a short flash deal). The
+    // customer always sees/pays the LOWEST active price — so we must pick the
+    // minimum amount, not the first match. (Picking the first under-discounted
+    // us: we quoted $949 while ML displayed $885.)
     const now = new Date();
-    const promoPrice = prices.find(p =>
+    const activePromos = prices.filter(p =>
       p.type === 'promotion' &&
       p.amount &&
       (!p.conditions?.start_time || new Date(p.conditions.start_time) <= now) &&
       (!p.conditions?.end_time || new Date(p.conditions.end_time) > now)
     );
+    const promoPrice = activePromos.length
+      ? activePromos.reduce((lo, p) => (p.amount < lo.amount ? p : lo))
+      : null;
 
     // Standard/base price
     const standardPrice = prices.find(p => p.type === 'standard');
