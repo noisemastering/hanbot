@@ -132,6 +132,28 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
     `🧩 [workflow] ${sourceLabel} flow="${workflow.name}" → node="${diagnostics?.toNode?.name || "?"}"${handoff ? " [HANDOFF]" : ""}`
   );
 
+  // CATALOG DOCUMENT: the share_catalog tool flags a PDF to send as a file
+  // attachment (replicates legacy sendCatalog — arrives as a document bubble,
+  // not a link). Send it on the right channel; the text reply goes separately.
+  if (diagnostics?.catalogToSend?.url) {
+    try {
+      const cat = diagnostics.catalogToSend;
+      const isWhatsApp = (convo.channel === "whatsapp") || String(psid).startsWith("wa:");
+      if (isWhatsApp) {
+        const { sendDocumentMessage } = require("../channels/whatsapp/api");
+        const phone = String(psid).replace(/^wa:/, "");
+        await sendDocumentMessage(phone, cat.url, cat.filename || "Catalogo_Hanlob.pdf", null);
+      } else {
+        const { sendCatalog } = require("../utils/sendCatalog");
+        const fbPsid = String(psid).replace(/^fb:/, "");
+        await sendCatalog(fbPsid, cat.url, null); // file only; the text reply is separate
+      }
+      console.log(`📄 [workflow] catalog document sent to ${psid}`);
+    } catch (e) {
+      console.error("⚠️ workflow catalog send failed:", e.message);
+    }
+  }
+
   // SAFETY NET: if the model pasted a raw Mercado Libre URL into its reply
   // (instead of calling share_product_link), rewrite it to a psid-tracked
   // redirect so the click is attributed. Single chokepoint for every
@@ -183,7 +205,7 @@ async function maybeRunAdWorkflow(userMessage, psid) {
   // Cheap, side-effect-free read first (getConversation may upsert/hydrate).
   const Conversation = require("../models/Conversation");
   const convo = await Conversation.findOne({ psid })
-    .select("adId state workflowState extractedName city zipcode productInterest")
+    .select("adId channel state workflowState extractedName city zipcode productInterest")
     .lean();
   if (!convo || !convo.adId) return null;
   if (WORKFLOW_HUMAN_STATES.has(convo.state)) return null;
@@ -211,7 +233,7 @@ async function maybeRunAdWorkflow(userMessage, psid) {
 async function maybeRunColdStartWorkflow(userMessage, psid) {
   const Conversation = require("../models/Conversation");
   const convo = await Conversation.findOne({ psid })
-    .select("adId state workflowState extractedName city zipcode productInterest")
+    .select("adId channel state workflowState extractedName city zipcode productInterest")
     .lean();
   if (!convo) return null;
   // Ad-routed conversations are handled by maybeRunAdWorkflow, not here.

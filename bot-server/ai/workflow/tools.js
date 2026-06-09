@@ -262,6 +262,30 @@ const REGISTRY = {
     },
   },
 
+  share_catalog: {
+    definition: {
+      name: "share_catalog",
+      description:
+        "Send the product catalog to the customer when they ask for it (lista de precios, catálogo, qué medidas/productos manejan). Sends it as a document/file in the chat — you don't need to paste a URL.",
+      input_schema: { type: "object", properties: {}, additionalProperties: false },
+    },
+    async execute(input, ctx) {
+      ctx.actions.push({ tool: "share_catalog", input });
+      const cat = ctx.catalog; // resolved up-front: ad value → family climb → global
+      if (!cat || !cat.url) {
+        return "[INTERNO] No hay catálogo disponible para este flujo. Ofrece de forma natural pasar con un asesor o pregunta qué medida busca.";
+      }
+      if (cat.kind === "store_link") {
+        // A store link is just a URL — share it inline (no document bubble).
+        return `Aquí tienes nuestra tienda: ${cat.url}`;
+      }
+      // PDF: signal maybeRunAdWorkflow to send it as a document attachment
+      // (replicates legacy sendCatalog — arrives as a file bubble, not a link).
+      ctx.catalogToSend = { url: cat.url, filename: "Catalogo_Hanlob.pdf" };
+      return "[INTERNO] El catálogo en PDF se enviará como documento adjunto. Acompáñalo con una frase breve y natural (ej. 'Te comparto nuestro catálogo 📄'). NO pegues la URL en el texto.";
+    },
+  },
+
   request_handoff: {
     definition: {
       name: "request_handoff",

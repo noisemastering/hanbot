@@ -329,7 +329,7 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     lines.push(`- Catálogo disponible (${what}): ${catalogResolved.url}. Compártelo si lo piden o si aplica.`);
   }
 
-  return { setup, contextBlock: lines.join("\n"), product: product || null, priceInfo };
+  return { setup, contextBlock: lines.join("\n"), product: product || null, priceInfo, catalog: catalogResolved || null };
 }
 
 module.exports = { resolveSetupContext, mergeSetup };

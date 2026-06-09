@@ -66,7 +66,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     try {
       const Workflow = require("../../models/Workflow");
       const familyList = Workflow.familyListOf(workflow);
-      const { contextBlock, product, priceInfo } = await resolveSetupContext(
+      const { contextBlock, product, priceInfo, catalog } = await resolveSetupContext(
         workflow.setup,
         state.setupOverrides,
         familyList,
@@ -75,6 +75,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       state.contextBlock = contextBlock || "";
       state.product = product || null;
       state.priceInfo = priceInfo || null;
+      state.catalog = catalog || null; // resolved catalog (climb): {url, kind, source}
     } catch (err) {
       console.error("⚠️ setup context resolution failed:", err.message);
       state.contextBlock = "";
@@ -203,6 +204,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     priceInfo: turnPriceInfo, // turn-scoped: the measure the client just asked for
     families: familyList, // realm (for scope checks)
     currentFlowName: workflow.name, // for the AI product-scope classifier
+    catalog: state.catalog || null, // resolved catalog for share_catalog tool
+    catalogToSend: null, // set by share_catalog → maybeRunAdWorkflow sends the document
     psid: opts.psid || null, // enables psid-traceable links in share_* tools
   };
   const { text, toolCalls } = await executeNode(
@@ -244,6 +247,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     actions: ctx.actions,
     handoffRequested: ctx.handoffRequested,
     handoffReason: ctx.handoffReason || null,
+    catalogToSend: ctx.catalogToSend || null,
   };
 
   // 6. FLOW SWITCH — a TOOL (model-invoked) decided to hand off to another flow.

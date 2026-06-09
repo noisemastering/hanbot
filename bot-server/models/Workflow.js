@@ -13,6 +13,7 @@ const mongoose = require("mongoose");
 const TOOL_KEYS = [
   "share_product_link", // share a tracked ML/product link
   "share_store_link",   // share the generic store link
+  "share_catalog",      // send the catalog (PDF document / store link), with family-climb fallback
   "request_handoff",    // hand the conversation to a human
   "capture_lead",       // record name/phone/email
   "ask_location",       // ask for and capture city/zip

@@ -37,6 +37,7 @@ function reusableNode(n) {
 const TOOL_KEYS = [
   "share_product_link",
   "share_store_link",
+  "share_catalog",
   "request_handoff",
   "capture_lead",
   "ask_location",
