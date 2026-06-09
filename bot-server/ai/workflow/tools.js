@@ -95,6 +95,70 @@ async function availableVariantsForProduct(productDoc) {
   }));
 }
 
+// Walk DOWN the flow's family tree and return every distinct available measure
+// (sellable + active descendants), so the bot can answer "¿qué medidas
+// manejas?" with real data. You configure ONLY the family on the flow — this
+// discovers all the sizes/lengths under it automatically (no per-product
+// selection). Color/variant leaves that share a size collapse to ONE measure.
+// Returns measures sorted small→large by area: [{ label, size, price, dims }].
+async function availableMeasuresForFamilies(familyList) {
+  const PF = require("../../models/ProductFamily");
+  const ids = (Array.isArray(familyList) ? familyList : familyList ? [familyList] : [])
+    .filter((f) => f && f.id)
+    .map((f) => String(f.id));
+  if (!ids.length) return [];
+
+  const queue = [...ids];
+  const found = [];
+  let guard = 0;
+  while (queue.length && guard++ < 800) {
+    const pid = queue.shift();
+    const kids = await PF.find({ parentId: pid })
+      .select("name size sellable active price")
+      .lean();
+    for (const k of kids) {
+      if (k.sellable && k.active !== false) found.push(k);
+      queue.push(k._id);
+    }
+  }
+
+  // Collapse to distinct measures: a size with color variants is ONE measure.
+  // Key on the size (or name when there's no size). Keep the cheapest price seen.
+  const byMeasure = new Map();
+  for (const p of found) {
+    const dims = dimsOf(p.size) || dimsOf(p.name);
+    const key = (p.size || p.name || "").toLowerCase().trim();
+    if (!key) continue;
+    const price = numericOrNull(p.price);
+    const existing = byMeasure.get(key);
+    if (!existing) {
+      byMeasure.set(key, {
+        label: (p.size || p.name || "").trim(),
+        size: p.size || null,
+        price,
+        dims,
+      });
+    } else if (price != null && (existing.price == null || price < existing.price)) {
+      existing.price = price;
+    }
+  }
+
+  const list = [...byMeasure.values()];
+  // Sort small → large by area (dims product); measures without dims go last.
+  list.sort((a, b) => {
+    const aa = a.dims ? a.dims[0] * a.dims[1] : Infinity;
+    const bb = b.dims ? b.dims[0] * b.dims[1] : Infinity;
+    return aa - bb;
+  });
+  return list;
+}
+
+function numericOrNull(p) {
+  if (p == null) return null;
+  const n = typeof p === "number" ? p : parseFloat(String(p).replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) && n > 0 ? n : null;
+}
+
 // AI-based product-scope classifier. Replaces the old stopword + name-regex
 // matcher (which misrouted on attribute words). Given the customer's message
 // and the catalog of active flows, decides which flow handles the product they
@@ -544,4 +608,4 @@ async function runTool(name, input, ctx) {
   }
 }
 
-module.exports = { REGISTRY, toolDefsFor, runTool, dimsOf, findProductInFamilies, availableVariantsForProduct };
+module.exports = { REGISTRY, toolDefsFor, runTool, dimsOf, findProductInFamilies, availableVariantsForProduct, availableMeasuresForFamilies };

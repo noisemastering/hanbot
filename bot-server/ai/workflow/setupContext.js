@@ -223,6 +223,33 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     );
   }
 
+  // Available measures — discovered by walking DOWN the flow's family tree
+  // (sellable descendants). You only configure the family; this finds every
+  // size/length under it. Count-aware so we never dump a long list:
+  //   ≤ 8 measures → list them; more → smallest/largest range.
+  try {
+    const { availableMeasuresForFamilies } = require("./tools");
+    const measures = await availableMeasuresForFamilies(familyList);
+    if (measures.length) {
+      const fmt = (m) => `${m.label}${m.price != null ? ` ($${m.price})` : ""}`;
+      if (measures.length <= 8) {
+        lines.push(
+          `- MEDIDAS DISPONIBLES (de la familia del flujo): ${measures.map(fmt).join(", ")}. ` +
+            `Si el cliente pregunta qué medidas/largos manejas, ofrécele ESTAS. No inventes otras.`
+        );
+      } else {
+        const lo = measures[0];
+        const hi = measures[measures.length - 1];
+        lines.push(
+          `- MEDIDAS DISPONIBLES (de la familia del flujo): ${measures.length} medidas, desde ${fmt(lo)} hasta ${fmt(hi)}. ` +
+            `Si preguntan qué medidas manejas, da ESE RANGO (desde X hasta Y) y pide la que necesitan; NUNCA enumeres las ${measures.length}. No inventes medidas fuera del rango.`
+        );
+      }
+    }
+  } catch (err) {
+    console.error("⚠️ available-measures resolution failed:", err.message);
+  }
+
   if (setup.buyer) lines.push(`- Tipo de cliente: ${LABELS.buyer[setup.buyer] || setup.buyer}`);
   if (setup.purchaseType) lines.push(`- Tipo de compra: ${LABELS.purchaseType[setup.purchaseType] || setup.purchaseType}`);
   if (setup.saleChannel) lines.push(`- Canal de venta: ${LABELS.saleChannel[setup.saleChannel] || setup.saleChannel}`);
