@@ -192,7 +192,6 @@ function PromoPicker({ familyIds, value, onChange }) {
 export default function SetupFields({ value = {}, onChange, familyIds = null }) {
   const v = value || {};
   const set = (patch) => onChange({ ...v, ...patch });
-  const setNested = (key, patch) => onChange({ ...v, [key]: { ...(v[key] || {}), ...patch } });
   return (
     <div className="grid grid-cols-2 gap-3">
       <Sel label="buyer (cliente)" val={v.buyer} onChange={(x) => set({ buyer: x })}
@@ -211,11 +210,10 @@ export default function SetupFields({ value = {}, onChange, familyIds = null }) 
       <Labeled label="promo (dentro de la familia)">
         <PromoPicker familyIds={familyIds} value={v.hasPromo} onChange={(x) => set({ hasPromo: x })} />
       </Labeled>
-      <Sel label="catalog (tipo)" val={v.catalog?.kind} onChange={(x) => setNested("catalog", { kind: x })}
-        opts={[{ value: "", label: "— (nil)" }, { value: "pdf", label: "pdf" }, { value: "store_link", label: "store_link" }]} />
-      <Labeled label="catalog (valor / link)">
-        <input className="wf-input" placeholder="URL del PDF o tienda" value={v.catalog?.value || ""} onChange={(e) => setNested("catalog", { value: e.target.value || null })} />
-      </Labeled>
+      {/* Catalog and store link are NOT set per-ad (recipe for divergence).
+          The store link comes from the company's available marketplaces, and
+          the catalog from the product tree (climbing up to the general
+          company catalog). Both resolve automatically at runtime. */}
     </div>
   );
 }

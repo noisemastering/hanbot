@@ -246,19 +246,33 @@ const REGISTRY = {
   share_store_link: {
     definition: {
       name: "share_store_link",
-      description: "Share the generic store link (Distribuidora Hanlob) when no product-specific link applies.",
+      description: "Share the company's official store link when no product-specific link applies.",
       input_schema: { type: "object", properties: {}, additionalProperties: false },
     },
     async execute(input, ctx) {
       ctx.actions.push({ tool: "share_store_link", input });
-      const STORE_URL = "https://www.mercadolibre.com.mx/perfil/DISTRIBUIDORA+HANLOB";
+      // Source the store link from the company's AVAILABLE MARKETPLACES (config),
+      // never a hardcoded or per-ad URL. Prefer Mercado Libre, else any active one.
+      let storeUrl = null;
+      try {
+        const { getBusinessInfo } = require("../../businessInfoManager");
+        const biz = await getBusinessInfo();
+        const mkts = (biz?.marketplaces || []).filter((m) => m && m.url && m.active !== false);
+        const ml = mkts.find((m) => /mercado\s*libre|mercadolibre/i.test(m.name || "")) || mkts[0];
+        if (ml?.url) storeUrl = ml.url;
+      } catch {
+        /* ignore — fall through */
+      }
+      if (!storeUrl) {
+        return "[INTERNO] No hay tienda configurada en los marketplaces de la empresa. NO inventes un link; si el cliente quiere comprar, ofrece pasar con un asesor.";
+      }
       const { trackedLink } = require("./priceResolver");
-      const link = await trackedLink(STORE_URL, {
+      const link = await trackedLink(storeUrl, {
         psid: ctx.psid,
         sandbox: ctx.sandbox,
-        productName: "Tienda Distribuidora Hanlob",
+        productName: "Tienda oficial",
       });
-      return link || STORE_URL;
+      return link || storeUrl;
     },
   },
 
@@ -271,16 +285,12 @@ const REGISTRY = {
     },
     async execute(input, ctx) {
       ctx.actions.push({ tool: "share_catalog", input });
-      const cat = ctx.catalog; // resolved up-front: ad value → family climb → global
+      const cat = ctx.catalog; // resolved from the tree: family climb → company general
       if (!cat || !cat.url) {
         return "[INTERNO] No hay catálogo disponible para este flujo. Ofrece de forma natural pasar con un asesor o pregunta qué medida busca.";
       }
-      if (cat.kind === "store_link") {
-        // A store link is just a URL — share it inline (no document bubble).
-        return `Aquí tienes nuestra tienda: ${cat.url}`;
-      }
-      // PDF: signal maybeRunAdWorkflow to send it as a document attachment
-      // (replicates legacy sendCatalog — arrives as a file bubble, not a link).
+      // Send the catalog PDF as a document attachment (replicates legacy
+      // sendCatalog — arrives as a file bubble, not a link).
       ctx.catalogToSend = { url: cat.url, filename: "Catalogo_Hanlob.pdf" };
       return "[INTERNO] El catálogo en PDF se enviará como documento adjunto. Acompáñalo con una frase breve y natural (ej. 'Te comparto nuestro catálogo 📄'). NO pegues la URL en el texto.";
     },
