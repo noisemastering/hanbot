@@ -109,34 +109,49 @@ async function availableMeasuresForFamilies(familyList) {
   if (!ids.length) return [];
 
   const queue = [...ids];
-  const found = [];
+  const leaves = [];
   let guard = 0;
   while (queue.length && guard++ < 800) {
     const pid = queue.shift();
     const kids = await PF.find({ parentId: pid })
-      .select("name size sellable active price")
+      .select("name size sellable active price parentId")
       .lean();
     for (const k of kids) {
-      if (k.sellable && k.active !== false) found.push(k);
+      if (k.sellable && k.active !== false) leaves.push(k);
       queue.push(k._id);
     }
   }
 
-  // Collapse to distinct measures: a size with color variants is ONE measure.
-  // Key on the size (or name when there's no size). Keep the cheapest price seen.
+  // For each sellable leaf, decide what the customer-facing MEASURE is:
+  //   - If the leaf's PARENT is a size-group (has its own size, e.g. the
+  //     "6m x 4m" node whose children are color leaves) → the measure is the
+  //     PARENT (label "6m x 4m"); color variants collapse into it.
+  //   - Else the leaf IS the product (e.g. borde's "Rollo de 6 m" sitting
+  //     directly under the family) → the measure is the leaf, labelled by its
+  //     own NAME (length-focused, not the raw "13x6m" size).
+  // Keyed by the measure node's id; keep the cheapest price seen.
+  const parentCache = new Map();
+  const getParent = async (pid) => {
+    const key = String(pid);
+    if (parentCache.has(key)) return parentCache.get(key);
+    const doc = await PF.findById(pid).select("name size").lean();
+    parentCache.set(key, doc);
+    return doc;
+  };
+
   const byMeasure = new Map();
-  for (const p of found) {
-    const dims = dimsOf(p.size) || dimsOf(p.name);
-    const key = (p.size || p.name || "").toLowerCase().trim();
-    if (!key) continue;
-    const price = numericOrNull(p.price);
+  for (const leaf of leaves) {
+    const parent = leaf.parentId ? await getParent(leaf.parentId) : null;
+    const node = parent && parent.size ? parent : leaf; // size-group → parent, else leaf
+    const key = String(node._id);
+    const price = numericOrNull(leaf.price);
     const existing = byMeasure.get(key);
     if (!existing) {
       byMeasure.set(key, {
-        label: (p.size || p.name || "").trim(),
-        size: p.size || null,
+        label: (node.name || node.size || "").trim(),
+        size: node.size || null,
         price,
-        dims,
+        dims: dimsOf(node.size) || dimsOf(node.name),
       });
     } else if (price != null && (existing.price == null || price < existing.price)) {
       existing.price = price;
