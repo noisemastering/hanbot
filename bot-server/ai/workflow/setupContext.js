@@ -132,6 +132,47 @@ async function resolveFamilyRealm(family) {
   }
 }
 
+// Resolve the catalog to share, with fallback climb:
+//   1. Explicit value set in the ad assignment (uploaded PDF / store link) → use it.
+//   2. PDF option selected but NO file uploaded → climb the flow's family tree
+//      (family node → its ancestors → root) looking for a ProductFamily.catalog.url.
+//   3. Still nothing → the company general catalog (businessInfo.catalog.url).
+//   4. Nothing anywhere → null.
+// Returns { url, kind, source } or null.
+async function resolveCatalog(setup, familyList) {
+  // 1. Explicit value provided in the ad assignment.
+  if (setup.catalog?.value) {
+    return { url: setup.catalog.value, kind: setup.catalog.kind || "pdf", source: "ad" };
+  }
+  // Only fall back when a catalog was actually opted into (kind set, no value).
+  if (!setup.catalog?.kind) return null;
+
+  const PF = mongoose.model("ProductFamily");
+  // 2. Climb each flow family up to its root looking for a catalog.url.
+  for (const fam of familyList || []) {
+    if (!fam.id || !mongoose.isValidObjectId(fam.id)) continue;
+    let cur = await PF.findById(fam.id).select("name parentId catalog").lean();
+    let guard = 0;
+    while (cur && guard++ < 12) {
+      if (cur.catalog?.url) {
+        return { url: cur.catalog.url, kind: "pdf", source: `family:${cur.name}` };
+      }
+      if (!cur.parentId) break;
+      cur = await PF.findById(cur.parentId).select("name parentId catalog").lean();
+    }
+  }
+  // 3. Company general catalog.
+  try {
+    const { getBusinessInfo } = require("../../businessInfoManager");
+    const biz = await getBusinessInfo();
+    if (biz?.catalog?.url) return { url: biz.catalog.url, kind: "pdf", source: "global" };
+  } catch {
+    /* ignore */
+  }
+  // 4. Nothing.
+  return null;
+}
+
 async function resolveSetupContext(workflowSetup, overrides, families, opts = {}) {
   const setup = mergeSetup(workflowSetup, overrides);
   const lines = [];
@@ -279,9 +320,13 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
 
   if (promo) lines.push(`- Promoción: ${promo.text}. Preséntala cuando sea oportuno.`);
 
-  if (setup.catalog?.value) {
-    const what = setup.catalog.kind === "pdf" ? "catálogo en PDF" : "enlace a la tienda";
-    lines.push(`- Catálogo disponible (${what}): ${setup.catalog.value}. Compártelo si lo piden o si aplica.`);
+  // Catalog with fallback climb: explicit value → flow's family catalog (climb
+  // to root) → company general catalog. So if the ad opted into a PDF but no
+  // file was uploaded, the bot still has the closest available catalog to share.
+  const catalogResolved = await resolveCatalog(setup, familyList);
+  if (catalogResolved) {
+    const what = catalogResolved.kind === "pdf" ? "catálogo en PDF" : "enlace a la tienda";
+    lines.push(`- Catálogo disponible (${what}): ${catalogResolved.url}. Compártelo si lo piden o si aplica.`);
   }
 
   return { setup, contextBlock: lines.join("\n"), product: product || null, priceInfo };
