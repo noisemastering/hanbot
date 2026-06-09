@@ -23,11 +23,14 @@ function ManualSaleForm({ psid, channel, onClose }) {
   const [crmEmail, setCrmEmail] = useState("");
   const [zipCode, setZipCode] = useState("");
 
-  // Sale info
+  // Sale info — "current line" inputs, added to the cart before registering
   const [productName, setProductName] = useState("");
   const [quantity, setQuantity] = useState("1");
   const [totalAmount, setTotalAmount] = useState("");
   const [notes, setNotes] = useState("");
+
+  // Cart: line items the client is ordering
+  const [cart, setCart] = useState([]);
 
   const [registering, setRegistering] = useState(false);
   const [success, setSuccess] = useState(null);
@@ -66,10 +69,26 @@ function ManualSaleForm({ psid, channel, onClose }) {
 
   useEffect(() => {
     if (productName.length >= 1 && allProducts.length > 0) {
-      const q = productName.toLowerCase();
-      const matches = allProducts.filter(p => p.toLowerCase().includes(q)).slice(0, 8);
-      setSuggestions(matches);
-      setShowSuggestions(matches.length > 0);
+      // Tokenized AND match: every word the agent types must appear somewhere
+      // in the product's full path. So "malla rollo" or "rollo 6x4" both work,
+      // and "rollo" returns ALL rollos (malla, borde, groundcover) — not just
+      // the alphabetically-first 8.
+      const tokens = productName.toLowerCase().trim().split(/\s+/).filter(Boolean);
+      const scored = allProducts
+        .map((p) => {
+          const lower = p.toLowerCase();
+          if (!tokens.every((tk) => lower.includes(tk))) return null;
+          // Rank: earliest position of the first token (a match near the start
+          // of the path, e.g. "Malla Sombra…", outranks a deep one), then shorter.
+          const pos = lower.indexOf(tokens[0]);
+          return { p, score: pos * 1000 + p.length };
+        })
+        .filter(Boolean)
+        .sort((a, b) => a.score - b.score)
+        .slice(0, 25)
+        .map((x) => x.p);
+      setSuggestions(scored);
+      setShowSuggestions(scored.length > 0);
     } else {
       setSuggestions([]);
       setShowSuggestions(false);
@@ -86,16 +105,46 @@ function ManualSaleForm({ psid, channel, onClose }) {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const handleRegister = async () => {
+  // Add the current line inputs to the cart
+  const addToCart = () => {
     if (!productName.trim() || !totalAmount) return;
+    setCart((c) => [
+      ...c,
+      {
+        productName: productName.trim(),
+        quantity: parseInt(quantity) || 1,
+        amount: parseFloat(totalAmount) || 0,
+      },
+    ]);
+    // reset the line inputs for the next product
+    setProductName("");
+    setQuantity("1");
+    setTotalAmount("");
+    setError(null);
+  };
+
+  const removeFromCart = (idx) => setCart((c) => c.filter((_, i) => i !== idx));
+
+  const cartTotal = cart.reduce((s, it) => s + (it.amount || 0), 0);
+
+  const handleRegister = async () => {
+    // Build the line items: the cart, plus the current line if it's filled in
+    // (so a single-product sale doesn't require clicking "Agregar").
+    const items = [...cart];
+    if (productName.trim() && totalAmount) {
+      items.push({
+        productName: productName.trim(),
+        quantity: parseInt(quantity) || 1,
+        amount: parseFloat(totalAmount) || 0,
+      });
+    }
+    if (items.length === 0) return;
 
     setRegistering(true);
     setError(null);
     try {
       const res = await API.post(`/conversations/${psid}/register-sale`, {
-        productName: productName.trim(),
-        quantity: parseInt(quantity) || 1,
-        totalAmount: parseFloat(totalAmount),
+        items,
         notes: notes.trim() || undefined,
         crmName: crmName.trim() || undefined,
         crmPhone: crmPhone.trim() || undefined,
@@ -288,6 +337,47 @@ function ManualSaleForm({ psid, channel, onClose }) {
             </div>
           </div>
 
+          {/* Add-to-cart */}
+          <button
+            onClick={addToCart}
+            disabled={!productName.trim() || !totalAmount}
+            style={{
+              width: "100%",
+              padding: "0.5rem",
+              marginBottom: "0.75rem",
+              backgroundColor: "transparent",
+              color: (!productName.trim() || !totalAmount) ? "#555" : "#4caf50",
+              border: `1px dashed ${(!productName.trim() || !totalAmount) ? "#444" : "#4caf50"}`,
+              borderRadius: "4px",
+              cursor: (!productName.trim() || !totalAmount) ? "not-allowed" : "pointer",
+              fontWeight: "bold",
+              fontSize: "0.85rem"
+            }}
+          >
+            + Agregar producto al pedido
+          </button>
+
+          {/* Cart */}
+          {cart.length > 0 && (
+            <div style={{ marginBottom: "0.75rem", padding: "0.5rem 0.75rem", backgroundColor: "#1e1e1e", borderRadius: "6px", border: "1px solid #333" }}>
+              <div style={{ color: "#888", fontSize: "0.75rem", textTransform: "uppercase", marginBottom: "0.4rem", letterSpacing: "0.05em" }}>
+                Pedido ({cart.length})
+              </div>
+              {cart.map((it, idx) => (
+                <div key={idx} style={{ display: "flex", alignItems: "center", gap: "0.5rem", padding: "0.3rem 0", borderBottom: idx < cart.length - 1 ? "1px solid #2a2a2a" : "none" }}>
+                  <span style={{ color: "#bbb", fontSize: "0.75rem", minWidth: "1.5rem" }}>{it.quantity}×</span>
+                  <span style={{ color: "#ddd", fontSize: "0.8rem", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }} title={it.productName}>{it.productName}</span>
+                  <span style={{ color: "#4caf50", fontSize: "0.8rem", fontFamily: "monospace" }}>${it.amount.toLocaleString()}</span>
+                  <button onClick={() => removeFromCart(idx)} style={{ background: "none", border: "none", color: "#f44336", cursor: "pointer", fontSize: "1rem", padding: "0 0.2rem" }} title="Quitar">×</button>
+                </div>
+              ))}
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: "0.5rem", paddingTop: "0.5rem", borderTop: "1px solid #3a3a3a" }}>
+                <span style={{ color: "#aaa", fontSize: "0.8rem", fontWeight: "bold" }}>Total</span>
+                <span style={{ color: "#4caf50", fontSize: "0.9rem", fontWeight: "bold", fontFamily: "monospace" }}>${cartTotal.toLocaleString()}</span>
+              </div>
+            </div>
+          )}
+
           {/* Notes */}
           <label style={labelStyle}>
             {t('manualSale.notes')}
@@ -305,24 +395,30 @@ function ManualSaleForm({ psid, channel, onClose }) {
             }}
           />
 
-          {/* Register Button */}
-          <button
-            onClick={handleRegister}
-            disabled={registering || !productName.trim() || !totalAmount}
-            style={{
-              width: "100%",
-              padding: "0.75rem",
-              backgroundColor: registering ? "#666" : "#4caf50",
-              color: "white",
-              border: "none",
-              borderRadius: "4px",
-              cursor: registering || !productName.trim() || !totalAmount ? "not-allowed" : "pointer",
-              opacity: registering || !productName.trim() || !totalAmount ? 0.6 : 1,
-              fontWeight: "bold"
-            }}
-          >
-            {registering ? t('manualSale.registering') : t('manualSale.register')}
-          </button>
+          {/* Register Button — enabled if the cart has items OR the current line is filled */}
+          {(() => {
+            const canRegister = cart.length > 0 || (productName.trim() && totalAmount);
+            const disabled = registering || !canRegister;
+            return (
+              <button
+                onClick={handleRegister}
+                disabled={disabled}
+                style={{
+                  width: "100%",
+                  padding: "0.75rem",
+                  backgroundColor: registering ? "#666" : "#4caf50",
+                  color: "white",
+                  border: "none",
+                  borderRadius: "4px",
+                  cursor: disabled ? "not-allowed" : "pointer",
+                  opacity: disabled ? 0.6 : 1,
+                  fontWeight: "bold"
+                }}
+              >
+                {registering ? t('manualSale.registering') : t('manualSale.register')}
+              </button>
+            );
+          })()}
         </>
       )}
 

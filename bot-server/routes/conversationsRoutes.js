@@ -1119,7 +1119,29 @@ router.get('/purchase-intent/:psid', async (req, res) => {
 router.post('/:psid/register-sale', async (req, res) => {
   try {
     const { psid } = req.params;
-    const { productName, quantity, totalAmount, notes, orderId, crmName, crmPhone, crmEmail, zipCode } = req.body;
+    let { productName, quantity, totalAmount, notes, orderId, crmName, crmPhone, crmEmail, zipCode, items } = req.body;
+
+    // CART MODE: when an items[] array is sent, the sale has multiple line
+    // items. Derive a readable summary + totals so single-item readers (reports,
+    // commerce-status) still work, and keep the per-line breakdown in `items`.
+    let cartItems = null;
+    if (Array.isArray(items) && items.length > 0) {
+      cartItems = items
+        .map((it) => ({
+          productName: (it.productName || '').trim(),
+          quantity: parseInt(it.quantity) || 1,
+          amount: parseFloat(it.amount) || 0,
+        }))
+        .filter((it) => it.productName);
+      if (cartItems.length === 0) {
+        return res.status(400).json({ success: false, error: 'El pedido no tiene productos válidos' });
+      }
+      totalAmount = cartItems.reduce((s, it) => s + it.amount, 0);
+      quantity = cartItems.reduce((s, it) => s + it.quantity, 0);
+      // Summary title: "2x Malla 6x4" or "2x Malla 6x4 (+1 más)"
+      const first = `${cartItems[0].quantity}x ${cartItems[0].productName}`;
+      productName = cartItems.length === 1 ? first : `${first} (+${cartItems.length - 1} más)`;
+    }
 
     if (!productName || !totalAmount) {
       return res.status(400).json({
@@ -1169,6 +1191,7 @@ router.post('/:psid/register-sale', async (req, res) => {
         paidAmount: parseFloat(totalAmount),
         itemTitle: productName,
         itemQuantity: parseInt(quantity) || 1,
+        ...(cartItems ? { items: cartItems } : {}),
         orderId: orderId || clickId,
         orderDate: new Date(),
         manualNotes: notes || null

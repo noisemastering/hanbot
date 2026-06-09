@@ -120,6 +120,14 @@ const clickLogSchema = new mongoose.Schema(
       orderDate: Date,
       itemTitle: String,
       itemQuantity: Number,
+      // Multi-item manual sale (shopping cart). When present, the sale covers
+      // several line items; totalAmount is their sum. itemTitle/itemQuantity
+      // keep a readable summary for back-compat with single-item readers.
+      items: [{
+        productName: String,
+        quantity: Number,
+        amount: Number,
+      }],
       // Shipping address (from ML shipments API)
       shippingCity: String,
       shippingState: String,
