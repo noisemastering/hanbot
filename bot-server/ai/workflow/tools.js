@@ -68,6 +68,33 @@ async function findProductInFamilies(query, familyList) {
   return candidates.find((c) => (c.name || "").toLowerCase().includes(q)) || null;
 }
 
+// Given a resolved product leaf, return its sibling VARIANTS — the other
+// sellable+active products under the same parent that share the same size.
+// In a size→color tree, those siblings ARE the available colors for that size.
+// Purely structural (no color-word matching): a "variant" = same parent + same
+// size. If the leaf has no same-size siblings (e.g. it's a plain size leaf
+// directly under a size list), returns just itself → caller sees no choice.
+// Returns [{ id, name, label, price, mlPrice, link, sellable, active }].
+async function availableVariantsForProduct(productDoc) {
+  const PF = require("../../models/ProductFamily");
+  if (!productDoc || !productDoc.parentId || !productDoc.size) return [];
+  const siblings = await PF.find({ parentId: productDoc.parentId, sellable: true, active: { $ne: false } })
+    .select("name size price mlPrice onlineStoreLinks")
+    .lean();
+  const sizeKey = String(productDoc.size).toLowerCase();
+  const variants = siblings.filter((s) => String(s.size || "").toLowerCase() === sizeKey);
+  if (variants.length <= 1) return []; // no real variant choice for this size
+  return variants.map((v) => ({
+    id: String(v._id),
+    name: v.name,
+    // cosmetic: "Color Beige" → "Beige" for customer-facing display
+    label: (v.name || "").replace(/^\s*color\s+/i, "").trim() || v.name,
+    price: v.price,
+    mlPrice: v.mlPrice,
+    link: (v.onlineStoreLinks || []).find((l) => l?.url && /mercadolibre/i.test(l.url))?.url || null,
+  }));
+}
+
 // AI-based product-scope classifier. Replaces the old stopword + name-regex
 // matcher (which misrouted on attribute words). Given the customer's message
 // and the catalog of active flows, decides which flow handles the product they
@@ -483,4 +510,4 @@ async function runTool(name, input, ctx) {
   }
 }
 
-module.exports = { REGISTRY, toolDefsFor, runTool, dimsOf, findProductInFamilies };
+module.exports = { REGISTRY, toolDefsFor, runTool, dimsOf, findProductInFamilies, availableVariantsForProduct };

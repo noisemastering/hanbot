@@ -159,6 +159,14 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             (link ? ` Link: ${link}.` : "") +
             ` Cotiza ESTE producto con su precio y link; NO escales a un humano ni pidas la medida de nuevo.`;
         }
+        // Available colors/variants for the requested size — so the bot can
+        // answer "¿tienes otros colores?" with the real options instead of
+        // defaulting to "solo beige" / handoff.
+        if (found.variants && found.variants.length > 1) {
+          const opts = found.variants.map((v) => v.label).join(", ");
+          turnContextExtra +=
+            `\n- COLORES DISPONIBLES para esta medida: ${opts}. Si el cliente pregunta por otros colores, ofrécele estas opciones (no digas "solo beige" ni escales a un asesor por color). Cada color tiene su propio link de compra.`;
+        }
       }
     } catch (err) {
       console.error("⚠️ in-family measure pricing failed:", err.message);
@@ -287,7 +295,9 @@ async function resolveInFamilyMeasure(message, familyList) {
   const doc = await toolsMod.findProductInFamilies(message, familyList);
   if (!doc) return null;
   const { resolvePrice } = require("./priceResolver");
-  return { name: doc.name, id: String(doc._id), priceInfo: await resolvePrice(doc) };
+  // Available color/variant options for this size (structural sibling walk).
+  const variants = await toolsMod.availableVariantsForProduct(doc).catch(() => []);
+  return { name: doc.name, id: String(doc._id), priceInfo: await resolvePrice(doc), variants };
 }
 
 // Carry the conversation over to flow B and run its opening turn. Shared by the
