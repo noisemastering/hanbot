@@ -167,7 +167,21 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // the answer survives across turns (the color question usually comes
         // a turn AFTER the measure).
         if (found.variants && found.variants.length > 1) {
-          turnColors = { size: found.size || null, options: found.variants.map((v) => v.label) };
+          // Each color gets its OWN tracked link — never reuse one link for all
+          // (that bug shipped the same URL for Beige and Verde).
+          const { trackedLink } = require("./priceResolver");
+          const options = [];
+          for (const v of found.variants) {
+            const vlink = v.link
+              ? await trackedLink(v.link, {
+                  psid: opts.psid || null,
+                  sandbox: !!opts.sandbox,
+                  productName: `${found.size || ""} ${v.label}`.trim(),
+                })
+              : null;
+            options.push({ label: v.label, link: vlink });
+          }
+          turnColors = { size: found.size || null, options };
         }
       }
     } catch (err) {
@@ -182,9 +196,16 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     turnColors = state.availableColors;
   }
   if (turnColors && turnColors.options?.length > 1) {
-    const opts = turnColors.options.join(", ");
+    // options may be strings (legacy persisted state) or {label, link}.
+    const labelOf = (o) => (typeof o === "string" ? o : o.label);
+    const linkOf = (o) => (typeof o === "string" ? null : o.link);
+    const lines2 = turnColors.options
+      .map((o) => (linkOf(o) ? `${labelOf(o)} → ${linkOf(o)}` : labelOf(o)))
+      .join("; ");
     turnContextExtra +=
-      `\n- COLORES DISPONIBLES${turnColors.size ? ` para ${turnColors.size}` : ""}: ${opts}. Si el cliente pregunta por otros colores, ofrécele estas opciones (no digas "solo beige" ni escales a un asesor por color). Cada color tiene su propio link de compra.`;
+      `\n- COLORES DISPONIBLES${turnColors.size ? ` para ${turnColors.size}` : ""}: ${lines2}. ` +
+      `Comparte el link que corresponde a CADA color — cada uno tiene su PROPIO link, NUNCA reutilices el mismo link para colores distintos. ` +
+      `No digas "solo beige" ni escales a un asesor por color.`;
   }
 
   // 2. route
