@@ -155,6 +155,21 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
     } catch (e) {
       console.error("⚠️ workflow phoneGuard failed:", e.message);
     }
+    // Internal-vocabulary guard: the customer must never hear engine concepts
+    // like "flujo", "este flujo", "nodo", "configurado en este flujo". Node
+    // prompts sometimes contain these words ("...fuera de la familia
+    // configurada en este flujo") and the model echoes them. Soften to
+    // customer-safe phrasing.
+    try {
+      safeText = safeText
+        .replace(/\b(en|de|para|dentro de)\s+este\s+flujo\b/gi, "en nuestro catálogo")
+        .replace(/\beste\s+flujo\b/gi, "nuestro catálogo")
+        .replace(/\b(el\s+)?flujo\s+(actual|configurado|asignado)\b/gi, "nuestro catálogo")
+        .replace(/\bla\s+familia\s+configurada[^.,;]*/gi, "lo que manejamos")
+        .replace(/\bflujos?\b/gi, "catálogo");
+    } catch (e) {
+      console.error("⚠️ workflow vocab guard failed:", e.message);
+    }
   }
 
   return { handled: true, reply: safeText ? { type: "text", text: safeText } : null };
