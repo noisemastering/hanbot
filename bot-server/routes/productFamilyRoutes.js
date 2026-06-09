@@ -681,12 +681,27 @@ async function propagateDimensionValuesToDescendants(parentId, parentData) {
       }
     }
 
-    // STEP 3: Copy parent's dimension values to child (overriding existing values)
+    // STEP 3: Copy parent's dimension values to child — ONLY when the parent
+    // holds a MEANINGFUL value for that dimension.
+    //
+    // BUG FIX: a category node like "Rectangular" enables the width/length
+    // STRUCTURE but holds no real value (its own attributes are width:"0",
+    // length:"0" — each child has its OWN size: 6x4, 5x3, …). The old code
+    // copied those "0"s down on every save, and re-parenting a node fires a
+    // save → so moving "Rectangular" under a new parent wiped all 38 leaves'
+    // real dimensions. Now an empty/"0"/missing parent value is treated as
+    // "children define their own" and is NOT propagated. A parent with a
+    // genuine shared value (e.g. width:"4" for all children) still propagates.
+    const isMeaningful = (v) => {
+      if (v == null) return false;
+      const s = String(v).trim();
+      return s !== "" && s !== "0";
+    };
     for (const [dimKey, dimValue] of parentAttributes) {
       // Only propagate actual dimension fields (not general attributes)
       const isDimension = allDimensions.includes(dimKey);
 
-      if (isDimension && parentEnabledDimensions.includes(dimKey)) {
+      if (isDimension && parentEnabledDimensions.includes(dimKey) && isMeaningful(dimValue)) {
         child.attributes.set(dimKey, dimValue);
         childModified = true;
       }
