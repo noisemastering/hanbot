@@ -136,6 +136,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // or escalating to a human.
   let turnPriceInfo = state.priceInfo || null;
   let turnContextExtra = "";
+  let turnColors = null;
   if (userMessage) {
     try {
       const found = await resolveInFamilyMeasure(String(userMessage), familyList);
@@ -161,16 +162,28 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         }
         // Available colors/variants for the requested size — so the bot can
         // answer "¿tienes otros colores?" with the real options instead of
-        // defaulting to "solo beige" / handoff.
+        // defaulting to "solo beige" / handoff. Persisted to state below so
+        // the answer survives across turns (the color question usually comes
+        // a turn AFTER the measure).
         if (found.variants && found.variants.length > 1) {
-          const opts = found.variants.map((v) => v.label).join(", ");
-          turnContextExtra +=
-            `\n- COLORES DISPONIBLES para esta medida: ${opts}. Si el cliente pregunta por otros colores, ofrécele estas opciones (no digas "solo beige" ni escales a un asesor por color). Cada color tiene su propio link de compra.`;
+          turnColors = { size: found.size || null, options: found.variants.map((v) => v.label) };
         }
       }
     } catch (err) {
       console.error("⚠️ in-family measure pricing failed:", err.message);
     }
+  }
+
+  // If no measure THIS turn but we resolved colors on a previous turn (same
+  // active size), keep offering them — the "¿otros colores?" follow-up almost
+  // always lands on its own turn.
+  if (!turnColors && state.availableColors && state.availableColors.options?.length > 1) {
+    turnColors = state.availableColors;
+  }
+  if (turnColors && turnColors.options?.length > 1) {
+    const opts = turnColors.options.join(", ");
+    turnContextExtra +=
+      `\n- COLORES DISPONIBLES${turnColors.size ? ` para ${turnColors.size}` : ""}: ${opts}. Si el cliente pregunta por otros colores, ofrécele estas opciones (no digas "solo beige" ni escales a un asesor por color). Cada color tiene su propio link de compra.`;
   }
 
   // 2. route
@@ -215,6 +228,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     lead: ctx.lead,
     location: ctx.location,
     basket: state.basket || [],
+    // Remember the active size's color options so a later "¿otros colores?"
+    // turn (which carries no measure) can still offer them.
+    availableColors: turnColors || state.availableColors || null,
   };
 
   const diagnostics = {
