@@ -42,7 +42,7 @@ async function findProductInFamilies(query, familyList) {
   while (queue.length && guard++ < 500) {
     const pid = queue.shift();
     const kids = await PF.find({ parentId: pid })
-      .select("name sellable active price mlPrice onlineStoreLinks parentId")
+      .select("name size sellable active price mlPrice onlineStoreLinks parentId")
       .lean();
     for (const k of kids) {
       if (k.sellable && k.active !== false) candidates.push(k);
@@ -53,8 +53,12 @@ async function findProductInFamilies(query, familyList) {
 
   const wantDims = dimsOf(query);
   if (wantDims) {
+    // Match the measure against the candidate's SIZE field first, then its
+    // name. After a tree restructure the sellable leaf can be named for an
+    // attribute ("Color Beige") with the measure living only in `size`
+    // ("5x10m") — so name-only matching misses every size. Check both.
     const hit = candidates.find((c) => {
-      const cd = dimsOf(c.name);
+      const cd = dimsOf(c.size) || dimsOf(c.name);
       return cd && cd[0] === wantDims[0] && cd[1] === wantDims[1];
     });
     if (hit) return hit;
