@@ -894,9 +894,13 @@ function InventarioView() {
                                   {product.name}
                                 </span>
                                 {(() => {
-                                  // Only show ML button for valid ML links with real item IDs (MLM-XXXXXXXXX)
+                                  // Show the ML badge for ANY Mercado Libre link. The old filter
+                                  // required "MLM" + 6 digits, which excluded the newer catalog
+                                  // URLs (/p/MLM…, /up/MLMU…) and slug links — so links added in
+                                  // those formats silently didn't render. A saved link must always
+                                  // show, regardless of URL shape or the product's active state.
                                   const mlLink = product.onlineStoreLinks?.find(l =>
-                                    l.url?.includes('mercadolibre') && /MLM[-]?\d{6,}/.test(l.url)
+                                    l.url?.includes('mercadolibre')
                                   )?.url;
                                   return (
                                     <div className="flex items-center gap-1">
