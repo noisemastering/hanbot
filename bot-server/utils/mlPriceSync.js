@@ -3,7 +3,12 @@
 
 const axios = require("axios");
 const ProductFamily = require("../models/ProductFamily");
-const { getValidMLToken } = require("../mlTokenManager");
+// Use the OAuth token path (mercadoLibreOAuth) — the legacy mlTokenManager's
+// refresh token is expired (invalid_grant), which 500s the sync. getValidAccessToken
+// is the SAME path the live price lookups and repair scripts use successfully.
+const { getValidAccessToken } = require("./mercadoLibreOAuth");
+const ML_SELLER_ID = "482595248";
+const getValidMLToken = async () => (await getValidAccessToken(ML_SELLER_ID) || "").trim();
 
 /**
  * Extract ML item ID from a URL
