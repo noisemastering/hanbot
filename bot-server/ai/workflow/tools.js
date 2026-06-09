@@ -77,12 +77,12 @@ async function findProductInFamilies(query, familyList) {
 //   - "needs_human" → Hanlob sells it but no active flow covers it → human.
 //   - "not_sold"    → genuinely not our category (toldo, lona, geomembrana…).
 // On any error: "no_product" (safest — no false switch, no false denial).
-async function aiClassifyProductScope(query, currentFlowName, flowCatalog) {
+async function aiClassifyProductScope(query, currentFlowName, flowCatalog, currentIsColdStart = false) {
   const { getClient, CHAT_MODEL } = require("./llmClient");
   const flowsDesc = (flowCatalog || [])
     .map(
       (f) =>
-        `- "${f.name}"${f.isCurrent ? " (FLUJO ACTUAL)" : ""}: ${
+        `- "${f.name}"${f.isCurrent ? " (FLUJO ACTUAL)" : ""}${f.isColdStart ? " (TRIAGE / ARRANQUE EN FRÍO)" : ""}: ${
           f.families && f.families.length ? f.families.join(", ") : "(sin familias)"
         }`
     )
@@ -103,11 +103,12 @@ FLUJOS ACTIVOS Y LO QUE VENDE CADA UNO:
 ${flowsDesc || "(ninguno)"}
 
 ${currentFlowName ? `El cliente está actualmente en el flujo: "${currentFlowName}".` : ""}
+${currentIsColdStart ? `\n⚠️ EL FLUJO ACTUAL ES DE TRIAGE (ARRANQUE EN FRÍO). Su único trabajo es enrutar al cliente al flujo especialista correcto. NUNCA devuelvas "current" para este flujo: aunque sus familias abarcan toda la categoría, NO atiende productos directamente. Si un flujo especialista maneja lo que pide el cliente, devuelve SIEMPRE "other_flow" apuntando a ese especialista. Solo usa needs_human / not_sold cuando ningún especialista aplique.` : ""}
 
 REGLAS:
 - "no_product": el mensaje NO nombra un producto concreto. Saludos, agradecimientos, un color suelto (beige/negro/verde…), o preguntas como "¿qué hago?", "me interesa", "info" → no_product. Los COLORES son ATRIBUTOS, nunca productos.
-- "current": el producto pertenece al FLUJO ACTUAL (misma categoría que ya está atendiendo).
-- "other_flow": pertenece claramente a OTRO flujo activo distinto del actual. Pon su nombre EXACTO en targetFlow.
+- "current": el producto pertenece al FLUJO ACTUAL (misma categoría que ya está atendiendo). ${currentIsColdStart ? "NO USES ESTE VALOR — el flujo actual es de triage." : ""}
+- "other_flow": pertenece claramente a OTRO flujo activo distinto del actual (un especialista). Pon su nombre EXACTO en targetFlow.
 - "needs_human": es malla sombra o algo que Hanlob fabrica, pero ningún flujo activo lo cubre.
 - "not_sold": algo que Hanlob NO vende (toldo, lona impermeable, geomembrana, plástico agrícola, etc.).
 
@@ -338,7 +339,7 @@ const REGISTRY = {
       let workflows = [];
       try {
         workflows = await WorkflowModel.find({ active: true })
-          .select("name family families")
+          .select("name family families isColdStart")
           .lean();
       } catch {
         /* ignore */
@@ -356,11 +357,16 @@ const REGISTRY = {
             }
           }
           const isCurrent = fams.some((f) => flowFamilyIds.has(String(f.id)));
-          return { id: String(w._id), name: w.name, families: names, isCurrent };
+          return { id: String(w._id), name: w.name, families: names, isCurrent, isColdStart: !!w.isColdStart };
         })
       );
 
-      const verdict = await aiClassifyProductScope(q, ctx.currentFlowName || null, flowCatalog);
+      // Is the CURRENT flow the cold-start/triage flow? If so, it must always
+      // route OUT to a specialist — never claim "current" — because its broad
+      // family realm overlaps every specialist flow.
+      const currentIsColdStart = flowCatalog.some((f) => f.isCurrent && f.isColdStart);
+
+      const verdict = await aiClassifyProductScope(q, ctx.currentFlowName || null, flowCatalog, currentIsColdStart);
 
       // no_product → the message didn't name a concrete product (greeting,
       // color, filler). Don't switch, don't deny — just continue.
@@ -369,7 +375,17 @@ const REGISTRY = {
       }
 
       // current → product belongs to this flow.
+      // SAFETY: a cold-start/triage flow must never keep a product as "current"
+      // — its job is to route out. If the classifier still said "current" here
+      // (e.g. its broad realm overlapped a specialist), treat it as needs_human
+      // so the customer gets a real asesor instead of a dead-end "no puedo
+      // cotizar". Better than parking them on the triage node.
       if (verdict.verdict === "current") {
+        if (currentIsColdStart) {
+          ctx.handoffRequested = true;
+          ctx.handoffReason = `Cliente en flujo de triage pidió "${q}"; no se pudo enrutar a un especialista — requiere asesor`;
+          return `[INTERNO — no menciones flujos ni procesos internos] No pudiste enrutar este producto a un flujo especialista. Ofrece de forma natural pasarlo con un asesor que le cotiza (usa request_handoff). NUNCA digas que no puedes dar precios sin ofrecer el asesor.`;
+        }
         return `[INTERNO — no menciones nada de esto al cliente] Eso sí lo manejas tú aquí. Atiéndelo con normalidad como parte de esta conversación.`;
       }
 
