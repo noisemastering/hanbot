@@ -140,7 +140,12 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   let turnColors = null;
   if (userMessage) {
     try {
-      const found = await resolveInFamilyMeasure(String(userMessage), familyList);
+      // AI measure extraction (customer free-text) — done ONCE per turn and
+      // threaded into the lookups, so any phrasing parses ("13 de largo x 3 de
+      // ancho", "mide 13 por 3", worded numbers) without regex whack-a-mole.
+      const { extractMeasure } = require("../utils/measureExtractor");
+      const wantDims = await extractMeasure(String(userMessage));
+      const found = await resolveInFamilyMeasure(String(userMessage), familyList, wantDims);
       if (found && found.priceInfo) {
         turnPriceInfo = found.priceInfo;
         const pi = found.priceInfo;
@@ -189,8 +194,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // offers a REAL size and asks if they still want the exact one —
         // instead of inventing a size or saying "no manejamos decimales".
         const toolsMod = require("./tools");
-        if (toolsMod.dimsOf && toolsMod.dimsOf(String(userMessage))) {
-          const closest = await toolsMod.closestAvailableMeasure(String(userMessage), familyList);
+        if (wantDims) {
+          const closest = await toolsMod.closestAvailableMeasure(String(userMessage), familyList, wantDims);
           if (closest) {
             turnContextExtra +=
               `\n- MEDIDA NO DISPONIBLE: la medida exacta que pidió el cliente NO está en catálogo. La más cercana que sí manejamos es "${closest.label}"${closest.price != null ? ` ($${closest.price})` : ""}. ` +
@@ -343,12 +348,13 @@ async function detectFlowSwitch(message, familyList, currentWorkflow) {
 
 // If the customer's message contains a measure (e.g. "4x3") that exists in this
 // flow's families, resolve its price/link. Returns { name, priceInfo } or null.
-// Only fires for measure-like messages so plain "precio" keeps the preloaded one.
-async function resolveInFamilyMeasure(message, familyList) {
+// wantDims is the AI-extracted measure from the customer message (passed in so
+// we don't re-extract); only fires for measure messages so plain "precio" keeps
+// the preloaded one.
+async function resolveInFamilyMeasure(message, familyList, wantDims) {
+  if (!wantDims) return null; // no measure in the message → keep preloaded product
   const toolsMod = require("./tools");
-  // reuse the dimension parser to gate: no measure → skip (don't override preload)
-  if (!toolsMod.dimsOf || !toolsMod.dimsOf(message)) return null;
-  const doc = await toolsMod.findProductInFamilies(message, familyList);
+  const doc = await toolsMod.findProductInFamilies(message, familyList, wantDims);
   if (!doc) return null;
   const { resolvePrice } = require("./priceResolver");
   // Available color/variant options for this size (structural sibling walk).

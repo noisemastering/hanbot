@@ -32,7 +32,7 @@ function dimsOf(text) {
 
 // Find a sellable product in the flow's family subtrees that matches the
 // customer's requested measure/name. Returns the ProductFamily doc or null.
-async function findProductInFamilies(query, familyList) {
+async function findProductInFamilies(query, familyList, wantDimsArg = null) {
   if (!query) return null;
   const PF = require("../../models/ProductFamily");
   const ids = (Array.isArray(familyList) ? familyList : familyList ? [familyList] : [])
@@ -56,7 +56,10 @@ async function findProductInFamilies(query, familyList) {
     // also consider the family node itself if it's sellable
   }
 
-  const wantDims = dimsOf(query);
+  // Wanted dims come from the AI extractor for customer text (passed in); fall
+  // back to dimsOf only if not provided. Candidate (catalog) sizes are still
+  // parsed with dimsOf — they're clean, controlled "6x4m" strings.
+  const wantDims = wantDimsArg || dimsOf(query);
   if (wantDims) {
     // Match the measure against the candidate's SIZE field first, then its
     // name. After a tree restructure the sellable leaf can be named for an
@@ -79,8 +82,8 @@ async function findProductInFamilies(query, familyList) {
 // saying "no manejamos decimales". Closeness = squared distance between the
 // sorted dimension pairs (so 13x3 → nearest by both width and length).
 // Returns the measure object from availableMeasuresForFamilies, or null.
-async function closestAvailableMeasure(query, familyList) {
-  const want = dimsOf(query);
+async function closestAvailableMeasure(query, familyList, wantDimsArg = null) {
+  const want = wantDimsArg || dimsOf(query);
   if (!want) return null;
   const measures = await availableMeasuresForFamilies(familyList);
   let best = null;
@@ -493,11 +496,16 @@ const REGISTRY = {
       );
 
       // FAST PATH (dimension-only, no name matching): if the customer named a
-      // MEASURE (e.g. "6x4") that exists as a sellable product in THIS flow's
-      // families, it's in-scope. Pure numeric dimension comparison.
+      // MEASURE (e.g. "6x4" or "13 de largo x 3 de ancho") that exists as a
+      // sellable product in THIS flow's families, it's in-scope. Dims extracted
+      // by AI from the customer's text (any phrasing); catalog sizes parsed
+      // deterministically inside findProductInFamilies.
+      const { extractMeasure } = require("../utils/measureExtractor");
+      const scopeDims = await extractMeasure(q).catch(() => null);
       const inFamilyByDims = await findProductInFamilies(
         q,
-        Array.isArray(ctx.families) ? ctx.families : ctx.family ? [ctx.family] : []
+        Array.isArray(ctx.families) ? ctx.families : ctx.family ? [ctx.family] : [],
+        scopeDims
       );
       if (inFamilyByDims) {
         return `[INTERNO — no menciones nada de esto al cliente] "${inFamilyByDims.name}" sí lo manejas tú aquí. Atiéndelo con normalidad.`;
