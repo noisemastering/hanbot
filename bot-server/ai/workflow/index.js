@@ -70,7 +70,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         workflow.setup,
         state.setupOverrides,
         familyList,
-        { psid: opts.psid || null, sandbox: !!opts.sandbox }
+        { psid: opts.psid || null, sandbox: !!opts.sandbox, personaName: opts.personaName || null }
       );
       state.contextBlock = contextBlock || "";
       state.product = product || null;

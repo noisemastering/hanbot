@@ -29,6 +29,10 @@ const conversationSchema = new mongoose.Schema({
   extractedName: { type: String, default: null },
   nameHarvested: { type: Boolean, default: false },
 
+  // The bot's persona name for THIS conversation (assigned once, reused).
+  // Keeps the assistant from jumping between names across turns/systems.
+  botPersonaName: { type: String, default: null },
+
   // Campaign & context tracking
   campaignRef: { type: String, default: null },
   adId: { type: String, default: null },           // Facebook Ad ID (referral.ad_id) or WhatsApp CTWA source_id

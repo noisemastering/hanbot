@@ -77,6 +77,19 @@ async function generateReplyPipeline(userMessage, psid, referral = null) {
 async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLabel, initOverrides = {} }) {
   const { runWorkflowTurn, initState } = require("./workflow");
 
+  // ONE persona name per conversation: assign once from the bot-only pool
+  // (excludes real human operators like Noemi), persist it, and reuse forever.
+  // Every flow then uses this single name instead of inventing a new one each
+  // greeting (which made the bot jump Adriana → Paula in one conversation).
+  let personaName = convo.botPersonaName || null;
+  if (!personaName) {
+    // Deterministic pick from psid so it's stable even before the write lands.
+    let h = 0;
+    for (const ch of String(psid)) h = (h * 31 + ch.charCodeAt(0)) >>> 0;
+    personaName = BOT_PERSONA_POOL[h % BOT_PERSONA_POOL.length];
+    updateConversation(psid, { botPersonaName: personaName }).catch(() => {});
+  }
+
   // Reuse persisted state only if it belongs to THIS workflow; otherwise start
   // fresh, seeding the setup vars as per-conversation overrides.
   let state = convo.workflowState;
@@ -88,7 +101,7 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
     workflow,
     state,
     userMessage,
-    { psid } // enable psid-traceable links (commerce-status attribution)
+    { psid, personaName } // psid-traceable links + the conversation's pinned persona name
   );
 
   // Map what the engine collected (lead / location / product) onto the
@@ -201,11 +214,16 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
 // live human takeover.
 const WORKFLOW_HUMAN_STATES = new Set(["needs_human", "human_active", "human_takeover", "human_handling"]);
 
+// Bot persona names — assigned once per conversation and reused. This is a
+// BOT-ONLY pool: it must never contain a real human operator's name (e.g.
+// Noemi) so the bot never impersonates an actual member of the sales team.
+const BOT_PERSONA_POOL = ["Carolina", "Mireya", "Claudia", "Fernanda", "Miranda", "Adriana", "Regina", "Karen"];
+
 async function maybeRunAdWorkflow(userMessage, psid) {
   // Cheap, side-effect-free read first (getConversation may upsert/hydrate).
   const Conversation = require("../models/Conversation");
   const convo = await Conversation.findOne({ psid })
-    .select("adId channel state workflowState extractedName city zipcode productInterest")
+    .select("adId channel state workflowState extractedName city zipcode productInterest botPersonaName")
     .lean();
   if (!convo || !convo.adId) return null;
   if (WORKFLOW_HUMAN_STATES.has(convo.state)) return null;
@@ -233,7 +251,7 @@ async function maybeRunAdWorkflow(userMessage, psid) {
 async function maybeRunColdStartWorkflow(userMessage, psid) {
   const Conversation = require("../models/Conversation");
   const convo = await Conversation.findOne({ psid })
-    .select("adId channel state workflowState extractedName city zipcode productInterest")
+    .select("adId channel state workflowState extractedName city zipcode productInterest botPersonaName")
     .lean();
   if (!convo) return null;
   // Ad-routed conversations are handled by maybeRunAdWorkflow, not here.

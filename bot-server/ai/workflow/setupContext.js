@@ -174,6 +174,17 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
   // Accept either a single family object (legacy) or an array of families.
   const familyList = Array.isArray(families) ? families.filter((f) => f && f.id) : families && families.id ? [families] : [];
 
+  // Persona name — ONE name per conversation, assigned + persisted upstream and
+  // passed in here. Every node uses this exact name; the model must not invent
+  // or change it, and must not re-greet once it has already greeted.
+  if (opts.personaName) {
+    lines.push(
+      `[INTERNO] Tu nombre como asesora en esta conversación es "${opts.personaName}". ` +
+        `Úsalo SIEMPRE que te presentes; NUNCA uses otro nombre ni inventes uno. ` +
+        `NO te vuelvas a presentar ni a saludar si ya saludaste antes en esta conversación.`
+    );
+  }
+
   // Flow switch: this conversation was handed over from another flow. Don't
   // greet again — continue seamlessly with the product the client asked for.
   if (overrides && overrides.comesFromFlowSwitch) {
