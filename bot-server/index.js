@@ -947,23 +947,32 @@ app.post("/webhook", async (req, res) => {
                   let replyMessage = null;
                   let replyType = null;
 
-                  // Check for shipping question first (high confidence) - has its own killswitch
-                  if (isShippingAutoReplyEnabled() && isShippingQuestion(message)) {
+                  // AI intent classifier — decides whether to reply and the type
+                  // (shipping vs general) based on INTENT, not keywords. Catches
+                  // declarative purchase interest ("me interesa una malla roja")
+                  // that the old keyword `isQuestion` gate silently ignored.
+                  const { classifyComment } = require('./ai/utils/commentIntent');
+                  const intent = await classifyComment(message);
+
+                  if (intent.reply && intent.type === 'shipping' && isShippingAutoReplyEnabled()) {
                     replyMessage = await generateBotResponse("comment_reply_shipping", {
                       operatorName,
                       userComment: message
                     });
                     replyType = 'shipping';
-                    console.log(`   📦 Shipping question detected, auto-replying...`);
+                    console.log(`   📦 Shipping comment detected (AI), auto-replying...`);
                   }
-                  // Fall back to general question detection
-                  else if (isQuestion(message)) {
+                  // Shipping but its killswitch is off, OR a general worth-replying
+                  // comment → general reply.
+                  else if (intent.reply) {
                     replyMessage = await generateBotResponse("comment_reply_general", {
                       operatorName,
                       userComment: message
                     });
                     replyType = 'general';
-                    console.log(`   💬 General question detected, auto-replying...`);
+                    console.log(`   💬 Comment worth replying (AI, ${intent.type}), auto-replying...`);
+                  } else {
+                    console.log(`   ⏭️ Comment not worth auto-replying (AI): "${(message || '').slice(0, 50)}"`);
                   }
 
                   if (replyMessage) {
