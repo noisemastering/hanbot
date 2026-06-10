@@ -14,11 +14,16 @@
 // "4x3", "4 x 3 m", "4 por 3", "de 4x3 metros" → ["4","3"] (sorted for order-insensitivity).
 function dimsOf(text) {
   if (!text) return null;
-  // Strip metric units, including 'm' glued to a digit ("6m" → "6").
+  // Strip metric units, including 'm' glued to a digit ("6m" → "6"), AND the
+  // descriptive words customers put between the numbers and the separator
+  // ("13 de largo x 3 de ancho", "13 metros de largo por 3 de ancho") — without
+  // this, the number isn't adjacent to the x/por and the match fails.
   const m = String(text)
     .toLowerCase()
     .replace(/(\d)\s*(?:m\b|mts?\b|metros?\b)/g, "$1 ")
     .replace(/\bmts?\.?\b|\bmetros?\b|\bm\b/g, " ")
+    .replace(/\bde\s+(?:largo|ancho|alto|altura|fondo|lado)\b/g, " ") // "13 de largo x 3 de ancho" → "13 x 3"
+    .replace(/\b(?:largo|ancho|alto|altura|fondo)\s+de\b/g, " ")      // "largo de 13 x ancho de 3"
     .match(/(\d+(?:\.\d+)?)\s*(?:[x×*]|por)\s*(\d+(?:\.\d+)?)/);
   if (!m) return null;
   // Sort numerically so "6x4" and "4x6" compare equal regardless of order.
@@ -66,6 +71,29 @@ async function findProductInFamilies(query, familyList) {
   // Fallback: loose name contains (e.g. a named variant, not a measure).
   const q = query.toLowerCase();
   return candidates.find((c) => (c.name || "").toLowerCase().includes(q)) || null;
+}
+
+// When a requested measure isn't in the catalog (e.g. 13x3, out of range),
+// find the CLOSEST available measure so the bot can offer a real size and ask
+// if the customer still wants the exact one — instead of inventing a size or
+// saying "no manejamos decimales". Closeness = squared distance between the
+// sorted dimension pairs (so 13x3 → nearest by both width and length).
+// Returns the measure object from availableMeasuresForFamilies, or null.
+async function closestAvailableMeasure(query, familyList) {
+  const want = dimsOf(query);
+  if (!want) return null;
+  const measures = await availableMeasuresForFamilies(familyList);
+  let best = null;
+  let bestDist = Infinity;
+  for (const m of measures) {
+    if (!m.dims) continue;
+    const d = (m.dims[0] - want[0]) ** 2 + (m.dims[1] - want[1]) ** 2;
+    if (d < bestDist) {
+      bestDist = d;
+      best = m;
+    }
+  }
+  return best;
 }
 
 // Given a resolved product leaf, return its sibling VARIANTS — the other
@@ -623,4 +651,4 @@ async function runTool(name, input, ctx) {
   }
 }
 
-module.exports = { REGISTRY, toolDefsFor, runTool, dimsOf, findProductInFamilies, availableVariantsForProduct, availableMeasuresForFamilies };
+module.exports = { REGISTRY, toolDefsFor, runTool, dimsOf, findProductInFamilies, availableVariantsForProduct, availableMeasuresForFamilies, closestAvailableMeasure };

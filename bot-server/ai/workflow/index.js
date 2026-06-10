@@ -183,6 +183,21 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           }
           turnColors = { size: found.size || null, options };
         }
+      } else {
+        // The customer named a MEASURE we couldn't resolve in catalog (e.g.
+        // 13x3 — out of range). Find the closest available size so the bot
+        // offers a REAL size and asks if they still want the exact one —
+        // instead of inventing a size or saying "no manejamos decimales".
+        const toolsMod = require("./tools");
+        if (toolsMod.dimsOf && toolsMod.dimsOf(String(userMessage))) {
+          const closest = await toolsMod.closestAvailableMeasure(String(userMessage), familyList);
+          if (closest) {
+            turnContextExtra +=
+              `\n- MEDIDA NO DISPONIBLE: la medida exacta que pidió el cliente NO está en catálogo. La más cercana que sí manejamos es "${closest.label}"${closest.price != null ? ` ($${closest.price})` : ""}. ` +
+              `Ofrécele ESTA medida más cercana y pregúntale si le sirve o si necesita la medida exacta. ` +
+              `NO inventes una medida, NO inventes precios, y NUNCA digas "no manejamos decimales" (la medida pedida puede no tener decimales). Si insiste en la medida exacta, ofrécele pasar con un asesor.`;
+          }
+        }
       }
     } catch (err) {
       console.error("⚠️ in-family measure pricing failed:", err.message);
