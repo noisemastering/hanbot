@@ -80,7 +80,9 @@ async function executeNode(workflow, node, history, vars, ctx, contextBlock = ""
       });
     } catch (err) {
       console.error("⚠️ Workflow nodeExecutor error:", err.message);
-      return { text: finalText || null, toolCalls };
+      // Signal an LLM failure so the engine can degrade to a human handoff
+      // instead of returning a silent null (which ghosts the customer).
+      return { text: finalText || null, toolCalls, llmError: true };
     }
 
     const msg = resp.choices?.[0]?.message;

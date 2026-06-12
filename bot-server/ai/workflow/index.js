@@ -249,7 +249,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     catalogToSend: null, // set by share_catalog → maybeRunAdWorkflow sends the document
     psid: opts.psid || null, // enables psid-traceable links in share_* tools
   };
-  const { text, toolCalls } = await executeNode(
+  const { text: rawText, toolCalls, llmError: nodeLlmError } = await executeNode(
     workflow,
     movedTo,
     history,
@@ -257,6 +257,18 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     ctx,
     contextBlock + turnContextExtra
   );
+
+  // RESILIENCE: if the engine's LLM calls failed (router or node) and we got no
+  // usable text, DON'T go silent — degrade to a human handoff so the customer
+  // gets a reply and an agent is alerted, instead of being ghosted by a
+  // transient OpenAI outage (429 / timeout / 5xx).
+  let text = rawText;
+  if ((decision.llmError || nodeLlmError) && !text) {
+    ctx.handoffRequested = true;
+    ctx.handoffReason = ctx.handoffReason || "Fallo temporal del motor de IA — pasar a un asesor para no dejar al cliente sin respuesta";
+    text = "Permíteme un momento, te comunico con un asesor para ayudarte mejor. 🙌";
+    console.warn(`⚠️ [workflow] LLM failure → degrading to human handoff for ${opts.psid || "(no psid)"}`);
+  }
 
   // 5. record the reply
   if (text) {

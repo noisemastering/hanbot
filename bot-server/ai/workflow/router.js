@@ -67,7 +67,8 @@ Return the id of the transition that now applies, or "STAY".`;
     if (txt) decision = JSON.parse(txt);
   } catch (err) {
     console.error("⚠️ Workflow router error:", err.message);
-    return { nextNodeId: currentNode.id, edgeId: null, reason: `router_error: ${err.message}` };
+    // Flag the LLM failure so the engine degrades to a handoff, not silence.
+    return { nextNodeId: currentNode.id, edgeId: null, reason: `router_error: ${err.message}`, llmError: true };
   }
 
   if (!decision.edge_id || decision.edge_id === "STAY" || !enumIds.includes(decision.edge_id)) {
