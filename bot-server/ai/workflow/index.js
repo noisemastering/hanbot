@@ -270,6 +270,25 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     console.warn(`⚠️ [workflow] LLM failure → degrading to human handoff for ${opts.psid || "(no psid)"}`);
   }
 
+  // GROUNDING CHECK: verify the model's reply against the facts in context
+  // (realm/shade%, available measures, colors, price) before sending — catches
+  // a fabricated spec the model asserted (e.g. confirming "95%" when the family
+  // is 90%) and corrects it. Only on real model output (not the canned fallback
+  // above, not empty replies). Data-driven; never blocks (returns original on
+  // error).
+  if (text && !(decision.llmError || nodeLlmError)) {
+    try {
+      const { verifyReply } = require("./replyVerifier");
+      const v = await verifyReply(text, `${contextBlock}${turnContextExtra}`);
+      if (v.corrected) {
+        console.warn(`🛡️ [workflow] reply corrected by grounding check for ${opts.psid || "(no psid)"}`);
+        text = v.reply;
+      }
+    } catch (e) {
+      console.error("⚠️ workflow grounding check failed:", e.message);
+    }
+  }
+
   // 5. record the reply
   if (text) {
     history.push({ role: "assistant", text, nodeId: movedTo.id, at: new Date() });
