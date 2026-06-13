@@ -20,6 +20,37 @@ const { route } = require("./router");
 const { executeNode } = require("./nodeExecutor");
 const { resolveSetupContext } = require("./setupContext");
 
+// Current date/time + open/closed status in Mexico (Querétaro) time. The LLM
+// has no clock, so we compute it server-side and inject it as a fact each turn.
+// Business hours: Mon–Fri 08:00–18:00, Sat 09:00–14:00, Sun closed.
+function businessHoursContext() {
+  try {
+    const now = new Date();
+    // Wall-clock in Mexico City, then read day/hour from it.
+    const mx = new Date(now.toLocaleString("en-US", { timeZone: "America/Mexico_City" }));
+    const day = mx.getDay(); // 0=Sun … 6=Sat
+    const hour = mx.getHours();
+    const min = mx.getMinutes();
+    const dias = ["domingo", "lunes", "martes", "miércoles", "jueves", "viernes", "sábado"];
+    let open = false;
+    if (day >= 1 && day <= 5) open = hour >= 8 && hour < 18;
+    else if (day === 6) open = hour >= 9 && hour < 14;
+    const hhmm = `${String(hour).padStart(2, "0")}:${String(min).padStart(2, "0")}`;
+    const fecha = mx.toLocaleDateString("es-MX", { timeZone: "America/Mexico_City", day: "numeric", month: "long" });
+    let line = `\n- FECHA Y HORA ACTUAL (México): ${dias[day]} ${fecha}, ${hhmm}. `;
+    if (open) {
+      line += "ESTÁS DENTRO del horario de atención; un asesor puede responder hoy.";
+    } else {
+      line +=
+        "ESTÁS FUERA del horario de atención (atendemos L–V 8:00–18:00 y Sáb 9:00–14:00). " +
+        "Si haces un handoff, NO digas que lo atenderán de inmediato ni \"en breve\": aclara con naturalidad que el especialista lo contactará en el PRÓXIMO horario hábil.";
+    }
+    return line;
+  } catch {
+    return "";
+  }
+}
+
 // Lazy-load the model to avoid require cycles at module init.
 async function loadWorkflowById(id) {
   if (!id) return null;
@@ -136,7 +167,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // context, so the model quotes it deterministically instead of vague-replying
   // or escalating to a human.
   let turnPriceInfo = state.priceInfo || null;
-  let turnContextExtra = "";
+  // Current date/time + business-hours status (Mexico). The model has no clock;
+  // inject it FRESH each turn so the handoff node can tell the customer whether
+  // a specialist responds now or in the next business window.
+  let turnContextExtra = businessHoursContext();
   let turnColors = null;
   if (userMessage) {
     try {
