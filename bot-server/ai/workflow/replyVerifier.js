@@ -19,12 +19,26 @@ const { getClient, CHAT_MODEL } = require("./llmClient");
  * @param {string} facts - the grounded context (contextBlock + turn extras)
  * @returns {Promise<{ reply: string, corrected: boolean }>}
  */
+// KILLSWITCH: the grounding check is ON by default. If it ever misbehaves
+// (e.g. false-corrects valid replies in production), set REPLY_VERIFIER_ENABLED
+// = "false" (or "0") on the server to disable it instantly — replies then pass
+// straight through, unverified, with no other behavior change.
+function isVerifierEnabled() {
+  const v = process.env.REPLY_VERIFIER_ENABLED;
+  return v !== "false" && v !== "0";
+}
+
 async function verifyReply(reply, facts) {
+  if (!isVerifierEnabled()) return { reply, corrected: false };
   if (!reply || !reply.trim() || !facts || !facts.trim()) return { reply, corrected: false };
 
   try {
     const client = getClient();
     const res = await client.chat.completions.create({
+      // Stays on gpt-4o: tested gpt-4o-mini and it FALSE-corrected valid
+      // in-range replies (mangled "6x4" → "2x2 hasta 7x10"). The verifier must
+      // be reliable or it corrupts good replies. Cost is controlled by gating
+      // (only run when the reply contains a number/spec), not by downgrading.
       model: CHAT_MODEL,
       temperature: 0,
       max_tokens: 400,

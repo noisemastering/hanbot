@@ -232,7 +232,10 @@ async function aiClassifyProductScope(query, currentFlowName, flowCatalog, curre
   try {
     const client = getClient();
     const res = await client.chat.completions.create({
-      model: CHAT_MODEL,
+      // Classification task — gpt-4o-mini is plenty and ~15x cheaper than the
+      // engine's gpt-4o. This runs on most messages (flow-switch detection), so
+      // it's a meaningful cost lever.
+      model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
