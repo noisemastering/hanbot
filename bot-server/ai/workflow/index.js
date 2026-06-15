@@ -313,7 +313,16 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   if (text && !(decision.llmError || nodeLlmError)) {
     try {
       const { verifyReply } = require("./replyVerifier");
-      const v = await verifyReply(text, `${contextBlock}${turnContextExtra}`);
+      // Include the TURN's tool outputs (e.g. share_product_link's "Precio:
+      // $599") in the facts — the price/spec often comes from a tool call, not
+      // the pre-injected context. Without this the verifier was blind to it
+      // (the $1128-on-a-$599-product case slipped through).
+      const toolFacts = (toolCalls || [])
+        .filter((t) => t && t.output)
+        .map((t) => `- [${t.name}] devolvió: ${t.output}`)
+        .join("\n");
+      const facts = `${contextBlock}${turnContextExtra}${toolFacts ? "\n" + toolFacts : ""}`;
+      const v = await verifyReply(text, facts);
       if (v.corrected) {
         console.warn(`🛡️ [workflow] reply corrected by grounding check for ${opts.psid || "(no psid)"}`);
         text = v.reply;

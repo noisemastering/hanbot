@@ -99,8 +99,11 @@ async function executeNode(workflow, node, history, vars, ctx, contextBlock = ""
       } catch {
         /* ignore malformed args */
       }
-      toolCalls.push({ name: tc.function.name, input: args });
       const out = await runTool(tc.function.name, args, ctx);
+      // Capture the tool OUTPUT too — the grounding verifier needs to see facts
+      // that came from tools (e.g. share_product_link's "Precio: $599"), not
+      // just the pre-injected context.
+      toolCalls.push({ name: tc.function.name, input: args, output: String(out) });
       messages.push({ role: "tool", tool_call_id: tc.id, content: String(out) });
     }
   }
