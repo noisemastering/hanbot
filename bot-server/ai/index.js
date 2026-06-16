@@ -219,53 +219,80 @@ const WORKFLOW_HUMAN_STATES = new Set(["needs_human", "human_active", "human_tak
 // Noemi) so the bot never impersonates an actual member of the sales team.
 const BOT_PERSONA_POOL = ["Carolina", "Mireya", "Claudia", "Fernanda", "Miranda", "Adriana", "Regina", "Karen"];
 
+// Returns:
+//   null                       → NOT owned by an ad-workflow (no ad, or the ad
+//                                 has no flow attached) → caller may use legacy.
+//   { owned: true, reply }     → OWNED by an ad-workflow. The conversation is
+//                                 the engine's; it must NEVER fall through to
+//                                 the legacy bot — not on a human takeover, a
+//                                 missing workflow, or an engine error. reply
+//                                 may be null (= stay silent) in those cases.
 async function maybeRunAdWorkflow(userMessage, psid) {
-  // Cheap, side-effect-free read first (getConversation may upsert/hydrate).
   const Conversation = require("../models/Conversation");
   const convo = await Conversation.findOne({ psid })
     .select("adId channel state workflowState extractedName city zipcode productInterest botPersonaName")
     .lean();
-  if (!convo || !convo.adId) return null;
-  if (WORKFLOW_HUMAN_STATES.has(convo.state)) return null;
+  if (!convo || !convo.adId) return null; // not an ad conversation
 
   const Ad = require("../models/Ad");
   const ad = await Ad.findOne({ fbAdId: convo.adId })
     .select("name workflowId workflowEnabled workflowSetup")
     .lean();
+  // Ad with NO flow attached → legacy still handles it (per request, only ads
+  // WITH the new flows lose their legacy tie).
   if (!ad || !ad.workflowEnabled || !ad.workflowId) return null;
 
-  const Workflow = require("../models/Workflow");
-  const workflow = await Workflow.findById(ad.workflowId);
-  if (!workflow) return null;
-
-  return runEngineWorkflow(workflow, convo, psid, userMessage, {
-    sourceLabel: `ad="${ad.name || convo.adId}"`,
-    initOverrides: ad.workflowSetup || {},
-  });
+  // From here the conversation is OWNED by the engine — no legacy fallthrough.
+  if (WORKFLOW_HUMAN_STATES.has(convo.state)) return { owned: true, reply: null }; // human handling → silent
+  try {
+    const Workflow = require("../models/Workflow");
+    const workflow = await Workflow.findById(ad.workflowId);
+    if (!workflow) return { owned: true, reply: null };
+    const res = await runEngineWorkflow(workflow, convo, psid, userMessage, {
+      sourceLabel: `ad="${ad.name || convo.adId}"`,
+      initOverrides: ad.workflowSetup || {},
+    });
+    return { owned: true, reply: res?.reply || null };
+  } catch (e) {
+    // Owned but the engine errored → stay silent / let the engine's own handoff
+    // fallback handle it. NEVER drop to the legacy bot (that caused the bounce).
+    console.error(`⚠️ ad-workflow engine error (owned, NOT falling to legacy) for ${psid}:`, e.message);
+    return { owned: true, reply: null };
+  }
 }
 
 // COLD-START WORKFLOW: handles conversations that arrive WITHOUT a routing ad
 // (organic DMs, page messages). Runs only when exactly one workflow is flagged
 // isColdStart (and active). No flag → returns null → legacy bot handles it,
 // exactly as before. Off-switch is the flag itself.
+// Same ownership contract as maybeRunAdWorkflow. Returns null when cold-start
+// doesn't own the conversation (it's ad-routed, or there's no active cold-start
+// flow → legacy handles organic). Returns { owned: true, reply } once cold-start
+// owns it — and then it NEVER falls through to legacy.
 async function maybeRunColdStartWorkflow(userMessage, psid) {
   const Conversation = require("../models/Conversation");
   const convo = await Conversation.findOne({ psid })
     .select("adId channel state workflowState extractedName city zipcode productInterest botPersonaName")
     .lean();
   if (!convo) return null;
-  // Ad-routed conversations are handled by maybeRunAdWorkflow, not here.
-  if (convo.adId) return null;
-  if (WORKFLOW_HUMAN_STATES.has(convo.state)) return null;
+  if (convo.adId) return null; // ad path owns ad conversations
 
   const Workflow = require("../models/Workflow");
   const workflow = await Workflow.findOne({ isColdStart: true, active: true });
-  if (!workflow) return null;
+  if (!workflow) return null; // no cold-start flow → legacy handles organic
 
-  return runEngineWorkflow(workflow, convo, psid, userMessage, {
-    sourceLabel: "coldstart",
-    initOverrides: {},
-  });
+  // OWNED by cold-start from here — no legacy fallthrough.
+  if (WORKFLOW_HUMAN_STATES.has(convo.state)) return { owned: true, reply: null };
+  try {
+    const res = await runEngineWorkflow(workflow, convo, psid, userMessage, {
+      sourceLabel: "coldstart",
+      initOverrides: {},
+    });
+    return { owned: true, reply: res?.reply || null };
+  } catch (e) {
+    console.error(`⚠️ cold-start engine error (owned, NOT falling to legacy) for ${psid}:`, e.message);
+    return { owned: true, reply: null };
+  }
 }
 
 /**
@@ -273,33 +300,21 @@ async function maybeRunColdStartWorkflow(userMessage, psid) {
  * Uses pipeline when USE_PIPELINE=true, otherwise uses the monolith.
  */
 async function generateReply(userMessage, psid, referral = null) {
-  // ===== AD-ASSIGNED WORKFLOW TAKEOVER (opt-in per ad; super_admin) =====
-  // If this conversation entered through an ad that has a Conversation Workflow
-  // attached AND enabled, the router+node engine handles the turn and the legacy
-  // flow system is bypassed entirely. Re-checked every message, so flipping the
-  // ad's toggle OFF reverts its traffic to the current bot on the next message.
-  // Covers BOTH channels (FB + WhatsApp both funnel through generateReply and both
-  // stamp convo.adId on ad entry). Any error falls through to the legacy bot.
-  try {
-    const taken = await maybeRunAdWorkflow(userMessage, psid);
-    if (taken && taken.handled) return taken.reply;
-  } catch (err) {
-    console.error("❌ ad-workflow takeover failed; falling back to legacy:", err.message);
-  }
-  // ===== END WORKFLOW TAKEOVER =====
+  // ===== WORKFLOW ENGINE OWNERSHIP =====
+  // If this conversation is OWNED by the engine — an ad with a flow attached, or
+  // organic traffic with an active cold-start flow — the engine handles it and
+  // it NEVER touches the legacy bot. Not on success, not on a human takeover,
+  // not on an engine error. This is the deliberate cut of the legacy tie: a
+  // workflow conversation can no longer "bounce" to legacy (different persona,
+  // ungrounded answers). reply may be null → the bot stays silent for that turn.
+  // Legacy is reached ONLY when neither path claims ownership: ads with no flow,
+  // or organic traffic when no cold-start flow is active.
+  const adOwned = await maybeRunAdWorkflow(userMessage, psid);
+  if (adOwned) return adOwned.reply;
 
-  // ===== COLD-START WORKFLOW TAKEOVER (non-ad traffic; opt-in via flag) =====
-  // Conversations WITHOUT a routing ad (organic DMs/page messages) are handled
-  // by the workflow flagged isColdStart, if any. No flag → falls through to the
-  // legacy bot, unchanged. Re-checked every message, so flipping the flag OFF
-  // reverts organic traffic to the legacy bot on the next message.
-  try {
-    const taken = await maybeRunColdStartWorkflow(userMessage, psid);
-    if (taken && taken.handled) return taken.reply;
-  } catch (err) {
-    console.error("❌ cold-start workflow failed; falling back to legacy:", err.message);
-  }
-  // ===== END COLD-START TAKEOVER =====
+  const csOwned = await maybeRunColdStartWorkflow(userMessage, psid);
+  if (csOwned) return csOwned.reply;
+  // ===== END WORKFLOW OWNERSHIP — below here is the legacy bot =====
 
   if (USE_PIPELINE) {
     return generateReplyPipeline(userMessage, psid, referral);
