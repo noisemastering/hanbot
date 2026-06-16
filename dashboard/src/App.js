@@ -1565,8 +1565,12 @@ function App() {
   const childVisible = (child) => {
     if (!child || child.isLabel) return true;
     if (child.id === 'flows' || child.id === 'intents') return effectiveRole === 'super_admin';
-    if (child.id === 'ad-workflow' || child.id === 'bot-sandbox') {
+    if (child.id === 'ad-workflow') {
       return effectiveRole === 'super_admin' || effectiveRole === 'admin' || canAccess('ad-workflow');
+    }
+    // Sandbox simulator: admins and above only.
+    if (child.id === 'bot-sandbox') {
+      return effectiveRole === 'super_admin' || effectiveRole === 'admin';
     }
     return canAccess(child.id);
   };
