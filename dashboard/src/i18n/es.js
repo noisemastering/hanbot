@@ -46,7 +46,7 @@ const es = {
   "menu.intents": "Intents",
   "menu.flows": "Flujos (Legacy)",
   "menu.workflows": "Workflows (beta)",
-  "menu.adWorkflow": "Flujo en anuncio (beta)",
+  "menu.adWorkflow": "Flujo en anuncio",
   "menu.playground": "Playground",
   "menu.playgroundML": "Mercado Libre",
   "menu.playgroundForecast": "Pronóstico de Ventas",
