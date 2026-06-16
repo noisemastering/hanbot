@@ -194,20 +194,20 @@ export default function SetupFields({ value = {}, onChange, familyIds = null }) 
   const set = (patch) => onChange({ ...v, ...patch });
   return (
     <div className="grid grid-cols-2 gap-3">
-      <Sel label="buyer (cliente)" val={v.buyer} onChange={(x) => set({ buyer: x })}
-        opts={[{ value: "", label: "— (sin definir)" }, { value: "end_user", label: "end_user (consumidor final)" }, { value: "reseller", label: "reseller (revendedor)" }]} />
-      <Sel label="tono" val={v.tone} onChange={(x) => set({ tone: x })}
-        opts={[{ value: "", label: "— (sin definir)" }, { value: "casual", label: "casual" }, { value: "professional", label: "professional" }, { value: "technical", label: "technical" }]} />
-      <Sel label="purchase_type" val={v.purchaseType} onChange={(x) => set({ purchaseType: x })}
-        opts={[{ value: "", label: "— (sin definir)" }, { value: "retail", label: "retail" }, { value: "wholesale", label: "wholesale" }]} />
-      <Sel label="sale_channel" val={v.saleChannel} onChange={(x) => set({ saleChannel: x })}
-        opts={[{ value: "", label: "— (sin definir)" }, { value: "marketplace", label: "marketplace" }, { value: "manual", label: "manual" }]} />
+      <Sel label="Cliente" val={v.buyer} onChange={(x) => set({ buyer: x })}
+        opts={[{ value: "", label: "— (sin definir)" }, { value: "end_user", label: "Consumidor final" }, { value: "reseller", label: "Revendedor" }]} />
+      <Sel label="Tono" val={v.tone} onChange={(x) => set({ tone: x })}
+        opts={[{ value: "", label: "— (sin definir)" }, { value: "casual", label: "Casual" }, { value: "professional", label: "Profesional" }, { value: "technical", label: "Técnico" }]} />
+      <Sel label="Tipo de compra" val={v.purchaseType} onChange={(x) => set({ purchaseType: x })}
+        opts={[{ value: "", label: "— (sin definir)" }, { value: "retail", label: "Menudeo" }, { value: "wholesale", label: "Mayoreo" }]} />
+      <Sel label="Canal de venta" val={v.saleChannel} onChange={(x) => set({ saleChannel: x })}
+        opts={[{ value: "", label: "— (sin definir)" }, { value: "marketplace", label: "Marketplace" }, { value: "manual", label: "Manual (asesor)" }]} />
       <div className="col-span-2">
-        <Labeled label="productos (medidas/grupos dentro de la familia del flujo — varios permitidos)">
+        <Labeled label="Productos (dentro de la familia del flujo — varios permitidos)">
           <ProductsPicker familyIds={familyIds} selected={v.products} onChange={(arr) => set({ products: arr })} />
         </Labeled>
       </div>
-      <Labeled label="promo (dentro de la familia)">
+      <Labeled label="Promoción (dentro de la familia)">
         <PromoPicker familyIds={familyIds} value={v.hasPromo} onChange={(x) => set({ hasPromo: x })} />
       </Labeled>
       {/* Catalog and store link are NOT set per-ad (recipe for divergence).
