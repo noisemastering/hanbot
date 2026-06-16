@@ -44,7 +44,7 @@ const en = {
   "menu.importer": "Importer",
   "menu.bot": "Bot",
   "menu.intents": "Intents",
-  "menu.flows": "Flow Structure",
+  "menu.flows": "Flows (Legacy)",
   "menu.workflows": "Workflows (beta)",
   "menu.adWorkflow": "Workflow on ad (beta)",
   "menu.playground": "Playground",

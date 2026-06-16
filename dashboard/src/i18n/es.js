@@ -44,7 +44,7 @@ const es = {
   "menu.importer": "Importador",
   "menu.bot": "Bot",
   "menu.intents": "Intents",
-  "menu.flows": "Estructura de flujos",
+  "menu.flows": "Flujos (Legacy)",
   "menu.workflows": "Workflows (beta)",
   "menu.adWorkflow": "Flujo en anuncio (beta)",
   "menu.playground": "Playground",
