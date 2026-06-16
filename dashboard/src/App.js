@@ -418,6 +418,14 @@ const menuItems = [
     isExpandable: true,
     children: [
       {
+        id: "ad-workflow",
+        labelKey: "menu.adWorkflow",
+        path: "/playground/anuncio-flujo",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+        )
+      },
+      {
         id: "flows",
         labelKey: "menu.flows",
         path: "/flujos",
@@ -499,14 +507,6 @@ const menuItems = [
         path: "/workflows",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 3a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2V5a2 2 0 00-2-2H5zM5 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2H5zM15 11a2 2 0 00-2 2v2a2 2 0 002 2h2a2 2 0 002-2v-2a2 2 0 00-2-2h-2zM9 6h6m-3 5v-1m0 0V9m3 5h.01" />
-        )
-      },
-      {
-        id: "ad-workflow",
-        labelKey: "menu.adWorkflow",
-        path: "/playground/anuncio-flujo",
-        icon: (
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
         )
       },
     ]
@@ -1549,14 +1549,34 @@ function App() {
   // In simulation mode, use simulated role for visibility checks
   const effectiveRole = simulationMode?.role || user?.role;
 
+  // Per-CHILD visibility. Some children are stricter than plain canAccess:
+  //  - Bot builder tools (Flujos Legacy, intents) stay super_admin-only, even
+  //    for admins (who otherwise have '*').
+  //  - The ad↔flow assignment (ad-workflow) is open to super_admin, admin, and
+  //    anyone explicitly granted it (e.g. the "Administrador de campaña" profile).
+  const childVisible = (child) => {
+    if (!child || child.isLabel) return true;
+    if (child.id === 'flows' || child.id === 'intents') return effectiveRole === 'super_admin';
+    if (child.id === 'ad-workflow') {
+      return effectiveRole === 'super_admin' || effectiveRole === 'admin' || canAccess('ad-workflow');
+    }
+    return canAccess(child.id);
+  };
+
   const filteredMenuItems = menuItems.filter(item => {
     // Users section only visible to super_admin and admin
     if (item.id === 'users') {
       return canManageUsers();
     }
-    // Roles, Profiles, Bot, Playground sections only visible to super_admin
-    if (item.id === 'roles' || item.id === 'profiles' || item.id === 'bot' || item.id === 'playground') {
+    // Roles, Profiles, Playground sections stay super_admin-only.
+    if (item.id === 'roles' || item.id === 'profiles' || item.id === 'playground') {
       return effectiveRole === 'super_admin';
+    }
+    // Bot section: visible if the user can see ANY of its children. With
+    // childVisible, that means super_admin sees it (all children), while admins
+    // and the campaign-admin profile see it for the ad-workflow item only.
+    if (item.id === 'bot') {
+      return (item.children || []).some(childVisible);
     }
 
     // For items with children (including CRM), check if user has access to ANY child
@@ -1577,11 +1597,12 @@ function App() {
     // Filter other sections based on canAccess
     return canAccess(item.id);
   }).map(item => {
-    // If item has children, filter them based on permissions
+    // If item has children, filter them based on permissions (childVisible
+    // applies the per-child rules above).
     if (item.children && item.children.length > 0) {
       return {
         ...item,
-        children: item.children.filter(child => child.isLabel || canAccess(child.id))
+        children: item.children.filter(childVisible)
       };
     }
     return item;

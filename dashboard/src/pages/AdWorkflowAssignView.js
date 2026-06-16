@@ -136,7 +136,6 @@ export default function AdWorkflowAssignView() {
       <div className="mb-4">
         <h1 className="text-2xl font-bold text-white flex items-center gap-2">
           Asignar flujo a un anuncio
-          <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">beta</span>
         </h1>
         <p className="text-gray-400 text-xs mt-0.5">
           Conecta un workflow a un anuncio para probarlo en vivo. Cuando está <b>activo</b>, las
