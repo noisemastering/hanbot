@@ -5,12 +5,16 @@
 // indicator, an editor for the current node's prompt, and the global prompt.
 // Saved edits apply on the NEXT message — the engine re-reads the flow each turn,
 // so you can tweak prompts and keep talking without losing the conversation.
+//
+// `sandboxOnly` renders JUST the chat tester (no prompt editor) — used by the
+// Bot-menu sandbox so admins/campaign managers can test flows without touching
+// prompts.
 import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import API from "../api";
 import SandboxTester from "../components/workflow/SandboxTester";
 
-function ConvoSimulatorView() {
+function ConvoSimulatorView({ sandboxOnly = false }) {
   const [workflows, setWorkflows] = useState([]);
   const [selectedId, setSelectedId] = useState("");
   const [workflow, setWorkflow] = useState(null);
@@ -120,10 +124,11 @@ function ConvoSimulatorView() {
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
             Simulador de conversación
-            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300">beta</span>
           </h1>
           <p className="text-gray-400 text-xs mt-0.5">
-            Chatea contra el motor router+nodo y edita prompts en vivo. No afecta al bot en producción.
+            {sandboxOnly
+              ? "Prueba el flujo conversando contra el motor. No afecta al bot en producción."
+              : "Chatea contra el motor router+nodo y edita prompts en vivo. No afecta al bot en producción."}
           </p>
         </div>
         <div className="flex-1" />
@@ -139,14 +144,16 @@ function ConvoSimulatorView() {
             </option>
           ))}
         </select>
-        <button
-          onClick={reloadFlow}
-          disabled={!selectedId || reloading}
-          className="px-3 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 text-white disabled:opacity-50"
-          title="Re-lee el flujo desde la base de datos sin reiniciar la conversación"
-        >
-          {reloading ? "…" : "↻ Recargar flujo"}
-        </button>
+        {!sandboxOnly && (
+          <button
+            onClick={reloadFlow}
+            disabled={!selectedId || reloading}
+            className="px-3 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 text-white disabled:opacity-50"
+            title="Re-lee el flujo desde la base de datos sin reiniciar la conversación"
+          >
+            {reloading ? "…" : "↻ Recargar flujo"}
+          </button>
+        )}
       </div>
 
       {!selectedId ? (
@@ -172,6 +179,7 @@ function ConvoSimulatorView() {
           </div>
 
           {/* Live editor */}
+          {!sandboxOnly && (
           <div className="w-full lg:w-96 shrink-0 space-y-4">
             {/* Current node indicator */}
             <div className="border border-gray-700 rounded-xl p-3 bg-gray-800/40">
@@ -232,6 +240,7 @@ function ConvoSimulatorView() {
               Los cambios guardados aquí se aplican en el siguiente mensaje, sin reiniciar la conversación.
             </p>
           </div>
+          )}
         </div>
       )}
     </div>

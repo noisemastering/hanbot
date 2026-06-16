@@ -47,6 +47,7 @@ const en = {
   "menu.flows": "Flows (Legacy)",
   "menu.workflows": "Workflows (beta)",
   "menu.adWorkflow": "Workflow on ad",
+  "menu.sandbox": "Simulator",
   "menu.playground": "Playground",
   "menu.playgroundML": "Mercado Libre",
   "menu.playgroundForecast": "Sales Forecast",

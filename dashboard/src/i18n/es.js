@@ -47,6 +47,7 @@ const es = {
   "menu.flows": "Flujos (Legacy)",
   "menu.workflows": "Workflows (beta)",
   "menu.adWorkflow": "Flujo en anuncio",
+  "menu.sandbox": "Simulador",
   "menu.playground": "Playground",
   "menu.playgroundML": "Mercado Libre",
   "menu.playgroundForecast": "Pronóstico de Ventas",
