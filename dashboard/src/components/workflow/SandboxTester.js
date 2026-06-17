@@ -17,7 +17,7 @@ const SCENARIOS = [
   { value: "returning", label: "returning", hint: "Cliente que regresa a una conversación previa." },
 ];
 
-export default function SandboxTester({ workflowId, dirty, onCurrentNode, familyIds = null }) {
+export default function SandboxTester({ workflowId, dirty, onCurrentNode, familyIds = null, onSent = null }) {
   const [scenario, setScenario] = useState("cold");
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -50,6 +50,8 @@ export default function SandboxTester({ workflowId, dirty, onCurrentNode, family
     const text = input.trim();
     if (!workflowId) return;
     if (!text && messages.length > 0) return;
+    // First message of a fresh session => this counts as a new conversation.
+    const isNewConvo = messages.length === 0;
     if (text) setMessages((m) => [...m, { role: "user", text }]);
     setInput("");
     setSending(true);
@@ -72,6 +74,9 @@ export default function SandboxTester({ workflowId, dirty, onCurrentNode, family
           { role: "system", text: "(sin respuesta — nodo silencioso o terminal)", diag: data.diagnostics },
         ]);
       }
+      // A send reached the engine (tokens spent). Report it so the parent can
+      // track usage (only the first message of a session counts as a new convo).
+      onSent?.({ isNewConvo });
     } catch (err) {
       const msg = err.response?.data?.error || err.message;
       setMessages((m) => [...m, { role: "error", text: msg }]);

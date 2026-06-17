@@ -13,6 +13,11 @@ import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import API from "../api";
 import SandboxTester from "../components/workflow/SandboxTester";
+import { useAuth } from "../contexts/AuthContext";
+
+// After this many conversations tested in the Bot sandbox, we surface a
+// permanent token-usage warning (the engine runs several LLM calls per turn).
+const SANDBOX_CONVO_LIMIT = 5;
 
 function ConvoSimulatorView({ sandboxOnly = false }) {
   const [workflows, setWorkflows] = useState([]);
@@ -24,6 +29,37 @@ function ConvoSimulatorView({ sandboxOnly = false }) {
   const [savingNode, setSavingNode] = useState(false);
   const [savingGlobal, setSavingGlobal] = useState(false);
   const [reloading, setReloading] = useState(false);
+
+  // Token-usage nudge (Bot sandbox only). Count is kept per-user in localStorage
+  // so it survives reloads; once the warning fires it is permanent — it never
+  // disappears for that user, even after refreshing or hitting the limit again.
+  const { user } = useAuth();
+  const userKey = user?.id || user?._id || user?.username || "anon";
+  const warnKey = `sandboxTokenWarned:${userKey}`;
+  const countKey = `sandboxConvoCount:${userKey}`;
+  const [tokenWarned, setTokenWarned] = useState(() => {
+    try {
+      return localStorage.getItem(warnKey) === "1";
+    } catch {
+      return false;
+    }
+  });
+
+  // Called by SandboxTester after every send that reaches the engine. Only the
+  // FIRST message of a session counts as a new conversation.
+  const handleSandboxSent = ({ isNewConvo } = {}) => {
+    if (!sandboxOnly || !isNewConvo) return;
+    try {
+      const n = (parseInt(localStorage.getItem(countKey) || "0", 10) || 0) + 1;
+      localStorage.setItem(countKey, String(n));
+      if (n >= SANDBOX_CONVO_LIMIT) {
+        localStorage.setItem(warnKey, "1");
+        setTokenWarned(true);
+      }
+    } catch {
+      /* localStorage unavailable — skip the nudge silently */
+    }
+  };
 
   // Load the workflow list once.
   useEffect(() => {
@@ -120,6 +156,18 @@ function ConvoSimulatorView({ sandboxOnly = false }) {
 
   return (
     <div className="p-6 max-w-6xl mx-auto">
+      {sandboxOnly && tokenWarned && (
+        <div
+          role="alert"
+          className="sticky top-0 z-20 mb-4 flex items-start gap-3 rounded-xl border border-amber-500/50 bg-amber-500/15 px-4 py-3 text-amber-200"
+        >
+          <span className="text-lg leading-none">⚠️</span>
+          <p className="text-sm">
+            El uso excesivo del simulador puede generar un consumo elevado de tokens en el motor de IA.
+            Te recomendamos utilizarlo únicamente para pruebas específicas y puntuales.
+          </p>
+        </div>
+      )}
       <div className="flex flex-wrap items-center gap-3 mb-4">
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-2">
@@ -168,6 +216,7 @@ function ConvoSimulatorView({ sandboxOnly = false }) {
               workflowId={selectedId}
               dirty={false}
               onCurrentNode={setCurrentNode}
+              onSent={handleSandboxSent}
               familyIds={
                 workflow?.families && workflow.families.length
                   ? workflow.families.filter((f) => f && f.id).map((f) => f.id)
