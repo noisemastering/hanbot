@@ -113,13 +113,33 @@ async function trackedLink(rawUrl, opts = {}) {
   }
 }
 
+// A Mercado Libre URL with no product/store path → the generic homepage. The
+// directive: NEVER share the generic ML link; fall back to our official store.
+function isGenericMlUrl(url) {
+  const m = String(url).match(/^https?:\/\/[^/]*mercadolibre\.com[^/]*(\/[^?#]*)?/i);
+  if (!m) return false;
+  const path = (m[1] || "").replace(/\/+$/, "");
+  return path === ""; // bare domain or just "/"
+}
+
+// The official store link from the company's configured marketplaces (prefer ML).
+async function officialStoreUrl() {
+  try {
+    const { getBusinessInfo } = require("../../businessInfoManager");
+    const biz = await getBusinessInfo();
+    const mkts = (biz?.marketplaces || []).filter((m) => m && m.url && m.active !== false);
+    const ml = mkts.find((m) => /mercado\s*libre|mercadolibre/i.test(m.name || "")) || mkts[0];
+    return ml?.url || null;
+  } catch {
+    return null;
+  }
+}
+
 // Safety net: the model sometimes pastes a raw Mercado Libre URL straight into
-// its reply instead of calling share_product_link (which would attribute the
-// click to the psid). This scans the outgoing text for raw ML links and swaps
-// each for a psid-traceable redirect, so a click is always attributable.
-// NOTE: this is mechanical URL detection (find the substring, swap it) — not a
-// semantic decision. It only rewrites mercadolibre.com links and never touches
-// our own agente.hanlob.com.mx/r/ redirects.
+// its reply instead of calling share_product_link. This scans the outgoing text
+// for raw ML links and (a) ENFORCES the link directive — a bare/generic ML link
+// (homepage) is swapped for the official store link, never sent as-is — and
+// (b) swaps every ML link for a psid-traceable redirect so clicks are attributed.
 async function sanitizeMarketplaceLinks(text, opts = {}) {
   if (!text || !opts.psid || opts.sandbox) return text;
   const found = text.match(/https?:\/\/[^\s)]+/g) || [];
@@ -128,16 +148,33 @@ async function sanitizeMarketplaceLinks(text, opts = {}) {
     const url = rawMatch.replace(/[.,;:!?]+$/, ""); // trim trailing punctuation
     if (/agente\.hanlob\.com\.mx\/r\//i.test(url)) continue; // already tracked
     if (!/mercadolibre\.com/i.test(url)) continue; // only marketplace links
+
+    const generic = isGenericMlUrl(url);
+    let target = url;
+    let label = opts.productName || null;
+    if (generic) {
+      const store = await officialStoreUrl();
+      if (store) {
+        target = store; // never the homepage — use our store
+        label = "Tienda oficial";
+        console.log(`🔗 [workflow] generic ML link → official store link (${opts.psid})`);
+      } else {
+        // No store configured: strip the generic link rather than send the homepage.
+        out = out.split(url).join("").replace(/[ \t]{2,}/g, " ");
+        console.warn(`🔗 [workflow] generic ML link removed; no store configured (${opts.psid})`);
+        continue;
+      }
+    }
     try {
-      const tracked = await trackedLink(url, {
+      const tracked = await trackedLink(target, {
         psid: opts.psid,
         sandbox: opts.sandbox,
-        productName: opts.productName || null,
-        productId: opts.productId || null,
+        productName: label,
+        productId: generic ? null : opts.productId || null,
       });
-      if (tracked && tracked !== url) {
+      if (tracked) {
         out = out.split(url).join(tracked);
-        console.log(`🔗 [workflow] rewrote raw ML link → tracked (${opts.psid})`);
+        if (!generic) console.log(`🔗 [workflow] rewrote raw ML link → tracked (${opts.psid})`);
       }
     } catch {
       /* leave the raw url as-is on failure */
@@ -196,4 +233,4 @@ function clampPrices(text, allowedAmounts = [], primaryAmount = null) {
   return { text: out, changed };
 }
 
-module.exports = { resolvePrice, mlLinkOf, trackedLink, sanitizeMarketplaceLinks, clampPrices };
+module.exports = { resolvePrice, mlLinkOf, trackedLink, sanitizeMarketplaceLinks, clampPrices, isGenericMlUrl, officialStoreUrl };

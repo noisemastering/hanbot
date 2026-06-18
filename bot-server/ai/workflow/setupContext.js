@@ -50,6 +50,51 @@ const LABELS = {
   },
 };
 
+// Color preference from promo/product text (the base color is beige).
+function colorFromText(...texts) {
+  const t = texts.filter(Boolean).join(" ").toLowerCase();
+  if (/\bnegro\b/.test(t)) return "negro";
+  if (/\bverde\b/.test(t)) return "verde";
+  if (/\bblanco\b/.test(t)) return "blanco";
+  return "beige";
+}
+
+// If `doc` is a non-sellable SIZE-GROUP (e.g. "6m x 4m", whose price AND ML link
+// actually live on its color leaves), descend to the best sellable leaf: prefer
+// one that matches the color (default beige) AND has a real ML link, then any
+// with a link, then any matching color, then the first sellable. Returns `doc`
+// unchanged when it's already sellable or has no sellable descendants. This is
+// why a promo/ad pointing at the size-group still quotes the right price+link.
+async function resolveSellableLeaf(doc, colorHint = "beige") {
+  if (!doc || doc.sellable === true) return doc;
+  try {
+    const PF = mongoose.model("ProductFamily");
+    const queue = [String(doc._id)];
+    const sellables = [];
+    let guard = 0;
+    while (queue.length && guard++ < 200) {
+      const kids = await PF.find({ parentId: queue.shift() })
+        .select("name size price mlPrice onlineStoreLinks sellable active parentId")
+        .lean();
+      for (const k of kids) {
+        if (k.sellable && k.active !== false) sellables.push(k);
+        queue.push(String(k._id));
+      }
+    }
+    if (!sellables.length) return doc;
+    const hasLink = (p) => (p.onlineStoreLinks || []).some((l) => /mercadolibre/i.test(l?.url || l || ""));
+    const isColor = (p) => new RegExp(colorHint, "i").test(p.name || "");
+    return (
+      sellables.find((p) => isColor(p) && hasLink(p)) ||
+      sellables.find((p) => hasLink(p)) ||
+      sellables.find((p) => isColor(p)) ||
+      sellables[0]
+    );
+  } catch {
+    return doc;
+  }
+}
+
 async function loadProductDoc(productSpecific) {
   if (!productSpecific?.kind || !productSpecific?.id) return null;
   if (!mongoose.isValidObjectId(productSpecific.id)) return null;
@@ -60,9 +105,11 @@ async function loadProductDoc(productSpecific) {
     const fam = await mongoose
       .model("ProductFamily")
       .findById(productSpecific.id)
-      .select("name price mlPrice onlineStoreLinks sellable active")
+      .select("name price mlPrice onlineStoreLinks sellable active parentId")
       .lean();
-    if (fam) return fam;
+    // A preloaded "product" can be a size-group node; descend to the sellable
+    // leaf so price + ML link resolve (else the bot has no link to share).
+    if (fam) return await resolveSellableLeaf(fam);
     return await mongoose.model("Product").findById(productSpecific.id).select("name price").lean();
   } catch {
     return null;
@@ -92,13 +139,15 @@ async function resolvePromo(hasPromo) {
           .select("name price mlPrice onlineStoreLinks sellable active")
           .lean();
         if (doc) {
-          product = doc;
+          // Descend a non-sellable size-group to the real sellable leaf (price +
+          // ML link live there); prefer the promo's color (default beige).
+          product = await resolveSellableLeaf(doc, colorFromText(p.colorNote, p.name));
           const override = (p.promoPrices || []).find(
-            (x) => String(x.productId) === String(pid)
+            (x) => String(x.productId) === String(pid) || String(x.productId) === String(product._id)
           )?.price;
           priceInfo = override
-            ? { amount: override, source: "promo", handoff: false, link: mlLinkOf(doc) }
-            : await resolvePrice(doc);
+            ? { amount: override, source: "promo", handoff: false, link: mlLinkOf(product) }
+            : await resolvePrice(product);
         }
       }
       // A promo is ALWAYS a product (or range of products) at a promo price —
