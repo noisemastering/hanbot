@@ -48,6 +48,7 @@ const es = {
   "menu.workflows": "Workflows (beta)",
   "menu.adWorkflow": "Flujo en anuncio",
   "menu.sandbox": "Simulador",
+  "menu.promos": "Promociones",
   "menu.playground": "Playground",
   "menu.playgroundML": "Mercado Libre",
   "menu.playgroundForecast": "Pronóstico de Ventas",

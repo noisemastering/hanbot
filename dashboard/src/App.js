@@ -76,6 +76,7 @@ import ConversionProbabilityView from "./pages/ConversionProbabilityView";
 import AdSpendOptimizationView from "./pages/AdSpendOptimizationView";
 import ConvoSimulatorView from "./pages/ConvoSimulatorView";
 import AdWorkflowAssignView from "./pages/AdWorkflowAssignView";
+import PromosView from "./pages/PromosView";
 import CampaignIntelligenceView from "./pages/CampaignIntelligenceView";
 import MLOrderImportView from "./pages/MLOrderImportView";
 import HelpView from "./pages/HelpView";
@@ -431,6 +432,14 @@ const menuItems = [
         path: "/bot/simulador",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4l-4 4v-4z" />
+        )
+      },
+      {
+        id: "promos",
+        labelKey: "menu.promos",
+        path: "/promos",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5a1.99 1.99 0 011.414.586l7 7a2 2 0 010 2.828l-5 5a2 2 0 01-2.828 0l-7-7A2 2 0 013 8V3a2 2 0 012-2z" transform="translate(-0.5 1)" />
         )
       },
       {
@@ -1565,7 +1574,8 @@ function App() {
   const childVisible = (child) => {
     if (!child || child.isLabel) return true;
     if (child.id === 'flows' || child.id === 'intents') return effectiveRole === 'super_admin';
-    if (child.id === 'ad-workflow') {
+    if (child.id === 'ad-workflow' || child.id === 'promos') {
+      // Same audience that manages ad flows: admins + Administrador de Campaña.
       return effectiveRole === 'super_admin' || effectiveRole === 'admin' || canAccess('ad-workflow');
     }
     // Sandbox simulator: admins and above only.
@@ -2324,6 +2334,7 @@ function App() {
           <Route path="/workflows" element={<WorkflowsView />} />
           <Route path="/playground/simulador" element={<ConvoSimulatorView />} />
           <Route path="/bot/simulador" element={<ConvoSimulatorView sandboxOnly />} />
+          <Route path="/promos" element={<PromosView />} />
           <Route path="/playground/anuncio-flujo" element={<AdWorkflowAssignView />} />
           <Route path="/inteligencia-artificial" element={<CampaignIntelligenceView />} />
           <Route path="/ml-import" element={<MLOrderImportView />} />
