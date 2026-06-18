@@ -81,6 +81,7 @@ function blankPromo() {
     timeframe: { startDate: null, endDate: null },
     terms: "",
     colorNote: "",
+    salesPitch: "",
     active: true,
   };
 }
@@ -124,6 +125,7 @@ export default function PromosView() {
       timeframe: { startDate: promo.timeframe?.startDate || null, endDate: promo.timeframe?.endDate || null },
       terms: promo.terms || "",
       colorNote: promo.colorNote || "",
+      salesPitch: promo.salesPitch || "",
       active: promo.active !== false,
     });
   };
@@ -160,6 +162,7 @@ export default function PromosView() {
       timeframe: editing.timeframe,
       terms: editing.terms.trim() || null,
       colorNote: editing.colorNote.trim() || null,
+      salesPitch: editing.salesPitch.trim() || null,
       active: editing.active,
     };
     try {
@@ -335,6 +338,19 @@ export default function PromosView() {
                 value={editing.terms}
                 onChange={(e) => setEditing({ ...editing, terms: e.target.value })}
                 placeholder="Ej. Es la malla 6x4 m a precio promocional. Aplica solo a esa medida."
+              />
+            </label>
+
+            <label className="block">
+              <span className="block text-xs text-gray-400 mb-1">
+                Pitch de venta (opcional — si lo llenas, el bot lo envía TAL CUAL, una sola vez, cuando el cliente pida la promo)
+              </span>
+              <textarea
+                className="wf-input"
+                rows={4}
+                value={editing.salesPitch}
+                onChange={(e) => setEditing({ ...editing, salesPitch: e.target.value })}
+                placeholder={"Ej. 🔥 Promo Mundial: malla sombra 6x4 m beige reforzada, lista para instalar, envío gratis. Aprovecha el 51% de descuento por tiempo limitado. 🛒"}
               />
             </label>
 

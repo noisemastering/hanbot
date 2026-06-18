@@ -97,7 +97,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     try {
       const Workflow = require("../../models/Workflow");
       const familyList = Workflow.familyListOf(workflow);
-      const { contextBlock, product, priceInfo, catalog, preloadedAmounts } = await resolveSetupContext(
+      const { contextBlock, product, priceInfo, catalog, preloadedAmounts, promoPitch } = await resolveSetupContext(
         workflow.setup,
         state.setupOverrides,
         familyList,
@@ -108,6 +108,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       state.priceInfo = priceInfo || null;
       state.catalog = catalog || null; // resolved catalog (climb): {url, kind, source}
       state.preloadedAmounts = preloadedAmounts || []; // every preloaded product's price (clamp allow-set)
+      state.promoPitch = promoPitch || null; // verbatim sales pitch (sent once, on ask)
     } catch (err) {
       console.error("⚠️ setup context resolution failed:", err.message);
       state.contextBlock = "";
@@ -124,6 +125,35 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // 1. record the incoming message
   if (userMessage != null && userMessage !== "") {
     history.push({ role: "user", text: String(userMessage), nodeId: currentNode.id, at: new Date() });
+  }
+
+  // 1.1 VERBATIM PROMO PITCH (sent ONCE, when the customer asks about the promo).
+  // If the active promo has a sales pitch and we haven't sent it, a tiny gpt-4o-mini
+  // intent check decides whether THIS message asks for the promo. If so, we send
+  // the pitch EXACTLY as written and return — skipping the router, node LLM and
+  // verifier entirely (token-cheap). When there's no pitch, this never runs and
+  // the LLM handles the promo normally.
+  if (userMessage && state.promoPitch && !state.promoPitchSent) {
+    try {
+      const { wantsPromo } = require("../utils/promoIntent");
+      if (await wantsPromo(String(userMessage))) {
+        const pitch = String(state.promoPitch);
+        history.push({ role: "assistant", text: pitch, nodeId: currentNode.id, at: new Date() });
+        return {
+          reply: pitch,
+          state: { ...state, history, promoPitchSent: true, nodeId: currentNode.id },
+          diagnostics: {
+            workflow: { id: String(workflow._id), name: workflow.name },
+            fromNode: { id: currentNode.id, name: currentNode.name },
+            toNode: { id: currentNode.id, name: currentNode.name },
+            verbatimPitch: true,
+          },
+        };
+      }
+    } catch (err) {
+      console.error("⚠️ promo pitch check failed:", err.message);
+      // fall through to normal LLM handling
+    }
   }
 
   const familyList = require("../../models/Workflow").familyListOf(workflow);

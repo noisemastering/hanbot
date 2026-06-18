@@ -125,50 +125,60 @@ async function resolvePromo(hasPromo) {
       const p = await mongoose
         .model("Promo")
         .findById(hasPromo)
-        .select("name promoProductIds promoPrices colorNote terms timeframe")
+        .select("name promoProductIds promoPrices colorNote terms timeframe salesPitch")
         .lean();
-      if (!p) return { text: "hay una promoción activa", product: null, priceInfo: null };
+      if (!p) return { text: "hay una promoción activa", product: null, priceInfo: null, pitch: null, products: [] };
 
-      let product = null;
-      let priceInfo = null;
-      const pid = (p.promoProductIds || [])[0]; // featured product
-      if (pid) {
+      // Per-product PRICE: an override (promoPrices) is the offer; otherwise the
+      // cardinal rule (live ML → synced ML → inventario). Resolve EVERY promo
+      // product (descending size-groups to the real sellable leaf) so a
+      // multi-product promo can be quoted a line per product.
+      const overrideFor = (id) => {
+        const m = (p.promoPrices || []).find((x) => String(x.productId) === String(id));
+        return m ? m.price : undefined;
+      };
+      const products = []; // [{ doc, name, id, priceInfo }]
+      for (const rawId of p.promoProductIds || []) {
         const doc = await mongoose
           .model("ProductFamily")
-          .findById(pid)
+          .findById(rawId)
           .select("name price mlPrice onlineStoreLinks sellable active")
           .lean();
-        if (doc) {
-          // Descend a non-sellable size-group to the real sellable leaf (price +
-          // ML link live there); prefer the promo's color (default beige).
-          product = await resolveSellableLeaf(doc, colorFromText(p.colorNote, p.name));
-          const override = (p.promoPrices || []).find(
-            (x) => String(x.productId) === String(pid) || String(x.productId) === String(product._id)
-          )?.price;
-          priceInfo = override
-            ? { amount: override, source: "promo", handoff: false, link: mlLinkOf(product) }
-            : await resolvePrice(product);
-        }
+        if (!doc) continue;
+        const leaf = await resolveSellableLeaf(doc, colorFromText(p.colorNote, p.name));
+        const ov = overrideFor(rawId) ?? overrideFor(leaf._id);
+        const priceInfo =
+          ov != null
+            ? { amount: ov, source: "promo", handoff: false, link: mlLinkOf(leaf) }
+            : await resolvePrice(leaf);
+        products.push({ doc: leaf, name: leaf.name, id: String(leaf._id), priceInfo });
       }
+      const featured = products[0] || null;
+      const product = featured ? featured.doc : null;
+      const priceInfo = featured ? featured.priceInfo : null;
+
       // A promo is ALWAYS a product (or range of products) at a promo price —
       // never a quantity mechanic. Describe it by its PRODUCT so the model can't
       // misread the name (e.g. read "6x4" as "buy 4 get 6").
-      const count = (p.promoProductIds || []).length;
       let text = `"${p.name}"`;
       if (product) {
-        text += count > 1
-          ? ` — aplica a un grupo de productos (el destacado es "${product.name}"), a precio promocional`
+        text += products.length > 1
+          ? ` — aplica a varios productos (el destacado es "${product.name}"), a precio promocional`
           : ` — es el producto/medida "${product.name}" a precio promocional`;
       }
       if (p.colorNote) text += `. ${p.colorNote}`;
       if (p.terms) text += `. Condiciones: ${p.terms}`;
-      if (p.timeframe) text += `. Vigencia: ${p.timeframe}`;
-      return { text, name: p.name, product, priceInfo };
+      const tf = p.timeframe || {};
+      if (tf.startDate || tf.endDate) {
+        const f = (d) => (d ? new Date(d).toLocaleDateString("es-MX", { day: "numeric", month: "long" }) : "");
+        text += `. Vigencia: ${tf.startDate ? `del ${f(tf.startDate)}` : ""}${tf.endDate ? ` hasta el ${f(tf.endDate)}` : ""}`.trim();
+      }
+      return { text, name: p.name, product, priceInfo, pitch: p.salesPitch || null, products };
     } catch {
       /* ignore */
     }
   }
-  return { text: "hay una promoción activa", product: null, priceInfo: null };
+  return { text: "hay una promoción activa", product: null, priceInfo: null, pitch: null, products: [] };
 }
 
 /**
@@ -443,6 +453,35 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
         `El precio promocional es el del producto mostrado arriba; NUNCA lo cambies de medida ni digas que la medida anunciada "no aplica".`
     );
 
+  // MULTI-PRODUCT promo → one line per product, each with its own engine-resolved
+  // price (override → offer, else cardinal/ML) + its own tracked link. Each price
+  // is bound to its product here, so the model never copies one onto another.
+  if (promo && Array.isArray(promo.products) && promo.products.length > 1) {
+    const rows = [];
+    for (const it of promo.products) {
+      const pi = it.priceInfo;
+      if (!pi) continue;
+      noteResolved(pi);
+      let line = `    • ${it.name}`;
+      if (pi.handoff || pi.amount == null) {
+        line += `: sin precio en línea — cotízalo con un asesor`;
+      } else {
+        let plink = pi.link;
+        if (pi.link) {
+          const { trackedLink } = require("./priceResolver");
+          plink = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: it.name, productId: it.id });
+        }
+        line += `: $${pi.amount}${plink ? ` → ${plink}` : ""}`;
+      }
+      rows.push(line);
+    }
+    if (rows.length)
+      lines.push(
+        `- PRECIOS DE LA PROMOCIÓN (uno por producto — cotiza el que pida el cliente con SU precio y SU link; NUNCA mezcles precios entre medidas):\n` +
+          rows.join("\n")
+      );
+  }
+
   // Catalog from the product tree: nearest family catalog (climb to root) →
   // company general catalog. Never set per-ad.
   const catalogResolved = await resolveCatalog(familyList);
@@ -450,7 +489,15 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     lines.push(`- Catálogo disponible (PDF): ${catalogResolved.url}. Compártelo (usa share_catalog) si el cliente lo pide.`);
   }
 
-  return { setup, contextBlock: lines.join("\n"), product: product || null, priceInfo, catalog: catalogResolved || null, preloadedAmounts };
+  return {
+    setup,
+    contextBlock: lines.join("\n"),
+    product: product || null,
+    priceInfo,
+    catalog: catalogResolved || null,
+    preloadedAmounts,
+    promoPitch: (promo && promo.pitch) || null, // verbatim sales pitch (sent once, on ask)
+  };
 }
 
 module.exports = { resolveSetupContext, mergeSetup };

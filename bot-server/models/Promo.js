@@ -16,6 +16,10 @@ const promoSchema = new mongoose.Schema({
   },
   terms: { type: String, default: null },
   colorNote: { type: String, default: null },
+  // Verbatim sales pitch. When set, the bot sends it EXACTLY as written, ONCE,
+  // the first time the customer asks about the promo (no LLM rephrasing → cheap).
+  // When empty, the bot generates the promo response normally.
+  salesPitch: { type: String, default: null },
   active: { type: Boolean, default: true }
 }, { timestamps: true });
 
