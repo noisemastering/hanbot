@@ -330,14 +330,14 @@ export default function PromosView() {
 
             <label className="block">
               <span className="block text-xs text-gray-400 mb-1">
-                Reglas / descripción (el bot la usa tal cual)
+                Reglas / condiciones (el bot las toma en cuenta al responder)
               </span>
               <textarea
                 className="wf-input"
                 rows={3}
                 value={editing.terms}
                 onChange={(e) => setEditing({ ...editing, terms: e.target.value })}
-                placeholder="Ej. Es la malla 6x4 m a precio promocional. Aplica solo a esa medida."
+                placeholder="Ej. Aplica solo a la medida 6x4 m. Precio válido comprando en línea. No acumulable con otras promociones."
               />
             </label>
 
