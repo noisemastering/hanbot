@@ -20,10 +20,24 @@ function flattenTree(nodes, acc = {}) {
 function TreePicker({ tree, selected, onToggle }) {
   const [expanded, setExpanded] = useState({});
   const toggleExp = (id) => setExpanded((e) => ({ ...e, [id]: !e[id] }));
+  // Ids that are ANCESTORS of a selected node — auto-expanded so a pre-selected
+  // (often deeply nested) product is visible without hunting through the tree.
+  const ancestorSet = useMemo(() => {
+    const set = new Set();
+    const walk = (nodes, path) => {
+      for (const n of nodes || []) {
+        const id = String(n._id);
+        if (selected.includes(id)) path.forEach((a) => set.add(a));
+        walk(n.children, [...path, id]);
+      }
+    };
+    walk(tree, []);
+    return set;
+  }, [tree, selected]);
   const render = (node, depth) => {
     const id = String(node._id);
     const kids = node.children || [];
-    const open = expanded[id] ?? depth < 1;
+    const open = expanded[id] ?? (depth < 1 || ancestorSet.has(id));
     return (
       <div key={id}>
         <div className="flex items-center gap-1" style={{ paddingLeft: depth * 14 }}>
@@ -254,6 +268,12 @@ export default function PromosView() {
             <div>
               <span className="block text-xs text-gray-400 mb-1">
                 Producto(s) / rango — {editing.promoProductIds.length} seleccionado(s)
+                {editing.promoProductIds.length > 0 && (
+                  <span className="text-emerald-300">
+                    {": "}
+                    {editing.promoProductIds.map((id) => flat[id]?.name || id).join(", ")}
+                  </span>
+                )}
               </span>
               <TreePicker tree={tree} selected={editing.promoProductIds} onToggle={toggleProduct} />
             </div>
