@@ -47,7 +47,7 @@ async function findProductInFamilies(query, familyList, wantDimsArg = null) {
   while (queue.length && guard++ < 500) {
     const pid = queue.shift();
     const kids = await PF.find({ parentId: pid })
-      .select("name size sellable active price mlPrice onlineStoreLinks parentId")
+      .select("name size sellable active price mlPrice onlineStoreLinks parentId enabledDimensions")
       .lean();
     for (const k of kids) {
       if (k.sellable && k.active !== false) candidates.push(k);
@@ -66,6 +66,9 @@ async function findProductInFamilies(query, familyList, wantDimsArg = null) {
     // attribute ("Color Beige") with the measure living only in `size`
     // ("5x10m") — so name-only matching misses every size. Check both.
     const hit = candidates.find((c) => {
+      // A width×length request never matches a length-only product (borde).
+      const ed = c.enabledDimensions;
+      if (Array.isArray(ed) && ed.length > 0 && !ed.includes("width")) return false;
       const cd = dimsOf(c.size) || dimsOf(c.name);
       return cd && cd[0] === wantDims[0] && cd[1] === wantDims[1];
     });
@@ -86,11 +89,26 @@ async function closestAvailableMeasure(query, familyList, wantDimsArg = null) {
   const want = wantDimsArg || dimsOf(query);
   if (!want) return null;
   const measures = await availableMeasuresForFamilies(familyList);
+
+  // A two-number (width × length) request — e.g. "4x50" — is by definition a
+  // 2-D product (malla rollo / confeccionada). LENGTH-ONLY products (borde
+  // separador: you choose only a length; the 13 cm is a fixed height spec, not a
+  // width) are a different KIND of product and must never match. The catalog
+  // tells us which is which via enabledDimensions (no "width" → length-only),
+  // so this is a structural exclusion, not a numeric guess. This is why "4 m"
+  // can never match "13 cm".
+  const candidates = measures.filter((m) => m.dims && !m.lengthOnly);
+  if (!candidates.length) return null; // no 2-D product in scope → don't offer a length-only one
+
+  // Among real 2-D products, pick the closest by RELATIVE distance (squared
+  // log-ratio) so scale is respected proportionally: "4x50" lands on "4x100",
+  // not on a smaller piece that's near in raw units.
   let best = null;
   let bestDist = Infinity;
-  for (const m of measures) {
-    if (!m.dims) continue;
-    const d = (m.dims[0] - want[0]) ** 2 + (m.dims[1] - want[1]) ** 2;
+  for (const m of candidates) {
+    const dw = Math.log(m.dims[0] / want[0]);
+    const dl = Math.log(m.dims[1] / want[1]);
+    const d = dw * dw + dl * dl;
     if (d < bestDist) {
       bestDist = d;
       best = m;
@@ -145,7 +163,7 @@ async function availableMeasuresForFamilies(familyList) {
   while (queue.length && guard++ < 800) {
     const pid = queue.shift();
     const kids = await PF.find({ parentId: pid })
-      .select("name size sellable active price parentId")
+      .select("name size sellable active price parentId enabledDimensions")
       .lean();
     for (const k of kids) {
       if (k.sellable && k.active !== false) leaves.push(k);
@@ -176,6 +194,12 @@ async function availableMeasuresForFamilies(familyList) {
     const node = parent && parent.size ? parent : leaf; // size-group → parent, else leaf
     const key = String(node._id);
     const price = numericOrNull(leaf.price);
+    // Length-only product (e.g. borde separador: you choose only a length; its
+    // height/thickness are fixed specs, NOT a width). The catalog says so via
+    // enabledDimensions — no "width" enabled. Such products must never match a
+    // width×length request like "4x50".
+    const ed = leaf.enabledDimensions;
+    const lengthOnly = Array.isArray(ed) && ed.length > 0 && !ed.includes("width");
     const existing = byMeasure.get(key);
     if (!existing) {
       byMeasure.set(key, {
@@ -183,9 +207,12 @@ async function availableMeasuresForFamilies(familyList) {
         size: node.size || null,
         price,
         dims: dimsOf(node.size) || dimsOf(node.name),
+        lengthOnly,
       });
-    } else if (price != null && (existing.price == null || price < existing.price)) {
-      existing.price = price;
+    } else {
+      if (price != null && (existing.price == null || price < existing.price)) existing.price = price;
+      // If any contributing variant has a width, the measure is NOT length-only.
+      existing.lengthOnly = existing.lengthOnly && lengthOnly;
     }
   }
 

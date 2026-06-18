@@ -97,7 +97,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     try {
       const Workflow = require("../../models/Workflow");
       const familyList = Workflow.familyListOf(workflow);
-      const { contextBlock, product, priceInfo, catalog } = await resolveSetupContext(
+      const { contextBlock, product, priceInfo, catalog, preloadedAmounts } = await resolveSetupContext(
         workflow.setup,
         state.setupOverrides,
         familyList,
@@ -107,6 +107,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       state.product = product || null;
       state.priceInfo = priceInfo || null;
       state.catalog = catalog || null; // resolved catalog (climb): {url, kind, source}
+      state.preloadedAmounts = preloadedAmounts || []; // every preloaded product's price (clamp allow-set)
     } catch (err) {
       console.error("⚠️ setup context resolution failed:", err.message);
       state.contextBlock = "";
@@ -167,6 +168,28 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // context, so the model quotes it deterministically instead of vague-replying
   // or escalating to a human.
   let turnPriceInfo = state.priceInfo || null;
+  // DETERMINISTIC PRICE CLAMP — collect every price the engine actually RESOLVES
+  // this turn. The outgoing reply may only quote one of these; any other number
+  // gets rewritten to `primaryQuoteAmount` (the measure the customer asked about).
+  // See clampPrices in priceResolver.js. Empty set → clamp is a no-op.
+  const allowedAmounts = [];
+  let primaryQuoteAmount = null;
+  const noteAmount = (pi, makePrimary) => {
+    if (!pi) return;
+    if (Number.isFinite(pi.amount) && pi.amount > 0) {
+      allowedAmounts.push(pi.amount);
+      if (makePrimary) primaryQuoteAmount = pi.amount;
+    }
+    if (Number.isFinite(pi.originalPrice) && pi.originalPrice > 0) allowedAmounts.push(pi.originalPrice);
+  };
+  // Every preloaded product's resolved price is legit to mention (but none is
+  // the rewrite target — that's the measure the customer actually asks about).
+  // Including ALL of them stops the clamp from corrupting a correct multi-product
+  // quote (e.g. rewriting the 54 m's $1599 down to the 18 m's $689).
+  noteAmount(state.priceInfo, false);
+  for (const a of state.preloadedAmounts || []) {
+    if (Number.isFinite(a) && a > 0) allowedAmounts.push(a);
+  }
   // Current date/time + business-hours status (Mexico). The model has no clock;
   // inject it FRESH each turn so the handoff node can tell the customer whether
   // a specialist responds now or in the next business window.
@@ -183,6 +206,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       if (found && found.priceInfo) {
         turnPriceInfo = found.priceInfo;
         const pi = found.priceInfo;
+        // This is the measure the customer asked about THIS turn → the canonical
+        // price + the rewrite target for the clamp.
+        noteAmount(pi, true);
         if (pi.handoff) {
           turnContextExtra =
             `\n- COTIZACIÓN SOLICITADA: "${found.name}" no tiene precio disponible. NO inventes precio; ofrece pasar con un asesor.`;
@@ -231,6 +257,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         if (wantDims) {
           const closest = await toolsMod.closestAvailableMeasure(String(userMessage), familyList, wantDims);
           if (closest) {
+            if (Number.isFinite(closest.price) && closest.price > 0) {
+              allowedAmounts.push(closest.price);
+              if (primaryQuoteAmount == null) primaryQuoteAmount = closest.price;
+            }
             turnContextExtra +=
               `\n- MEDIDA NO DISPONIBLE: la medida exacta que pidió el cliente NO está en catálogo. La más cercana que sí manejamos es "${closest.label}"${closest.price != null ? ` ($${closest.price})` : ""}. ` +
               `Ofrécele ESTA medida más cercana y pregúntale si le sirve o si necesita la medida exacta. ` +
@@ -304,6 +334,21 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     console.warn(`⚠️ [workflow] LLM failure → degrading to human handoff for ${opts.psid || "(no psid)"}`);
   }
 
+  // A share_product_link / quote tool call returns the canonical "Precio: $X" —
+  // add it to the clamp's allowed set (it's a price the engine resolved).
+  for (const t of toolCalls || []) {
+    if (t && t.output && /share_product_link|quote|cotiz/i.test(t.name || "")) {
+      const mm = String(t.output).match(/Precio:\s*\$?\s*([\d,]+(?:\.\d+)?)/i);
+      if (mm) {
+        const v = parseFloat(mm[1].replace(/,/g, ""));
+        if (Number.isFinite(v) && v > 0) {
+          allowedAmounts.push(v);
+          if (primaryQuoteAmount == null) primaryQuoteAmount = v;
+        }
+      }
+    }
+  }
+
   // GROUNDING CHECK: verify the model's reply against the facts in context
   // (realm/shade%, available measures, colors, price) before sending — catches
   // a fabricated spec the model asserted (e.g. confirming "95%" when the family
@@ -329,6 +374,27 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       }
     } catch (e) {
       console.error("⚠️ workflow grounding check failed:", e.message);
+    }
+  }
+
+  // DETERMINISTIC PRICE CLAMP — runs LAST (after the verifier, which is itself an
+  // LLM and could reintroduce a wrong number). Prices are not the model's to
+  // author: any price token that isn't one the engine resolved this turn is
+  // rewritten to the price of the measure the customer asked about. No-op when
+  // nothing was resolved (overview/range/chit-chat turns).
+  if (text) {
+    try {
+      const { clampPrices } = require("./priceResolver");
+      const clamp = clampPrices(text, allowedAmounts, primaryQuoteAmount);
+      if (clamp.changed) {
+        console.warn(
+          `🔒 [workflow] price clamp rewrote a non-resolved price for ${opts.psid || "(no psid)"} ` +
+            `(allowed=[${allowedAmounts.join(", ")}], primary=${primaryQuoteAmount})`
+        );
+        text = clamp.text;
+      }
+    } catch (e) {
+      console.error("⚠️ price clamp failed:", e.message);
     }
   }
 

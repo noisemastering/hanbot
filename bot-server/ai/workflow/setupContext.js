@@ -78,7 +78,7 @@ async function resolvePromo(hasPromo) {
       const p = await mongoose
         .model("Promo")
         .findById(hasPromo)
-        .select("name promoProductIds promoPrices")
+        .select("name promoProductIds promoPrices colorNote terms timeframe")
         .lean();
       if (!p) return { text: "hay una promoción activa", product: null, priceInfo: null };
 
@@ -101,7 +101,20 @@ async function resolvePromo(hasPromo) {
             : await resolvePrice(doc);
         }
       }
-      return { text: `promoción activa: "${p.name}"`, name: p.name, product, priceInfo };
+      // A promo is ALWAYS a product (or range of products) at a promo price —
+      // never a quantity mechanic. Describe it by its PRODUCT so the model can't
+      // misread the name (e.g. read "6x4" as "buy 4 get 6").
+      const count = (p.promoProductIds || []).length;
+      let text = `"${p.name}"`;
+      if (product) {
+        text += count > 1
+          ? ` — aplica a un grupo de productos (el destacado es "${product.name}"), a precio promocional`
+          : ` — es el producto/medida "${product.name}" a precio promocional`;
+      }
+      if (p.colorNote) text += `. ${p.colorNote}`;
+      if (p.terms) text += `. Condiciones: ${p.terms}`;
+      if (p.timeframe) text += `. Vigencia: ${p.timeframe}`;
+      return { text, name: p.name, product, priceInfo };
     } catch {
       /* ignore */
     }
@@ -242,18 +255,26 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     const { availableMeasuresForFamilies } = require("./tools");
     const measures = await availableMeasuresForFamilies(familyList);
     if (measures.length) {
-      const fmt = (m) => `${m.label}${m.price != null ? ` ($${m.price})` : ""}`;
+      // NEVER list per-measure prices here. Listing every size's price lets the
+      // model grab a NEIGHBOR'S number when quoting (e.g. answering "7x4" with
+      // the 7x10 price). Measures are listed by LABEL only; the price for the
+      // specific measure the customer asks about is resolved deterministically
+      // by the engine (step 1.6) / the share_product_link tool, and is the ONLY
+      // price allowed to reach the customer (see clampPrices).
+      const fmt = (m) => m.label;
       if (measures.length <= 8) {
         lines.push(
           `- MEDIDAS DISPONIBLES (de la familia del flujo): ${measures.map(fmt).join(", ")}. ` +
-            `Si el cliente pregunta qué medidas/largos manejas, ofrécele ESTAS. No inventes otras.`
+            `Si el cliente pregunta qué medidas/largos manejas, ofrécele ESTAS. No inventes otras. ` +
+            `NUNCA des un precio que no venga de la herramienta de cotización; si te preguntan un precio, cotiza esa medida con la herramienta.`
         );
       } else {
         const lo = measures[0];
         const hi = measures[measures.length - 1];
         lines.push(
           `- MEDIDAS DISPONIBLES (de la familia del flujo): ${measures.length} medidas, desde ${fmt(lo)} hasta ${fmt(hi)}. ` +
-            `Si preguntan qué medidas manejas, da ESE RANGO (desde X hasta Y) y pide la que necesitan; NUNCA enumeres las ${measures.length}. No inventes medidas fuera del rango.`
+            `Si preguntan qué medidas manejas, da ESE RANGO (desde X hasta Y) y pide la que necesitan; NUNCA enumeres las ${measures.length}. No inventes medidas fuera del rango. ` +
+            `NUNCA des un precio que no venga de la herramienta de cotización.`
         );
       }
     }
@@ -282,6 +303,14 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
 
   let priceInfo = null;
   let product = null;
+  // Every preloaded product's RESOLVED price — fed to the deterministic price
+  // clamp so it can't corrupt a legit multi-product quote (and so a neighbor's
+  // price can be detected). See clampPrices / runWorkflowTurn.
+  const preloadedAmounts = [];
+  const noteResolved = (pi) => {
+    if (pi && Number.isFinite(pi.amount) && pi.amount > 0) preloadedAmounts.push(pi.amount);
+    if (pi && Number.isFinite(pi.originalPrice) && pi.originalPrice > 0) preloadedAmounts.push(pi.originalPrice);
+  };
   const priceTxt = (pi) =>
     pi && (pi.source === "ml" || pi.source === "inventario" || pi.source === "promo")
       ? ` ($${pi.amount})`
@@ -326,6 +355,7 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     // A single SPECIFIC measure was preloaded → it's the default.
     product = resolved[0];
     priceInfo = await resolvePrice(product);
+    noteResolved(priceInfo);
     await pushDefault(product, priceInfo);
   } else if (resolved.length > 1) {
     product = resolved[0];
@@ -333,12 +363,17 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     const items = [];
     for (const p of resolved) {
       const pi = await resolvePrice(p);
-      items.push(`${p.name}${priceTxt(pi)}`);
+      noteResolved(pi);
+      // NAMES ONLY — never list inline prices for multiple products. Listing
+      // each measure's price side-by-side lets the model copy one measure's
+      // price onto another (the "54 m quoted at the 18 m's $689" bug). Prices
+      // for a specific measure come ONLY from the share_product_link tool.
+      items.push(p.name);
     }
     lines.push(
       `- Productos de interés (precargados): ${items.join(", ")}. El cliente está interesado en ESTAS medidas/variantes. ` +
-        `Si pide "información" o precio, habla de estas opciones concretas; NUNCA preguntes "¿de qué producto?" ni "¿qué medida?". ` +
-        `Cotiza solo los precios mostrados arriba; si una opción no tiene precio, no lo inventes.`
+        `Si pide "información" o precio, NO listes precios de memoria: cotiza CADA medida por separado con la herramienta de cotización para obtener su precio y link correctos. ` +
+        `NUNCA copies el precio de una medida a otra, NUNCA pongas el mismo precio a dos medidas distintas, y NUNCA inventes precios.`
     );
   }
 
@@ -347,10 +382,17 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
   if ((!product || product.sellable !== true) && promo && promo.product && promo.product.sellable) {
     product = promo.product;
     priceInfo = promo.priceInfo || (await resolvePrice(product));
+    noteResolved(priceInfo);
     await pushDefault(product, priceInfo, promo.name || "promoción");
   }
 
-  if (promo) lines.push(`- Promoción: ${promo.text}. Preséntala cuando sea oportuno.`);
+  if (promo)
+    lines.push(
+      `- PROMOCIÓN ACTIVA: ${promo.text}. Preséntala cuando sea oportuno. ` +
+        `REGLA: una promoción SIEMPRE es un producto (o rango de productos) a un precio especial; NUNCA es una promoción de cantidad ("compra X y llévate Y", "2x1", etc.). ` +
+        `NUNCA inventes mecánicas de cantidad. Si el nombre de la promo incluye una medida como "6x4", se refiere a los METROS del producto (6 m x 4 m), NO a cantidades. ` +
+        `El precio promocional es el del producto mostrado arriba; NUNCA lo cambies de medida ni digas que la medida anunciada "no aplica".`
+    );
 
   // Catalog from the product tree: nearest family catalog (climb to root) →
   // company general catalog. Never set per-ad.
@@ -359,7 +401,7 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     lines.push(`- Catálogo disponible (PDF): ${catalogResolved.url}. Compártelo (usa share_catalog) si el cliente lo pide.`);
   }
 
-  return { setup, contextBlock: lines.join("\n"), product: product || null, priceInfo, catalog: catalogResolved || null };
+  return { setup, contextBlock: lines.join("\n"), product: product || null, priceInfo, catalog: catalogResolved || null, preloadedAmounts };
 }
 
 module.exports = { resolveSetupContext, mergeSetup };

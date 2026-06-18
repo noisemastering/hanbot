@@ -30,9 +30,11 @@ async function resolvePrice(product) {
   if (!product) return empty;
 
   const link = mlLinkOf(product);
-  const invPrice = numericPrice(product.price);
+  const invPrice = numericPrice(product.price); // Inventario
+  const syncedMl = numericPrice(product.mlPrice); // last-synced ML price (ProductFamily.mlPrice)
 
-  // 1. ML price (live)
+  // 1. LIVE ML price — the source of truth. Quote it whenever we can fetch it.
+  //    This NEVER downgrades while a live price exists.
   if (link) {
     try {
       const r = await getMLPrice(link, invPrice);
@@ -40,6 +42,7 @@ async function resolvePrice(product) {
         return {
           amount: numericPrice(r.price),
           source: "ml",
+          live: true,
           handoff: false,
           link,
           hasDiscount: !!r.hasDiscount,
@@ -51,16 +54,38 @@ async function resolvePrice(product) {
     }
   }
 
-  // 2. Inventario price
-  if (invPrice) {
+  // The LIVE ML price was NOT available (no link, fetch failed/404, or the
+  // listing has no price). We do NOT silently quote Inventario — the ML price is
+  // paramount; Inventario is a downgrade only when there's genuinely NO ML price.
+  if (syncedMl != null) {
+    // 2a. We still have a last-synced ML price. If Inventario is BELOW it, the
+    //     two sources disagree and quoting the cheaper Inventario would
+    //     undersell — hand to a human instead of serving a wrong number.
+    if (invPrice != null && invPrice < syncedMl) {
+      return {
+        amount: null,
+        source: null,
+        handoff: true,
+        link,
+        handoffReason: `Sin precio ML en vivo; inventario ($${invPrice}) por debajo del último precio ML ($${syncedMl}) — validar con un asesor`,
+      };
+    }
+    // 2b. No conflict (Inventario ≥ synced, or no Inventario) → quote the
+    //     last-synced ML price (still the source of truth, just cached).
+    return { amount: syncedMl, source: "ml", live: false, handoff: false, link };
+  }
+
+  // 3. No ML price AT ALL (never synced / not an ML product) → Inventario is the
+  //    legitimate last resort.
+  if (invPrice != null) {
     return { amount: invPrice, source: "inventario", handoff: false, link };
   }
 
-  // 3. sellable but no price → human handoff
+  // 4. sellable but no price anywhere → human handoff (never invent a price).
   const sellable = product.active !== false && product.sellable === true;
   if (sellable) return { amount: null, source: null, handoff: true, link };
 
-  // 4. not quotable
+  // 5. not quotable
   return { ...empty, link };
 }
 
@@ -121,4 +146,54 @@ async function sanitizeMarketplaceLinks(text, opts = {}) {
   return out;
 }
 
-module.exports = { resolvePrice, mlLinkOf, trackedLink, sanitizeMarketplaceLinks };
+// DETERMINISTIC PRICE CLAMP — prices are NOT the model's to author.
+//
+// The engine resolves the canonical price for the product under discussion each
+// turn (ML → Inventario hierarchy, in resolvePrice). The model is only allowed
+// to SAY a price that the engine actually resolved this turn. This scans the
+// outgoing reply for price tokens ($N or "N pesos/MXN") and rewrites any number
+// that isn't one of the allowed (resolved) amounts to the primary resolved
+// amount — so a hallucinated/neighbor price (the "7x4 → $3450" bug) can never
+// reach the customer.
+//
+// SAFE BY DESIGN: when the turn resolved NO concrete price (overview / range /
+// chit-chat), allowedAmounts is empty and this is a no-op — range replies like
+// "desde 4x7m hasta 7x10m" are never touched (they carry no prices anymore).
+//
+// @param {string} text
+// @param {number[]} allowedAmounts - every price the engine resolved this turn
+// @param {number|null} primaryAmount - what to rewrite a wrong price TO (the
+//        measure the customer asked about). Defaults to allowedAmounts[0].
+// @returns {{ text: string, changed: boolean }}
+function clampPrices(text, allowedAmounts = [], primaryAmount = null) {
+  if (!text) return { text, changed: false };
+  const allowed = (allowedAmounts || [])
+    .map((n) => (typeof n === "number" ? n : parseFloat(String(n).replace(/[^0-9.]/g, ""))))
+    .filter((n) => Number.isFinite(n) && n > 0);
+  if (!allowed.length) return { text, changed: false }; // nothing resolved → never touch
+
+  const primary = Number.isFinite(primaryAmount) && primaryAmount > 0 ? primaryAmount : allowed[0];
+  // Tolerate rounding (e.g. ML 804.3 vs the bot saying $804).
+  const ok = (v) => allowed.some((a) => Math.abs(v - a) <= Math.max(1, a * 0.01));
+  const display = String(Math.round(primary));
+  let changed = false;
+
+  // $-prefixed amounts: $3,450  $ 450  $804.30
+  let out = text.replace(/\$\s?(\d[\d,]*(?:\.\d+)?)/g, (m, num) => {
+    const v = parseFloat(num.replace(/,/g, ""));
+    if (!Number.isFinite(v) || ok(v)) return m;
+    changed = true;
+    return `$${display}`;
+  });
+  // bare "N pesos" / "N MXN" (no $ sign)
+  out = out.replace(/\b(\d[\d,]*(?:\.\d+)?)\s*(pesos|mxn)\b/gi, (m, num, unit) => {
+    const v = parseFloat(num.replace(/,/g, ""));
+    if (!Number.isFinite(v) || ok(v)) return m;
+    changed = true;
+    return `${display} ${unit}`;
+  });
+
+  return { text: out, changed };
+}
+
+module.exports = { resolvePrice, mlLinkOf, trackedLink, sanitizeMarketplaceLinks, clampPrices };
