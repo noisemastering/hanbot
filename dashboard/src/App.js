@@ -279,6 +279,22 @@ const menuItems = [
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
         )
       },
+      {
+        id: "ad-workflow",
+        labelKey: "menu.adWorkflow",
+        path: "/playground/anuncio-flujo",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
+        )
+      },
+      {
+        id: "promos",
+        labelKey: "menu.promos",
+        path: "/promos",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5a1.99 1.99 0 011.414.586l7 7a2 2 0 010 2.828l-5 5a2 2 0 01-2.828 0l-7-7A2 2 0 013 8V3a2 2 0 012-2z" transform="translate(-0.5 1)" />
+        )
+      },
       // ── Herramientas ──
       { id: "label-tools", labelKey: "menu.campTools", isLabel: true },
       {
@@ -419,27 +435,11 @@ const menuItems = [
     isExpandable: true,
     children: [
       {
-        id: "ad-workflow",
-        labelKey: "menu.adWorkflow",
-        path: "/playground/anuncio-flujo",
-        icon: (
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
-        )
-      },
-      {
         id: "bot-sandbox",
         labelKey: "menu.sandbox",
         path: "/bot/simulador",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4l-4 4v-4z" />
-        )
-      },
-      {
-        id: "promos",
-        labelKey: "menu.promos",
-        path: "/promos",
-        icon: (
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5a1.99 1.99 0 011.414.586l7 7a2 2 0 010 2.828l-5 5a2 2 0 01-2.828 0l-7-7A2 2 0 013 8V3a2 2 0 012-2z" transform="translate(-0.5 1)" />
         )
       },
       {
@@ -1575,8 +1575,13 @@ function App() {
     if (!child || child.isLabel) return true;
     if (child.id === 'flows' || child.id === 'intents') return effectiveRole === 'super_admin';
     if (child.id === 'ad-workflow' || child.id === 'promos') {
-      // Same audience that manages ad flows: admins + Administrador de Campaña.
-      return effectiveRole === 'super_admin' || effectiveRole === 'admin' || canAccess('ad-workflow');
+      // Administrador de Campaña profile + above levels (super_user, admin, super_admin).
+      return (
+        effectiveRole === 'super_admin' ||
+        effectiveRole === 'admin' ||
+        effectiveRole === 'super_user' ||
+        canAccess('ad-workflow')
+      );
     }
     // Sandbox simulator: admins and above only.
     if (child.id === 'bot-sandbox') {
