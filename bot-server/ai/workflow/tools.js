@@ -321,61 +321,96 @@ const REGISTRY = {
     },
     async execute(input, ctx) {
       ctx.actions.push({ tool: "share_product_link", input });
-      const { resolvePrice } = require("./priceResolver");
+      const { resolvePrice, trackedLink } = require("./priceResolver");
       const requested = (input.product || "").trim();
-      const pi = ctx.priceInfo; // preloaded product (a default/shortcut, NOT a lock)
 
-      // Decide which product to quote:
-      //  - If the customer named a specific measure/product, resolve THAT within
-      //    the flow's families (any measure is available, not just the preloaded one).
-      //  - Else fall back to the preloaded product as a convenient default.
-      let priceInfo = null;
-      let resolvedName = null;
-      let resolvedId = null;
+      // Resolve ONE measure/product → a customer-facing quote line, or null if it
+      // can't be found. Sets handoff only for a sellable-but-priceless product.
+      const quoteOne = async (q) => {
+        let doc = await findProductInFamilies(q, ctx.families);
+        if (!doc) {
+          // Retry with just the numeric token so "18 mt" / "18 metros" still match
+          // a length product named "Rollo de 18 m".
+          const nums = String(q).match(/\d+(?:\.\d+)?/g) || [];
+          if (nums.length === 1) doc = await findProductInFamilies(nums[0], ctx.families);
+        }
+        if (!doc) return { ok: false };
+        const pInfo = await resolvePrice(doc);
+        if (pInfo.handoff) {
+          ctx.handoffRequested = true;
+          ctx.handoffReason = `Producto vendible sin precio: ${doc.name} — requiere cotización de un asesor`;
+          return { ok: true, line: `"${doc.name}" no tiene precio en línea; para esa medida pasa con un asesor.` };
+        }
+        if (pInfo.link || pInfo.amount) {
+          const link = await trackedLink(pInfo.link, {
+            psid: ctx.psid,
+            sandbox: ctx.sandbox,
+            productName: doc.name,
+            productId: String(doc._id),
+          });
+          const price = pInfo.amount ? ` Precio: $${pInfo.amount}${pInfo.source === "ml" ? "" : " (inventario)"}.` : "";
+          const linkPart = link ? `Link de compra: ${link}.` : "";
+          return { ok: true, line: `${doc.name} — ${linkPart}${price}`.trim() };
+        }
+        return { ok: false };
+      };
 
       if (requested) {
-        const doc = await findProductInFamilies(requested, ctx.families);
-        if (doc) {
-          priceInfo = await resolvePrice(doc);
-          resolvedName = doc.name;
-          resolvedId = String(doc._id);
-        } else {
-          // Customer named a SPECIFIC product/measure we couldn't find in this
-          // flow's families. NEVER fall back to the preloaded product (that would
-          // quote the wrong thing). Tell the model to clarify, not invent.
-          return `[INTERNO] No encontré "${requested}" entre las medidas/variantes de este flujo. ` +
-            `Si el cliente dio una medida, confírmala o pídela exacta (ancho x largo); NO compartas el link del producto precargado ni inventes precio.`;
+        // MULTI-MEASURE: the customer may ask for several in one message ("6 y 18",
+        // "6x4 y 8x5"). Split on word/punctuation separators — NOT on the "x"
+        // inside a single measure — and quote EACH. Never escalate just because a
+        // combined string didn't resolve as one product.
+        const segments = requested
+          .split(/\s*(?:,|;|\/|\+|\by\b|\bo\b|\band\b|\be\b)\s*/i)
+          .map((s) => s.trim())
+          .filter(Boolean);
+        if (segments.length > 1) {
+          const lines = [];
+          const missing = [];
+          for (const seg of segments) {
+            const r = await quoteOne(seg);
+            if (r.ok) lines.push(r.line);
+            else missing.push(seg);
+          }
+          if (lines.length) {
+            let out = `Comparte estas cotizaciones (una por medida, cada una con SU precio y SU link):\n` + lines.join("\n");
+            if (missing.length)
+              out += `\n(No encontré: ${missing.join(", ")} — pide solo esa(s) medida(s) exacta(s); NO digas que hubo un problema ni transfieras por esto.)`;
+            return out;
+          }
+          // none resolved → fall through to single handling / clarify
         }
-      } else if (pi) {
-        // No specific product named → use the preloaded one as a default shortcut.
-        priceInfo = pi;
-        resolvedId = ctx.product && ctx.product._id ? String(ctx.product._id) : null;
+
+        const one = await quoteOne(requested);
+        if (one.ok) return one.line;
+        // Truly couldn't resolve. Guide the model to split / clarify — do NOT make
+        // it announce a problem or transfer.
+        return (
+          `[INTERNO] No encontré "${requested}" como una sola medida de este flujo. ` +
+          `Si el cliente pidió VARIAS medidas en un mensaje (p. ej. "6 y 18"), cotiza CADA UNA por separado ` +
+          `(llama esta herramienta una vez por medida). NO digas que hubo un problema ni transfieras por esto; ` +
+          `pide la medida exacta solo si de verdad no la entiendes. NO compartas el link del producto precargado ni inventes precio.`
+        );
       }
 
-      if (!priceInfo) {
-        return "Pregunta al cliente qué medida necesita para poder cotizar.";
-      }
-
-      // Quoting hierarchy: sellable-but-no-price → human, never invent.
-      if (priceInfo.handoff) {
+      // No specific product named → use the preloaded one as a default shortcut.
+      const pi = ctx.priceInfo;
+      if (!pi) return "Pregunta al cliente qué medida necesita para poder cotizar.";
+      if (pi.handoff) {
         ctx.handoffRequested = true;
-        ctx.handoffReason = `Producto vendible sin precio: ${resolvedName || "(producto del flujo)"} — requiere cotización de un asesor`;
-        return `${resolvedName ? `"${resolvedName}"` : "Ese producto"} no tiene precio disponible. NO inventes un precio: ofrece pasar con un asesor.`;
+        ctx.handoffReason = `Producto vendible sin precio: ${ctx.product?.name || "(producto del flujo)"} — requiere cotización de un asesor`;
+        return `${ctx.product?.name ? `"${ctx.product.name}"` : "Ese producto"} no tiene precio disponible. NO inventes un precio: ofrece pasar con un asesor.`;
       }
-      if (priceInfo.link || priceInfo.amount) {
-        // psid-traceable redirect so the click is attributed in commerce-status.
-        const { trackedLink } = require("./priceResolver");
-        const link = await trackedLink(priceInfo.link, {
+      if (pi.link || pi.amount) {
+        const link = await trackedLink(pi.link, {
           psid: ctx.psid,
           sandbox: ctx.sandbox,
-          productName: resolvedName || ctx.product?.name,
-          productId: resolvedId,
+          productName: ctx.product?.name,
+          productId: ctx.product && ctx.product._id ? String(ctx.product._id) : null,
         });
-        const price = priceInfo.amount
-          ? ` Precio: $${priceInfo.amount}${priceInfo.source === "ml" ? "" : " (inventario)"}.`
-          : "";
+        const price = pi.amount ? ` Precio: $${pi.amount}${pi.source === "ml" ? "" : " (inventario)"}.` : "";
         const linkPart = link ? `Link de compra: ${link}.` : "";
-        return `${resolvedName ? resolvedName + " — " : ""}${linkPart}${price}`.trim();
+        return `${ctx.product?.name ? ctx.product.name + " — " : ""}${linkPart}${price}`.trim();
       }
       return ctx.sandbox
         ? "No hay producto resoluble en este test; asigna familia/productos en Setup."
