@@ -231,7 +231,12 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // threaded into the lookups, so any phrasing parses ("13 de largo x 3 de
       // ancho", "mide 13 por 3", worded numbers) without regex whack-a-mole.
       const { extractMeasure } = require("../utils/measureExtractor");
-      const wantDims = await extractMeasure(String(userMessage));
+      const { dimsOf } = require("./tools");
+      // Prefer the AI extractor, but FALL BACK to the deterministic dims parse —
+      // the extractor whiffs on some phrasings (e.g. "el precio de 6*8" with a
+      // "*" separator in prose), and dimsOf handles x/×/* reliably. Without this
+      // fallback the measure went unresolved and the node wrongly escalated.
+      const wantDims = (await extractMeasure(String(userMessage))) || dimsOf(String(userMessage));
       const found = await resolveInFamilyMeasure(String(userMessage), familyList, wantDims);
       if (found && found.priceInfo) {
         turnPriceInfo = found.priceInfo;
