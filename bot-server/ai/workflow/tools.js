@@ -188,10 +188,18 @@ async function availableMeasuresForFamilies(familyList) {
     return doc;
   };
 
+  // A TRIANGULAR net has three sides ("2 m x 2 m x 2 m"). Per business rule, we
+  // do NOT list or suggest triangular nets proactively — only quote them if the
+  // customer explicitly asks. (findProductInFamilies still resolves them on an
+  // explicit ask; this only keeps them out of the proactive measures list and
+  // the "closest measure" suggestions.)
+  const isTriangular = (s) => (String(s || "").match(/\d+(?:\.\d+)?/g) || []).length >= 3;
+
   const byMeasure = new Map();
   for (const leaf of leaves) {
     const parent = leaf.parentId ? await getParent(leaf.parentId) : null;
     const node = parent && parent.size ? parent : leaf; // size-group → parent, else leaf
+    if (isTriangular(node.size) || isTriangular(node.name)) continue; // skip triangular (don't suggest unless asked)
     const key = String(node._id);
     const price = numericOrNull(leaf.price);
     // Length-only product (e.g. borde separador: you choose only a length; its
