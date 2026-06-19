@@ -10,6 +10,28 @@
 // (ML links, handoff trigger, lead capture, location stats) happens hands-on
 // later — kept behind this single seam so the engine doesn't change.
 
+// Full ancestry path of a ProductFamily ("Root > ... > Family"), cached. Used to
+// describe a flow's realm to the scope classifier: a bare leaf name like
+// "Rectangular" isn't recognizable as a product, but "Malla Sombra Raschel >
+// 90% > Confeccionada con Refuerzo > Rectangular" is — so the flow becomes
+// summonable from cold-start / any other flow.
+const _pathCache = new Map();
+async function familyFullPath(PF, id) {
+  const key = String(id);
+  if (_pathCache.has(key)) return _pathCache.get(key);
+  const path = [];
+  let cur = await PF.findById(key).select("name parentId").lean();
+  let guard = 0;
+  while (cur && guard++ < 12) {
+    if (cur.name) path.unshift(cur.name);
+    if (!cur.parentId) break;
+    cur = await PF.findById(cur.parentId).select("name parentId").lean();
+  }
+  const out = path.join(" > ");
+  _pathCache.set(key, out);
+  return out;
+}
+
 // Normalize a measure/product query to comparable dimension tokens.
 // "4x3", "4 x 3 m", "4 por 3", "de 4x3 metros" → ["4","3"] (sorted for order-insensitivity).
 function dimsOf(text) {
@@ -291,6 +313,7 @@ REGLAS:
 - "needs_human": es malla sombra o algo que Hanlob fabrica, pero ningún flujo activo lo cubre.
 - "not_sold": algo que Hanlob NO vende (toldo, lona impermeable, geomembrana, plástico agrícola, etc.).
 
+INTERPRETA POR MEDIDAS/PRESENTACIÓN: una "malla sombra" con medida ANCHO x LARGO (p. ej. "6x8", "4 por 5", "6 de ancho y 8") es malla CONFECCIONADA → enruta (other_flow) al flujo que vende malla sombra confeccionada. Una "malla sombra" en ROLLO o "por metro" → flujo de rollo. Nombrar "malla sombra" + una medida SÍ es nombrar un producto concreto: NUNCA lo marques como no_product.
 Responde SOLO JSON: {"verdict":"no_product|current|other_flow|needs_human|not_sold","targetFlow":"<nombre exacto del flujo o null>","productName":"<el producto que pidió o null>"}`,
         },
         { role: "user", content: query },
@@ -580,7 +603,10 @@ const REGISTRY = {
         Array.isArray(ctx.families) ? ctx.families : ctx.family ? [ctx.family] : [],
         scopeDims
       );
-      if (inFamilyByDims) {
+      // A TRIAGE (cold-start) flow must NOT claim a product just because its
+      // broad realm contains it — its job is to route to the specialist. Skip
+      // the fast path for cold-start so the AI classifier below picks the flow.
+      if (inFamilyByDims && !ctx.isColdStart) {
         return `[INTERNO — no menciones nada de esto al cliente] "${inFamilyByDims.name}" sí lo manejas tú aquí. Atiéndelo con normalidad.`;
       }
 
@@ -603,11 +629,10 @@ const REGISTRY = {
           const fams = WorkflowModel.familyListOf(w) || [];
           const names = [];
           for (const f of fams) {
-            if (f.name) names.push(f.name);
-            else if (f.id) {
-              const doc = await PF.findById(f.id).select("name").lean();
-              if (doc?.name) names.push(doc.name);
-            }
+            // Full ancestry path so the classifier recognizes the product (a bare
+            // "Rectangular" reads as nothing). Fall back to the stored name.
+            const path = f.id ? await familyFullPath(PF, f.id) : "";
+            names.push(path || f.name || "");
           }
           const isCurrent = fams.some((f) => flowFamilyIds.has(String(f.id)));
           return { id: String(w._id), name: w.name, families: names, isCurrent, isColdStart: !!w.isColdStart };

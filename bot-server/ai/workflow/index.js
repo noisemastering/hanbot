@@ -362,6 +362,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     priceInfo: turnPriceInfo, // turn-scoped: the measure the client just asked for
     families: familyList, // realm (for scope checks)
     currentFlowName: workflow.name, // for the AI product-scope classifier
+    isColdStart: !!workflow.isColdStart, // triage flow → always route out, never claim a product
     catalog: state.catalog || null, // resolved catalog for share_catalog tool
     catalogToSend: null, // set by share_catalog → maybeRunAdWorkflow sends the document
     psid: opts.psid || null, // enables psid-traceable links in share_* tools
@@ -525,6 +526,7 @@ async function detectFlowSwitch(message, familyList, currentWorkflow) {
     handoffRequested: false,
     families: familyList,
     currentFlowName: currentWorkflow?.name || null,
+    isColdStart: !!currentWorkflow?.isColdStart, // triage → always route out
     _autoProbe: true,
   };
   try {
@@ -562,10 +564,26 @@ async function performSwitch(switchTo, { history, vars, lead, location, basket, 
   if (!target) return null;
   const carried = { comesFromFlowSwitch: true };
   if (switchTo.product && switchTo.product.id) carried.products = [switchTo.product];
+
+  // Re-run the customer's TRIGGERING message in the target flow so it resolves
+  // and quotes the product/measure they asked for. If we opened with an empty
+  // message, the target couldn't resolve the carried measure and would improvise
+  // (e.g. wrongly say "6x8 no disponible"). Pull the last user message out of the
+  // carried history (the target re-records it) and feed it as the opening turn.
+  const hist = Array.isArray(history) ? [...history] : [];
+  let openingMsg = "";
+  for (let i = hist.length - 1; i >= 0; i--) {
+    if (hist[i] && hist[i].role === "user") {
+      openingMsg = String(hist[i].text || "");
+      hist.splice(i, 1);
+      break;
+    }
+  }
+
   const bState = {
     workflowId: String(target._id),
     nodeId: target.getStartNodeId(),
-    history, // carry the whole conversation
+    history: hist, // carry the conversation (minus the triggering msg, re-added below)
     vars,
     setupOverrides: carried,
     lead,
@@ -573,9 +591,10 @@ async function performSwitch(switchTo, { history, vars, lead, location, basket, 
     basket: basket || [],
     // contextBlock intentionally undefined → re-resolved for flow B
   };
-  const bTurn = await runWorkflowTurn(target, bState, "", {
+  const bTurn = await runWorkflowTurn(target, bState, openingMsg, {
     ...opts,
     _switchDepth: (opts._switchDepth || 0) + 1,
+    sandboxNoAutoSwitch: true, // don't let the target immediately switch again on the same message
   });
   const reply = [prefixReply, bTurn.reply].filter(Boolean).join("\n\n") || bTurn.reply || prefixReply || null;
   return {
