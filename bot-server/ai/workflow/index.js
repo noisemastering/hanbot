@@ -97,7 +97,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     try {
       const Workflow = require("../../models/Workflow");
       const familyList = Workflow.familyListOf(workflow);
-      const { contextBlock, product, priceInfo, catalog, preloadedAmounts, promoPitch } = await resolveSetupContext(
+      const { contextBlock, product, priceInfo, catalog, preloadedAmounts, promoPitch, promoQuote } = await resolveSetupContext(
         workflow.setup,
         state.setupOverrides,
         familyList,
@@ -109,6 +109,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       state.catalog = catalog || null; // resolved catalog (climb): {url, kind, source}
       state.preloadedAmounts = preloadedAmounts || []; // every preloaded product's price (clamp allow-set)
       state.promoPitch = promoPitch || null; // verbatim sales pitch (sent once, on ask)
+      state.promoQuote = promoQuote || null; // deterministic quote when no pitch is set
     } catch (err) {
       console.error("⚠️ setup context resolution failed:", err.message);
       state.contextBlock = "";
@@ -133,25 +134,42 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // the pitch EXACTLY as written and return — skipping the router, node LLM and
   // verifier entirely (token-cheap). When there's no pitch, this never runs and
   // the LLM handles the promo normally.
-  if (userMessage && state.promoPitch && !state.promoPitchSent) {
+  if (userMessage && (state.promoPitch || state.promoQuote) && !state.promoPitchSent) {
     try {
       const { wantsPromo } = require("../utils/promoIntent");
       if (await wantsPromo(String(userMessage))) {
-        const pitch = String(state.promoPitch);
-        history.push({ role: "assistant", text: pitch, nodeId: currentNode.id, at: new Date() });
-        return {
-          reply: pitch,
-          state: { ...state, history, promoPitchSent: true, nodeId: currentNode.id },
-          diagnostics: {
-            workflow: { id: String(workflow._id), name: workflow.name },
-            fromNode: { id: currentNode.id, name: currentNode.name },
-            toNode: { id: currentNode.id, name: currentNode.name },
-            verbatimPitch: true,
-          },
-        };
+        // Pitch wins if set; otherwise send the deterministic quote (product +
+        // promo price + tracked link). Either way the bot answers the promo ask
+        // directly — the router never gets a chance to detour to handoff.
+        let reply = null;
+        let kind = null;
+        if (state.promoPitch) {
+          reply = String(state.promoPitch);
+          kind = "verbatimPitch";
+        } else if (state.promoQuote && state.promoQuote.amount) {
+          const q = state.promoQuote;
+          const label = q.label ? q.label.charAt(0).toUpperCase() + q.label.slice(1) : "El producto en promoción";
+          reply =
+            `¡Claro! ${label} está en promoción por $${q.amount}.` +
+            (q.link ? ` Puedes comprarla aquí: ${q.link}` : "");
+          kind = "promoQuote";
+        }
+        if (reply) {
+          history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+          return {
+            reply,
+            state: { ...state, history, promoPitchSent: true, nodeId: currentNode.id },
+            diagnostics: {
+              workflow: { id: String(workflow._id), name: workflow.name },
+              fromNode: { id: currentNode.id, name: currentNode.name },
+              toNode: { id: currentNode.id, name: currentNode.name },
+              [kind]: true,
+            },
+          };
+        }
       }
     } catch (err) {
-      console.error("⚠️ promo pitch check failed:", err.message);
+      console.error("⚠️ promo pitch/quote check failed:", err.message);
       // fall through to normal LLM handling
     }
   }

@@ -489,6 +489,35 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     lines.push(`- Catálogo disponible (PDF): ${catalogResolved.url}. Compártelo (usa share_catalog) si el cliente lo pide.`);
   }
 
+  // Deterministic promo QUOTE — used when the customer asks for the promo and
+  // there is NO verbatim pitch. The featured promo product + its price + a
+  // tracked link, so the engine can answer the promo-buy click directly instead
+  // of leaving it to the router (which can detour to handoff).
+  let promoQuote = null;
+  if (
+    promo &&
+    promo.product &&
+    promo.priceInfo &&
+    Number.isFinite(promo.priceInfo.amount) &&
+    promo.priceInfo.amount > 0 &&
+    !promo.priceInfo.handoff
+  ) {
+    const size = (promo.product.size || "").trim().replace(/m$/i, " m").trim();
+    const color = colorFromText(promo.product.name, promo.name);
+    const label = size ? `la malla sombra de ${size} en color ${color}` : `la ${promo.product.name}`;
+    let plink = promo.priceInfo.link || null;
+    if (plink) {
+      const { trackedLink } = require("./priceResolver");
+      plink = await trackedLink(plink, {
+        psid: opts.psid || null,
+        sandbox: !!opts.sandbox,
+        productName: promo.product.name,
+        productId: promo.product._id ? String(promo.product._id) : null,
+      });
+    }
+    promoQuote = { label, amount: promo.priceInfo.amount, link: plink };
+  }
+
   return {
     setup,
     contextBlock: lines.join("\n"),
@@ -497,6 +526,7 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     catalog: catalogResolved || null,
     preloadedAmounts,
     promoPitch: (promo && promo.pitch) || null, // verbatim sales pitch (sent once, on ask)
+    promoQuote, // deterministic quote (product + price + link) when no pitch is set
   };
 }
 
