@@ -310,9 +310,21 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
   // (sellable descendants). You only configure the family; this finds every
   // size/length under it. Count-aware so we never dump a long list:
   //   ≤ 8 measures → list them; more → smallest/largest range.
+  //
+  // SKIP for cold-start: it spans many incompatible categories (malla in meters,
+  // cinta/borde in inches/lengths, ground cover, etc.), so a single "desde X
+  // hasta Y" range is meaningless ("2x2 → rollos de 2 pulgadas"). Cold-start's
+  // job is to identify the product and route — not to list measures. A specific
+  // measure the customer names is still resolved per-turn by the engine (1.6).
+  if (opts.isColdStart) {
+    lines.push(
+      `- NO listes medidas ni des un rango: este flujo cubre varias categorías distintas. ` +
+        `Identifica qué PRODUCTO y medida busca el cliente y enruta al flujo correcto; si pide un precio de una medida concreta, cotízala con la herramienta.`
+    );
+  }
   try {
     const { availableMeasuresForFamilies } = require("./tools");
-    const measures = await availableMeasuresForFamilies(familyList);
+    const measures = opts.isColdStart ? [] : await availableMeasuresForFamilies(familyList);
     if (measures.length) {
       // NEVER list per-measure prices here. Listing every size's price lets the
       // model grab a NEIGHBOR'S number when quoting (e.g. answering "7x4" with
