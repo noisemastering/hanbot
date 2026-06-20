@@ -80,11 +80,18 @@ router.get("/", authenticate, async (req, res) => {
         },
         { $group: { _id: dayExpr("$lastMessageAt"), n: { $sum: 1 } } },
       ]),
-      // reports per day = conversation_report tickets created that day
+      // reports per day = conversation_report tickets created that day, split by severity
       Ticket.aggregate([
         { $match: { source: "conversation_report", createdAt: { $gte: from, $lte: to } } },
-        { $group: { _id: { p: "$psid", d: dayExpr("$createdAt") } } },
-        { $group: { _id: "$_id.d", n: { $sum: 1 } } },
+        {
+          $group: {
+            _id: dayExpr("$createdAt"),
+            n: { $sum: 1 },
+            high: { $sum: { $cond: [{ $eq: ["$priority", "high"] }, 1, 0] } },
+            medium: { $sum: { $cond: [{ $eq: ["$priority", "medium"] }, 1, 0] } },
+            low: { $sum: { $cond: [{ $eq: ["$priority", "low"] }, 1, 0] } },
+          },
+        },
       ]),
     ]);
 
@@ -92,7 +99,7 @@ router.get("/", authenticate, async (req, res) => {
     const ensure = (day) => {
       let e = dayMap.get(day);
       if (!e) {
-        e = { date: day, conversations: 0, clicks: 0, sales: 0, handoffs: 0, reports: 0, revenue: 0 };
+        e = { date: day, conversations: 0, clicks: 0, sales: 0, handoffs: 0, reports: 0, revenue: 0, reportsHigh: 0, reportsMedium: 0, reportsLow: 0 };
         dayMap.set(day, e);
       }
       return e;
@@ -101,7 +108,14 @@ router.get("/", authenticate, async (req, res) => {
     clicksDaily.forEach((d) => { if (d._id) ensure(d._id).clicks = d.n; });
     salesDaily.forEach((d) => { if (d._id) { const e = ensure(d._id); e.sales = d.n; e.revenue = Math.round(d.revenue || 0); } });
     handoffDaily.forEach((d) => { if (d._id) ensure(d._id).handoffs = d.n; });
-    reportDaily.forEach((d) => { if (d._id) ensure(d._id).reports = d.n; });
+    reportDaily.forEach((d) => {
+      if (!d._id) return;
+      const e = ensure(d._id);
+      e.reports = d.n;
+      e.reportsHigh = d.high || 0;
+      e.reportsMedium = d.medium || 0;
+      e.reportsLow = d.low || 0;
+    });
 
     const daily = [...dayMap.values()]
       .sort((a, b) => a.date.localeCompare(b.date))
@@ -117,6 +131,11 @@ router.get("/", authenticate, async (req, res) => {
       handoffs: daily.reduce((s, d) => s + d.handoffs, 0),
       reports: daily.reduce((s, d) => s + d.reports, 0),
       salesRevenue: daily.reduce((s, d) => s + d.revenue, 0),
+      reportsByPriority: {
+        high: daily.reduce((s, d) => s + d.reportsHigh, 0),
+        medium: daily.reduce((s, d) => s + d.reportsMedium, 0),
+        low: daily.reduce((s, d) => s + d.reportsLow, 0),
+      },
     };
 
     // ── TABLE ROWS (most-recent conversations, capped) ───────────────────────

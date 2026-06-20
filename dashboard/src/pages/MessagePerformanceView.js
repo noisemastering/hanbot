@@ -149,7 +149,17 @@ function MessagePerformanceView() {
           <Kpi label="Ingresos" value={fmtMoney(s.salesRevenue)} color="#22c55e" />
           <Kpi label="Clics" value={s.clicks.toLocaleString('es-MX')} sub={pct(s.clicks, s.conversations)} color="#3b82f6" />
           <Kpi label="A humano" value={s.handoffs.toLocaleString('es-MX')} sub={pct(s.handoffs, s.conversations)} color="#f5a623" />
-          <Kpi label="Reportes" value={s.reports.toLocaleString('es-MX')} sub={pct(s.reports, s.conversations)} color="#f44336" />
+          <Kpi
+            label="Reportes"
+            value={s.reports.toLocaleString('es-MX')}
+            sub={pct(s.reports, s.conversations)}
+            color="#f44336"
+            breakdown={[
+              { label: PRIORITY_LABEL.high, value: s.reportsByPriority?.high || 0, color: PRIORITY_COLOR.high },
+              { label: PRIORITY_LABEL.medium, value: s.reportsByPriority?.medium || 0, color: PRIORITY_COLOR.medium },
+              { label: PRIORITY_LABEL.low, value: s.reportsByPriority?.low || 0, color: PRIORITY_COLOR.low },
+            ]}
+          />
         </div>
       )}
 
@@ -280,7 +290,7 @@ function MessagePerformanceView() {
   );
 }
 
-function Kpi({ label, value, sub, color }) {
+function Kpi({ label, value, sub, color, breakdown }) {
   return (
     <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
       <p className="text-gray-400 text-xs mb-1">{label}</p>
@@ -288,6 +298,16 @@ function Kpi({ label, value, sub, color }) {
         <p className="text-xl font-bold" style={{ color: color || '#fff' }}>{value}</p>
         {sub && <span className="text-sm font-semibold text-gray-400">{sub}</span>}
       </div>
+      {breakdown && (
+        <div className="flex flex-wrap gap-x-3 gap-y-1 mt-2">
+          {breakdown.map((b) => (
+            <span key={b.label} className="inline-flex items-center gap-1 text-[11px] text-gray-400">
+              <span style={{ width: 7, height: 7, borderRadius: '50%', backgroundColor: b.color }} />
+              {b.label} {b.value}
+            </span>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
