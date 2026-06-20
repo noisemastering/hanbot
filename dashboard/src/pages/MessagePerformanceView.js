@@ -1,4 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
+} from 'recharts';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -23,6 +26,11 @@ const PRIORITY_COLOR = { low: '#4caf50', medium: '#f5a623', high: '#f44336' };
 
 function fmtMoney(n) {
   return '$' + Math.round(n || 0).toLocaleString('es-MX');
+}
+
+function pct(part, total) {
+  if (!total) return '0%';
+  return Math.round((part / total) * 100) + '%';
 }
 
 function fmtDateTime(dateStr) {
@@ -90,6 +98,17 @@ function MessagePerformanceView() {
 
   const s = data?.summary;
 
+  // Outcome breakdown for the chart — ordered as a soft funnel (most → least common).
+  const chartData = useMemo(() => {
+    if (!s) return [];
+    return [
+      { label: 'Clic', value: s.clicks, color: '#3b82f6' },
+      { label: 'Venta', value: s.sales, color: '#22c55e' },
+      { label: 'A humano', value: s.handoffs, color: '#f5a623' },
+      { label: 'Reporte', value: s.reports, color: '#f44336' },
+    ];
+  }, [s]);
+
   if (loading && !data) {
     return (
       <div className="p-6 flex items-center justify-center min-h-[60vh]">
@@ -136,11 +155,57 @@ function MessagePerformanceView() {
       {s && (
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
           <Kpi label="Conversaciones" value={s.conversations.toLocaleString('es-MX')} />
-          <Kpi label="Ventas" value={s.sales.toLocaleString('es-MX')} color="#22c55e" />
+          <Kpi label="Ventas" value={s.sales.toLocaleString('es-MX')} sub={pct(s.sales, s.conversations)} color="#22c55e" />
           <Kpi label="Ingresos" value={fmtMoney(s.salesRevenue)} color="#22c55e" />
-          <Kpi label="Clics" value={s.clicks.toLocaleString('es-MX')} color="#3b82f6" />
-          <Kpi label="A humano" value={s.handoffs.toLocaleString('es-MX')} color="#f5a623" />
-          <Kpi label="Reportes" value={s.reports.toLocaleString('es-MX')} color="#f44336" />
+          <Kpi label="Clics" value={s.clicks.toLocaleString('es-MX')} sub={pct(s.clicks, s.conversations)} color="#3b82f6" />
+          <Kpi label="A humano" value={s.handoffs.toLocaleString('es-MX')} sub={pct(s.handoffs, s.conversations)} color="#f5a623" />
+          <Kpi label="Reportes" value={s.reports.toLocaleString('es-MX')} sub={pct(s.reports, s.conversations)} color="#f44336" />
+        </div>
+      )}
+
+      {/* Outcome breakdown chart */}
+      {s && s.conversations > 0 && (
+        <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5">
+          <h2 className="text-white font-semibold mb-4">Resultados ({s.conversations.toLocaleString('es-MX')} conversaciones)</h2>
+          <div className="h-64">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 48, top: 4, bottom: 4 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
+                <XAxis
+                  type="number"
+                  domain={[0, s.conversations]}
+                  tick={{ fill: '#9ca3af', fontSize: 11 }}
+                  allowDecimals={false}
+                />
+                <YAxis
+                  type="category"
+                  dataKey="label"
+                  tick={{ fill: '#e5e7eb', fontSize: 12 }}
+                  width={90}
+                />
+                <Tooltip
+                  cursor={{ fill: '#ffffff08' }}
+                  contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
+                  labelStyle={{ color: '#e5e7eb' }}
+                  formatter={(val) => [`${val.toLocaleString('es-MX')} (${pct(val, s.conversations)})`, 'Conversaciones']}
+                />
+                <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={26}>
+                  {chartData.map((entry, idx) => (
+                    <Cell key={idx} fill={entry.color} />
+                  ))}
+                  <LabelList
+                    dataKey="value"
+                    position="right"
+                    content={({ x, y, width, height, value }) => (
+                      <text x={x + width + 8} y={y + height / 2} fill="#e5e7eb" fontSize={12} dominantBaseline="central">
+                        {`${value.toLocaleString('es-MX')} · ${pct(value, s.conversations)}`}
+                      </text>
+                    )}
+                  />
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
         </div>
       )}
 
@@ -230,11 +295,14 @@ function MessagePerformanceView() {
   );
 }
 
-function Kpi({ label, value, color }) {
+function Kpi({ label, value, sub, color }) {
   return (
     <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4">
       <p className="text-gray-400 text-xs mb-1">{label}</p>
-      <p className="text-xl font-bold" style={{ color: color || '#fff' }}>{value}</p>
+      <div className="flex items-baseline gap-2">
+        <p className="text-xl font-bold" style={{ color: color || '#fff' }}>{value}</p>
+        {sub && <span className="text-sm font-semibold text-gray-400">{sub}</span>}
+      </div>
     </div>
   );
 }
