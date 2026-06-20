@@ -21,6 +21,13 @@ const TICKET_REASONS = [
   { value: "other", label: "Otro" },
 ];
 
+// Traffic-light severity → maps to the ticket `priority` enum (low|medium|high).
+const SEVERITIES = [
+  { value: "low", label: "Baja", dot: "#4caf50", ring: "#4caf50" },
+  { value: "medium", label: "Media", dot: "#f5a623", ring: "#f5a623" },
+  { value: "high", label: "Alta", dot: "#f44336", ring: "#f44336" },
+];
+
 export default function ConversationCommercePanel({ psid }) {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -28,6 +35,7 @@ export default function ConversationCommercePanel({ psid }) {
   const [modalOpen, setModalOpen] = useState(false);
   const [reason, setReason] = useState("");
   const [note, setNote] = useState("");
+  const [severity, setSeverity] = useState("medium"); // traffic light → ticket priority
   const [submitting, setSubmitting] = useState(false);
 
   const load = useCallback(
@@ -60,13 +68,15 @@ export default function ConversationCommercePanel({ psid }) {
     setSubmitting(true);
     try {
       const reasonLabel = TICKET_REASONS.find((r) => r.value === reason)?.label || reason;
+      const sevLabel = SEVERITIES.find((s) => s.value === severity)?.label || severity;
       await API.post("/tickets", {
         title: `Conversación reportada: ${reasonLabel}`,
         description:
           `Conversación ${psid} reportada por el agente.\n` +
           `Motivo: ${reasonLabel}\n` +
+          `Severidad: ${sevLabel}\n` +
           (note ? `Detalle: ${note}` : ""),
-        priority: "medium",
+        priority: severity,
         psid,
         category: reason,
         source: "conversation_report",
@@ -75,6 +85,7 @@ export default function ConversationCommercePanel({ psid }) {
       setModalOpen(false);
       setReason("");
       setNote("");
+      setSeverity("medium");
     } catch (err) {
       toast.error(err.response?.data?.error || "No se pudo crear el ticket");
     } finally {
@@ -149,6 +160,37 @@ export default function ConversationCommercePanel({ psid }) {
                 </option>
               ))}
             </select>
+            <label className="block text-xs text-gray-400 mb-1">Severidad</label>
+            <div className="flex gap-2 mb-3">
+              {SEVERITIES.map((s) => {
+                const active = severity === s.value;
+                return (
+                  <button
+                    key={s.value}
+                    type="button"
+                    onClick={() => setSeverity(s.value)}
+                    className="flex-1 flex items-center justify-center gap-2 px-3 py-2 rounded-lg text-sm transition-all"
+                    style={{
+                      backgroundColor: active ? `${s.dot}22` : "#111827",
+                      border: `1px solid ${active ? s.ring : "#374151"}`,
+                      color: active ? "#fff" : "#9ca3af",
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 10,
+                        height: 10,
+                        borderRadius: "50%",
+                        backgroundColor: s.dot,
+                        opacity: active ? 1 : 0.5,
+                        boxShadow: active ? `0 0 6px ${s.dot}` : "none",
+                      }}
+                    />
+                    {s.label}
+                  </button>
+                );
+              })}
+            </div>
             <label className="block text-xs text-gray-400 mb-1">Detalle (opcional)</label>
             <textarea
               className="w-full bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm mb-3"
