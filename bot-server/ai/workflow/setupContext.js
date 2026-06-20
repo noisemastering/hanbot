@@ -98,6 +98,13 @@ async function resolveSellableLeaf(doc, colorHint = "beige") {
 async function loadProductDoc(productSpecific) {
   if (!productSpecific?.kind || !productSpecific?.id) return null;
   if (!mongoose.isValidObjectId(productSpecific.id)) return null;
+  // A FAMILY preload is the flow's REALM (a range of products), NOT a single
+  // default measure. Don't descend it to one sellable leaf — doing so made an
+  // ad like "Promo Futbol" (preloads the whole Rectangular family) collapse to a
+  // sticky "6x4" default that overrode whatever size the customer actually asked
+  // for. The realm comes from the workflow's families; the customer's measure is
+  // resolved per-turn.
+  if (productSpecific.kind === "family") return null;
   try {
     // The product picker selects from the ProductFamily tree (sellable leaves
     // included), so resolve against ProductFamily for BOTH kinds. Fall back to
@@ -391,14 +398,17 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
   // product as the DEFAULT measure when no specific measure is preloaded.
   const promo = await resolvePromo(setup.hasPromo);
 
-  // Push the "this is the default measure — assume it, don't ask which" lines.
+  // Push the DEFAULT/featured measure. It's a default for unspecified requests —
+  // NOT a lock. The bot must still adapt to any other size the customer names
+  // and answer product questions; otherwise a promo ad glues every conversation
+  // to one measure (the regression where "5x6" got answered with "6x4").
   const pushDefault = async (prod, pi, promoLabel) => {
     const prodPath = await resolveFamilyRealm({ id: prod._id, name: prod.name });
     lines.push(
-      `- ${promoLabel ? `PRODUCTO EN PROMOCIÓN (medida por defecto): "${promoLabel}" → ` : "Producto de interés (precargado): "}` +
-        `${prodPath || prod.name}${priceTxt(pi)}. El cliente YA está hablando de ESTA medida. ` +
-        `Si pide información, precio, colores, fotos, etc., asume que se refiere a ESTA medida; NUNCA preguntes "¿de qué producto?" ni "¿qué medida?". ` +
-        `Solo si el cliente pide explícitamente OTRA medida, cotiza esa.`
+      `- ${promoLabel ? `PROMOCIÓN destacada: "${promoLabel}" → ` : "Medida destacada (por defecto): "}` +
+        `${prodPath || prod.name}${priceTxt(pi)}. Es la opción por DEFECTO: si el cliente pide precio/info SIN especificar una medida, ofrécele ESTA. ` +
+        `PERO ADÁPTATE: si el cliente menciona CUALQUIER otra medida (p. ej. 5x6, 3x2, 8x10), cotiza ESA medida — NUNCA le impongas la medida destacada ni cambies la que pidió. ` +
+        `Responde con normalidad sus preguntas y detalles del producto (% de sombra, refuerzo, colores, envío, etc.); no escales por dudas que puedes responder.`
     );
     if (pi && pi.source === "ml") {
       const { trackedLink } = require("./priceResolver");
