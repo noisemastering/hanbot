@@ -547,9 +547,30 @@ async function detectFlowSwitch(message, familyList, currentWorkflow) {
 // we don't re-extract); only fires for measure messages so plain "precio" keeps
 // the preloaded one.
 async function resolveInFamilyMeasure(message, familyList, wantDims) {
-  if (!wantDims) return null; // no measure in the message → keep preloaded product
   const toolsMod = require("./tools");
-  const doc = await toolsMod.findProductInFamilies(message, familyList, wantDims);
+  const isLengthOnly = (d) =>
+    Array.isArray(d?.enabledDimensions) && d.enabledDimensions.length > 0 && !d.enabledDimensions.includes("width");
+
+  let doc = null;
+  if (wantDims) {
+    // 2-D measure (W×L) — the normal case (malla confeccionada, etc.).
+    doc = await toolsMod.findProductInFamilies(message, familyList, wantDims);
+  } else {
+    // No 2-D measure. For LENGTH-ONLY products (borde separador: you choose only
+    // a length), a SINGLE length IS the measure — resolve it deterministically
+    // ("18 metros" → Rollo de 18 m) instead of leaving the model to improvise/
+    // escalate. Accept ONLY if the resolved product is genuinely length-only, so
+    // a bare number in a 2-D flow doesn't quote half a measure.
+    const direct = await toolsMod.findProductInFamilies(message, familyList, null);
+    if (direct && isLengthOnly(direct)) doc = direct;
+    if (!doc) {
+      const nums = String(message).match(/\d+(?:\.\d+)?/g) || [];
+      if (nums.length === 1) {
+        const byNum = await toolsMod.findProductInFamilies(nums[0], familyList, null);
+        if (byNum && isLengthOnly(byNum)) doc = byNum;
+      }
+    }
+  }
   if (!doc) return null;
   const { resolvePrice } = require("./priceResolver");
   // Available color/variant options for this size (structural sibling walk).
