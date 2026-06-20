@@ -174,7 +174,12 @@ function MessagePerformanceView() {
                 <Tooltip
                   contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
                   labelStyle={{ color: '#e5e7eb' }}
-                  formatter={(val, name) => [val.toLocaleString('es-MX'), name]}
+                  formatter={(val, name, item) => {
+                    const total = item?.payload?.conversations || 0;
+                    const txt = val.toLocaleString('es-MX');
+                    // Conversaciones is the denominator — show the count only.
+                    return [name === 'Conversaciones' ? txt : `${txt} · ${pct(val, total)}`, name];
+                  }}
                 />
                 <Legend wrapperStyle={{ color: '#9ca3af', fontSize: 12 }} />
                 <Bar dataKey="conversations" name="Conversaciones" fill="#475569" fillOpacity={0.5} radius={[3, 3, 0, 0]} barSize={daily.length > 31 ? 6 : 14} />
