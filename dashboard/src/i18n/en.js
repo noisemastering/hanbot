@@ -54,6 +54,7 @@ const en = {
   "menu.playgroundForecast": "Sales Forecast",
   "menu.playgroundSegments": "Segmentation",
   "menu.playgroundConversion": "Conversion Prob.",
+  "menu.messagePerformance": "Message Performance",
   "menu.playgroundSpend": "Spend Optimization",
   "menu.tickets": "Tickets",
   "menu.salesOverview": "Sales Overview",

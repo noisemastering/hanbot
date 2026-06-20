@@ -149,6 +149,7 @@ const notificationRoutes = require('./routes/notificationRoutes');
 const crossSellRoutes = require('./routes/crossSellRoutes');
 const companyInfoRoutes = require('./routes/companyInfoRoutes');
 const salesOverviewRoutes = require('./routes/salesOverviewRoutes');
+const messagePerformanceRoutes = require('./routes/messagePerformanceRoutes');
 const workflowsRoutes = require('./routes/workflowsRoutes');
 
 // Auth routes (no prefix, will be /auth/login, /auth/me, etc.)
@@ -191,6 +192,7 @@ app.use('/notifications', notificationRoutes);
 app.use('/cross-sell', crossSellRoutes);
 app.use('/company-info', companyInfoRoutes);
 app.use('/sales-overview', salesOverviewRoutes);
+app.use('/message-performance', messagePerformanceRoutes);
 app.use('/workflows', workflowsRoutes);
 
 // ============================================

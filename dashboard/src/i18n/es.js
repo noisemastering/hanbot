@@ -54,6 +54,7 @@ const es = {
   "menu.playgroundForecast": "Pronóstico de Ventas",
   "menu.playgroundSegments": "Segmentación",
   "menu.playgroundConversion": "Prob. Conversión",
+  "menu.messagePerformance": "Rendimiento de Mensajes",
   "menu.playgroundSpend": "Optimización de Gasto",
   "menu.tickets": "Tickets",
   "menu.salesOverview": "Resumen de Ventas",
