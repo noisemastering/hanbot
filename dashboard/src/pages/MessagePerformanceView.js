@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell, LabelList,
+  ComposedChart, Bar, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend,
 } from 'recharts';
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
@@ -97,17 +97,7 @@ function MessagePerformanceView() {
   }, [data, filter]);
 
   const s = data?.summary;
-
-  // Outcome breakdown for the chart — ordered as a soft funnel (most → least common).
-  const chartData = useMemo(() => {
-    if (!s) return [];
-    return [
-      { label: 'Clic', value: s.clicks, color: '#3b82f6' },
-      { label: 'Venta', value: s.sales, color: '#22c55e' },
-      { label: 'A humano', value: s.handoffs, color: '#f5a623' },
-      { label: 'Reporte', value: s.reports, color: '#f44336' },
-    ];
-  }, [s]);
+  const daily = data?.daily || [];
 
   if (loading && !data) {
     return (
@@ -163,49 +153,39 @@ function MessagePerformanceView() {
         </div>
       )}
 
-      {/* Outcome breakdown chart */}
-      {s && s.conversations > 0 && (
+      {/* Daily outcome chart */}
+      {daily.length > 0 && (
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5">
-          <h2 className="text-white font-semibold mb-4">Resultados ({s.conversations.toLocaleString('es-MX')} conversaciones)</h2>
-          <div className="h-64">
+          <h2 className="text-white font-semibold mb-4">Resultados por día</h2>
+          <div className="h-72">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={chartData} layout="vertical" margin={{ left: 8, right: 48, top: 4, bottom: 4 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" horizontal={false} />
+              <ComposedChart data={daily} margin={{ top: 8, right: 16, bottom: 5, left: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                 <XAxis
-                  type="number"
-                  domain={[0, s.conversations]}
+                  dataKey="dateLabel"
                   tick={{ fill: '#9ca3af', fontSize: 11 }}
-                  allowDecimals={false}
+                  axisLine={{ stroke: '#374151' }}
+                  interval={daily.length > 31 ? Math.floor(daily.length / 15) : 0}
+                  angle={daily.length > 14 ? -45 : 0}
+                  textAnchor={daily.length > 14 ? 'end' : 'middle'}
+                  height={daily.length > 14 ? 50 : 30}
                 />
-                <YAxis
-                  type="category"
-                  dataKey="label"
-                  tick={{ fill: '#e5e7eb', fontSize: 12 }}
-                  width={90}
-                />
+                <YAxis tick={{ fill: '#9ca3af', fontSize: 11 }} axisLine={{ stroke: '#374151' }} allowDecimals={false} />
                 <Tooltip
-                  cursor={{ fill: '#ffffff08' }}
                   contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: '8px' }}
                   labelStyle={{ color: '#e5e7eb' }}
-                  formatter={(val) => [`${val.toLocaleString('es-MX')} (${pct(val, s.conversations)})`, 'Conversaciones']}
+                  formatter={(val, name) => [val.toLocaleString('es-MX'), name]}
                 />
-                <Bar dataKey="value" radius={[0, 4, 4, 0]} barSize={26}>
-                  {chartData.map((entry, idx) => (
-                    <Cell key={idx} fill={entry.color} />
-                  ))}
-                  <LabelList
-                    dataKey="value"
-                    position="right"
-                    content={({ x, y, width, height, value }) => (
-                      <text x={x + width + 8} y={y + height / 2} fill="#e5e7eb" fontSize={12} dominantBaseline="central">
-                        {`${value.toLocaleString('es-MX')} · ${pct(value, s.conversations)}`}
-                      </text>
-                    )}
-                  />
-                </Bar>
-              </BarChart>
+                <Legend wrapperStyle={{ color: '#9ca3af', fontSize: 12 }} />
+                <Bar dataKey="conversations" name="Conversaciones" fill="#475569" fillOpacity={0.5} radius={[3, 3, 0, 0]} barSize={daily.length > 31 ? 6 : 14} />
+                <Line type="monotone" dataKey="clicks" name="Clics" stroke="#3b82f6" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="sales" name="Ventas" stroke="#22c55e" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="handoffs" name="A humano" stroke="#f5a623" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="reports" name="Reportes" stroke="#f44336" strokeWidth={2} dot={false} />
+              </ComposedChart>
             </ResponsiveContainer>
           </div>
+          <p className="text-gray-500 text-xs mt-2">Barras = conversaciones · líneas = resultados por día</p>
         </div>
       )}
 
