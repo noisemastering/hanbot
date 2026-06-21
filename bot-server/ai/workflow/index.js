@@ -216,6 +216,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // context, so the model quotes it deterministically instead of vague-replying
   // or escalating to a human.
   let turnPriceInfo = state.priceInfo || null;
+  // When this turn's price resolution decides a human must validate the price
+  // (e.g. no live ML + inventario below the last-synced ML), we fire a REAL
+  // handoff with this reason — not just a textual "te paso con un asesor".
+  let turnHandoffReason = null;
   // DETERMINISTIC PRICE CLAMP — collect every price the engine actually RESOLVES
   // this turn. The outgoing reply may only quote one of these; any other number
   // gets rewritten to `primaryQuoteAmount` (the measure the customer asked about).
@@ -263,8 +267,15 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // price + the rewrite target for the clamp.
         noteAmount(pi, true);
         if (pi.handoff) {
+          // Reference the ACTUAL measure the customer asked for (never the leaf
+          // name like "Color Beige", which made the model invent a size such as
+          // "7x10"). Fire a real handoff with the deterministic reason.
+          const askedMeasure = wantDims ? `${wantDims[0]}x${wantDims[1]}m` : found.name;
+          turnHandoffReason =
+            `Cotización ${askedMeasure}: ${pi.handoffReason || "requiere validación de precio con un asesor"}`;
           turnContextExtra =
-            `\n- COTIZACIÓN SOLICITADA: "${found.name}" no tiene precio disponible. NO inventes precio; ofrece pasar con un asesor.`;
+            `\n- COTIZACIÓN SOLICITADA: la medida ${askedMeasure} requiere que un asesor confirme el precio. ` +
+            `NO inventes un precio NI otra medida; dile al cliente con naturalidad que lo pasas con un asesor para confirmarle el precio de ${askedMeasure}.`;
         } else if (pi.amount) {
           // psid-traceable link so a click here is attributed (commerce-status).
           const { trackedLink } = require("./priceResolver");
@@ -367,6 +378,14 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     catalogToSend: null, // set by share_catalog → maybeRunAdWorkflow sends the document
     psid: opts.psid || null, // enables psid-traceable links in share_* tools
   };
+  // DETERMINISTIC HANDOFF: if this turn's price resolution needs human price
+  // validation, escalate for real (set the flag the caller acts on) with the
+  // concrete reason — so it's recorded, the brief is handed over, and the
+  // dashboard shows WHY, instead of the bot just saying "te paso con un asesor".
+  if (turnHandoffReason) {
+    ctx.handoffRequested = true;
+    ctx.handoffReason = turnHandoffReason;
+  }
   const { text: rawText, toolCalls, llmError: nodeLlmError } = await executeNode(
     workflow,
     movedTo,

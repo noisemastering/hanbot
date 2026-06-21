@@ -313,7 +313,15 @@ async function correlateOrder(order, sellerId) {
     // ============ PHASE 4: ORPHAN CORRELATION ============
     // If no click matched well, check if we have a user match without a click
     // This handles: user chatted, got product info, but bought directly on ML without clicking link
-    if ((!bestMatch || bestScore < 50) && matchingUsers.length > 0) {
+    // An item-id match gives a click a high raw score but is NOT identity. If the
+    // best click lacks any identity signal, treat it as "no real match" so a
+    // genuine identity-backed buyer (orphan) can take the order instead.
+    const bestHasIdentity = !!(bestMatch && bestMatch.matchDetails &&
+      (bestMatch.matchDetails.nameMatch || bestMatch.matchDetails.zipMatch ||
+       bestMatch.matchDetails.cityMatch || bestMatch.matchDetails.stateMatch ||
+       bestMatch.matchDetails.poiMatch));
+
+    if ((!bestMatch || bestScore < 50 || !bestHasIdentity) && matchingUsers.length > 0) {
       for (const user of matchingUsers) {
         let orphanScore = 0;
         const matchDetails = {
@@ -365,8 +373,10 @@ async function correlateOrder(order, sellerId) {
           }
         }
 
-        // Only consider orphan if score is meaningful (name + location OR name + POI)
-        if (orphanScore >= 70 && orphanScore > bestScore) {
+        // Only consider orphan if score is meaningful (name + location OR name + POI).
+        // An identity-backed orphan must be able to beat an item-id-only click
+        // (high raw score, no identity corroboration).
+        if (orphanScore >= 70 && (orphanScore > bestScore || !bestHasIdentity)) {
           console.log(`   🔮 ORPHAN CORRELATION: User ${user.first_name} (score: ${orphanScore})`);
           bestScore = orphanScore;
           bestMatch = {
@@ -382,50 +392,40 @@ async function correlateOrder(order, sellerId) {
     }
 
     if (!bestMatch || bestScore < 30) {
-      // If re-evaluating an existing correlation, keep it but determine proper method
+      // If re-evaluating an existing correlation, keep it ONLY if the buyer's
+      // identity corroborates the click's user. Under our proprietary method a
+      // sale is tied to a person by name / zip / city/state — NOT by an item-id
+      // match alone (clicking our tracked link for a popular product does not
+      // make this person the buyer). So recompute identity regardless of item.
       if (existingCorrelation) {
-        let method = 'time_based';
+        const clickUser = await User.findOne({ psid: existingCorrelation.psid }).lean();
+        let nameMatches = false, cityMatches = false, stateMatches = false, zipMatches = false;
+        if (clickUser) {
+          const userFirstName = normalizeName(clickUser.firstName || clickUser.first_name);
+          const userCity = normalizeCity(clickUser.location?.city);
+          const userState = normalizeCity(clickUser.location?.state);
+          const userZip = clickUser.location?.zipcode;
+          nameMatches = !!(userFirstName && buyerFirstName && userFirstName === buyerFirstName);
+          cityMatches = !!(userCity && normalizedShippingCity && userCity === normalizedShippingCity);
+          stateMatches = !!(userState && normalizedShippingState && userState === normalizedShippingState);
+          zipMatches = !!(userZip && shippingZipCode && userZip === shippingZipCode);
+        }
+        const hasItemMatch = !!(existingCorrelation.mlItemId && orderedMLItemIds.includes(existingCorrelation.mlItemId));
+        const hasIdentity = nameMatches || cityMatches || stateMatches || zipMatches;
 
-        // Check if existing click has ML Item ID that matches order
-        if (existingCorrelation.mlItemId && orderedMLItemIds.includes(existingCorrelation.mlItemId)) {
-          method = 'ml_item_match';
-          console.log(`   🎯 Existing correlation has ML Item ID match: ${existingCorrelation.mlItemId}`);
-        } else {
-          // Check if click's user matches buyer by name/location
-          const clickUser = await User.findOne({ psid: existingCorrelation.psid }).lean();
-          if (clickUser) {
-            const userFirstName = normalizeName(clickUser.firstName || clickUser.first_name);
-            const userCity = normalizeCity(clickUser.location?.city);
-            const userState = normalizeCity(clickUser.location?.state);
-
-            const nameMatches = userFirstName && buyerFirstName && userFirstName === buyerFirstName;
-            const cityMatches = userCity && normalizedShippingCity && userCity === normalizedShippingCity;
-            const stateMatches = userState && normalizedShippingState && userState === normalizedShippingState;
-
-            // If name + location match, it's enhanced (not just time)
-            if (nameMatches && (cityMatches || stateMatches)) {
-              method = 'enhanced';
-              console.log(`   ✨ User match: ${clickUser.firstName} from ${clickUser.location?.city}`);
-            } else if (cityMatches || stateMatches) {
-              method = 'enhanced';
-              console.log(`   ✨ Location match: ${clickUser.location?.city}, ${clickUser.location?.state}`);
-            } else if (nameMatches) {
-              method = 'enhanced';
-              console.log(`   ✨ Name match: ${clickUser.firstName}`);
-            }
-          }
+        if (!hasIdentity) {
+          // No identity corroboration → this credit is unverified. Release it so
+          // a re-sync clears the bogus "Compró" instead of re-stamping it high.
+          await ClickLog.findByIdAndUpdate(existingCorrelation._id, {
+            converted: false, convertedAt: null, correlatedOrderId: null,
+            correlationConfidence: null, correlationMethod: null, matchDetails: null
+          });
+          console.log(`   🧹 Released existing correlation for order ${orderId} — no identity match (item-id only: ${hasItemMatch})`);
+          return null;
         }
 
-        // Determine confidence based on method
-        let confidence = 'low';
-        if (method === 'ml_item_match') {
-          confidence = 'high'; // ML ID is a definitive match
-        } else if (method === 'enhanced') {
-          confidence = 'medium'; // Name/location match is medium
-        }
-        // time_based stays 'low'
-
-        // Update existing correlation with proper method AND confidence
+        const method = hasItemMatch ? 'ml_item_match' : 'enhanced';
+        const confidence = (hasItemMatch || (nameMatches && (cityMatches || stateMatches || zipMatches))) ? 'high' : 'medium';
         await ClickLog.findByIdAndUpdate(existingCorrelation._id, {
           correlationMethod: method,
           correlationConfidence: confidence,
@@ -449,6 +449,27 @@ async function correlateOrder(order, sellerId) {
     // Determine method based on what actually matched
     const hasMLItemMatch = md.mlItemMatch || false;
     const hasNonTimeSignals = md.nameMatch || md.cityMatch || md.stateMatch || md.zipMatch || md.poiMatch;
+
+    // ── Proprietary correlation gate ────────────────────────────────────────
+    // A conversion is only CONFIRMED when the buyer's IDENTITY corroborates the
+    // click's user: name, zip, city/state, or POI. An ML item-id match alone is
+    // NOT enough — clicking our tracked link for a popular promo does not make
+    // this person the buyer (this is exactly how a 6x4 order placed by another
+    // buyer got pinned to a click). Orphan matches are identity-based already.
+    if (!bestMatch.isOrphan && !hasNonTimeSignals) {
+      // Release any stale/false credit this click holds for THIS order so a
+      // re-sync actually clears the bogus "Compró" (item-id/time-only matches).
+      if (bestMatch.click && bestMatch.click.converted &&
+          String(bestMatch.click.correlatedOrderId || '') === String(orderId)) {
+        await ClickLog.findByIdAndUpdate(bestMatch.click._id, {
+          converted: false, convertedAt: null, correlatedOrderId: null,
+          correlationConfidence: null, correlationMethod: null, matchDetails: null
+        });
+        console.log(`   🧹 Released item/time-only credit (no identity) for order ${orderId}`);
+      }
+      console.log(`   ❌ Order ${orderId}: item/time only, no identity (name/zip/city) — NOT credited per proprietary method`);
+      return null;
+    }
 
     let method;
     if (hasMLItemMatch) {

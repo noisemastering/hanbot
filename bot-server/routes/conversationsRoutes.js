@@ -1278,4 +1278,47 @@ router.get('/:psid/commerce-status', async (req, res) => {
   }
 });
 
+// GET /conversations/:psid/handoff-info — why a conversation was escalated to a
+// human + the data the bot collected, so the agent picking it up has full
+// context. Requirement: EVERY handoff must surface its reason and, if available,
+// the user data. Returns the same brief used in the push notification plus
+// structured fields for the side panel.
+router.get('/:psid/handoff-info', async (req, res) => {
+  try {
+    const { psid } = req.params;
+    const { buildClientBrief } = require('../utils/clientBrief');
+    const convo = await Conversation.findOne({ psid }).lean();
+    if (!convo) return res.status(404).json({ success: false, error: 'Conversation not found' });
+
+    const specs = convo.productSpecs || {};
+    const pick = (...xs) => xs.find((x) => x !== undefined && x !== null && x !== '') || null;
+
+    res.json({
+      success: true,
+      handoffRequested: !!convo.handoffRequested,
+      handoffReason: convo.handoffReason || null,
+      handoffAt: convo.handoffTimestamp || null,
+      state: convo.state || null,
+      brief: buildClientBrief(convo),
+      collected: {
+        name: pick(convo.extractedName, specs.customerName, convo.userName, convo.profileName),
+        contact: pick(convo.leadData && convo.leadData.contact),
+        city: pick(convo.city),
+        stateMx: pick(convo.stateMx),
+        zip: pick(convo.zipCode, convo.zipcode, convo.leadData && convo.leadData.zipcode),
+        product: pick(convo.poiRootName, convo.productInterest, specs.productType),
+        size: pick(specs.size, specs.dimensions, specs.width && specs.length ? `${specs.width}x${specs.length}` : null),
+        percentage: pick(specs.percentage),
+        color: pick(specs.color),
+        quantity: pick(specs.quantity),
+        adHeadline: pick(convo.adHeadline),
+        channel: pick(convo.channel),
+      },
+    });
+  } catch (error) {
+    console.error('Error fetching handoff info:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch handoff info' });
+  }
+});
+
 module.exports = router;

@@ -4,6 +4,7 @@ import API from "../api";
 import TrackedLinkGenerator from "../components/TrackedLinkGenerator";
 import ManualSaleForm from "../components/ManualSaleForm";
 import ConversationCommercePanel from "../components/ConversationCommercePanel";
+import ConversationHandoffPanel from "../components/ConversationHandoffPanel";
 import { useTranslation } from '../i18n';
 import FeatureTip from '../components/FeatureTip';
 
@@ -1988,6 +1989,8 @@ function Messages() {
             {/* Commerce status + report-as-ticket */}
             <div style={{ padding: "0 1rem 1rem 1rem" }}>
               <ConversationCommercePanel psid={selectedPsid} />
+              {/* Handoff reason + collected client data for the agent taking over */}
+              <ConversationHandoffPanel psid={selectedPsid} />
             </div>
 
             {/* Tracked Link Generator */}
