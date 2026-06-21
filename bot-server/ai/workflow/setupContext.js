@@ -430,6 +430,14 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
         `- PRECIO: NO disponible. El producto es vendible pero no tiene precio. NUNCA inventes un precio: ofrece pasar con un asesor (usa request_handoff).`
       );
     }
+    if (pi && (Number.isFinite(pi.amount) || pi.source)) {
+      // The promo/default price belongs to THIS measure only. Without this the
+      // model carried the 6x4 promo $655 onto a 3x5 request.
+      const measureTxt = prod.size || prod.name;
+      lines.push(
+        `- IMPORTANTE: ese precio es EXCLUSIVO de la medida ${measureTxt}. Para CUALQUIER otra medida que pida el cliente, cotiza el precio PROPIO de esa medida; NUNCA apliques este precio (ni el de promoción) a otra medida.`
+      );
+    }
   };
 
   if (resolved.length === 1 && resolved[0].sellable === true) {

@@ -220,6 +220,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // (e.g. no live ML + inventario below the last-synced ML), we fire a REAL
   // handoff with this reason — not just a textual "te paso con un asesor".
   let turnHandoffReason = null;
+  // True when the customer asked for a SPECIFIC measure this turn and we resolved
+  // its real price. In that case the promo/preloaded default price must NOT be an
+  // allowed substitute for it (that's how the 6x4 promo $655 leaked onto a 3x5).
+  let askedMeasureResolved = false;
   // DETERMINISTIC PRICE CLAMP — collect every price the engine actually RESOLVES
   // this turn. The outgoing reply may only quote one of these; any other number
   // gets rewritten to `primaryQuoteAmount` (the measure the customer asked about).
@@ -238,10 +242,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // the rewrite target — that's the measure the customer actually asks about).
   // Including ALL of them stops the clamp from corrupting a correct multi-product
   // quote (e.g. rewriting the 54 m's $1599 down to the 18 m's $689).
-  noteAmount(state.priceInfo, false);
-  for (const a of state.preloadedAmounts || []) {
-    if (Number.isFinite(a) && a > 0) allowedAmounts.push(a);
-  }
+  // NOTE: the carried/preloaded prices are added LATER (after this turn's measure
+  // resolution) — and ONLY when the customer didn't pivot to a different-priced
+  // measure — so the promo/default price can't substitute for an asked measure.
   // Current date/time + business-hours status (Mexico). The model has no clock;
   // inject it FRESH each turn so the handoff node can tell the customer whether
   // a specialist responds now or in the next business window.
@@ -277,6 +280,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             `\n- COTIZACIÓN SOLICITADA: la medida ${askedMeasure} requiere que un asesor confirme el precio. ` +
             `NO inventes un precio NI otra medida; dile al cliente con naturalidad que lo pasas con un asesor para confirmarle el precio de ${askedMeasure}.`;
         } else if (pi.amount) {
+          // The customer asked a specific measure and we resolved its real price.
+          askedMeasureResolved = true;
           // psid-traceable link so a click here is attributed (commerce-status).
           const { trackedLink } = require("./priceResolver");
           const link = await trackedLink(pi.link, {
@@ -335,6 +340,20 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     } catch (err) {
       console.error("⚠️ in-family measure pricing failed:", err.message);
     }
+  }
+
+  // Carried/preloaded prices (e.g. the promo 6x4 $655) are legit to mention ONLY
+  // when the customer did NOT pivot to a different-priced measure this turn. If
+  // they asked for 3x5 ($629), the promo $655 must NOT be an allowed substitute —
+  // otherwise the clamp lets the model quote the 3x5 at the promo price. Keep the
+  // preloaded amounts when the asked measure IS one of them (multi-product quotes,
+  // e.g. borde 54m + 18m) so the clamp doesn't corrupt a correct multi-line quote.
+  const preloaded = (state.preloadedAmounts || []).filter((a) => Number.isFinite(a) && a > 0);
+  const pivotedToDifferentPrice =
+    askedMeasureResolved && primaryQuoteAmount != null && !preloaded.includes(primaryQuoteAmount);
+  if (!pivotedToDifferentPrice) {
+    noteAmount(state.priceInfo, false);
+    for (const a of preloaded) allowedAmounts.push(a);
   }
 
   // If no measure THIS turn but we resolved colors on a previous turn (same
