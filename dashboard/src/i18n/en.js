@@ -62,6 +62,9 @@ const en = {
   "menu.crossSell": "Cross-Selling",
   "menu.companyInfo": "Company Info",
   "menu.settings": "Settings",
+  "menu.specOps": "Spec Ops",
+  "menu.killswitch": "Killswitch",
+  "menu.nukeEm": "Nuke'em",
   "menu.help": "Help",
 
   // ── Common ───────────────────────────────────────────────

@@ -83,6 +83,9 @@ import TicketsView from "./pages/TicketsView";
 import NotificationsView from "./pages/NotificationsView";
 import CrossSellView from "./pages/CrossSellView";
 import CompanyInfoView from "./pages/CompanyInfoView";
+import KillswitchView from "./pages/KillswitchView";
+import NukeEmView from "./pages/NukeEmView";
+import MaintenanceGate from "./components/MaintenanceGate";
 import SalesOverviewView from "./pages/SalesOverviewView";
 import MessagePerformanceView from "./pages/MessagePerformanceView";
 // FlowsView replaced by FlowPromptsView
@@ -535,6 +538,33 @@ const menuItems = [
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
     )
+  },
+  // Spec Ops — super_admin only emergency controls.
+  {
+    id: "spec-ops",
+    labelKey: "menu.specOps",
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 00-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+    ),
+    isExpandable: true,
+    children: [
+      {
+        id: "killswitch",
+        labelKey: "menu.killswitch",
+        path: "/spec-ops/killswitch",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 5.636a9 9 0 11-12.728 0M12 3v9" />
+        )
+      },
+      {
+        id: "nuke",
+        labelKey: "menu.nukeEm",
+        path: "/spec-ops/nuke",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+        )
+      }
+    ]
   },
   {
     id: "settings",
@@ -1573,6 +1603,8 @@ function App() {
   //    anyone explicitly granted it (e.g. the "Administrador de campaña" profile).
   const childVisible = (child) => {
     if (!child || child.isLabel) return true;
+    // Spec Ops (killswitch / nuke) — super_admin only.
+    if (child.id === 'killswitch' || child.id === 'nuke') return effectiveRole === 'super_admin';
     if (child.id === 'flows' || child.id === 'intents') return effectiveRole === 'super_admin';
     if (child.id === 'ad-workflow' || child.id === 'promos') {
       // Administrador de Campaña profile + above levels (super_user, admin, super_admin).
@@ -1595,8 +1627,8 @@ function App() {
     if (item.id === 'users') {
       return canManageUsers();
     }
-    // Roles, Profiles, Playground sections stay super_admin-only.
-    if (item.id === 'roles' || item.id === 'profiles' || item.id === 'playground') {
+    // Roles, Profiles, Playground, Spec Ops sections stay super_admin-only.
+    if (item.id === 'roles' || item.id === 'profiles' || item.id === 'playground' || item.id === 'spec-ops') {
       return effectiveRole === 'super_admin';
     }
     // Bot section: visible if the user can see ANY of its children. With
@@ -1717,6 +1749,8 @@ function App() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-gray-900 via-gray-800 to-gray-900">
+      {/* Spec Ops: maintenance overlay for everyone below super_admin when halted */}
+      <MaintenanceGate role={effectiveRole} />
       {/* Toast Notifications */}
       <Toaster
         position="top-right"
@@ -2489,6 +2523,8 @@ function App() {
           <Route path="/company-info" element={<CompanyInfoView />} />
 
           <Route path="/settings" element={<Settings />} />
+          <Route path="/spec-ops/killswitch" element={effectiveRole === 'super_admin' ? <KillswitchView /> : <Navigate to={getLandingPage()} replace />} />
+          <Route path="/spec-ops/nuke" element={effectiveRole === 'super_admin' ? <NukeEmView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/help" element={<HelpView />} />
         </Routes>
 

@@ -186,6 +186,15 @@ async function processMessage(normalizedMessage, io = null) {
   console.log(`\n📨 Received ${channel} message from ${userId}`);
   console.log(`   Text: "${text}"`);
 
+  // Spec Ops: Killswitch / Nuke'em halt the bot on EVERY channel (WhatsApp too).
+  try {
+    const { isBotHalted } = require("../../utils/systemState");
+    if (await isBotHalted()) {
+      console.warn(`🛑 [SpecOps] bot halted — skipping ${channel} message processing`);
+      return;
+    }
+  } catch (e) { /* fail open */ }
+
   // 1. Deduplication
   if (await isMessageProcessed(messageId)) {
     console.log(`⚠️  Duplicate message ${messageId}, skipping`);

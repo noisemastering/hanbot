@@ -151,9 +151,37 @@ const companyInfoRoutes = require('./routes/companyInfoRoutes');
 const salesOverviewRoutes = require('./routes/salesOverviewRoutes');
 const messagePerformanceRoutes = require('./routes/messagePerformanceRoutes');
 const workflowsRoutes = require('./routes/workflowsRoutes');
+const specOpsRoutes = require('./routes/specOpsRoutes');
+
+// ── Spec Ops: Nuke'em hard lockdown ───────────────────────────────────────────
+// When Nuke'em is engaged the whole API is OFFLINE (503) for everyone, EXCEPT:
+//  - /auth      → super_admin can still log in
+//  - /spec-ops  → super_admin can read status + DISARM (recover)
+//  - /webhook   → FB/WhatsApp verification + acks (the bot itself is gated to stay
+//                 silent inside the handlers, but we must still 200 the webhook so
+//                 the platforms don't hammer retries)
+//  - /health    → uptime checks
+// The deployment and the GitHub code are untouched — this is fully reversible.
+const { getHaltState } = require('./utils/systemState');
+const NUKE_EXEMPT = /^\/(auth|spec-ops|webhook|health)(\/|$)/;
+app.use(async (req, res, next) => {
+  if (NUKE_EXEMPT.test(req.path)) return next();
+  try {
+    const { nuke } = await getHaltState();
+    if (nuke) {
+      return res.status(503).json({
+        success: false,
+        halted: 'nuke',
+        error: 'El sistema está fuera de servicio. Contacta a tu proveedor.',
+      });
+    }
+  } catch (e) { /* fail open */ }
+  next();
+});
 
 // Auth routes (no prefix, will be /auth/login, /auth/me, etc.)
 app.use('/auth', authRoutes);
+app.use('/spec-ops', specOpsRoutes);
 app.use('/push', pushRoutes);
 app.use('/dashboard-users', dashboardUsersRoutes);
 app.use('/roles', rolesRoutes);
@@ -879,6 +907,16 @@ app.get("/webhook", (req, res) => {
 
 app.post("/webhook", async (req, res) => {
   const body = req.body;
+
+  // Spec Ops: when Killswitch or Nuke'em is engaged the bot stays SILENT on every
+  // channel. Still ack 200 so Facebook doesn't retry-storm the (paused) endpoint.
+  try {
+    const { isBotHalted } = require('./utils/systemState');
+    if (await isBotHalted()) {
+      console.warn("🛑 [SpecOps] bot halted — skipping FB webhook processing");
+      return res.sendStatus(200);
+    }
+  } catch (e) { /* fail open — never drop messages on a state-read error */ }
 
   // 🔍 DEBUG: Log raw webhook payload to diagnose missing referrals
   console.log("📥 WEBHOOK RAW:", JSON.stringify(body, null, 2).slice(0, 1500));
