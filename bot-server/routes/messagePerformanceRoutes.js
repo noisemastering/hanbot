@@ -154,7 +154,7 @@ router.get("/", authenticate, async (req, res) => {
           .select("psid channel extractedName productSpecs.customerName adId state handoffRequested handoffReason")
           .lean(),
         ClickLog.find({ psid: { $in: psids } }).select("psid clicked converted conversionData").lean(),
-        Ticket.find({ psid: { $in: psids }, source: "conversation_report" }).select("psid priority category createdAt").lean(),
+        Ticket.find({ psid: { $in: psids }, source: "conversation_report" }).select("psid priority category createdAt status noError").lean(),
       ]);
 
       const convoBy = new Map(convos.map((c) => [c.psid, c]));
@@ -193,6 +193,8 @@ router.get("/", authenticate, async (req, res) => {
           reported: !!rep,
           reportPriority: rep?.priority || null,
           reportCategory: rep?.category || null,
+          reportStatus: rep?.status || null, // open | review | working | solved | dismissed
+          reportResolved: rep ? ["solved", "dismissed"].includes(rep.status) : false,
         };
       });
     }

@@ -260,8 +260,21 @@ function MessagePerformanceView() {
                         <Badge on={r.handoff} color="#f5a623" label="Humano" title={r.handoffReason || ''} />
                         <Badge
                           on={r.reported}
-                          color={r.reported ? PRIORITY_COLOR[r.reportPriority] || '#f44336' : '#f44336'}
-                          label={r.reported ? `Reporte${r.reportPriority ? ` · ${PRIORITY_LABEL[r.reportPriority] || ''}` : ''}` : 'Reporte'}
+                          color={
+                            !r.reported ? '#f44336'
+                              : r.reportStatus === 'solved' ? '#22c55e'
+                              : r.reportStatus === 'dismissed' ? '#6b7280'
+                              : PRIORITY_COLOR[r.reportPriority] || '#f44336'
+                          }
+                          label={
+                            r.reported
+                              ? `Reporte${
+                                  r.reportStatus === 'solved' ? ' · Resuelto'
+                                    : r.reportStatus === 'dismissed' ? ' · Sin error'
+                                    : r.reportPriority ? ` · ${PRIORITY_LABEL[r.reportPriority] || ''}` : ''
+                                }`
+                              : 'Reporte'
+                          }
                           title={r.reportCategory || ''}
                         />
                       </div>
