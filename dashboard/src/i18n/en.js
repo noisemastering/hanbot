@@ -61,6 +61,7 @@ const en = {
   "menu.notifications": "Notifications",
   "menu.crossSell": "Cross-Selling",
   "menu.companyInfo": "Company Info",
+  "menu.reportedConvos": "Reported Convos",
   "menu.settings": "Settings",
   "menu.specOps": "Spec Ops",
   "menu.killswitch": "Killswitch",

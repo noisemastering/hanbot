@@ -52,7 +52,13 @@ const ticketSchema = new mongoose.Schema(
       ],
       default: null
     },
-    source: { type: String, default: "manual" } // 'manual' | 'conversation_report'
+    source: { type: String, default: "manual" }, // 'manual' | 'conversation_report'
+    // Resolution: explanation written when a reported conversation is closed.
+    // status 'solved' = fixed (with explanation); 'dismissed' = "Sin error".
+    resolution: { type: String, default: null },
+    noError: { type: Boolean, default: false }, // true when closed as "Sin error"
+    resolvedAt: { type: Date, default: null },
+    resolvedBy: { type: mongoose.Schema.Types.ObjectId, ref: "DashboardUser", default: null },
   },
   { timestamps: true }
 );

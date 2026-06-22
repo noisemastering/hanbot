@@ -83,6 +83,7 @@ import TicketsView from "./pages/TicketsView";
 import NotificationsView from "./pages/NotificationsView";
 import CrossSellView from "./pages/CrossSellView";
 import CompanyInfoView from "./pages/CompanyInfoView";
+import ReportedConversationsView from "./pages/ReportedConversationsView";
 import KillswitchView from "./pages/KillswitchView";
 import NukeEmView from "./pages/NukeEmView";
 import MaintenanceGate from "./components/MaintenanceGate";
@@ -157,6 +158,15 @@ const menuItems = [
     path: "/conversations",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+    )
+  },
+  // 4b. Convos reportadas (admin+)
+  {
+    id: "reported-convos",
+    labelKey: "menu.reportedConvos",
+    path: "/reported-convos",
+    icon: (
+      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 3v18h18M7 14l3-3 3 3 5-5M21 9V3h-6" />
     )
   },
   // 5. CRM
@@ -1631,6 +1641,10 @@ function App() {
     if (item.id === 'roles' || item.id === 'profiles' || item.id === 'playground' || item.id === 'spec-ops') {
       return effectiveRole === 'super_admin';
     }
+    // Reported conversations review — admin + super_admin.
+    if (item.id === 'reported-convos') {
+      return effectiveRole === 'super_admin' || effectiveRole === 'admin';
+    }
     // Bot section: visible if the user can see ANY of its children. With
     // childVisible, that means super_admin sees it (all children), while admins
     // and the campaign-admin profile see it for the ad-workflow item only.
@@ -2523,6 +2537,7 @@ function App() {
           <Route path="/company-info" element={<CompanyInfoView />} />
 
           <Route path="/settings" element={<Settings />} />
+          <Route path="/reported-convos" element={(effectiveRole === 'super_admin' || effectiveRole === 'admin') ? <ReportedConversationsView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/spec-ops/killswitch" element={effectiveRole === 'super_admin' ? <KillswitchView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/spec-ops/nuke" element={effectiveRole === 'super_admin' ? <NukeEmView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/help" element={<HelpView />} />

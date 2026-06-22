@@ -61,6 +61,7 @@ const es = {
   "menu.notifications": "Notificaciones",
   "menu.crossSell": "Cross-Selling",
   "menu.companyInfo": "Información General",
+  "menu.reportedConvos": "Convos reportadas",
   "menu.settings": "Configuración",
   "menu.specOps": "Spec Ops",
   "menu.killswitch": "Killswitch",

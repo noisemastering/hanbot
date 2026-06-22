@@ -37,6 +37,7 @@ router.get("/", authenticate, async (req, res) => {
     const tickets = await Ticket.find()
       .populate("createdBy", "firstName lastName username")
       .populate("assignedTo", "firstName lastName username")
+      .populate("resolvedBy", "firstName lastName username")
       .populate("comments.author", "firstName lastName username")
       .sort({ createdAt: -1 });
 
@@ -138,7 +139,7 @@ router.put("/:id", authenticate, async (req, res) => {
       return res.status(404).json({ success: false, error: "Ticket not found" });
     }
 
-    const { title, description, status, priority, assignedTo } = req.body;
+    const { title, description, status, priority, assignedTo, resolution, noError } = req.body;
     const previousStatus = ticket.status;
 
     // Admin+ can change status, priority, and assignment
@@ -148,6 +149,19 @@ router.put("/:id", authenticate, async (req, res) => {
       if (assignedTo !== undefined) ticket.assignedTo = assignedTo || null;
       if (title) ticket.title = title;
       if (description) ticket.description = description;
+      // Resolution of a reported conversation: explanation + "Sin error" flag.
+      if (resolution !== undefined) ticket.resolution = resolution;
+      if (noError !== undefined) ticket.noError = !!noError;
+      const closing = status === "solved" || status === "dismissed";
+      if (closing) {
+        ticket.resolvedAt = new Date();
+        ticket.resolvedBy = req.user._id;
+        if (status === "dismissed") ticket.noError = true;
+      } else if (status) {
+        // Reopened → clear resolution stamps.
+        ticket.resolvedAt = null;
+        ticket.resolvedBy = null;
+      }
     } else {
       // Non-admin can only edit title/description if they are the creator
       if (ticket.createdBy.toString() !== req.user._id.toString()) {
