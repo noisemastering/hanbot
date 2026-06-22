@@ -26,16 +26,12 @@ const norm = (s) =>
   (s == null ? '' : String(s)).toLowerCase().trim()
     .normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 
-async function hasIdentity(click) {
+function hasIdentity(click, user) {
   const cd = click.conversionData || {};
   const buyerFirst = norm(cd.buyerFirstName || (cd.receiverName || '').split(/\s+/)[0]);
   const shipCity = norm(cd.shippingCity);
   const shipState = norm(cd.shippingState);
   const shipZip = cd.shippingZipCode ? String(cd.shippingZipCode).trim() : '';
-
-  const user = await User.findOne({
-    $or: [{ psid: click.psid }, { unifiedId: click.psid }, { unifiedId: `fb:${click.psid}` }],
-  }).lean();
 
   // Click-level location is also a valid signal (stored on the clicklog itself).
   const uFirst = norm(user && (user.firstName || user.first_name));
@@ -71,13 +67,62 @@ async function main() {
     return;
   }
 
+  // --retier: don't delete anything. Recompute CONFIDENCE from stored matchDetails
+  // (the proprietary telltales: name / zip / city / state / POI). Item-id alone →
+  // LOW (no longer fake "high"); a single identity telltale → medium; strong
+  // identity (zip, or name+location) → high. Reversible: backs up prior tiers.
+  if (args.includes('--retier')) {
+    const all = await ClickLog.find({ converted: true, correlatedOrderId: { $ne: null } })
+      .select('correlationConfidence correlationMethod matchDetails').lean();
+    const tierOf = (m = {}) => {
+      const id = m.nameMatch || m.zipMatch || m.cityMatch || m.stateMatch || m.poiMatch;
+      if (id && (m.zipMatch || (m.nameMatch && (m.cityMatch || m.stateMatch)))) return 'high';
+      if (id) return 'medium';
+      return 'low';
+    };
+    const changes = [];
+    for (const c of all) {
+      const want = tierOf(c.matchDetails || {});
+      if (want !== c.correlationConfidence) changes.push({ _id: c._id, from: c.correlationConfidence, to: want });
+    }
+    const breakdown = changes.reduce((a, c) => ((a[`${c.from}→${c.to}`] = (a[`${c.from}→${c.to}`] || 0) + 1), a), {});
+    console.log(`Re-tier: ${changes.length}/${all.length} would change. Breakdown:`, JSON.stringify(breakdown));
+    if (!apply) {
+      console.log('(DRY RUN — re-run with --retier --apply to write + back up.)');
+      await mongoose.connection.close();
+      return;
+    }
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const backupFile = path.join(__dirname, `_retierBackup_${stamp}.json`);
+    fs.writeFileSync(backupFile, JSON.stringify(changes, null, 2));
+    for (const c of changes) await ClickLog.findByIdAndUpdate(c._id, { $set: { correlationConfidence: c.to } });
+    console.log(`💾 Backup: ${backupFile}\n✅ Re-tiered ${changes.length} clicklogs. (Undo: restore confidences from that file.)`);
+    await mongoose.connection.close();
+    return;
+  }
+
   const converted = await ClickLog.find({ converted: true, correlatedOrderId: { $ne: null } }).lean();
-  console.log(`Scanning ${converted.length} converted clicklogs…\n`);
+  console.log(`Scanning ${converted.length} converted clicklogs…`);
+
+  // Batch-load every relevant user ONCE (psid + fb:psid variants) into a map,
+  // instead of one findOne per clicklog (4k+ Atlas round-trips → minutes).
+  const psids = [...new Set(converted.map((c) => c.psid).filter(Boolean))];
+  const variants = [...new Set(psids.flatMap((p) => [p, `fb:${p}`]))];
+  const users = await User.find({ $or: [{ psid: { $in: psids } }, { unifiedId: { $in: variants } }] })
+    .select('psid unifiedId firstName first_name location')
+    .lean();
+  const userByKey = new Map();
+  for (const u of users) {
+    if (u.psid) userByKey.set(String(u.psid), u);
+    if (u.unifiedId) userByKey.set(String(u.unifiedId).replace(/^fb:/, ''), u);
+  }
+  const userFor = (click) => userByKey.get(String(click.psid)) || null;
+  console.log(`Loaded ${users.length} matching users.\n`);
 
   const toRelease = [];
   let kept = 0;
   for (const click of converted) {
-    const id = await hasIdentity(click);
+    const id = hasIdentity(click, userFor(click));
     if (id.ok) {
       kept++;
     } else {

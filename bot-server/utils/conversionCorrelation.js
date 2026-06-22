@@ -392,11 +392,11 @@ async function correlateOrder(order, sellerId) {
     }
 
     if (!bestMatch || bestScore < 30) {
-      // If re-evaluating an existing correlation, keep it ONLY if the buyer's
-      // identity corroborates the click's user. Under our proprietary method a
-      // sale is tied to a person by name / zip / city/state — NOT by an item-id
-      // match alone (clicking our tracked link for a popular product does not
-      // make this person the buyer). So recompute identity regardless of item.
+      // Re-evaluate an existing correlation. CONFIDENCE reflects how strongly the
+      // buyer's IDENTITY corroborates the click's user (name / ML nickname / zip /
+      // city/state). An item-id match alone (clicking our tracked link for a
+      // popular product) is kept but at LOW confidence — it is NOT proof this
+      // person is the buyer. Identity signals promote it to medium/high.
       if (existingCorrelation) {
         const clickUser = await User.findOne({ psid: existingCorrelation.psid }).lean();
         let nameMatches = false, cityMatches = false, stateMatches = false, zipMatches = false;
@@ -405,7 +405,8 @@ async function correlateOrder(order, sellerId) {
           const userCity = normalizeCity(clickUser.location?.city);
           const userState = normalizeCity(clickUser.location?.state);
           const userZip = clickUser.location?.zipcode;
-          nameMatches = !!(userFirstName && buyerFirstName && userFirstName === buyerFirstName);
+          nameMatches = !!(userFirstName && ((buyerFirstName && userFirstName === buyerFirstName) ||
+            (buyerInfo.nickname && nameInNickname(userFirstName, buyerInfo.nickname))));
           cityMatches = !!(userCity && normalizedShippingCity && userCity === normalizedShippingCity);
           stateMatches = !!(userState && normalizedShippingState && userState === normalizedShippingState);
           zipMatches = !!(userZip && shippingZipCode && userZip === shippingZipCode);
@@ -413,19 +414,13 @@ async function correlateOrder(order, sellerId) {
         const hasItemMatch = !!(existingCorrelation.mlItemId && orderedMLItemIds.includes(existingCorrelation.mlItemId));
         const hasIdentity = nameMatches || cityMatches || stateMatches || zipMatches;
 
-        if (!hasIdentity) {
-          // No identity corroboration → this credit is unverified. Release it so
-          // a re-sync clears the bogus "Compró" instead of re-stamping it high.
-          await ClickLog.findByIdAndUpdate(existingCorrelation._id, {
-            converted: false, convertedAt: null, correlatedOrderId: null,
-            correlationConfidence: null, correlationMethod: null, matchDetails: null
-          });
-          console.log(`   🧹 Released existing correlation for order ${orderId} — no identity match (item-id only: ${hasItemMatch})`);
-          return null;
-        }
-
-        const method = hasItemMatch ? 'ml_item_match' : 'enhanced';
-        const confidence = (hasItemMatch || (nameMatches && (cityMatches || stateMatches || zipMatches))) ? 'high' : 'medium';
+        // Tier: identity (esp. name+location or zip) → high; identity-only signal
+        // → medium; item-id alone (no identity) → low; nothing → low.
+        const method = hasIdentity ? (hasItemMatch ? 'ml_item_match' : 'enhanced') : (hasItemMatch ? 'ml_item_match' : 'time_based');
+        let confidence;
+        if (hasIdentity && (zipMatches || (nameMatches && (cityMatches || stateMatches)))) confidence = 'high';
+        else if (hasIdentity) confidence = 'medium';
+        else confidence = 'low'; // item-id or time only — unconfirmed buyer
         await ClickLog.findByIdAndUpdate(existingCorrelation._id, {
           correlationMethod: method,
           correlationConfidence: confidence,
@@ -448,53 +443,35 @@ async function correlateOrder(order, sellerId) {
 
     // Determine method based on what actually matched
     const hasMLItemMatch = md.mlItemMatch || false;
-    const hasNonTimeSignals = md.nameMatch || md.cityMatch || md.stateMatch || md.zipMatch || md.poiMatch;
-
-    // ── Proprietary correlation gate ────────────────────────────────────────
-    // A conversion is only CONFIRMED when the buyer's IDENTITY corroborates the
-    // click's user: name, zip, city/state, or POI. An ML item-id match alone is
-    // NOT enough — clicking our tracked link for a popular promo does not make
-    // this person the buyer (this is exactly how a 6x4 order placed by another
-    // buyer got pinned to a click). Orphan matches are identity-based already.
-    if (!bestMatch.isOrphan && !hasNonTimeSignals) {
-      // Release any stale/false credit this click holds for THIS order so a
-      // re-sync actually clears the bogus "Compró" (item-id/time-only matches).
-      if (bestMatch.click && bestMatch.click.converted &&
-          String(bestMatch.click.correlatedOrderId || '') === String(orderId)) {
-        await ClickLog.findByIdAndUpdate(bestMatch.click._id, {
-          converted: false, convertedAt: null, correlatedOrderId: null,
-          correlationConfidence: null, correlationMethod: null, matchDetails: null
-        });
-        console.log(`   🧹 Released item/time-only credit (no identity) for order ${orderId}`);
-      }
-      console.log(`   ❌ Order ${orderId}: item/time only, no identity (name/zip/city) — NOT credited per proprietary method`);
-      return null;
-    }
+    // Identity signals (the proprietary telltales): name / ML nickname, zip,
+    // city, state, POI. These — not the item-id — are what tie a BUYER to a click.
+    const hasIdentity = md.nameMatch || md.cityMatch || md.stateMatch || md.zipMatch || md.poiMatch;
 
     let method;
-    if (hasMLItemMatch) {
+    if (hasIdentity && hasMLItemMatch) {
       method = 'ml_item_match';
-    } else if (hasNonTimeSignals) {
+    } else if (hasIdentity) {
       method = 'enhanced';
+    } else if (hasMLItemMatch) {
+      method = 'ml_item_match';
     } else {
       method = 'time_based';
     }
 
-    // Determine confidence level based on method and score
+    // ── Confidence tiers (proprietary method) ───────────────────────────────
+    // The item-id match alone only proves SOMEONE clicked our link for the
+    // ordered product — it does NOT prove this person is the buyer (a popular
+    // promo gets many clicks per order; that's how a 6x4 order by another buyer
+    // got pinned to a click). So item-id WITHOUT an identity telltale is kept but
+    // LOW confidence — not the fake "high" it used to get. Identity corroboration
+    // (name/zip/city) promotes it to medium/high.
     let confidence;
-    if (hasMLItemMatch) {
-      // ML Item ID is a definitive match — customer clicked our tracked link and bought that exact product
-      confidence = 'high';
-    } else if (method === 'enhanced') {
-      // Enhanced correlations (multiple signals) should be at least medium
-      if (bestScore >= 100) {
-        confidence = 'high';
-      } else {
-        confidence = 'medium'; // Enhanced is always at least medium
-      }
+    if (hasIdentity && (md.zipMatch || (md.nameMatch && (md.cityMatch || md.stateMatch)) || bestScore >= 135)) {
+      confidence = 'high'; // strong identity (+ usually item) → confirmed buyer
+    } else if (hasIdentity) {
+      confidence = 'medium'; // a single identity telltale
     } else {
-      // Time-based only
-      confidence = 'low';
+      confidence = 'low'; // item-id and/or time only — buyer not confirmed
     }
 
     // Handle orphan correlation (no click, just user match)
