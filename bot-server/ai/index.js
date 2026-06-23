@@ -110,6 +110,17 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
   const lead = newState.lead || {};
   const loc = newState.location || {};
   const handoff = !!diagnostics?.handoffRequested;
+
+  // DETERMINISTIC CP CAPTURE: the zip is the linchpin of sales correlation, so
+  // when this reply shares a buy/tracked link and we DON'T yet have the
+  // customer's CP, the engine GUARANTEES the "¿código postal?" ask (instead of
+  // hoping the prompt includes it). Fires once per conversation (zipAsked flag),
+  // never on a handoff turn.
+  const sharedBuyLink = !!(reply && (/\/r\/[a-z0-9]+/i.test(reply) || /mercadolibre\.com/i.test(reply)));
+  const haveZip = !!(convo.zipcode || loc.zip || loc.zipcode);
+  const shouldAskZip = sharedBuyLink && !haveZip && !newState.zipAsked && !handoff;
+  if (shouldAskZip) newState.zipAsked = true; // persisted via workflowState below
+
   const persist = {
     workflowState: newState,
     currentFlow: `workflow:${workflow.name}`,
@@ -205,6 +216,12 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
     } catch (e) {
       console.error("⚠️ workflow vocab guard failed:", e.message);
     }
+  }
+
+  // Deterministic CP ask: only append if the model didn't already ask for it this
+  // turn (so we don't double-ask), and we resolved to ask above.
+  if (shouldAskZip && safeText && !/c[oó]digo postal|\bC\.?P\.?\b|\bcp\b/i.test(safeText)) {
+    safeText += "\n\n¿Me confirmas tu código postal? 📦 Es para validar la cobertura y el tiempo de envío a tu zona.";
   }
 
   return { handled: true, reply: safeText ? { type: "text", text: safeText } : null };
