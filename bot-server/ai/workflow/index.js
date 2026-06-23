@@ -349,8 +349,20 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // preloaded amounts when the asked measure IS one of them (multi-product quotes,
   // e.g. borde 54m + 18m) so the clamp doesn't corrupt a correct multi-line quote.
   const preloaded = (state.preloadedAmounts || []).filter((a) => Number.isFinite(a) && a > 0);
-  const pivotedToDifferentPrice =
-    askedMeasureResolved && primaryQuoteAmount != null && !preloaded.includes(primaryQuoteAmount);
+  // The ACTIVE measure being quoted — resolved THIS turn, or CARRIED from a prior
+  // turn (the customer asked "3x4" and now just says "Porfa"). Its price is the
+  // canonical one + the clamp's rewrite target, so a promo/preloaded price can't
+  // substitute for it on a follow-up turn. (turnPriceInfo = this turn's resolution
+  // or the carried state.priceInfo.)
+  const activePI = turnPriceInfo && Number.isFinite(turnPriceInfo.amount) && turnPriceInfo.amount > 0 ? turnPriceInfo : null;
+  if (activePI) {
+    if (primaryQuoteAmount == null) primaryQuoteAmount = activePI.amount;
+    noteAmount(activePI, false); // allow the active measure's price (+ its originalPrice)
+  }
+  // Keep the preloaded amounts only when the active measure IS one of them (e.g. the
+  // customer is on the promo product, or borde 54m+18m multi-quote) — otherwise the
+  // promo price must NOT be allowed to stand in for a different measure.
+  const pivotedToDifferentPrice = activePI != null && !preloaded.includes(activePI.amount);
   if (!pivotedToDifferentPrice) {
     noteAmount(state.priceInfo, false);
     for (const a of preloaded) allowedAmounts.push(a);
@@ -504,6 +516,11 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     lead: ctx.lead,
     location: ctx.location,
     basket: state.basket || [],
+    // Persist the ACTIVE measure's price so a follow-up turn that carries no
+    // measure ("Porfa", "sí", "lo quiero") still quotes/clamps THAT measure —
+    // not the promo/default. Without this the resolved 3x4 ($449) was lost and
+    // state.priceInfo stayed the setup promo ($655), which then leaked.
+    priceInfo: turnPriceInfo || state.priceInfo || null,
     // Remember the active size's color options so a later "¿otros colores?"
     // turn (which carries no measure) can still offer them.
     availableColors: turnColors || state.availableColors || null,
