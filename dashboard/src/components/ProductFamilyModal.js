@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from '../i18n';
 import API from '../api';
 import CatalogUpload from './CatalogUpload';
@@ -7,6 +7,11 @@ const API_URL = process.env.REACT_APP_API_URL || 'https://hanbot-production.up.r
 
 function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParentId }) {
   const { t } = useTranslation();
+  // Tracks whether the modal made a server-side change OUTSIDE the save flow
+  // (catalog upload/delete/select). Only then should closing trigger a tree
+  // refresh — a plain cancel with no change must NOT reload.
+  const changedRef = useRef(false);
+  const handleClose = () => onClose(changedRef.current);
   const [formData, setFormData] = useState({
     name: '',
     description: '',
@@ -599,7 +604,7 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
             {product ? 'Editar Familia de Productos' : 'Nueva Familia de Productos'}
           </h2>
           <button
-            onClick={onClose}
+            onClick={handleClose}
             title="Cerrar"
             className="p-2 rounded-lg text-gray-400 hover:bg-gray-700/50 hover:text-white transition-colors"
           >
@@ -988,8 +993,8 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                   entityType="product-family"
                   entityId={product._id}
                   currentCatalog={currentCatalog}
-                  onUploadSuccess={(catalog) => setCurrentCatalog(catalog)}
-                  onDeleteSuccess={() => setCurrentCatalog(null)}
+                  onUploadSuccess={(catalog) => { changedRef.current = true; setCurrentCatalog(catalog); }}
+                  onDeleteSuccess={() => { changedRef.current = true; setCurrentCatalog(null); }}
                   existingCatalogs={existingCatalogs}
                   onSelectExisting={async ({ url, name }) => {
                     try {
@@ -1000,6 +1005,7 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
                       });
                       const data = await response.json();
                       if (data.success) {
+                        changedRef.current = true;
                         setCurrentCatalog(data.data.catalog);
                       }
                     } catch (err) {
@@ -1344,7 +1350,7 @@ function ProductFamilyModal({ product, allProducts, onSave, onClose, presetParen
         <div className="px-6 py-4 border-t border-gray-700/50 flex justify-end space-x-2">
           <button
             type="button"
-            onClick={onClose}
+            onClick={handleClose}
             className="px-4 py-2 bg-gray-700/50 text-white rounded-lg hover:bg-gray-600/50 transition-colors"
           >
             Cancelar

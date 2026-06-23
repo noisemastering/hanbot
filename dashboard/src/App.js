@@ -2891,11 +2891,13 @@ function App() {
             allProducts={productFamilyTree}
             presetParentId={selectedParentId}
             onSave={handleSaveProductFamily}
-            onClose={() => {
+            onClose={(changed) => {
               setShowProductFamilyModal(false);
               setSelectedProductFamily(null);
               setSelectedParentId(null);
-              fetchProductFamilies(); // Refresh data after modal closes (needed for propagation)
+              // Only reload if the modal made a server-side change outside the save
+              // flow (e.g. catalog upload/delete). A plain cancel must NOT reload.
+              if (changed) fetchProductFamilies();
             }}
           />
         )}
