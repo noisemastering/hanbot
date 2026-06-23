@@ -143,16 +143,19 @@ async function correlateOrder(order, sellerId) {
 
     console.log(`   📦 Ordered items: ${orderedMLItemIds.join(', ')}`);
 
-    // Receiver name for matching (from shipment, this is the real name)
-    // Parse "Juan Pérez García" into first/last name
-    let buyerFirstName = null;
-    let buyerLastName = null;
-    if (receiverName) {
+    // Name for matching. ML delivers the BUYER ACCOUNT name (~99%) but almost
+    // never the shipment receiver name (~0%) — so use the buyer name as the
+    // primary, and fall back to the receiver name only if it's ever present.
+    // (Bonus: using the buyer's name is what makes the "bought by someone else,
+    // shipped to me" case score as zip+item=90% instead of a false trifecta.)
+    let buyerFirstName = buyerInfo.first_name ? normalizeName(buyerInfo.first_name) : null;
+    let buyerLastName = buyerInfo.last_name ? normalizeName(buyerInfo.last_name) : null;
+    if ((!buyerFirstName || !buyerLastName) && receiverName) {
       const nameParts = receiverName.trim().split(/\s+/);
-      buyerFirstName = normalizeName(nameParts[0]);
-      buyerLastName = nameParts.length > 1 ? normalizeName(nameParts.slice(1).join(' ')) : null;
+      if (!buyerFirstName) buyerFirstName = normalizeName(nameParts[0]);
+      if (!buyerLastName && nameParts.length > 1) buyerLastName = normalizeName(nameParts.slice(1).join(' '));
     }
-    console.log(`   👤 Receiver name parsed: ${buyerFirstName} ${buyerLastName || ''}`);
+    console.log(`   👤 Buyer name: ${buyerFirstName} ${buyerLastName || ''} (nick ${buyerInfo.nickname || '-'})`);
 
     // Calculate time window for click-based correlation
     const maxTimeAgo = new Date(orderDate.getTime() - (MAX_CORRELATION_HOURS * 60 * 60 * 1000));
