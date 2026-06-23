@@ -221,7 +221,7 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
   // Deterministic CP ask: only append if the model didn't already ask for it this
   // turn (so we don't double-ask), and we resolved to ask above.
   if (shouldAskZip && safeText && !/c[oó]digo postal|\bC\.?P\.?\b|\bcp\b/i.test(safeText)) {
-    safeText += "\n\n¿Me confirmas tu código postal? 📦 Es para validar la cobertura y el tiempo de envío a tu zona.";
+    safeText += "\n\nPor cierto, ¿me compartes tu código postal? Es solo para fines estadísticos. 🙏";
   }
 
   return { handled: true, reply: safeText ? { type: "text", text: safeText } : null };
