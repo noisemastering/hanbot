@@ -224,6 +224,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // its real price. In that case the promo/preloaded default price must NOT be an
   // allowed substitute for it (that's how the 6x4 promo $655 leaked onto a 3x5).
   let askedMeasureResolved = false;
+  // The ACTIVE product the customer is being quoted. Updated whenever a measure
+  // resolves; carried across turns so a follow-up ("Porfa", "sí") still re-resolves
+  // THIS product's price from ML — never reverts to the promo/default.
+  let turnActiveProductId = state.activeProductId || null;
   // DETERMINISTIC PRICE CLAMP — collect every price the engine actually RESOLVES
   // this turn. The outgoing reply may only quote one of these; any other number
   // gets rewritten to `primaryQuoteAmount` (the measure the customer asked about).
@@ -282,6 +286,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         } else if (pi.amount) {
           // The customer asked a specific measure and we resolved its real price.
           askedMeasureResolved = true;
+          turnActiveProductId = found.id; // this product is now the active one
           // psid-traceable link so a click here is attributed (commerce-status).
           const { trackedLink } = require("./priceResolver");
           const link = await trackedLink(pi.link, {
@@ -317,23 +322,45 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           }
           turnColors = { size: found.size || null, options };
         }
-      } else {
+      } else if (wantDims) {
         // The customer named a MEASURE we couldn't resolve in catalog (e.g.
         // 13x3 — out of range). Find the closest available size so the bot
         // offers a REAL size and asks if they still want the exact one —
         // instead of inventing a size or saying "no manejamos decimales".
         const toolsMod = require("./tools");
-        if (wantDims) {
-          const closest = await toolsMod.closestAvailableMeasure(String(userMessage), familyList, wantDims);
-          if (closest) {
-            if (Number.isFinite(closest.price) && closest.price > 0) {
-              allowedAmounts.push(closest.price);
-              if (primaryQuoteAmount == null) primaryQuoteAmount = closest.price;
-            }
-            turnContextExtra +=
-              `\n- MEDIDA NO DISPONIBLE: la medida exacta que pidió el cliente NO está en catálogo. La más cercana que sí manejamos es "${closest.label}"${closest.price != null ? ` ($${closest.price})` : ""}. ` +
-              `Ofrécele ESTA medida más cercana y pregúntale si le sirve o si necesita la medida exacta. ` +
-              `NO inventes una medida, NO inventes precios, y NUNCA digas "no manejamos decimales" (la medida pedida puede no tener decimales). Si insiste en la medida exacta, ofrécele pasar con un asesor.`;
+        const closest = await toolsMod.closestAvailableMeasure(String(userMessage), familyList, wantDims);
+        if (closest) {
+          if (Number.isFinite(closest.price) && closest.price > 0) {
+            allowedAmounts.push(closest.price);
+            if (primaryQuoteAmount == null) primaryQuoteAmount = closest.price;
+          }
+          turnContextExtra +=
+            `\n- MEDIDA NO DISPONIBLE: la medida exacta que pidió el cliente NO está en catálogo. La más cercana que sí manejamos es "${closest.label}"${closest.price != null ? ` ($${closest.price})` : ""}. ` +
+            `Ofrécele ESTA medida más cercana y pregúntale si le sirve o si necesita la medida exacta. ` +
+            `NO inventes una medida, NO inventes precios, y NUNCA digas "no manejamos decimales" (la medida pedida puede no tener decimales). Si insiste en la medida exacta, ofrécele pasar con un asesor.`;
+        }
+      } else if (turnActiveProductId) {
+        // NO measure in THIS message, but there's an ACTIVE product (e.g. the
+        // customer asked "3x4" earlier and now just says "Porfa"/"sí"). The price
+        // is BOUND to the product: re-resolve ITS price from ML (first rule) so a
+        // follow-up never reverts to the promo/default price.
+        const PF = require("../../models/ProductFamily");
+        const { resolvePrice, trackedLink } = require("./priceResolver");
+        const doc = await PF.findById(turnActiveProductId).lean().catch(() => null);
+        if (doc && doc.sellable) {
+          const pi = await resolvePrice(doc);
+          turnPriceInfo = pi;
+          if (pi && pi.handoff) {
+            turnHandoffReason = `Cotización ${doc.size || doc.name}: ${pi.handoffReason || "requiere validación de precio con un asesor"}`;
+            turnContextExtra =
+              `\n- COTIZACIÓN: la medida ${doc.size || doc.name} requiere que un asesor confirme el precio. NO inventes un precio; dile que lo pasas con un asesor.`;
+          } else if (pi && pi.amount) {
+            askedMeasureResolved = true;
+            const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: doc.name, productId: turnActiveProductId });
+            turnContextExtra =
+              `\n- PRODUCTO ACTIVO: el cliente sigue tratando "${doc.name}" (${doc.size || ""}). Precio $${pi.amount}${pi.source === "ml" ? " (Mercado Libre)" : " (inventario)"}.` +
+              (link ? ` Link: ${link}.` : "") +
+              ` Cotiza ESTE producto con su precio y link; NUNCA uses el precio de otra medida ni de la promoción.`;
           }
         }
       }
@@ -521,6 +548,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     // not the promo/default. Without this the resolved 3x4 ($449) was lost and
     // state.priceInfo stayed the setup promo ($655), which then leaked.
     priceInfo: turnPriceInfo || state.priceInfo || null,
+    // The active product (id) the customer is being quoted — carried so a
+    // follow-up turn re-resolves THIS product's price from ML, not the promo.
+    activeProductId: turnActiveProductId || null,
     // Remember the active size's color options so a later "¿otros colores?"
     // turn (which carries no measure) can still offer them.
     availableColors: turnColors || state.availableColors || null,
