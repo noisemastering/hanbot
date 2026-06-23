@@ -996,6 +996,18 @@ function InventarioView() {
                                     =ML
                                   </span>
                                 )}
+                                {/* + IVA: price excludes tax → bot quotes it as "más IVA" */}
+                                <label
+                                  className="flex items-center gap-0.5 text-[10px] text-gray-400 cursor-pointer ml-1 whitespace-nowrap"
+                                  title="Si se marca, el precio se cotiza MÁS IVA (no incluye impuesto)"
+                                >
+                                  <input
+                                    type="checkbox"
+                                    checked={!!product.priceExcludesTax}
+                                    onChange={(e) => handleUpdateProduct(product._id, 'priceExcludesTax', e.target.checked)}
+                                  />
+                                  +IVA
+                                </label>
                               </div>
                             </td>
                             <td className="px-3 py-2">

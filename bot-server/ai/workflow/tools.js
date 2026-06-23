@@ -379,7 +379,7 @@ const REGISTRY = {
             productName: doc.name,
             productId: String(doc._id),
           });
-          const price = pInfo.amount ? ` Precio: $${pInfo.amount}${pInfo.source === "ml" ? "" : " (inventario)"}.` : "";
+          const price = pInfo.amount ? ` Precio: $${pInfo.amount}${pInfo.plusIva ? " + IVA" : ""}${pInfo.source === "ml" ? "" : " (inventario)"}.` : "";
           const linkPart = link ? `Link de compra: ${link}.` : "";
           return { ok: true, line: `${doc.name} — ${linkPart}${price}`.trim() };
         }
@@ -439,7 +439,7 @@ const REGISTRY = {
           productName: ctx.product?.name,
           productId: ctx.product && ctx.product._id ? String(ctx.product._id) : null,
         });
-        const price = pi.amount ? ` Precio: $${pi.amount}${pi.source === "ml" ? "" : " (inventario)"}.` : "";
+        const price = pi.amount ? ` Precio: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${pi.source === "ml" ? "" : " (inventario)"}.` : "";
         const linkPart = link ? `Link de compra: ${link}.` : "";
         return `${ctx.product?.name ? ctx.product.name + " — " : ""}${linkPart}${price}`.trim();
       }

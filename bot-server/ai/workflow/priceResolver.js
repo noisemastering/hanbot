@@ -32,6 +32,7 @@ async function resolvePrice(product) {
   const link = mlLinkOf(product);
   const invPrice = numericPrice(product.price); // Inventario
   const syncedMl = numericPrice(product.mlPrice); // last-synced ML price (ProductFamily.mlPrice)
+  const plusIva = !!product.priceExcludesTax; // price excludes tax → quote as "+ IVA"
 
   // 1. LIVE ML price — the source of truth. Quote it whenever we can fetch it.
   //    This NEVER downgrades while a live price exists.
@@ -45,6 +46,7 @@ async function resolvePrice(product) {
           live: true,
           handoff: false,
           link,
+          plusIva,
           hasDiscount: !!r.hasDiscount,
           originalPrice: r.originalPrice || null,
         };
@@ -72,13 +74,13 @@ async function resolvePrice(product) {
     }
     // 2b. No conflict (Inventario ≥ synced, or no Inventario) → quote the
     //     last-synced ML price (still the source of truth, just cached).
-    return { amount: syncedMl, source: "ml", live: false, handoff: false, link };
+    return { amount: syncedMl, source: "ml", live: false, handoff: false, link, plusIva };
   }
 
   // 3. No ML price AT ALL (never synced / not an ML product) → Inventario is the
   //    legitimate last resort.
   if (invPrice != null) {
-    return { amount: invPrice, source: "inventario", handoff: false, link };
+    return { amount: invPrice, source: "inventario", handoff: false, link, plusIva };
   }
 
   // 4. sellable but no price anywhere → human handoff (never invent a price).

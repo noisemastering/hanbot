@@ -313,8 +313,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             productId: found.id,
           });
           turnContextExtra =
-            `\n- COTIZACIÓN SOLICITADA AHORA: el cliente pregunta por "${found.name}". Precio $${pi.amount}${pi.source === "ml" ? " (Mercado Libre)" : " (inventario)"}.` +
+            `\n- COTIZACIÓN SOLICITADA AHORA: el cliente pregunta por "${found.name}". Precio $${pi.amount}${pi.plusIva ? " + IVA" : ""}${pi.source === "ml" ? " (Mercado Libre)" : " (inventario)"}.` +
             (link ? ` Link: ${link}.` : "") +
+            (pi.plusIva ? ` Este precio es MÁS IVA: al cotizar di SIEMPRE "$${pi.amount} + IVA" o "más IVA".` : "") +
             ` Cotiza ESTE producto con su precio y link; NO escales a un humano ni pidas la medida de nuevo.`;
         }
         // Available colors/variants for the requested size — so the bot can
@@ -375,8 +376,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             askedMeasureResolved = true;
             const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: doc.name, productId: turnActiveProductId });
             turnContextExtra =
-              `\n- PRODUCTO ACTIVO: el cliente sigue tratando "${doc.name}" (${doc.size || ""}). Precio $${pi.amount}${pi.source === "ml" ? " (Mercado Libre)" : " (inventario)"}.` +
+              `\n- PRODUCTO ACTIVO: el cliente sigue tratando "${doc.name}" (${doc.size || ""}). Precio $${pi.amount}${pi.plusIva ? " + IVA" : ""}${pi.source === "ml" ? " (Mercado Libre)" : " (inventario)"}.` +
               (link ? ` Link: ${link}.` : "") +
+              (pi.plusIva ? ` Este precio es MÁS IVA: di SIEMPRE "$${pi.amount} + IVA".` : "") +
               ` Cotiza ESTE producto con su precio y link; NUNCA uses el precio de otra medida ni de la promoción.`;
           }
         }

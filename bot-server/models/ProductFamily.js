@@ -28,6 +28,12 @@ const productFamilySchema = new mongoose.Schema({
   price: {
     type: Number
   },
+  // When true, the stored price EXCLUDES tax → the bot must quote it as "+ IVA"
+  // (más IVA). Default false (price already includes tax). Set true for rolls.
+  priceExcludesTax: {
+    type: Boolean,
+    default: false
+  },
   wholesaleEnabled: {
     type: Boolean,
     default: false  // Whether wholesale pricing is available for this product
