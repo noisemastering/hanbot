@@ -198,7 +198,10 @@ function getSubdivision(product, parentChain) {
   // Check if any parent contains "rompeviento"
   const isCintaRompevientos = parentChain.some(p => p.name.toLowerCase().includes('rompeviento'));
 
-  // Get intermediate parents (skip base class and direct parent if it's just a size/color)
+  // Get intermediate parents (skip base class and direct parent if it's just a size/color).
+  // Collect EVERY qualifying descriptive level and join them — the chain can have more
+  // than one rung (e.g. "Borde Separador" › "Grueso"), and all of them belong in the name.
+  const subs = [];
   for (let i = 1; i < parentChain.length; i++) {
     const parent = parentChain[i];
     const nameLower = parent.name.toLowerCase();
@@ -222,11 +225,11 @@ function getSubdivision(product, parentChain) {
       continue;
     }
 
-    // This is likely a subdivision
-    return parent.name;
+    // This is a descriptive subdivision level — keep climbing for any more.
+    subs.push(parent.name);
   }
 
-  return null;
+  return subs.length ? subs.join(' ') : null;
 }
 
 // Check if product has triangular shape (3 sides)
