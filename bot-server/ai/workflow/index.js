@@ -134,16 +134,22 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // the pitch EXACTLY as written and return — skipping the router, node LLM and
   // verifier entirely (token-cheap). When there's no pitch, this never runs and
   // the LLM handles the promo normally.
-  if (userMessage && (state.promoPitch || state.promoQuote) && !state.promoPitchSent) {
+  // Runs when the pitch hasn't been sent yet, OR when the promo was dismissed
+  // (client pivoted to another measure) — so a customer CIRCLING BACK to ask for
+  // the promo re-surfaces it. The verbatim pitch is sent only once; re-asks get
+  // the cheap deterministic quote.
+  if (userMessage && (state.promoPitch || state.promoQuote) && (!state.promoPitchSent || state.promoDismissed)) {
     try {
       const { wantsPromo } = require("../utils/promoIntent");
       if (await wantsPromo(String(userMessage))) {
-        // Pitch wins if set; otherwise send the deterministic quote (product +
-        // promo price + tracked link). Either way the bot answers the promo ask
-        // directly — the router never gets a chance to detour to handoff.
+        // The promo is relevant again → un-dismiss so its context returns for
+        // follow-up turns too.
+        state.promoDismissed = false;
+        // First time with a pitch → send the verbatim pitch; otherwise (re-ask, or
+        // no pitch) send the deterministic quote (product + promo price + link).
         let reply = null;
         let kind = null;
-        if (state.promoPitch) {
+        if (state.promoPitch && !state.promoPitchSent) {
           reply = String(state.promoPitch);
           kind = "verbatimPitch";
         } else if (state.promoQuote && state.promoQuote.amount) {
@@ -153,12 +159,18 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             `¡Claro! ${label} está en promoción por $${q.amount}.` +
             (q.link ? ` Puedes comprarla aquí: ${q.link}` : "");
           kind = "promoQuote";
+        } else if (state.promoPitch) {
+          reply = String(state.promoPitch); // pitch already sent but no quote available → repeat pitch
+          kind = "verbatimPitch";
         }
         if (reply) {
           history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+          // The promo product is the active one again, so a follow-up ("Porfa")
+          // re-resolves THE PROMO's price, not the previously-asked measure.
+          const promoProductId = state.product && state.product._id ? String(state.product._id) : (state.activeProductId || null);
           return {
             reply,
-            state: { ...state, history, promoPitchSent: true, nodeId: currentNode.id },
+            state: { ...state, history, promoPitchSent: true, promoDismissed: false, activeProductId: promoProductId, nodeId: currentNode.id },
             diagnostics: {
               workflow: { id: String(workflow._id), name: workflow.name },
               fromNode: { id: currentNode.id, name: currentNode.name },
