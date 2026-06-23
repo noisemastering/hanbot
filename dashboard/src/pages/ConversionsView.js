@@ -674,9 +674,26 @@ function ConversionsView() {
                         </span>
                       </td>
                       <td className="px-4 py-3 text-center">
-                        <span className={`px-2 py-0.5 rounded text-xs font-medium ${getConfidenceBadge(conversion.correlationConfidence)}`}>
-                          {getConfidenceLabel(conversion.correlationConfidence)}
-                        </span>
+                        {conversion.certainty != null ? (
+                          <span
+                            title={conversion.attributionReason || ''}
+                            style={{
+                              color: conversion.certainty >= 90 ? '#34d399'
+                                : conversion.certainty >= 70 ? '#fbbf24'
+                                : conversion.certainty >= 50 ? '#fb923c'
+                                : '#9ca3af',
+                              fontWeight: conversion.certainty >= 90 ? 700 : conversion.certainty >= 70 ? 600 : 400,
+                              fontSize: conversion.certainty >= 90 ? '0.95rem' : conversion.certainty >= 50 ? '0.8rem' : '0.72rem',
+                            }}
+                          >
+                            {conversion.certainty}%{conversion.undisputed ? ' 🏅' : ''}
+                            {conversion.ventaIndirecta ? <span className="block text-[9px] text-orange-300/70">indirecta</span> : null}
+                          </span>
+                        ) : (
+                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${getConfidenceBadge(conversion.correlationConfidence)}`}>
+                            {getConfidenceLabel(conversion.correlationConfidence)}
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}

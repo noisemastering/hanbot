@@ -255,7 +255,11 @@ function MessagePerformanceView() {
                     <td className="py-2 pr-4 text-gray-400 whitespace-nowrap">{fmtDateTime(r.lastMessageAt)}</td>
                     <td className="py-2 pr-2">
                       <div className="flex flex-wrap gap-1 justify-center">
-                        <Badge on={r.sale} color="#22c55e" label="Venta" />
+                        <Badge
+                          on={r.sale}
+                          color={r.saleCertainty == null ? "#22c55e" : r.saleCertainty >= 90 ? "#22c55e" : r.saleCertainty >= 70 ? "#fbbf24" : r.saleCertainty >= 50 ? "#fb923c" : "#9ca3af"}
+                          label={`Venta${r.saleCertainty != null ? ` ${r.saleCertainty}%` : ""}${r.saleUndisputed ? " 🏅" : ""}`}
+                        />
                         <Badge on={r.click} color="#3b82f6" label="Clic" />
                         <Badge on={r.handoff} color="#f5a623" label="Humano" title={r.handoffReason || ''} />
                         <Badge

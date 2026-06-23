@@ -153,16 +153,22 @@ router.get("/", authenticate, async (req, res) => {
         Conversation.find({ psid: { $in: psids } })
           .select("psid channel extractedName productSpecs.customerName adId state handoffRequested handoffReason")
           .lean(),
-        ClickLog.find({ psid: { $in: psids } }).select("psid clicked converted conversionData").lean(),
+        ClickLog.find({ psid: { $in: psids } }).select("psid clicked converted conversionData correlationCertainty correlationUndisputed ventaIndirecta").lean(),
         Ticket.find({ psid: { $in: psids }, source: "conversation_report" }).select("psid priority category createdAt status noError").lean(),
       ]);
 
       const convoBy = new Map(convos.map((c) => [c.psid, c]));
       const clickAgg = new Map();
       for (const cl of clicks) {
-        const e = clickAgg.get(cl.psid) || { clicked: false, sale: false, saleAmount: 0 };
+        const e = clickAgg.get(cl.psid) || { clicked: false, sale: false, saleAmount: 0, certainty: null, undisputed: false, indirecta: false };
         if (cl.clicked) e.clicked = true;
-        if (cl.converted) { e.sale = true; e.saleAmount += Number(cl.conversionData?.totalAmount) || 0; }
+        if (cl.converted) {
+          e.sale = true; e.saleAmount += Number(cl.conversionData?.totalAmount) || 0;
+          // Keep the STRONGEST certainty among this psid's converted clicks.
+          if (cl.correlationCertainty != null && (e.certainty == null || cl.correlationCertainty > e.certainty)) {
+            e.certainty = cl.correlationCertainty; e.undisputed = !!cl.correlationUndisputed; e.indirecta = !!cl.ventaIndirecta;
+          }
+        }
         clickAgg.set(cl.psid, e);
       }
       const reportBy = new Map();
@@ -188,6 +194,9 @@ router.get("/", authenticate, async (req, res) => {
           click: ck.clicked,
           sale: ck.sale,
           saleAmount: ck.sale ? Math.round(ck.saleAmount) : null,
+          saleCertainty: ck.sale ? ck.certainty : null,
+          saleUndisputed: ck.sale ? ck.undisputed : false,
+          saleIndirecta: ck.sale ? ck.indirecta : false,
           handoff,
           handoffReason: handoff ? c.handoffReason || null : null,
           reported: !!rep,

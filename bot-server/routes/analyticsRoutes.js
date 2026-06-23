@@ -264,6 +264,10 @@ router.get('/conversions/recent', async (req, res) => {
         convertedAt: click.convertedAt,
         correlationConfidence: click.correlationConfidence,
         correlationMethod: click.correlationMethod,
+        certainty: click.correlationCertainty != null ? click.correlationCertainty : null,
+        undisputed: !!click.correlationUndisputed,
+        ventaIndirecta: !!click.ventaIndirecta,
+        attributionReason: click.attributionReason || null,
         // Location data from click
         city: click.city,
         stateMx: click.stateMx,

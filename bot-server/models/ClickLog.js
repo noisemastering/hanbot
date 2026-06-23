@@ -91,6 +91,14 @@ const clickLogSchema = new mongoose.Schema(
       default: null
     },
 
+    // Certainty model (combination of signals): 25/50/70/90/100 %, the undisputed
+    // (ML-nickname) medal, the venta-indirecta flag (zip matches, product differs),
+    // and a human-readable reason for the attribution.
+    correlationCertainty: { type: Number, default: null },
+    correlationUndisputed: { type: Boolean, default: false },
+    ventaIndirecta: { type: Boolean, default: false },
+    attributionReason: { type: String, default: null },
+
     // Match details for correlation auditing
     matchDetails: {
       mlItemMatch: Boolean,

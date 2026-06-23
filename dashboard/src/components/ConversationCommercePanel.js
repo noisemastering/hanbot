@@ -122,14 +122,21 @@ export default function ConversationCommercePanel({ psid }) {
             on={status.purchased}
             onLabel={
               status.purchased
-                ? `Compró${status.conversion?.totalAmount ? ` — $${status.conversion.totalAmount}` : ""}` +
-                  `${status.conversion?.confidence ? ` (${status.conversion.confidence})` : ""}`
+                ? `Compró${status.conversion?.totalAmount ? ` — $${status.conversion.totalAmount}` : ""}`
                 : ""
             }
             offLabel="Sin compra registrada"
           />
-          {status.purchased && status.conversion?.itemTitle && (
-            <p className="text-[11px] text-gray-400 pl-4">{status.conversion.itemTitle}</p>
+          {status.purchased && status.conversion && (
+            <div className="pl-4 space-y-0.5">
+              <Certainty conv={status.conversion} />
+              {status.conversion.attributionReason && (
+                <p className="text-[10px] text-gray-500">{status.conversion.attributionReason}</p>
+              )}
+              {status.conversion.itemTitle && (
+                <p className="text-[11px] text-gray-400">{status.conversion.itemTitle}</p>
+              )}
+            </div>
           )}
         </div>
       ) : (
@@ -215,6 +222,27 @@ export default function ConversationCommercePanel({ psid }) {
         </div>
       )}
     </div>
+  );
+}
+
+// Certainty % with color/typography hierarchy so the agent judges the data:
+// 90–100 solid, 70 amber, 50 muted orange, 25 faint. Undisputed (100 w/ ML match)
+// shows a medal.
+function Certainty({ conv }) {
+  const pct = conv.certainty;
+  if (pct == null) {
+    // Legacy record without a certainty score — fall back to the old tier word.
+    return conv.confidence ? <span className="text-xs text-gray-400">Confianza: {conv.confidence}</span> : null;
+  }
+  const style =
+    pct >= 90 ? { color: "#34d399", weight: 700, size: "0.95rem" } // solid green, prominent
+      : pct >= 70 ? { color: "#fbbf24", weight: 600, size: "0.85rem" } // amber
+      : pct >= 50 ? { color: "#fb923c", weight: 500, size: "0.8rem" } // muted orange
+      : { color: "#9ca3af", weight: 400, size: "0.75rem" }; // faint gray (25%)
+  return (
+    <span style={{ color: style.color, fontWeight: style.weight, fontSize: style.size }}>
+      {pct}% de certeza{conv.undisputed ? " 🏅" : ""}{conv.ventaIndirecta ? " · venta indirecta" : ""}
+    </span>
   );
 }
 

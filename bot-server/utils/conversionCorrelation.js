@@ -212,283 +212,103 @@ async function correlateOrder(order, sellerId) {
 
     console.log(`   🖱️ Found ${allClicks.length} clicks in time window`);
 
-    let bestMatch = null;
-    let bestScore = 0;
+    // ── CERTAINTY MODEL ───────────────────────────────────────────────────────
+    // Attribution = the SUM of corroborating signals; no single one decides it.
+    //   zip  = the CP we collected on Messenger == the order's shipping zip (the linchpin)
+    //   name = our Messenger FULL name (first+last) == the shipping receiver name
+    //   item = the product they clicked == the product ordered
+    //   nick = our name inside the ML buyer handle (the undisputed topper)
+    //   time = ONLY the ≤5-min gate for the weakest (item-only, no zip) case
+    // Tiers: 100 (zip+name+item; +nick ⇒ undisputed) · 90 (zip+item) · 70 (zip+name,
+    //   distinto producto = indirecta) · 50 (zip, distinto producto = indirecta) ·
+    //   25 (item + ≤5min, sin zip) · else NOT attributed.
+    const normZip = (z) => String(z || '').replace(/\D/g, '');
+    const shipZipN = normZip(shippingZipCode);
 
+    const evalCandidate = (click, user) => {
+      const uFirst = normalizeName((user && (user.firstName || user.first_name)) || '');
+      const uLast = normalizeName((user && (user.lastName || user.last_name)) || '');
+      const uZip = normZip((user && user.location && user.location.zipcode) || (click && click.zipcode));
+      const mlItemId = click && click.mlItemId;
+      const zipMatch = !!(uZip && shipZipN && uZip === shipZipN);
+      // FULL name only: need first AND last on both sides, all matching.
+      const nameMatch = !!(uFirst && uLast && buyerFirstName && buyerLastName && uFirst === buyerFirstName && uLast === buyerLastName);
+      const itemMatch = !!(mlItemId && orderedMLItemIds.includes(mlItemId));
+      const nicknameMatch = !!(uFirst && buyerInfo.nickname && nameInNickname(uFirst, buyerInfo.nickname));
+      const minutes = click && click.clickedAt ? (orderDate.getTime() - new Date(click.clickedAt).getTime()) / 60000 : null;
+      return { zipMatch, nameMatch, itemMatch, nicknameMatch, minutes };
+    };
+
+    const classify = (m) => {
+      if (m.zipMatch && m.nameMatch && m.itemMatch)
+        return { pct: 100, confidence: 'high', undisputed: !!m.nicknameMatch, ventaIndirecta: false,
+                 reason: m.nicknameMatch ? 'zip + nombre + item + usuario ML → indiscutible (100%)' : 'zip + nombre + item → trifecta (100%)' };
+      if (m.zipMatch && m.itemMatch)
+        return { pct: 90, confidence: 'high', undisputed: false, ventaIndirecta: false, reason: 'zip + item (90%)' };
+      if (m.zipMatch && m.nameMatch)
+        return { pct: 70, confidence: 'medium', undisputed: false, ventaIndirecta: true, reason: 'zip + nombre, distinto producto → venta indirecta (70%)' };
+      if (m.zipMatch)
+        return { pct: 50, confidence: 'medium', undisputed: false, ventaIndirecta: true, reason: 'zip, distinto producto → venta indirecta (50%)' };
+      if (m.itemMatch && m.minutes != null && m.minutes >= 0 && m.minutes <= 5)
+        return { pct: 25, confidence: 'low', undisputed: false, ventaIndirecta: false, reason: 'item + tiempo ≤5 min, sin zip (25%)' };
+      return null;
+    };
+
+    const candidates = [];
     for (const click of allClicks) {
-      let score = 0;
-      const matchDetails = {
-        mlItemMatch: false,
-        nameMatch: false,
-        nicknameMatch: false,
-        cityMatch: false,
-        stateMatch: false,
-        zipMatch: false,
-        poiMatch: false,
-        timeScore: 0
-      };
-
-      const hoursAgo = hoursBetween(click.clickedAt, orderDate);
-
-      // Find the user associated with this click
-      const clickUser = matchingUsers.find(u =>
-        u.psid === click.psid ||
-        u.unifiedId === click.psid ||
-        u.unifiedId === `fb:${click.psid}`
-      );
-
-      // ML Item ID exact match - strongest signal
-      if (click.mlItemId && orderedMLItemIds.includes(click.mlItemId)) {
-        score += 100;
-        matchDetails.mlItemMatch = true;
-        console.log(`      ✓ ML Item ID match: ${click.mlItemId}`);
-      }
-
-      // Name match - check User model against receiver name or nickname
-      if (clickUser) {
-        const userFirstName = normalizeName(clickUser.firstName || clickUser.first_name);
-
-        // Primary: match against receiver name from shipment
-        if (userFirstName && buyerFirstName && userFirstName === buyerFirstName) {
-          score += 40;
-          matchDetails.nameMatch = true;
-          console.log(`      ✓ Name match (receiver): ${clickUser.firstName || clickUser.first_name}`);
-        }
-        // Fallback: check if user's name appears in buyer nickname
-        else if (userFirstName && buyerInfo.nickname && nameInNickname(userFirstName, buyerInfo.nickname)) {
-          score += 35; // Slightly lower confidence than exact match
-          matchDetails.nameMatch = true;
-          matchDetails.nicknameMatch = true;
-          console.log(`      ✓ Name in nickname: ${userFirstName} found in ${buyerInfo.nickname}`);
-        }
-      }
-
-      // Location matches - check both ClickLog and User model
-      const clickCity = normalizeCity(click.city || clickUser?.location?.city);
-      const clickState = normalizeCity(click.stateMx || clickUser?.location?.state);
-      const clickZip = click.zipcode || clickUser?.location?.zipcode;
-
-      if (clickCity && normalizedShippingCity && clickCity === normalizedShippingCity) {
-        score += 35;
-        matchDetails.cityMatch = true;
-      }
-
-      if (clickState && normalizedShippingState && clickState === normalizedShippingState) {
-        score += 25;
-        matchDetails.stateMatch = true;
-      }
-
-      if (clickZip && shippingZipCode && clickZip === shippingZipCode) {
-        score += 45; // Zip is very specific
-        matchDetails.zipMatch = true;
-      }
-
-      // POI match - check if user's POI matches ordered product
-      if (clickUser?.poi?.rootName && firstItem?.item?.title) {
-        if (poiMatchesProduct(clickUser.poi.rootName, firstItem.item.title)) {
-          score += 30;
-          matchDetails.poiMatch = true;
-          console.log(`      ✓ POI match: ${clickUser.poi.rootName}`);
-        }
-      }
-
-      // Time proximity scoring
-      if (hoursAgo <= HIGH_CONFIDENCE_HOURS) {
-        score += 20;
-        matchDetails.timeScore = 20;
-      } else if (hoursAgo <= MEDIUM_CONFIDENCE_HOURS) {
-        score += 10;
-        matchDetails.timeScore = 10;
-      } else {
-        score += 5;
-        matchDetails.timeScore = 5;
-      }
-
-      if (score > bestScore) {
-        bestScore = score;
-        bestMatch = { click, score, hoursAgo, matchDetails, user: clickUser };
-      }
+      let user = matchingUsers.find((u) => u.psid === click.psid || u.unifiedId === click.psid || u.unifiedId === `fb:${click.psid}`);
+      if (!user) user = await User.findOne({ psid: click.psid }).lean().catch(() => null);
+      const m = evalCandidate(click, user);
+      const c = classify(m);
+      if (c) candidates.push({ click, user, isOrphan: false, m, ...c });
+    }
+    // Orphans: a known customer (name/zip match) who bought without clicking our link.
+    for (const u of matchingUsers) {
+      const clicked = allClicks.some((cl) => cl.psid === u.psid || cl.psid === (u.unifiedId || '').replace(/^fb:/, ''));
+      if (clicked) continue;
+      const m = evalCandidate(null, u);
+      const c = classify(m);
+      if (c) candidates.push({ click: null, user: u, isOrphan: true, m, ...c });
     }
 
-    // ============ PHASE 4: ORPHAN CORRELATION ============
-    // If no click matched well, check if we have a user match without a click
-    // This handles: user chatted, got product info, but bought directly on ML without clicking link
-    // An item-id match gives a click a high raw score but is NOT identity. If the
-    // best click lacks any identity signal, treat it as "no real match" so a
-    // genuine identity-backed buyer (orphan) can take the order instead.
-    const bestHasIdentity = !!(bestMatch && bestMatch.matchDetails &&
-      (bestMatch.matchDetails.nameMatch || bestMatch.matchDetails.zipMatch ||
-       bestMatch.matchDetails.cityMatch || bestMatch.matchDetails.stateMatch ||
-       bestMatch.matchDetails.poiMatch));
+    // Strongest wins (highest %; tie → most recent click).
+    candidates.sort((a, b) => {
+      if (b.pct !== a.pct) return b.pct - a.pct;
+      const ta = a.click && a.click.clickedAt ? new Date(a.click.clickedAt).getTime() : 0;
+      const tb = b.click && b.click.clickedAt ? new Date(b.click.clickedAt).getTime() : 0;
+      return tb - ta;
+    });
+    const best = candidates[0] || null;
 
-    if ((!bestMatch || bestScore < 50 || !bestHasIdentity) && matchingUsers.length > 0) {
-      for (const user of matchingUsers) {
-        let orphanScore = 0;
-        const matchDetails = {
-          orphan: true,
-          nameMatch: false,
-          nicknameMatch: false,
-          cityMatch: false,
-          stateMatch: false,
-          zipMatch: false,
-          poiMatch: false
-        };
-
-        // Name match - receiver name or nickname
-        const userFirstName = normalizeName(user.firstName || user.first_name);
-        if (userFirstName && buyerFirstName && userFirstName === buyerFirstName) {
-          orphanScore += 40;
-          matchDetails.nameMatch = true;
-        } else if (userFirstName && buyerInfo.nickname && nameInNickname(userFirstName, buyerInfo.nickname)) {
-          orphanScore += 35;
-          matchDetails.nameMatch = true;
-          matchDetails.nicknameMatch = true;
-        }
-
-        // Location match
-        const userCity = normalizeCity(user.location?.city);
-        const userState = normalizeCity(user.location?.state);
-        const userZip = user.location?.zipcode;
-
-        if (userCity && normalizedShippingCity && userCity === normalizedShippingCity) {
-          orphanScore += 35;
-          matchDetails.cityMatch = true;
-        }
-
-        if (userState && normalizedShippingState && userState === normalizedShippingState) {
-          orphanScore += 25;
-          matchDetails.stateMatch = true;
-        }
-
-        if (userZip && shippingZipCode && userZip === shippingZipCode) {
-          orphanScore += 45;
-          matchDetails.zipMatch = true;
-        }
-
-        // POI match
-        if (user.poi?.rootName && firstItem?.item?.title) {
-          if (poiMatchesProduct(user.poi.rootName, firstItem.item.title)) {
-            orphanScore += 30;
-            matchDetails.poiMatch = true;
-          }
-        }
-
-        // Only consider orphan if score is meaningful (name + location OR name + POI).
-        // An identity-backed orphan must be able to beat an item-id-only click
-        // (high raw score, no identity corroboration).
-        if (orphanScore >= 70 && (orphanScore > bestScore || !bestHasIdentity)) {
-          console.log(`   🔮 ORPHAN CORRELATION: User ${user.first_name} (score: ${orphanScore})`);
-          bestScore = orphanScore;
-          bestMatch = {
-            click: null,
-            score: orphanScore,
-            hoursAgo: null,
-            matchDetails,
-            user,
-            isOrphan: true
-          };
-        }
-      }
-    }
-
-    if (!bestMatch || bestScore < 30) {
-      // Re-evaluate an existing correlation. CONFIDENCE reflects how strongly the
-      // buyer's IDENTITY corroborates the click's user (name / ML nickname / zip /
-      // city/state). An item-id match alone (clicking our tracked link for a
-      // popular product) is kept but at LOW confidence — it is NOT proof this
-      // person is the buyer. Identity signals promote it to medium/high.
-      if (existingCorrelation) {
-        const clickUser = await User.findOne({ psid: existingCorrelation.psid }).lean();
-        let nameMatches = false, cityMatches = false, stateMatches = false, zipMatches = false;
-        if (clickUser) {
-          const userFirstName = normalizeName(clickUser.firstName || clickUser.first_name);
-          const userCity = normalizeCity(clickUser.location?.city);
-          const userState = normalizeCity(clickUser.location?.state);
-          const userZip = clickUser.location?.zipcode;
-          nameMatches = !!(userFirstName && ((buyerFirstName && userFirstName === buyerFirstName) ||
-            (buyerInfo.nickname && nameInNickname(userFirstName, buyerInfo.nickname))));
-          cityMatches = !!(userCity && normalizedShippingCity && userCity === normalizedShippingCity);
-          stateMatches = !!(userState && normalizedShippingState && userState === normalizedShippingState);
-          zipMatches = !!(userZip && shippingZipCode && userZip === shippingZipCode);
-        }
-        const hasItemMatch = !!(existingCorrelation.mlItemId && orderedMLItemIds.includes(existingCorrelation.mlItemId));
-        const hasIdentity = nameMatches || cityMatches || stateMatches || zipMatches;
-
-        // Tier: identity (esp. name+location or zip) → high; identity-only signal
-        // → medium; item-id alone (no identity) → low; nothing → low.
-        const method = hasIdentity ? (hasItemMatch ? 'ml_item_match' : 'enhanced') : (hasItemMatch ? 'ml_item_match' : 'time_based');
-        let confidence;
-        if (hasIdentity && (zipMatches || (nameMatches && (cityMatches || stateMatches)))) confidence = 'high';
-        else if (hasIdentity) confidence = 'medium';
-        else confidence = 'low'; // item-id or time only — unconfirmed buyer
+    if (!best) {
+      // Nothing meets the model. Release any stale credit on this order so a
+      // re-sync clears it instead of leaving a bogus conversion.
+      if (existingCorrelation && existingCorrelation.converted && String(existingCorrelation.correlatedOrderId || '') === String(orderId)) {
         await ClickLog.findByIdAndUpdate(existingCorrelation._id, {
-          correlationMethod: method,
-          correlationConfidence: confidence,
-          correlatedOrderId: String(orderId)
+          converted: false, convertedAt: null, correlatedOrderId: null,
+          correlationConfidence: null, correlationMethod: null, matchDetails: null,
+          correlationCertainty: null, correlationUndisputed: false, ventaIndirecta: false, attributionReason: null,
         });
-        console.log(`   ✅ Updated existing correlation for order ${orderId} (${method}, ${confidence})`);
-        // One order → one converted click.
-        await demoteOtherClicksForOrder(orderId, existingCorrelation._id);
-        return { alreadyCorrelated: true, clickLog: existingCorrelation, method, confidence };
+        console.log(`   🧹 Released stale correlation for order ${orderId} — no longer meets the certainty model`);
       }
-      console.log(`   ❌ No suitable match found for order ${orderId} (best score: ${bestScore})`);
+      console.log(`   ❌ Order ${orderId}: no candidate meets the certainty model — not attributed`);
       return null;
     }
 
-    // Log match details
-    const md = bestMatch.matchDetails || {};
-    console.log(`   📊 Best match score: ${bestScore}`);
-    console.log(`      ML Item: ${md.mlItemMatch ? 'YES' : 'no'}, Name: ${md.nameMatch ? 'YES' : 'no'}, POI: ${md.poiMatch ? 'YES' : 'no'}`);
-    console.log(`      City: ${md.cityMatch ? 'YES' : 'no'}, State: ${md.stateMatch ? 'YES' : 'no'}, Zip: ${md.zipMatch ? 'YES' : 'no'}`);
-
-    // Determine method based on what actually matched
-    const hasMLItemMatch = md.mlItemMatch || false;
-    // Identity signals (the proprietary telltales): name / ML nickname, zip,
-    // city, state, POI. These — not the item-id — are what tie a BUYER to a click.
-    const hasIdentity = md.nameMatch || md.cityMatch || md.stateMatch || md.zipMatch || md.poiMatch;
-
-    let method;
-    if (hasIdentity && hasMLItemMatch) {
-      method = 'ml_item_match';
-    } else if (hasIdentity) {
-      method = 'enhanced';
-    } else if (hasMLItemMatch) {
-      method = 'ml_item_match';
-    } else {
-      method = 'time_based';
-    }
-
-    // ── Confidence tiers (proprietary method) ───────────────────────────────
-    // The item-id match alone only proves SOMEONE clicked our link for the
-    // ordered product — it does NOT prove this person is the buyer (a popular
-    // promo gets many clicks per order; that's how a 6x4 order by another buyer
-    // got pinned to a click). So item-id WITHOUT an identity telltale is kept but
-    // LOW confidence — not the fake "high" it used to get. Identity corroboration
-    // (name/zip/city) promotes it to medium/high.
-    let confidence;
-    if (hasIdentity && (md.zipMatch || (md.nameMatch && (md.cityMatch || md.stateMatch)) || bestScore >= 135)) {
-      confidence = 'high'; // strong identity (+ usually item) → confirmed buyer
-    } else if (hasIdentity) {
-      confidence = 'medium'; // a single identity telltale
-    } else {
-      confidence = 'low'; // item-id and/or time only — buyer not confirmed
-    }
-
-    // Handle orphan correlation (no click, just user match)
-    if (bestMatch.isOrphan) {
-      return await saveOrphanCorrelation(bestMatch.user, order, confidence, bestMatch.matchDetails, {
-        shippingCity, shippingState, shippingZipCode,
-        buyerFirstName, buyerLastName, receiverName
+    console.log(`   ✅ Best: ${best.pct}% — ${best.reason}${best.isOrphan ? ' [orphan]' : ''}`);
+    const method = best.m.itemMatch ? 'ml_item_match' : (best.m.nameMatch || best.m.zipMatch) ? 'enhanced' : 'time_based';
+    const details = {
+      mlItemMatch: best.m.itemMatch, nameMatch: best.m.nameMatch, nicknameMatch: best.m.nicknameMatch,
+      zipMatch: best.m.zipMatch, cityMatch: false, stateMatch: false, poiMatch: false, timeScore: best.m.minutes,
+      certaintyPct: best.pct, undisputed: best.undisputed, ventaIndirecta: best.ventaIndirecta, attributionReason: best.reason,
+      shippingCity, shippingState, shippingZipCode, buyerFirstName, buyerLastName, receiverName,
+    };
+    if (best.isOrphan) {
+      return await saveOrphanCorrelation(best.user, order, best.confidence, details, {
+        shippingCity, shippingState, shippingZipCode, buyerFirstName, buyerLastName, receiverName,
       });
     }
-
-    // Normal click-based correlation
-    return await saveCorrelation(bestMatch.click, order, confidence, method, {
-      ...bestMatch.matchDetails,
-      shippingCity, shippingState, shippingZipCode,
-      buyerFirstName, buyerLastName, receiverName,
-      hoursAgo: bestMatch.hoursAgo
-    });
+    return await saveCorrelation(best.click, order, best.confidence, method, details);
 
   } catch (error) {
     console.error(`❌ Error correlating order:`, error.message);
@@ -530,6 +350,11 @@ async function saveCorrelation(click, order, confidence, method, details) {
     correlatedOrderId: String(orderId),
     correlationConfidence: confidence,
     correlationMethod: method,
+    // Certainty model outputs (shown in the dashboard with hierarchy).
+    correlationCertainty: details.certaintyPct != null ? details.certaintyPct : null,
+    correlationUndisputed: !!details.undisputed,
+    ventaIndirecta: !!details.ventaIndirecta,
+    attributionReason: details.attributionReason || null,
     // Store match details for debugging/auditing
     matchDetails: {
       mlItemMatch: details.mlItemMatch || false,
@@ -619,6 +444,10 @@ async function saveOrphanCorrelation(user, order, confidence, matchDetails, ship
     correlatedOrderId: String(orderId),
     correlationConfidence: confidence,
     correlationMethod: 'orphan',
+    correlationCertainty: matchDetails && matchDetails.certaintyPct != null ? matchDetails.certaintyPct : null,
+    correlationUndisputed: !!(matchDetails && matchDetails.undisputed),
+    ventaIndirecta: !!(matchDetails && matchDetails.ventaIndirecta),
+    attributionReason: (matchDetails && matchDetails.attributionReason) || null,
     city: user.location?.city,
     stateMx: user.location?.state,
     conversionData: {
