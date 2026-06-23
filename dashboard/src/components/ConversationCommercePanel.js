@@ -231,8 +231,14 @@ export default function ConversationCommercePanel({ psid }) {
 function Certainty({ conv }) {
   const pct = conv.certainty;
   if (pct == null) {
-    // Legacy record without a certainty score — fall back to the old tier word.
-    return conv.confidence ? <span className="text-xs text-gray-400">Confianza: {conv.confidence}</span> : null;
+    // Legacy record (pre-certainty-model) — show the old tier word, clearly cited
+    // as the previous criteria so it isn't read as a new % score.
+    return (
+      <span className="text-xs text-gray-400">
+        {conv.confidence ? `Confianza: ${conv.confidence}` : "Registrada"}
+        <span className="text-[10px] text-gray-500 italic"> · criterio anterior</span>
+      </span>
+    );
   }
   const style =
     pct >= 90 ? { color: "#34d399", weight: 700, size: "0.95rem" } // solid green, prominent

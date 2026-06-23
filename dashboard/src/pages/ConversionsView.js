@@ -690,8 +690,11 @@ function ConversionsView() {
                             {conversion.ventaIndirecta ? <span className="block text-[9px] text-orange-300/70">indirecta</span> : null}
                           </span>
                         ) : (
-                          <span className={`px-2 py-0.5 rounded text-xs font-medium ${getConfidenceBadge(conversion.correlationConfidence)}`}>
-                            {getConfidenceLabel(conversion.correlationConfidence)}
+                          <span title="Registrada con el criterio anterior (antes del modelo de certeza)">
+                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${getConfidenceBadge(conversion.correlationConfidence)}`}>
+                              {getConfidenceLabel(conversion.correlationConfidence)}
+                            </span>
+                            <span className="block text-[9px] text-gray-500 italic">criterio anterior</span>
                           </span>
                         )}
                       </td>
