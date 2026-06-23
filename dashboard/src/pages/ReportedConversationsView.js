@@ -39,17 +39,23 @@ export default function ReportedConversationsView() {
   const [resolution, setResolution] = useState("");
   const [saving, setSaving] = useState(false);
 
-  const loadTickets = useCallback(async () => {
+  const loadTickets = useCallback(async (silent = false) => {
     try {
       const res = await API.get("/tickets");
       setTickets((res.data.data || []).filter((t) => t.source === "conversation_report"));
     } catch (e) {
-      toast.error("No se pudieron cargar los reportes");
+      if (!silent) toast.error("No se pudieron cargar los reportes");
     } finally {
-      setLoading(false);
+      if (!silent) setLoading(false);
     }
   }, []);
-  useEffect(() => { loadTickets(); }, [loadTickets]);
+
+  // Initial load + silent 1-min polling so new reports surface in near real-time.
+  useEffect(() => {
+    loadTickets();
+    const id = setInterval(() => loadTickets(true), 60000);
+    return () => clearInterval(id);
+  }, [loadTickets]);
 
   const openTicket = async (t) => {
     setSelected(t);
