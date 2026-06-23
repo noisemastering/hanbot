@@ -227,33 +227,47 @@ async function correlateOrder(order, sellerId) {
     //   25 (item + ≤5min, sin zip) · else NOT attributed.
     const normZip = (z) => String(z || '').replace(/\D/g, '');
     const shipZipN = normZip(shippingZipCode);
+    const shipCityN = normalizeCity(shippingCity);
 
     const evalCandidate = (click, user) => {
       const uFirst = normalizeName((user && (user.firstName || user.first_name)) || '');
       const uLast = normalizeName((user && (user.lastName || user.last_name)) || '');
       const uZip = normZip((user && user.location && user.location.zipcode) || (click && click.zipcode));
+      const uCity = normalizeCity((user && user.location && user.location.city) || (click && click.city) || '');
       const mlItemId = click && click.mlItemId;
       const zipMatch = !!(uZip && shipZipN && uZip === shipZipN);
+      // City = a zip-like fallback when we never captured the CP (lower score, -10).
+      const cityMatch = !!(uCity && shipCityN && uCity === shipCityN);
       // FULL name only: need first AND last on both sides, all matching.
       const nameMatch = !!(uFirst && uLast && buyerFirstName && buyerLastName && uFirst === buyerFirstName && uLast === buyerLastName);
       const itemMatch = !!(mlItemId && orderedMLItemIds.includes(mlItemId));
       const nicknameMatch = !!(uFirst && buyerInfo.nickname && nameInNickname(uFirst, buyerInfo.nickname));
       const minutes = click && click.clickedAt ? (orderDate.getTime() - new Date(click.clickedAt).getTime()) / 60000 : null;
-      return { zipMatch, nameMatch, itemMatch, nicknameMatch, minutes };
+      return { zipMatch, cityMatch, nameMatch, itemMatch, nicknameMatch, minutes };
     };
 
+    // Location signal: zip (full strength) or city (zip − 10, a known-zip-area match).
     const classify = (m) => {
-      if (m.zipMatch && m.nameMatch && m.itemMatch)
-        return { pct: 100, confidence: 'high', undisputed: !!m.nicknameMatch, ventaIndirecta: false,
-                 reason: m.nicknameMatch ? 'zip + nombre + item + usuario ML → indiscutible (100%)' : 'zip + nombre + item → trifecta (100%)' };
-      if (m.zipMatch && m.itemMatch)
-        return { pct: 90, confidence: 'high', undisputed: false, ventaIndirecta: false, reason: 'zip + item (90%)' };
-      if (m.zipMatch && m.nameMatch)
-        return { pct: 70, confidence: 'medium', undisputed: false, ventaIndirecta: true, reason: 'zip + nombre, distinto producto → venta indirecta (70%)' };
-      if (m.zipMatch)
-        return { pct: 50, confidence: 'medium', undisputed: false, ventaIndirecta: true, reason: 'zip, distinto producto → venta indirecta (50%)' };
+      const loc = m.zipMatch ? 'zip' : m.cityMatch ? 'city' : null;
+      const locTxt = loc === 'zip' ? 'cp' : 'ciudad';
+      const drop = loc === 'city' ? 10 : 0;
+      const med = (pct) => (pct >= 70 ? 'high' : pct >= 50 ? 'medium' : 'low');
+      if (loc && m.nameMatch && m.itemMatch) {
+        const pct = 100 - drop;
+        return { pct, confidence: med(pct), undisputed: !!m.nicknameMatch && loc === 'zip', ventaIndirecta: false,
+                 reason: `${locTxt} + nombre + item${m.nicknameMatch ? ' + usuario ML' : ''} → ${m.nicknameMatch && loc === 'zip' ? 'indiscutible' : 'trifecta'} (${pct}%)` };
+      }
+      if (loc && m.itemMatch)
+        return { pct: 90 - drop, confidence: med(90 - drop), undisputed: false, ventaIndirecta: false, reason: `${locTxt} + item (${90 - drop}%)` };
+      // No location, but a strong identity match: name + ML nickname + item.
+      if (m.nameMatch && m.nicknameMatch && m.itemMatch)
+        return { pct: 80, confidence: 'high', undisputed: false, ventaIndirecta: false, reason: 'nombre + usuario ML + item, sin ubicación (80%)' };
+      if (loc && m.nameMatch)
+        return { pct: 70 - drop, confidence: med(70 - drop), undisputed: false, ventaIndirecta: true, reason: `${locTxt} + nombre, distinto producto → venta indirecta (${70 - drop}%)` };
+      if (loc)
+        return { pct: 50 - drop, confidence: med(50 - drop), undisputed: false, ventaIndirecta: true, reason: `${locTxt}, distinto producto → venta indirecta (${50 - drop}%)` };
       if (m.itemMatch && m.minutes != null && m.minutes >= 0 && m.minutes <= 5)
-        return { pct: 25, confidence: 'low', undisputed: false, ventaIndirecta: false, reason: 'item + tiempo ≤5 min, sin zip (25%)' };
+        return { pct: 25, confidence: 'low', undisputed: false, ventaIndirecta: false, reason: 'item + tiempo ≤5 min, sin ubicación (25%)' };
       return null;
     };
 
@@ -302,7 +316,7 @@ async function correlateOrder(order, sellerId) {
     const method = best.m.itemMatch ? 'ml_item_match' : (best.m.nameMatch || best.m.zipMatch) ? 'enhanced' : 'time_based';
     const details = {
       mlItemMatch: best.m.itemMatch, nameMatch: best.m.nameMatch, nicknameMatch: best.m.nicknameMatch,
-      zipMatch: best.m.zipMatch, cityMatch: false, stateMatch: false, poiMatch: false, timeScore: best.m.minutes,
+      zipMatch: best.m.zipMatch, cityMatch: best.m.cityMatch, stateMatch: false, poiMatch: false, timeScore: best.m.minutes,
       certaintyPct: best.pct, undisputed: best.undisputed, ventaIndirecta: best.ventaIndirecta, attributionReason: best.reason,
       shippingCity, shippingState, shippingZipCode, buyerFirstName, buyerLastName, receiverName,
     };
