@@ -287,6 +287,11 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // The customer asked a specific measure and we resolved its real price.
           askedMeasureResolved = true;
           turnActiveProductId = found.id; // this product is now the active one
+          // The pinned promo/default is a VOLATILE startup guide: the moment the
+          // client asks for a DIFFERENT measure it must VANISH from context. Mark
+          // it dismissed (persisted) unless they asked for the pinned measure itself.
+          const pinnedId = state.product && state.product._id ? String(state.product._id) : null;
+          if (!pinnedId || String(found.id) !== pinnedId) state.promoDismissed = true;
           // psid-traceable link so a click here is attributed (commerce-status).
           const { trackedLink } = require("./priceResolver");
           const link = await trackedLink(pi.link, {
@@ -375,7 +380,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // otherwise the clamp lets the model quote the 3x5 at the promo price. Keep the
   // preloaded amounts when the asked measure IS one of them (multi-product quotes,
   // e.g. borde 54m + 18m) so the clamp doesn't corrupt a correct multi-line quote.
-  const preloaded = (state.preloadedAmounts || []).filter((a) => Number.isFinite(a) && a > 0);
+  // Once the promo/default is dismissed (client asked a different measure), its
+  // price vanishes from the clamp's allow-set too — never a substitute again.
+  const preloaded = state.promoDismissed ? [] : (state.preloadedAmounts || []).filter((a) => Number.isFinite(a) && a > 0);
   // The ACTIVE measure being quoted — resolved THIS turn, or CARRIED from a prior
   // turn (the customer asked "3x4" and now just says "Porfa"). Its price is the
   // canonical one + the clamp's rewrite target, so a promo/preloaded price can't
@@ -414,8 +421,15 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       `No digas "solo beige" ni escales a un asesor por color.`;
   }
 
+  // Effective context: the pinned promo/default lines are tagged with §D§. Once
+  // the client pivots to a different measure (promoDismissed), those lines VANISH;
+  // otherwise just strip the tag so they read normally. The tag never reaches the model.
+  const effectiveContext = state.promoDismissed
+    ? contextBlock.split("\n").filter((l) => !l.includes("§D§")).join("\n")
+    : contextBlock.replace(/§D§/g, "");
+
   // 2. route
-  const decision = await route(workflow, currentNode, history, contextBlock);
+  const decision = await route(workflow, currentNode, history, effectiveContext);
   const movedTo = workflow.getNode(decision.nextNodeId) || currentNode;
 
   // 3 + 4. execute the (possibly new) active node
@@ -450,7 +464,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     history,
     vars,
     ctx,
-    contextBlock + turnContextExtra
+    effectiveContext + turnContextExtra
   );
 
   // RESILIENCE: if the engine's LLM calls failed (router or node) and we got no
@@ -497,7 +511,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         .filter((t) => t && t.output)
         .map((t) => `- [${t.name}] devolvió: ${t.output}`)
         .join("\n");
-      const facts = `${contextBlock}${turnContextExtra}${toolFacts ? "\n" + toolFacts : ""}`;
+      const facts = `${effectiveContext}${turnContextExtra}${toolFacts ? "\n" + toolFacts : ""}`;
       const v = await verifyReply(text, facts);
       if (v.corrected) {
         console.warn(`🛡️ [workflow] reply corrected by grounding check for ${opts.psid || "(no psid)"}`);

@@ -402,14 +402,19 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
   // NOT a lock. The bot must still adapt to any other size the customer names
   // and answer product questions; otherwise a promo ad glues every conversation
   // to one measure (the regression where "5x6" got answered with "6x4").
+  // The pinned/promo default is a VOLATILE startup guide: it's the default ONLY
+  // until the client asks for a different measure, at which point it must VANISH
+  // from context. We TAG every default/promo line with §D§ so the engine can strip
+  // them the moment the client pivots (the tag itself is removed before display).
+  const D = (s) => `§D§${s}`;
   const pushDefault = async (prod, pi, promoLabel) => {
     const prodPath = await resolveFamilyRealm({ id: prod._id, name: prod.name });
-    lines.push(
+    lines.push(D(
       `- ${promoLabel ? `PROMOCIÓN destacada: "${promoLabel}" → ` : "Medida destacada (por defecto): "}` +
         `${prodPath || prod.name}${priceTxt(pi)}. Es la opción por DEFECTO: si el cliente pide precio/info SIN especificar una medida, ofrécele ESTA. ` +
         `PERO ADÁPTATE: si el cliente menciona CUALQUIER otra medida (p. ej. 5x6, 3x2, 8x10), cotiza ESA medida — NUNCA le impongas la medida destacada ni cambies la que pidió. ` +
         `Responde con normalidad sus preguntas y detalles del producto (% de sombra, refuerzo, colores, envío, etc.); no escales por dudas que puedes responder.`
-    );
+    ));
     if (pi && pi.source === "ml") {
       const { trackedLink } = require("./priceResolver");
       const plink = await trackedLink(pi.link, {
@@ -418,25 +423,23 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
         productName: prod.name,
         productId: prod._id ? String(prod._id) : null,
       });
-      lines.push(
+      lines.push(D(
         `- PRECIO: $${pi.amount} (fuente: Mercado Libre${pi.hasDiscount ? `, con descuento desde $${pi.originalPrice}` : ""}). Cotiza este precio. Link: ${plink || "(usa la herramienta)"}.`
-      );
+      ));
     } else if (pi && pi.source === "inventario") {
-      lines.push(`- PRECIO: $${pi.amount} (fuente: Inventario). Cotiza este precio.`);
+      lines.push(D(`- PRECIO: $${pi.amount} (fuente: Inventario). Cotiza este precio.`));
     } else if (pi && pi.source === "promo") {
-      lines.push(`- PRECIO: $${pi.amount} (precio de promoción). Cotiza este precio.`);
+      lines.push(D(`- PRECIO: $${pi.amount} (precio de promoción). Cotiza este precio.`));
     } else if (pi && pi.handoff) {
-      lines.push(
+      lines.push(D(
         `- PRECIO: NO disponible. El producto es vendible pero no tiene precio. NUNCA inventes un precio: ofrece pasar con un asesor (usa request_handoff).`
-      );
+      ));
     }
     if (pi && (Number.isFinite(pi.amount) || pi.source)) {
-      // The promo/default price belongs to THIS measure only. Without this the
-      // model carried the 6x4 promo $655 onto a 3x5 request.
       const measureTxt = prod.size || prod.name;
-      lines.push(
+      lines.push(D(
         `- IMPORTANTE: ese precio es EXCLUSIVO de la medida ${measureTxt}. Para CUALQUIER otra medida que pida el cliente, cotiza el precio PROPIO de esa medida; NUNCA apliques este precio (ni el de promoción) a otra medida.`
-      );
+      ));
     }
   };
 
@@ -459,11 +462,11 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
       // for a specific measure come ONLY from the share_product_link tool.
       items.push(p.name);
     }
-    lines.push(
+    lines.push(D(
       `- Productos de interés (precargados): ${items.join(", ")}. El cliente está interesado en ESTAS medidas/variantes. ` +
         `Si pide "información" o precio, NO listes precios de memoria: cotiza CADA medida por separado con la herramienta de cotización para obtener su precio y link correctos. ` +
         `NUNCA copies el precio de una medida a otra, NUNCA pongas el mismo precio a dos medidas distintas, y NUNCA inventes precios.`
-    );
+    ));
   }
 
   // No specific measure preloaded (e.g. only a FAMILY was selected), but the ad
@@ -476,12 +479,12 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
   }
 
   if (promo)
-    lines.push(
+    lines.push(D(
       `- PROMOCIÓN ACTIVA: ${promo.text}. Preséntala cuando sea oportuno. ` +
         `REGLA: una promoción SIEMPRE es un producto (o rango de productos) a un precio especial; NUNCA es una promoción de cantidad ("compra X y llévate Y", "2x1", etc.). ` +
         `NUNCA inventes mecánicas de cantidad. Si el nombre de la promo incluye una medida como "6x4", se refiere a los METROS del producto (6 m x 4 m), NO a cantidades. ` +
         `El precio promocional es el del producto mostrado arriba; NUNCA lo cambies de medida ni digas que la medida anunciada "no aplica".`
-    );
+    ));
 
   // MULTI-PRODUCT promo → one line per product, each with its own engine-resolved
   // price (override → offer, else cardinal/ML) + its own tracked link. Each price
@@ -506,10 +509,10 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
       rows.push(line);
     }
     if (rows.length)
-      lines.push(
+      lines.push(D(
         `- PRECIOS DE LA PROMOCIÓN (uno por producto — cotiza el que pida el cliente con SU precio y SU link; NUNCA mezcles precios entre medidas):\n` +
           rows.join("\n")
-      );
+      ));
   }
 
   // Catalog from the product tree: nearest family catalog (climb to root) →
