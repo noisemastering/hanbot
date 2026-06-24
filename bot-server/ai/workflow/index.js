@@ -61,6 +61,28 @@ async function loadWorkflowById(id) {
   }
 }
 
+// Extract EVERY width×length measure named in a message (deduped, sorted), so a
+// single message asking for several ("6x6m y otra de 6x8m") can be quoted per
+// measure. Same normalization as dimsOf, but a global match instead of the first.
+function extractAllMeasures(text) {
+  const cleaned = String(text || "")
+    .toLowerCase()
+    .replace(/(\d)\s*(?:m\b|mts?\b|metros?\b)/g, "$1 ")
+    .replace(/\bmts?\.?\b|\bmetros?\b|\bm\b/g, " ")
+    .replace(/\bde\s+(?:largo|ancho|alto|altura|fondo|lado)\b/g, " ")
+    .replace(/\b(?:largo|ancho|alto|altura|fondo)\s+de\b/g, " ");
+  const re = /(\d+(?:\.\d+)?)\s*(?:[x×*]|por)\s*(\d+(?:\.\d+)?)/g;
+  const seen = new Set();
+  const out = [];
+  let m;
+  while ((m = re.exec(cleaned))) {
+    const d = [Number(m[1]), Number(m[2])].sort((a, b) => a - b);
+    const k = d.join("x");
+    if (!seen.has(k)) { seen.add(k); out.push(d); }
+  }
+  return out;
+}
+
 // Build a fresh state object for a brand-new conversation on this workflow.
 function initState(workflow, vars = {}, setupOverrides = {}) {
   return {
@@ -278,8 +300,51 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // "*" separator in prose), and dimsOf handles x/×/* reliably. Without this
       // fallback the measure went unresolved and the node wrongly escalated.
       const wantDims = (await extractMeasure(String(userMessage))) || dimsOf(String(userMessage));
-      const found = await resolveInFamilyMeasure(String(userMessage), familyList, wantDims);
-      if (found && found.priceInfo) {
+
+      // ── MULTI-MEASURE ─────────────────────────────────────────────────────
+      // If the message names 2+ measures ("6x6m y otra de 6x8m"), quote EACH with
+      // its OWN price + link — never collapse to one. Each resolved price is added
+      // to the clamp's allow-set so the multi-line quote survives.
+      let multiHandled = false;
+      const allMeasures = extractAllMeasures(String(userMessage));
+      if (allMeasures.length >= 2) {
+        const { findProductInFamilies } = require("./tools");
+        const { resolvePrice, trackedLink } = require("./priceResolver");
+        turnPriceInfo = null; // a multi-quote has no single price → no clamp primary, no carried-promo pollution
+        const lines = [];
+        let resolvedAny = false;
+        for (const d of allMeasures) {
+          const doc = await findProductInFamilies(String(userMessage), familyList, d);
+          if (!doc) {
+            lines.push(`  • ${d[0]}x${d[1]}m: no es medida estándar — ofrécele la más cercana o pásalo con un asesor.`);
+            continue;
+          }
+          const pi = await resolvePrice(doc);
+          if (pi && pi.amount) {
+            resolvedAny = true;
+            turnActiveProductId = String(doc._id);
+            noteAmount(pi, false); // each price is allowed; no single primary in a multi-quote
+            const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: doc.name, productId: String(doc._id) });
+            lines.push(`  • ${d[0]}x${d[1]}m: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${link ? ` → ${link}` : ""}`);
+          } else if (pi && pi.handoff) {
+            lines.push(`  • ${d[0]}x${d[1]}m: sin precio confirmado — pásalo con un asesor para el precio.`);
+            turnHandoffReason = turnHandoffReason || `Cotización ${d[0]}x${d[1]}m: ${pi.handoffReason || "validar precio con un asesor"}`;
+          }
+        }
+        if (resolvedAny) {
+          askedMeasureResolved = true;
+          const pinnedId = state.product && state.product._id ? String(state.product._id) : null;
+          if (!pinnedId || turnActiveProductId !== pinnedId) state.promoDismissed = true;
+        }
+        turnContextExtra +=
+          `\n- COTIZACIÓN MÚLTIPLE: el cliente pidió varias medidas en un mismo mensaje. Cotiza CADA una con SU PROPIO precio y SU PROPIO link (una línea por medida); NUNCA uses el mismo precio o link para dos medidas distintas:\n${lines.join("\n")}`;
+        multiHandled = true;
+      }
+
+      const found = multiHandled ? null : await resolveInFamilyMeasure(String(userMessage), familyList, wantDims);
+      if (multiHandled) {
+        // handled above
+      } else if (found && found.priceInfo) {
         turnPriceInfo = found.priceInfo;
         const pi = found.priceInfo;
         // This is the measure the customer asked about THIS turn → the canonical
