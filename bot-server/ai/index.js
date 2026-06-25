@@ -68,6 +68,30 @@ async function generateReplyPipeline(userMessage, psid, referral = null) {
  * built (seeded with the ad's setup vars) on the first turn, or whenever the ad's
  * attached workflow changes.
  */
+// A bare-number reply right AFTER we asked for the customer's código postal IS
+// the zip. Recognize it deterministically so the engine never treats a lone
+// number as nonsense ("Parece que mencionaste un número, no estoy segura…").
+// Returns the 5-digit CP when present, and whether the message is essentially
+// just the number (so we can thank-and-stop instead of running the model).
+function captureZipReply(text) {
+  const t = String(text || "").trim();
+  if (!t || !/\d/.test(t)) return { isZipReply: false };
+  const five = t.match(/\b(\d{5})\b/); // a valid Mexican CP
+  // Strip CP-context words + any number run; if almost nothing meaningful
+  // remains, the message was basically just the zip.
+  const stripped = t
+    .replace(/\d+/g, " ")
+    .replace(/c[oó]digo\s*postal|\bc\.?\s*p\.?\b|\bcp\b|\bmi\b|\bes\b|\bel\b|aqu[ií]|\bsale\b|\btoma\b/gi, " ")
+    .replace(/[^\p{L}]+/gu, " ")
+    .trim();
+  const bareNumberOnly = stripped.length <= 3;
+  if (five) return { isZipReply: true, zip: five[1], bareNumberOnly };
+  // a bare-ish number that isn't a clean 5-digit (a typo, 4 or 6 digits) but is
+  // clearly the reply to our CP ask
+  if (bareNumberOnly && /^\D*\d{3,6}\D*$/.test(t)) return { isZipReply: true, zip: null, bareNumberOnly: true };
+  return { isZipReply: false };
+}
+
 // Shared engine runner. Given a resolved workflow + the conversation, runs one
 // turn, persists collected data, fires a real handoff if requested, and
 // sanitizes the reply (link tracking + phone guard). Used by BOTH the ad path
@@ -95,6 +119,35 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
   let state = convo.workflowState;
   if (!state || String(state.workflowId) !== String(workflow._id)) {
     state = initState(workflow, {}, initOverrides || {});
+  }
+
+  // DETERMINISTIC CP REPLY CAPTURE: last turn we asked for the customer's código
+  // postal (state.zipAsked) and still don't have it. A number reply IS the zip —
+  // capture it and, when the message is basically just the number, thank them and
+  // STOP (no model turn), so the engine can't reply "no estoy segura de qué número
+  // es" to a zip we ourselves requested.
+  const haveZipAlready = !!(convo.zipcode || (state.location && (state.location.zip || state.location.zipcode)));
+  if (state.zipAsked && !haveZipAlready) {
+    const z = captureZipReply(userMessage);
+    if (z.isZipReply) {
+      const nextLoc = { ...(state.location || {}) };
+      if (z.zip) nextLoc.zip = z.zip;
+      state = { ...state, location: nextLoc, zipCaptured: true };
+      const persistZip = { workflowState: state, lastMessageAt: new Date() };
+      if (z.zip) persistZip.zipcode = z.zip;
+      await updateConversation(psid, persistZip).catch((e) =>
+        console.error("⚠️ zip capture persist failed:", e.message)
+      );
+      console.log(`📮 [workflow] CP capturado para ${psid}: ${z.zip || "(número no estándar)"}`);
+      if (z.bareNumberOnly) {
+        // The message was essentially just the zip → acknowledge warmly and stop;
+        // no model turn (so it can't treat a lone number as nonsense).
+        const ack = "¡Perfecto, muchas gracias! 🙏 Quedo al pendiente por si tienes cualquier otra duda. 😊";
+        return { handled: true, reply: { type: "text", text: ack } };
+      }
+      // else the message also asked something → fall through to the engine, which
+      // now has the zip in state and won't re-ask.
+    }
   }
 
   const { reply, state: newState, diagnostics } = await runWorkflowTurn(

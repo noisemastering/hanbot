@@ -411,7 +411,9 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     const prodPath = await resolveFamilyRealm({ id: prod._id, name: prod.name });
     lines.push(D(
       `- ${promoLabel ? `PROMOCIÓN destacada: "${promoLabel}" → ` : "Medida destacada (por defecto): "}` +
-        `${prodPath || prod.name}${priceTxt(pi)}. Es la opción por DEFECTO: si el cliente pide precio/info SIN especificar una medida, ofrécele ESTA. ` +
+        `${prodPath || prod.name}${priceTxt(pi)}. Es la opción por DEFECTO. ` +
+        `El cliente YA viene de un anuncio de ESTA medida, así que es el punto de partida: si muestra interés en comprar o pide precio/info SIN especificar otra medida ` +
+        `(p. ej. "quiero una", "me interesa", "cuánto cuesta", "la quiero", "comprar", "sí"), NO le preguntes qué medida necesita — asume ESTA medida y cotízala directamente con su precio y link. ` +
         `PERO ADÁPTATE: si el cliente menciona CUALQUIER otra medida (p. ej. 5x6, 3x2, 8x10), cotiza ESA medida — NUNCA le impongas la medida destacada ni cambies la que pidió. ` +
         `Responde con normalidad sus preguntas y detalles del producto (% de sombra, refuerzo, colores, envío, etc.); no escales por dudas que puedes responder.`
     ));

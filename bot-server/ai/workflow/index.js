@@ -64,13 +64,23 @@ async function loadWorkflowById(id) {
 // Extract EVERY width×length measure named in a message (deduped, sorted), so a
 // single message asking for several ("6x6m y otra de 6x8m") can be quoted per
 // measure. Same normalization as dimsOf, but a global match instead of the first.
+const _WORD_NUM = {
+  uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6,
+  siete: 7, ocho: 8, nueve: 9, diez: 10, once: 11, doce: 12,
+};
 function extractAllMeasures(text) {
-  const cleaned = String(text || "")
+  let cleaned = String(text || "")
     .toLowerCase()
     .replace(/(\d)\s*(?:m\b|mts?\b|metros?\b)/g, "$1 ")
     .replace(/\bmts?\.?\b|\bmetros?\b|\bm\b/g, " ")
     .replace(/\bde\s+(?:largo|ancho|alto|altura|fondo|lado)\b/g, " ")
     .replace(/\b(?:largo|ancho|alto|altura|fondo)\s+de\b/g, " ");
+  // Worded numbers ("tres por tres", "dos x dos") → digits, so the regex below
+  // catches spelled-out measures too (the bot understands them like a human).
+  cleaned = cleaned.replace(
+    /\b(un[oa]?|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce)\b/g,
+    (w) => String(_WORD_NUM[w] ?? w)
+  );
   const re = /(\d+(?:\.\d+)?)\s*(?:[x×*]|por)\s*(\d+(?:\.\d+)?)/g;
   const seen = new Set();
   const out = [];
@@ -81,6 +91,49 @@ function extractAllMeasures(text) {
     if (!seen.has(k)) { seen.add(k); out.push(d); }
   }
   return out;
+}
+
+// Detect a COMPLETED purchase ("ya la compré", "ya pagué", "acabo de comprarla",
+// "ya hice el pedido", "ya quedó pagada") so the bot stops re-pitching the promo /
+// re-sharing a buy link and acknowledges instead. Excludes future intent ("quiero
+// comprar", "cómo compro", "voy a comprar").
+// Trailing lookahead (not another letter) instead of \b — \b doesn't form a
+// boundary after accented chars like "é", and this also blocks longer words
+// ("comprendí" won't match "compré").
+const _PAST_BUY = /\b(compr[eé]|pagu[eé]|orden[eé]|adquir[ií])(?![a-záéíóúñ])/;
+const _FUTURE_BUY =
+  /\b(quiero|voy a|deseo|quisiera|me gustar[ií]a|puedo|podr[ií]a|c[oó]mo|d[oó]nde)\b[^.?!]*\b(comprar|pagar|ordenar|adquirir)\b/;
+function saysAlreadyBought(text) {
+  const t = String(text || "").toLowerCase().trim();
+  if (!t) return false;
+  if (_FUTURE_BUY.test(t)) return false; // intent to buy, not done
+  if (/\bacabo de\s+(comprar|pagar|ordenar|adquirir)/.test(t)) return true;
+  if (/\bhice\s+(el\s+pedido|la\s+compra|mi\s+compra)/.test(t)) return true;
+  if (/\bya\b/.test(t) && (_PAST_BUY.test(t) || /\b(comprad[ao]s?|pagad[ao]s?)\b/.test(t))) return true;
+  if (/\b(compr[eé]|pagu[eé])\s+(la|el|las|los|mi|una?|dos)?\s*(malla|lona|maya|promoci[oó]n|orden|pedido)/.test(t))
+    return true;
+  return false;
+}
+// Did the message ALSO ask something (so we answer it instead of just thanking)?
+function hasFollowUpQuestion(text) {
+  const t = String(text || "").toLowerCase();
+  return /\?|cu[aá]nto|cu[aá]ndo|c[oó]mo|d[oó]nde|por qu[eé]|puedo|tienen|hay\b|me\s+(llega|env[ií]an|mandan|entregan)/.test(t);
+}
+
+// A buying-interest / price signal that names NO measure ("quiero una", "me
+// interesa", "la quiero", "cuánto cuesta", "precio", "comprar"). Used to quote
+// the preloaded ad measure deterministically instead of asking "¿qué medida?".
+// Deliberately NOT triggered by detail questions ("quiero saber el % de sombra").
+function isNoMeasureBuyingSignal(text) {
+  const t = String(text || "").toLowerCase().trim();
+  if (!t) return false;
+  if (/\b(la|lo)\s+quiero\b/.test(t)) return true;
+  if (/\bquiero\s+(una?|el|la|comprar|esa|ese|esta|este|la\s+promoci[oó]n)\b/.test(t)) return true;
+  if (/\bme\s+interesa\b/.test(t)) return true;
+  if (/\bme\s+la\s+llevo\b/.test(t)) return true;
+  if (/\b(quiero|deseo)\s+comprar\b|\bcomprarla\b|\bc[oó]mo\s+(la\s+)?compro\b/.test(t)) return true;
+  if (/\bcu[aá]nto\s+(cuesta|vale|sale|es|ser[ií]a)\b/.test(t) || /\bqu[eé]\s+precio\b/.test(t) || /^precio\b/.test(t)) return true;
+  return false;
 }
 
 // Build a fresh state object for a brand-new conversation on this workflow.
@@ -150,6 +203,140 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     history.push({ role: "user", text: String(userMessage), nodeId: currentNode.id, at: new Date() });
   }
 
+  // 1.02 DETERMINISTIC LEAD CAPTURE. A phone (or "me llamo X") in the message IS
+  // contact info — persist it even when the model doesn't call capture_lead, so a
+  // handoff always carries a reachable lead and the dashboard fields fill. Runs
+  // before ctx is built so ctx.lead (and persisted newState.lead) inherit it.
+  if (userMessage) {
+    try {
+      const { extractPhone, extractName } = require("./handoffGate");
+      const phone = extractPhone(String(userMessage));
+      const nm = extractName(String(userMessage));
+      if (phone || nm) {
+        state.lead = { ...(state.lead || {}) };
+        if (phone && !state.lead.phone) state.lead.phone = phone;
+        if (nm && !state.lead.name) state.lead.name = nm;
+      }
+    } catch (err) {
+      console.error("⚠️ lead capture failed:", err.message);
+    }
+  }
+
+  // 1.03 PENDING-HANDOFF RESUME. Last turn we asked for name + phone before
+  // completing a handoff. Capture a bare-name reply too, then complete the handoff
+  // now (with whatever contact we have) — one ask only, we never nag or trap.
+  if (userMessage && state.pendingHandoff) {
+    try {
+      const { looksLikeBareName } = require("./handoffGate");
+      if (!(state.lead && state.lead.name) && looksLikeBareName(String(userMessage))) {
+        state.lead = { ...(state.lead || {}), name: String(userMessage).trim() };
+      }
+      const reason = state.pendingHandoff.reason || "El cliente requiere atención de un asesor";
+      const who = state.lead && state.lead.name ? `, ${String(state.lead.name).split(/\s+/)[0]}` : "";
+      const reply = `¡Gracias${who}! 🙌 Un asesor te contactará lo antes posible para ayudarte.`;
+      history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+      return {
+        reply,
+        state: { ...state, history, lead: state.lead || null, location: state.location || null, nodeId: currentNode.id, pendingHandoff: null },
+        diagnostics: {
+          workflow: { id: String(workflow._id), name: workflow.name },
+          fromNode: { id: currentNode.id, name: currentNode.name },
+          toNode: { id: currentNode.id, name: currentNode.name },
+          handoffRequested: true,
+          handoffReason: reason,
+          handoffResumed: true,
+        },
+      };
+    } catch (err) {
+      console.error("⚠️ pending-handoff resume failed:", err.message);
+      state.pendingHandoff = null;
+    }
+  }
+
+  // 1.05 ALREADY-PURCHASED. The customer signals the sale is DONE ("ya la compré",
+  // "ya pagué", "acabo de comprarla"). NEVER re-pitch the promo or re-share a buy
+  // link at them — acknowledge the purchase. Dismiss the promo so it vanishes from
+  // context now and on future turns. If they ALSO asked something ("ya la compré,
+  // ¿cuándo llega?"), let the model answer (promo dismissed so it won't re-sell).
+  if (userMessage && !state.purchased && saysAlreadyBought(String(userMessage))) {
+    state.purchased = true;
+    state.promoDismissed = true;
+    if (!hasFollowUpQuestion(String(userMessage))) {
+      const reply =
+        "¡Qué gusto! 🙌 Muchas gracias por tu compra. Si tienes cualquier duda con tu pedido o necesitas algo más, aquí estoy para ayudarte. 😊";
+      history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+      return {
+        reply,
+        state: { ...state, history, nodeId: currentNode.id },
+        diagnostics: {
+          workflow: { id: String(workflow._id), name: workflow.name },
+          fromNode: { id: currentNode.id, name: currentNode.name },
+          toNode: { id: currentNode.id, name: currentNode.name },
+          alreadyPurchased: true,
+        },
+      };
+    }
+    // else fall through: the message also asked something → the model answers it,
+    // but the promo is dismissed so it won't try to re-sell.
+  }
+
+  // 1.06 MEASURE CLARIFY RESUME. Last turn we asked the client to choose between
+  // two products that share the asked measure (different families). Match their
+  // reply to a candidate and switch to that flow; if unclear, re-ask once, then
+  // give up and let the conversation continue normally.
+  if (
+    userMessage &&
+    state.pendingMeasureClarify &&
+    Array.isArray(state.pendingMeasureClarify.candidates) &&
+    state.pendingMeasureClarify.candidates.length
+  ) {
+    try {
+      const pend = state.pendingMeasureClarify;
+      const { matchClarifyReply, buildClarifyQuestion } = require("./measureRouter");
+      const idx = await matchClarifyReply(String(userMessage), pend.candidates);
+      if (idx >= 0 && (opts._switchDepth || 0) < 2) {
+        const chosen = pend.candidates[idx];
+        state.pendingMeasureClarify = null;
+        const handover = await performSwitch(
+          { toWorkflowId: chosen.toWorkflowId, toName: chosen.toName, product: chosen.product },
+          { history, vars, lead: state.lead || null, location: state.location || null, basket: state.basket || [], opts }
+        );
+        if (handover) {
+          return {
+            reply: handover.reply,
+            state: { ...handover.state, pendingMeasureClarify: null },
+            diagnostics: {
+              workflow: { id: String(workflow._id), name: workflow.name },
+              measureClarifyResolved: true,
+              switchedTo: handover.switchedTo,
+              afterSwitch: handover.diagnostics,
+            },
+          };
+        }
+      }
+      // Unclear answer (or switch failed). Re-ask ONCE; after that, give up and
+      // let normal handling take over so we never loop.
+      if ((pend.tries || 0) < 1) {
+        const q = buildClarifyQuestion(pend.candidates, pend.dims);
+        history.push({ role: "assistant", text: q, nodeId: currentNode.id, at: new Date() });
+        return {
+          reply: q,
+          state: { ...state, history, nodeId: currentNode.id, pendingMeasureClarify: { ...pend, tries: (pend.tries || 0) + 1 } },
+          diagnostics: {
+            workflow: { id: String(workflow._id), name: workflow.name },
+            fromNode: { id: currentNode.id, name: currentNode.name },
+            toNode: { id: currentNode.id, name: currentNode.name },
+            measureClarifyReask: true,
+          },
+        };
+      }
+      state.pendingMeasureClarify = null; // gave up → fall through to normal flow
+    } catch (err) {
+      console.error("⚠️ measure clarify resume failed:", err.message);
+      state.pendingMeasureClarify = null;
+    }
+  }
+
   // 1.1 VERBATIM PROMO PITCH (sent ONCE, when the customer asks about the promo).
   // If the active promo has a sales pitch and we haven't sent it, a tiny gpt-4o-mini
   // intent check decides whether THIS message asks for the promo. If so, we send
@@ -160,7 +347,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // (client pivoted to another measure) — so a customer CIRCLING BACK to ask for
   // the promo re-surfaces it. The verbatim pitch is sent only once; re-asks get
   // the cheap deterministic quote.
-  if (userMessage && (state.promoPitch || state.promoQuote) && (!state.promoPitchSent || state.promoDismissed)) {
+  if (userMessage && !state.purchased && (state.promoPitch || state.promoQuote) && (!state.promoPitchSent || state.promoDismissed)) {
     try {
       const { wantsPromo } = require("../utils/promoIntent");
       if (await wantsPromo(String(userMessage))) {
@@ -208,12 +395,143 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     }
   }
 
+  // 1.2 HARD DEFAULT-MEASURE GUARANTEE. The customer came from an ad for a specific
+  // measure (state.product) and now shows buying interest WITHOUT naming another
+  // measure ("quiero una", "me interesa", "cuánto cuesta", "precio"). Don't let the
+  // model ask "¿qué medida?" — deterministically quote the preloaded default
+  // (price + link), the same way the promo/zip/purchase fast-paths short-circuit.
+  // Skipped once the client pivoted (promoDismissed) or already bought.
+  if (
+    userMessage &&
+    !state.purchased &&
+    !state.promoDismissed &&
+    state.product &&
+    state.product._id &&
+    isNoMeasureBuyingSignal(String(userMessage)) &&
+    extractAllMeasures(String(userMessage)).length === 0
+  ) {
+    try {
+      const PF = require("../../models/ProductFamily");
+      const { resolvePrice, trackedLink } = require("./priceResolver");
+      let amount = null, link = null, plusIva = false, label = null, isPromo = false;
+      // Prefer the already-resolved promo quote; else resolve the default product now.
+      if (state.promoQuote && Number.isFinite(state.promoQuote.amount) && state.promoQuote.amount > 0) {
+        amount = state.promoQuote.amount;
+        link = state.promoQuote.link || null;
+        label = state.promoQuote.label || null;
+        isPromo = true;
+      } else {
+        const doc = await PF.findById(state.product._id).lean().catch(() => null);
+        if (doc && doc.sellable) {
+          const pi = await resolvePrice(doc);
+          if (pi && pi.amount) {
+            amount = pi.amount;
+            plusIva = !!pi.plusIva;
+            label = doc.size || doc.name;
+            link = await trackedLink(pi.link, {
+              psid: opts.psid || null,
+              sandbox: !!opts.sandbox,
+              productName: doc.name,
+              productId: String(doc._id),
+            });
+          }
+        }
+      }
+      if (amount) {
+        const name = label
+          ? label.charAt(0).toUpperCase() + label.slice(1)
+          : "La malla sombra";
+        const reply =
+          `¡Claro! ${name}${isPromo ? " está en promoción por" : " tiene un precio de"} $${amount}${plusIva ? " + IVA" : ""}.` +
+          (link ? ` Puedes comprarla aquí: ${link}` : "");
+        history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+        return {
+          reply,
+          state: {
+            ...state,
+            history,
+            nodeId: currentNode.id,
+            activeProductId: String(state.product._id),
+            priceInfo: { amount, source: isPromo ? "promo" : "ml", link, plusIva, handoff: false },
+          },
+          diagnostics: {
+            workflow: { id: String(workflow._id), name: workflow.name },
+            fromNode: { id: currentNode.id, name: currentNode.name },
+            toNode: { id: currentNode.id, name: currentNode.name },
+            defaultMeasureQuote: true,
+          },
+        };
+      }
+    } catch (err) {
+      console.error("⚠️ default-measure guarantee failed:", err.message);
+      // fall through to normal LLM handling
+    }
+  }
+
   const familyList = require("../../models/Workflow").familyListOf(workflow);
+
+  // 1.4 DETERMINISTIC MEASURE ROUTER ("no flow, no offer"). When the customer
+  // names a measure, route by the CATALOG: which active SPECIALIST flow(s) sell a
+  // product at that exact W×L. One offer → switch to it; two+ → ask which (a human
+  // would too); none → fall through to the LLM scope classifier below. Subsumes
+  // the confeccionada-vs-rollo split (a 100 m measure only exists in the rollo
+  // flow's realm) with no length heuristic.
+  let skipLLMSwitch = false;
+  if (userMessage && (opts._switchDepth || 0) < 2 && !opts.sandboxNoAutoSwitch) {
+    try {
+      const { dimsOf } = require("./tools");
+      const earlyDims = dimsOf(String(userMessage)) || extractAllMeasures(String(userMessage))[0] || null;
+      if (earlyDims) {
+        const { routeByMeasure, buildClarifyQuestion } = require("./measureRouter");
+        const r = await routeByMeasure(String(userMessage), earlyDims, String(workflow._id));
+        if (r.action === "switch") {
+          const handover = await performSwitch(
+            { toWorkflowId: r.toWorkflowId, toName: r.toName, product: r.product },
+            { history, vars, lead: state.lead || null, location: state.location || null, basket: state.basket || [], opts }
+          );
+          if (handover) {
+            return {
+              reply: handover.reply,
+              state: handover.state,
+              diagnostics: {
+                workflow: { id: String(workflow._id), name: workflow.name },
+                measureAutoSwitch: true,
+                switchedTo: handover.switchedTo,
+                afterSwitch: handover.diagnostics,
+              },
+            };
+          }
+        } else if (r.action === "clarify") {
+          const q = buildClarifyQuestion(r.candidates, earlyDims);
+          history.push({ role: "assistant", text: q, nodeId: currentNode.id, at: new Date() });
+          return {
+            reply: q,
+            state: {
+              ...state,
+              history,
+              nodeId: currentNode.id,
+              pendingMeasureClarify: { dims: earlyDims, candidates: r.candidates, tries: 0 },
+            },
+            diagnostics: {
+              workflow: { id: String(workflow._id), name: workflow.name },
+              fromNode: { id: currentNode.id, name: currentNode.name },
+              toNode: { id: currentNode.id, name: currentNode.name },
+              measureClarify: true,
+            },
+          };
+        } else if (r.action === "stay") {
+          skipLLMSwitch = true; // current flow owns this measure → don't switch away
+        }
+      }
+    } catch (err) {
+      console.error("⚠️ measure router failed:", err.message);
+    }
+  }
 
   // 1.5 ENGINE-SIDE OUT-OF-FAMILY DETECTION (does not rely on the model calling a
   // tool). If the customer's message points at a product handled by ANOTHER active
   // flow, switch deterministically — product switches need no confirmation.
-  if (userMessage && (opts._switchDepth || 0) < 2 && !opts.sandboxNoAutoSwitch) {
+  if (userMessage && !skipLLMSwitch && (opts._switchDepth || 0) < 2 && !opts.sandboxNoAutoSwitch) {
     try {
       const det = await detectFlowSwitch(String(userMessage), familyList, workflow);
       if (det && det.toWorkflowId) {
@@ -299,7 +617,15 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // the extractor whiffs on some phrasings (e.g. "el precio de 6*8" with a
       // "*" separator in prose), and dimsOf handles x/×/* reliably. Without this
       // fallback the measure went unresolved and the node wrongly escalated.
-      const wantDims = (await extractMeasure(String(userMessage))) || dimsOf(String(userMessage));
+      // extractMeasure (AI) is inconsistent on some phrasings ("precio de tres x
+      // tres" → null even though "tres x tres" works); dimsOf only sees digits.
+      // extractAllMeasures normalizes worded numbers deterministically, so use its
+      // first hit as a final fallback — worded single-measures never go unparsed.
+      const wantDims =
+        (await extractMeasure(String(userMessage))) ||
+        dimsOf(String(userMessage)) ||
+        extractAllMeasures(String(userMessage))[0] ||
+        null;
 
       // ── MULTI-MEASURE ─────────────────────────────────────────────────────
       // If the message names 2+ measures ("6x6m y otra de 6x8m"), quote EACH with
@@ -556,6 +882,42 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     ctx.handoffReason = ctx.handoffReason || "Fallo temporal del motor de IA — pasar a un asesor para no dejar al cliente sin respuesta";
     text = "Permíteme un momento, te comunico con un asesor para ayudarte mejor. 🙌";
     console.warn(`⚠️ [workflow] LLM failure → degrading to human handoff for ${opts.psid || "(no psid)"}`);
+  }
+
+  // COLLECT-BEFORE-HANDOFF GATE (engine port of preHandoffCheck). Before
+  // completing an intentional handoff, make sure the human gets a reachable lead.
+  // If we have no contact yet, ask ONCE for name + phone and PARK the handoff
+  // (state.pendingHandoff); the resume above completes it next turn with whatever
+  // they give. Skip during an LLM-outage handoff (escalate immediately).
+  if (ctx.handoffRequested && !(decision.llmError || nodeLlmError) && !state.pendingHandoff) {
+    const haveContact = !!(
+      (ctx.lead && (ctx.lead.phone || ctx.lead.email || ctx.lead.name)) ||
+      (state.lead && (state.lead.phone || state.lead.email || state.lead.name))
+    );
+    if (!haveContact) {
+      const ask = "¡Con gusto te paso con un asesor! 🙌 ¿Me compartes tu nombre y un teléfono para que te contacte?";
+      history.push({ role: "assistant", text: ask, nodeId: movedTo.id, at: new Date() });
+      return {
+        reply: ask,
+        state: {
+          ...state,
+          history,
+          vars,
+          lead: ctx.lead || state.lead || null,
+          location: ctx.location || state.location || null,
+          nodeId: movedTo.id,
+          pendingHandoff: { reason: ctx.handoffReason || null, attempts: 1 },
+        },
+        diagnostics: {
+          workflow: { id: String(workflow._id), name: workflow.name },
+          fromNode: { id: currentNode.id, name: currentNode.name },
+          toNode: { id: movedTo.id, name: movedTo.name },
+          handoffPendingContact: true,
+        },
+      };
+    }
+    // have contact → fall through; the handoff completes normally, now WITH a
+    // reachable lead in the brief.
   }
 
   // A share_product_link / quote tool call returns the canonical "Precio: $X" —

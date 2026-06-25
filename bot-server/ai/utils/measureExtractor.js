@@ -20,16 +20,26 @@ const _openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 const _cache = new Map();
 const _CACHE_MAX = 500;
 
+// Spanish spelled-out integers a customer might use for a measure ("tres x tres",
+// "dos por dos metros"). Malla sizes top out around 12m, so 1–12 covers it.
+const _NUM_WORDS =
+  /\b(un[oa]?|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce)\b/i;
+// A measure separator: x / × / * / the word "por".
+const _SEP = /(\bx\b|×|\*|\bpor\b)/i;
+
 /**
  * @param {string} text - the customer's message
  * @returns {Promise<number[]|null>} [min, max] in meters, or null if no measure
  */
 async function extractMeasure(text) {
   if (!text || typeof text !== 'string') return null;
-  // A measure requires a quantity. No digit anywhere → can't be a measure.
-  // (Worded-only like "seis por cuatro" is rare; handled below if a digit-free
-  // message ever needs it, but skipping the API on "hola"/"gracias" is worth it.)
-  if (!/\d/.test(text)) return null;
+  // A measure needs a quantity AND a "x/por" separator. Fire the API when the
+  // message has a digit, OR a spelled-out number next to a separator ("tres x
+  // tres", "dos por dos") — the bot must understand worded measures like a human,
+  // not only digits. Still skips "hola"/"gracias"/"por favor" (no number word).
+  const hasDigit = /\d/.test(text);
+  const hasWordedMeasure = _NUM_WORDS.test(text) && _SEP.test(text);
+  if (!hasDigit && !hasWordedMeasure) return null;
 
   const key = text.trim().toLowerCase();
   if (_cache.has(key)) return _cache.get(key);
@@ -42,6 +52,7 @@ async function extractMeasure(text) {
           role: 'system',
           content: `Extrae las DOS dimensiones (medida) que pide el cliente para una malla sombra / lona / rollo, en METROS. El cliente puede expresarlas de cualquier forma:
 - "6x4", "6 x 4", "6 por 4", "6X4M"
+- NÚMEROS CON LETRA: "tres x tres", "dos por dos", "seis por cuatro", "cinco x tres metros" → conviértelos a número (tres=3, cuatro=4, etc.)
 - "13 de largo x 3 de ancho", "13 metros de largo por 3 de ancho"
 - "una de 3 de ancho y 13 de largo", "mide 13 por 3", "3 ancho 13 largo"
 - decimales: "5.5 x 3", "2.30x1.80"
@@ -58,6 +69,10 @@ REGLAS:
 
 EJEMPLOS:
 - "13 de largo x 3 de ancho" → {"found":true,"a":13,"b":3}
+- "tres x tres" → {"found":true,"a":3,"b":3}
+- "dos por dos metros" → {"found":true,"a":2,"b":2}
+- "seis por cuatro" → {"found":true,"a":6,"b":4}
+- "dos por favor" → {"found":false}
 - "una maya 3x6" → {"found":true,"a":3,"b":6}
 - "5.5 por 3 metros" → {"found":true,"a":5.5,"b":3}
 - "150x200 cm" → {"found":true,"a":1.5,"b":2}
