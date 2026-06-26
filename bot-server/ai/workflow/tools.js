@@ -69,7 +69,7 @@ async function findProductInFamilies(query, familyList, wantDimsArg = null) {
   while (queue.length && guard++ < 500) {
     const pid = queue.shift();
     const kids = await PF.find({ parentId: pid })
-      .select("name size sellable active price mlPrice onlineStoreLinks parentId enabledDimensions")
+      .select("name size sellable active stock price mlPrice onlineStoreLinks parentId enabledDimensions")
       .lean();
     for (const k of kids) {
       if (k.sellable && k.active !== false) candidates.push(k);
@@ -150,7 +150,7 @@ async function availableVariantsForProduct(productDoc) {
   const PF = require("../../models/ProductFamily");
   if (!productDoc || !productDoc.parentId || !productDoc.size) return [];
   const siblings = await PF.find({ parentId: productDoc.parentId, sellable: true, active: { $ne: false } })
-    .select("name size price mlPrice onlineStoreLinks")
+    .select("name size sellable active stock price mlPrice onlineStoreLinks")
     .lean();
   const sizeKey = String(productDoc.size).toLowerCase();
   const variants = siblings.filter((s) => String(s.size || "").toLowerCase() === sizeKey);
@@ -185,7 +185,7 @@ async function availableMeasuresForFamilies(familyList) {
   while (queue.length && guard++ < 800) {
     const pid = queue.shift();
     const kids = await PF.find({ parentId: pid })
-      .select("name size sellable active price parentId enabledDimensions")
+      .select("name size sellable active stock price parentId enabledDimensions")
       .lean();
     for (const k of kids) {
       if (k.sellable && k.active !== false) leaves.push(k);
@@ -275,8 +275,40 @@ function numericOrNull(p) {
 //   - "needs_human" → Hanlob sells it but no active flow covers it → human.
 //   - "not_sold"    → genuinely not our category (toldo, lona, geomembrana…).
 // On any error: "no_product" (safest — no false switch, no false denial).
+// One classification call. reasoning=false → cheap gpt-4o-mini (fast, ~free).
+// reasoning='high'|'low' → gpt-5.4-mini with reasoning_effort (it thinks before
+// deciding). Reasoning models reject temperature:0 and split
+// max_completion_tokens between thinking and the JSON output, so we drop
+// temperature and give a big budget (reasoning can otherwise starve the JSON).
+// Returns the parsed {verdict,targetFlow,productName} or null on empty/parse fail.
+async function _classifyScopeOnce(client, systemContent, query, reasoning) {
+  const reqParams = reasoning
+    ? { model: "gpt-5.4-mini", reasoning_effort: reasoning, max_completion_tokens: 1500 }
+    : { model: "gpt-4o-mini", temperature: 0, max_tokens: 120 };
+  const res = await client.chat.completions.create({
+    ...reqParams,
+    response_format: { type: "json_object" },
+    messages: [
+      { role: "system", content: systemContent },
+      { role: "user", content: query },
+    ],
+  });
+  const raw = res.choices?.[0]?.message?.content;
+  if (!raw || !raw.trim()) {
+    console.warn("⚠️ classifyScope: empty content (reasoning may have starved output)");
+    return null;
+  }
+  const parsed = JSON.parse(raw);
+  const valid = ["no_product", "current", "other_flow", "needs_human", "not_sold"];
+  return {
+    verdict: valid.includes(parsed.verdict) ? parsed.verdict : "no_product",
+    targetFlow: parsed.targetFlow || null,
+    productName: parsed.productName || null,
+  };
+}
+
 async function aiClassifyProductScope(query, currentFlowName, flowCatalog, currentIsColdStart = false) {
-  const { getClient, CHAT_MODEL } = require("./llmClient");
+  const { getClient } = require("./llmClient");
   const flowsDesc = (flowCatalog || [])
     .map(
       (f) =>
@@ -286,17 +318,7 @@ async function aiClassifyProductScope(query, currentFlowName, flowCatalog, curre
     )
     .join("\n");
 
-  try {
-    const client = getClient();
-    const res = await client.chat.completions.create({
-      // Classification task — gpt-4o-mini is plenty and ~15x cheaper than the
-      // engine's gpt-4o. This runs on most messages (flow-switch detection), so
-      // it's a meaningful cost lever.
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content: `Eres un clasificador de alcance de producto para Hanlob (fabricante mexicano de malla sombra).
+  const systemContent = `Eres un clasificador de alcance de producto para Hanlob (fabricante mexicano de malla sombra).
 
 Tu trabajo: decidir a qué FLUJO de venta pertenece el producto que pide el cliente, o si no aplica. NO interpretes colores, saludos ni preguntas tipo "qué hago" como productos.
 
@@ -314,21 +336,42 @@ REGLAS:
 - "not_sold": algo que Hanlob NO vende (toldo, lona impermeable, geomembrana, plástico agrícola, etc.).
 
 INTERPRETA POR MEDIDAS/PRESENTACIÓN: una medida de DOS dimensiones (ANCHO x LARGO) — "6x8", "3x3", "tres x tres", "4 por 5", "6 de ancho y 8" — es POR SÍ SOLA un producto concreto: malla sombra CONFECCIONADA → enruta (other_flow) al flujo que vende malla sombra confeccionada, AUNQUE el cliente NO escriba la palabra "malla". NUNCA marques una medida de DOS dimensiones como no_product. El borde separador y los rollos se venden por UN SOLO largo lineal; una medida de DOS lados NUNCA es borde separador. Una "malla sombra" en ROLLO o "por metro" → flujo de rollo. Nombrar "malla sombra" + una medida SÍ es nombrar un producto concreto: NUNCA lo marques como no_product.
-Responde SOLO JSON: {"verdict":"no_product|current|other_flow|needs_human|not_sold","targetFlow":"<nombre exacto del flujo o null>","productName":"<el producto que pidió o null>"}`,
-        },
-        { role: "user", content: query },
-      ],
-      temperature: 0,
-      max_tokens: 120,
-      response_format: { type: "json_object" },
-    });
-    const parsed = JSON.parse(res.choices[0].message.content);
-    const valid = ["no_product", "current", "other_flow", "needs_human", "not_sold"];
-    return {
-      verdict: valid.includes(parsed.verdict) ? parsed.verdict : "no_product",
-      targetFlow: parsed.targetFlow || null,
-      productName: parsed.productName || null,
-    };
+Responde SOLO JSON: {"verdict":"no_product|current|other_flow|needs_human|not_sold","targetFlow":"<nombre exacto del flujo o null>","productName":"<el producto que pidió o null>"}`;
+
+  // FLOW_SWITCH_REASONING modes:
+  //   off  → cheap classifier only (gpt-4o-mini). No reasoning anywhere.
+  //   auto → cheap classify first; only if it lands on a CONSEQUENTIAL verdict
+  //          (other_flow / needs_human) re-run with reasoning to CONFIRM before
+  //          acting. Reasoning fires only on the rare switch decisions, not on
+  //          the ~95% of messages that are no_product/current. (Recommended.)
+  //   high|low → reasoning on EVERY classification (most expensive).
+  const mode = (process.env.FLOW_SWITCH_REASONING || "off").toLowerCase();
+  const CONSEQUENTIAL = new Set(["other_flow", "needs_human"]);
+
+  try {
+    const client = getClient();
+
+    if (mode === "high" || mode === "low") {
+      const r = await _classifyScopeOnce(client, systemContent, query, mode);
+      return r || { verdict: "no_product", targetFlow: null, productName: null };
+    }
+
+    // Fast pass first (off and auto both start here).
+    const cheap = await _classifyScopeOnce(client, systemContent, query, false);
+    const base = cheap || { verdict: "no_product", targetFlow: null, productName: null };
+
+    if (mode === "auto" && CONSEQUENTIAL.has(base.verdict)) {
+      // The cheap pass thinks a switch/handoff is warranted — confirm with
+      // reasoning before acting (this is where false switches were costly).
+      console.log(`🧠 [scope] cheap verdict "${base.verdict}" — confirming with reasoning`);
+      try {
+        const reasoned = await _classifyScopeOnce(client, systemContent, query, "high");
+        if (reasoned) return reasoned;
+      } catch (e) {
+        console.error("⚠️ scope reasoning confirm failed, using cheap verdict:", e.message);
+      }
+    }
+    return base;
   } catch (err) {
     console.error("❌ aiClassifyProductScope error:", err.message);
     return { verdict: "no_product", targetFlow: null, productName: null };
@@ -367,6 +410,9 @@ const REGISTRY = {
         }
         if (!doc) return { ok: false };
         const pInfo = await resolvePrice(doc);
+        if (pInfo.soldOut) {
+          return { ok: true, line: `"${doc.name}": SÍ la manejamos, pero está AGOTADA por el momento — NO compartas link de compra; ofrece avisar cuando regrese o pasar con un asesor.` };
+        }
         if (pInfo.handoff) {
           ctx.handoffRequested = true;
           ctx.handoffReason = `Producto vendible sin precio: ${doc.name} — requiere cotización de un asesor`;
@@ -379,7 +425,11 @@ const REGISTRY = {
             productName: doc.name,
             productId: String(doc._id),
           });
-          const price = pInfo.amount ? ` Precio: $${pInfo.amount}${pInfo.plusIva ? " + IVA" : ""}${pInfo.source === "ml" ? "" : " (inventario)"}.` : "";
+          const disc =
+            pInfo.hasDiscount && Number(pInfo.originalPrice) > Number(pInfo.amount)
+              ? ` (CON DESCUENTO, rebajado de $${Math.round(pInfo.originalPrice)})`
+              : "";
+          const price = pInfo.amount ? ` Precio: $${pInfo.amount}${pInfo.plusIva ? " + IVA" : ""}${disc}${pInfo.source === "ml" ? "" : " (inventario)"}.` : "";
           const linkPart = link ? `Link de compra: ${link}.` : "";
           return { ok: true, line: `${doc.name} — ${linkPart}${price}`.trim() };
         }
@@ -427,6 +477,9 @@ const REGISTRY = {
       // No specific product named → use the preloaded one as a default shortcut.
       const pi = ctx.priceInfo;
       if (!pi) return "Pregunta al cliente qué medida necesita para poder cotizar.";
+      if (pi.soldOut) {
+        return `${ctx.product?.name ? `"${ctx.product.name}"` : "Ese producto"} SÍ lo manejamos, pero está AGOTADO por el momento. NO compartas link de compra; ofrece avisar cuando vuelva a haber o pasar con un asesor. NUNCA digas que no lo vendemos.`;
+      }
       if (pi.handoff) {
         ctx.handoffRequested = true;
         ctx.handoffReason = `Producto vendible sin precio: ${ctx.product?.name || "(producto del flujo)"} — requiere cotización de un asesor`;
@@ -439,7 +492,11 @@ const REGISTRY = {
           productName: ctx.product?.name,
           productId: ctx.product && ctx.product._id ? String(ctx.product._id) : null,
         });
-        const price = pi.amount ? ` Precio: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${pi.source === "ml" ? "" : " (inventario)"}.` : "";
+        const disc =
+          pi.hasDiscount && Number(pi.originalPrice) > Number(pi.amount)
+            ? ` (CON DESCUENTO, rebajado de $${Math.round(pi.originalPrice)})`
+            : "";
+        const price = pi.amount ? ` Precio: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${disc}${pi.source === "ml" ? "" : " (inventario)"}.` : "";
         const linkPart = link ? `Link de compra: ${link}.` : "";
         return `${ctx.product?.name ? ctx.product.name + " — " : ""}${linkPart}${price}`.trim();
       }

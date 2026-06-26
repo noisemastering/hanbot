@@ -35,11 +35,13 @@ async function verifyReply(reply, facts) {
   try {
     const client = getClient();
     const res = await client.chat.completions.create({
-      // Stays on gpt-4o: tested gpt-4o-mini and it FALSE-corrected valid
-      // in-range replies (mangled "6x4" → "2x2 hasta 7x10"). The verifier must
-      // be reliable or it corrupts good replies. Cost is controlled by gating
-      // (only run when the reply contains a number/spec), not by downgrading.
-      model: CHAT_MODEL,
+      // PINNED to gpt-4o (NOT CHAT_MODEL): tested gpt-4o-mini and it
+      // FALSE-corrected valid in-range replies (mangled "6x4" → "2x2 hasta
+      // 7x10"). The verifier must be reliable or it corrupts good replies, so
+      // it stays on gpt-4o even when the engine (WORKFLOW_MODEL) is switched to
+      // a cheaper model. Cost is controlled by gating (only runs when the reply
+      // contains a number/spec), not by downgrading the verifier.
+      model: "gpt-4o",
       temperature: 0,
       max_tokens: 400,
       response_format: { type: "json_object" },

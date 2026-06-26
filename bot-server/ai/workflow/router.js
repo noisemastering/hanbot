@@ -56,7 +56,7 @@ Return the id of the transition that now applies, or "STAY".`;
     const resp = await client.chat.completions.create({
       model: CHAT_MODEL,
       temperature: 0,
-      max_tokens: 200,
+      max_completion_tokens: 200, // GPT-5.x require this; gpt-4o accepts it too
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: ROUTER_SYSTEM },

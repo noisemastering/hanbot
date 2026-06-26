@@ -74,7 +74,7 @@ async function executeNode(workflow, node, history, vars, ctx, contextBlock = ""
       resp = await client.chat.completions.create({
         model: CHAT_MODEL,
         temperature: 0.5,
-        max_tokens: 600,
+        max_completion_tokens: 600, // GPT-5.x require this; gpt-4o accepts it too
         messages,
         ...(tools.length ? { tools, tool_choice: "auto" } : {}),
       });
