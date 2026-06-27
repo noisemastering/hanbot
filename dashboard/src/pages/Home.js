@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../api";
+import { correlateAndWait } from "../utils/correlate";
 import { useTranslation } from "../i18n";
 import { useAuth } from "../contexts/AuthContext";
 import FeatureTip from '../components/FeatureTip';
@@ -166,11 +167,9 @@ function Home() {
   useEffect(() => {
     // Show cached data immediately, sync in background, then refresh
     fetchAll();
-    API.post('/analytics/correlate-conversions', {
-      sellerId: '482595248',
-      dateFrom,
-      dateTo
-    }).then(() => { setLastSync(new Date()); return fetchAll(); }).catch(err => console.error('Auto-sync failed:', err));
+    correlateAndWait({ dateFrom, dateTo })
+      .then(() => { setLastSync(new Date()); return fetchAll(); })
+      .catch(err => console.error('Auto-sync failed:', err));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range]);
 
@@ -241,11 +240,7 @@ function Home() {
     setCorrelating(true);
     startProgress();
     try {
-      await API.post('/analytics/correlate-conversions', {
-        sellerId: '482595248',
-        dateFrom,
-        dateTo
-      });
+      await correlateAndWait({ dateFrom, dateTo });
       setLastSync(new Date());
       stopProgress();
       await fetchAll();

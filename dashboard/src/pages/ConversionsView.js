@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import API from '../api';
+import { correlateAndWait } from '../utils/correlate';
 import { useTranslation } from '../i18n';
 import FeatureTip from '../components/FeatureTip';
 import {
@@ -93,17 +94,10 @@ function ConversionsView() {
     setCorrelationResult(null);
 
     try {
-      const response = await API.post('/analytics/correlate-conversions', {
-        sellerId: '482595248',
-        timeWindowHours,
-        orderLimit,
-        dryRun,
-        dateFrom,
-        dateTo
-      });
+      const result = await correlateAndWait({ timeWindowHours, orderLimit, dryRun, dateFrom, dateTo });
 
       setCorrelationResult({
-        ...response.data,
+        ...result,
         dryRun
       });
 
@@ -122,14 +116,9 @@ function ConversionsView() {
   useEffect(() => {
     // Show cached data immediately, sync in background, then refresh
     fetchData();
-    API.post('/analytics/correlate-conversions', {
-      sellerId: '482595248',
-      timeWindowHours,
-      orderLimit,
-      dryRun: false,
-      dateFrom,
-      dateTo
-    }).then(() => fetchData()).catch(err => console.error('Auto-sync failed:', err));
+    correlateAndWait({ timeWindowHours, orderLimit, dryRun: false, dateFrom, dateTo })
+      .then(() => fetchData())
+      .catch(err => console.error('Auto-sync failed:', err));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Fetch on mount + background sync
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import API from '../api';
+import { correlateAndWait } from '../utils/correlate';
 import FeatureTip from '../components/FeatureTip';
 import PeriodSelector from '../components/PeriodSelector';
 import {
@@ -91,27 +92,13 @@ function AdPerformanceView() {
   const runCorrelation = async () => {
     setCorrelating(true);
     setCorrelationProgress({ phase: 'starting', ordersTotal: 0, ordersProcessed: 0 });
-
-    // Poll progress every second
-    const pollInterval = setInterval(async () => {
-      try {
-        const res = await API.get('/analytics/correlate-conversions/progress?sellerId=482595248');
-        if (res.data?.status) {
-          setCorrelationProgress(res.data);
-          if (res.data.status === 'completed' || res.data.status === 'error') {
-            clearInterval(pollInterval);
-          }
-        }
-      } catch {}
-    }, 1000);
-
     try {
-      await API.post('/analytics/correlate-conversions', { sellerId: '482595248', dateFrom, dateTo });
+      // Background job + progress polling (the POST returns 202 immediately).
+      await correlateAndWait({ dateFrom, dateTo }, { onProgress: setCorrelationProgress });
       await fetchData();
     } catch (err) {
       console.error('Correlation failed:', err);
     } finally {
-      clearInterval(pollInterval);
       setCorrelating(false);
       // Keep progress visible briefly so user sees the completion
       setTimeout(() => setCorrelationProgress(null), 2500);
