@@ -214,6 +214,7 @@ function ConvoSimulatorView({ sandboxOnly = false }) {
           <div className="flex-1 min-w-0">
             <SandboxTester
               workflowId={selectedId}
+              workflowName={workflow?.name || ""}
               dirty={false}
               onCurrentNode={setCurrentNode}
               onSent={handleSandboxSent}

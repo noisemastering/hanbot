@@ -7,6 +7,7 @@ import React, { useState, useRef, useEffect } from "react";
 import toast from "react-hot-toast";
 import API from "../../api";
 import SetupFields from "./SetupFields";
+import ReportModal from "../ReportModal";
 
 function newSessionId() {
   return `sbx_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
@@ -17,7 +18,7 @@ const SCENARIOS = [
   { value: "returning", label: "returning", hint: "Cliente que regresa a una conversación previa." },
 ];
 
-export default function SandboxTester({ workflowId, dirty, onCurrentNode, familyIds = null, onSent = null }) {
+export default function SandboxTester({ workflowId, workflowName = "", dirty, onCurrentNode, familyIds = null, onSent = null }) {
   const [scenario, setScenario] = useState("cold");
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -25,8 +26,19 @@ export default function SandboxTester({ workflowId, dirty, onCurrentNode, family
   const [currentNode, setCurrentNode] = useState(null);
   const [setup, setSetup] = useState({});
   const [setupOpen, setSetupOpen] = useState(false);
+  const [reportOpen, setReportOpen] = useState(false);
   const sessionRef = useRef(newSessionId());
   const scrollRef = useRef(null);
+
+  // Build a readable transcript of the simulated conversation for the report
+  // ticket (no real psid here — the transcript IS the context for the reviewer).
+  const buildTranscript = () =>
+    messages
+      .map((m) => {
+        const who = m.role === "user" ? "Cliente" : m.role === "assistant" ? "Bot" : m.role === "error" ? "Error" : "Sistema";
+        return `${who}: ${m.text}`;
+      })
+      .join("\n");
 
   useEffect(() => {
     // New workflow selected → fresh conversation.
@@ -122,6 +134,14 @@ export default function SandboxTester({ workflowId, dirty, onCurrentNode, family
         >
           {setupOpen ? "▾ Setup (override)" : "▸ Setup (override)"}
         </button>
+        <button
+          onClick={() => setReportOpen(true)}
+          disabled={messages.length === 0}
+          title={messages.length === 0 ? "Conversa primero para poder reportar" : "Reportar esta conversación simulada"}
+          className="px-3 py-2 text-sm rounded-lg bg-red-600/80 hover:bg-red-600 text-white disabled:opacity-50"
+        >
+          🚩 Reportar
+        </button>
         <p className="text-xs text-amber-300/80 flex-1 min-w-[200px]">
           ⓘ {SCENARIOS.find((s) => s.value === scenario)?.hint}
           {dirty && <span className="text-amber-400"> · Tienes cambios sin guardar; el sandbox usa la versión guardada.</span>}
@@ -188,6 +208,17 @@ export default function SandboxTester({ workflowId, dirty, onCurrentNode, family
           </button>
         </div>
       </div>
+
+      <ReportModal
+        open={reportOpen}
+        onClose={() => setReportOpen(false)}
+        heading="Reportar conversación simulada"
+        titlePrefix="Simulación reportada"
+        contextLine={`Simulación del workflow "${workflowName || workflowId}" (scenario: ${scenario}) reportada desde el Sandbox. PSID: ${sessionRef.current}`}
+        extra={`--- Conversación simulada ---\n${buildTranscript()}`}
+        psid={sessionRef.current}
+        source="sandbox_report"
+      />
     </div>
   );
 }
