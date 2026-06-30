@@ -12,6 +12,26 @@ export const AuthProvider = ({ children }) => {
   // Simulation mode state (super_admin only)
   const [simulationMode, setSimulationMode] = useState(null); // { role, profile, permissions, label }
 
+  // Liberado release gate (Spec Ops). false = restricted (gated features are
+  // super_admin-only). Defaults restricted until the status is read.
+  const [liberado, setLiberado] = useState(false);
+  const refreshLiberado = async () => {
+    try {
+      const t = localStorage.getItem('token');
+      if (!t) return;
+      const res = await fetch(`${API_URL}/spec-ops/status`, {
+        credentials: 'include',
+        headers: { Authorization: `Bearer ${t}` },
+      });
+      const data = await res.json();
+      if (data && data.success) setLiberado(!!data.liberado?.engaged);
+    } catch (_) { /* keep restricted on error */ }
+  };
+  useEffect(() => {
+    if (user) refreshLiberado();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user]);
+
   // Check if user is logged in on mount
   useEffect(() => {
     if (token) {
@@ -211,7 +231,10 @@ export const AuthProvider = ({ children }) => {
     simulationMode,
     startSimulation,
     stopSimulation,
-    isSimulating
+    isSimulating,
+    // Liberado release gate
+    liberado,
+    refreshLiberado
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

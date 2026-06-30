@@ -86,6 +86,7 @@ import CompanyInfoView from "./pages/CompanyInfoView";
 import ReportedConversationsView from "./pages/ReportedConversationsView";
 import KillswitchView from "./pages/KillswitchView";
 import NukeEmView from "./pages/NukeEmView";
+import LiberadoView from "./pages/LiberadoView";
 import MaintenanceGate from "./components/MaintenanceGate";
 import SalesOverviewView from "./pages/SalesOverviewView";
 import MessagePerformanceView from "./pages/MessagePerformanceView";
@@ -572,6 +573,14 @@ const menuItems = [
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         )
+      },
+      {
+        id: "liberado",
+        labelKey: "menu.liberado",
+        path: "/spec-ops/liberado",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        )
       }
     ]
   },
@@ -596,7 +605,7 @@ const menuItems = [
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, loading: authLoading, canAccess, canManageUsers, getLandingPage, logout, simulationMode, stopSimulation } = useAuth();
+  const { user, loading: authLoading, canAccess, canManageUsers, getLandingPage, logout, simulationMode, stopSimulation, liberado } = useAuth();
   const { t, locale, language, changeLanguage } = useTranslation();
   const updateAvailable = useNewVersionCheck();
 
@@ -1613,8 +1622,10 @@ function App() {
   const childVisible = (child) => {
     if (!child || child.isLabel) return true;
     // Spec Ops (killswitch / nuke) — super_admin only.
-    if (child.id === 'killswitch' || child.id === 'nuke') return effectiveRole === 'super_admin';
+    if (child.id === 'killswitch' || child.id === 'nuke' || child.id === 'liberado') return effectiveRole === 'super_admin';
     if (child.id === 'flows' || child.id === 'intents') return effectiveRole === 'super_admin';
+    // Flow attachment to ads is Liberado-gated: super_admin-only until released.
+    if (child.id === 'ad-workflow' && !liberado) return effectiveRole === 'super_admin';
     if (child.id === 'ad-workflow' || child.id === 'promos') {
       // Administrador de Campaña profile + above levels (super_user, admin, super_admin).
       return (
@@ -2382,7 +2393,7 @@ function App() {
           <Route path="/playground/simulador" element={<ConvoSimulatorView />} />
           <Route path="/bot/simulador" element={<ConvoSimulatorView sandboxOnly />} />
           <Route path="/promos" element={<PromosView />} />
-          <Route path="/playground/anuncio-flujo" element={<AdWorkflowAssignView />} />
+          <Route path="/playground/anuncio-flujo" element={(liberado || effectiveRole === 'super_admin') ? <AdWorkflowAssignView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/inteligencia-artificial" element={<CampaignIntelligenceView />} />
           <Route path="/ml-import" element={<MLOrderImportView />} />
 
@@ -2535,6 +2546,7 @@ function App() {
           <Route path="/reported-convos" element={effectiveRole === 'super_admin' ? <ReportedConversationsView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/spec-ops/killswitch" element={effectiveRole === 'super_admin' ? <KillswitchView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/spec-ops/nuke" element={effectiveRole === 'super_admin' ? <NukeEmView /> : <Navigate to={getLandingPage()} replace />} />
+          <Route path="/spec-ops/liberado" element={effectiveRole === 'super_admin' ? <LiberadoView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/help" element={<HelpView />} />
         </Routes>
 
