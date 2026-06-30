@@ -157,6 +157,7 @@ export default function SandboxTester({ workflowId, workflowName = "", dirty, on
           <SetupFields
             value={setup}
             familyIds={familyIds}
+            hideAdvanced
             onChange={(s) => {
               setSetup(s);
               reset();

@@ -189,19 +189,25 @@ function PromoPicker({ familyIds, value, onChange }) {
   );
 }
 
-export default function SetupFields({ value = {}, onChange, familyIds = null }) {
+// hideAdvanced: drop the buyer/tone/purchase/channel selects (used by the sandbox,
+// which only needs promo + product selection). Default shows all fields.
+export default function SetupFields({ value = {}, onChange, familyIds = null, hideAdvanced = false }) {
   const v = value || {};
   const set = (patch) => onChange({ ...v, ...patch });
   return (
     <div className="grid grid-cols-2 gap-3">
-      <Sel label="Cliente" val={v.buyer} onChange={(x) => set({ buyer: x })}
-        opts={[{ value: "", label: "— (sin definir)" }, { value: "end_user", label: "Consumidor final" }, { value: "reseller", label: "Revendedor" }]} />
-      <Sel label="Tono" val={v.tone} onChange={(x) => set({ tone: x })}
-        opts={[{ value: "", label: "— (sin definir)" }, { value: "casual", label: "Casual" }, { value: "professional", label: "Profesional" }, { value: "technical", label: "Técnico" }]} />
-      <Sel label="Tipo de compra" val={v.purchaseType} onChange={(x) => set({ purchaseType: x })}
-        opts={[{ value: "", label: "— (sin definir)" }, { value: "retail", label: "Menudeo" }, { value: "wholesale", label: "Mayoreo" }]} />
-      <Sel label="Canal de venta" val={v.saleChannel} onChange={(x) => set({ saleChannel: x })}
-        opts={[{ value: "", label: "— (sin definir)" }, { value: "marketplace", label: "Marketplace" }, { value: "manual", label: "Manual (asesor)" }]} />
+      {!hideAdvanced && (
+        <>
+          <Sel label="Cliente" val={v.buyer} onChange={(x) => set({ buyer: x })}
+            opts={[{ value: "", label: "— (sin definir)" }, { value: "end_user", label: "Consumidor final" }, { value: "reseller", label: "Revendedor" }]} />
+          <Sel label="Tono" val={v.tone} onChange={(x) => set({ tone: x })}
+            opts={[{ value: "", label: "— (sin definir)" }, { value: "casual", label: "Casual" }, { value: "professional", label: "Profesional" }, { value: "technical", label: "Técnico" }]} />
+          <Sel label="Tipo de compra" val={v.purchaseType} onChange={(x) => set({ purchaseType: x })}
+            opts={[{ value: "", label: "— (sin definir)" }, { value: "retail", label: "Menudeo" }, { value: "wholesale", label: "Mayoreo" }]} />
+          <Sel label="Canal de venta" val={v.saleChannel} onChange={(x) => set({ saleChannel: x })}
+            opts={[{ value: "", label: "— (sin definir)" }, { value: "marketplace", label: "Marketplace" }, { value: "manual", label: "Manual (asesor)" }]} />
+        </>
+      )}
       <div className="col-span-2">
         <Labeled label="Productos (dentro de la familia del flujo — varios permitidos)">
           <ProductsPicker familyIds={familyIds} selected={v.products} onChange={(arr) => set({ products: arr })} />
