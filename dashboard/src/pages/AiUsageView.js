@@ -31,11 +31,11 @@ const int = (n) => (n || 0).toLocaleString("es-MX");
 
 function Card({ label, primary, secondary, hint }) {
   return (
-    <div className="bg-white rounded-lg shadow p-4 border border-gray-100">
-      <div className="text-xs font-medium text-gray-500 uppercase tracking-wide">{label}</div>
-      <div className="text-2xl font-bold text-gray-900 mt-1">{primary}</div>
-      {secondary && <div className="text-sm text-gray-600 mt-0.5">{secondary}</div>}
-      {hint && <div className="text-xs text-gray-400 mt-1">{hint}</div>}
+    <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5">
+      <div className="text-xs font-medium text-gray-400 uppercase tracking-wide">{label}</div>
+      <div className="text-2xl font-bold text-white mt-1">{primary}</div>
+      {secondary && <div className="text-sm text-gray-300 mt-0.5">{secondary}</div>}
+      {hint && <div className="text-xs text-gray-500 mt-1">{hint}</div>}
     </div>
   );
 }
@@ -93,18 +93,18 @@ export default function AiUsageView() {
   }));
 
   return (
-    <div className="p-6 max-w-6xl mx-auto">
-      <div className="flex items-center justify-between flex-wrap gap-3 mb-1">
-        <h1 className="text-2xl font-bold text-gray-900">Costos IA</h1>
+    <div className="p-6 space-y-6 max-w-6xl mx-auto">
+      <div className="flex items-center justify-between flex-wrap gap-3">
+        <h1 className="text-2xl font-bold text-white">Costos IA</h1>
         <div className="flex items-center gap-2">
           {RANGES.map((r) => (
             <button
               key={r.days}
               onClick={() => setDays(r.days)}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium border ${
+              className={`px-3 py-1.5 rounded-md text-sm font-medium border transition-colors ${
                 days === r.days
                   ? "bg-indigo-600 text-white border-indigo-600"
-                  : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50"
+                  : "bg-gray-800 text-gray-300 border-gray-700 hover:bg-gray-700"
               }`}
             >
               {r.label}
@@ -112,29 +112,31 @@ export default function AiUsageView() {
           ))}
         </div>
       </div>
-      <p className="text-sm text-gray-500 mb-5">
+      <p className="text-sm text-gray-400 -mt-3">
         Gasto real de OpenAI (telemetría por llamada). Costo por conversación = gasto ÷ conversaciones activas en el periodo.
       </p>
 
       {/* FX control */}
-      <div className="flex items-center gap-2 mb-5 text-sm text-gray-600">
+      <div className="flex items-center gap-2 text-sm text-gray-300">
         <span>Tipo de cambio USD→MXN:</span>
         <input
           type="number"
           step="0.01"
           value={fx}
           onChange={(e) => setFx(parseFloat(e.target.value) || 0)}
-          className="w-24 px-2 py-1 border border-gray-200 rounded-md"
+          className="w-24 px-2 py-1 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
         />
-        {fxDate && <span className="text-xs text-gray-400">(frankfurter, {fxDate})</span>}
+        {fxDate && <span className="text-xs text-gray-500">(frankfurter, {fxDate})</span>}
       </div>
 
       {loading ? (
-        <div className="text-gray-400 py-20 text-center">Cargando…</div>
+        <div className="flex justify-center min-h-[40vh] items-center">
+          <div className="inline-block animate-spin rounded-full h-10 w-10 border-b-2 border-indigo-400"></div>
+        </div>
       ) : (
         <>
           {/* Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <Card
               label={`Gasto total (${days}d)`}
               primary={mxn(totalUsd * fx)}
@@ -160,37 +162,37 @@ export default function AiUsageView() {
           </div>
 
           {/* Daily chart */}
-          <div className="bg-white rounded-lg shadow p-4 border border-gray-100 mb-6">
-            <div className="text-sm font-semibold text-gray-700 mb-3">Gasto diario (MXN)</div>
+          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5">
+            <div className="text-sm font-semibold text-gray-200 mb-3">Gasto diario (MXN)</div>
             {chartData.length === 0 ? (
-              <div className="text-gray-400 text-sm py-10 text-center">Sin datos en este periodo todavía.</div>
+              <div className="text-gray-500 text-sm py-10 text-center">Sin datos en este periodo todavía.</div>
             ) : (
               <ResponsiveContainer width="100%" height={280}>
                 <BarChart data={chartData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#eee" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} width={48} />
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis dataKey="date" tick={{ fontSize: 11, fill: "#9ca3af" }} stroke="#4b5563" />
+                  <YAxis tick={{ fontSize: 11, fill: "#9ca3af" }} width={48} stroke="#4b5563" />
                   <Tooltip
-                    formatter={(v, name) =>
-                      name === "mxn" ? [mxn(v), "Gasto"] : [v, name]
-                    }
+                    contentStyle={{ background: "#1f2937", border: "1px solid #374151", borderRadius: 8, color: "#e5e7eb" }}
+                    labelStyle={{ color: "#9ca3af" }}
+                    formatter={(v, name) => (name === "mxn" ? [mxn(v), "Gasto"] : [v, name])}
                     labelFormatter={(l) => `Día ${l}`}
                   />
-                  <Bar dataKey="mxn" fill="#4f46e5" radius={[3, 3, 0, 0]} />
+                  <Bar dataKey="mxn" fill="#6366f1" radius={[3, 3, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             )}
           </div>
 
           {/* By-model table */}
-          <div className="bg-white rounded-lg shadow border border-gray-100 overflow-hidden">
-            <div className="text-sm font-semibold text-gray-700 px-4 py-3 border-b border-gray-100">
+          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl overflow-hidden">
+            <div className="text-sm font-semibold text-gray-200 px-4 py-3 border-b border-gray-700/50">
               Desglose por modelo
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="text-left text-gray-500 border-b border-gray-100">
+                  <tr className="text-left text-gray-400 border-b border-gray-700/50">
                     <th className="px-4 py-2 font-medium">Modelo</th>
                     <th className="px-4 py-2 font-medium text-right">Gasto (MXN)</th>
                     <th className="px-4 py-2 font-medium text-right">Gasto (USD)</th>
@@ -202,21 +204,21 @@ export default function AiUsageView() {
                 </thead>
                 <tbody>
                   {(data?.byModel || []).map((m) => (
-                    <tr key={m.model} className="border-b border-gray-50 last:border-0">
-                      <td className="px-4 py-2 font-medium text-gray-800">{m.model}</td>
-                      <td className="px-4 py-2 text-right">{mxn(m.costUsd * fx)}</td>
-                      <td className="px-4 py-2 text-right text-gray-500">{usd(m.costUsd)}</td>
-                      <td className="px-4 py-2 text-right text-gray-500">
+                    <tr key={m.model} className="border-b border-gray-800 last:border-0">
+                      <td className="px-4 py-2 font-medium text-gray-100">{m.model}</td>
+                      <td className="px-4 py-2 text-right text-gray-200">{mxn(m.costUsd * fx)}</td>
+                      <td className="px-4 py-2 text-right text-gray-400">{usd(m.costUsd)}</td>
+                      <td className="px-4 py-2 text-right text-gray-400">
                         {totalUsd > 0 ? `${((m.costUsd / totalUsd) * 100).toFixed(1)}%` : "—"}
                       </td>
-                      <td className="px-4 py-2 text-right text-gray-500">{int(m.calls)}</td>
-                      <td className="px-4 py-2 text-right text-gray-500">{int(m.promptTokens)}</td>
-                      <td className="px-4 py-2 text-right text-gray-500">{int(m.completionTokens)}</td>
+                      <td className="px-4 py-2 text-right text-gray-400">{int(m.calls)}</td>
+                      <td className="px-4 py-2 text-right text-gray-400">{int(m.promptTokens)}</td>
+                      <td className="px-4 py-2 text-right text-gray-400">{int(m.completionTokens)}</td>
                     </tr>
                   ))}
                   {(!data?.byModel || data.byModel.length === 0) && (
                     <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-gray-400">
+                      <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
                         Sin datos todavía.
                       </td>
                     </tr>
@@ -226,7 +228,7 @@ export default function AiUsageView() {
             </div>
           </div>
 
-          <p className="text-xs text-gray-400 mt-4">
+          <p className="text-xs text-gray-500">
             La telemetría se registra por llamada desde el {data?.window?.since ? new Date(data.window.since).toLocaleDateString("es-MX") : "inicio"} del periodo. Costos calculados con precios vigentes por modelo (entrada/salida, con descuento de caché).
           </p>
         </>
