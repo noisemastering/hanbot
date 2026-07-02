@@ -817,6 +817,9 @@ function Messages() {
                       setSelectedPsid(handoff.psid);
                       setSelectedChannel(handoff.channel);
                       fetchFullConversation(handoff.psid);
+                      // Opening a pending conversation means the human is taking over —
+                      // mark it taken (same as the "Tomar" button), not just viewed.
+                      handleTakeoverAndResolve(handoff.psid);
                     }}
                     style={{
                       borderBottom: "1px solid #555",
