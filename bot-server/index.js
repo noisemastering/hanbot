@@ -4,6 +4,7 @@ require('dotenv').config();
 // Monkey-patch OpenAI SDK to track all API calls for usage monitoring.
 // Must run before any module imports OpenAI.
 const { recordCall, recordError } = require('./utils/aiUsageTracker');
+const { recordUsage } = require('./ai/utils/aiUsageLogger');
 const OrigOpenAI = require('openai').OpenAI;
 const _origCreate = OrigOpenAI.prototype._origCreate; // save for safety
 require('openai').OpenAI = class extends OrigOpenAI {
@@ -13,7 +14,12 @@ require('openai').OpenAI = class extends OrigOpenAI {
     this.chat.completions.create = async function (...callArgs) {
       try {
         const result = await origChat(...callArgs);
-        if (result?.usage) recordCall(result.model || 'unknown', result.usage.prompt_tokens, result.usage.completion_tokens);
+        if (result?.usage) {
+          const model = result.model || callArgs[0]?.model || 'unknown';
+          recordCall(model, result.usage.prompt_tokens, result.usage.completion_tokens);
+          // Detailed, persistent per-call record (accurate cost) for the Costos IA view.
+          recordUsage(model, result.usage);
+        }
         return result;
       } catch (err) {
         recordError(err);
@@ -151,6 +157,7 @@ const companyInfoRoutes = require('./routes/companyInfoRoutes');
 const salesOverviewRoutes = require('./routes/salesOverviewRoutes');
 const messagePerformanceRoutes = require('./routes/messagePerformanceRoutes');
 const workflowsRoutes = require('./routes/workflowsRoutes');
+const aiUsageRoutes = require('./routes/aiUsageRoutes');
 const specOpsRoutes = require('./routes/specOpsRoutes');
 
 // ── Spec Ops: Nuke'em hard lockdown ───────────────────────────────────────────
@@ -222,6 +229,7 @@ app.use('/company-info', companyInfoRoutes);
 app.use('/sales-overview', salesOverviewRoutes);
 app.use('/message-performance', messagePerformanceRoutes);
 app.use('/workflows', workflowsRoutes);
+app.use('/ai-usage', aiUsageRoutes);
 
 // ============================================
 // Global Error Handler (returns JSON, not HTML)

@@ -45,6 +45,7 @@ const es = {
   "menu.bot": "Bot",
   "menu.intents": "Intents",
   "menu.flows": "Flujos (Legacy)",
+  "menu.aiUsage": "Costos IA",
   "menu.workflows": "Workflows (beta)",
   "menu.adWorkflow": "Flujo en anuncio",
   "menu.sandbox": "Sandbox",

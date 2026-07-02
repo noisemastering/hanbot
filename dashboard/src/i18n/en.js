@@ -45,6 +45,7 @@ const en = {
   "menu.bot": "Bot",
   "menu.intents": "Intents",
   "menu.flows": "Flows (Legacy)",
+  "menu.aiUsage": "AI Costs",
   "menu.workflows": "Workflows (beta)",
   "menu.adWorkflow": "Workflow on ad",
   "menu.sandbox": "Sandbox",

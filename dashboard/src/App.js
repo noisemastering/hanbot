@@ -70,6 +70,7 @@ import MLPlaygroundView from "./pages/MLPlaygroundView";
 import SalesForecastView from "./pages/SalesForecastView";
 import FlowPromptsView from "./pages/FlowPromptsView";
 import WorkflowsView from "./pages/WorkflowsView";
+import AiUsageView from "./pages/AiUsageView";
 import CustomerSegmentationView from "./pages/CustomerSegmentationView";
 import ConversionProbabilityView from "./pages/ConversionProbabilityView";
 import AdSpendOptimizationView from "./pages/AdSpendOptimizationView";
@@ -445,6 +446,14 @@ const menuItems = [
         path: "/flujos",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
+        )
+      },
+      {
+        id: "ai-usage",
+        labelKey: "menu.aiUsage",
+        path: "/bot/costos-ia",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 7h6m0 10v-3m-3 3V9m-3 8v-1m-4 4h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v14a2 2 0 002 2z" />
         )
       }
     ]
@@ -1623,7 +1632,7 @@ function App() {
     if (!child || child.isLabel) return true;
     // Spec Ops (killswitch / nuke) — super_admin only.
     if (child.id === 'killswitch' || child.id === 'nuke' || child.id === 'liberado') return effectiveRole === 'super_admin';
-    if (child.id === 'flows' || child.id === 'intents') return effectiveRole === 'super_admin';
+    if (child.id === 'flows' || child.id === 'intents' || child.id === 'ai-usage') return effectiveRole === 'super_admin';
     // Flow attachment to ads is Liberado-gated: super_admin-only until released.
     if (child.id === 'ad-workflow' && !liberado) return effectiveRole === 'super_admin';
     if (child.id === 'ad-workflow' || child.id === 'promos') {
@@ -2544,6 +2553,7 @@ function App() {
 
           <Route path="/settings" element={<Settings />} />
           <Route path="/reported-convos" element={effectiveRole === 'super_admin' ? <ReportedConversationsView /> : <Navigate to={getLandingPage()} replace />} />
+          <Route path="/bot/costos-ia" element={effectiveRole === 'super_admin' ? <AiUsageView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/spec-ops/killswitch" element={effectiveRole === 'super_admin' ? <KillswitchView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/spec-ops/nuke" element={effectiveRole === 'super_admin' ? <NukeEmView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/spec-ops/liberado" element={effectiveRole === 'super_admin' ? <LiberadoView /> : <Navigate to={getLandingPage()} replace />} />
