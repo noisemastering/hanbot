@@ -114,13 +114,12 @@ function ConversionsView() {
   };
 
   useEffect(() => {
-    // Show cached data immediately, sync in background, then refresh
+    // READ-ONLY on load: DISPLAY the already-correlated data only. Correlation is
+    // heavy and must NOT auto-run on load (it stalled the backend and showed
+    // half-reset numbers). It runs ONLY via the explicit "Correlacionar" button.
     fetchData();
-    correlateAndWait({ timeWindowHours, orderLimit, dryRun: false, dateFrom, dateTo })
-      .then(() => fetchData())
-      .catch(err => console.error('Auto-sync failed:', err));
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Fetch on mount + background sync
+  }, []); // Fetch on mount (read-only)
 
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return 'N/A';

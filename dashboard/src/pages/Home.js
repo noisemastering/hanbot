@@ -165,11 +165,12 @@ function Home() {
   };
 
   useEffect(() => {
-    // Show cached data immediately, sync in background, then refresh
+    // READ-ONLY on load: just DISPLAY the already-correlated data. Correlation is
+    // heavy (one ML shipment fetch per order) and must NOT run on load — auto-syncing
+    // here stalled the backend (CORS/timeouts across the whole dashboard) and showed
+    // half-reset numbers mid-run. Correlation runs ONLY via the explicit
+    // "Correlacionar" button (runCorrelation).
     fetchAll();
-    correlateAndWait({ dateFrom, dateTo })
-      .then(() => { setLastSync(new Date()); return fetchAll(); })
-      .catch(err => console.error('Auto-sync failed:', err));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range]);
 
