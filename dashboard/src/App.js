@@ -1644,9 +1644,10 @@ function App() {
         canAccess('ad-workflow')
       );
     }
-    // Sandbox simulator: admins and above only.
+    // Sandbox simulator: admins and above only (matches the backend, which allows
+    // super_admin, admin, and super_user to list + run the sandbox).
     if (child.id === 'bot-sandbox') {
-      return effectiveRole === 'super_admin' || effectiveRole === 'admin';
+      return effectiveRole === 'super_admin' || effectiveRole === 'admin' || effectiveRole === 'super_user';
     }
     return canAccess(child.id);
   };
