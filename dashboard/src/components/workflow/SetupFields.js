@@ -54,15 +54,19 @@ function subtreeIds(node, acc = new Set()) {
 function ProductsPicker({ familyIds, selected, onChange }) {
   const [tree, setTree] = useState([]);
   const [expanded, setExpanded] = useState({});
+  const [loading, setLoading] = useState(true);
   const ids = Array.isArray(familyIds) ? familyIds.filter(Boolean) : familyIds ? [familyIds] : [];
 
   useEffect(() => {
     (async () => {
+      setLoading(true);
       try {
         const res = await API.get("/product-families/tree");
         setTree(res.data?.data || []);
       } catch {
         /* non-fatal */
+      } finally {
+        setLoading(false);
       }
     })();
   }, []);
@@ -122,7 +126,12 @@ function ProductsPicker({ familyIds, selected, onChange }) {
         )}
       </div>
       <div className="border border-gray-700 rounded-lg p-2 max-h-56 overflow-y-auto bg-gray-900">
-        {!ids.length ? (
+        {loading ? (
+          <div className="flex items-center gap-2 text-xs text-gray-400 py-1">
+            <span className="inline-block w-3.5 h-3.5 border-2 border-gray-600 border-t-emerald-400 rounded-full animate-spin" />
+            Cargando productos…
+          </div>
+        ) : !ids.length ? (
           <p className="text-xs text-amber-400/80">Asigna primero una o más familias al flujo (pestaña Config).</p>
         ) : roots.length === 0 ? (
           <p className="text-xs text-gray-500">Las familias del flujo no tienen elementos.</p>
