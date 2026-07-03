@@ -41,8 +41,11 @@ export default function SandboxTester({ workflowId, workflowName = "", dirty, on
       .join("\n");
 
   useEffect(() => {
-    // New workflow selected → fresh conversation.
+    // New workflow selected → fresh conversation AND fresh setup override. Without
+    // clearing setup, the previous flow's products/promo (e.g. confeccionada 6x4 promo)
+    // leak into the new flow — a borde flow would then quote the malla promo.
     sessionRef.current = newSessionId();
+    setSetup({});
     setMessages([]);
     setCurrentNode(null);
   }, [workflowId]);
