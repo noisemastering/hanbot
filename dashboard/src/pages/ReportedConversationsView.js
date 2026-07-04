@@ -25,7 +25,7 @@ const REASON_LABELS = {
   other: "Otro",
 };
 const SEV = { low: { l: "Baja", c: "#4caf50" }, medium: { l: "Media", c: "#f5a623" }, high: { l: "Alta", c: "#f44336" } };
-const STATUS_LABEL = { open: "Abierto", review: "En revisión", working: "En proceso", solved: "Resuelto", dismissed: "Sin error" };
+const STATUS_LABEL = { open: "Abierto", review: "En revisión", working: "En proceso", solved: "Resuelto", dismissed: "Sin error", ya_resuelto: "Ya resuelto" };
 
 export default function ReportedConversationsView() {
   const [tickets, setTickets] = useState([]);
@@ -83,10 +83,10 @@ export default function ReportedConversationsView() {
     try {
       await API.put(`/tickets/${selected._id}`, {
         status,
-        resolution: resolution.trim() || (status === "dismissed" ? "Sin error" : ""),
+        resolution: resolution.trim() || (status === "dismissed" ? "Sin error" : status === "ya_resuelto" ? "Ya resuelto" : ""),
         noError: status === "dismissed",
       });
-      toast.success(status === "dismissed" ? "Marcado como Sin error" : "Marcado como resuelto");
+      toast.success(status === "dismissed" ? "Marcado como Sin error" : status === "ya_resuelto" ? "Marcado como Ya resuelto" : "Marcado como resuelto");
       await loadTickets();
       setSelected((s) => (s ? { ...s, status, resolution } : s));
     } catch (e) {
@@ -143,7 +143,7 @@ export default function ReportedConversationsView() {
     }
   };
 
-  const visible = tickets.filter((t) => (showResolved ? true : !["solved", "dismissed"].includes(t.status)));
+  const visible = tickets.filter((t) => (showResolved ? true : !["solved", "dismissed", "ya_resuelto"].includes(t.status)));
 
   if (loading) return <div className="p-8 text-gray-400">Cargando reportes…</div>;
 
@@ -163,7 +163,7 @@ export default function ReportedConversationsView() {
         ) : (
           visible.map((t) => {
             const sev = SEV[t.priority] || {};
-            const closed = ["solved", "dismissed"].includes(t.status);
+            const closed = ["solved", "dismissed", "ya_resuelto"].includes(t.status);
             return (
               <button
                 key={t._id}
@@ -248,6 +248,11 @@ export default function ReportedConversationsView() {
                 <button onClick={() => resolve("solved")} disabled={saving}
                   className="flex-1 px-4 py-2 rounded-lg bg-emerald-600 hover:bg-emerald-500 text-white font-semibold disabled:opacity-50">
                   {saving ? "Guardando…" : "✓ Marcar como resuelto"}
+                </button>
+                <button onClick={() => resolve("ya_resuelto")} disabled={saving}
+                  className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white font-semibold disabled:opacity-50"
+                  title="Era un error real pero ya está corregido; se descuenta del conteo de reportes">
+                  Ya resuelto
                 </button>
                 <button onClick={() => resolve("dismissed")} disabled={saving}
                   className="px-4 py-2 rounded-lg bg-gray-600 hover:bg-gray-500 text-white font-semibold disabled:opacity-50"
