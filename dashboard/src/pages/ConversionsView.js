@@ -116,7 +116,6 @@ function ConversionsView() {
         totalRevenue: sum.totals?.revenue || 0,
         clickedLinks: totalClicks,
         clickRate: totalLinks ? Math.round((totalClicks / totalLinks) * 100) : 0,
-        conversionRate: totalClicks ? Math.round((conversions / totalClicks) * 100) : 0,
         confidenceBreakdown: cb,
       });
       setDailyClicks(chart);
@@ -237,9 +236,7 @@ function ConversionsView() {
               <div>
                 <p className="text-sm text-gray-400">{t('conversions.conversions')}</p>
                 <p className="text-2xl font-bold text-green-400">{stats.conversions}</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  {t('conversions.ofClicks', { rate: stats.conversionRate })}
-                </p>
+                <p className="text-xs text-gray-500 mt-1">ventas ligadas a conversaciones</p>
               </div>
               <div className="w-12 h-12 bg-green-500/20 rounded-full flex items-center justify-center">
                 <svg className="w-6 h-6 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -614,7 +611,6 @@ function ConversionsView() {
                 <span className="text-xl font-bold text-green-400">{stats.conversions}</span>
               </div>
               <p className="text-sm text-gray-400">{t('conversions.funnelConversions')}</p>
-              <p className="text-xs text-gray-500">{stats.conversionRate}%</p>
             </div>
 
             <div className="text-gray-600 text-2xl">→</div>
