@@ -193,6 +193,7 @@ function ConversionsView() {
       date: day.date,
       dateLabel: day.dateLabel,
       clicks: day.clicks || 0,
+      sales: day.sales || 0,
       conversions: day.conversions || 0
     }));
   }, [dailyClicks]);
@@ -364,6 +365,14 @@ function ConversionsView() {
                   fill="#10B981"
                   fillOpacity={0.7}
                   radius={[4, 4, 0, 0]}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="sales"
+                  name="Ventas (total)"
+                  stroke="#F59E0B"
+                  strokeWidth={2}
+                  dot={{ fill: '#F59E0B', strokeWidth: 2, r: 3 }}
                 />
                 <Line
                   type="monotone"
