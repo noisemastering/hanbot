@@ -182,19 +182,6 @@ function ConversionsView() {
     });
   };
 
-  const getConfidenceBadge = (confidence) => {
-    const styles = {
-      high: 'bg-green-500/20 text-green-300 border border-green-500/30',
-      medium: 'bg-yellow-500/20 text-yellow-300 border border-yellow-500/30',
-      low: 'bg-red-500/20 text-red-300 border border-red-500/30'
-    };
-    return styles[confidence] || 'bg-gray-500/20 text-gray-300 border border-gray-500/30';
-  };
-
-  const getConfidenceLabel = (confidence) => {
-    const labels = { high: t('conversions.high'), medium: t('conversions.medium'), low: t('conversions.low') };
-    return labels[confidence] || confidence || 'N/A';
-  };
 
   // Chart data comes directly from the daily API (already has clicks + conversions)
   const chartData = useMemo(() => {
@@ -509,7 +496,6 @@ function ConversionsView() {
                     <th className="px-4 py-3">{t('conversions.colOrder')}</th>
                     <th className="px-4 py-3">{t('conversions.colMethod')}</th>
                     <th className="px-4 py-3 text-right">{t('conversions.colAmount')}</th>
-                    <th className="px-4 py-3 text-center">{t('conversions.colConfidence')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700/50">
@@ -558,31 +544,7 @@ function ConversionsView() {
                           {formatCurrency(conversion.conversionData?.totalAmount)}
                         </span>
                       </td>
-                      <td className="px-4 py-3 text-center">
-                        {conversion.certainty != null ? (
-                          <span
-                            title={conversion.attributionReason || ''}
-                            style={{
-                              color: conversion.certainty >= 90 ? '#34d399'
-                                : conversion.certainty >= 70 ? '#fbbf24'
-                                : conversion.certainty >= 50 ? '#fb923c'
-                                : '#9ca3af',
-                              fontWeight: conversion.certainty >= 90 ? 700 : conversion.certainty >= 70 ? 600 : 400,
-                              fontSize: conversion.certainty >= 90 ? '0.95rem' : conversion.certainty >= 50 ? '0.8rem' : '0.72rem',
-                            }}
-                          >
-                            {conversion.certainty}%{conversion.undisputed ? ' 🏅' : ''}
-                            {conversion.ventaIndirecta ? <span className="block text-[9px] text-orange-300/70">indirecta</span> : null}
-                          </span>
-                        ) : (
-                          <span title="Registrada con el criterio anterior (antes del modelo de certeza)">
-                            <span className={`px-2 py-0.5 rounded text-xs font-medium ${getConfidenceBadge(conversion.correlationConfidence)}`}>
-                              {getConfidenceLabel(conversion.correlationConfidence)}
-                            </span>
-                            <span className="block text-[9px] text-gray-500 italic">criterio anterior</span>
-                          </span>
-                        )}
-                      </td>
+                      {/* Confianza column hidden for now (data still fetched). */}
                     </tr>
                   ))}
                 </tbody>
