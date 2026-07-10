@@ -107,6 +107,11 @@ export default function ConversationCommercePanel({ psid }) {
               {status.conversion.itemTitle && (
                 <p className="text-[11px] text-gray-400">{status.conversion.itemTitle}</p>
               )}
+              {status.conversion.orderId && (
+                <p className="text-[10px] text-gray-500 font-mono">
+                  Venta ID: <span className="text-gray-300">{status.conversion.orderId}</span>
+                </p>
+              )}
             </div>
           )}
         </div>
