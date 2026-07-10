@@ -260,7 +260,8 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     lines.push(
       `[INTERNO] Tu nombre como asesora en esta conversación es "${opts.personaName}". ` +
         `Úsalo SIEMPRE que te presentes; NUNCA uses otro nombre ni inventes uno. ` +
-        `NO te vuelvas a presentar ni a saludar si ya saludaste antes en esta conversación.`
+        `Preséntate UNA sola vez al inicio; NO te vuelvas a presentar ni a saludar si ya saludaste antes. ` +
+        `NUNCA respondas ÚNICAMENTE con un saludo o presentación ("¡Hola! Soy X, ¿en qué te ayudo?") cuando el cliente ya hizo una pregunta o pidió un precio/medida: SIEMPRE atiende lo que pidió en ese mismo mensaje.`
     );
   }
 
@@ -329,10 +330,28 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
         `Identifica qué PRODUCTO y medida busca el cliente y enruta al flujo correcto; si pide un precio de una medida concreta, cotízala con la herramienta.`
     );
   }
+  // ROLLO realm: the flow now carries MANY roll sizes (widths 2–5 m × lengths
+  // 10–100 m × several shade %). Listing them — or a "desde X hasta Y" range
+  // across mixed widths/lengths — is overkill and meaningless. Instead we ask the
+  // customer for the LENGTH they need (or the AREA to cover, → width×length) and
+  // quote that specific roll. Shade % and width come PRESET from the ad. Detected
+  // here (suppress the list), directive emitted after the product is resolved.
+  // Roll-like realm: Raschel rollo OR ground cover (malla antimaleza) — both are
+  // sold in W×L rolls and get the "ask length/area, don't list" treatment.
+  const isRollRealm = realms.length > 0 && realms.every((r) => /\brollo\b|ground\s*cover|antimaleza/i.test(r));
+  // Only Raschel rollo has shade %; ground cover does not. The path carries the
+  // shade ("… > 90% > Rollo"), so detect it to keep shade out of GC's directive.
+  const realmHasShade = realms.some((r) => /\d{1,3}\s*%/.test(r));
+  let rollLengths = [],
+    rollWidths = [];
   try {
     const { availableMeasuresForFamilies } = require("./tools");
     const measures = opts.isColdStart ? [] : await availableMeasuresForFamilies(familyList);
-    if (measures.length) {
+    if (isRollRealm && measures.length) {
+      rollLengths = [...new Set(measures.map((m) => m.dims && m.dims[1]).filter((n) => n != null))].sort((a, b) => a - b);
+      rollWidths = [...new Set(measures.map((m) => m.dims && m.dims[0]).filter((n) => n != null))].sort((a, b) => a - b);
+    }
+    if (measures.length && !isRollRealm) {
       // NEVER list per-measure prices here. Listing every size's price lets the
       // model grab a NEIGHBOR'S number when quoting (e.g. answering "7x4" with
       // the 7x10 price). Measures are listed by LABEL only; the price for the
@@ -358,6 +377,34 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     }
   } catch (err) {
     console.error("⚠️ available-measures resolution failed:", err.message);
+  }
+
+  // NEVER OVER-DENY. The bot was caught flatly denying things we DO offer (custom
+  // sizes, negro color). Affirm availability and offer the closest option and/or an
+  // asesor instead of a hard "no" — never invent a price.
+  lines.push(
+    `- NUNCA NIEGUES DE MÁS: si el cliente pide una medida, color o variante que no está lista directamente en catálogo, NO lo niegues tajantemente. ` +
+      `Ofrécele la opción estándar más cercana y/o pasar con un asesor para conseguir justo lo que pide (sin inventar precio). ` +
+      `NUNCA des un "no" rotundo ("no lo manejamos", "no la podemos ofrecer") sin ofrecer una alternativa real.`
+  );
+  const isSinRefuerzo = realms.some((r) => /sin\s*refuerzo/i.test(r));
+  if (isSinRefuerzo) {
+    lines.push(
+      `- QUÉ VENDES: malla sombra confeccionada SIN refuerzo (también llamada "con argollas"). Es la MISMA malla que la reforzada pero sin el refuerzo en las esquinas; es la opción MÁS ECONÓMICA (mismas demás características: % de sombra, argollas, lista para instalar). Nunca la menosprecies.`
+    );
+    lines.push(
+      `- COLOR: SOLO manejas BEIGE en sin refuerzo. NO ofrezcas negro ni verde aquí.`
+    );
+    lines.push(
+      `- CATÁLOGO MÁS CORTO: si el cliente pide una medida que NO está en tu lista, el sistema te dará el precio y link de esa medida en la opción REFORZADA. Menciónalo con naturalidad ("en esa medida la tengo en opción reforzada por $X") y ofrécele ESE link. NO cambies de flujo.`
+    );
+  } else if (realms.some((r) => /malla\s*sombra|raschel|confeccionada/i.test(r))) {
+    lines.push(
+      `- COLOR POR DEFECTO = BEIGE: cotiza y ofrece SIEMPRE en BEIGE de manera predeterminada. NO ofrezcas ni menciones proactivamente negro ni verde. ` +
+        `SOLO ofrece otro color (negro/verde) si el CLIENTE lo pide explícitamente. ` +
+        `- MALLA SOMBRA — HAY MÁS DE LO QUE LISTAS: Hanlob fabrica malla sombra SOBRE MEDIDA (cualquier medida) y, SI EL CLIENTE PREGUNTA, también en NEGRO y VERDE. ` +
+        `Afírmalo cuando pregunten. NUNCA digas "solo tenemos beige" ni "no manejamos esa medida": si no tienes un link directo para ese color o medida exacta, ofrécele pasar con un asesor para ESA opción (nunca niegues que existe).`
+    );
   }
 
   if (setup.buyer) lines.push(`- Tipo de cliente: ${LABELS.buyer[setup.buyer] || setup.buyer}`);
@@ -478,6 +525,44 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     priceInfo = promo.priceInfo || (await resolvePrice(product));
     noteResolved(priceInfo);
     await pushDefault(product, priceInfo, promo.name || "promoción");
+  }
+
+  // ROLLO directive (paired with the suppressed list above). Ask for LENGTH or
+  // AREA; shade %/width come PRESET from the ad (derived from the resolved
+  // product when present). Emitted here, after `product` is known.
+  if (isRollRealm) {
+    let presetW = null,
+      presetShade = null;
+    if (product) {
+      const ws = String(product.size || "").match(/(\d+(?:\.\d+)?)\s*x/i); // width = first dim of "WxL"
+      if (ws) presetW = ws[1];
+      try {
+        const PF = mongoose.model("ProductFamily");
+        let c = product.parentId ? await PF.findById(product.parentId).select("name parentId").lean() : null;
+        for (let i = 0; i < 8 && c; i++) {
+          const sm = String(c.name || "").match(/(\d{2,3})\s*%/);
+          if (sm) { presetShade = sm[1]; break; }
+          c = c.parentId ? await PF.findById(c.parentId).select("name parentId").lean() : null;
+        }
+      } catch { /* shade just won't be preset */ }
+    }
+    const lenTxt = rollLengths.length ? `${rollLengths.join(", ")} m` : "varios largos";
+    const widthTxt = rollWidths.length ? `${rollWidths.join(", ")} m` : "varios anchos";
+    const exW = presetW || rollWidths[rollWidths.length - 1] || 4;
+    const exL = rollLengths[rollLengths.length - 1] || 100;
+    const shadePrefix = realmHasShade ? "el % de sombra y " : "";
+    const exShadePrefix = realmHasShade ? `${presetShade || 90}% ` : "";
+    const presetLine =
+      presetShade || presetW
+        ? `${realmHasShade ? "El % de sombra y el ancho" : "El ancho"} YA vienen definidos por el anuncio${presetShade ? ` (${presetShade}% de sombra)` : ""}${presetW ? ` (ancho ${presetW} m)` : ""}; NO los vuelvas a preguntar.`
+        : `${realmHasShade ? "El % de sombra y el ancho" : "El ancho"} NO están predefinidos: pregúntalos solo si el cliente no los menciona (anchos: ${widthTxt}${realmHasShade ? "; sombra 35–90%" : ""}).`;
+    lines.push(
+      `- MEDIDAS DE ROLLO — NO LAS LISTES NI DES UN RANGO: hay muchísimas combinaciones (ancho × largo${realmHasShade ? " × % de sombra" : ""}). ` +
+        `En lugar de listarlas, PREGUNTA al cliente qué LARGO de rollo necesita (largos disponibles: ${lenTxt}) o qué ÁREA quiere cubrir. ` +
+        `Si te da un ÁREA, calcula el largo ≈ área ÷ ancho y propón el largo disponible MÁS CERCANO (confírmalo con el cliente). ` +
+        presetLine +
+        ` Cuando ya tengas ${shadePrefix}el ancho + el largo, cotiza ESE rollo con la herramienta indicando la medida COMPLETA, ej. "${exShadePrefix}${exW}x${exL}". NUNCA inventes un precio ni listes todas las medidas.`
+    );
   }
 
   if (promo)

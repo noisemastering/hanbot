@@ -580,134 +580,93 @@ router.get('/correlate-conversions/progress', (req, res) => {
   res.json(progress);
 });
 
-// POST /analytics/correlate-conversions - Run correlation (dashboard format)
-router.post('/correlate-conversions', async (req, res) => {
-  try {
-    const { sellerId = '482595248', timeWindowHours = 48, orderLimit = 50, dryRun = false, dateFrom, dateTo } = req.body;
+// The heavy correlation job. Runs DETACHED from the HTTP request (the request
+// returns 202 immediately) so it can't exceed the edge/proxy request timeout —
+// which was producing a 502 with no CORS header (looked like a "CORS error" in
+// the dashboard). The dashboard polls GET /correlate-conversions/progress, which
+// now also carries the final RESULT fields once status === 'completed'.
+async function runCorrelationJob({ sellerId, safeLimit, dryRun, dateFrom, dateTo }) {
+  // Build order fetch options
+  const orderOptions = { limit: safeLimit, sort: 'date_desc' };
+  if (dateFrom) orderOptions.dateFrom = new Date(dateFrom).toISOString().replace('Z', '-00:00');
+  if (dateTo) orderOptions.dateTo = new Date(dateTo + 'T23:59:59').toISOString().replace('Z', '-00:00');
 
-    // ML API max limit is 51, cap it to 50 per page
-    const safeLimit = Math.min(parseInt(orderLimit) || 50, 50);
-
-    console.log(`🔄 Running enhanced correlation: seller=${sellerId}, limit=${safeLimit}, dryRun=${dryRun}, dateFrom=${dateFrom}, dateTo=${dateTo}`);
-
-    // Initialize progress tracker
-    correlationProgress.set(sellerId, {
-      status: 'running',
-      phase: 'fetching_orders',
-      ordersTotal: 0,
-      ordersProcessed: 0,
-      matched: 0,
-      pagesFetched: 0,
-      startedAt: new Date()
-    });
-
-    // Build order fetch options
-    const orderOptions = { limit: safeLimit, sort: 'date_desc' };
-    if (dateFrom) orderOptions.dateFrom = new Date(dateFrom).toISOString().replace('Z', '-00:00');
-    if (dateTo) orderOptions.dateTo = new Date(dateTo + 'T23:59:59').toISOString().replace('Z', '-00:00');
-
-    // Paginate through all orders in the date range (ML API max 50 per page)
-    let allOrders = [];
-    let offset = 0;
-    const maxPages = 10; // Safety limit: 500 orders max
-    for (let page = 0; page < maxPages; page++) {
-      const pageOptions = { ...orderOptions, offset };
-      const ordersResult = await getOrders(sellerId, pageOptions);
-      if (!ordersResult.success) {
-        if (allOrders.length === 0) {
-          correlationProgress.set(sellerId, {
-            ...correlationProgress.get(sellerId),
-            status: 'error',
-            error: ordersResult.error
-          });
-          return res.status(500).json({
-            success: false,
-            error: 'Failed to fetch orders from ML API',
-            details: ordersResult.error
-          });
-        }
-        break; // Use what we have so far
+  // Paginate through all orders in the date range (ML API max 50 per page)
+  let allOrders = [];
+  let offset = 0;
+  const maxPages = 10; // Safety limit: 500 orders max
+  for (let page = 0; page < maxPages; page++) {
+    const ordersResult = await getOrders(sellerId, { ...orderOptions, offset });
+    if (!ordersResult.success) {
+      if (allOrders.length === 0) {
+        correlationProgress.set(sellerId, { ...correlationProgress.get(sellerId), status: 'error', error: ordersResult.error });
+        return;
       }
-      allOrders = allOrders.concat(ordersResult.orders);
-      correlationProgress.set(sellerId, {
-        ...correlationProgress.get(sellerId),
-        ordersTotal: allOrders.length,
-        pagesFetched: page + 1
-      });
-      // Stop if we got fewer than requested (no more pages)
-      if (ordersResult.orders.length < safeLimit) break;
-      offset += safeLimit;
+      break; // Use what we have so far
     }
-
-    // Filter to paid orders only
-    const paidOrders = allOrders.filter(o => o.status === 'paid');
-    console.log(`📦 Found ${paidOrders.length} paid orders out of ${allOrders.length} total (${Math.ceil(allOrders.length / safeLimit)} pages)`);
-
-    // Update progress: moving to correlation phase
-    correlationProgress.set(sellerId, {
-      ...correlationProgress.get(sellerId),
-      phase: 'correlating',
-      ordersTotal: paidOrders.length,
-      ordersProcessed: 0
-    });
-
-    // Use enhanced correlation system (same as auto-sync)
-    // This checks ML Item ID, name, location, POI - not just time
-    const correlationResult = await correlateOrders(paidOrders, sellerId, (processed, matched) => {
-      correlationProgress.set(sellerId, {
-        ...correlationProgress.get(sellerId),
-        ordersProcessed: processed,
-        matched
-      });
-    });
-
-    // Mark progress complete
-    correlationProgress.set(sellerId, {
-      ...correlationProgress.get(sellerId),
-      status: 'completed',
-      phase: 'done',
-      ordersProcessed: paidOrders.length,
-      matched: correlationResult.correlated,
-      completedAt: new Date()
-    });
-
-    // For dry run, we need to show what would be correlated
-    // The enhanced system doesn't have a dry run mode, so we just report results
-    if (dryRun) {
-      res.json({
-        success: true,
-        dryRun: true,
-        ordersProcessed: paidOrders.length,
-        ordersWithClicks: correlationResult.correlated + correlationResult.alreadyCorrelated,
-        clicksCorrelated: correlationResult.correlated,
-        message: 'Dry run not fully supported with enhanced correlation - showing actual results',
-        correlations: correlationResult.details?.slice(0, 10) || []
-      });
-    } else {
-      res.json({
-        success: true,
-        dryRun: false,
-        ordersProcessed: paidOrders.length,
-        ordersWithClicks: correlationResult.correlated + correlationResult.alreadyCorrelated,
-        clicksCorrelated: correlationResult.correlated,
-        alreadyCorrelated: correlationResult.alreadyCorrelated,
-        noMatch: correlationResult.noMatch,
-        correlations: correlationResult.details?.slice(0, 10) || []
-      });
-    }
-  } catch (error) {
-    console.error('❌ Error running correlation:', error);
-    correlationProgress.set(req.body.sellerId || '482595248', {
-      ...(correlationProgress.get(req.body.sellerId || '482595248') || {}),
-      status: 'error',
-      error: error.message
-    });
-    res.status(500).json({
-      success: false,
-      error: 'Failed to run correlation',
-      details: error.message
-    });
+    allOrders = allOrders.concat(ordersResult.orders);
+    correlationProgress.set(sellerId, { ...correlationProgress.get(sellerId), ordersTotal: allOrders.length, pagesFetched: page + 1 });
+    if (ordersResult.orders.length < safeLimit) break; // no more pages
+    offset += safeLimit;
   }
+
+  const paidOrders = allOrders.filter(o => o.status === 'paid');
+  console.log(`📦 Found ${paidOrders.length} paid orders out of ${allOrders.length} total (${Math.ceil(allOrders.length / safeLimit)} pages)`);
+
+  correlationProgress.set(sellerId, { ...correlationProgress.get(sellerId), phase: 'correlating', ordersTotal: paidOrders.length, ordersProcessed: 0 });
+
+  // Enhanced correlation (ML Item ID, name, location, POI — not just time)
+  const correlationResult = await correlateOrders(paidOrders, sellerId, (processed, matched) => {
+    correlationProgress.set(sellerId, { ...correlationProgress.get(sellerId), ordersProcessed: processed, matched });
+  });
+
+  // Mark complete AND stash the result fields so a polling client gets them.
+  correlationProgress.set(sellerId, {
+    ...correlationProgress.get(sellerId),
+    status: 'completed',
+    phase: 'done',
+    ordersProcessed: paidOrders.length,
+    matched: correlationResult.correlated,
+    completedAt: new Date(),
+    result: {
+      success: true,
+      dryRun: !!dryRun,
+      ordersProcessed: paidOrders.length,
+      ordersWithClicks: correlationResult.correlated + correlationResult.alreadyCorrelated,
+      clicksCorrelated: correlationResult.correlated,
+      alreadyCorrelated: correlationResult.alreadyCorrelated,
+      noMatch: correlationResult.noMatch,
+      correlations: correlationResult.details?.slice(0, 10) || []
+    }
+  });
+}
+
+// POST /analytics/correlate-conversions - kick off correlation in the BACKGROUND
+// and return immediately (202). Poll GET /correlate-conversions/progress for
+// status + final result. (Was synchronous → timed out at the edge → no CORS.)
+router.post('/correlate-conversions', async (req, res) => {
+  const { sellerId = '482595248', orderLimit = 50, dryRun = false, dateFrom, dateTo } = req.body;
+  const safeLimit = Math.min(parseInt(orderLimit) || 50, 50); // ML API caps at 50/page
+
+  // Don't start a second run while one is in flight — return the live progress.
+  const existing = correlationProgress.get(sellerId);
+  if (existing && existing.status === 'running') {
+    return res.status(202).json({ success: true, status: 'running', alreadyRunning: true, progress: existing });
+  }
+
+  console.log(`🔄 Starting enhanced correlation (bg): seller=${sellerId}, limit=${safeLimit}, dryRun=${dryRun}, dateFrom=${dateFrom}, dateTo=${dateTo}`);
+  correlationProgress.set(sellerId, {
+    status: 'running', phase: 'fetching_orders', ordersTotal: 0, ordersProcessed: 0,
+    matched: 0, pagesFetched: 0, startedAt: new Date()
+  });
+
+  // Respond NOW; do the work detached.
+  res.status(202).json({ success: true, status: 'running', started: true });
+
+  runCorrelationJob({ sellerId, safeLimit, dryRun, dateFrom, dateTo }).catch((error) => {
+    console.error('❌ Error running correlation (bg):', error);
+    correlationProgress.set(sellerId, { ...(correlationProgress.get(sellerId) || {}), status: 'error', error: error.message });
+  });
 });
 
 // POST /analytics/correlate - Run correlation on existing orders (legacy)

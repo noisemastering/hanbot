@@ -7,7 +7,7 @@ const Campaign = require("../models/Campaign");
 const { handleFallback } = require("./core/fallback");
 const { identifyAndSetProduct } = require("./utils/productIdentifier");
 const { lockPOI, checkVariantExists } = require("./utils/productTree");
-const { handleLocationStatsResponse, appendStatsQuestionIfNeeded } = require("./utils/locationStats");
+const { handleLocationStatsResponse, appendStatsQuestionIfNeeded, syncLocationToUser } = require("./utils/locationStats");
 
 // Extracted shared helpers (used by both old monolith and new pipeline)
 const { checkForRepetition } = require("./utils/repetitionChecker");
@@ -127,22 +127,51 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
   // STOP (no model turn), so the engine can't reply "no estoy segura de qué número
   // es" to a zip we ourselves requested.
   const haveZipAlready = !!(convo.zipcode || (state.location && (state.location.zip || state.location.zipcode)));
-  if (state.zipAsked && !haveZipAlready) {
-    const z = captureZipReply(userMessage);
+  const z0 = captureZipReply(userMessage);
+  // An UNPROMPTED bare 5-digit number is only a CP if it's a REAL Mexican postal
+  // code in our database (we have all ~32k). This kills the false-positive (a
+  // random 5-digit number) AND the measure-misread (a lone "77539" read as "7.75 x
+  // 3.9"). The DB hit runs ONLY on the rare unprompted-bare-number case (~weekly),
+  // so it costs nothing in practice. The PROMPTED case (we asked) stays lenient.
+  const unpromptedBare = !state.zipAsked && z0.isZipReply && !!z0.zip && z0.bareNumberOnly;
+  let cpDoc = null;
+  if ((state.zipAsked || unpromptedBare) && z0.zip && !haveZipAlready) {
+    try {
+      const ZipCode = require("../models/ZipCode");
+      cpDoc = await ZipCode.findOne({ code: String(z0.zip).padStart(5, "0") })
+        .select("code city state municipality")
+        .lean();
+    } catch (e) {
+      console.error("⚠️ CP DB lookup failed:", e.message);
+    }
+  }
+  const unpromptedCPValid = unpromptedBare && !!cpDoc;
+  if ((state.zipAsked || unpromptedCPValid) && !haveZipAlready) {
+    const z = z0;
     if (z.isZipReply) {
+      const city = cpDoc ? cpDoc.city || cpDoc.municipality || null : null;
       const nextLoc = { ...(state.location || {}) };
       if (z.zip) nextLoc.zip = z.zip;
+      if (city) nextLoc.city = city;
       state = { ...state, location: nextLoc, zipCaptured: true };
       const persistZip = { workflowState: state, lastMessageAt: new Date() };
       if (z.zip) persistZip.zipcode = z.zip;
       await updateConversation(psid, persistZip).catch((e) =>
         console.error("⚠️ zip capture persist failed:", e.message)
       );
-      console.log(`📮 [workflow] CP capturado para ${psid}: ${z.zip || "(número no estándar)"}`);
+      // Sync the CP (and city, from the DB) onto the User too — sales correlation
+      // matches the order's ship-to against User.location.zipcode (NOT the
+      // Conversation), so without this the captured CP never raises certainty.
+      if (z.zip) await syncLocationToUser(psid, { zipcode: z.zip, ...(city ? { city } : {}) }, "conversation").catch(() => {});
+      console.log(`📮 [workflow] CP capturado para ${psid}: ${z.zip || "(número no estándar)"}${city ? ` (${city})` : ""}`);
       if (z.bareNumberOnly) {
-        // The message was essentially just the zip → acknowledge warmly and stop;
-        // no model turn (so it can't treat a lone number as nonsense).
-        const ack = "¡Perfecto, muchas gracias! 🙏 Quedo al pendiente por si tienes cualquier otra duda. 😊";
+        // The message was essentially just the zip → acknowledge warmly and stop
+        // (no model turn, so it can't treat a lone number as nonsense/a measure).
+        // ALWAYS invite the customer to continue — a CP often means they're deciding
+        // to buy, so "quedo al pendiente" (a dead-end close) left them hanging.
+        const ack = unpromptedCPValid
+          ? "¡Gracias! Ya registré tu código postal. 😊 ¿Te ayudo con alguna medida o tienes otra duda?"
+          : "¡Perfecto, gracias! 🙏 Ya registré tu código postal. Si te ayudo con tu cotización, otra medida o cualquier duda, aquí estoy. 😊";
         return { handled: true, reply: { type: "text", text: ack } };
       }
       // else the message also asked something → fall through to the engine, which
@@ -188,6 +217,13 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
   await updateConversation(psid, persist).catch((e) =>
     console.error("⚠️ workflowState persist failed:", e.message)
   );
+  // Mirror any location the engine collected onto the User, so sales correlation
+  // (which reads User.location.zipcode) can use it. Without this the CP only ever
+  // lived on the Conversation and conversions stayed item-only / low certainty.
+  const syncZip = loc.zip || loc.zipcode;
+  if (syncZip || loc.city) {
+    await syncLocationToUser(psid, { zipcode: syncZip || undefined, city: loc.city || undefined }, "conversation").catch(() => {});
+  }
 
   // REAL HANDOFF: when the flow decided to escalate (request_handoff, or a scope
   // check that needs a human), take it over throughout the system — set
@@ -379,6 +415,26 @@ async function generateReply(userMessage, psid, referral = null) {
   // ungrounded answers). reply may be null → the bot stays silent for that turn.
   // Legacy is reached ONLY when neither path claims ownership: ads with no flow,
   // or organic traffic when no cold-start flow is active.
+
+  // LIBERADO CAP — while the release gate is OFF, serve at most 50 distinct
+  // conversations/day (Mexico City). A new-today conversation past the cap gets a
+  // brief deferral and no flow. Done HERE so it covers BOTH channels and BOTH the
+  // engine and legacy paths in one place. No-op when released.
+  try {
+    const { liberadoCapDecision, DEFERRAL_MESSAGE } = require("../utils/liberadoCap");
+    const capConvo = await getConversation(psid);
+    const decision = await liberadoCapDecision(capConvo);
+    if (decision.defer) {
+      console.warn(`🚦 [Liberado] 50/day cap reached — deferring conversation ${psid}`);
+      return { type: "text", text: DEFERRAL_MESSAGE };
+    }
+    if (decision.markDay) {
+      await updateConversation(psid, { liberadoServedDay: decision.markDay }).catch(() => {});
+    }
+  } catch (e) {
+    console.error("⚠️ liberado cap gate failed:", e.message);
+  }
+
   const adOwned = await maybeRunAdWorkflow(userMessage, psid);
   if (adOwned) return adOwned.reply;
 

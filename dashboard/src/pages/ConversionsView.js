@@ -83,12 +83,11 @@ function ConversionsView() {
       if (dateFromISO) cp.append('dateFrom', dateFromISO);
       if (dateToISO) cp.append('dateTo', dateToISO);
 
-      // All from OUR-DB correlation (convo_sale_matches) — no re-correlation here.
-      const [summaryRes, chartRes, matchesRes, productsRes] = await Promise.all([
+      // EVERYTHING from OUR-DB correlation (convo_sale_matches) — one source, all criteria.
+      const [summaryRes, chartRes, matchesRes] = await Promise.all([
         API.get('/correlation/summary'),
         API.get(`/correlation/chart?${cp.toString()}`),
         API.get('/correlation/matches?limit=500'),
-        API.get('/analytics/top-products')
       ]);
 
       const chart = chartRes.data?.chartData || [];
@@ -109,10 +108,11 @@ function ConversionsView() {
         clickRate: totalLinks ? Math.round((totalClicks / totalLinks) * 100) : 0,
         conversionRate: totalClicks ? Math.round((conversions / totalClicks) * 100) : 0,
         confidenceBreakdown: cb,
+        topConverters: (sum.topConverters || []).map((c) => ({ psid: c.psid, firstName: c.name, conversions: c.conversions, totalRevenue: c.totalRevenue })),
       });
       setDailyClicks(chart);
       setRecentConversions((matchesRes.data?.matches || []).map(mapMatch));
-      setTopProducts((productsRes.data?.allProducts || []).slice(0, 5));
+      setTopProducts((sum.topProducts || []).map((p) => ({ _id: p.name, conversions: p.conversions, totalRevenue: p.totalRevenue })));
     } catch (err) {
       console.error('Error fetching conversion data:', err);
       setError(err.message);

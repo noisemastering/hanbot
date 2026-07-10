@@ -24,6 +24,10 @@ const systemStateSchema = new mongoose.Schema(
     _id: { type: String, default: "singleton" },
     killswitch: { type: switchSchema, default: () => ({}) },
     nuke: { type: switchSchema, default: () => ({}) },
+    // liberado: release gate. engaged=true → RELEASED (gated features open to all
+    // per normal permissions; no daily conversation cap). Default OFF → the gated
+    // features are super_admin-only and the bot is capped at 50 conversations/day.
+    liberado: { type: switchSchema, default: () => ({}) },
   },
   { timestamps: true }
 );

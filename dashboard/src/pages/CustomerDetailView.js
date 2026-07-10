@@ -29,10 +29,23 @@ function CustomerDetailView() {
   const fetchDetail = useCallback(async () => {
     setLoading(true);
     try {
-      const res = await API.get(`/crm/customers/${encodeURIComponent(decodedPsid)}`);
+      // Profile + messages from CRM; PURCHASES from the correlation (convo_sale_matches)
+      // so attribution uses the same all-criteria source as everywhere else.
+      const [res, matchesRes] = await Promise.all([
+        API.get(`/crm/customers/${encodeURIComponent(decodedPsid)}`),
+        API.get(`/correlation/matches?psid=${encodeURIComponent(decodedPsid)}`).catch(() => ({ data: {} })),
+      ]);
       setCustomer(res.data.customer);
       setMessages(res.data.messages || []);
-      setPurchases(res.data.purchases || []);
+      const matches = (matchesRes.data?.matches || []).map((m) => ({
+        productName: m.sale?.itemTitle,
+        convertedAt: m.sale?.dateCreated,
+        certainty: m.certainty,
+        correlationConfidence: m.confidence,
+        conversionData: { totalAmount: m.sale?.totalAmount, itemTitle: m.sale?.itemTitle, orderId: m.orderId },
+      }));
+      // Prefer correlation matches; fall back to CRM purchases only if none.
+      setPurchases(matches.length ? matches : (res.data.purchases || []));
     } catch (err) {
       console.error('Error fetching customer:', err);
     } finally {

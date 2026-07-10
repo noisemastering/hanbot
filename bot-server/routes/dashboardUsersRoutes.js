@@ -3,6 +3,7 @@ const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
 const DashboardUser = require("../models/DashboardUser");
+const { requireLiberadoOrSuperAdmin } = require("../middleware/liberadoGate");
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-jwt-key-change-in-production";
 
@@ -62,7 +63,7 @@ router.get("/", async (req, res) => {
 });
 
 // POST /dashboard-users - Create a new dashboard user
-router.post("/", async (req, res) => {
+router.post("/", requireLiberadoOrSuperAdmin, async (req, res) => {
   try {
     const { username, email, password, firstName, lastName, role, profile, createdBy } = req.body;
 

@@ -1,0 +1,52 @@
+[
+ {
+  "id": "693ade9efd1e209971fb0b21",
+  "name": "Rollo de 18 m",
+  "size": "13x18m"
+ },
+ {
+  "id": "693adeaafd1e209971fb0b9d",
+  "name": "Rollo de 54 m",
+  "size": "13x54m"
+ },
+ {
+  "id": "69459fcaab9a0558d15b0281",
+  "name": "Rollo de 6 m",
+  "size": "13x6m"
+ },
+ {
+  "id": "69459fd1ab9a0558d15b03e1",
+  "name": "Rollo de 9 m",
+  "size": "13x9m"
+ },
+ {
+  "id": "6a3ae82d26f0856e191b5a68",
+  "name": "Grueso",
+  "size": "13x18m"
+ },
+ {
+  "id": "6a3ae86f26f0856e191b609f",
+  "name": "Delgado",
+  "size": "13x18m"
+ },
+ {
+  "id": "6a3ae91526f0856e191b6b38",
+  "name": "Rollo de 18 m",
+  "size": "13x18m"
+ },
+ {
+  "id": "6a3ae92a26f0856e191b6eef",
+  "name": "Rollo de 54 m",
+  "size": "13x54m"
+ },
+ {
+  "id": "6a3ae95926f0856e191b7279",
+  "name": "Rollo de 6 m (Copia)",
+  "size": "13x6m"
+ },
+ {
+  "id": "6a3ae97726f0856e191b76d9",
+  "name": "Rollo de 9 m (Copia)",
+  "size": "13x9m"
+ }
+]

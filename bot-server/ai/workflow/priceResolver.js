@@ -25,9 +25,43 @@ function numericPrice(p) {
  * @returns {Promise<{ amount: number|null, source: 'ml'|'inventario'|null, handoff: boolean,
  *                      link: string|null, hasDiscount?: boolean, originalPrice?: number|null }>}
  */
+// RULE (all flows): an active product with a price but NO purchase link is still
+// QUOTED, but it can't be bought self-service, so we ALSO hand off to a human to
+// close the sale. With a link, the quote stands as-is.
+function noLinkResult(base, product) {
+  if (base.link) return { ...base, handoff: false };
+  return {
+    ...base,
+    handoff: true,
+    quoteThenHandoff: true,
+    handoffReason: `Producto sin link de compra en línea: ${product.name || "producto del flujo"} — cotizado en $${base.amount}; concretar la venta con un asesor`,
+  };
+}
+
 async function resolvePrice(product) {
   const empty = { amount: null, source: null, handoff: false, link: null };
   if (!product) return empty;
+
+  // STOCK GATE: an active, sellable product with NO stock is still OFFERED, but
+  // it's SOLD OUT → acknowledge it AND HAND OFF to a human (capture the lead so a
+  // human can follow up / notify when it returns). Never quote-to-buy or share a
+  // buy link. Stock is a MANUAL field (default 1). Treat undefined/unloaded stock
+  // as available, so an un-selected field can never false-flag a product as sold out.
+  if (
+    product.active !== false &&
+    product.sellable === true &&
+    product.stock != null &&
+    Number(product.stock) < 1
+  ) {
+    return {
+      amount: null,
+      source: null,
+      handoff: true,
+      soldOut: true,
+      link: mlLinkOf(product),
+      handoffReason: `Producto AGOTADO (activo, sin stock): ${product.name || "producto del flujo"} — pasar con un asesor para seguimiento/aviso`,
+    };
+  }
 
   const link = mlLinkOf(product);
   const invPrice = numericPrice(product.price); // Inventario
@@ -73,14 +107,17 @@ async function resolvePrice(product) {
       };
     }
     // 2b. No conflict (Inventario ≥ synced, or no Inventario) → quote the
-    //     last-synced ML price (still the source of truth, just cached).
-    return { amount: syncedMl, source: "ml", live: false, handoff: false, link, plusIva };
+    //     last-synced ML price (still the source of truth, just cached). If there
+    //     is NO purchase link, we still QUOTE the price but HAND OFF (a customer
+    //     can't self-serve without a link) — see noLinkResult.
+    return noLinkResult({ amount: syncedMl, source: "ml", live: false, link, plusIva }, product);
   }
 
   // 3. No ML price AT ALL (never synced / not an ML product) → Inventario is the
-  //    legitimate last resort.
+  //    legitimate last resort. Same no-link rule: quote it, but hand off if there
+  //    is no purchase link.
   if (invPrice != null) {
-    return { amount: invPrice, source: "inventario", handoff: false, link, plusIva };
+    return noLinkResult({ amount: invPrice, source: "inventario", link, plusIva }, product);
   }
 
   // 4. sellable but no price anywhere → human handoff (never invent a price).
@@ -235,4 +272,45 @@ function clampPrices(text, allowedAmounts = [], primaryAmount = null) {
   return { text: out, changed };
 }
 
-module.exports = { resolvePrice, mlLinkOf, trackedLink, sanitizeMarketplaceLinks, clampPrices, isGenericMlUrl, officialStoreUrl };
+// DETERMINISTIC MEASURE CLAMP — the measure analog of clampPrices. The model
+// resolves the RIGHT product (price + link correct) but sometimes mistypes the
+// W×L label in its sentence (e.g. resolves 8x4 / $989 / the 8x4 link, but writes
+// "La de 7x4..."). A measure, like a price, is not the model's to author. When the
+// turn quoted ONE measure, any divergent W×L token in the reply is rewritten to it.
+//
+// SAFE BY DESIGN: caller passes a canonical measure ONLY on a single-measure exact
+// quote (not multi-measure, not a nearest-substitution) — otherwise this is a
+// no-op. URLs are masked first so a measure inside a link is never touched.
+//
+// @param {string} text
+// @param {string} canonical - the measure to rewrite TO, in the customer's order ("8x4")
+// @param {Array<[number,number]>} allowedPairs - sorted [a,b] measures legit this turn
+// @returns {{ text: string, changed: boolean }}
+function clampMeasures(text, canonical, allowedPairs = []) {
+  if (!text || !canonical) return { text, changed: false };
+  const norm = (a, b) => [Math.min(a, b), Math.max(a, b)];
+  const allowed = (allowedPairs || [])
+    .filter((p) => Array.isArray(p) && p.length === 2 && Number.isFinite(+p[0]) && Number.isFinite(+p[1]))
+    .map((p) => norm(+p[0], +p[1]));
+  if (!allowed.length) return { text, changed: false };
+  const eq = (x, y) => Math.abs(x[0] - y[0]) < 0.05 && Math.abs(x[1] - y[1]) < 0.05;
+
+  // Mask URLs so a measure inside a link (…6mx4m…) is never rewritten.
+  const urls = [];
+  let masked = text.replace(/https?:\/\/\S+/gi, (u) => { urls.push(u); return `@@U${urls.length - 1}@@`; });
+
+  let changed = false;
+  masked = masked.replace(
+    /\b(\d{1,3}(?:\.\d+)?)\s*[x×]\s*(\d{1,3}(?:\.\d+)?)(\s*(?:mts?\b|metros\b|m\b))?/gi,
+    (mtch, a, b, suf) => {
+      const pair = norm(parseFloat(a), parseFloat(b));
+      if (allowed.some((p) => eq(p, pair))) return mtch;
+      changed = true;
+      return `${canonical}${suf || ""}`;
+    }
+  );
+  const out = masked.replace(/@@U(\d+)@@/g, (_, i) => urls[+i] || "");
+  return { text: out, changed };
+}
+
+module.exports = { resolvePrice, mlLinkOf, trackedLink, sanitizeMarketplaceLinks, clampPrices, clampMeasures, isGenericMlUrl, officialStoreUrl };

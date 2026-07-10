@@ -1,0 +1,220 @@
+{
+ "nodes": [
+  {
+   "autoAction": {
+    "type": null,
+    "text": ""
+   },
+   "position": {
+    "x": -45.56593286396861,
+    "y": -324.55783356666353
+   },
+   "id": "saludo",
+   "name": "Saludo",
+   "prompt": "Primer contacto. Saluda con calidez, preséntate brevemente como asesora de Hanlob usando el nombre indicado en el CONTEXTO (NO inventes uno).\nVerifica si existe un producto predefinido o uno en promoción.\n\nREGLAS ESTRICTAS\n- Usa SIEMPRE el nombre del CONTEXTO; no te re-presentes ni vuelvas a saludar si ya saludaste.\n- Si el CONTEXTO ya indica qué malla quiere instalar el cliente, NO lo vuelvas a preguntar.\n- Si no, pregunta de forma natural QUÉ malla va a instalar (confeccionada, rollo o ground cover) para recomendarle el complemento correcto.",
+   "kind": "llm",
+   "isStart": true,
+   "terminal": false,
+   "toolsAllowed": [
+    "note",
+    "check_product_scope",
+    "switch_flow",
+    "request_handoff"
+   ]
+  },
+  {
+   "autoAction": {
+    "type": null,
+    "text": ""
+   },
+   "position": {
+    "x": 194.40378748889407,
+    "y": -173.49992407656515
+   },
+   "id": "descubrir",
+   "name": "Interpretar medida y porcentaje",
+   "prompt": "El cliente busca COMPLEMENTOS para instalar/montar su malla. Tu objetivo es identificar QUÉ malla tiene para recomendar el complemento correcto.\n\nPregunta de forma natural qué va a instalar: ¿malla sombra confeccionada (medida ya hecha), un rollo de malla sombra, o ground cover (antimaleza)? Si el CONTEXTO ya lo indica, NO lo vuelvas a preguntar.\n\nMAPEO (recomienda SOLO lo que corresponda):\n- Confeccionada  → Kit de instalación + Cordón UV.\n- Rollo          → Sujetadores plásticos + Cordón UV.\n- Ground cover   → Sujetadores plásticos + Cordón UV.\n\nREGLAS ESTRICTAS\n- NO listes todo el catálogo. Recomienda el/los complemento(s) que apliquen.\n- El Cordón UV aplica para cualquier malla; el Kit es solo para confeccionada; los Sujetadores son para rollo y ground cover.",
+   "kind": "llm",
+   "isStart": false,
+   "terminal": false,
+   "toolsAllowed": [
+    "note",
+    "check_product_scope",
+    "switch_flow"
+   ]
+  },
+  {
+   "autoAction": {
+    "type": null,
+    "text": ""
+   },
+   "position": {
+    "x": 728.1363559974295,
+    "y": -397.4715716122277
+   },
+   "id": "cotizar",
+   "name": "Cotizar",
+   "prompt": "Ya sabes qué malla tiene el cliente y qué complemento(s) necesita. Cotiza el/los complemento(s) que corresponda(n).\n\nREGLA DE CANTIDAD\n- 1 pieza → comparte el PRECIO y el LINK de compra con la herramienta share_product_link.\n- 2 o más → puede ser mayoreo: pásalo con un especialista para mejor precio y cierre.\n\nREGLAS ESTRICTAS\n- El precio SIEMPRE viene de la herramienta de cotización / Mercado Libre en vivo; NUNCA lo inventes.\n- Si el complemento NO tiene link o precio disponible, NO inventes un precio: dilo con naturalidad y pasa con un especialista para cotizar y cerrar.\n- Cuando el cliente vaya a comprar o se pase con un especialista, intenta capturar su NOMBRE y TELÉFONO.",
+   "kind": "llm",
+   "isStart": false,
+   "terminal": false,
+   "toolsAllowed": [
+    "note",
+    "check_product_scope",
+    "switch_flow",
+    "share_product_link",
+    "request_handoff"
+   ]
+  },
+  {
+   "autoAction": {
+    "type": null,
+    "text": ""
+   },
+   "position": {
+    "x": 163.2717844147425,
+    "y": 202.493651356215
+   },
+   "id": "objecion",
+   "name": "Manejo de objeción",
+   "prompt": "El cliente tiene una duda o preocupación (precio, confianza, envío). Resuélvela con empatía y datos reales (compra protegida, fabricante con experiencia).\n\nREGLAS ESTRICTAS\n- No discutas.\n- Busca los datos únicamente en nuestra base de datos o en nuestras publicaciones de Mercado Libre, NUNCA de otro lado.\n- Si no tienes datos para responder, escala a un especialista.\n- No te refieras al humano como \"humano\" sino como \"especialista\" o \"supervisor\".\n- No repitas respuestas; replantéalas o escala a un especialista.",
+   "kind": "llm",
+   "isStart": false,
+   "terminal": false,
+   "toolsAllowed": [
+    "note",
+    "request_handoff",
+    "check_product_scope",
+    "switch_flow"
+   ]
+  },
+  {
+   "autoAction": {
+    "type": null,
+    "text": ""
+   },
+   "position": {
+    "x": 1007.0592727001649,
+    "y": -97.67423971703033
+   },
+   "id": "cierre",
+   "name": "Cierre",
+   "prompt": "Has hecho el hand off hacia el especialista, no es necesario que respondas excepto con un \"gracias\" o similar.",
+   "kind": "llm",
+   "isStart": false,
+   "terminal": true,
+   "toolsAllowed": [
+    "note",
+    "request_handoff",
+    "switch_flow"
+   ]
+  },
+  {
+   "autoAction": {
+    "type": "handoff",
+    "text": "Con gusto te paso con un asesor que te atiende personalmente. Un momento por favor 🙏"
+   },
+   "position": {
+    "x": 702.874346642443,
+    "y": 85.64180769779551
+   },
+   "id": "handoff",
+   "name": "Pasar a humano",
+   "prompt": "Debes recabar algunos datos más y notificarle al cliente que vas a transferir su caso a un especialista.\nTen en cuenta si es día festivo o fin de semana y si es antes de las 9 am o después de las 6 pm: en esos casos aclara que el especialista les atenderá en el próximo turno disponible.\n\nREGLAS ESTRICTAS\n- Antes de hacer el handoff pide el NOMBRE a quien irá dirigida la cotización y su TELÉFONO y código postal para calcular el envío.\n- Al especialista entrégale: el complemento solicitado, qué malla va a instalar, la cantidad, nombre, teléfono y código postal.",
+   "kind": "llm",
+   "isStart": false,
+   "terminal": true,
+   "toolsAllowed": [
+    "request_handoff",
+    "check_product_scope",
+    "switch_flow",
+    "ask_location",
+    "capture_lead",
+    "note"
+   ]
+  },
+  {
+   "autoAction": {
+    "type": null,
+    "text": ""
+   },
+   "position": {
+    "x": -66.58669259964573,
+    "y": 72.36959767640832
+   },
+   "id": "n_mpshkl0w",
+   "name": "Información del producto",
+   "prompt": "Tu trabajo es informar al cliente sobre los complementos cuando tiene una duda. Sé clara y breve.\n\nLos complementos para instalar la malla son:\n- KIT DE INSTALACIÓN (herrajes): para fijar y tensar la MALLA SOMBRA CONFECCIONADA.\n- SUJETADORES PLÁSTICOS: para sujetar ROLLOS de malla sombra y GROUND COVER al montarlos.\n- CORDÓN / LAZO CON PROTECCIÓN UV: para amarrar y tensar cualquier malla (resiste el sol sin degradarse).\n\nREGLAS ESTRICTAS\n- No dejes al cliente sin respuesta. No inventes; usa los datos de la base / Mercado Libre.\n- Si no tienes el dato, escala a un especialista.",
+   "kind": "llm",
+   "isStart": false,
+   "terminal": false,
+   "toolsAllowed": [
+    "check_product_scope",
+    "switch_flow",
+    "request_handoff"
+   ]
+  }
+ ],
+ "edges": [
+  {
+   "id": "e1",
+   "from": "saludo",
+   "to": "descubrir",
+   "condition": "El cliente respondió y mostró interés en complementos de instalación."
+  },
+  {
+   "id": "e2",
+   "from": "descubrir",
+   "to": "cotizar",
+   "condition": "El cliente ya indicó qué malla tiene o qué complemento necesita."
+  },
+  {
+   "id": "e3",
+   "from": "cotizar",
+   "to": "cierre",
+   "condition": "El cliente aceptó, dio sus datos, o dijo que va a comprar."
+  },
+  {
+   "id": "e4",
+   "from": "cotizar",
+   "to": "objecion",
+   "condition": "El cliente expresó una duda, queja o preocupación (precio, confianza, envío)."
+  },
+  {
+   "id": "e5",
+   "from": "objecion",
+   "to": "cotizar",
+   "condition": "La objeción quedó resuelta y el cliente sigue interesado."
+  },
+  {
+   "id": "e6",
+   "from": "objecion",
+   "to": "handoff",
+   "condition": "El cliente sigue molesto o no se encontró información suficiente."
+  },
+  {
+   "id": "e7",
+   "from": "descubrir",
+   "to": "handoff",
+   "condition": "El cliente compartió su teléfono o pidió hablar con un especialista."
+  },
+  {
+   "id": "e8",
+   "from": "cotizar",
+   "to": "handoff",
+   "condition": "Es mayoreo (2+), el complemento no tiene link/precio, o está decidido a comprar."
+  },
+  {
+   "id": "e_1780154177187",
+   "from": "descubrir",
+   "to": "n_mpshkl0w",
+   "condition": "El cliente tiene preguntas o dudas sobre el producto."
+  },
+  {
+   "id": "e_1780364433344",
+   "from": "cierre",
+   "to": "handoff",
+   "condition": ""
+  }
+ ]
+}

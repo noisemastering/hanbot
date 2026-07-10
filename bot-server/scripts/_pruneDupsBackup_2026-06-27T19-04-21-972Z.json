@@ -1,0 +1,47 @@
+[
+ {
+  "_id": "6a3d7efdf03f35f03e777e66",
+  "name": "Color Beige",
+  "parentId": "6a3d7efcf03f35f03e777e63",
+  "generation": 6,
+  "sellable": true,
+  "price": 880,
+  "priceExcludesTax": false,
+  "wholesaleEnabled": false,
+  "wholesaleMinQty": null,
+  "mlPrice": 880,
+  "mlPriceUpdatedAt": "2026-06-25T01:00:09.407Z",
+  "stock": 1,
+  "available": true,
+  "active": false,
+  "size": "2x8m",
+  "onlineStoreLinks": [
+   {
+    "url": "https://www.mercadolibre.com.mx/malla-sombra-90-raschell-beige-de-2mx8m-reforzada/up/MLMU706013780",
+    "store": "Mercado Libre",
+    "isPreferred": true,
+    "_id": "6a3d88169fd993097aa27a0e"
+   }
+  ],
+  "attributes": {
+   "width": "2",
+   "length": "8"
+  },
+  "enabledDimensions": [
+   "width",
+   "length"
+  ],
+  "dimensionUnits": {
+   "width": "m",
+   "length": "m"
+  },
+  "displayTemplate": {
+   "columns": []
+  },
+  "requiresHumanAdvisor": false,
+  "aliases": [],
+  "createdAt": "2026-06-25T19:18:21.084Z",
+  "updatedAt": "2026-06-25T23:21:07.984Z",
+  "__v": 0
+ }
+]

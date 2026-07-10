@@ -1,0 +1,447 @@
+[
+ {
+  "_id": "693cce4d1eda701808d9446d",
+  "name": "Color Beige",
+  "description": "",
+  "parentId": "693cce4d1eda701808d94453",
+  "generation": 5,
+  "sellable": true,
+  "price": 3696.02,
+  "sku": null,
+  "stock": 1,
+  "available": true,
+  "active": true,
+  "requiresHumanAdvisor": true,
+  "genericDescription": null,
+  "createdAt": "2025-12-13T02:24:13.651Z",
+  "updatedAt": "2026-06-26T23:43:46.724Z",
+  "__v": 2,
+  "attributes": {
+   "width": "4.2",
+   "length": "100"
+  },
+  "dimensionUnits": {
+   "width": "m",
+   "length": "m"
+  },
+  "displayTemplate": {
+   "columns": []
+  },
+  "enabledDimensions": [
+   "width",
+   "length"
+  ],
+  "onlineStoreLinks": [],
+  "size": "4x100m",
+  "aliases": [],
+  "wholesaleEnabled": false,
+  "wholesaleMinQty": 2,
+  "priceExcludesTax": true
+ },
+ {
+  "_id": "693d8df790cbebaaa1d46946",
+  "name": "Color Verde",
+  "description": "",
+  "parentId": "693cce4d1eda701808d94453",
+  "generation": 5,
+  "sellable": true,
+  "price": 3696.02,
+  "sku": null,
+  "stock": 1,
+  "available": true,
+  "active": true,
+  "requiresHumanAdvisor": true,
+  "genericDescription": null,
+  "createdAt": "2025-12-13T16:01:59.643Z",
+  "updatedAt": "2026-06-26T23:43:46.796Z",
+  "__v": 2,
+  "attributes": {
+   "width": "4.2",
+   "length": "100"
+  },
+  "dimensionUnits": {
+   "width": "m",
+   "length": "m"
+  },
+  "displayTemplate": {
+   "columns": []
+  },
+  "enabledDimensions": [
+   "width",
+   "length"
+  ],
+  "onlineStoreLinks": [],
+  "size": "4x100m",
+  "aliases": [],
+  "wholesaleEnabled": false,
+  "wholesaleMinQty": 2,
+  "priceExcludesTax": true
+ },
+ {
+  "_id": "694055aff1a5f22bbbfd575c",
+  "name": "Rollo de 1 1/2 pulgadas",
+  "description": "1 y media pulgada de ancho x 100 metros de largo",
+  "marketingDescription": null,
+  "parentId": "694054f8f1a5f22bbbfd56e1",
+  "generation": 3,
+  "sellable": true,
+  "price": 389,
+  "sku": null,
+  "stock": 1,
+  "available": true,
+  "active": false,
+  "requiresHumanAdvisor": false,
+  "genericDescription": null,
+  "createdAt": "2025-12-15T18:38:39.750Z",
+  "updatedAt": "2026-06-27T01:00:19.554Z",
+  "__v": 4,
+  "onlineStoreLinks": [
+   {
+    "url": "https://articulo.mercadolibre.com.mx/MLM-3027970406-cinta-rigida-1-12-pulgadas-de-100m-cinta-polipropileno-_JM",
+    "store": "Mercado Libre",
+    "isPreferred": true,
+    "_id": "6945accbab9a0558d15b0a2e"
+   }
+  ],
+  "thumbnail": null,
+  "displayTemplate": {
+   "columns": []
+  },
+  "enabledDimensions": [],
+  "mlPrice": 389,
+  "mlPriceUpdatedAt": "2026-06-27T01:00:19.222Z",
+  "aliases": [],
+  "wholesaleEnabled": false,
+  "wholesaleMinQty": 5
+ },
+ {
+  "_id": "694055b7f1a5f22bbbfd57da",
+  "name": "Rollo de 2 pulgadas.",
+  "description": "2 pulgadas de ancho x 100 metros de largo",
+  "marketingDescription": null,
+  "parentId": "694054f8f1a5f22bbbfd56e1",
+  "generation": 3,
+  "sellable": true,
+  "price": 482.9,
+  "sku": null,
+  "stock": 1,
+  "available": true,
+  "active": false,
+  "requiresHumanAdvisor": false,
+  "genericDescription": null,
+  "createdAt": "2025-12-15T18:38:47.030Z",
+  "updatedAt": "2026-06-27T01:00:19.627Z",
+  "__v": 4,
+  "onlineStoreLinks": [
+   {
+    "url": "https://www.mercadolibre.com.mx/cinta-rigida-2-pulgadas-de-100m-cinta-polipropileno/p/MLM35821312?pdp_filters=seller_id%3A482595248#polycard_client=recommendations_pdp-seller_items-above&reco_backend=ranker-retsys-same-seller&reco_model=rk_entity_sameseller&reco_client=pdp-seller_items-above&reco_item_pos=0&reco_backend_type=low_level&reco_id=5e9947bb-1567-41f7-9bac-a88d9519d389&wid=MLM2051939599&sid=recos",
+    "store": "Mercado Libre",
+    "isPreferred": false,
+    "_id": "6945ad16ab9a0558d15b0ae2"
+   }
+  ],
+  "thumbnail": null,
+  "displayTemplate": {
+   "columns": []
+  },
+  "enabledDimensions": [],
+  "mlPrice": 482.9,
+  "mlPriceUpdatedAt": "2026-06-27T01:00:19.222Z",
+  "aliases": [],
+  "wholesaleEnabled": false,
+  "wholesaleMinQty": 5
+ },
+ {
+  "_id": "69434963ed2d4185ba476c6b",
+  "name": "3 m x 9 m",
+  "description": "",
+  "marketingDescription": null,
+  "parentId": "69431347ed2d4185ba4706c2",
+  "generation": 5,
+  "sellable": true,
+  "price": 1319,
+  "sku": null,
+  "stock": 1,
+  "available": true,
+  "active": true,
+  "imageUrl": "https://http2.mlstatic.com/D_Q_NP_712845-MLA95683174676_102025-R.webp",
+  "requiresHumanAdvisor": false,
+  "genericDescription": null,
+  "createdAt": "2025-12-18T00:22:59.920Z",
+  "updatedAt": "2026-06-27T01:00:19.699Z",
+  "__v": 3,
+  "attributes": {
+   "width": "3",
+   "length": "9"
+  },
+  "dimensionUnits": {},
+  "displayTemplate": {
+   "columns": []
+  },
+  "enabledDimensions": [],
+  "onlineStoreLinks": [
+   {
+    "url": "https://articulo.mercadolibre.com.mx/MLM-1300999171-malla-sombra-90-raschel-beige-de-3mx9m-reforzada-_JM",
+    "isPreferred": true,
+    "_id": "69791c2e1c29d60a6fa4009a",
+    "store": "Mercado Libre"
+   }
+  ],
+  "size": "3x9m",
+  "thumbnail": null,
+  "mlPrice": 1319,
+  "mlPriceUpdatedAt": "2026-06-27T01:00:19.222Z",
+  "aliases": [],
+  "wholesaleEnabled": false,
+  "wholesaleMinQty": 5
+ },
+ {
+  "_id": "694349eced2d4185ba47711b",
+  "name": "3 m x 10 m",
+  "description": "",
+  "marketingDescription": null,
+  "parentId": "69431347ed2d4185ba4706c2",
+  "generation": 5,
+  "sellable": true,
+  "price": 1447,
+  "sku": null,
+  "stock": 1,
+  "available": true,
+  "active": true,
+  "imageUrl": "https://http2.mlstatic.com/D_Q_NP_712845-MLA95683174676_102025-R.webp",
+  "requiresHumanAdvisor": false,
+  "genericDescription": null,
+  "createdAt": "2025-12-18T00:25:16.285Z",
+  "updatedAt": "2026-06-27T01:00:19.769Z",
+  "__v": 3,
+  "attributes": {
+   "width": "3",
+   "length": "10"
+  },
+  "dimensionUnits": {},
+  "displayTemplate": {
+   "columns": []
+  },
+  "enabledDimensions": [],
+  "onlineStoreLinks": [
+   {
+    "url": "https://articulo.mercadolibre.com.mx/MLM-2868830514-malla-sombra-90-raschel-beige-de-3mx10m-reforzada-_JM",
+    "isPreferred": true,
+    "_id": "69791c2d1c29d60a6fa4008e",
+    "store": "Mercado Libre"
+   }
+  ],
+  "size": "3x10m",
+  "thumbnail": null,
+  "mlPrice": 1447,
+  "mlPriceUpdatedAt": "2026-06-27T01:00:19.222Z",
+  "aliases": [],
+  "wholesaleEnabled": false,
+  "wholesaleMinQty": 5
+ },
+ {
+  "_id": "69434a15ed2d4185ba4773ca",
+  "name": "2 m x 8 m",
+  "description": "",
+  "marketingDescription": null,
+  "parentId": "69431347ed2d4185ba4706c2",
+  "generation": 5,
+  "sellable": true,
+  "price": 1016,
+  "sku": null,
+  "stock": 1,
+  "available": true,
+  "active": true,
+  "imageUrl": "https://http2.mlstatic.com/D_Q_NP_712845-MLA95683174676_102025-R.webp",
+  "requiresHumanAdvisor": false,
+  "genericDescription": null,
+  "createdAt": "2025-12-18T00:25:57.932Z",
+  "updatedAt": "2026-06-27T01:00:19.841Z",
+  "__v": 3,
+  "attributes": {
+   "width": "8",
+   "length": "2"
+  },
+  "dimensionUnits": {},
+  "displayTemplate": {
+   "columns": []
+  },
+  "enabledDimensions": [],
+  "onlineStoreLinks": [
+   {
+    "url": "https://articulo.mercadolibre.com.mx/MLM-1954112273-malla-sombra-90-raschell-beige-de-8mx2m-reforzada-_JM",
+    "isPreferred": true,
+    "_id": "69791c301c29d60a6fa400b6",
+    "store": "Mercado Libre"
+   }
+  ],
+  "size": "2x8m",
+  "thumbnail": null,
+  "mlPrice": 1016,
+  "mlPriceUpdatedAt": "2026-06-27T01:00:19.222Z",
+  "aliases": [],
+  "wholesaleEnabled": false,
+  "wholesaleMinQty": 5
+ },
+ {
+  "_id": "69434a1ced2d4185ba4775d2",
+  "name": "2 m x 9 m",
+  "description": "",
+  "marketingDescription": null,
+  "parentId": "69431347ed2d4185ba4706c2",
+  "generation": 5,
+  "sellable": true,
+  "price": 1089,
+  "sku": null,
+  "stock": 1,
+  "available": true,
+  "active": true,
+  "imageUrl": "https://http2.mlstatic.com/D_Q_NP_712845-MLA95683174676_102025-R.webp",
+  "requiresHumanAdvisor": false,
+  "genericDescription": null,
+  "createdAt": "2025-12-18T00:26:04.760Z",
+  "updatedAt": "2026-06-27T01:00:19.935Z",
+  "__v": 3,
+  "attributes": {
+   "width": "2",
+   "length": "9"
+  },
+  "dimensionUnits": {},
+  "displayTemplate": {
+   "columns": []
+  },
+  "enabledDimensions": [],
+  "onlineStoreLinks": [
+   {
+    "url": "https://articulo.mercadolibre.com.mx/MLM-1954164669-malla-sombra-90-raschell-beige-de-2mx9m-reforzada-_JM",
+    "isPreferred": true,
+    "_id": "69791c2f1c29d60a6fa400a2",
+    "store": "Mercado Libre"
+   }
+  ],
+  "size": "2x9m",
+  "thumbnail": null,
+  "mlPrice": 1089,
+  "mlPriceUpdatedAt": "2026-06-27T01:00:19.222Z",
+  "aliases": [],
+  "wholesaleEnabled": false,
+  "wholesaleMinQty": 5
+ },
+ {
+  "_id": "6a207acdb1c740c583b5c471",
+  "name": "Color Negro",
+  "description": "",
+  "parentId": "693cce4d1eda701808d94453",
+  "generation": 5,
+  "sellable": true,
+  "price": 3696.02,
+  "wholesaleEnabled": false,
+  "wholesaleMinQty": 2,
+  "stock": 1,
+  "available": true,
+  "active": true,
+  "size": "4x100m",
+  "onlineStoreLinks": [],
+  "attributes": {
+   "width": "4.2",
+   "length": "100",
+   "color": "Negro"
+  },
+  "enabledDimensions": [
+   "width",
+   "length"
+  ],
+  "dimensionUnits": {
+   "width": "m",
+   "length": "m"
+  },
+  "displayTemplate": {
+   "columns": []
+  },
+  "requiresHumanAdvisor": true,
+  "genericDescription": null,
+  "aliases": [],
+  "createdAt": "2026-06-03T19:04:45.603Z",
+  "updatedAt": "2026-06-26T23:43:47.395Z",
+  "__v": 0,
+  "priceExcludesTax": true
+ },
+ {
+  "_id": "6a3ada0bb5617958c9559a70",
+  "name": "3 m x 1 m",
+  "parentId": "69431347ed2d4185ba4706c2",
+  "generation": 5,
+  "sellable": true,
+  "price": 123,
+  "wholesaleEnabled": false,
+  "wholesaleMinQty": null,
+  "stock": 1,
+  "available": true,
+  "active": true,
+  "size": "3x1m",
+  "enabledDimensions": [],
+  "displayTemplate": {
+   "columns": []
+  },
+  "requiresHumanAdvisor": false,
+  "aliases": [],
+  "onlineStoreLinks": [],
+  "createdAt": "2026-06-23T19:10:03.439Z",
+  "updatedAt": "2026-06-26T01:04:35.221Z",
+  "__v": 0
+ },
+ {
+  "_id": "693cce4d1eda701808d94453",
+  "name": "Medida 4 x 100",
+  "description": "4.2 m de ancho x 100 m de largo",
+  "parentId": "693cce4c1eda701808d94443",
+  "generation": 4,
+  "sellable": false,
+  "stock": 1,
+  "available": true,
+  "active": true,
+  "requiresHumanAdvisor": false,
+  "createdAt": "2025-12-13T02:24:13.352Z",
+  "updatedAt": "2026-06-25T23:04:05.554Z",
+  "__v": 2,
+  "genericDescription": null,
+  "attributes": {
+   "width": "4.2",
+   "length": "100"
+  },
+  "dimensionUnits": {
+   "width": "m",
+   "length": "m"
+  },
+  "displayTemplate": {
+   "columns": []
+  },
+  "enabledDimensions": [
+   "width",
+   "length"
+  ],
+  "marketingDescription": null,
+  "onlineStoreLinks": [],
+  "thumbnail": null,
+  "price": 3696.02,
+  "aliases": [],
+  "wholesaleEnabled": false
+ },
+ {
+  "_id": "694054f8f1a5f22bbbfd56e1",
+  "name": "Cinta Rígida",
+  "description": "Polipropileno rígido color negro.",
+  "marketingDescription": "Resistente a la intemperie.\nHecho de resinas termoplásticas, las correas de polipropileno no se estirarán como las correas de nylon y son resistentes al agua y al clima.\n¡Crea tu propia correa y accesorios para mascotas, polipastos, amarres, eslingas, corredores, arneses y mucho más!\nEl material es resistente al moho, ácidos, aceite y grasa. Incluso tiene alguna capacidad para flotar en el agua.",
+  "parentId": "69405453f1a5f22bbbfd55f1",
+  "generation": 2,
+  "sellable": false,
+  "stock": 1,
+  "available": true,
+  "active": true,
+  "requiresHumanAdvisor": false,
+  "genericDescription": null,
+  "createdAt": "2025-12-15T18:35:36.931Z",
+  "updatedAt": "2026-06-25T23:04:05.554Z",
+  "__v": 0
+ }
+]

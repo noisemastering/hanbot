@@ -108,6 +108,13 @@ async function getOrCreateClickLink(psid, originalUrl, options = {}) {
     return await generateClickLink(psid, originalUrl, options);
   }
 
+  // Create the customer's profile the MOMENT we share a tracked link, keyed by the
+  // SAME psid the ClickLog uses — so a later ML order can join click → profile → zip.
+  // Fire-and-forget: the profile only needs to exist by correlation time, not now.
+  try {
+    require("./ai/utils/locationStats").ensureUserProfile(psid, {}, "link_share").catch(() => {});
+  } catch (_) { /* non-critical */ }
+
   try {
     // Match by (psid, originalUrl) and optionally productId. Don't reuse a
     // ClickLog that has already been clicked — once the customer hit it, the

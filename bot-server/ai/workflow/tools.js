@@ -46,6 +46,7 @@ function dimsOf(text) {
     .replace(/\bmts?\.?\b|\bmetros?\b|\bm\b/g, " ")
     .replace(/\bde\s+(?:largo|ancho|alto|altura|fondo|lado)\b/g, " ") // "13 de largo x 3 de ancho" → "13 x 3"
     .replace(/\b(?:largo|ancho|alto|altura|fondo)\s+de\b/g, " ")      // "largo de 13 x ancho de 3"
+    .replace(/(\d+)\s*(?:y\s*medi[oa]|i\s*medi[oa]|imedi[oa]|y\s*1\/2)\b/g, "$1.5") // "3 imedio"/"3 y medio" → "3.5"
     .match(/(\d+(?:\.\d+)?)\s*(?:[x×*]|por)\s*(\d+(?:\.\d+)?)/);
   if (!m) return null;
   // Sort numerically so "6x4" and "4x6" compare equal regardless of order.
@@ -54,6 +55,65 @@ function dimsOf(text) {
 
 // Find a sellable product in the flow's family subtrees that matches the
 // customer's requested measure/name. Returns the ProductFamily doc or null.
+// Score how strongly a candidate's ANCESTRY matches the words in the query.
+// Used only to break a measure-tie between sibling variants (grueso/delgado):
+// the variant word lives on a parent node, so a candidate whose ancestry word
+// the customer typed wins. Generic words shared by every candidate's path
+// (borde, separador, rollo, the length) add equally to all → cancel in the
+// argmax, leaving only the distinguishing word to decide. Walks leaf→root.
+const _norm = (s) =>
+  String(s || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+async function _ancestryKeywordScore(leaf, query, stopIds) {
+  const PF = require("../../models/ProductFamily");
+  const qWords = new Set(_norm(query).split(/[^a-z]+/).filter((w) => w.length >= 4));
+  if (!qWords.size) return 0;
+  const stop = new Set((stopIds || []).map(String));
+  let score = 0;
+  let cur = leaf;
+  for (let i = 0; i < 8 && cur; i++) {
+    for (const w of _norm(cur.name).split(/[^a-z]+/)) if (w.length >= 4 && qWords.has(w)) score++;
+    if (stop.has(String(cur._id)) || !cur.parentId) break;
+    cur = await PF.findById(cur.parentId).select("_id name parentId").lean().catch(() => null);
+  }
+  return score;
+}
+
+// Shade percentage requested in the query ("90%", "90 %", "90 por ciento").
+// Rolls of the SAME width×length exist under every shade family (35/50/70/80/90),
+// so the measure alone can't disambiguate — the shade does.
+function _shadeOf(s) {
+  const m = String(s || "").match(/(\d{2,3})\s*(?:%|por\s*ciento|porciento)/i);
+  return m ? m[1] : null;
+}
+// Does a candidate's ANCESTRY sit under the requested shade family (a node named
+// "90%")? The shade node is ABOVE the flow's family node (families are the per-
+// shade ".../90%/Rollo" nodes), so we climb the FULL ancestry to root — NOT
+// stopping at the flow boundary — bounded by depth.
+async function _ancestryHasShade(leaf, shade) {
+  const PF = require("../../models/ProductFamily");
+  const re = new RegExp(`\\b${shade}\\s*%`);
+  let cur = leaf;
+  for (let i = 0; i < 10 && cur; i++) {
+    if (re.test(String(cur.name || ""))) return true;
+    if (!cur.parentId) break;
+    cur = await PF.findById(cur.parentId).select("_id name parentId").lean().catch(() => null);
+  }
+  return false;
+}
+
+// Pick the right sibling VARIANT among candidates that all match the requested
+// measure (e.g. grueso vs delgado "Rollo de 18 m"). The distinguishing word is
+// on a parent node, so score each candidate's ancestry against the query words;
+// a distinguishing keyword the customer typed wins. Tie (no variant word) →
+// first candidate (the default presentation).
+async function _pickVariant(hits, query, stopIds) {
+  const scored = [];
+  for (const c of hits) scored.push({ c, score: await _ancestryKeywordScore(c, query, stopIds) });
+  scored.sort((a, b) => b.score - a.score);
+  if (scored[0].score > (scored[1] ? scored[1].score : 0)) return scored[0].c;
+  return hits[0];
+}
+
 async function findProductInFamilies(query, familyList, wantDimsArg = null) {
   if (!query) return null;
   const PF = require("../../models/ProductFamily");
@@ -87,14 +147,54 @@ async function findProductInFamilies(query, familyList, wantDimsArg = null) {
     // name. After a tree restructure the sellable leaf can be named for an
     // attribute ("Color Beige") with the measure living only in `size`
     // ("5x10m") — so name-only matching misses every size. Check both.
-    const hit = candidates.find((c) => {
+    let hits = candidates.filter((c) => {
       // A width×length request never matches a length-only product (borde).
       const ed = c.enabledDimensions;
       if (Array.isArray(ed) && ed.length > 0 && !ed.includes("width")) return false;
       const cd = dimsOf(c.size) || dimsOf(c.name);
       return cd && cd[0] === wantDims[0] && cd[1] === wantDims[1];
     });
-    if (hit) return hit;
+    // Rolls: the SAME width×length exists under every shade family (35/50/70/80/90%);
+    // if the query/context names a shade, keep only that shade's leaf so we don't
+    // quote a random shade's price.
+    if (hits.length > 1) {
+      const shade = _shadeOf(query);
+      if (shade) {
+        const sf = [];
+        for (const h of hits) if (await _ancestryHasShade(h, shade)) sf.push(h);
+        if (sf.length) hits = sf;
+      }
+    }
+    if (hits.length === 1) return hits[0];
+    if (hits.length > 1) return _pickVariant(hits, query, ids);
+  }
+
+  // LENGTH-ONLY products (borde separador): the customer picks only a length
+  // ("18 m"), so dimsOf — which needs W×L — returns null and the block above is
+  // skipped. Match a single length against length-only candidates (those whose
+  // enabledDimensions has no "width"). Several lengths exist under BOTH "Grueso"
+  // and "Delgado" with IDENTICAL leaf names ("Rollo de 18 m"); the VARIANT lives
+  // on the PARENT, so disambiguate by the variant word the customer used, same
+  // ancestry scoring as 2-D variants. No variant word → first match (default,
+  // e.g. grueso).
+  const lengthOnly = candidates.filter((c) => {
+    const ed = c.enabledDimensions;
+    return Array.isArray(ed) && ed.length > 0 && !ed.includes("width");
+  });
+  if (lengthOnly.length) {
+    const qNums = (String(query).match(/\d+(?:\.\d+)?/g) || []).map(Number);
+    if (qNums.length) {
+      const lenOf = (c) => {
+        const m = String(c.name || c.size || "").match(/(\d+(?:\.\d+)?)\s*m\b/i);
+        return m ? Number(m[1]) : null;
+      };
+      const lhits = lengthOnly.filter((c) => {
+        const L = lenOf(c);
+        return L != null && qNums.includes(L);
+      });
+      if (lhits.length === 1) return lhits[0];
+      if (lhits.length > 1) return _pickVariant(lhits, query, ids);
+    }
   }
   // Fallback: loose name contains (e.g. a named variant, not a measure).
   const q = query.toLowerCase();
@@ -283,7 +383,7 @@ function numericOrNull(p) {
 // Returns the parsed {verdict,targetFlow,productName} or null on empty/parse fail.
 async function _classifyScopeOnce(client, systemContent, query, reasoning) {
   const reqParams = reasoning
-    ? { model: "gpt-5.4-mini", reasoning_effort: reasoning, max_completion_tokens: 1500 }
+    ? { model: "gpt-5.4-mini", reasoning_effort: reasoning, max_completion_tokens: 4000 }
     : { model: "gpt-4o-mini", temperature: 0, max_tokens: 120 };
   const res = await client.chat.completions.create({
     ...reqParams,
@@ -314,7 +414,7 @@ async function aiClassifyProductScope(query, currentFlowName, flowCatalog, curre
       (f) =>
         `- "${f.name}"${f.isCurrent ? " (FLUJO ACTUAL)" : ""}${f.isColdStart ? " (TRIAGE / ARRANQUE EN FRÍO)" : ""}: ${
           f.families && f.families.length ? f.families.join(", ") : "(sin familias)"
-        }`
+        }${f.desc ? ` — ${f.desc}` : ""}`
     )
     .join("\n");
 
@@ -330,6 +430,7 @@ ${currentIsColdStart ? `\n⚠️ EL FLUJO ACTUAL ES DE TRIAGE (ARRANQUE EN FRÍO
 
 REGLAS:
 - "no_product": el mensaje NO nombra un producto concreto. Saludos, agradecimientos, un color suelto (beige/negro/verde…), o preguntas como "¿qué hago?", "me interesa", "info" → no_product. Los COLORES son ATRIBUTOS, nunca productos.
+- IMPORTANTE — una PREGUNTA o PETICIÓN que SÍ nombra un producto sigue nombrando ese producto: "¿tienen X?", "¿venden X?", "¿manejan X?", "¿hay X?", "busco X", "quiero X", "necesito X", "me das precio de X" → EXTRAE X y clasifícalo normalmente (NUNCA lo marques no_product solo por venir como pregunta). Ej.: "¿venden sujetadores plásticos?" nombra el producto "sujetadores plásticos".
 - "current": el producto pertenece al FLUJO ACTUAL (misma categoría que ya está atendiendo). ${currentIsColdStart ? "NO USES ESTE VALOR — el flujo actual es de triage." : ""}
 - "other_flow": pertenece claramente a OTRO flujo activo distinto del actual (un especialista). Pon su nombre EXACTO en targetFlow.
 - "needs_human": es malla sombra o algo que Hanlob fabrica, pero ningún flujo activo lo cubre.
@@ -411,11 +512,15 @@ const REGISTRY = {
         if (!doc) return { ok: false };
         const pInfo = await resolvePrice(doc);
         if (pInfo.soldOut) {
-          return { ok: true, line: `"${doc.name}": SÍ la manejamos, pero está AGOTADA por el momento — NO compartas link de compra; ofrece avisar cuando regrese o pasar con un asesor.` };
-        }
-        if (pInfo.handoff) {
+          // Active but out of stock → acknowledge AND hand off (capture the lead).
           ctx.handoffRequested = true;
-          ctx.handoffReason = `Producto vendible sin precio: ${doc.name} — requiere cotización de un asesor`;
+          ctx.handoffReason = pInfo.handoffReason || `Producto AGOTADO: ${doc.name} — pasar con un asesor`;
+          ctx.handoffPreface = ctx.handoffPreface || `Sí manejamos "${doc.name}", pero por el momento está agotada.`;
+          return { ok: true, line: `"${doc.name}": SÍ la manejamos, pero está AGOTADA por el momento; el sistema la pasará con un asesor para darle seguimiento. NO compartas link de compra.` };
+        }
+        if (pInfo.handoff && pInfo.amount == null) {
+          ctx.handoffRequested = true;
+          ctx.handoffReason = pInfo.handoffReason || `Producto vendible sin precio: ${doc.name} — requiere cotización de un asesor`;
           return { ok: true, line: `"${doc.name}" no tiene precio en línea; para esa medida pasa con un asesor.` };
         }
         if (pInfo.link || pInfo.amount) {
@@ -431,6 +536,13 @@ const REGISTRY = {
               : "";
           const price = pInfo.amount ? ` Precio: $${pInfo.amount}${pInfo.plusIva ? " + IVA" : ""}${disc}${pInfo.source === "ml" ? "" : " (inventario)"}.` : "";
           const linkPart = link ? `Link de compra: ${link}.` : "";
+          // Price but NO purchase link → quote it AND hand off to close the sale.
+          if (pInfo.quoteThenHandoff || (pInfo.handoff && !link)) {
+            ctx.handoffRequested = true;
+            ctx.handoffReason = pInfo.handoffReason || `Sin link de compra: ${doc.name} — concretar con un asesor`;
+            ctx.handoffPreface = ctx.handoffPreface || `${doc.name} — $${pInfo.amount}${pInfo.plusIva ? " + IVA" : ""}.`;
+            return { ok: true, line: `${doc.name} —${price} (sin link de compra en línea; el sistema lo pasará con un asesor para concretar la compra).` };
+          }
           return { ok: true, line: `${doc.name} — ${linkPart}${price}`.trim() };
         }
         return { ok: false };
@@ -477,19 +589,24 @@ const REGISTRY = {
       // No specific product named → use the preloaded one as a default shortcut.
       const pi = ctx.priceInfo;
       if (!pi) return "Pregunta al cliente qué medida necesita para poder cotizar.";
+      const pName = ctx.product?.name;
       if (pi.soldOut) {
-        return `${ctx.product?.name ? `"${ctx.product.name}"` : "Ese producto"} SÍ lo manejamos, pero está AGOTADO por el momento. NO compartas link de compra; ofrece avisar cuando vuelva a haber o pasar con un asesor. NUNCA digas que no lo vendemos.`;
-      }
-      if (pi.handoff) {
+        // Active but out of stock → acknowledge AND hand off (capture the lead).
         ctx.handoffRequested = true;
-        ctx.handoffReason = `Producto vendible sin precio: ${ctx.product?.name || "(producto del flujo)"} — requiere cotización de un asesor`;
-        return `${ctx.product?.name ? `"${ctx.product.name}"` : "Ese producto"} no tiene precio disponible. NO inventes un precio: ofrece pasar con un asesor.`;
+        ctx.handoffReason = pi.handoffReason || `Producto AGOTADO: ${pName || "(producto del flujo)"} — pasar con un asesor`;
+        ctx.handoffPreface = ctx.handoffPreface || `${pName ? `"${pName}"` : "Ese producto"} sí lo manejamos, pero por el momento está agotado.`;
+        return `${pName ? `"${pName}"` : "Ese producto"} SÍ lo manejamos, pero está AGOTADO por el momento; el sistema lo pasará con un asesor. NO compartas link de compra. NUNCA digas que no lo vendemos.`;
+      }
+      if (pi.handoff && pi.amount == null) {
+        ctx.handoffRequested = true;
+        ctx.handoffReason = pi.handoffReason || `Producto vendible sin precio: ${pName || "(producto del flujo)"} — requiere cotización de un asesor`;
+        return `${pName ? `"${pName}"` : "Ese producto"} no tiene precio disponible. NO inventes un precio: ofrece pasar con un asesor.`;
       }
       if (pi.link || pi.amount) {
         const link = await trackedLink(pi.link, {
           psid: ctx.psid,
           sandbox: ctx.sandbox,
-          productName: ctx.product?.name,
+          productName: pName,
           productId: ctx.product && ctx.product._id ? String(ctx.product._id) : null,
         });
         const disc =
@@ -498,7 +615,14 @@ const REGISTRY = {
             : "";
         const price = pi.amount ? ` Precio: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${disc}${pi.source === "ml" ? "" : " (inventario)"}.` : "";
         const linkPart = link ? `Link de compra: ${link}.` : "";
-        return `${ctx.product?.name ? ctx.product.name + " — " : ""}${linkPart}${price}`.trim();
+        // Price but NO purchase link → quote it AND hand off to close the sale.
+        if (pi.quoteThenHandoff || (pi.handoff && !link)) {
+          ctx.handoffRequested = true;
+          ctx.handoffReason = pi.handoffReason || `Sin link de compra: ${pName || "(producto del flujo)"} — concretar con un asesor`;
+          ctx.handoffPreface = ctx.handoffPreface || `${pName ? pName + " — " : ""}$${pi.amount}${pi.plusIva ? " + IVA" : ""}.`;
+          return `${pName ? pName + " — " : ""}${price} (sin link de compra en línea; el sistema lo pasará con un asesor para concretar la compra).`.trim();
+        }
+        return `${pName ? pName + " — " : ""}${linkPart}${price}`.trim();
       }
       return ctx.sandbox
         ? "No hay producto resoluble en este test; asigna familia/productos en Setup."
@@ -675,7 +799,7 @@ const REGISTRY = {
       let workflows = [];
       try {
         workflows = await WorkflowModel.find({ active: true })
-          .select("name family families isColdStart")
+          .select("name family families isColdStart description")
           .lean();
       } catch {
         /* ignore */
@@ -692,7 +816,7 @@ const REGISTRY = {
             names.push(path || f.name || "");
           }
           const isCurrent = fams.some((f) => flowFamilyIds.has(String(f.id)));
-          return { id: String(w._id), name: w.name, families: names, isCurrent, isColdStart: !!w.isColdStart };
+          return { id: String(w._id), name: w.name, families: names, desc: w.description || "", isCurrent, isColdStart: !!w.isColdStart };
         })
       );
 
@@ -726,7 +850,14 @@ const REGISTRY = {
 
       // other_flow → belongs to a different active flow → surface switch target.
       if (verdict.verdict === "other_flow" && verdict.targetFlow) {
-        const other = flowCatalog.find((f) => f.name === verdict.targetFlow && !f.isCurrent);
+        // Exclude only the ACTUAL current flow (by name) — NOT by the family-overlap
+        // `isCurrent` flag. A triage/cold-start flow shares families with its
+        // specialists (e.g. cold-start carries the Ground Cover family), so a
+        // specialist gets wrongly flagged isCurrent and the switch target was being
+        // dropped → "ground cover" never routed out of cold-start.
+        const other = flowCatalog.find(
+          (f) => f.name === verdict.targetFlow && f.name !== (ctx.currentFlowName || "")
+        );
         if (other) {
           ctx.scopeResult = {
             verdict: "other_flow",
@@ -814,4 +945,58 @@ async function runTool(name, input, ctx) {
   }
 }
 
-module.exports = { REGISTRY, toolDefsFor, runTool, dimsOf, findProductInFamilies, availableVariantsForProduct, availableMeasuresForFamilies, closestAvailableMeasure };
+// Recommend the ACTIVE roll whose total area (width × length) is closest to a
+// target area (m²). Used when the customer asks for a non-standard roll measure
+// (e.g. 5x20 → 100 m²): we confirm the area, then propose the nearest real roll.
+// Tie-break: smallest width (so 100 m² → 2x50, not 4x25). Optional shade filter.
+async function nearestRollByArea(targetArea, familyList, opts = {}) {
+  const PF = require("../../models/ProductFamily");
+  const ids = (Array.isArray(familyList) ? familyList : familyList ? [familyList] : [])
+    .filter((f) => f && f.id)
+    .map((f) => String(f.id));
+  if (!ids.length || !(targetArea > 0)) return null;
+  const queue = [...ids];
+  const cands = [];
+  let g = 0;
+  while (queue.length && g++ < 500) {
+    const kids = await PF.find({ parentId: queue.shift() })
+      .select("name size sellable active price mlPrice onlineStoreLinks parentId enabledDimensions")
+      .lean();
+    for (const k of kids) {
+      if (k.sellable && k.active !== false) {
+        const d = dimsOf(k.size) || dimsOf(k.name);
+        const ed = k.enabledDimensions;
+        const isWL = !(Array.isArray(ed) && ed.length > 0 && !ed.includes("width"));
+        if (d && isWL) cands.push({ leaf: k, dims: d, area: d[0] * d[1] });
+      }
+      queue.push(k._id);
+    }
+  }
+  if (!cands.length) return null;
+  let pool = cands;
+  if (opts.shade) {
+    const sf = [];
+    for (const c of cands) if (await _ancestryHasShade(c.leaf, String(opts.shade))) sf.push(c);
+    if (sf.length) pool = sf;
+  }
+  pool.sort(
+    (a, b) => Math.abs(a.area - targetArea) - Math.abs(b.area - targetArea) || a.dims[0] - b.dims[0] || a.area - b.area
+  );
+  return pool[0]; // { leaf, dims, area }
+}
+
+// Parse an explicit ROLL quantity from a message: "3 rollos", "dos piezas",
+// "5 unidades". Returns the integer or null. Conservative — requires a unit word
+// so a MEASURE ("4x50", "50 metros") is never mistaken for a quantity. A bare
+// number is handled by the caller only when it's clearly a quantity reply.
+function parseRollQuantity(text) {
+  const t = String(text || "").toLowerCase();
+  let m = t.match(/(\d+)\s*(rollos?|piezas?|pzas?\.?|unidades?|tramos?)\b/);
+  if (m) return parseInt(m[1], 10);
+  const words = { un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10 };
+  m = t.match(/\b(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\s+(rollos?|piezas?|pzas?\.?|unidades?|tramos?)\b/);
+  if (m) return words[m[1]];
+  return null;
+}
+
+module.exports = { REGISTRY, toolDefsFor, runTool, dimsOf, findProductInFamilies, availableVariantsForProduct, availableMeasuresForFamilies, closestAvailableMeasure, nearestRollByArea, parseRollQuantity };

@@ -1,0 +1,50 @@
+[
+ {
+  "_id": "693cb0cac3b7d8cc1846b0b8",
+  "name": "Kit de Instalación para Malla Sombra",
+  "parentId": "693cb05fc3b7d8cc1846b07e",
+  "price": 489
+ },
+ {
+  "_id": "693cb435c3b7d8cc1846b1a9",
+  "name": "Paquete de 10 piezas",
+  "parentId": "693cb414c3b7d8cc1846b16b",
+  "price": 89
+ },
+ {
+  "_id": "693cb443c3b7d8cc1846b1e9",
+  "name": "Paquete de 20 piezas",
+  "parentId": "693cb414c3b7d8cc1846b16b",
+  "price": 99
+ },
+ {
+  "_id": "693cb4ccc3b7d8cc1846b22a",
+  "name": "Paquete de 30 piezas",
+  "parentId": "693cb414c3b7d8cc1846b16b",
+  "price": 109
+ },
+ {
+  "_id": "693cb4e0c3b7d8cc1846b26c",
+  "name": "Paquete de 35 piezas",
+  "parentId": "693cb414c3b7d8cc1846b16b",
+  "price": 119
+ },
+ {
+  "_id": "693cb4eec3b7d8cc1846b2af",
+  "name": "Paquete de 50 piezas",
+  "parentId": "693cb414c3b7d8cc1846b16b",
+  "price": 149
+ },
+ {
+  "_id": "693cb505c3b7d8cc1846b2f3",
+  "name": "Paquete de 100 piezas",
+  "parentId": "693cb414c3b7d8cc1846b16b",
+  "price": 189
+ },
+ {
+  "_id": "697bb296add8373c0e52fe46",
+  "name": "Rollo de 47 m",
+  "parentId": "697bb1ebadd8373c0e52fc9e",
+  "price": 300
+ }
+]

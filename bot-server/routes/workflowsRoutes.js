@@ -10,6 +10,7 @@ const Workflow = require("../models/Workflow");
 const Ad = require("../models/Ad");
 const DashboardUser = require("../models/DashboardUser");
 const { runWorkflowTurn, initState } = require("../ai/workflow");
+const { requireLiberadoOrSuperAdmin } = require("../middleware/liberadoGate");
 
 const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-jwt-key-change-in-production";
 
@@ -41,7 +42,11 @@ router.use(authenticate);
 router.use(requireSuperAdmin);
 
 // --- ephemeral sandbox sessions (in-memory, lost on restart — fine for testing) ---
-const sandboxSessions = new Map(); // sessionId -> { workflowId, state }
+const sandboxSessions = new Map(); // sessionId -> { workflowId, state, personaName }
+// Mirror production's bot-only persona pool (ai/index.js) so the sandbox greets
+// with a name like the live bot does — otherwise flows told to use the CONTEXT
+// name (e.g. Ground Cover) greet nameless in the sandbox only. BOT-ONLY names.
+const SANDBOX_PERSONA_POOL = ["Carolina", "Mireya", "Claudia", "Fernanda", "Miranda", "Adriana", "Regina", "Karen"];
 
 // ===== Ad → workflow assignment (attach a flow to an ad + set vars + toggle) =====
 // Registered BEFORE the generic "/:id" routes so GET /ads is not swallowed by /:id.
@@ -77,7 +82,7 @@ router.get("/ads", async (req, res) => {
 
 // PATCH /workflows/ads/:adId — attach/detach a workflow, set its vars, toggle on/off.
 // Body: { workflowId?, workflowSetup?, workflowEnabled? }
-router.patch("/ads/:adId", async (req, res) => {
+router.patch("/ads/:adId", requireLiberadoOrSuperAdmin, async (req, res) => {
   try {
     const ad = await Ad.findById(req.params.adId);
     if (!ad) return res.status(404).json({ success: false, error: "Ad not found" });
@@ -129,7 +134,7 @@ router.get("/:id", async (req, res) => {
 });
 
 // POST /workflows
-router.post("/", async (req, res) => {
+router.post("/", requireLiberadoOrSuperAdmin, async (req, res) => {
   try {
     const wf = new Workflow({ ...req.body, createdBy: req.user.username || req.user.email });
     await wf.save();
@@ -140,7 +145,7 @@ router.post("/", async (req, res) => {
 });
 
 // POST /workflows/import — create from a full JSON definition
-router.post("/import", async (req, res) => {
+router.post("/import", requireLiberadoOrSuperAdmin, async (req, res) => {
   try {
     const def = req.body && req.body.workflow ? req.body.workflow : req.body;
     if (!def || !def.name) {
@@ -157,7 +162,7 @@ router.post("/import", async (req, res) => {
 
 // POST /workflows/:id/duplicate — copy an existing flow into a new INACTIVE one.
 // Carries nodes/edges/setup/family/globalPrompt/knowledge; drops versions/metrics.
-router.post("/:id/duplicate", async (req, res) => {
+router.post("/:id/duplicate", requireLiberadoOrSuperAdmin, async (req, res) => {
   try {
     const src = await Workflow.findById(req.params.id).lean();
     if (!src) return res.status(404).json({ success: false, error: "Workflow not found" });
@@ -226,7 +231,7 @@ router.delete("/node-templates/:tid", async (req, res) => {
 });
 
 // PUT /workflows/:id — snapshot the previous version, then update
-router.put("/:id", async (req, res) => {
+router.put("/:id", requireLiberadoOrSuperAdmin, async (req, res) => {
   try {
     const existing = await Workflow.findById(req.params.id);
     if (!existing) return res.status(404).json({ success: false, error: "Workflow not found" });
@@ -287,7 +292,7 @@ router.put("/:id", async (req, res) => {
 // Updates the global prompt and/or a single node's prompt WITHOUT snapshotting a
 // version (the full studio Save still versions). The sandbox re-reads the
 // workflow each turn, so changes apply to the next message.
-router.patch("/:id/prompts", async (req, res) => {
+router.patch("/:id/prompts", requireLiberadoOrSuperAdmin, async (req, res) => {
   try {
     const wf = await Workflow.findById(req.params.id);
     if (!wf) return res.status(404).json({ success: false, error: "Workflow not found" });
@@ -308,7 +313,7 @@ router.patch("/:id/prompts", async (req, res) => {
 });
 
 // DELETE /workflows/:id
-router.delete("/:id", async (req, res) => {
+router.delete("/:id", requireLiberadoOrSuperAdmin, async (req, res) => {
   try {
     const wf = await Workflow.findById(req.params.id);
     if (!wf) return res.status(404).json({ success: false, error: "Workflow not found" });
@@ -353,6 +358,9 @@ router.post("/:id/sandbox", async (req, res) => {
       session = {
         workflowId: String(wf._id),
         state: initState(wf, req.body.vars || {}, req.body.setup || {}),
+        // Pin one persona name for the whole sandbox session, like production
+        // pins convo.botPersonaName once per conversation.
+        personaName: SANDBOX_PERSONA_POOL[Math.floor(Math.random() * SANDBOX_PERSONA_POOL.length)],
       };
       sandboxSessions.set(sessionId, session);
     }
@@ -362,7 +370,7 @@ router.post("/:id/sandbox", async (req, res) => {
       wf,
       session.state,
       req.body.message || "",
-      { sandbox: true }
+      { sandbox: true, personaName: session.personaName }
     );
     session.state = state;
 

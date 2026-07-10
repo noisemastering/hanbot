@@ -93,6 +93,15 @@ const productFamilySchema = new mongoose.Schema({
       default: false  // Mark the main/preferred link (e.g., Mercado Libre)
     }
   }],
+  // ML SELLER-ITEM ids this product's listing(s) resolve to (MLM…). Populated by
+  // scripts/mapMlItems.js (resolves the onlineStoreLink, catalog→item). Sales
+  // attribution maps an ORDER's item id → this family → OUR product, so a click
+  // (which stores our productId) matches on the PRODUCT, never on a rotating ML id.
+  mlItemIds: {
+    type: [String],
+    default: [],
+    index: true,
+  },
   attributes: {
     type: Map,
     of: String  // Flexible attributes like { size: "3x5m", finish: "Reforzada" }

@@ -14,6 +14,7 @@ const userSchema = new mongoose.Schema({
   // User profile (works for both channels)
   first_name: String,
   last_name: String,
+  phone: String, // contact phone captured at handoff (Messenger/ad leads have no whatsappPhone)
   profile_pic: String,
   locale: String,
   timezone: Number,
@@ -25,11 +26,13 @@ const userSchema = new mongoose.Schema({
     zipcode: { type: String, default: null },
     city: { type: String, default: null },
     state: { type: String, default: null },
-    source: { type: String, enum: ['conversation', 'stats_question', 'shipping_flow', null], default: null },
+    source: { type: String, enum: ['conversation', 'stats_question', 'shipping_flow', 'shipping_question', 'link_share', 'handoff', null], default: null },
     updatedAt: { type: Date, default: null }
   },
 
-  // Product of Interest (for sales correlation)
+  // Product(s) of Interest (for sales correlation). `poi` = the MOST RECENT (back-compat);
+  // `pois` = the FULL list — a client can engage more than one product over time (e.g.
+  // click several shared links). Deduped by familyId; each entry timestamps first/last seen.
   poi: {
     productInterest: { type: String, default: null },     // "malla_sombra", "borde_separador", "rollo", etc.
     familyId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductFamily', default: null },
@@ -37,7 +40,16 @@ const userSchema = new mongoose.Schema({
     rootId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductFamily', default: null },
     rootName: { type: String, default: null },            // "Malla Sombra"
     updatedAt: { type: Date, default: null }
-  }
+  },
+  pois: [{
+    productInterest: { type: String, default: null },
+    familyId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductFamily', default: null },
+    familyName: { type: String, default: null },
+    rootId: { type: mongoose.Schema.Types.ObjectId, ref: 'ProductFamily', default: null },
+    rootName: { type: String, default: null },
+    firstSeen: { type: Date, default: Date.now },
+    lastSeen: { type: Date, default: Date.now }
+  }]
 });
 
 // Ensure at least one identifier is present

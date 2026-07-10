@@ -400,37 +400,54 @@ async function handleLocationStatsResponse(message, psid, convo) {
  * @param {object} location - { city, state, zipcode }
  * @param {string} source - Where the location came from
  */
-async function syncLocationToUser(psid, location, source = 'conversation') {
+// ensureUserProfile — the single primitive that guarantees a User profile EXISTS
+// for a psid and carries whatever identity we've collected. We create the profile
+// the moment we share a tracked link or hit a handoff, and populate the zip/name/
+// phone whenever the customer gives them. Sales correlation reads User.location,
+// so without this the CP we collected was silently dropped for the ~95% of
+// customers who never had a User record (they came from ad/comment clicks, which
+// never ran the DM-only registerUserIfNeeded). Upsert keyed by psid; matches an
+// existing profile under any id form so we never duplicate. Fields accepted:
+// { first_name, last_name, phone, city, state, zipcode }.
+async function ensureUserProfile(psid, fields = {}, source = 'conversation') {
+  if (!psid) return null;
   try {
-    // Find user by psid or unifiedId
-    const user = await User.findOne({
-      $or: [
-        { psid: psid },
-        { unifiedId: psid },
-        { unifiedId: `fb:${psid}` }
-      ]
-    });
-
-    if (!user) {
-      console.log(`📊 User not found for psid ${psid}, skipping location sync`);
-      return;
+    const set = {};
+    if (fields.first_name) set.first_name = fields.first_name;
+    if (fields.last_name) set.last_name = fields.last_name;
+    if (fields.phone) set.phone = fields.phone;
+    if (fields.city) set['location.city'] = fields.city;
+    if (fields.state) set['location.state'] = fields.state;
+    if (fields.zipcode) set['location.zipcode'] = fields.zipcode;
+    if (fields.city || fields.state || fields.zipcode) {
+      set['location.updatedAt'] = new Date();
+      set['location.source'] = source;
     }
-
-    // Update location
-    const locationUpdate = {
-      'location.updatedAt': new Date(),
-      'location.source': source
-    };
-
-    if (location.city) locationUpdate['location.city'] = location.city;
-    if (location.state) locationUpdate['location.state'] = location.state;
-    if (location.zipcode) locationUpdate['location.zipcode'] = location.zipcode;
-
-    await User.updateOne({ _id: user._id }, { $set: locationUpdate });
-    console.log(`📊 Synced location to User: ${JSON.stringify(location)}`);
-  } catch (error) {
-    console.error("Error syncing location to User:", error.message);
+    // channel is required on the schema — infer from the id shape (FB psids are
+    // long digit strings; WhatsApp ids are prefixed / phone-like).
+    const channel = /^\d{6,}$/.test(String(psid)) ? 'facebook' : 'whatsapp';
+    const update = { $setOnInsert: { psid, channel, last_interaction: new Date() } };
+    if (Object.keys(set).length) update.$set = set;
+    const user = await User.findOneAndUpdate(
+      { $or: [{ psid }, { unifiedId: psid }, { unifiedId: `fb:${psid}` }] },
+      update,
+      { upsert: true, new: true }
+    );
+    return user;
+  } catch (e) {
+    if (e.code !== 11000) console.error(`ensureUserProfile [${source}] error:`, e.message);
+    return null; // duplicate-key race → the profile exists now, which is all we need
   }
+}
+
+async function syncLocationToUser(psid, location, source = 'conversation') {
+  // Delegate to the upsert primitive so a captured CP ALWAYS lands on a profile —
+  // creating one if the customer never had a User record (the old code skipped).
+  return ensureUserProfile(psid, {
+    city: location.city || undefined,
+    state: location.state || undefined,
+    zipcode: location.zipcode || undefined,
+  }, source);
 }
 
 /**
@@ -471,18 +488,34 @@ async function syncPOIToUser(psid, poiData) {
       return;
     }
 
-    // Update POI
-    const poiUpdate = {
-      'poi.updatedAt': new Date()
-    };
-
+    const now = new Date();
+    // `poi` = the MOST RECENT interest (back-compat for existing readers).
+    const poiUpdate = { 'poi.updatedAt': now };
     if (poiData.productInterest) poiUpdate['poi.productInterest'] = poiData.productInterest;
     if (poiData.familyId) poiUpdate['poi.familyId'] = poiData.familyId;
     if (poiData.familyName) poiUpdate['poi.familyName'] = poiData.familyName;
     if (poiData.rootId) poiUpdate['poi.rootId'] = poiData.rootId;
     if (poiData.rootName) poiUpdate['poi.rootName'] = poiData.rootName;
-
     await User.updateOne({ _id: user._id }, { $set: poiUpdate });
+
+    // `pois` = the FULL list. Dedup by familyId (fallback productInterest): if this
+    // product is already there, bump lastSeen; otherwise push a new entry. This is how
+    // a client who engages/clicks MORE THAN ONE product accumulates every interest.
+    const key = poiData.familyId ? String(poiData.familyId) : (poiData.productInterest || null);
+    if (key) {
+      const filter = poiData.familyId ? { 'pois.familyId': poiData.familyId } : { 'pois.productInterest': poiData.productInterest };
+      const bumped = await User.updateOne({ _id: user._id, ...filter }, { $set: { 'pois.$.lastSeen': now, ...(poiData.productInterest ? { 'pois.$.productInterest': poiData.productInterest } : {}) } });
+      if (bumped.matchedCount === 0) {
+        await User.updateOne({ _id: user._id }, { $push: { pois: {
+          productInterest: poiData.productInterest || null,
+          familyId: poiData.familyId || null,
+          familyName: poiData.familyName || null,
+          rootId: poiData.rootId || null,
+          rootName: poiData.rootName || null,
+          firstSeen: now, lastSeen: now,
+        } } });
+      }
+    }
     console.log(`📊 Synced POI to User: ${poiData.productInterest || poiData.rootName}`);
   } catch (error) {
     console.error("Error syncing POI to User:", error.message);
@@ -517,6 +550,7 @@ module.exports = {
   parseLocationResponse,
   handleLocationStatsResponse,
   syncLocationToUser,
+  ensureUserProfile,
   syncConversationLocationToUser,
   syncPOIToUser,
   syncConversationPOIToUser,

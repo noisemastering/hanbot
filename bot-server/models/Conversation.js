@@ -22,6 +22,10 @@ const conversationSchema = new mongoose.Schema({
   unknownCount: { type: Number, default: 0 },
   clarificationCount: { type: Number, default: 0 },  // Track unintelligible message attempts
   lastMessageAt: { type: Date, default: Date.now },
+  // Liberado cap: the Mexico-City date (YYYY-MM-DD) on which the bot last SERVED
+  // this conversation. Used to count distinct served conversations/day while the
+  // release gate (Liberado) is OFF. Null = never served under the cap.
+  liberadoServedDay: { type: String, default: null, index: true },
   lastBotResponse: { type: String, default: null },  // Track last bot response to detect repetition
 
   // Name harvested from FB Page Instant Reply ("¡Hola, {First Name}!")

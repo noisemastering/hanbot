@@ -18,8 +18,12 @@ const CACHE_TTL = 10 * 60 * 1000; // 10 minutes
  */
 function extractMLItemId(url) {
   if (!url) return null;
-  const match = url.match(/MLM-?(\d+)/i);
-  return match ? `MLM${match[1]}` : null;
+  // Capture BOTH forms: a sellable ITEM id ("MLM-2888465189" / "MLM2888465189")
+  // and a CATALOG product id from /p/ and /up/ links ("MLMU3914956039"). The old
+  // /MLM-?\d+/ regex missed "MLMU…" (the U isn't a digit), so /up/ catalog links
+  // returned null → instant DB fallback (never even tried live ML).
+  const match = url.match(/ML[A-Z]*-?\d+/i);
+  return match ? match[0].replace(/-/g, "").toUpperCase() : null;
 }
 
 /**
@@ -36,6 +40,10 @@ async function getMLPrice(mlUrl, dbPrice) {
   if (!mlItemId) {
     return { price: dbPrice, originalPrice: null, hasDiscount: false, discountPercent: 0, source: 'db' };
   }
+  // A "/p/MLM…" or "/up/MLMU…" URL is a CATALOG PRODUCT id, not a sellable ITEM
+  // id — the items/prices endpoints 404 (and /products/{MLMU} 403s) on it. We
+  // resolve it to the seller's winning ITEM below via /products/{id}/items.
+  const isCatalog = /\/(p|up)\/ML/i.test(mlUrl || "");
 
   // Check cache
   const cached = _cache.get(mlItemId);
@@ -46,8 +54,49 @@ async function getMLPrice(mlUrl, dbPrice) {
   try {
     const token = await getValidAccessToken(ML_SELLER_ID);
 
+    // CATALOG (/p/MLM…) → resolve the buy-box winning ITEM so items/prices works.
+    // If the catalog gives a price directly, use it. Otherwise fall through with
+    // the resolved item id.
+    let itemId = mlItemId;
+    if (isCatalog) {
+      // /products/{catalogId}/items → the seller's actual sellable item(s) for
+      // this catalog product. Works for BOTH /p/MLM and /up/MLMU (where
+      // /products/{id} itself 403s). Take the first result's item_id and price it
+      // properly below (the prices endpoint surfaces promotions).
+      try {
+        const pi = await axios.get(`https://api.mercadolibre.com/products/${mlItemId}/items`, {
+          headers: { Authorization: `Bearer ${token}` },
+          timeout: 4000,
+        });
+        const win = pi.data?.results?.[0];
+        if (win?.item_id) itemId = win.item_id;
+        else if (win?.price != null) {
+          const op = win.original_price && win.original_price > win.price ? win.original_price : null;
+          const result = { price: win.price, originalPrice: op, hasDiscount: !!op, discountPercent: op ? Math.round((1 - win.price / op) * 100) : 0, source: "ml", fetchedAt: Date.now() };
+          _cache.set(mlItemId, result);
+          return result;
+        }
+      } catch (e1) {
+        // Fallback: /products/{id} buy_box_winner (some /p/ catalog products).
+        try {
+          const pr = await axios.get(`https://api.mercadolibre.com/products/${mlItemId}`, {
+            headers: { Authorization: `Bearer ${token}` },
+            timeout: 3000,
+          });
+          const bbw = pr.data?.buy_box_winner;
+          if (bbw?.item_id) itemId = bbw.item_id;
+          else if (bbw?.price != null) {
+            const op = bbw.original_price && bbw.original_price > bbw.price ? bbw.original_price : null;
+            const result = { price: bbw.price, originalPrice: op, hasDiscount: !!op, discountPercent: op ? Math.round((1 - bbw.price / op) * 100) : 0, source: "ml", fetchedAt: Date.now() };
+            _cache.set(mlItemId, result);
+            return result;
+          }
+        } catch (e2) { /* fall through; items call below will 404 → DB fallback */ }
+      }
+    }
+
     // Use the Prices endpoint — the Items endpoint doesn't show marketplace promotions
-    const res = await axios.get(`https://api.mercadolibre.com/items/${mlItemId}/prices`, {
+    const res = await axios.get(`https://api.mercadolibre.com/items/${itemId}/prices`, {
       headers: { Authorization: `Bearer ${token}` },
       timeout: 3000
     });
@@ -87,7 +136,7 @@ async function getMLPrice(mlUrl, dbPrice) {
       discountPercent = 0;
     } else {
       // Fallback to items endpoint
-      const itemRes = await axios.get(`https://api.mercadolibre.com/items/${mlItemId}`, {
+      const itemRes = await axios.get(`https://api.mercadolibre.com/items/${itemId}`, {
         headers: { Authorization: `Bearer ${token}` },
         timeout: 3000
       });

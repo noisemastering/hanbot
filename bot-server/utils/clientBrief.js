@@ -18,7 +18,17 @@ function buildClientBrief(convo) {
   const name = first(c.extractedName, specs.customerName, c.profileName);
   if (name) parts.push(`Cliente: ${name}`);
 
-  const contact = first(c.leadData && c.leadData.contact);
+  // Prefer the structured contact; if missing, salvage a phone the model left in
+  // the handoff reason (older handoffs predate deterministic capture).
+  let contact = first(c.leadData && c.leadData.contact);
+  if (!contact && c.handoffReason) {
+    try {
+      const { extractPhone } = require("../ai/workflow/handoffGate");
+      contact = extractPhone(c.handoffReason);
+    } catch {
+      /* ignore */
+    }
+  }
   if (contact) parts.push(`Contacto: ${contact}`);
 
   const loc =

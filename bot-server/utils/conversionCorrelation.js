@@ -143,6 +143,22 @@ async function correlateOrder(order, sellerId) {
 
     console.log(`   📦 Ordered items: ${orderedMLItemIds.join(', ')}`);
 
+    // PRODUCT-BASED MATCH (the durable one): map the order's ML item ids to OUR
+    // products via ProductFamily.mlItemIds, so a click (which stores our productId)
+    // matches on the PRODUCT — not on a rotating/relisted ML id string. Item ids
+    // drift when ML relists; our product id never does.
+    let orderedProductIds = new Set();
+    try {
+      const ProductFamily = require('../models/ProductFamily');
+      if (orderedMLItemIds.length) {
+        const fams = await ProductFamily.find({ mlItemIds: { $in: orderedMLItemIds } }).select('_id').lean();
+        orderedProductIds = new Set(fams.map(f => String(f._id)));
+      }
+    } catch (e) {
+      console.error('   ⚠️ product map lookup failed:', e.message);
+    }
+    if (orderedProductIds.size) console.log(`   🧩 Order maps to our product(s): ${[...orderedProductIds].join(', ')}`);
+
     // Name for matching. ML delivers the BUYER ACCOUNT name (~99%) but almost
     // never the shipment receiver name (~0%) — so use the buyer name as the
     // primary, and fall back to the receiver name only if it's ever present.
@@ -222,9 +238,10 @@ async function correlateOrder(order, sellerId) {
     //   item = the product they clicked == the product ordered
     //   nick = our name inside the ML buyer handle (the undisputed topper)
     //   time = ONLY the ≤5-min gate for the weakest (item-only, no zip) case
-    // Tiers: 100 (zip+name+item; +nick ⇒ undisputed) · 90 (zip+item) · 70 (zip+name,
-    //   distinto producto = indirecta) · 50 (zip, distinto producto = indirecta) ·
-    //   25 (item + ≤5min, sin zip) · else NOT attributed.
+    // Tiers: 100 (zip+name+item; +nick ⇒ undisputed) · 90 (zip+item) · 80 (city+item ·
+    //   or name+nick+item) · 70 (zip+name, distinto producto = indirecta) · 60 (city+name) ·
+    //   25 (item + ≤5min, sin zip) · else NOT attributed. Zip/city ALONE (no item, no
+    //   name) do NOT attribute (removed 2026-07-02 — see classify body).
     const normZip = (z) => String(z || '').replace(/\D/g, '');
     const shipZipN = normZip(shippingZipCode);
     const shipCityN = normalizeCity(shippingCity);
@@ -240,7 +257,13 @@ async function correlateOrder(order, sellerId) {
       const cityMatch = !!(uCity && shipCityN && uCity === shipCityN);
       // FULL name only: need first AND last on both sides, all matching.
       const nameMatch = !!(uFirst && uLast && buyerFirstName && buyerLastName && uFirst === buyerFirstName && uLast === buyerLastName);
-      const itemMatch = !!(mlItemId && orderedMLItemIds.includes(mlItemId));
+      // ITEM MATCH = "did they buy the PRODUCT they clicked". Match on OUR product
+      // id (durable; the click stores it) first; the ML item-id string is only a
+      // legacy fallback (it's usually null on clicks and rotates on relists).
+      const itemMatch = !!(
+        (click && click.productId && orderedProductIds.has(String(click.productId))) ||
+        (mlItemId && orderedMLItemIds.includes(mlItemId))
+      );
       const nicknameMatch = !!(uFirst && buyerInfo.nickname && nameInNickname(uFirst, buyerInfo.nickname));
       const minutes = click && click.clickedAt ? (orderDate.getTime() - new Date(click.clickedAt).getTime()) / 60000 : null;
       return { zipMatch, cityMatch, nameMatch, itemMatch, nicknameMatch, minutes };
@@ -264,8 +287,13 @@ async function correlateOrder(order, sellerId) {
         return { pct: 80, confidence: 'high', undisputed: false, ventaIndirecta: false, reason: 'nombre + usuario ML + item, sin ubicación (80%)' };
       if (loc && m.nameMatch)
         return { pct: 70 - drop, confidence: med(70 - drop), undisputed: false, ventaIndirecta: true, reason: `${locTxt} + nombre, distinto producto → venta indirecta (${70 - drop}%)` };
-      if (loc)
-        return { pct: 50 - drop, confidence: med(50 - drop), undisputed: false, ventaIndirecta: true, reason: `${locTxt}, distinto producto → venta indirecta (${50 - drop}%)` };
+      // LOCATION ALONE NO LONGER ATTRIBUTES (user, 2026-07-02). A zip must be
+      // CORROBORATED by the product OR the name — zip+item=90 and zip+name=70 above
+      // already cover those. A bare zip match with NEITHER item NOR name is NOT a
+      // sale: after the profile backfill (44→1,539 users with a CP) a lone-zip rule
+      // flooded the Conversions page with "50% indirecta" credits (many are just a
+      // different household/relative at the same CP buying something else). City
+      // alone was removed earlier for the same reason; zip alone now joins it.
       if (m.itemMatch && m.minutes != null && m.minutes >= 0 && m.minutes <= 5)
         return { pct: 25, confidence: 'low', undisputed: false, ventaIndirecta: false, reason: 'item + tiempo ≤5 min, sin ubicación (25%)' };
       return null;

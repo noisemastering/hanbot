@@ -240,15 +240,18 @@ router.get("/daily", async (req, res) => {
       { $sort: { _id: 1 } }
     ]);
 
-    // Conversions + revenue grouped by click/link date — deduplicated by orderId
+    // Conversions + revenue grouped by the SALE date (conversionData.orderDate),
+    // NOT the click/doc date — otherwise a re-correlation stamps convertedAt/createdAt
+    // = today and every backfilled sale piles onto the run day (the giant "today"
+    // spike). Bucket by when the order actually happened. Deduplicated by orderId.
     const conversionsPerDay = await ClickLog.aggregate([
-      { $match: { converted: true, ...(dateFilter.$gte ? { createdAt: dateFilter } : {}) } },
+      { $match: { converted: true, ...(dateFilter.$gte ? { 'conversionData.orderDate': dateFilter } : { 'conversionData.orderDate': { $ne: null } }) } },
       // Deduplicate: one row per unique orderId per day, keep revenue once
       {
         $group: {
           _id: {
             orderId: '$conversionData.orderId',
-            date: { $dateToString: { format: "%Y-%m-%d", date: "$createdAt", timezone: "America/Mexico_City" } }
+            date: { $dateToString: { format: "%Y-%m-%d", date: "$conversionData.orderDate", timezone: "America/Mexico_City" } }
           },
           revenue: { $first: '$conversionData.totalAmount' }
         }

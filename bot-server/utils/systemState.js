@@ -6,7 +6,9 @@
 const SystemState = require("../models/SystemState");
 
 const TTL_MS = 5000;
-let cache = { killswitch: false, nuke: false, at: 0 };
+// liberado defaults FALSE (restricted): fail-CLOSED so a release-gated feature
+// never leaks to non-super-admins before it's explicitly released.
+let cache = { killswitch: false, nuke: false, liberado: false, at: 0 };
 
 async function getHaltState() {
   if (Date.now() - cache.at > TTL_MS) {
@@ -15,16 +17,18 @@ async function getHaltState() {
       cache = {
         killswitch: !!(s.killswitch && s.killswitch.engaged),
         nuke: !!(s.nuke && s.nuke.engaged),
+        liberado: !!(s.liberado && s.liberado.engaged),
         at: Date.now(),
       };
     } catch (e) {
-      // On a read error, fail OPEN (don't accidentally halt the business) but
-      // keep the stale value if we had one.
+      // On a read error, fail OPEN for the HALT switches (don't accidentally halt
+      // the business) but keep the stale value; liberado keeps its stale value too
+      // (defaults restricted), so the gate stays safe.
       console.error("⚠️ systemState read failed:", e.message);
       cache.at = Date.now();
     }
   }
-  return { killswitch: cache.killswitch, nuke: cache.nuke };
+  return { killswitch: cache.killswitch, nuke: cache.nuke, liberado: cache.liberado };
 }
 
 // True when the BOT must stay silent (either switch halts message processing).
@@ -33,8 +37,15 @@ async function isBotHalted() {
   return s.killswitch || s.nuke;
 }
 
+// True when the system is RELEASED (Liberado ON). When false, gated features are
+// super_admin-only and the bot is capped at 50 conversations/day.
+async function isLiberado() {
+  const s = await getHaltState();
+  return s.liberado;
+}
+
 function invalidate() {
   cache.at = 0;
 }
 
-module.exports = { getHaltState, isBotHalted, invalidate };
+module.exports = { getHaltState, isBotHalted, isLiberado, invalidate };

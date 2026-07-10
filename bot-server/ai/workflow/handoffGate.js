@@ -19,7 +19,10 @@ function extractPhone(text) {
     if (d.length === 13 && d.startsWith("521")) d = d.slice(3);
     else if (d.length === 12 && d.startsWith("52")) d = d.slice(2);
     else if (d.length === 11 && d.startsWith("1")) d = d.slice(1);
-    if (d.length === 10) return d;
+    // Valid MX number: 10 digits, first digit 2-9 (no LADA starts with 0/1). This
+    // rejects random 10-digit runs (order IDs, concatenated zips/dates) that
+    // aren't phones.
+    if (d.length === 10 && /^[2-9]/.test(d)) return d;
   }
   return null;
 }
@@ -46,6 +49,14 @@ const _NOT_NAME = new Set([
   "okay", "claro", "bueno", "buenas", "listo", "ya", "entendi", "entiendo", "vale",
   "perfecto", "aja", "que", "como", "cuanto", "cuando", "donde", "porque", "pues",
   "ahora", "ahorita", "tal", "vez", "mande", "dime", "ver", "ahi", "aqui",
+  // communication / decline / logistics phrases customers send instead of a name
+  // (e.g. "sólo mensajes", "mejor por whatsapp", "no tengo teléfono")
+  "solo", "solamente", "unicamente", "nomas", "nadamas", "mejor", "prefiero", "quiero",
+  "mensaje", "mensajes", "mensajito", "escrito", "texto", "chat", "whatsapp", "wasap",
+  "wats", "correo", "email", "mail", "llamada", "llamadas", "llamar", "llame", "llamen",
+  "telefono", "numero", "celular", "cel", "contacto", "nada", "nadie", "ninguno",
+  "ninguna", "tengo", "puedo", "puede", "puedes", "por", "info", "informacion",
+  "precio", "medida", "malla", "sombra", "cotizacion", "cotizar",
 ]);
 function looksLikeBareName(text) {
   const t = String(text || "").trim();

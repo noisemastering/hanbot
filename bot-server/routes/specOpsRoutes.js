@@ -49,6 +49,7 @@ router.use(authenticate);
 const shape = (s) => ({
   killswitch: { engaged: !!s.killswitch?.engaged, at: s.killswitch?.at || null, by: s.killswitch?.by || null },
   nuke: { engaged: !!s.nuke?.engaged, at: s.nuke?.at || null, by: s.nuke?.by || null },
+  liberado: { engaged: !!s.liberado?.engaged, at: s.liberado?.at || null, by: s.liberado?.by || null },
 });
 
 // Status — any authenticated user (drives the maintenance modal).
@@ -100,6 +101,21 @@ router.post("/nuke", requireSuperAdmin, async (req, res) => {
     res.json({ success: true, ...shape(s) });
   } catch (e) {
     res.status(500).json({ success: false, error: "No se pudo cambiar Nuke'em" });
+  }
+});
+
+// Liberado — super_admin. Body: { engage: boolean }. engage=true → RELEASED.
+router.post("/liberado", requireSuperAdmin, async (req, res) => {
+  try {
+    const engage = !!req.body.engage;
+    const s = await SystemState.getState();
+    s.liberado = { engaged: engage, at: engage ? new Date() : null, by: engage ? (req.user.username || req.user.email || "super_admin") : null };
+    await s.save();
+    invalidate();
+    console.warn(`🚀 [SpecOps] Liberado ${engage ? "ON — features released, cap lifted" : "OFF — gated to super_admin, 50/day cap"} by ${req.user.username || req.user.email}`);
+    res.json({ success: true, ...shape(s) });
+  } catch (e) {
+    res.status(500).json({ success: false, error: "No se pudo cambiar Liberado" });
   }
 });
 

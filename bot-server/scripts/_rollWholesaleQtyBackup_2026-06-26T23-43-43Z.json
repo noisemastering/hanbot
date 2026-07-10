@@ -1,0 +1,583 @@
+[
+  {
+    "id": "6938c74dd77786ffb953502a",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 2x100 > Color Beige",
+    "size": "2x100m",
+    "len": 100,
+    "wholesaleMinQty": 2
+  },
+  {
+    "id": "6938c8edd77786ffb9535c62",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 2x100 > Color Negro",
+    "size": "2x100m",
+    "len": 100,
+    "wholesaleMinQty": 2
+  },
+  {
+    "id": "6938c93dd77786ffb9535c89",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 4x100 > Color Negro",
+    "size": "4x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6938c951d77786ffb9535c9f",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 3x100 > Color Beige",
+    "size": "3x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6938c967d77786ffb9535cb6",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 4x100 > Color Beige",
+    "size": "4x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6938c968d77786ffb9535cbf",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 5x100 > Color Beige",
+    "size": "5x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6939c727b7f2dfa6d9162164",
+    "path": "Ground Cover > Rollo de 2x100 m > Negro",
+    "size": "2x100m",
+    "len": 100,
+    "wholesaleMinQty": 3
+  },
+  {
+    "id": "6939c746b7f2dfa6d916219c",
+    "path": "Ground Cover > Rollo de 2x100 m > Blanco",
+    "size": "2x100m",
+    "len": 100,
+    "wholesaleMinQty": 3
+  },
+  {
+    "id": "6939c755b7f2dfa6d91621d5",
+    "path": "Ground Cover > Rollo de 4x100 m > Negro",
+    "size": "4x100m",
+    "len": 100,
+    "wholesaleMinQty": 3
+  },
+  {
+    "id": "6939c765b7f2dfa6d916220f",
+    "path": "Ground Cover > Rollo de 4x100 m > Blanco",
+    "size": "4x100m",
+    "len": 100,
+    "wholesaleMinQty": 3
+  },
+  {
+    "id": "693cce4d1eda701808d9446d",
+    "path": "Malla Sombra Raschel > 80% > Rollo > Medida 4 x 100 > Color Beige",
+    "size": "4x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "693d8df790cbebaaa1d46946",
+    "path": "Malla Sombra Raschel > 80% > Rollo > Medida 4 x 100 > Color Verde",
+    "size": "4x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "693d8e7390cbebaaa1d46a96",
+    "path": "Malla Sombra Raschel > 70% > Rollo > Medida 4.2 x 100 > Color Beige",
+    "size": "4.2x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6a1e19a406f569435aec69c4",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 5x100 > Color Negro",
+    "size": "5x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6a204733363f85f298cfdb82",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 2x100 > Color Verde",
+    "size": "2x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6a204fafcb28003dfac7e8b7",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 3x100 > Color Negro",
+    "size": "3x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6a204fbbcb28003dfac7e957",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 3x100 > Color Verde",
+    "size": "3x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6a204fcacb28003dfac7ea00",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 4x100 > Color Verde",
+    "size": "4x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6a204fd9cb28003dfac7eaa0",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 5x100 > Color Verde",
+    "size": "5x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6a207acdb1c740c583b5c471",
+    "path": "Malla Sombra Raschel > 80% > Rollo > Medida 4 x 100 > Color Negro",
+    "size": "4x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6a207aecb1c740c583b5c5c2",
+    "path": "Malla Sombra Raschel > 80% > Rollo > Medida 2 x 100 > Color Verde",
+    "size": "2x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6a207aecb1c740c583b5c5c4",
+    "path": "Malla Sombra Raschel > 80% > Rollo > Medida 2 x 100 > Color Beige",
+    "size": "2x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6a207aecb1c740c583b5c5c6",
+    "path": "Malla Sombra Raschel > 80% > Rollo > Medida 2 x 100 > Color Negro",
+    "size": "2x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6a207d04b1c740c583b5d04f",
+    "path": "Malla Sombra Raschel > 70% > Rollo > Medida 4.2 x 100 > Color Negro",
+    "size": "4.2x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6a207dc9b1c740c583b5d330",
+    "path": "Malla Sombra Raschel > 70% > Rollo > Medida 2 x 100 > Color Negro",
+    "size": "2x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6a207dc9b1c740c583b5d332",
+    "path": "Malla Sombra Raschel > 70% > Rollo > Medida 2 x 100 > Color Beige",
+    "size": "2x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6a207ff5b1c740c583b5e1f3",
+    "path": "Malla Sombra Raschel > 50% > Rollo > Medida 4.2 x 100 > Color Negro",
+    "size": "4.2x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6a208080b1c740c583b5e444",
+    "path": "Malla Sombra Raschel > 35% > Rollo > Medida 4.2 x 100 > Color Negro",
+    "size": "4.2x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6a274e577c8a983787736563",
+    "path": "Malla Sombra Raschel > 70% > Rollo > Medida 4.2 x 100 > Color Verde",
+    "size": "4.2x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6a274e757c8a9837877366ba",
+    "path": "Malla Sombra Raschel > 70% > Rollo > Medida 2 x 100 > Color Verde",
+    "size": "2x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6a3aef9dd1471bd645578251",
+    "path": "Ground Cover > Rollo de 2x10 m > Negro",
+    "size": "2x10m",
+    "len": 10,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3aef9dd1471bd645578255",
+    "path": "Ground Cover > Rollo de 2x10 m > Blanco",
+    "size": "2x10m",
+    "len": 10,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3aef9ed1471bd64557825c",
+    "path": "Ground Cover > Rollo de 2x25 m > Negro",
+    "size": "2x25m",
+    "len": 25,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3aef9ed1471bd645578260",
+    "path": "Ground Cover > Rollo de 2x25 m > Blanco",
+    "size": "2x25m",
+    "len": 25,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3aef9ed1471bd645578267",
+    "path": "Ground Cover > Rollo de 2x50 m > Negro",
+    "size": "2x50m",
+    "len": 50,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3aef9fd1471bd64557826b",
+    "path": "Ground Cover > Rollo de 2x50 m > Blanco",
+    "size": "2x50m",
+    "len": 50,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3aef9fd1471bd645578272",
+    "path": "Ground Cover > Rollo de 4x10 m > Negro",
+    "size": "4x10m",
+    "len": 10,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3aef9fd1471bd645578276",
+    "path": "Ground Cover > Rollo de 4x10 m > Blanco",
+    "size": "4x10m",
+    "len": 10,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3aefa0d1471bd64557827d",
+    "path": "Ground Cover > Rollo de 4x25 m > Negro",
+    "size": "4x25m",
+    "len": 25,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3aefa0d1471bd645578281",
+    "path": "Ground Cover > Rollo de 4x25 m > Blanco",
+    "size": "4x25m",
+    "len": 25,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3aefa0d1471bd645578288",
+    "path": "Ground Cover > Rollo de 4x50 m > Negro",
+    "size": "4x50m",
+    "len": 50,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3aefa1d1471bd64557828c",
+    "path": "Ground Cover > Rollo de 4x50 m > Blanco",
+    "size": "4x50m",
+    "len": 50,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af27b02423207332ba3f1",
+    "path": "Malla Sombra Raschel > 35% > Rollo > Medida 4x14 > Color Negro",
+    "size": "4x14m",
+    "len": 14,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af27b02423207332ba3f8",
+    "path": "Malla Sombra Raschel > 35% > Rollo > Medida 4x25 > Color Negro",
+    "size": "4x25m",
+    "len": 25,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af27c02423207332ba3ff",
+    "path": "Malla Sombra Raschel > 35% > Rollo > Medida 4x50 > Color Negro",
+    "size": "4x50m",
+    "len": 50,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af27c02423207332ba406",
+    "path": "Malla Sombra Raschel > 50% > Rollo > Medida 4x10 > Color Negro",
+    "size": "4x10m",
+    "len": 10,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af27c02423207332ba40d",
+    "path": "Malla Sombra Raschel > 50% > Rollo > Medida 4x25 > Color Negro",
+    "size": "4x25m",
+    "len": 25,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af27d02423207332ba414",
+    "path": "Malla Sombra Raschel > 50% > Rollo > Medida 4x50 > Color Negro",
+    "size": "4x50m",
+    "len": 50,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af27d02423207332ba41b",
+    "path": "Malla Sombra Raschel > 70% > Rollo > Medida 4x10 > Color Beige",
+    "size": "4x10m",
+    "len": 10,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af27e02423207332ba41f",
+    "path": "Malla Sombra Raschel > 70% > Rollo > Medida 4x10 > Color Negro",
+    "size": "4x10m",
+    "len": 10,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af27e02423207332ba426",
+    "path": "Malla Sombra Raschel > 70% > Rollo > Medida 4x15 > Color Beige",
+    "size": "4x15m",
+    "len": 15,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af27e02423207332ba42a",
+    "path": "Malla Sombra Raschel > 70% > Rollo > Medida 4x15 > Color Negro",
+    "size": "4x15m",
+    "len": 15,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af27f02423207332ba431",
+    "path": "Malla Sombra Raschel > 70% > Rollo > Medida 4x25 > Color Beige",
+    "size": "4x25m",
+    "len": 25,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af27f02423207332ba435",
+    "path": "Malla Sombra Raschel > 70% > Rollo > Medida 4x25 > Color Negro",
+    "size": "4x25m",
+    "len": 25,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af27f02423207332ba43c",
+    "path": "Malla Sombra Raschel > 70% > Rollo > Medida 4x50 > Color Beige",
+    "size": "4x50m",
+    "len": 50,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28002423207332ba440",
+    "path": "Malla Sombra Raschel > 70% > Rollo > Medida 4x50 > Color Negro",
+    "size": "4x50m",
+    "len": 50,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28002423207332ba447",
+    "path": "Malla Sombra Raschel > 80% > Rollo > Medida 4x10 > Color Beige",
+    "size": "4x10m",
+    "len": 10,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28002423207332ba44b",
+    "path": "Malla Sombra Raschel > 80% > Rollo > Medida 4x10 > Color Negro",
+    "size": "4x10m",
+    "len": 10,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28102423207332ba452",
+    "path": "Malla Sombra Raschel > 80% > Rollo > Medida 4x15 > Color Beige",
+    "size": "4x15m",
+    "len": 15,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28102423207332ba456",
+    "path": "Malla Sombra Raschel > 80% > Rollo > Medida 4x15 > Color Negro",
+    "size": "4x15m",
+    "len": 15,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28202423207332ba45d",
+    "path": "Malla Sombra Raschel > 80% > Rollo > Medida 4x25 > Color Beige",
+    "size": "4x25m",
+    "len": 25,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28202423207332ba461",
+    "path": "Malla Sombra Raschel > 80% > Rollo > Medida 4x25 > Color Negro",
+    "size": "4x25m",
+    "len": 25,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28202423207332ba468",
+    "path": "Malla Sombra Raschel > 80% > Rollo > Medida 4x50 > Color Beige",
+    "size": "4x50m",
+    "len": 50,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28302423207332ba46c",
+    "path": "Malla Sombra Raschel > 80% > Rollo > Medida 4x50 > Color Negro",
+    "size": "4x50m",
+    "len": 50,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28302423207332ba473",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 2x10 > Color Beige",
+    "size": "2x10m",
+    "len": 10,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28302423207332ba477",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 2x10 > Color Negro",
+    "size": "2x10m",
+    "len": 10,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28402423207332ba47e",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 2x15 > Color Beige",
+    "size": "2x15m",
+    "len": 15,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28402423207332ba482",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 2x15 > Color Negro",
+    "size": "2x15m",
+    "len": 15,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28402423207332ba489",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 2x25 > Color Beige",
+    "size": "2x25m",
+    "len": 25,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28502423207332ba48d",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 2x25 > Color Negro",
+    "size": "2x25m",
+    "len": 25,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28502423207332ba494",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 2x50 > Color Beige",
+    "size": "2x50m",
+    "len": 50,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28502423207332ba498",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 2x50 > Color Negro",
+    "size": "2x50m",
+    "len": 50,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28602423207332ba49f",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 4x10 > Color Beige",
+    "size": "4x10m",
+    "len": 10,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28602423207332ba4a3",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 4x10 > Color Negro",
+    "size": "4x10m",
+    "len": 10,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28602423207332ba4aa",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 4x15 > Color Beige",
+    "size": "4x15m",
+    "len": 15,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28702423207332ba4ae",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 4x15 > Color Negro",
+    "size": "4x15m",
+    "len": 15,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28702423207332ba4b5",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 4x25 > Color Beige",
+    "size": "4x25m",
+    "len": 25,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28702423207332ba4b9",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 4x25 > Color Negro",
+    "size": "4x25m",
+    "len": 25,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28802423207332ba4c0",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 4x50 > Color Beige",
+    "size": "4x50m",
+    "len": 50,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3af28802423207332ba4c4",
+    "path": "Malla Sombra Raschel > 90% > Rollo > Medida 4x50 > Color Negro",
+    "size": "4x50m",
+    "len": 50,
+    "wholesaleMinQty": null
+  },
+  {
+    "id": "6a3d8b19a7dd41b3bd9d382a",
+    "path": "Malla Sombra Raschel > 80% > Rollo > Medida 4.2 x 100 > Color Beige",
+    "size": "4.2x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6a3d8b19a7dd41b3bd9d382f",
+    "path": "Malla Sombra Raschel > 80% > Rollo > Medida 4.2 x 100 > Color Verde",
+    "size": "4.2x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  },
+  {
+    "id": "6a3d8b19a7dd41b3bd9d3834",
+    "path": "Malla Sombra Raschel > 80% > Rollo > Medida 4.2 x 100 > Color Negro",
+    "size": "4.2x100m",
+    "len": 100,
+    "wholesaleMinQty": 5
+  }
+]

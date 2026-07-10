@@ -1,0 +1,123 @@
+[
+ {
+  "userId": "6914f4e47fd242acd45b23bf",
+  "psid": "25254027430901957",
+  "prevLocation": {
+   "zipcode": null,
+   "city": null,
+   "state": null,
+   "source": null,
+   "updatedAt": null
+  }
+ },
+ {
+  "userId": "691c9ee2d7bebd58b2f3be95",
+  "psid": "25259383883663714",
+  "prevLocation": {
+   "zipcode": null,
+   "city": null,
+   "state": null,
+   "source": null,
+   "updatedAt": null
+  }
+ },
+ {
+  "userId": "69214f132140a359da95cbed",
+  "psid": "24509445235396350",
+  "prevLocation": {
+   "zipcode": null,
+   "state": null,
+   "city": "CuáLes Su Costó",
+   "source": "stats_question",
+   "updatedAt": "2026-03-23T20:09:32.286Z"
+  }
+ },
+ {
+  "userId": "69b5681b95a2581e7e3a2db5",
+  "psid": "wa:5217736804517",
+  "prevLocation": {
+   "zipcode": null,
+   "city": null,
+   "state": null,
+   "source": null,
+   "updatedAt": null
+  }
+ },
+ {
+  "userId": "69b5a78b95a2581e7e3a68e1",
+  "psid": "wa:5213339486487",
+  "prevLocation": {
+   "zipcode": null,
+   "city": null,
+   "state": null,
+   "source": null,
+   "updatedAt": null
+  }
+ },
+ {
+  "userId": "69b7262426d2dd9077853b6f",
+  "psid": "wa:5218111793340",
+  "prevLocation": {
+   "zipcode": null,
+   "city": null,
+   "state": null,
+   "source": null,
+   "updatedAt": null
+  }
+ },
+ {
+  "userId": "69b78d7c26d2dd9077859d5a",
+  "psid": "wa:5216143020081",
+  "prevLocation": {
+   "zipcode": null,
+   "city": null,
+   "state": null,
+   "source": null,
+   "updatedAt": null
+  }
+ },
+ {
+  "userId": "69edb4bd78d65ba42ef49497",
+  "psid": "wa:5215522991523",
+  "prevLocation": {
+   "zipcode": null,
+   "city": null,
+   "state": null,
+   "source": null,
+   "updatedAt": null
+  }
+ },
+ {
+  "userId": "69ee3e1c78d65ba42ef4ae01",
+  "psid": "wa:5217228946439",
+  "prevLocation": {
+   "zipcode": null,
+   "city": null,
+   "state": null,
+   "source": null,
+   "updatedAt": null
+  }
+ },
+ {
+  "userId": "6a25e6e0d03beb5a435e55e8",
+  "psid": "wa:5213841190577",
+  "prevLocation": {
+   "zipcode": null,
+   "city": null,
+   "state": null,
+   "source": null,
+   "updatedAt": null
+  }
+ },
+ {
+  "userId": "6a2874ebad0ab617355c7014",
+  "psid": "wa:5215530585615",
+  "prevLocation": {
+   "zipcode": null,
+   "city": null,
+   "state": null,
+   "source": null,
+   "updatedAt": null
+  }
+ }
+]

@@ -81,6 +81,10 @@ function extractAllMeasures(text) {
     /\b(un[oa]?|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez|once|doce)\b/g,
     (w) => String(_WORD_NUM[w] ?? w)
   );
+  // Spelled/typo half-measures: "3 y medio", "3 imedio", "3 i medio", "tres y medio"
+  // (→ "3 y medio" above) → "3.5". Mexican Spanish "y medio"/"imedio" = .5. Do this
+  // AFTER worded→digit so "tres y medio" is handled too, and BEFORE the measure regex.
+  cleaned = cleaned.replace(/(\d+)\s*(?:y\s*medi[oa]|i\s*medi[oa]|imedi[oa]|y\s*1\/2)\b/g, "$1.5");
   const re = /(\d+(?:\.\d+)?)\s*(?:[x×*]|por)\s*(\d+(?:\.\d+)?)/g;
   const seen = new Set();
   const out = [];
@@ -136,6 +140,36 @@ function isNoMeasureBuyingSignal(text) {
   return false;
 }
 
+// The customer wants RAIN/WATERPROOF protection. Malla sombra is shade mesh — it
+// is NOT impermeable (water passes through) — so we must never push it as a rain
+// solution. ("para la lluvia", "impermeable", "que no pase el agua", "toldo")
+function wantsWaterproof(text) {
+  const t = String(text || "").toLowerCase();
+  if (/\bimpermeable\b|a prueba de agua|water\s?proof|lona\s+impermeable|\btoldo\b/.test(t)) return true;
+  if (/lluvi|llover|lluev|llovi/.test(t)) return true; // lluvia(s), llover, llueve/llueva, lloviendo/llovizna
+  if (/que no (me )?(pase|entre|cale|traspase) (el )?agua/.test(t)) return true;
+  return false;
+}
+
+// Reforzada (con refuerzo) families — cached. The sin-refuerzo flow uses these to
+// look up + quote the reforzada version of a size it doesn't carry, so it can
+// MENTION "esa medida la tengo en reforzada por $X" + link (no flow switch).
+let _refFamCache = { at: 0, fams: null };
+async function reforzadaFamilies() {
+  if (_refFamCache.fams && Date.now() - _refFamCache.at < 30000) return _refFamCache.fams;
+  const W = require("../../models/Workflow");
+  let fams = [];
+  try {
+    const all = await W.find({ active: true }).select("name family families").lean();
+    const rf = all.find((w) => /con\s*refuerzo/i.test(w.name || "") && !/sin\s*refuerzo/i.test(w.name || ""));
+    fams = rf ? W.familyListOf(rf) || [] : [];
+  } catch (e) {
+    /* ignore */
+  }
+  _refFamCache = { at: Date.now(), fams };
+  return fams;
+}
+
 // Build a fresh state object for a brand-new conversation on this workflow.
 function initState(workflow, vars = {}, setupOverrides = {}) {
   return {
@@ -180,11 +214,31 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       );
       state.contextBlock = contextBlock || "";
       state.product = product || null;
+      // Anchor the color-offer handler (and other product-aware steps) on the
+      // preloaded/promo product from turn 1 — so "¿qué colores?" at first contact
+      // resolves variants instead of falling to the model's "solo beige" answer.
+      if (product && product._id && !state.activeProductId) state.activeProductId = String(product._id);
       state.priceInfo = priceInfo || null;
       state.catalog = catalog || null; // resolved catalog (climb): {url, kind, source}
       state.preloadedAmounts = preloadedAmounts || []; // every preloaded product's price (clamp allow-set)
       state.promoPitch = promoPitch || null; // verbatim sales pitch (sent once, on ask)
       state.promoQuote = promoQuote || null; // deterministic quote when no pitch is set
+      // OPEN THE FILE ON ENGAGEMENT: entering a PRODUCT workflow (not cold-start) with a
+      // message = the client asked about a valid product. Create/ensure the profile now
+      // and record the product interest (POI) — even before any link or handoff. A file
+      // that never goes further (no link, no purchase) is itself a useful telltale: an
+      // engaged lead that didn't convert. Fire-and-forget.
+      if (opts.psid && userMessage && !workflow.isColdStart && Array.isArray(familyList) && familyList.length) {
+        const fam = familyList[0];
+        const loc = require("../utils/locationStats");
+        loc.ensureUserProfile(opts.psid, {}, "engagement")
+          .then(() => loc.syncPOIToUser(opts.psid, {
+            productInterest: (product && product.name) || workflow.name || null,
+            familyId: fam && fam.id ? String(fam.id) : undefined,
+            familyName: fam && fam.name ? fam.name : undefined,
+          }))
+          .catch(() => {});
+      }
     } catch (err) {
       console.error("⚠️ setup context resolution failed:", err.message);
       state.contextBlock = "";
@@ -202,6 +256,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   if (userMessage != null && userMessage !== "") {
     history.push({ role: "user", text: String(userMessage), nodeId: currentNode.id, at: new Date() });
   }
+
+  // Rain/waterproof intent — gates the promo/default quotes and forces an honest
+  // "malla sombra is not waterproof" clarification (it's shade mesh).
+  const rainIntent = userMessage ? wantsWaterproof(String(userMessage)) : false;
 
   // 1.02 DETERMINISTIC LEAD CAPTURE. A phone (or "me llamo X") in the message IS
   // contact info — persist it even when the model doesn't call capture_lead, so a
@@ -231,6 +289,17 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       if (!(state.lead && state.lead.name) && looksLikeBareName(String(userMessage))) {
         state.lead = { ...(state.lead || {}), name: String(userMessage).trim() };
       }
+      // Persist the completed lead (name + phone + zip/city) to the profile.
+      if (opts.psid) {
+        const nm = String((state.lead && state.lead.name) || "").trim().split(/\s+/).filter(Boolean);
+        require("../utils/locationStats").ensureUserProfile(opts.psid, {
+          first_name: nm[0] || undefined,
+          last_name: nm.length > 1 ? nm.slice(1).join(" ") : undefined,
+          phone: (state.lead && state.lead.phone) || undefined,
+          zipcode: (state.location && (state.location.zipcode || state.location.zip)) || undefined,
+          city: (state.location && state.location.city) || undefined,
+        }, "handoff").catch(() => {});
+      }
       const reason = state.pendingHandoff.reason || "El cliente requiere atención de un asesor";
       const who = state.lead && state.lead.name ? `, ${String(state.lead.name).split(/\s+/)[0]}` : "";
       const reply = `¡Gracias${who}! 🙌 Un asesor te contactará lo antes posible para ayudarte.`;
@@ -252,6 +321,57 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       state.pendingHandoff = null;
     }
   }
+
+  // Collect-before-handoff for the DETERMINISTIC early-return paths (steps 1.x)
+  // that run BEFORE the post-node handoff gate. Mirrors that gate: if we already
+  // have a reachable contact, complete the handoff now; otherwise ask for name +
+  // phone — prefaced with any fact we owe the customer (a price quote, a sold-out
+  // note) so one message both informs AND collects — and arm pendingHandoff so
+  // their reply completes it next turn.
+  const beginHandoff = ({ preface, reason } = {}) => {
+    const pre = preface ? `${String(preface).trim()} ` : "";
+    const haveContact = !!(state.lead && (state.lead.phone || state.lead.email || state.lead.name));
+    if (haveContact) {
+      // Persist the lead to the customer's profile at handoff — here we have MORE
+      // than the zip (name + phone). Keyed by psid so correlation can use it later.
+      if (opts.psid) {
+        const nm = String(state.lead.name || "").trim().split(/\s+/).filter(Boolean);
+        require("../utils/locationStats").ensureUserProfile(opts.psid, {
+          first_name: nm[0] || undefined,
+          last_name: nm.length > 1 ? nm.slice(1).join(" ") : undefined,
+          phone: state.lead.phone || undefined,
+          zipcode: (state.location && (state.location.zipcode || state.location.zip)) || undefined,
+          city: (state.location && state.location.city) || undefined,
+        }, "handoff").catch(() => {});
+      }
+      const who = state.lead.name ? `, ${String(state.lead.name).split(/\s+/)[0]}` : "";
+      const reply = `${pre}¡Gracias${who}! 🙌 Un asesor te contactará lo antes posible para ayudarte.`;
+      history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+      return {
+        reply,
+        state: { ...state, history, lead: state.lead || null, location: state.location || null, nodeId: currentNode.id, pendingHandoff: null },
+        diagnostics: {
+          workflow: { id: String(workflow._id), name: workflow.name },
+          fromNode: { id: currentNode.id, name: currentNode.name },
+          toNode: { id: currentNode.id, name: currentNode.name },
+          handoffRequested: true,
+          handoffReason: reason || null,
+        },
+      };
+    }
+    const reply = `${pre}¡Con gusto te paso con un asesor! 🙌 ¿Me compartes tu nombre y un teléfono para que te contacte?`;
+    history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+    return {
+      reply,
+      state: { ...state, history, nodeId: currentNode.id, pendingHandoff: { reason: reason || null, attempts: 1 } },
+      diagnostics: {
+        workflow: { id: String(workflow._id), name: workflow.name },
+        fromNode: { id: currentNode.id, name: currentNode.name },
+        toNode: { id: currentNode.id, name: currentNode.name },
+        handoffPendingContact: true,
+      },
+    };
+  };
 
   // 1.05 ALREADY-PURCHASED. The customer signals the sale is DONE ("ya la compré",
   // "ya pagué", "acabo de comprarla"). NEVER re-pitch the promo or re-share a buy
@@ -337,6 +457,573 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     }
   }
 
+  // 1.07–1.08 ROLLO-FLOW DETERMINISTIC HANDLING. The rollo flow has fixed shades
+  // (35/50/70/80/90), discrete widths and lengths, so its quoting is enforced in
+  // code rather than left to the model:
+  //   (a) UNAVAILABLE SHADE — a % we don't carry → specialist handoff.
+  //   (b) AREA CONFIRM — a non-standard W×L (e.g. 5x20) → confirm the m² it covers.
+  //   (c) RECOMMEND — on confirm, propose the nearest-area real roll + price/link.
+  //   (d) QUANTITY GATE — 2+ rolls = mayoreo → specialist handoff.
+  //   (e) DECLINE — customer rejects the recommendation → specialist handoff.
+  if (userMessage) {
+    try {
+      const Wf = require("../../models/Workflow");
+      const rolloFams = Wf.familyListOf(workflow) || [];
+      const isRollFlow = rolloFams.length > 0 && rolloFams.every((f) => /\brollo\b|ground\s*cover|antimaleza/i.test(f.name || ""));
+      if (isRollFlow) {
+        const { dimsOf, findProductInFamilies, nearestRollByArea, parseRollQuantity } = require("./tools");
+        const { resolvePrice, trackedLink } = require("./priceResolver");
+        const PF = require("../../models/ProductFamily");
+        const msg = String(userMessage);
+        // Accent-insensitive for yes/no detection: \b doesn't fit accented chars
+        // (e.g. \bsí\b fails because "í" isn't a regex word-char), so normalize.
+        const msgN = msg.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+        const affirm = /\b(si|correcto|exacto|asi\s+es|claro|va|vale|sale|dale|de\s+acuerdo|ok|okay|perfecto|adelante|me\s+convence|esa)\b/.test(msgN);
+        const decline = /\b(no|otra|otro|distint\w*|diferente|mejor\s+otra?|busco\s+otra|algo\s+mas|no\s+gracias)\b/.test(msgN);
+        // Shades this rollo flow carries (e.g. 35/50/70/80/90).
+        const carried = new Set();
+        for (const f of rolloFams) for (const s of String(f.name || "").match(/\d{2,3}(?=\s*%)/g) || []) carried.add(s);
+        // A shade the customer stated: "80%", "al 80", OR a BARE "80" — a bare number
+        // counts only when the message has NO measure/length/quantity (so it's not a
+        // size or a roll count). Catches "Buen día 80".
+        const shadeInText = (t) => {
+          const s = String(t || "");
+          let mm = s.match(/(\d{2,3})\s*(?:%|por\s*ciento|porciento)/i);
+          if (mm && carried.has(mm[1])) return mm[1];
+          mm = s.match(/\b(?:al|del?|en|de)\s+(\d{2,3})\b/i);
+          if (mm && carried.has(mm[1])) return mm[1];
+          if (!/[x×]/i.test(s) && !/\b\d+\s*(?:m|mts?|metros?|largo|ancho)\b/i.test(s) && !/\b(?:rollos?|piezas?|unidades?|tramos?)\b/i.test(s)) {
+            for (const n of s.match(/\b(\d{2,3})\b/g) || []) if (carried.has(n)) return n;
+          }
+          return null;
+        };
+        let askedShade = shadeInText(msg);
+        // If we asked "¿qué % de sombra?" last turn, a bare number IS the answer, and
+        // it applies to the measure we remembered then.
+        let rememberedDims = null;
+        if (state.awaitingRollShade) {
+          const bn = (msg.match(/\b(\d{2,3})\b/) || [])[1];
+          if (bn && carried.has(bn)) { askedShade = bn; rememberedDims = state.awaitingRollShade.dims; }
+          state.awaitingRollShade = null;
+        }
+        // Persist an explicit shade so it carries across turns.
+        if (askedShade && carried.has(askedShade)) state.rollShade = askedShade;
+        let reqShade = askedShade || state.rollShade || null;
+        // RULE: the shade must come from the USER — never guessed — EXCEPT a promo.
+        // 1) A shade the client already said EARLIER in the conversation (e.g. "80" in
+        //    the cold-start greeting, BEFORE switching to rollo — history carries over
+        //    the switch). Don't re-ask what they already told us.
+        if (!reqShade) {
+          for (let i = history.length - 1; i >= 0 && i >= history.length - 10; i--) {
+            if (history[i].role !== "user") continue;
+            const hs = shadeInText(history[i].text);
+            if (hs) { reqShade = hs; state.rollShade = hs; break; }
+          }
+        }
+        // 2) A shaded rollo product PRELOADED by the ad → use its shade (promo inferred).
+        if (!reqShade && state.product) {
+          const PF = require("../../models/ProductFamily");
+          let c = state.product;
+          for (let i = 0; i < 8 && c; i++) {
+            const sm = String(c.name || "").match(/(\d{2,3})\s*%/);
+            if (sm && carried.has(sm[1])) { reqShade = sm[1]; break; }
+            c = c.parentId ? await PF.findById(c.parentId).select("name parentId").lean().catch(() => null) : null;
+          }
+        }
+        const dims = dimsOf(msg) || (extractAllMeasures(msg)[0] || null) || rememberedDims;
+        // One-shot "awaiting quantity" flag: set when WE ask "¿cuántos?", so a
+        // number reply ("3", "necesito 3", "tres") is read as the quantity next
+        // turn. Consumed each turn; re-armed only when we ask again.
+        const awaitingQty = !!state.awaitingRollQty;
+        state.awaitingRollQty = false;
+        let qty = parseRollQuantity(msg); // explicit "N rollos/piezas" — works anytime
+        if (qty == null && awaitingQty && !dims && !askedShade) {
+          const mm = msg.match(/\b(\d{1,3})\b/);
+          const W = { un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10 };
+          const wm = msgN.match(/\b(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\b/);
+          if (mm) qty = parseInt(mm[1], 10);
+          else if (wm) qty = W[wm[1]];
+        }
+
+        const ret = (reply, extra) => {
+          history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+          return {
+            reply,
+            state: { ...state, history, nodeId: currentNode.id },
+            diagnostics: {
+              workflow: { id: String(workflow._id), name: workflow.name },
+              fromNode: { id: currentNode.id, name: currentNode.name },
+              toNode: { id: currentNode.id, name: currentNode.name },
+              ...extra,
+            },
+          };
+        };
+        const shadeText = async (leaf) => {
+          let c = leaf;
+          for (let i = 0; i < 8 && c; i++) {
+            const m = String(c.name || "").match(/(\d{2,3})\s*%/);
+            if (m) return m[1];
+            c = c.parentId ? await PF.findById(c.parentId).select("name parentId").lean().catch(() => null) : null;
+          }
+          return null;
+        };
+        // Build a roll recommendation for a target area; quote it + share link, or
+        // hand off if it has no price. Sets rollRecommendation/activeProductId.
+        const recommend = async (area, shade) => {
+          const rec = await nearestRollByArea(area, rolloFams, { shade: shade || undefined });
+          if (!rec) return ret(`Déjame conectarte con un especialista para encontrar la mejor opción para cubrir ${area} m². 🙌`, { handoffRequested: true, handoffReason: `Sin rollo para ${area} m²` });
+          const sh = await shadeText(rec.leaf);
+          const pi = await resolvePrice(rec.leaf);
+          state.pendingAreaConfirm = null;
+          if (pi && pi.amount) {
+            const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: rec.leaf.name, productId: String(rec.leaf._id) });
+            state.activeProductId = String(rec.leaf._id);
+            state.rollRecommendation = { id: String(rec.leaf._id), dims: rec.dims, area };
+            const shadePart = sh ? `al ${sh}% ` : "";
+            const reply = `Perfecto. Para eso te puedo recomendar un rollo ${shadePart}de ${rec.dims[0]} x ${rec.dims[1]} m, con un precio de $${pi.amount}.` + (link ? ` Te dejo el link: ${link}.` : "") + ` Dime si esta opción te convence. 😊`;
+            return ret(reply, { rollAreaRecommended: `${rec.dims[0]}x${rec.dims[1]}` });
+          }
+          state.rollRecommendation = null;
+          return ret(`Para cubrir ${area} m² te recomiendo un rollo de ${rec.dims[0]} x ${rec.dims[1]} m; te conecto con un especialista para confirmarte el precio y el envío. 🙌`, { handoffRequested: true, handoffReason: `Rollo recomendado ${rec.dims[0]}x${rec.dims[1]} sin precio en línea` });
+        };
+
+        // (a) UNAVAILABLE SHADE. Detect ANY %-shade the customer named — even one we
+        // DON'T carry (shadeInText only returns CARRIED shades, so "75%" was invisible
+        // and fell through to the model, which offered 70/80 instead of saying we don't
+        // carry 75%). A %-anchored number that isn't in `carried` → say so + handoff.
+        const rawShadeM = msgN.match(/(\d{2,3})\s*(?:%|por\s*ciento|porciento)/);
+        const rawShade = rawShadeM ? rawShadeM[1] : null;
+        const badShade = (askedShade && carried.size && !carried.has(askedShade)) ? askedShade
+          : (rawShade && carried.size && !carried.has(rawShade)) ? rawShade : null;
+        if (badShade) {
+          return ret(
+            `Por el momento no contamos con porcentaje de sombra al ${badShade}%; sin embargo, te comunico con un especialista para que pueda asesorarte mejor. Cuéntame, ¿a qué le quieres dar sombra? 😊`,
+            { handoffRequested: true, handoffReason: `Cliente pidió % de sombra NO disponible (${badShade}%) en rollo — pasar con un especialista`, unavailableShade: badShade }
+          );
+        }
+        if (askedShade) state.rollShade = askedShade;
+
+        // (e) RECOMMENDATION pending → spec-change (new shade) / decline / accept
+        if (state.rollRecommendation) {
+          if (askedShade && !dims && qty == null) {
+            // shade correction on the same area → re-recommend, NOT a decline
+            return await recommend(state.rollRecommendation.area, askedShade);
+          }
+          if (decline && !affirm && !dims && qty == null) {
+            state.rollRecommendation = null;
+            return ret(`De acuerdo, un asesor se pondrá en contacto contigo para encontrar la mejor solución. 🙌`, { handoffRequested: true, handoffReason: `Cliente no aceptó el rollo recomendado — buscar mejor solución con un asesor` });
+          }
+          if (affirm && !dims && qty == null) state.rollRecommendation = null; // accepted → continue
+        }
+
+        // (b) AREA CONFIRM pending → on confirm, recommend
+        if (state.pendingAreaConfirm) {
+          if (affirm && !decline && !dims) return await recommend(state.pendingAreaConfirm.area, reqShade);
+          if (!dims) state.pendingAreaConfirm = null; // unclear / changed → drop and continue
+        }
+
+        // (d) QUANTITY GATE — 2+ rolls = mayoreo → handoff
+        let rollActive = !!state.activeProductId;
+        if (!rollActive && dims) rollActive = !!(await findProductInFamilies(msg, rolloFams, dims));
+        if (qty != null && qty >= 2 && rollActive) {
+          return ret(`¡Excelente! Para ${qty} rollos manejamos precio de MAYOREO 🙌. Te paso con un especialista para darte el mejor precio y cerrar tu pedido.`, { handoffRequested: true, handoffReason: `Mayoreo: ${qty} rollos — precio y cierre con un especialista` });
+        }
+
+        // (c) MEASURE GIVEN
+        if (dims) {
+          // Resolve at the KNOWN shade (from state or this turn), not by raw msg
+          // text — otherwise a bare "80" reply can't steer the resolver to the 80%
+          // variant and it would pick an arbitrary shade.
+          const resolveQ = reqShade ? `${reqShade}% ${dims[0]}x${dims[1]}` : msg;
+          const exact = await findProductInFamilies(resolveQ, rolloFams, dims);
+          const ed = exact ? dimsOf(exact.size) || dimsOf(exact.name) : null;
+          const isExact = ed && ed[0] === dims[0] && ed[1] === dims[1];
+          if (!isExact) {
+            // Non-standard size → confirm the area it covers, then recommend.
+            const area = dims[0] * dims[1];
+            state.rollRecommendation = null;
+            state.pendingAreaConfirm = { area, dims };
+            return ret(`¡Un gusto atenderte! Veo que el área que buscas cubrir es de ${area} m², ¿correcto?`, { rollAreaConfirm: area });
+          }
+          // EXACT size but the SHADE is unknown (shade-flow) → ASK the % FIRST, no
+          // matter the quantity — NEVER guess a shade (a wrong % is "información
+          // incorrecta"). Remember the measure so the next turn's shade reply quotes
+          // it. Note "un rollo" parses as qty=1, so this must NOT gate on qty==null.
+          if (carried.size > 0 && !reqShade) {
+            const shades = [...carried].map(Number).sort((a, b) => a - b).join("%, ") + "%";
+            state.awaitingRollShade = { dims };
+            return ret(
+              `¡Claro! Ese rollo de ${dims[0]} x ${dims[1]} m lo manejamos en varios porcentajes de sombra (${shades}). ¿Cuál necesitas? 😊`,
+              { rollAskShade: true }
+            );
+          }
+          // EXACT size we carry AND the shade is known → the ONLY thing left to
+          // ask is the QUANTITY. Quote the price and ask how many; the link is
+          // shared only once we know it's 1 roll (quantity gate: 1 → link, 2+ →
+          // mayoreo handoff). Don't re-ask width/shade/area. qty already given
+          // (==1, since 2+ was handled by the gate above) → fall through to quote.
+          // Require a known shade ONLY when the flow has shades (Raschel rollo);
+          // ground cover has none, so the exact size alone is enough to ask qty.
+          const flowHasShades = carried.size > 0;
+          if ((qty == null || qty === 1) && (reqShade || !flowHasShades)) {
+            const pi = await resolvePrice(exact);
+            if (pi && pi.amount) {
+              const sh = await shadeText(exact);
+              state.activeProductId = String(exact._id);
+              const shTxt = sh ? ` al ${sh}%` : "";
+              if (qty === 1) {
+                // 1 roll → MENUDEO: quote + share the link deterministically (don't
+                // hand a known shade+size+qty to the model to re-ask or mis-shade).
+                const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: exact.name, productId: String(exact._id) });
+                return ret(
+                  `¡Claro! El rollo${shTxt} de ${dims[0]} x ${dims[1]} m cuesta $${pi.amount}.` + (link ? ` Aquí lo compras: ${link}` : "") + ` ¿Te ayudo con algo más? 😊`,
+                  { rollQuoted: `${dims[0]}x${dims[1]}` }
+                );
+              }
+              state.awaitingRollQty = true; // a number reply next turn = quantity
+              return ret(
+                `¡Claro! El rollo${shTxt} de ${dims[0]} x ${dims[1]} m tiene un precio de $${pi.amount}. ¿Cuántos rollos necesitas?`,
+                { rollAskQty: `${dims[0]}x${dims[1]}` }
+              );
+            }
+          }
+          // exact + no price → fall through; normal quoting handles it.
+        }
+      }
+    } catch (err) {
+      console.error("⚠️ rollo deterministic handling failed:", err.message);
+    }
+  }
+
+  // 1.09 COMPLEMENTS-FLOW DETERMINISTIC HANDLING. These are NAMED SKUs (kit /
+  // cordón / ojillos packets), NOT measure products — the generic measure-oriented
+  // resolver can't match them by name, so we classify the message + resolve by the
+  // known family IDs and quote live ML, instead of leaving the model to (fail to)
+  // call a tool. Mapping: confeccionada → kit + cordón; rollo/GC → ojillos + cordón.
+  if (userMessage && /Complementos de Instalaci/i.test(workflow.name || "")) {
+    try {
+      const C = require("./complementsResolver");
+      const { resolvePrice, trackedLink } = require("./priceResolver");
+      const PF = require("../../models/ProductFamily");
+      const msg = String(userMessage);
+
+      const net0 = C.classifyNet(msg);
+      if (net0) state.complementNet = net0;
+      const net = state.complementNet || null;
+      const comp = C.classifyComplement(msg);
+
+      const ret = (reply, extra) => {
+        history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+        return {
+          reply,
+          state: { ...state, history, nodeId: currentNode.id },
+          diagnostics: {
+            workflow: { id: String(workflow._id), name: workflow.name },
+            fromNode: { id: currentNode.id, name: currentNode.name },
+            toNode: { id: currentNode.id, name: currentNode.name },
+            ...extra,
+          },
+        };
+      };
+      const quote = async (doc, label) => {
+        const pi = await resolvePrice(doc);
+        if (pi && pi.amount && !pi.handoff) {
+          const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: doc.name, productId: String(doc._id) });
+          state.activeProductId = String(doc._id);
+          return ret(`El ${label} cuesta $${pi.amount}.` + (link ? ` Aquí lo puedes comprar: ${link}` : "") + ` ¿Te ayudo con algo más? 😊`, { complementQuoted: label });
+        }
+        return ret(`Déjame conectarte con un especialista para confirmarte el precio del ${label}. 🙌`, { handoffRequested: true, handoffReason: `Complemento "${label}" sin precio en línea` });
+      };
+
+      // OJILLOS / SUJETADORES → resolve the packet by piece count
+      const awaitingOj = !!state.awaitingOjillosQty;
+      state.awaitingOjillosQty = false;
+      if (comp === "ojillos" || (awaitingOj && /\d/.test(msg))) {
+        let qty = C.parseOjillosQty(msg);
+        if (qty == null && awaitingOj) { const mm = msg.match(/\b(\d{1,3})\b/); if (mm) qty = parseInt(mm[1], 10); }
+        const packet = C.nearestPacket(qty);
+        if (packet) {
+          const doc = await C.resolveOjillosPacket(PF, packet);
+          if (doc) return await quote(doc, `paquete de ${packet} ojillos sujetadores`);
+        }
+        const packets = await C.ojillosPackets(PF);
+        state.awaitingOjillosQty = true;
+        return ret(`Los ojillos sujetadores los manejamos por paquete (${packets.map((p) => p.n).join(", ")} piezas). ¿Cuántos necesitas? 😊`, { complementAskQty: true });
+      }
+      // KIT (confeccionada) and CORDÓN (universal) — single SKUs, quote directly.
+      if (comp === "kit") {
+        const doc = await C.resolveKit(PF);
+        if (doc) return await quote(doc, "kit de instalación");
+      }
+      if (comp === "cordon") {
+        const doc = await C.resolveCordon(PF);
+        if (doc) return await quote(doc, "cordón con protección UV (rollo de 47 m)");
+      }
+      // No complement named yet, but we know the NET → recommend the mapped ones.
+      if (!comp && net) {
+        if (net === "confeccionada")
+          return ret(`Para tu malla confeccionada te recomiendo el kit de instalación y el cordón con protección UV. ¿Cuál te cotizo? 😊`, { complementRecommend: "kit+cordon" });
+        return ret(`Para ${net === "groundcover" ? "ground cover" : "tu rollo de malla"} te recomiendo los ojillos sujetadores y el cordón con protección UV. ¿Cuál te cotizo? 😊`, { complementRecommend: "ojillos+cordon" });
+      }
+      // else: nothing determinable yet (greeting / unclear) → fall through to graph.
+    } catch (err) {
+      console.error("⚠️ complements deterministic handling failed:", err.message);
+    }
+  }
+
+  // 1.084 BORDE QUANTITY GATE. The borde flow (length-only rolls: 6/9/18/54 m) is
+  // model-driven and shared the link immediately. User's rule: ASK how many rolls
+  // BEFORE sharing the link (like rollo). Resolve the length → quote the unit price and
+  // ask "¿cuántos?"; on the reply, 1 → link, 2+ → mayoreo handoff.
+  try {
+    const bordeFams = require("../../models/Workflow").familyListOf(workflow) || [];
+    const isBordeFlow = /borde/i.test(workflow.name || "") || bordeFams.some((f) => /borde/i.test(f.name || ""));
+    if (userMessage && isBordeFlow) {
+      const { findProductInFamilies, parseRollQuantity } = require("./tools");
+      const { resolvePrice, trackedLink } = require("./priceResolver");
+      const PFm = require("../../models/ProductFamily");
+      const msgB = String(userMessage);
+      const retB = (reply, extra) => {
+        history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+        return { reply, state: { ...state, history, nodeId: currentNode.id }, diagnostics: { workflow: { id: String(workflow._id), name: workflow.name }, fromNode: { id: currentNode.id, name: currentNode.name }, toNode: { id: currentNode.id, name: currentNode.name }, ...extra } };
+      };
+      const parseQty = () => {
+        let q = parseRollQuantity(msgB);
+        if (q == null) {
+          const mm = msgB.match(/\b(\d{1,3})\b/);
+          const W = { un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10 };
+          const wm = msgB.toLowerCase().match(/\b(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\b/);
+          if (mm) q = parseInt(mm[1], 10); else if (wm) q = W[wm[1]];
+        }
+        return q;
+      };
+      const mayoreo = (n) => retB(`¡Excelente! Para ${n} rollos de borde manejamos precio de MAYOREO 🙌. Te paso con un especialista para darte el mejor precio y cerrar tu pedido.`, { handoffRequested: true, handoffReason: `Mayoreo borde: ${n} rollos` });
+      const shareLink = async (leaf, len) => {
+        const pi = await resolvePrice(leaf);
+        if (!pi || !pi.amount) return null;
+        const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: leaf.name, productId: String(leaf._id) });
+        return retB(`¡Perfecto! El rollo de ${len} m está en $${pi.amount}.` + (link ? ` Aquí lo compras: ${link}` : ""), { bordeQuoted: len });
+      };
+      // A) awaiting quantity from last turn (we asked "¿cuántos?")
+      if (state.awaitingBordeQty) {
+        const rec = state.awaitingBordeQty; state.awaitingBordeQty = null;
+        const q = parseQty();
+        if (q != null && q >= 2) return mayoreo(q);
+        const leaf = await PFm.findById(rec.productId).lean().catch(() => null);
+        const out = leaf ? await shareLink(leaf, rec.length) : null;
+        if (out) return out;
+      }
+      // B) a new SINGLE, EXACT length (no W×L, exactly one length number) → resolve to a
+      // LENGTH-ONLY borde product. Skip 2+ lengths (multi-length path quotes each) and
+      // non-exact lengths like 57 (the closest-size path handles those).
+      const hasWxL = /\d+\s*[x×*]\s*\d+/.test(msgB);
+      const allNums = [...new Set((msgB.replace(/\d+\s*[x×*]\s*\d+/g, " ").match(/\b\d{1,3}\b/g)) || [])];
+      if (!hasWxL && allNums.length === 1 && !state.awaitingBordeQty) {
+        const len = allNums[0];
+        // Resolve on the FULL message so "grueso/delgado" is respected (not just the length).
+        const leaf = await findProductInFamilies(msgB, bordeFams, null).catch(() => null);
+        const ed = leaf && leaf.enabledDimensions;
+        const exactLen = leaf && new RegExp(`\\b${len}\\b`).test(`${leaf.name || ""} ${leaf.size || ""}`);
+        if (leaf && exactLen && Array.isArray(ed) && ed.length && !ed.includes("width")) {
+          const pi = await resolvePrice(leaf);
+          if (pi && pi.amount) {
+            state.activeProductId = String(leaf._id);
+            const q = parseRollQuantity(msgB); // explicit "N rollos" only (the bare number IS the length here)
+            if (q != null && q >= 2) return mayoreo(q);
+            if (q === 1) return await shareLink(leaf, len);
+            state.awaitingBordeQty = { productId: String(leaf._id), length: len };
+            return retB(`¡Claro! El rollo de ${len} m está en $${pi.amount}. ¿Cuántos rollos necesitas? 😊`, { bordeAskQty: len });
+          }
+        }
+      }
+      // C) borde price/product inquiry with NO length yet → deterministically ASK the
+      // length (6/9/18/54 m) instead of letting the model escalate to an asesor. The
+      // model, under some setups (wholesale/manual), hands off on a bare "precio del
+      // borde"; the human rule is: ask the length first, always.
+      if (!hasWxL && allNums.length === 0 && !state.awaitingBordeQty) {
+        const wantsBorde = /(precio|cuánto|cuanto|cotiz|cost|vale|borde|separador|rollo|metr|largo)/i.test(msgB);
+        if (wantsBorde) {
+          return retB(`¡Claro! Manejo el borde separador en rollos de 6, 9, 18 y 54 m. ¿Qué largo necesitas? 😊`, { bordeAskLength: true });
+        }
+      }
+    }
+  } catch (err) {
+    console.error("⚠️ borde quantity gate failed:", err.message);
+  }
+
+  // 1.085 REFORZADA WHOLESALE QUANTITY GATE. When the customer names a quantity of
+  // confeccionada pieces >= that product's wholesaleMinQty (lives on the SIZE-GROUP
+  // ancestor, not the color leaf), it's a WHOLESALE order → recognize it and route
+  // to an asesor, collecting name+phone (beginHandoff). Below the threshold it's
+  // retail → fall through to the normal per-unit quote + link.
+  if (userMessage && /con Refuerzo.*Retail/i.test(workflow.name || "")) {
+    try {
+      const { parseRollQuantity, findProductInFamilies, dimsOf } = require("./tools");
+      const { resolvePrice } = require("./priceResolver");
+      const PF = require("../../models/ProductFamily");
+      const refFams = require("../../models/Workflow").familyListOf(workflow) || [];
+      const msg = String(userMessage);
+      const qty = parseRollQuantity(msg);
+      const dims = dimsOf(msg) || (extractAllMeasures(msg)[0] || null);
+      if (qty && qty >= 2 && dims && refFams.length) {
+        const leaf = await findProductInFamilies(msg, refFams, dims);
+        if (leaf) {
+          let wmq = null, c = leaf, i = 0;
+          while (c && i++ < 8) {
+            if (Number.isFinite(c.wholesaleMinQty) && c.wholesaleMinQty > 0) { wmq = c.wholesaleMinQty; break; }
+            c = c.parentId ? await PF.findById(c.parentId).select("parentId wholesaleMinQty").lean().catch(() => null) : null;
+          }
+          if (wmq && qty >= wmq) {
+            const pi = await resolvePrice(leaf).catch(() => null);
+            const unit = pi && pi.amount ? ` (cada una $${pi.amount})` : "";
+            return beginHandoff({
+              preface: `¡Claro! ${qty} piezas de ${dims[0]}x${dims[1]} m${unit} entran en precio de MAYOREO; te preparo una cotización por volumen.`,
+              reason: `Mayoreo confeccionada: ${qty} piezas de ${dims[0]}x${dims[1]} (umbral mayoreo ${wmq})`,
+            });
+          }
+          // qty < wholesaleMinQty → retail; fall through to the normal quote.
+        }
+      }
+    } catch (err) {
+      console.error("⚠️ reforzada wholesale gate failed:", err.message);
+    }
+  }
+
+  // 1.0855 DEFERRED CP ASK — a link was shared last turn (pendingZipAsk armed). The CP
+  // ask is mandatory but must land on THIS turn (once the client reacted to the link),
+  // NOT on the same message as the link. Only fire if we still lack the zip, the client
+  // isn't giving one now, and they aren't firing a NEW request (answer that instead — a
+  // fresh link re-arms this). One-shot.
+  if (userMessage && state.pendingZipAsk) {
+    const haveZip = !!(state.location && (state.location.zip || state.location.zipcode));
+    const msgHasZip = /\b\d{5}\b/.test(String(userMessage));
+    const isNewRequest = /\b(colores?|verde|negro|negra|beige|blanc|gris|precio|cu[aá]nto|medida|link|enlace|comprar|otra|otro)\b/i.test(String(userMessage)) || /\d+\s*[x×*]\s*\d+/.test(String(userMessage));
+    state.pendingZipAsk = false; // one-shot regardless
+    if (!haveZip && !msgHasZip && !isNewRequest) {
+      const reply = "¡Con gusto! ¿Me compartes tu código postal? Es solo para fines estadísticos. 🙏";
+      history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+      return {
+        reply,
+        state: { ...state, history, nodeId: currentNode.id },
+        diagnostics: {
+          workflow: { id: String(workflow._id), name: workflow.name },
+          fromNode: { id: currentNode.id, name: currentNode.name },
+          toNode: { id: currentNode.id, name: currentNode.name },
+          deferredZipAsk: true,
+        },
+      };
+    }
+  }
+
+  // 1.086 SIN-REFUERZO COLOR — sin refuerzo (con argollas) is BEIGE ONLY. A non-beige
+  // color request must be answered IN-FLOW (don't route to handoff): quote stays
+  // beige and we point to reforzada for other colors. Deterministic so a routing
+  // edge can't escalate a simple color question.
+  if (userMessage && /sin\s*refuerzo/i.test(workflow.name || "")) {
+    try {
+      const msgN = String(userMessage).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      const nonBeige = /\b(negro|negra|verde|gris|azul|rojo|blanco|caf[e]|marr[o]n|terracota|vino)\b/.test(msgN) && !/beige/.test(msgN);
+      if (nonBeige) {
+        const reply =
+          `La malla sin refuerzo (con argollas) solo la manejo en BEIGE. 😊 ` +
+          `Si buscas otro color como negro o verde, lo tengo en la malla REFORZADA. ` +
+          `¿Te cotizo la medida que necesitas en beige sin refuerzo, o prefieres ver la reforzada?`;
+        history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+        return {
+          reply,
+          state: { ...state, history, nodeId: currentNode.id },
+          diagnostics: {
+            workflow: { id: String(workflow._id), name: workflow.name },
+            fromNode: { id: currentNode.id, name: currentNode.name },
+            toNode: { id: currentNode.id, name: currentNode.name },
+            sinRefuerzoBeigeOnly: true,
+          },
+        };
+      }
+    } catch (err) {
+      console.error("⚠️ sin-refuerzo color handler failed:", err.message);
+    }
+  }
+
+  // 1.087 COLOR OFFER — for flows whose products HAVE real color variants (reforzada
+  // confeccionada: beige/negro/verde). "¿qué colores?" / "en verde/blanco" with NO
+  // fresh measure → LIST the available colors for the active measure, each with its
+  // OWN live price + tracked link. NEVER answer "solo beige" or hand off for a color
+  // we stock (verde/negro ARE in stock). Bug (reported ×2): the promo-beige context
+  // made the model say "la promo es solo beige" and escalate on verde.
+  const colorAnchorId = state.activeProductId || (state.product && state.product._id) || null;
+  if (userMessage && colorAnchorId && !/sin\s*refuerzo/i.test(workflow.name || "") && !/\brollo\b|ground\s*cover|antimaleza/i.test(workflow.name || "")) {
+    try {
+      const msgC = String(userMessage).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      const COLORW = /\b(beige|negro|negra|verde|blanc[oa]|gris|azul|rojo|caf[e]|marr[o]n|terracota|vino)\b/;
+      const asksColor = /\bcolor(es)?\b/.test(msgC) || /de\s+qu[e]\s+color/.test(msgC) || /otro\s+color/.test(msgC) || COLORW.test(msgC);
+      const hasDims = /\d+(?:\.\d+)?\s*[x×*]\s*\d+/.test(msgC); // a fresh W×L is handled by the measure path (it resolves colors too)
+      if (asksColor && !hasDims) {
+        const PF = require("../../models/ProductFamily");
+        const { availableVariantsForProduct } = require("./tools");
+        const { resolvePrice, trackedLink } = require("./priceResolver");
+        const anchor = await PF.findById(colorAnchorId).lean().catch(() => null);
+        const variants = anchor ? await availableVariantsForProduct(anchor).catch(() => []) : [];
+        if (variants.length > 1) {
+          const lineByColor = new Map(); // "beige" → "• Beige: $X → link"
+          for (const v of variants) {
+            const leaf = await PF.findById(v.id).lean().catch(() => null);
+            const pi = leaf ? await resolvePrice(leaf).catch(() => null) : null;
+            if (pi && Number.isFinite(pi.amount) && pi.amount > 0 && !pi.soldOut) {
+              const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: `${anchor.size || ""} ${v.label}`.trim(), productId: v.id });
+              // If THIS color also carries a live discount, mention it (rebajado de $X).
+              const disc = pi.hasDiscount && Number.isFinite(pi.originalPrice) && pi.originalPrice > pi.amount ? `, rebajado de $${Math.round(pi.originalPrice)}` : "";
+              lineByColor.set(String(v.label).toLowerCase(), `• ${v.label}: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${disc}${link ? ` → ${link}` : ""}`);
+            }
+          }
+          if (lineByColor.size) {
+            const size = anchor.size || "esa medida";
+            const cap = (c) => c.charAt(0).toUpperCase() + c.slice(1);
+            // Colors the customer NAMED this turn (normalize spelling variants).
+            const named = [...new Set((msgC.match(new RegExp(COLORW.source, "g")) || []).map((c) => c.replace("negra", "negro").replace(/blanc[oa]/, "blanco").replace(/caf[e]/, "cafe").replace(/marr[o]n/, "marron")))];
+            const namedHave = named.filter((c) => lineByColor.has(c));
+            const namedMissing = named.filter((c) => !lineByColor.has(c));
+            let reply, definitiveLink = false;
+            // The link IS the call to action — NEVER close with "¿te interesa?"/"¿te la
+            // aparto?". The CP ask is mandatory but MUST come on the NEXT turn (once the
+            // client reacts to the link), NOT stapled to the link message — so here we
+            // only ARM it (pendingZipAsk) and the deferred step below asks it next turn.
+            const haveZip = !!(state.location && (state.location.zip || state.location.zipcode));
+            if (namedHave.length) {
+              // Answer ONLY the color(s) asked (user: one color is enough, don't dump all 3).
+              const preU = namedMissing.length ? `En ${namedMissing.map(cap).join(" y ")} no la manejamos, pero ` : ``;
+              if (namedHave.length === 1) {
+                reply = `${preU}sí, la ${size} en ${cap(namedHave[0])}:\n${lineByColor.get(namedHave[0])}`;
+                definitiveLink = true; // one color, one link → arm the deferred CP ask
+              } else {
+                reply = `${preU}la ${size} la tenemos en:\n${namedHave.map((c) => lineByColor.get(c)).join("\n")}\n¿Cuál prefieres? 😊`;
+              }
+            } else if (namedMissing.length) {
+              // Only a color we DON'T carry was named → say so + list what we have.
+              reply = `Ese color no lo manejamos, pero la ${size} la tenemos en:\n${[...lineByColor.values()].join("\n")}\n¿Cuál prefieres? 😊`;
+            } else {
+              // General "¿qué colores?" (no specific color named) → list all available.
+              reply = `la ${size} la tenemos en:\n${[...lineByColor.values()].join("\n")}\n¿Cuál prefieres? 😊`;
+            }
+            history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+            return {
+              reply,
+              state: { ...state, history, nodeId: currentNode.id, pendingZipAsk: (definitiveLink && !haveZip) ? true : (state.pendingZipAsk || false) },
+              diagnostics: {
+                workflow: { id: String(workflow._id), name: workflow.name },
+                fromNode: { id: currentNode.id, name: currentNode.name },
+                toNode: { id: currentNode.id, name: currentNode.name },
+                colorOffer: lineByColor.size,
+              },
+            };
+          }
+        }
+      }
+    } catch (err) {
+      console.error("⚠️ color-offer handler failed:", err.message);
+    }
+  }
+
   // 1.1 VERBATIM PROMO PITCH (sent ONCE, when the customer asks about the promo).
   // If the active promo has a sales pitch and we haven't sent it, a tiny gpt-4o-mini
   // intent check decides whether THIS message asks for the promo. If so, we send
@@ -347,7 +1034,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // (client pivoted to another measure) — so a customer CIRCLING BACK to ask for
   // the promo re-surfaces it. The verbatim pitch is sent only once; re-asks get
   // the cheap deterministic quote.
-  if (userMessage && !state.purchased && (state.promoPitch || state.promoQuote) && (!state.promoPitchSent || state.promoDismissed)) {
+  if (userMessage && !state.purchased && !rainIntent && (state.promoPitch || state.promoQuote) && (!state.promoPitchSent || state.promoDismissed)) {
     try {
       const { wantsPromo } = require("../utils/promoIntent");
       if (await wantsPromo(String(userMessage))) {
@@ -404,6 +1091,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   if (
     userMessage &&
     !state.purchased &&
+    !rainIntent &&
     !state.promoDismissed &&
     state.product &&
     state.product._id &&
@@ -424,6 +1112,14 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         const doc = await PF.findById(state.product._id).lean().catch(() => null);
         if (doc && doc.sellable) {
           const pi = await resolvePrice(doc);
+          if (pi && pi.soldOut) {
+            // Active but out of stock → acknowledge AND hand off (capture the lead
+            // so a human follows up / notifies when it returns).
+            return beginHandoff({
+              preface: `¡Claro que la manejamos! Pero por el momento está agotada 😕.`,
+              reason: pi.handoffReason || `Producto AGOTADO: ${doc.name}`,
+            });
+          }
           if (pi && pi.amount) {
             amount = pi.amount;
             plusIva = !!pi.plusIva;
@@ -434,6 +1130,14 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
               productName: doc.name,
               productId: String(doc._id),
             });
+            // Price but NO purchase link → quote it AND hand off to close the sale.
+            if (pi.quoteThenHandoff || (pi.handoff && !link)) {
+              const nm = doc.size || doc.name;
+              return beginHandoff({
+                preface: `¡Claro! La malla de ${nm} tiene un precio de $${amount}${plusIva ? " + IVA" : ""}.`,
+                reason: pi.handoffReason || `Sin link de compra: ${doc.name}`,
+              });
+            }
           }
         }
       }
@@ -477,13 +1181,23 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // the confeccionada-vs-rollo split (a 100 m measure only exists in the rollo
   // flow's realm) with no length heuristic.
   let skipLLMSwitch = false;
-  if (userMessage && (opts._switchDepth || 0) < 2 && !opts.sandboxNoAutoSwitch) {
+  // The sin-refuerzo flow self-manages measures (sin sizes → quote; missing sizes
+  // → MENTION reforzada + link, never switch), so the measure router is skipped
+  // while inside it.
+  const inSinRefuerzo = /sin\s*refuerzo/i.test(workflow.name || "");
+  // The ROLLO flow likewise self-manages roll measures. A roll W×L (e.g. 2x10)
+  // also exists as a confeccionada piece, so the cross-flow router would bounce a
+  // roll customer to a "¿reforzada o rollo?" clarify — wrong when they're already
+  // in the rollo flow asking for a roll. Skip the router here; step 1.6 resolves
+  // the roll within the flow.
+  const isRollFlow = familyList.length > 0 && familyList.every((f) => /\brollo\b|ground\s*cover|antimaleza/i.test(f.name || ""));
+  if (userMessage && !inSinRefuerzo && !isRollFlow && (opts._switchDepth || 0) < 2 && !opts.sandboxNoAutoSwitch) {
     try {
       const { dimsOf } = require("./tools");
       const earlyDims = dimsOf(String(userMessage)) || extractAllMeasures(String(userMessage))[0] || null;
       if (earlyDims) {
         const { routeByMeasure, buildClarifyQuestion } = require("./measureRouter");
-        const r = await routeByMeasure(String(userMessage), earlyDims, String(workflow._id));
+        const r = await routeByMeasure(String(userMessage), earlyDims, String(workflow._id), { isColdStart: !!workflow.isColdStart });
         if (r.action === "switch") {
           const handover = await performSwitch(
             { toWorkflowId: r.toWorkflowId, toName: r.toName, product: r.product },
@@ -572,6 +1286,11 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // (e.g. no live ML + inventario below the last-synced ML), we fire a REAL
   // handoff with this reason — not just a textual "te paso con un asesor".
   let turnHandoffReason = null;
+  // When a handoff fires this turn but we still owe the customer a fact (a price
+  // quote, a "sold out" acknowledgement), this preface is prepended to the
+  // collect-before-handoff ask so the same message both informs them AND asks for
+  // their contact (instead of swallowing the quote with a generic ask).
+  let turnHandoffPreface = null;
   // True when the customer asked for a SPECIFIC measure this turn and we resolved
   // its real price. In that case the promo/preloaded default price must NOT be an
   // allowed substitute for it (that's how the 6x4 promo $655 leaked onto a 3x5).
@@ -586,6 +1305,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // See clampPrices in priceResolver.js. Empty set → clamp is a no-op.
   const allowedAmounts = [];
   let primaryQuoteAmount = null;
+  // When the turn quoted a measure NOT in catalog and offered the nearest size
+  // instead, the reply legitimately names a DIFFERENT measure → don't clamp it.
+  let usedClosestMeasure = false;
   const noteAmount = (pi, makePrimary) => {
     if (!pi) return;
     if (Number.isFinite(pi.amount) && pi.amount > 0) {
@@ -605,6 +1327,36 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // inject it FRESH each turn so the handoff node can tell the customer whether
   // a specialist responds now or in the next business window.
   let turnContextExtra = businessHoursContext();
+  // ALREADY-STATED SHADE %: the rollo deterministic handler persists state.rollShade
+  // when the customer states/implies a shade (incl. a bare "80" or one said earlier
+  // in the conversation). Tell the model so the descubrir node asks for the LARGO/
+  // ÁREA and NEVER re-asks the % the customer already gave.
+  {
+    const isRoll = (require("../../models/Workflow").familyListOf(workflow) || []).some((f) => /\brollo\b|ground\s*cover|antimaleza/i.test(f.name || ""));
+    if (isRoll && state.rollShade) {
+      turnContextExtra += `\n- EL CLIENTE YA INDICÓ ${state.rollShade}% DE SOMBRA — NO se lo vuelvas a preguntar. Continúa pidiéndole el LARGO que necesita o el ÁREA a cubrir.`;
+    }
+  }
+  // ALREADY-CAPTURED LOCATION: if we already have the customer's CP/city, tell the
+  // model so it NEVER asks for it again (it was re-asking 2–3× because the captured
+  // zip lived in state but never reached the node prompt).
+  {
+    const knownZip = state.location && (state.location.zip || state.location.zipcode);
+    const knownCity = state.location && state.location.city;
+    if (knownZip || knownCity) {
+      turnContextExtra +=
+        `\n- DATO YA CAPTURADO (NO lo vuelvas a pedir): ya tienes ${knownZip ? `el código postal del cliente (${knownZip})` : ""}` +
+        `${knownZip && knownCity ? " y " : ""}${knownCity ? `su ciudad (${knownCity})` : ""}. ` +
+        `Úsalo para el envío/cotización; NUNCA le pidas de nuevo el código postal ni la ciudad.`;
+    }
+  }
+  // RAIN/WATERPROOF: never sell malla sombra as a rain solution — it's shade mesh.
+  if (rainIntent) {
+    turnContextExtra +=
+      `\n- LLUVIA / IMPERMEABLE: el cliente menciona lluvia o algo impermeable. La malla sombra da SOMBRA y reduce el calor, pero NO es impermeable: deja pasar el agua y NO detiene la lluvia. ` +
+      `Acláraselo con HONESTIDAD; NO la ofrezcas ni la cotices como solución para la lluvia, y NO le mandes el link de compra para ese fin. Hanlob NO vende lonas impermeables ni toldos. ` +
+      `Pregúntale si le sirve para dar sombra / reducir el calor (que es para lo que sí funciona).`;
+  }
   let turnColors = null;
   if (userMessage) {
     try {
@@ -638,23 +1390,40 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         const { resolvePrice, trackedLink } = require("./priceResolver");
         turnPriceInfo = null; // a multi-quote has no single price → no clamp primary, no carried-promo pollution
         const lines = [];
+        const customerLines = []; // clean, customer-facing (used as the handoff preface if we escalate)
         let resolvedAny = false;
+        let multiNeedsHandoff = false;
         for (const d of allMeasures) {
+          const tag = `${d[0]}x${d[1]}m`;
           const doc = await findProductInFamilies(String(userMessage), familyList, d);
           if (!doc) {
-            lines.push(`  • ${d[0]}x${d[1]}m: no es medida estándar — ofrécele la más cercana o pásalo con un asesor.`);
+            lines.push(`  • ${tag}: no es medida estándar — ofrécele la más cercana o pásalo con un asesor.`);
             continue;
           }
           const pi = await resolvePrice(doc);
-          if (pi && pi.amount) {
+          if (pi && pi.soldOut) {
+            // Active but out of stock → note it AND escalate (capture the lead).
+            lines.push(`  • ${tag}: SÍ la manejamos pero está AGOTADA por ahora — NO compartas link; el sistema la pasará con un asesor.`);
+            customerLines.push(`• ${tag}: la manejamos, pero por ahora está agotada.`);
+            multiNeedsHandoff = true;
+            turnHandoffReason = turnHandoffReason || `Producto AGOTADO ${tag}: ${pi.handoffReason || "sin stock — pasar con un asesor"}`;
+          } else if (pi && pi.amount) {
             resolvedAny = true;
             turnActiveProductId = String(doc._id);
             noteAmount(pi, false); // each price is allowed; no single primary in a multi-quote
             const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: doc.name, productId: String(doc._id) });
-            lines.push(`  • ${d[0]}x${d[1]}m: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${link ? ` → ${link}` : ""}`);
+            lines.push(`  • ${tag}: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${link ? ` → ${link}` : ""}`);
+            customerLines.push(`• ${tag}: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${link ? ` → ${link}` : ""}`);
+            // Price but NO purchase link → still quote it, but escalate to close.
+            if (pi.quoteThenHandoff || (pi.handoff && !link)) {
+              multiNeedsHandoff = true;
+              turnHandoffReason = turnHandoffReason || `Cotización ${tag}: ${pi.handoffReason || "sin link de compra — concretar con un asesor"}`;
+            }
           } else if (pi && pi.handoff) {
-            lines.push(`  • ${d[0]}x${d[1]}m: sin precio confirmado — pásalo con un asesor para el precio.`);
-            turnHandoffReason = turnHandoffReason || `Cotización ${d[0]}x${d[1]}m: ${pi.handoffReason || "validar precio con un asesor"}`;
+            lines.push(`  • ${tag}: sin precio confirmado — el sistema la pasará con un asesor para el precio.`);
+            customerLines.push(`• ${tag}: el precio te lo confirma un asesor.`);
+            multiNeedsHandoff = true;
+            turnHandoffReason = turnHandoffReason || `Cotización ${tag}: ${pi.handoffReason || "validar precio con un asesor"}`;
           }
         }
         if (resolvedAny) {
@@ -664,7 +1433,63 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         }
         turnContextExtra +=
           `\n- COTIZACIÓN MÚLTIPLE: el cliente pidió varias medidas en un mismo mensaje. Cotiza CADA una con SU PROPIO precio y SU PROPIO link (una línea por medida); NUNCA uses el mismo precio o link para dos medidas distintas:\n${lines.join("\n")}`;
+        // If any measure needs a human (sold out / no link / no price), escalate —
+        // but keep the resolved quotes by prefacing the handoff ask with them.
+        if (multiNeedsHandoff && customerLines.length) {
+          turnHandoffPreface = `Te paso lo que tengo:\n${customerLines.join("\n")}`;
+        }
         multiHandled = true;
+      }
+
+      // MULTI-LENGTH (length-only products like borde: "9 y 18 m", "9, 18 y 54").
+      // extractAllMeasures only finds W×L PAIRS, so a list of bare lengths never
+      // multi-quotes and the model quoted just one. Resolve each number to a
+      // length-only leaf and quote each. Only fires for length-only products
+      // (borde/cinta) — numbers that don't resolve to one are ignored, so W×L
+      // flows (reforzada/rollo) never misfire here.
+      if (!multiHandled) {
+        const noPairs = String(userMessage)
+          .toLowerCase()
+          .replace(/\d+(?:\.\d+)?\s*(?:[x×*]|por)\s*\d+(?:\.\d+)?/g, " ") // drop W×L pairs
+          .replace(/\d+\s*%/g, " "); // drop shade %
+        const nums = [...new Set((noPairs.match(/\d+(?:\.\d+)?/g) || []).map(Number))];
+        if (nums.length >= 2) {
+          const { findProductInFamilies } = require("./tools");
+          const { resolvePrice, trackedLink } = require("./priceResolver");
+          const hits = [];
+          for (const n of nums) {
+            const doc = await findProductInFamilies(`${n} m`, familyList);
+            const ed = doc && doc.enabledDimensions;
+            if (doc && Array.isArray(ed) && ed.length > 0 && !ed.includes("width")) hits.push({ n, doc });
+          }
+          if (hits.length >= 2) {
+            turnPriceInfo = null;
+            const lines = [], customerLines = [];
+            let needHandoff = false;
+            for (const { n, doc } of hits) {
+              const pi = await resolvePrice(doc);
+              if (pi && pi.amount) {
+                noteAmount(pi, false);
+                const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: doc.name, productId: String(doc._id) });
+                if (pi.quoteThenHandoff || (pi.handoff && !link)) { needHandoff = true; turnHandoffReason = turnHandoffReason || `Cotización ${n} m: sin link — concretar con un asesor`; }
+                lines.push(`  • ${n} m: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${link ? ` → ${link}` : ""}`);
+                customerLines.push(`• ${n} m: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${link ? ` → ${link}` : ""}`);
+              } else if (pi && pi.soldOut) {
+                needHandoff = true; turnHandoffReason = turnHandoffReason || `AGOTADO ${n} m — pasar con un asesor`;
+                lines.push(`  • ${n} m: SÍ lo manejamos pero está AGOTADO — el sistema pasará con un asesor.`);
+                customerLines.push(`• ${n} m: lo manejamos, pero por ahora está agotado.`);
+              } else {
+                needHandoff = true; turnHandoffReason = turnHandoffReason || `Cotización ${n} m — validar con un asesor`;
+                lines.push(`  • ${n} m: el precio lo confirma un asesor.`);
+                customerLines.push(`• ${n} m: el precio te lo confirma un asesor.`);
+              }
+            }
+            turnContextExtra += `\n- COTIZACIÓN MÚLTIPLE (varios largos): el cliente pidió varios largos en un mensaje; cotiza CADA largo con SU PROPIO precio y SU PROPIO link (una línea por largo); NUNCA omitas ninguno:\n${lines.join("\n")}`;
+            if (needHandoff && customerLines.length) turnHandoffPreface = `Te paso lo que tengo:\n${customerLines.join("\n")}`;
+            askedMeasureResolved = true;
+            multiHandled = true;
+          }
+        }
       }
 
       const found = multiHandled ? null : await resolveInFamilyMeasure(String(userMessage), familyList, wantDims);
@@ -676,7 +1501,24 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // This is the measure the customer asked about THIS turn → the canonical
         // price + the rewrite target for the clamp.
         noteAmount(pi, true);
-        if (pi.handoff) {
+        if (pi.soldOut) {
+          // Active but out of stock → acknowledge AND hand off (capture the lead
+          // so a human follows up / notifies when it returns).
+          const askedMeasure = wantDims ? `${wantDims[0]}x${wantDims[1]}m` : found.name;
+          turnHandoffReason = `Producto AGOTADO ${askedMeasure}: ${pi.handoffReason || "sin stock — pasar con un asesor"}`;
+          turnHandoffPreface = `Sí manejamos la medida ${askedMeasure}, pero por el momento está agotada.`;
+          turnContextExtra =
+            `\n- PRODUCTO AGOTADO + HANDOFF: la medida ${askedMeasure} está AGOTADA; el sistema la pasará con un asesor para darle seguimiento. ` +
+            `Acláralo con naturalidad; NO compartas link ni la cotices para comprar; NUNCA digas que no la vendemos.`;
+        } else if (pi.quoteThenHandoff) {
+          // Price resolved but NO purchase link → quote it AND hand off to close.
+          const askedMeasure = wantDims ? `${wantDims[0]}x${wantDims[1]}m` : found.name;
+          turnHandoffReason = `Cotización ${askedMeasure}: ${pi.handoffReason || "sin link de compra — concretar con un asesor"}`;
+          turnHandoffPreface = `La medida ${askedMeasure} tiene un precio de $${pi.amount}${pi.plusIva ? " + IVA" : ""}.`;
+          turnContextExtra =
+            `\n- COTIZA + HANDOFF: la medida ${askedMeasure} cuesta $${pi.amount}${pi.plusIva ? " + IVA" : ""} pero NO tiene link de compra en línea; ` +
+            `el sistema la pasará con un asesor para concretar. Dile el PRECIO y que un asesor le ayuda a concretar la compra; NO inventes un link.`;
+        } else if (pi.handoff) {
           // Reference the ACTUAL measure the customer asked for (never the leaf
           // name like "Color Beige", which made the model invent a size such as
           // "7x10"). Fire a real handoff with the deterministic reason.
@@ -703,11 +1545,28 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             productName: found.name,
             productId: found.id,
           });
+          const disc =
+            pi.hasDiscount && Number.isFinite(pi.originalPrice) && pi.originalPrice > pi.amount
+              ? ` CON DESCUENTO (rebajado de $${Math.round(pi.originalPrice)} a $${pi.amount})`
+              : "";
           turnContextExtra =
-            `\n- COTIZACIÓN SOLICITADA AHORA: el cliente pregunta por "${found.name}". Precio $${pi.amount}${pi.plusIva ? " + IVA" : ""}${pi.source === "ml" ? " (Mercado Libre)" : " (inventario)"}.` +
+            `\n- COTIZACIÓN SOLICITADA AHORA: el cliente pregunta por "${found.name}". Precio $${pi.amount}${pi.plusIva ? " + IVA" : ""}${disc}${pi.source === "ml" ? " (Mercado Libre)" : " (inventario)"}.` +
             (link ? ` Link: ${link}.` : "") +
             (pi.plusIva ? ` Este precio es MÁS IVA: al cotizar di SIEMPRE "$${pi.amount} + IVA" o "más IVA".` : "") +
-            ` Cotiza ESTE producto con su precio y link; NO escales a un humano ni pidas la medida de nuevo.`;
+            ` SIEMPRE dile el PRECIO CONCRETO ($${pi.amount})${disc ? ` y que está REBAJADO desde $${Math.round(pi.originalPrice)}` : ""} y COMPARTE el link en este mismo mensaje. ` +
+            `NUNCA respondas solo "con descuento" ni "¿te interesa?" sin dar el precio exacto y el enlace. NO escales a un humano ni pidas la medida de nuevo.`;
+          // QUANTITY: the customer named N pieces. If we're here, N is BELOW the
+          // mayoreo threshold (step 1.085 already routed 2+ ≥ wholesaleMinQty to
+          // mayoreo), so quote it as retail — but ACKNOWLEDGE the quantity and give
+          // the TOTAL (the bot used to answer a bare unit price, ignoring "2 piezas").
+          const askedQty = require("./tools").parseRollQuantity(String(userMessage));
+          if (askedQty && askedQty >= 2 && Number.isFinite(pi.amount)) {
+            const total = pi.amount * askedQty;
+            allowedAmounts.push(total); // whitelist the total so the price clamp doesn't rewrite it to the unit price
+            turnContextExtra +=
+              `\n- CANTIDAD: el cliente quiere ${askedQty} piezas de ${found.name}. Cada una $${pi.amount}${pi.plusIva ? " + IVA" : ""}; ` +
+              `el TOTAL por ${askedQty} piezas es $${total}${pi.plusIva ? " + IVA" : ""}. Dile el total y comparte el link (en Mercado Libre elige la cantidad ${askedQty}).`;
+          }
         }
         // Available colors/variants for the requested size — so the bot can
         // answer "¿tienes otros colores?" with the real options instead of
@@ -732,21 +1591,59 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           turnColors = { size: found.size || null, options };
         }
       } else if (wantDims) {
+        const toolsMod = require("./tools");
+        // SIN-REFUERZO: our catalog is shorter. If the size isn't here, DON'T
+        // switch flows — just MENTION it's available in REFORZADA and offer that
+        // link (reforzada is the pricier, reinforced option).
+        let mentionedReforzada = false;
+        if (inSinRefuerzo) {
+          try {
+            const { resolvePrice, trackedLink } = require("./priceResolver");
+            const refFams = await reforzadaFamilies();
+            const refLeaf = refFams.length ? await toolsMod.findProductInFamilies(String(userMessage), refFams, wantDims) : null;
+            if (refLeaf) {
+              const pi = await resolvePrice(refLeaf);
+              if (pi && pi.amount && !pi.soldOut) {
+                const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: refLeaf.name, productId: String(refLeaf._id) });
+                // DETERMINISTIC — the model kept dropping the "not in sin refuerzo"
+                // clause and just quoting the reforzada price. Return the framed reply.
+                const disc = pi.hasDiscount && Number.isFinite(pi.originalPrice) && pi.originalPrice > pi.amount ? `, rebajado de $${Math.round(pi.originalPrice)}` : "";
+                const reply =
+                  `Esa medida ${wantDims[0]}x${wantDims[1]} m NO la manejo SIN refuerzo (con argollas), ` +
+                  `pero SÍ la tengo en REFORZADA (con refuerzo en las esquinas): $${pi.amount}${disc}.` +
+                  (link ? ` Aquí la puedes comprar: ${link}` : "");
+                history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+                return {
+                  reply,
+                  state: { ...state, history, nodeId: currentNode.id },
+                  diagnostics: {
+                    workflow: { id: String(workflow._id), name: workflow.name },
+                    fromNode: { id: currentNode.id, name: currentNode.name },
+                    toNode: { id: currentNode.id, name: currentNode.name },
+                    sinRefuerzoMentionReforzada: `${wantDims[0]}x${wantDims[1]}`,
+                  },
+                };
+              }
+            }
+          } catch (err) {
+            console.error("⚠️ sin→reforzada mention failed:", err.message);
+          }
+        }
         // The customer named a MEASURE we couldn't resolve in catalog (e.g.
         // 13x3 — out of range). Find the closest available size so the bot
         // offers a REAL size and asks if they still want the exact one —
         // instead of inventing a size or saying "no manejamos decimales".
-        const toolsMod = require("./tools");
-        const closest = await toolsMod.closestAvailableMeasure(String(userMessage), familyList, wantDims);
+        const closest = mentionedReforzada ? null : await toolsMod.closestAvailableMeasure(String(userMessage), familyList, wantDims);
         if (closest) {
+          usedClosestMeasure = true; // reply will name the nearest size, not the requested one
           if (Number.isFinite(closest.price) && closest.price > 0) {
             allowedAmounts.push(closest.price);
             if (primaryQuoteAmount == null) primaryQuoteAmount = closest.price;
           }
           turnContextExtra +=
-            `\n- MEDIDA NO DISPONIBLE: la medida exacta que pidió el cliente NO está en catálogo. La más cercana que sí manejamos es "${closest.label}"${closest.price != null ? ` ($${closest.price})` : ""}. ` +
-            `Ofrécele ESTA medida más cercana y pregúntale si le sirve o si necesita la medida exacta. ` +
-            `NO inventes una medida, NO inventes precios, y NUNCA digas "no manejamos decimales" (la medida pedida puede no tener decimales). Si insiste en la medida exacta, ofrécele pasar con un asesor.`;
+            `\n- MEDIDA NO DISPONIBLE EN CATÁLOGO (pero NO la niegues): la medida exacta no está LISTA en catálogo. La más cercana que sí manejamos es "${closest.label}"${closest.price != null ? ` ($${closest.price})` : ""}. ` +
+            `Ofrécele ESTA medida más cercana y pregúntale si le sirve. Hanlob SÍ fabrica malla sombra SOBRE MEDIDA, así que aclara que también se puede hacer a su medida EXACTA con un asesor. ` +
+            `NUNCA digas "no la manejamos", "no la podemos ofrecer" ni la niegues; NO inventes una medida ni un precio; NUNCA digas "no manejamos decimales". Si quiere la medida exacta, ofrécele pasar con un asesor para cotizarla.`;
         }
       } else if (turnActiveProductId) {
         // NO measure in THIS message, but there's an ACTIVE product (e.g. the
@@ -759,18 +1656,37 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         if (doc && doc.sellable) {
           const pi = await resolvePrice(doc);
           turnPriceInfo = pi;
-          if (pi && pi.handoff) {
+          if (pi && pi.soldOut) {
+            // Active but out of stock → acknowledge AND hand off (capture the lead).
+            turnHandoffReason = `Producto AGOTADO ${doc.size || doc.name}: ${pi.handoffReason || "sin stock — pasar con un asesor"}`;
+            turnHandoffPreface = `Sí manejamos "${doc.name}" (${doc.size || ""}), pero por el momento está agotada.`;
+            turnContextExtra =
+              `\n- PRODUCTO AGOTADO + HANDOFF: "${doc.name}" (${doc.size || ""}) está AGOTADO; el sistema lo pasará con un asesor para seguimiento. ` +
+              `Acláralo con naturalidad; NO compartas link ni lo cotices para comprar; NUNCA digas que no lo vendemos.`;
+          } else if (pi && pi.quoteThenHandoff) {
+            // Price resolved but NO purchase link → quote it AND hand off to close.
+            turnHandoffReason = `Cotización ${doc.size || doc.name}: ${pi.handoffReason || "sin link de compra — concretar con un asesor"}`;
+            turnHandoffPreface = `"${doc.name}" (${doc.size || ""}) tiene un precio de $${pi.amount}${pi.plusIva ? " + IVA" : ""}.`;
+            turnContextExtra =
+              `\n- COTIZA + HANDOFF: "${doc.name}" (${doc.size || ""}) cuesta $${pi.amount}${pi.plusIva ? " + IVA" : ""} pero NO tiene link de compra en línea; ` +
+              `el sistema lo pasará con un asesor para concretar. Dile el PRECIO y que un asesor le ayuda a concretar; NO inventes un link.`;
+          } else if (pi && pi.handoff) {
             turnHandoffReason = `Cotización ${doc.size || doc.name}: ${pi.handoffReason || "requiere validación de precio con un asesor"}`;
             turnContextExtra =
               `\n- COTIZACIÓN: la medida ${doc.size || doc.name} requiere que un asesor confirme el precio. NO inventes un precio; dile que lo pasas con un asesor.`;
           } else if (pi && pi.amount) {
             askedMeasureResolved = true;
             const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: doc.name, productId: turnActiveProductId });
+            const disc =
+              pi.hasDiscount && Number.isFinite(pi.originalPrice) && pi.originalPrice > pi.amount
+                ? ` CON DESCUENTO (rebajado de $${Math.round(pi.originalPrice)} a $${pi.amount})`
+                : "";
             turnContextExtra =
-              `\n- PRODUCTO ACTIVO: el cliente sigue tratando "${doc.name}" (${doc.size || ""}). Precio $${pi.amount}${pi.plusIva ? " + IVA" : ""}${pi.source === "ml" ? " (Mercado Libre)" : " (inventario)"}.` +
+              `\n- PRODUCTO ACTIVO: el cliente sigue tratando "${doc.name}" (${doc.size || ""}). Precio $${pi.amount}${pi.plusIva ? " + IVA" : ""}${disc}${pi.source === "ml" ? " (Mercado Libre)" : " (inventario)"}.` +
               (link ? ` Link: ${link}.` : "") +
               (pi.plusIva ? ` Este precio es MÁS IVA: di SIEMPRE "$${pi.amount} + IVA".` : "") +
-              ` Cotiza ESTE producto con su precio y link; NUNCA uses el precio de otra medida ni de la promoción.`;
+              ` SIEMPRE dile el PRECIO CONCRETO ($${pi.amount})${disc ? ` y que está REBAJADO desde $${Math.round(pi.originalPrice)}` : ""} y COMPARTE el link. ` +
+              `NUNCA respondas solo "con descuento" sin el precio y el enlace; NUNCA uses el precio de otra medida ni de la promoción.`;
           }
         }
       }
@@ -826,10 +1742,15 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       `No digas "solo beige" ni escales a un asesor por color.`;
   }
 
-  // Effective context: the pinned promo/default lines are tagged with §D§. Once
-  // the client pivots to a different measure (promoDismissed), those lines VANISH;
-  // otherwise just strip the tag so they read normally. The tag never reaches the model.
-  const effectiveContext = state.promoDismissed
+  // Effective context: the pinned promo/default lines are tagged with §D§. They
+  // VANISH once they've served their purpose — either the client pivoted to a
+  // different measure (promoDismissed) OR the bot has ALREADY replied at least once
+  // (the promo is presentable on the FIRST contact, but must NOT re-pitch every
+  // turn afterward — that spam was hijacking the conversation). A genuine promo ask
+  // is still answered by the deterministic promo path (step 1.1) regardless. The
+  // tag never reaches the model.
+  const promoAlreadyShown = state.promoDismissed || history.some((h) => h.role === "assistant");
+  const effectiveContext = promoAlreadyShown
     ? contextBlock.split("\n").filter((l) => !l.includes("§D§")).join("\n")
     : contextBlock.replace(/§D§/g, "");
 
@@ -862,6 +1783,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   if (turnHandoffReason) {
     ctx.handoffRequested = true;
     ctx.handoffReason = turnHandoffReason;
+    if (turnHandoffPreface) ctx.handoffPreface = turnHandoffPreface;
   }
   const { text: rawText, toolCalls, llmError: nodeLlmError } = await executeNode(
     workflow,
@@ -895,7 +1817,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       (state.lead && (state.lead.phone || state.lead.email || state.lead.name))
     );
     if (!haveContact) {
-      const ask = "¡Con gusto te paso con un asesor! 🙌 ¿Me compartes tu nombre y un teléfono para que te contacte?";
+      // If this turn owed the customer a fact (price quote / sold-out note), lead
+      // with it so the handoff message both informs AND collects contact.
+      const preface = ctx.handoffPreface ? `${ctx.handoffPreface.trim()} ` : "";
+      const ask = `${preface}¡Con gusto te paso con un asesor! 🙌 ¿Me compartes tu nombre y un teléfono para que te contacte?`;
       history.push({ role: "assistant", text: ask, nodeId: movedTo.id, at: new Date() });
       return {
         reply: ask,
@@ -981,6 +1906,31 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       }
     } catch (e) {
       console.error("⚠️ price clamp failed:", e.message);
+    }
+  }
+
+  // DETERMINISTIC MEASURE CLAMP — like the price clamp, but for the W×L label. When
+  // the customer asked for exactly ONE measure and we quoted it (NOT a nearest-
+  // substitution, NOT a multi-measure turn), any divergent W×L token in the reply
+  // is rewritten to that measure — so a resolved-8x4 quote can't go out saying
+  // "7x4" (real client report). URLs are masked inside clampMeasures, so links are
+  // never touched. No-op when those conditions don't hold.
+  if (text && primaryQuoteAmount != null && !usedClosestMeasure) {
+    try {
+      const reqMeasures = extractAllMeasures(String(userMessage || ""));
+      if (reqMeasures.length === 1) {
+        const { clampMeasures } = require("./priceResolver");
+        const d = reqMeasures[0];
+        const lit = String(userMessage).match(/(\d{1,3}(?:\.\d+)?)\s*[x×]\s*(\d{1,3}(?:\.\d+)?)/);
+        const canonical = lit ? `${lit[1]}x${lit[2]}` : `${d[0]}x${d[1]}`;
+        const cm = clampMeasures(text, canonical, [d]);
+        if (cm.changed) {
+          console.warn(`📐 [workflow] measure clamp rewrote a wrong measure → ${canonical} for ${opts.psid || "(no psid)"}`);
+          text = cm.text;
+        }
+      }
+    } catch (e) {
+      console.error("⚠️ measure clamp failed:", e.message);
     }
   }
 

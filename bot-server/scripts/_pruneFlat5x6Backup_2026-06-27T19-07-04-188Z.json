@@ -1,0 +1,16 @@
+{
+ "_id": "6a3ada0db5617958c9559a94",
+ "name": "5 m x 6 m",
+ "parentId": "69431347ed2d4185ba4706c2",
+ "sellable": true,
+ "active": true,
+ "size": "5x6m",
+ "onlineStoreLinks": [
+  {
+   "url": "https://www.mercadolibre.com.mx/malla-sombra-6mx5m-90-beige-raschel-lista-para-instalar/up/MLMU718003871",
+   "store": "Mercado Libre",
+   "isPreferred": true,
+   "_id": "6a3d881f9fd993097aa27ada"
+  }
+ ]
+}
