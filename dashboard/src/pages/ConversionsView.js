@@ -1,8 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import API from '../api';
-import { correlateAndWait } from '../utils/correlate';
 import { useTranslation } from '../i18n';
-import FeatureTip from '../components/FeatureTip';
 import {
   ComposedChart,
   Bar,
@@ -37,19 +35,13 @@ function ConversionsView() {
   const [recentConversions, setRecentConversions] = useState([]);
   const [dailyClicks, setDailyClicks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [correlating, setCorrelating] = useState(false);
   const [autoCorrelating, setAutoCorrelating] = useState(false); // >3h freshness rebuild
   const [error, setError] = useState(null);
-  const [correlationResult, setCorrelationResult] = useState(null);
   const [topProducts, setTopProducts] = useState([]);
 
-  // Date filters
-  const [dateFrom, setDateFrom] = useState(getStartOfMonthStr());
-  const [dateTo, setDateTo] = useState(getTodayStr());
-
-  // Correlation options
-  const [timeWindowHours, setTimeWindowHours] = useState(48);
-  const [orderLimit, setOrderLimit] = useState(50);
+  // Date range for the chart (defaults to this month → today)
+  const [dateFrom] = useState(getStartOfMonthStr());
+  const [dateTo] = useState(getTodayStr());
 
   // Pagination for conversions table
   const [pageSize, setPageSize] = useState(30);
@@ -151,29 +143,6 @@ function ConversionsView() {
     }
   };
 
-  const runCorrelation = async (dryRun = false) => {
-    setCorrelating(true);
-    setCorrelationResult(null);
-
-    try {
-      const result = await correlateAndWait({ timeWindowHours, orderLimit, dryRun, dateFrom, dateTo });
-
-      setCorrelationResult({
-        ...result,
-        dryRun
-      });
-
-      // Refresh data if not dry run
-      if (!dryRun) {
-        await fetchData();
-      }
-    } catch (err) {
-      console.error('Error running correlation:', err);
-      setError(err.message);
-    } finally {
-      setCorrelating(false);
-    }
-  };
 
   useEffect(() => {
     // Show cached correlation immediately, then auto-rebuild only if >3h stale
@@ -485,131 +454,6 @@ function ConversionsView() {
         )}
       </div>
 
-      {/* Correlation Controls */}
-      <div className="bg-gray-800/30 rounded-lg border border-gray-700/50 p-4 mb-6">
-        <h2 className="text-lg font-semibold text-white mb-4">{t('conversions.correlation')}</h2>
-
-        <div className="flex flex-wrap gap-4 items-end mb-4">
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">{t('conversions.from')}</label>
-            <input
-              type="date"
-              value={dateFrom}
-              onChange={(e) => setDateFrom(e.target.value)}
-              className="px-3 py-2 bg-gray-900/50 border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">{t('conversions.to')}</label>
-            <input
-              type="date"
-              value={dateTo}
-              onChange={(e) => setDateTo(e.target.value)}
-              className="px-3 py-2 bg-gray-900/50 border border-gray-700 rounded text-white focus:outline-none focus:ring-2 focus:ring-blue-500"
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">{t('conversions.windowHours')}</label>
-            <input
-              type="number"
-              value={timeWindowHours}
-              onChange={(e) => setTimeWindowHours(parseInt(e.target.value) || 48)}
-              className="bg-gray-700/50 border border-gray-600 rounded px-3 py-2 w-20 text-white"
-              min="1"
-              max="168"
-            />
-          </div>
-          <div>
-            <label className="block text-sm text-gray-400 mb-1">{t('conversions.limit')}</label>
-            <input
-              type="number"
-              value={orderLimit}
-              onChange={(e) => setOrderLimit(parseInt(e.target.value) || 100)}
-              className="bg-gray-700/50 border border-gray-600 rounded px-3 py-2 w-20 text-white"
-              min="10"
-              max="50"
-            />
-          </div>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          <button
-            onClick={fetchData}
-            disabled={loading}
-            className="px-4 py-2 bg-gray-700/50 text-gray-300 rounded hover:bg-gray-600 border border-gray-600"
-          >
-            {loading ? t('common.loading') : t('conversions.updateStats')}
-          </button>
-          <button
-            onClick={() => runCorrelation(true)}
-            disabled={correlating}
-            className="bg-gray-700/50 text-gray-300 px-4 py-2 rounded hover:bg-gray-600 disabled:opacity-50 border border-gray-600"
-          >
-            {correlating ? t('conversions.processing') : t('conversions.preview')}
-          </button>
-          <FeatureTip id="conv-correlate" title="Correlacionar" text="Conecta las órdenes de Mercado Libre con los clicks del bot para calcular conversiones e ingresos." position="left">
-            <button
-              onClick={() => runCorrelation(false)}
-              disabled={correlating}
-              className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700 disabled:opacity-50"
-            >
-              {correlating ? t('conversions.processing') : t('conversions.syncNow')}
-            </button>
-          </FeatureTip>
-        </div>
-
-        {/* Correlation Result */}
-        {correlationResult && (
-          <div className={`mt-4 p-4 rounded ${correlationResult.dryRun ? 'bg-yellow-500/20 border border-yellow-500/30' : 'bg-green-500/20 border border-green-500/30'}`}>
-            <h3 className="font-semibold mb-2 text-white">
-              {correlationResult.dryRun ? t('conversions.previewTitle') : t('conversions.correlationComplete')}
-            </h3>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-              <div>
-                <span className="text-gray-400">{t('conversions.ordersProcessed')}</span>
-                <span className="ml-2 font-medium text-white">{correlationResult.ordersProcessed}</span>
-              </div>
-              <div>
-                <span className="text-gray-400">{t('conversions.withClicks')}</span>
-                <span className="ml-2 font-medium text-white">{correlationResult.ordersWithClicks}</span>
-              </div>
-              <div>
-                <span className="text-gray-400">{t('conversions.clicksCorrelated')}</span>
-                <span className="ml-2 font-medium text-green-400">{correlationResult.clicksCorrelated || correlationResult.correlations?.length || 0}</span>
-              </div>
-              <div>
-                <span className="text-gray-400">{t('conversions.matchRate')}</span>
-                <span className="ml-2 font-medium text-white">
-                  {correlationResult.ordersProcessed > 0
-                    ? ((correlationResult.ordersWithClicks / correlationResult.ordersProcessed) * 100).toFixed(1)
-                    : 0}%
-                </span>
-              </div>
-            </div>
-
-            {/* Show correlations if dry run */}
-            {correlationResult.dryRun && correlationResult.correlations?.length > 0 && (
-              <div className="mt-4">
-                <h4 className="text-sm font-medium text-gray-300 mb-2">{t('conversions.correlationsFound')}</h4>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {correlationResult.correlations.slice(0, 5).map((c, i) => (
-                    <div key={i} className="text-xs bg-gray-800/50 p-2 rounded border border-gray-700">
-                      <span className="font-medium text-white">PSID {c.psid?.substring(0, 12)}...</span>
-                      <span className="mx-2 text-gray-500">→</span>
-                      <span className="text-gray-300">{c.productName}</span>
-                      <span className="mx-2 text-gray-500">→</span>
-                      <span className="text-green-400">{formatCurrency(c.totalAmount)}</span>
-                      <span className={`ml-2 px-1 py-0.5 rounded text-xs ${getConfidenceBadge(c.confidence)}`}>
-                        {getConfidenceLabel(c.confidence)}
-                      </span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
 
       {/* Top Converters - Horizontal Cards */}
       {stats?.topConverters?.length > 0 && (
