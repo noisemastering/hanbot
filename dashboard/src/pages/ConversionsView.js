@@ -1,5 +1,4 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import axios from 'axios';
 import API from '../api';
 import { correlateAndWait } from '../utils/correlate';
 import { useTranslation } from '../i18n';
@@ -20,8 +19,6 @@ import {
   Legend
 } from 'recharts';
 
-const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
-
 // Get start of current month in YYYY-MM-DD format for date input
 function getStartOfMonthStr() {
   const now = new Date();
@@ -41,6 +38,7 @@ function ConversionsView() {
   const [dailyClicks, setDailyClicks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [correlating, setCorrelating] = useState(false);
+  const [autoCorrelating, setAutoCorrelating] = useState(false); // >3h freshness rebuild
   const [error, setError] = useState(null);
   const [correlationResult, setCorrelationResult] = useState(null);
   const [topProducts, setTopProducts] = useState([]);
@@ -57,6 +55,31 @@ function ConversionsView() {
   const [pageSize, setPageSize] = useState(30);
   const [currentPage, setCurrentPage] = useState(1);
 
+  // Map a ConvoSaleMatch (our own-DB correlation) to the shape the table expects.
+  const mapMatch = (m) => ({
+    clickId: m._id,
+    psid: m.psid,
+    productName: m.sale?.itemTitle,
+    mlItemId: (m.matchDetails?.saleItemIds || [])[0],
+    conversionData: {
+      buyerFirstName: m.matchDetails?.saleReceiverName || '',
+      buyerLastName: '',
+      buyerNickname: m.sale?.buyerNickname || '-',
+      shippingCity: m.sale?.shippingCity,
+      orderId: m.orderId,
+      totalAmount: m.sale?.totalAmount,
+    },
+    city: m.matchDetails?.convoCity,
+    clickedAt: m.sale?.dateCreated,
+    correlationMethod: m.method,
+    certainty: m.certainty,
+    attributionReason: m.reason,
+    undisputed: m.undisputed,
+    ventaIndirecta: m.ventaIndirecta,
+    correlationConfidence: m.confidence,
+    mismatch: m.linkAudit?.mismatch, // safety-net flag
+  });
+
   const fetchData = async () => {
     setLoading(true);
     setError(null);
@@ -64,28 +87,67 @@ function ConversionsView() {
     try {
       const dateFromISO = dateFrom ? `${dateFrom}T00:00:00.000Z` : undefined;
       const dateToISO = dateTo ? `${dateTo}T23:59:59.999Z` : undefined;
+      const cp = new URLSearchParams();
+      if (dateFromISO) cp.append('dateFrom', dateFromISO);
+      if (dateToISO) cp.append('dateTo', dateToISO);
 
-      const params = new URLSearchParams();
-      if (dateFromISO) params.append('dateFrom', dateFromISO);
-      if (dateToISO) params.append('dateTo', dateToISO);
-
-      const [statsRes, conversionsRes, clicksRes, productsRes] = await Promise.all([
-        axios.get(`${API_URL}/analytics/conversions?${params.toString()}`),
-        axios.get(`${API_URL}/analytics/conversions/recent?limit=500`), // Fetch more for pagination
-        API.get(`/click-logs/daily?startDate=${dateFrom}&endDate=${dateTo}`),
+      // All from OUR-DB correlation (convo_sale_matches) — no re-correlation here.
+      const [summaryRes, chartRes, matchesRes, productsRes] = await Promise.all([
+        API.get('/correlation/summary'),
+        API.get(`/correlation/chart?${cp.toString()}`),
+        API.get('/correlation/matches?limit=500'),
         API.get('/analytics/top-products')
       ]);
 
-      setStats(statsRes.data.stats);
-      setRecentConversions(conversionsRes.data.conversions || []);
-      // API returns chartData with: { date, dateLabel, links, clicks, conversions }
-      setDailyClicks(clicksRes.data?.chartData || []);
+      const chart = chartRes.data?.chartData || [];
+      const totalLinks = chart.reduce((s, d) => s + (d.links || 0), 0);
+      const totalClicks = chart.reduce((s, d) => s + (d.clicks || 0), 0);
+      const sum = summaryRes.data || {};
+      const conversions = sum.totals?.conversions || 0;
+      const cb = { high: 0, medium: 0, low: 0 };
+      for (const tr of (sum.byTier || [])) {
+        if (tr.certainty >= 70) cb.high += tr.count;
+        else if (tr.certainty >= 50) cb.medium += tr.count;
+        else cb.low += tr.count;
+      }
+      setStats({
+        conversions,
+        totalRevenue: sum.totals?.revenue || 0,
+        clickedLinks: totalClicks,
+        clickRate: totalLinks ? Math.round((totalClicks / totalLinks) * 100) : 0,
+        conversionRate: totalClicks ? Math.round((conversions / totalClicks) * 100) : 0,
+        confidenceBreakdown: cb,
+      });
+      setDailyClicks(chart);
+      setRecentConversions((matchesRes.data?.matches || []).map(mapMatch));
       setTopProducts((productsRes.data?.allProducts || []).slice(0, 5));
     } catch (err) {
       console.error('Error fetching conversion data:', err);
       setError(err.message);
     } finally {
       setLoading(false);
+    }
+  };
+
+  // Freshness gate: the data is in our DB, so we don't re-correlate on every load.
+  // If the last correlation is >3h stale (or already running), trigger a rebuild in
+  // the background, show a non-blocking indicator, poll until done, then refresh.
+  const ensureFreshCorrelation = async () => {
+    try {
+      const { data } = await API.get('/correlation/status');
+      if (!data.stale && !data.running) return;
+      setAutoCorrelating(true);
+      if (data.stale && !data.running) await API.post('/correlation/run');
+      for (let i = 0; i < 150; i++) { // up to ~12.5 min
+        await new Promise((r) => setTimeout(r, 5000));
+        const s = await API.get('/correlation/status');
+        if (!s.data.running) break;
+      }
+      await fetchData();
+    } catch (e) {
+      console.error('freshness check failed:', e.message);
+    } finally {
+      setAutoCorrelating(false);
     }
   };
 
@@ -114,12 +176,15 @@ function ConversionsView() {
   };
 
   useEffect(() => {
-    // READ-ONLY on load: DISPLAY the already-correlated data only. Correlation is
-    // heavy and must NOT auto-run on load (it stalled the backend and showed
-    // half-reset numbers). It runs ONLY via the explicit "Correlacionar" button.
-    fetchData();
+    // Show cached correlation immediately, then auto-rebuild only if >3h stale
+    // (our own DB → no need to correlate every load; a loading indicator shows
+    // while a stale rebuild runs in the background).
+    (async () => {
+      await fetchData();
+      await ensureFreshCorrelation();
+    })();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Fetch on mount (read-only)
+  }, []); // Fetch on mount
 
   const formatCurrency = (amount) => {
     if (!amount && amount !== 0) return 'N/A';
@@ -186,6 +251,14 @@ function ConversionsView() {
       {error && (
         <div className="mb-6 bg-red-500/20 border border-red-500/30 text-red-300 px-4 py-3 rounded">
           <strong>Error:</strong> {error}
+        </div>
+      )}
+
+      {/* Auto-correlation indicator (data was >3h stale → rebuilding in background) */}
+      {autoCorrelating && (
+        <div className="fixed bottom-6 right-6 z-50 bg-gray-800 border border-blue-500/40 rounded-lg px-4 py-3 shadow-lg flex items-center gap-3">
+          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
+          <span className="text-sm text-gray-200">Actualizando correlación… (datos con &gt;3h)</span>
         </div>
       )}
 
