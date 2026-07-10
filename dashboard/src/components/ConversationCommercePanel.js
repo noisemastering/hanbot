@@ -11,45 +11,73 @@ import ReportModal from "./ReportModal";
 export default function ConversationCommercePanel({ psid }) {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
-  const [syncing, setSyncing] = useState(false);
+  const [correlating, setCorrelating] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
 
-  const load = useCallback(
-    async (sync) => {
-      if (!psid) return;
-      sync ? setSyncing(true) : setLoading(true);
-      try {
-        const res = await API.get(`/conversations/${psid}/commerce-status${sync ? "?sync=true" : ""}`);
-        setStatus(res.data);
-      } catch (err) {
-        toast.error(err.response?.data?.error || "No se pudo cargar el estado de compra");
-      } finally {
-        setLoading(false);
-        setSyncing(false);
+  const load = useCallback(async () => {
+    if (!psid) return;
+    setLoading(true);
+    try {
+      // Same source as the charts: clicked (ClickLog) + purchased (convo_sale_matches).
+      const res = await API.get(`/correlation/convo/${psid}`);
+      setStatus(res.data);
+    } catch (err) {
+      toast.error(err.response?.data?.error || "No se pudo cargar el estado de compra");
+    } finally {
+      setLoading(false);
+    }
+  }, [psid]);
+
+  // Trigger a correlation rebuild, poll until it finishes, then reload this convo.
+  const correlate = useCallback(async () => {
+    setCorrelating(true);
+    try {
+      await API.post(`/correlation/run`);
+      for (let i = 0; i < 150; i++) {
+        await new Promise((r) => setTimeout(r, 4000));
+        const s = await API.get(`/correlation/status`);
+        if (!s.data.running) break;
       }
-    },
-    [psid]
-  );
+      await load();
+      toast.success("Correlación actualizada");
+    } catch (err) {
+      toast.error(err.response?.data?.error || "No se pudo correlacionar");
+    } finally {
+      setCorrelating(false);
+    }
+  }, [load]);
 
   useEffect(() => {
     setStatus(null);
-    load(false);
+    load();
   }, [load]);
 
   if (!psid) return null;
+
+  const lc = status?.lastCorrelation;
+  const lastRunLabel = lc?.lastRun
+    ? `${new Date(lc.lastRun).toLocaleString()}${lc.ageHours != null ? ` · hace ${lc.ageHours}h` : ""}`
+    : "nunca";
+  const busy = correlating || lc?.running;
 
   return (
     <div className="border border-gray-700 rounded-lg p-3 bg-gray-800/40 text-sm">
       <div className="flex items-center justify-between mb-2">
         <span className="text-xs uppercase text-gray-400">Estado comercial</span>
         <button
-          onClick={() => load(true)}
-          disabled={syncing}
-          className="text-xs px-2 py-0.5 rounded bg-gray-700 hover:bg-gray-600 text-white disabled:opacity-50"
-          title="Sincroniza pedidos recientes de Mercado Libre y vuelve a correlacionar"
+          onClick={correlate}
+          disabled={busy}
+          className="text-xs px-2 py-0.5 rounded bg-blue-600/80 hover:bg-blue-600 text-white disabled:opacity-50"
+          title="Vuelve a correlacionar conversaciones con ventas (usa nuestra propia base de datos)"
         >
-          {syncing ? "Sincronizando…" : "↻ Sincronizar ML"}
+          {busy ? "Correlacionando…" : "↻ Correlacionar"}
         </button>
+      </div>
+
+      {/* Last correlation time + staleness */}
+      <div className="mb-2 text-[10px] text-gray-500 flex items-center gap-1">
+        <span>Última correlación: {lastRunLabel}</span>
+        {lc?.stale && !busy && <span className="text-amber-400">· desactualizada (&gt;3h)</span>}
       </div>
 
       {loading ? (
