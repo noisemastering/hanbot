@@ -64,6 +64,16 @@ function ConversionsView() {
     city: m.matchDetails?.convoCity,
     clickedAt: m.sale?.dateCreated,
     correlationMethod: m.method,
+    // Method label from the ACTUAL signals that matched (not the old click-method names).
+    methodLabel: (() => {
+      const s = m.signals || {};
+      const parts = [];
+      if (s.zip) parts.push('📍 CP');
+      else if (s.city) parts.push('🏙️ Ciudad');
+      if (s.name || s.nickname) parts.push('👤 Nombre');
+      if (s.item) parts.push('🎯 Item');
+      return parts.length ? parts.join(' + ') : '⏱️ Tiempo';
+    })(),
     certainty: m.certainty,
     attributionReason: m.reason,
     undisputed: m.undisputed,
@@ -108,7 +118,6 @@ function ConversionsView() {
         clickRate: totalLinks ? Math.round((totalClicks / totalLinks) * 100) : 0,
         conversionRate: totalClicks ? Math.round((conversions / totalClicks) * 100) : 0,
         confidenceBreakdown: cb,
-        topConverters: (sum.topConverters || []).map((c) => ({ psid: c.psid, firstName: c.name, conversions: c.conversions, totalRevenue: c.totalRevenue })),
       });
       setDailyClicks(chart);
       setRecentConversions((matchesRes.data?.matches || []).map(mapMatch));
@@ -464,41 +473,6 @@ function ConversionsView() {
       </div>
 
 
-      {/* Top Converters - Horizontal Cards */}
-      {stats?.topConverters?.length > 0 && (
-        <div className="mb-6">
-          <h2 className="text-lg font-semibold text-white mb-3">{t('conversions.topBuyers')}</h2>
-          <div className="flex flex-wrap gap-3">
-            {stats.topConverters.map((converter, i) => (
-              <div key={converter.psid} className={`flex items-center gap-3 px-4 py-3 bg-gray-800/30 rounded-lg border ${
-                i === 0 ? 'border-yellow-500/50' :
-                i === 1 ? 'border-gray-500/50' :
-                i === 2 ? 'border-orange-500/50' :
-                'border-gray-700/50'
-              }`}>
-                <span className={`w-7 h-7 rounded-full flex items-center justify-center text-sm font-bold ${
-                  i === 0 ? 'bg-yellow-500/30 text-yellow-300' :
-                  i === 1 ? 'bg-gray-500/30 text-gray-300' :
-                  i === 2 ? 'bg-orange-500/30 text-orange-300' :
-                  'bg-gray-600/30 text-gray-400'
-                }`}>
-                  {i + 1}
-                </span>
-                <div>
-                  <p className="text-sm font-medium text-white">
-                    {converter.firstName || converter.lastName
-                      ? `${converter.firstName || ''} ${converter.lastName || ''}`.trim()
-                      : t('conversions.userDefault')}
-                  </p>
-                  <p className="text-xs text-gray-500 font-mono">{converter.psid?.substring(0, 12)}...</p>
-                  <p className="text-xs text-gray-500">{converter.conversions !== 1 ? t('conversions.purchaseCountPlural', { count: converter.conversions }) : t('conversions.purchaseCount', { count: converter.conversions })} · {formatCurrency(converter.totalSpent)}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
       {/* Recent Conversions - Table */}
       <div className="bg-gray-800/30 rounded-lg border border-gray-700/50">
         <div className="px-4 py-3 border-b border-gray-700/50 flex justify-between items-center">
@@ -576,10 +550,7 @@ function ConversionsView() {
                       </td>
                       <td className="px-4 py-3">
                         <span className="text-xs text-gray-400">
-                          {conversion.correlationMethod === 'orphan' ? '🔮 orphan' :
-                           conversion.correlationMethod === 'ml_item_match' ? '🎯 ML ID' :
-                           conversion.correlationMethod === 'enhanced' ? '✨ multi' :
-                           '⏱️ tiempo'}
+                          {conversion.methodLabel || '⏱️ Tiempo'}
                         </span>
                       </td>
                       <td className="px-4 py-3 text-right">
