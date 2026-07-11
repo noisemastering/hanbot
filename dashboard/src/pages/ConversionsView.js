@@ -516,8 +516,7 @@ function ConversionsView() {
                     <th className="px-4 py-3">{t('conversions.colClick')}</th>
                     <th className="px-4 py-3">{t('conversions.colOrder')}</th>
                     <th className="px-4 py-3">{t('conversions.colMethod')}</th>
-                    <th className="px-4 py-3">{t('conversions.colMatchData')}</th>
-                    <th className="px-4 py-3">{t('conversions.colConversation')}</th>
+                    <th className="px-4 py-3">{t('conversions.colDetail')}</th>
                     <th className="px-4 py-3 text-right">{t('conversions.colAmount')}</th>
                   </tr>
                 </thead>
@@ -571,26 +570,13 @@ function ConversionsView() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        {conversion.matchDetails ? (
+                        {conversion.psid || conversion.matchDetails ? (
                           <button
-                            onClick={() => { setDetailRow(conversion); setDetailView('match'); }}
-                            title="Ver datos del match"
+                            onClick={() => { setDetailRow(conversion); setDetailView(conversion.matchDetails ? 'match' : 'chat'); }}
+                            title="Ver detalle (match y chat)"
                             className="w-8 h-8 flex items-center justify-center rounded border border-blue-600/60 text-blue-300 hover:bg-blue-600/20"
                           >
-                            📊
-                          </button>
-                        ) : (
-                          <span className="text-gray-600 text-xs">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3">
-                        {conversion.psid ? (
-                          <button
-                            onClick={() => { setDetailRow(conversion); setDetailView('chat'); }}
-                            title="Ver conversación"
-                            className="w-8 h-8 flex items-center justify-center rounded border border-blue-600/60 text-blue-300 hover:bg-blue-600/20"
-                          >
-                            💬
+                            🔍
                           </button>
                         ) : (
                           <span className="text-gray-600 text-xs">—</span>
