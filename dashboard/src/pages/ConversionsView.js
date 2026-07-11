@@ -37,6 +37,7 @@ function ConversionsView() {
   const [stats, setStats] = useState(null);
   const [recentConversions, setRecentConversions] = useState([]);
   const [transcriptPsid, setTranscriptPsid] = useState(null); // conversation viewer
+  const [matchDataConv, setMatchDataConv] = useState(null); // match-data modal
   const [dailyClicks, setDailyClicks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [autoCorrelating, setAutoCorrelating] = useState(false); // >3h freshness rebuild
@@ -568,7 +569,16 @@ function ConversionsView() {
                         )}
                       </td>
                       <td className="px-4 py-3">
-                        <MatchDataCompare md={conversion.matchDetails} saleItemTitle={conversion.saleItemTitle} signals={conversion.signals} />
+                        {conversion.matchDetails ? (
+                          <button
+                            onClick={() => setMatchDataConv(conversion)}
+                            className="text-xs px-2 py-1 rounded border border-blue-600/60 text-blue-300 hover:bg-blue-600/20"
+                          >
+                            Ver datos
+                          </button>
+                        ) : (
+                          <span className="text-gray-600 text-xs">—</span>
+                        )}
                       </td>
                       <td className="px-4 py-3">
                         {conversion.psid ? (
@@ -693,6 +703,23 @@ function ConversionsView() {
 
       {transcriptPsid && (
         <ConversationTranscriptModal psid={transcriptPsid} onClose={() => setTranscriptPsid(null)} />
+      )}
+
+      {matchDataConv && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setMatchDataConv(null)}>
+          <div className="bg-gray-800 rounded-lg w-full max-w-md border border-gray-700" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
+              <span className="text-sm text-white">Datos del match</span>
+              <button onClick={() => setMatchDataConv(null)} className="text-gray-400 hover:text-white text-lg leading-none">×</button>
+            </div>
+            <div className="p-4">
+              <MatchDataCompare md={matchDataConv.matchDetails} saleItemTitle={matchDataConv.saleItemTitle} signals={matchDataConv.signals} />
+              {matchDataConv.attributionReason && (
+                <p className="mt-3 pt-2 border-t border-gray-700/60 text-xs text-gray-400">{matchDataConv.attributionReason}</p>
+              )}
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
