@@ -114,6 +114,16 @@ export default function ConversationCommercePanel({ psid }) {
               )}
             </div>
           )}
+
+          {/* Clicks + sale over time — makes the temporal proximity explicit so a
+              sale is never read as "same-day as the chat" when it isn't. */}
+          {status.timeline?.length > 0 && (
+            <Timeline
+              events={status.timeline}
+              gapHours={status.saleGapHours}
+              sameDay={status.saleSameDayAsClick}
+            />
+          )}
         </div>
       ) : (
         <p className="text-gray-500 text-xs">—</p>
@@ -163,6 +173,44 @@ function Certainty({ conv }) {
     <span style={{ color: style.color, fontWeight: style.weight, fontSize: style.size }}>
       {pct}% de certeza{conv.undisputed ? " 🏅" : ""}{conv.ventaIndirecta ? " · venta indirecta" : ""}
     </span>
+  );
+}
+
+// Chronological clicks + sale, with the sale→click gap. When the sale is NOT the
+// same local day as any click it's flagged loudly (should never happen under the
+// gates, but the timeline is the proof, not a promise).
+function Timeline({ events, gapHours, sameDay }) {
+  const fmt = (d) =>
+    new Date(d).toLocaleString("es-MX", { day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit" });
+  const gapLabel =
+    gapHours == null ? null
+      : gapHours < 1 ? `${Math.round(gapHours * 60)} min` : `${gapHours} h`;
+  return (
+    <div className="mt-2 pt-2 border-t border-gray-700/60">
+      <div className="text-[10px] uppercase text-gray-500 mb-1">Cronología</div>
+      <ul className="space-y-1">
+        {events.map((e, i) => (
+          <li key={i} className="flex items-start gap-2 text-[11px]">
+            <span className={e.type === "sale" ? "text-emerald-400" : "text-blue-400"}>
+              {e.type === "sale" ? "🛒" : "🔗"}
+            </span>
+            <span className="text-gray-500 whitespace-nowrap tabular-nums">{fmt(e.date)}</span>
+            <span className={e.type === "sale" ? "text-emerald-300" : "text-gray-300"}>
+              {e.type === "sale"
+                ? `Venta${e.amount ? ` — $${e.amount}` : ""}${e.certainty != null ? ` · ${e.certainty}%` : ""}`
+                : e.label}
+            </span>
+          </li>
+        ))}
+      </ul>
+      {gapLabel != null && (
+        <p className={`mt-1 text-[10px] ${sameDay ? "text-gray-500" : "text-red-400 font-semibold"}`}>
+          {sameDay
+            ? `Venta a ${gapLabel} del clic más cercano (mismo día)`
+            : `⚠ Venta a ${gapLabel} del clic — NO es el mismo día`}
+        </p>
+      )}
+    </div>
   );
 }
 
