@@ -709,15 +709,15 @@ function ConversionsView() {
 
       {matchDataConv && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setMatchDataConv(null)}>
-          <div className="bg-gray-800 rounded-lg w-full max-w-md border border-gray-700" onClick={(e) => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-4 py-3 border-b border-gray-700">
-              <span className="text-sm text-white">Datos del match</span>
-              <button onClick={() => setMatchDataConv(null)} className="text-gray-400 hover:text-white text-lg leading-none">×</button>
+          <div className="bg-gray-800 rounded-lg w-full max-w-2xl border border-gray-700 overflow-x-auto" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
+              <span className="text-xl text-white font-medium">Datos del match</span>
+              <button onClick={() => setMatchDataConv(null)} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
             </div>
-            <div className="p-4">
-              <MatchDataCompare md={matchDataConv.matchDetails} saleItemTitle={matchDataConv.saleItemTitle} signals={matchDataConv.signals} />
+            <div className="p-6">
+              <MatchDataCompare md={matchDataConv.matchDetails} saleItemTitle={matchDataConv.saleItemTitle} signals={matchDataConv.signals} large />
               {matchDataConv.attributionReason && (
-                <p className="mt-3 pt-2 border-t border-gray-700/60 text-xs text-gray-400">{matchDataConv.attributionReason}</p>
+                <p className="mt-5 pt-4 border-t border-gray-700/60 text-lg text-gray-400">{matchDataConv.attributionReason}</p>
               )}
             </div>
           </div>
