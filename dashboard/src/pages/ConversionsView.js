@@ -2,6 +2,8 @@ import React, { useState, useEffect, useMemo } from 'react';
 import toast from 'react-hot-toast';
 import API from '../api';
 import { useTranslation } from '../i18n';
+import MatchDataCompare from '../components/MatchDataCompare';
+import ConversationTranscriptModal from '../components/ConversationTranscriptModal';
 import {
   ComposedChart,
   Bar,
@@ -34,6 +36,7 @@ function ConversionsView() {
   const { t, locale } = useTranslation();
   const [stats, setStats] = useState(null);
   const [recentConversions, setRecentConversions] = useState([]);
+  const [transcriptPsid, setTranscriptPsid] = useState(null); // conversation viewer
   const [dailyClicks, setDailyClicks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [autoCorrelating, setAutoCorrelating] = useState(false); // >3h freshness rebuild
@@ -83,6 +86,9 @@ function ConversionsView() {
     mismatch: m.linkAudit?.mismatch, // safety-net flag
     humanVerdict: m.humanVerdict || null, // "confirmed" | "rejected" | null
     human: !!m.human, // synthetic human-affirmed sale (no system order)
+    matchDetails: m.matchDetails || null, // convo-vs-ML comparison (data column)
+    saleItemTitle: m.sale?.itemTitle || null,
+    signals: m.signals || null,
   });
 
   // Human override on a listed sale (deem it not-a-sale, or restore it).
@@ -507,6 +513,8 @@ function ConversionsView() {
                     <th className="px-4 py-3">{t('conversions.colClick')}</th>
                     <th className="px-4 py-3">{t('conversions.colOrder')}</th>
                     <th className="px-4 py-3">{t('conversions.colMethod')}</th>
+                    <th className="px-4 py-3">{t('conversions.colMatchData')}</th>
+                    <th className="px-4 py-3">{t('conversions.colConversation')}</th>
                     <th className="px-4 py-3 text-right">{t('conversions.colAmount')}</th>
                   </tr>
                 </thead>
@@ -557,6 +565,21 @@ function ConversionsView() {
                           >
                             · {conversion.certainty}%
                           </span>
+                        )}
+                      </td>
+                      <td className="px-4 py-3">
+                        <MatchDataCompare md={conversion.matchDetails} saleItemTitle={conversion.saleItemTitle} signals={conversion.signals} />
+                      </td>
+                      <td className="px-4 py-3">
+                        {conversion.psid ? (
+                          <button
+                            onClick={() => setTranscriptPsid(conversion.psid)}
+                            className="text-xs px-2 py-1 rounded border border-blue-600/60 text-blue-300 hover:bg-blue-600/20"
+                          >
+                            Ver conversación
+                          </button>
+                        ) : (
+                          <span className="text-gray-600 text-xs">—</span>
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
@@ -666,6 +689,10 @@ function ConversionsView() {
             </div>
           </div>
         </div>
+      )}
+
+      {transcriptPsid && (
+        <ConversationTranscriptModal psid={transcriptPsid} onClose={() => setTranscriptPsid(null)} />
       )}
     </div>
   );

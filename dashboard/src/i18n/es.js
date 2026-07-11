@@ -1133,6 +1133,8 @@ const es = {
   "conversions.colClick": "Click",
   "conversions.colOrder": "Pedido",
   "conversions.colMethod": "Método",
+  "conversions.colMatchData": "Datos del match",
+  "conversions.colConversation": "Conversación",
   "conversions.colAmount": "Monto",
   "conversions.colConfidence": "Confianza",
   "conversions.showingRange": "Mostrando {{from}} - {{to}} de {{total}}",

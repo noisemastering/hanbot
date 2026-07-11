@@ -7,6 +7,7 @@ import React, { useState, useEffect, useCallback } from "react";
 import toast from "react-hot-toast";
 import API from "../api";
 import ReportModal from "./ReportModal";
+import MatchDataCompare from "./MatchDataCompare";
 
 export default function ConversationCommercePanel({ psid }) {
   const [status, setStatus] = useState(null);
@@ -148,6 +149,13 @@ export default function ConversationCommercePanel({ psid }) {
                 <p className="text-[10px] text-gray-500 font-mono">
                   Venta ID: <span className="text-gray-300">{status.conversion.orderId}</span>
                 </p>
+              )}
+              {/* The actual data we matched on — convo vs ML, same as the conversions table. */}
+              {status.matchDetails && (
+                <div className="mt-1.5 pt-1.5 border-t border-gray-700/40">
+                  <div className="text-[10px] uppercase text-gray-500 mb-1">Datos del match</div>
+                  <MatchDataCompare md={status.matchDetails} saleItemTitle={status.saleItemTitle} signals={status.signals} />
+                </div>
               )}
             </div>
           )}

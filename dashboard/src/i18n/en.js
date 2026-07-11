@@ -1169,6 +1169,8 @@ const en = {
   "conversions.colClick": "Click",
   "conversions.colOrder": "Order",
   "conversions.colMethod": "Method",
+  "conversions.colMatchData": "Match data",
+  "conversions.colConversation": "Conversation",
   "conversions.colAmount": "Amount",
   "conversions.colConfidence": "Confidence",
   "conversions.showingRange": "Showing {{from}} - {{to}} of {{total}}",
