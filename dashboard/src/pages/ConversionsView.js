@@ -33,6 +33,21 @@ function getTodayStr() {
   return new Date().toISOString().split('T')[0];
 }
 
+// Turn a reason like "producto distinto · ciudad · 6min (50%)" into the elements
+// summed with the % as the result: "Producto distinto + ciudad + 6min = 50%",
+// plus the tier color used elsewhere. Returns { sum, pct, color }.
+function parseReason(reason) {
+  if (!reason) return null;
+  const m = reason.match(/\((\d+)%\)\s*$/);
+  const pct = m ? Number(m[1]) : null;
+  const body = m ? reason.slice(0, m.index).trim() : reason;
+  const parts = body.split(/\s*[·+]\s*/).map((p) => p.trim()).filter(Boolean);
+  if (parts.length) parts[0] = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
+  const color = pct == null ? '#9ca3af'
+    : pct >= 90 ? '#34d399' : pct >= 70 ? '#fbbf24' : pct >= 50 ? '#fb923c' : '#9ca3af';
+  return { sum: parts.join(' + '), pct, color };
+}
+
 function ConversionsView() {
   const { t, locale } = useTranslation();
   const [stats, setStats] = useState(null);
@@ -713,9 +728,14 @@ function ConversionsView() {
               {detailView === 'match' ? (
                 <>
                   <MatchDataCompare md={detailRow.matchDetails} saleItemTitle={detailRow.saleItemTitle} signals={detailRow.signals} large />
-                  {detailRow.attributionReason && (
-                    <p className="mt-5 pt-4 border-t border-gray-700/60 text-lg text-gray-400">{detailRow.attributionReason}</p>
-                  )}
+                  {detailRow.attributionReason && (() => {
+                    const r = parseReason(detailRow.attributionReason);
+                    return (
+                      <p className="mt-5 pt-4 border-t border-gray-700/60 text-lg" style={{ color: r.color }}>
+                        {r.sum}{r.pct != null && <> = <span className="font-semibold">{r.pct}%</span></>}
+                      </p>
+                    );
+                  })()}
                 </>
               ) : (
                 <ConversationTranscript psid={detailRow.psid} />
