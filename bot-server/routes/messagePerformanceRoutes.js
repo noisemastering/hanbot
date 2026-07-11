@@ -41,6 +41,8 @@ function periodStart(period) {
 }
 
 const dayExpr = (field) => ({ $dateToString: { format: "%Y-%m-%d", date: field, timezone: TZ } });
+// JS equivalent of dayExpr for per-document bucketing (same %Y-%m-%d in local TZ).
+const dayStr = (d) => new Intl.DateTimeFormat("en-CA", { timeZone: TZ, year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(d));
 
 // GET /message-performance?period=7|15|30|90  (or start=&end= ISO)
 router.get("/", authenticate, async (req, res) => {
@@ -51,7 +53,7 @@ router.get("/", authenticate, async (req, res) => {
     const cap = Math.min(2000, Math.max(1, parseInt(limit, 10) || 500));
 
     // ── DAILY SERIES (uncapped, by event timestamp) ──────────────────────────
-    const [convDaily, clicksDaily, salesDaily, handoffDaily, reportDaily] = await Promise.all([
+    const [convDaily, clicksDaily, salesDaily, handoffDaily] = await Promise.all([
       // conversations active per day = distinct psid with a message that day
       Message.aggregate([
         { $match: { timestamp: { $gte: from, $lte: to } } },
@@ -80,20 +82,37 @@ router.get("/", authenticate, async (req, res) => {
         },
         { $group: { _id: dayExpr("$lastMessageAt"), n: { $sum: 1 } } },
       ]),
-      // reports per day = conversation_report tickets created that day, split by severity
-      Ticket.aggregate([
-        { $match: { source: "conversation_report", createdAt: { $gte: from, $lte: to } } },
-        {
-          $group: {
-            _id: dayExpr("$createdAt"),
-            n: { $sum: 1 },
-            high: { $sum: { $cond: [{ $eq: ["$priority", "high"] }, 1, 0] } },
-            medium: { $sum: { $cond: [{ $eq: ["$priority", "medium"] }, 1, 0] } },
-            low: { $sum: { $cond: [{ $eq: ["$priority", "low"] }, 1, 0] } },
-          },
-        },
-      ]),
     ]);
+
+    // Reports: conversation_report tickets, EXCLUDING those closed as "Sin error"
+    // (noError) so they don't count toward the report %; and bucketed by the day the
+    // CONVERSATION took place (its last message on/before the report) rather than the
+    // day it was reported. Report volume is low, so a per-ticket message lookup is fine.
+    const fromStr = dayStr(from), toStr = dayStr(to);
+    const reportTickets = await Ticket.find({
+      source: "conversation_report",
+      noError: { $ne: true },           // exclude "Sin error"
+      status: { $ne: "ya_resuelto" },   // exclude "Ya resuelto" (real bug, already fixed)
+      createdAt: { $gte: from, $lte: to },
+    }).select("psid priority createdAt").lean();
+    const reportByDay = new Map();
+    for (const t of reportTickets) {
+      let when = t.createdAt;
+      if (t.psid) {
+        const lastMsg = await Message.findOne({ psid: t.psid, timestamp: { $lte: t.createdAt } })
+          .sort({ timestamp: -1 }).select("timestamp").lean();
+        if (lastMsg && lastMsg.timestamp) when = lastMsg.timestamp;
+      }
+      const day = dayStr(when);
+      if (day < fromStr || day > toStr) continue; // convo day outside the window → belongs elsewhere
+      let e = reportByDay.get(day);
+      if (!e) { e = { _id: day, n: 0, high: 0, medium: 0, low: 0 }; reportByDay.set(day, e); }
+      e.n++;
+      if (t.priority === "high") e.high++;
+      else if (t.priority === "medium") e.medium++;
+      else if (t.priority === "low") e.low++;
+    }
+    const reportDaily = [...reportByDay.values()];
 
     const dayMap = new Map();
     const ensure = (day) => {

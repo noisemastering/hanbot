@@ -424,4 +424,38 @@ async function runLinkFollowUpJob() {
   }
 }
 
-module.exports = { scheduleFollowUpIfNeeded, runSilenceFollowUpJob, runLinkFollowUpJob };
+// ─────────────────────────────────────────────────────────────────────────────
+// PENDING-HANDOFF TIMEOUT: the bot asks for the customer's name/phone before
+// escalating. If they don't answer within ~30s, escalate ANYWAY (alert the human)
+// and flag that the client never gave their info — otherwise silent leads are
+// lost. Cleared when the customer replies (their turn re-arms or resolves it).
+const PENDING_HANDOFF_TIMEOUT_MS = 30 * 1000;
+async function runPendingHandoffTimeoutJob() {
+  try {
+    const { triggerHandoff } = require('../services/pushNotifications');
+    const { updateConversation } = require('../conversationManager');
+    const cutoff = new Date(Date.now() - PENDING_HANDOFF_TIMEOUT_MS);
+    const stale = await Conversation.find({
+      pendingHandoffAt: { $ne: null, $lte: cutoff },
+      handoffRequested: { $ne: true },
+      state: { $nin: ['needs_human', 'human_active', 'human_handling'] },
+    }).select('psid pendingHandoffAt pendingHandoffReason').limit(50).lean();
+    for (const c of stale) {
+      // Definitive "did they answer?" check — any USER message after the ask.
+      const replied = await Message.exists({ psid: c.psid, senderType: 'user', timestamp: { $gt: c.pendingHandoffAt } });
+      if (replied) {
+        // They engaged; their turn handles it — just clear the timer.
+        await updateConversation(c.psid, { pendingHandoffAt: null }).catch(() => {});
+        continue;
+      }
+      const reason = `${c.pendingHandoffReason || 'Cliente requiere asesor'} — ⚠️ el cliente NO proporcionó su información de contacto (sin respuesta en 30s)`;
+      await triggerHandoff(c.psid, reason).catch((e) => console.error('❌ pending-handoff timeout escalation failed:', e.message));
+      await updateConversation(c.psid, { pendingHandoffAt: null }).catch(() => {});
+      console.log(`⏱️ [pending-handoff] escalated ${c.psid} after 30s of silence — client gave no info`);
+    }
+  } catch (err) {
+    console.error('❌ runPendingHandoffTimeoutJob failed:', err.message);
+  }
+}
+
+module.exports = { scheduleFollowUpIfNeeded, runSilenceFollowUpJob, runLinkFollowUpJob, runPendingHandoffTimeoutJob };

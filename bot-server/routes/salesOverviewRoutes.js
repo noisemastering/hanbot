@@ -2,7 +2,10 @@ const express = require("express");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
 const DashboardUser = require("../models/DashboardUser");
-const MLOrder = require("../models/MLOrder");
+// mlorders (legacy normalized) was retired; ml_sales is the canonical sales store.
+// Same fields used here (status/totalAmount/dateCreated/items.title); product
+// grouping falls back to item.title since ml_sales items carry no productFamilyId.
+const MLOrder = require("../models/MLSale");
 const ClickLog = require("../models/ClickLog");
 const ProductFamily = require("../models/ProductFamily");
 

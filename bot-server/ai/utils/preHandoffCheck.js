@@ -117,7 +117,7 @@ async function checkZipBeforeHandoff(psid, convo, userMessage, handoffInfo = {})
   const attempts = (convo.preHandoffAttempts || 0);
   if (attempts >= 2) {
     console.log(`📋 preHandoff: max attempts reached, proceeding with partial data (missing: ${missing.join(', ')})`);
-    await updateConversation(psid, { preHandoffAttempts: 0, pendingHandoff: false, pendingHandoffInfo: null });
+    await updateConversation(psid, { preHandoffAttempts: 0, pendingHandoff: false, pendingHandoffInfo: null, pendingHandoffAt: null });
     return null;
   }
 
@@ -125,7 +125,9 @@ async function checkZipBeforeHandoff(psid, convo, userMessage, handoffInfo = {})
   await updateConversation(psid, {
     pendingHandoff: true,
     pendingHandoffInfo: handoffInfo,
-    preHandoffAttempts: attempts + 1
+    preHandoffAttempts: attempts + 1,
+    pendingHandoffAt: new Date(), // 30s timeout: escalate anyway if the client goes silent
+    pendingHandoffReason: handoffInfo.reason || 'Cliente requiere asesor',
   });
 
   const introText = attempts === 0
@@ -152,7 +154,7 @@ async function handlePendingZipResponse(psid, convo, userMessage) {
   const askResponse = await checkZipBeforeHandoff(psid, convo, userMessage, convo.pendingHandoffInfo || {});
   if (!askResponse) {
     // All data collected, proceed
-    await updateConversation(psid, { pendingHandoff: false, pendingHandoffInfo: null });
+    await updateConversation(psid, { pendingHandoff: false, pendingHandoffInfo: null, pendingHandoffAt: null });
     const zipInfo = convo.zipCode ? { code: convo.zipCode, city: convo.city, state: convo.stateMx }
       : convo.city ? { city: convo.city, state: convo.stateMx } : null;
     return { proceed: true, zipInfo };

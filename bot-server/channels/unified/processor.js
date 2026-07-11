@@ -310,7 +310,7 @@ async function processMessage(normalizedMessage, io = null) {
               } else {
                 waAdUpdate.currentFlow = isResellerAd ? 'reseller' : (adFlowRef || adProductInterest);
               }
-              waAdUpdate.greeted = true;
+              waAdUpdate.greeted = false; // #1: let the ENGINE greet on the first message
               waAdUpdate.lastGreetTime = Date.now();
             }
             if (resolved.productIds?.length) {

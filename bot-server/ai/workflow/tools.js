@@ -36,14 +36,17 @@ async function familyFullPath(PF, id) {
 // "4x3", "4 x 3 m", "4 por 3", "de 4x3 metros" → ["4","3"] (sorted for order-insensitivity).
 function dimsOf(text) {
   if (!text) return null;
-  // Strip metric units, including 'm' glued to a digit ("6m" → "6"), AND the
+  // Strip metric units, including 'm'/'cm' glued to a digit ("6m" → "6",
+  // "13cm" → "13" for the borde separador, whose height is in cm), AND the
   // descriptive words customers put between the numbers and the separator
   // ("13 de largo x 3 de ancho", "13 metros de largo por 3 de ancho") — without
   // this, the number isn't adjacent to the x/por and the match fails.
+  // cm goes first so it's stripped before the bare 'm' rules.
   const m = String(text)
     .toLowerCase()
-    .replace(/(\d)\s*(?:m\b|mts?\b|metros?\b)/g, "$1 ")
-    .replace(/\bmts?\.?\b|\bmetros?\b|\bm\b/g, " ")
+    .replace(/(\d),(\d)/g, "$1.$2") // Mexican decimal comma "3,5" → "3.5" (else "3,5 x 3,5" misparses to 3x5)
+    .replace(/(\d)\s*(?:cms?\b|cent[ií]metros?\b|m\b|mts?\b|metros?\b)/g, "$1 ")
+    .replace(/\bcms?\.?\b|\bcent[ií]metros?\b|\bmts?\.?\b|\bmetros?\b|\bm\b/g, " ")
     .replace(/\bde\s+(?:largo|ancho|alto|altura|fondo|lado)\b/g, " ") // "13 de largo x 3 de ancho" → "13 x 3"
     .replace(/\b(?:largo|ancho|alto|altura|fondo)\s+de\b/g, " ")      // "largo de 13 x ancho de 3"
     .replace(/(\d+)\s*(?:y\s*medi[oa]|i\s*medi[oa]|imedi[oa]|y\s*1\/2)\b/g, "$1.5") // "3 imedio"/"3 y medio" → "3.5"
@@ -51,6 +54,33 @@ function dimsOf(text) {
   if (!m) return null;
   // Sort numerically so "6x4" and "4x6" compare equal regardless of order.
   return [m[1], m[2]].map(Number).sort((a, b) => a - b);
+}
+
+// ── TRIANGLE HARD RULE ──────────────────────────────────────────────────────
+// A triangular net has THREE sides (attributes side1/side2/side3, no "width").
+// BUSINESS RULE (hard as steel): NEVER offer, suggest, quote, or even surface a
+// triangular product unless the customer EXPRESSLY asked for a triangle. These
+// two helpers are the SINGLE source of truth — every place that selects a product
+// runs candidates through isTriangularProduct() and only keeps triangles when
+// queryWantsTriangle() is true. This is what stops the 4x4x4 velaria from leaking
+// into a rectangular/length quote (it kept slipping through the length-only path
+// because its enabledDimensions are side1/side2/side3, i.e. no "width").
+function isTriangularProduct(node) {
+  if (!node) return false;
+  const ed = node.enabledDimensions;
+  if (Array.isArray(ed) && ed.length &&
+      (ed.includes("side3") || (ed.includes("side1") && ed.includes("side2") && !ed.includes("width")))) return true;
+  const s = `${node.size || ""} ${node.name || ""}`;
+  if (/triangul|velaria/i.test(s)) return true;
+  // three numeric groups joined by x/×/* → "4x4x4", "4 x 4 x 4"
+  if (/\d+(?:\.\d+)?\s*[x×*]\s*\d+(?:\.\d+)?\s*[x×*]\s*\d+/.test(s)) return true;
+  return false;
+}
+function queryWantsTriangle(query, wantDims) {
+  if (Array.isArray(wantDims) && wantDims.length >= 3) return true; // "3x3x3" parsed to 3 sides
+  const s = String(query || "");
+  return /triangul|tri[aá]ngulo|velaria/i.test(s) ||
+    /\d+(?:\.\d+)?\s*[x×*]\s*\d+(?:\.\d+)?\s*[x×*]\s*\d+/.test(s);
 }
 
 // Find a sellable product in the flow's family subtrees that matches the
@@ -101,6 +131,48 @@ async function _ancestryHasShade(leaf, shade) {
   return false;
 }
 
+// The shade % of a product, read from its ancestry (a node named "70%"). Null if
+// the product carries no shade (e.g. ground cover, borde).
+async function productShade(leaf) {
+  const PF = require("../../models/ProductFamily");
+  let cur = leaf;
+  for (let i = 0; i < 10 && cur; i++) {
+    const mm = String(cur.name || "").match(/(\d{2,3})\s*%/);
+    if (mm) return mm[1];
+    if (!cur.parentId) break;
+    cur = await PF.findById(cur.parentId).select("_id name parentId").lean().catch(() => null);
+  }
+  return null;
+}
+
+// The shades (%) actually stocked for a given W×L measure within these families —
+// so when a customer asks for a shade we don't carry IN THAT SIZE, we can offer
+// the real alternatives instead of silently swapping.
+async function availableShadesForMeasure(familyList, wantDims) {
+  if (!wantDims) return [];
+  const PF = require("../../models/ProductFamily");
+  const ids = (Array.isArray(familyList) ? familyList : familyList ? [familyList] : [])
+    .filter((f) => f && f.id).map((f) => String(f.id));
+  const queue = [...ids];
+  const shades = new Set();
+  let g = 0;
+  while (queue.length && g++ < 500) {
+    const kids = await PF.find({ parentId: queue.shift() })
+      .select("name size sellable active parentId enabledDimensions").lean();
+    for (const k of kids) {
+      if (k.sellable && k.active !== false && !isTriangularProduct(k)) {
+        const d = dimsOf(k.size) || dimsOf(k.name);
+        if (d && d[0] === wantDims[0] && d[1] === wantDims[1]) {
+          const sh = await productShade(k);
+          if (sh) shades.add(sh);
+        }
+      }
+      queue.push(k._id);
+    }
+  }
+  return [...shades].sort((a, b) => Number(a) - Number(b));
+}
+
 // Pick the right sibling VARIANT among candidates that all match the requested
 // measure (e.g. grueso vs delgado "Rollo de 18 m"). The distinguishing word is
 // on a parent node, so score each candidate's ancestry against the query words;
@@ -122,6 +194,12 @@ async function findProductInFamilies(query, familyList, wantDimsArg = null) {
     .map((f) => String(f.id));
   if (!ids.length) return null;
 
+  // HARD TRIANGLE RULE: only keep triangular products if the customer EXPRESSLY
+  // asked for a triangle. Applied at the SOURCE (candidate pool), so no downstream
+  // branch — exact, length-only, or name fallback — can ever surface a triangle
+  // for a normal 2-D/length request.
+  const wantTri = queryWantsTriangle(query, wantDimsArg);
+
   // Gather all sellable descendants of the flow families (BFS, bounded).
   const queue = [...ids];
   const candidates = [];
@@ -132,7 +210,7 @@ async function findProductInFamilies(query, familyList, wantDimsArg = null) {
       .select("name size sellable active stock price mlPrice onlineStoreLinks parentId enabledDimensions")
       .lean();
     for (const k of kids) {
-      if (k.sellable && k.active !== false) candidates.push(k);
+      if (k.sellable && k.active !== false && (wantTri || !isTriangularProduct(k))) candidates.push(k);
       queue.push(k._id);
     }
     // also consider the family node itself if it's sellable
@@ -141,7 +219,17 @@ async function findProductInFamilies(query, familyList, wantDimsArg = null) {
   // Wanted dims come from the AI extractor for customer text (passed in); fall
   // back to dimsOf only if not provided. Candidate (catalog) sizes are still
   // parsed with dimsOf — they're clean, controlled "6x4m" strings.
-  const wantDims = wantDimsArg || dimsOf(query);
+  // Sort ascending to mirror dimsOf's order-insensitivity: the AI extractor passes
+  // wantDimsArg in the SPOKEN order ("6x5" → [6,5]), but catalog sizes are compared
+  // as [small,large] via dimsOf, so an unsorted [6,5] never matched a "6x5m" leaf.
+  const _rawWant = wantDimsArg || dimsOf(query);
+  const wantDims = _rawWant ? [..._rawWant].sort((a, b) => a - b) : null;
+  // Is this a TRIANGULAR request? (explicit word, or a 3-part measure "3x3x3").
+  // dimsOf collapses "3x3x3"→[3,3], so without this a triangle and a rectangle look
+  // identical and a "triangular 3x3x3" ask wrongly resolves to the rectangular 3x3.
+  const _triCount = (s) => (String(s || "").match(/\d+(?:\.\d+)?/g) || []).length >= 3;
+  const qTriangular = /triangul|tri[aá]ngulo/i.test(String(query)) ||
+    /\d+(?:\.\d+)?\s*[x×*]\s*\d+(?:\.\d+)?\s*[x×*]\s*\d+/.test(String(query));
   if (wantDims) {
     // Match the measure against the candidate's SIZE field first, then its
     // name. After a tree restructure the sellable leaf can be named for an
@@ -151,6 +239,12 @@ async function findProductInFamilies(query, familyList, wantDimsArg = null) {
       // A width×length request never matches a length-only product (borde).
       const ed = c.enabledDimensions;
       if (Array.isArray(ed) && ed.length > 0 && !ed.includes("width")) return false;
+      // Shape gate: a triangular request matches ONLY triangular products, and a
+      // normal W×L request NEVER matches a triangular one. If the flow has no
+      // triangular product (triangles are a sibling family), a triangular ask
+      // yields no hit → null → escalate to an asesor (never misquote a rectangle).
+      const cTri = _triCount(c.size) || _triCount(c.name);
+      if (qTriangular !== cTri) return false;
       const cd = dimsOf(c.size) || dimsOf(c.name);
       return cd && cd[0] === wantDims[0] && cd[1] === wantDims[1];
     });
@@ -312,16 +406,15 @@ async function availableMeasuresForFamilies(familyList) {
 
   // A TRIANGULAR net has three sides ("2 m x 2 m x 2 m"). Per business rule, we
   // do NOT list or suggest triangular nets proactively — only quote them if the
-  // customer explicitly asks. (findProductInFamilies still resolves them on an
-  // explicit ask; this only keeps them out of the proactive measures list and
-  // the "closest measure" suggestions.)
-  const isTriangular = (s) => (String(s || "").match(/\d+(?:\.\d+)?/g) || []).length >= 3;
-
+  // customer explicitly asks. Uses the robust isTriangularProduct (which reads
+  // enabledDimensions side1/side2/side3), so a triangle whose size string doesn't
+  // obviously show 3 numbers is still kept out of the proactive measures list and
+  // the "closest measure" suggestions.
   const byMeasure = new Map();
   for (const leaf of leaves) {
     const parent = leaf.parentId ? await getParent(leaf.parentId) : null;
     const node = parent && parent.size ? parent : leaf; // size-group → parent, else leaf
-    if (isTriangular(node.size) || isTriangular(node.name)) continue; // skip triangular (don't suggest unless asked)
+    if (isTriangularProduct(leaf) || isTriangularProduct(node)) continue; // skip triangular (don't suggest unless asked)
     const key = String(node._id);
     const price = numericOrNull(leaf.price);
     // Length-only product (e.g. borde separador: you choose only a length; its
@@ -999,4 +1092,4 @@ function parseRollQuantity(text) {
   return null;
 }
 
-module.exports = { REGISTRY, toolDefsFor, runTool, dimsOf, findProductInFamilies, availableVariantsForProduct, availableMeasuresForFamilies, closestAvailableMeasure, nearestRollByArea, parseRollQuantity };
+module.exports = { REGISTRY, toolDefsFor, runTool, dimsOf, findProductInFamilies, availableVariantsForProduct, availableMeasuresForFamilies, closestAvailableMeasure, nearestRollByArea, parseRollQuantity, productShade, availableShadesForMeasure };

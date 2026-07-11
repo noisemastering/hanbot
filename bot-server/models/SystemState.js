@@ -28,6 +28,21 @@ const systemStateSchema = new mongoose.Schema(
     // per normal permissions; no daily conversation cap). Default OFF → the gated
     // features are super_admin-only and the bot is capped at 50 conversations/day.
     liberado: { type: switchSchema, default: () => ({}) },
+    // Convo↔sale correlation freshness. `at` = when the last correlation run
+    // finished; the dashboard auto-triggers a rebuild when it's >3h stale.
+    // `running` guards against concurrent runs across requests/instances.
+    lastCorrelationRun: {
+      type: new mongoose.Schema(
+        {
+          at: { type: Date, default: null },
+          running: { type: Boolean, default: false },
+          startedAt: { type: Date, default: null },
+          stats: { type: mongoose.Schema.Types.Mixed, default: null },
+        },
+        { _id: false }
+      ),
+      default: () => ({}),
+    },
   },
   { timestamps: true }
 );

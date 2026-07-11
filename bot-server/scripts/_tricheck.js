@@ -1,0 +1,16 @@
+require("dotenv").config({quiet:true}); const m=require("mongoose");
+require("../models/ProductFamily");
+const WF=require("../models/Workflow");
+const { findProductInFamilies, closestAvailableMeasure }=require("../ai/workflow/tools");
+(async()=>{ await m.connect(process.env.MONGODB_URI||process.env.MONGO_URI);
+  const cs=await WF.findOne({name:/coldstart/i}).lean();
+  const fl=((WF.familyListOf?WF.familyListOf(cs):cs.familyList)||[]);
+  const t=async(q,wd)=>{ const d=await findProductInFamilies(q,fl,wd); const c=await closestAvailableMeasure(q,fl,wd); console.log(`q="${q}" wd=${JSON.stringify(wd)}\n   find→ ${d?d.name+" ("+d.size+")":"null"}\n   closest→ ${c?c.label+" ("+(c.size||"?")+")":"null"}`); };
+  console.log("== should NOT return a triangle ==");
+  await t("2.5 x 4",[2.5,4]);
+  await t("2.5x4",null);
+  await t("quiero una malla de 4x2.5",[2.5,4]);
+  console.log("\n== SHOULD still resolve when explicitly triangular ==");
+  await t("triangular 3x3x3",[3,3,3]);
+  await t("una triangular de 4x4x4",null);
+  await m.connection.close(); })().catch(e=>{console.error(e);process.exit(1)});

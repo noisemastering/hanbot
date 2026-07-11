@@ -129,6 +129,7 @@ const mlRoutes = require('./routes/mlRoutes');
 const conversationsRoutes = require('./routes/conversationsRoutes');
 const crmRoutes = require('./routes/crmRoutes');
 const analyticsRoutes = require('./routes/analyticsRoutes');
+ const convoCorrelationRoutes = require('./routes/convoCorrelationRoutes');
 const masterCatalogRoutes = require('./routes/masterCatalogRoutes');
 const usosRoutes = require('./routes/usosRoutes');
 const gruposRoutes = require('./routes/gruposRoutes');
@@ -213,6 +214,7 @@ app.use('/conversations', conversationsRoutes);
 app.use('/crm', crmRoutes);
 app.use('/users', usersRoutes);
 app.use('/analytics', analyticsRoutes);
+ app.use('/correlation', convoCorrelationRoutes);
 app.use('/master-catalog', masterCatalogRoutes);
 app.use('/usos', usosRoutes);
 app.use('/grupos', gruposRoutes);
@@ -1431,21 +1433,19 @@ app.post("/webhook", async (req, res) => {
         const adFlowRef = resolvedSettings?.flowRef;
         const adCurrentFlow = isResellerAd ? 'reseller' : (adFlowRef || adProductInterest);
         if (adProductInterest) {
-          const adConvoUpdate = { productInterest: adProductInterest, currentFlow: adCurrentFlow, adFlowRef: adFlowRef || null, greeted: true, lastGreetTime: Date.now() };
+          const adConvoUpdate = { productInterest: adProductInterest, currentFlow: adCurrentFlow, adFlowRef: adFlowRef || null, greeted: false, lastGreetTime: Date.now() };
           if (adMainProductName) adConvoUpdate.adMainProductName = adMainProductName;
           const adMainProductId = resolvedSettings?.mainProductId || resolvedSettings?.productIds?.[0];
           if (adMainProductId) adConvoUpdate.adMainProductId = adMainProductId.toString();
           await updateConversation(senderPsid, adConvoUpdate);
-          await callSendAPI(senderPsid, { text: adGreeting });
+          // #1: the ENGINE greets on the first message now (greeted:false) — legacy
+          // ad greeting removed so nothing but the engine ever replies.
           adGreetingSent = true;
         } else if (referral.ad_id) {
           // Ad click but couldn't determine product - generic greeting
           console.log(`⚠️ Could not determine product for ad_id: ${referral.ad_id}`);
-          await updateConversation(senderPsid, { greeted: true, lastGreetTime: Date.now() });
-          const genericGreeting = (isRecentReturn && convo?.userName)
-            ? `¡Hola de nuevo, ${convo.userName}! ¿En qué te puedo ayudar?`
-            : "👋 ¡Hola! Gracias por contactarnos. ¿En qué producto te puedo ayudar?";
-          await callSendAPI(senderPsid, { text: genericGreeting });
+          await updateConversation(senderPsid, { greeted: false, lastGreetTime: Date.now() });
+          // #1: engine greets on the first message now — legacy greeting removed.
           adGreetingSent = true;
         }
         } // close if (!convoFlowRef) — legacy ad-entry guard
@@ -1758,15 +1758,15 @@ app.post("/webhook", async (req, res) => {
                 await callSendAPI(senderPsid, { text: reply.text });
                 await saveMessage(senderPsid, reply.text, "bot");
 
-                // Check if we need to hand off to human
+                // Check if we need to hand off to human. Use the canonical
+                // triggerHandoff so it sets handoffRequested + handoffReason +
+                // handoffTimestamp + needs_human AND notifies — otherwise the
+                // dashboard flag stays false and the takeover gate keeps the bot
+                // replying (image handoffs silently failed to "count").
                 if (reply.needsHandoff) {
-                  const convo = await Conversation.findOne({ psid: senderPsid });
-                  await updateConversation(senderPsid, {
-                    lastIntent: "human_handoff",
-                    state: "needs_human"
-                  });
-                  sendHandoffNotification(senderPsid, convo, reply.handoffReason || "Imagen requiere atención humana").catch(err => {
-                    console.error("❌ Failed to send push notification:", err);
+                  const { triggerHandoff } = require("./services/pushNotifications");
+                  await triggerHandoff(senderPsid, reply.handoffReason || "Imagen requiere atención humana", {
+                    extraUpdates: { lastIntent: "human_handoff" },
                   });
                 } else {
                   // Update conversation intent
@@ -2292,6 +2292,31 @@ if (process.env.REMARKETING_ENABLED === 'true' || process.env.REMARKETING_ENABLE
 } else {
   console.log('🚫 Remarketing follow-up jobs DISABLED (set REMARKETING_ENABLED=true to enable)');
 }
+
+// Pending-handoff timeout sweeper — ALWAYS ON (not gated by remarketing). Escalates
+// any handoff where the bot asked for contact and the client went silent > 30s.
+setTimeout(() => {
+  const { runPendingHandoffTimeoutJob } = require('./jobs/silenceFollowUp');
+  console.log('⏱️ Pending-handoff timeout sweeper scheduled (every 15s, 30s timeout)');
+  runPendingHandoffTimeoutJob();
+  setInterval(runPendingHandoffTimeoutJob, 15 * 1000);
+}, 20000);
+
+// Scheduled convo↔sale correlation — keeps ml_sales AND the conversions current
+// without waiting for a dashboard visit. Runs every 30 min; the DB-backed
+// SystemState.running guard prevents overlap across restarts/instances.
+setTimeout(() => {
+  const { runConvoCorrelation } = require('./utils/runConvoCorrelation');
+  const tick = async () => {
+    try {
+      const r = await runConvoCorrelation({});
+      if (!r.skipped) console.log(`🔗 Scheduled correlation: matched=${r.matched} scanned=${r.scanned}`);
+    } catch (e) { console.error('⚠️ scheduled correlation failed:', e.message); }
+  };
+  console.log('🔗 Convo↔sale correlation scheduled (every 30 min)');
+  tick();
+  setInterval(tick, 30 * 60 * 1000);
+}, 45000);
 
 // Health check - monitors tracking domain, emails alert on SSL/DNS/HTTP failure
 setTimeout(() => {

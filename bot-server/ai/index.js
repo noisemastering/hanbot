@@ -77,11 +77,16 @@ function captureZipReply(text) {
   const t = String(text || "").trim();
   if (!t || !/\d/.test(t)) return { isZipReply: false };
   const five = t.match(/\b(\d{5})\b/); // a valid Mexican CP
-  // Strip CP-context words + any number run; if almost nothing meaningful
-  // remains, the message was basically just the zip.
-  const stripped = t
+  // Strip CP-context words, greetings/polite filler + any number run; if almost
+  // nothing meaningful remains, the message was basically just the zip. A late
+  // reply like "Buenos días! 54945" MUST count as bare — the greeting alone must
+  // not push it to the model, which then wrongly escalated to a handoff.
+  const norm = t.normalize("NFD").replace(/[̀-ͯ]/g, ""); // drop accents so "días"→"dias"
+  const stripped = norm
     .replace(/\d+/g, " ")
-    .replace(/c[oó]digo\s*postal|\bc\.?\s*p\.?\b|\bcp\b|\bmi\b|\bes\b|\bel\b|aqu[ií]|\bsale\b|\btoma\b/gi, " ")
+    .replace(/codigo\s*postal|\bc\.?\s*p\.?\b|\bcp\b|\bmi\b|\bes\b|\bel\b|\baqui\b|\bsale\b|\btoma\b/gi, " ")
+    // greetings / courtesy filler that commonly wrap a bare CP reply
+    .replace(/\bhola+\b|\bola+\b|\bbuen(os|as|a)?\b|\bdias?\b|\btardes?\b|\bnoches?\b|\bque\s*tal\b|\bsaludos?\b|\bmuchas\b|\bgracias\b|\bhey\b|\bpor\s*favor\b|\bporfa(vor|s|is)?\b|\bdisculp[ae]s?\b|\boye\b|\boiga\b|\bsenor(ita|a)?\b|\bamig[oa]\b|\bcompa\b|\bokay?\b|\bvale\b|\blisto\b|\bmira\b|\bbien\b/gi, " ")
     .replace(/[^\p{L}]+/gu, " ")
     .trim();
   const bareNumberOnly = stripped.length <= 3;
@@ -209,6 +214,15 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
     lastIntent: handoff ? "handoff_requested" : "workflow_turn",
     lastMessageAt: new Date(),
   };
+  // 30s pending-handoff timeout: arm the clock when the engine asked the customer
+  // for their contact before escalating (pendingHandoff, no contact yet); clear it
+  // otherwise. If they go silent, the sweeper escalates and flags "no info given".
+  if (newState.pendingHandoff && !handoff) {
+    persist.pendingHandoffAt = new Date();
+    persist.pendingHandoffReason = (newState.pendingHandoff.reason) || diagnostics?.handoffReason || "Cliente requiere asesor";
+  } else {
+    persist.pendingHandoffAt = null;
+  }
   if (loc.city && !convo.city) persist.city = loc.city;
   if ((loc.zip || loc.zipcode) && !convo.zipcode) persist.zipcode = loc.zip || loc.zipcode;
   if (lead.phone || lead.email) persist.leadData = { contact: lead.phone || lead.email };
@@ -333,6 +347,23 @@ const BOT_PERSONA_POOL = ["Carolina", "Mireya", "Claudia", "Fernanda", "Miranda"
 //                                 the legacy bot — not on a human takeover, a
 //                                 missing workflow, or an engine error. reply
 //                                 may be null (= stay silent) in those cases.
+// RELEASE GATE (Rule 1): anything CREATED after July 1, 2026 must NOT run until the
+// system is Liberado (released). Applies to ads and workflows alike. Returns a
+// deferral reply object when blocked, or null when it's allowed to run. Nothing
+// post-July-1 exists yet, so this is a forward-looking freeze on new content.
+const RELEASE_CUTOFF = new Date("2026-07-02T06:00:00Z"); // 2026-07-02 00:00 America/Mexico_City
+async function releaseGateReply(createdAtDates) {
+  const anyAfterCutoff = createdAtDates.some((d) => d && new Date(d) >= RELEASE_CUTOFF);
+  if (!anyAfterCutoff) return null;
+  const { isLiberado } = require("../utils/systemState");
+  let liberado = false;
+  try { liberado = await isLiberado(); } catch { liberado = false; }
+  if (liberado) return null; // released → allowed
+  // Blocked: created after Jul 1 and not yet released.
+  const { DEFERRAL_MESSAGE } = require("../utils/liberadoCap");
+  return { type: "text", text: DEFERRAL_MESSAGE };
+}
+
 async function maybeRunAdWorkflow(userMessage, psid) {
   const Conversation = require("../models/Conversation");
   const convo = await Conversation.findOne({ psid })
@@ -342,7 +373,7 @@ async function maybeRunAdWorkflow(userMessage, psid) {
 
   const Ad = require("../models/Ad");
   const ad = await Ad.findOne({ fbAdId: convo.adId })
-    .select("name workflowId workflowEnabled workflowSetup")
+    .select("name workflowId workflowEnabled workflowSetup createdAt")
     .lean();
   // Ad with NO flow attached → legacy still handles it (per request, only ads
   // WITH the new flows lose their legacy tie).
@@ -354,6 +385,9 @@ async function maybeRunAdWorkflow(userMessage, psid) {
     const Workflow = require("../models/Workflow");
     const workflow = await Workflow.findById(ad.workflowId);
     if (!workflow) return { owned: true, reply: null };
+    // Rule 1: post-July-1 ad or workflow is frozen until Liberado.
+    const gated = await releaseGateReply([ad.createdAt, workflow.createdAt]);
+    if (gated) return { owned: true, reply: gated };
     const res = await runEngineWorkflow(workflow, convo, psid, userMessage, {
       sourceLabel: `ad="${ad.name || convo.adId}"`,
       initOverrides: ad.workflowSetup || {},
@@ -378,21 +412,30 @@ async function maybeRunAdWorkflow(userMessage, psid) {
 async function maybeRunColdStartWorkflow(userMessage, psid) {
   const Conversation = require("../models/Conversation");
   const convo = await Conversation.findOne({ psid })
-    .select("adId channel state workflowState extractedName city zipcode productInterest botPersonaName")
+    .select("adId channel state workflowState extractedName city zipcode productInterest botPersonaName convoFlowRef")
     .lean();
   if (!convo) return null;
-  if (convo.adId) return null; // ad path owns ad conversations
+  // FULL CUTOVER: the engine owns EVERY conversation the ad-workflow path didn't
+  // already claim — ad conversations WITHOUT an engine workflow, convo_flow ads,
+  // and organic traffic alike. This is the deliberate kill of the legacy monolith
+  // AND the convo_flow system: nothing below this line (legacy / convo_flow) ever
+  // runs. Previously ad conversations were excluded here and fell to legacy.
 
   const Workflow = require("../models/Workflow");
-  const workflow = await Workflow.findOne({ isColdStart: true, active: true });
-  if (!workflow) return null; // no cold-start flow → legacy handles organic
+  const workflow = await Workflow.findOne({ isColdStart: true, active: true }).select("+createdAt");
+  if (!workflow) return null; // safety net: no cold-start flow at all → legacy (should never happen in prod)
 
-  // OWNED by cold-start from here — no legacy fallthrough.
+  // OWNED by cold-start from here — no legacy/convo_flow fallthrough.
   if (WORKFLOW_HUMAN_STATES.has(convo.state)) return { owned: true, reply: null };
+  // Rule 1: a post-July-1 cold-start workflow is frozen until Liberado.
+  const gatedCs = await releaseGateReply([workflow.createdAt]);
+  if (gatedCs) return { owned: true, reply: gatedCs };
   try {
     const res = await runEngineWorkflow(workflow, convo, psid, userMessage, {
-      sourceLabel: "coldstart",
-      initOverrides: {},
+      sourceLabel: convo.adId ? `coldstart(ad=${convo.adId})` : "coldstart",
+      // Seed the engine with whatever the ad/conversation already knows so the
+      // Coldstart router has context (product interest) instead of starting blind.
+      initOverrides: convo.productInterest ? { productInterest: convo.productInterest } : {},
     });
     return { owned: true, reply: res?.reply || null };
   } catch (e) {
@@ -405,7 +448,7 @@ async function maybeRunColdStartWorkflow(userMessage, psid) {
  * Main entry point for generating bot responses.
  * Uses pipeline when USE_PIPELINE=true, otherwise uses the monolith.
  */
-async function generateReply(userMessage, psid, referral = null) {
+async function _generateReplyImpl(userMessage, psid, referral = null) {
   // ===== WORKFLOW ENGINE OWNERSHIP =====
   // If this conversation is OWNED by the engine — an ad with a flow attached, or
   // organic traffic with an active cold-start flow — the engine handles it and
@@ -1297,6 +1340,27 @@ async function generateReply(userMessage, psid, referral = null) {
 
   // Check for repetition and escalate if needed
   return await checkForRepetition(response, psid, convo);
+}
+
+// PER-CONVERSATION SERIALIZATION. Rapid-fire messages from the same customer were
+// processed CONCURRENTLY, each reading stale conversation state — so the zip got
+// asked/registered twice and the promo link was re-sent while another turn was still
+// running (out-of-order replies confirmed it). Queue calls per psid so a conversation
+// is only ever advanced ONE turn at a time, in arrival order. A 60s safety valve
+// prevents a stuck turn from blocking the queue forever.
+const _psidQueue = new Map(); // psid → tail promise
+function generateReply(userMessage, psid, referral = null) {
+  if (!psid) return _generateReplyImpl(userMessage, psid, referral);
+  const key = String(psid);
+  const prev = _psidQueue.get(key) || Promise.resolve();
+  const waited = Promise.race([
+    prev.catch(() => {}),
+    new Promise((r) => setTimeout(r, 60000)), // safety valve — don't deadlock on a hung turn
+  ]);
+  const run = waited.then(() => _generateReplyImpl(userMessage, psid, referral));
+  _psidQueue.set(key, run);
+  run.finally(() => { if (_psidQueue.get(key) === run) _psidQueue.delete(key); });
+  return run;
 }
 
 module.exports = { generateReply };

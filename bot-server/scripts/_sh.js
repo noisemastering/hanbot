@@ -1,0 +1,11 @@
+require("dotenv").config({quiet:true}); const m=require("mongoose");
+require("../models/ProductFamily");
+const WF=require("../models/Workflow");
+const { availableShadesForMeasure, findProductInFamilies, productShade }=require("../ai/workflow/tools");
+(async()=>{ await m.connect(process.env.MONGODB_URI||process.env.MONGO_URI);
+  const cs=await WF.findOne({name:/coldstart/i}).lean();
+  const fl=((WF.familyListOf?WF.familyListOf(cs):cs.familyList)||[]);
+  console.log("shades available for 2x100:", JSON.stringify(await availableShadesForMeasure(fl,[2,100])));
+  const doc=await findProductInFamilies("rollo 2x100 al 50%", fl, [2,100]);
+  console.log("resolved for '2x100 al 50%':", doc?`${doc.name} shade=${await productShade(doc)}`:"null");
+  await m.connection.close(); })().catch(e=>{console.error(e);process.exit(1)});

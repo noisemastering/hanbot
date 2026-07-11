@@ -192,6 +192,22 @@ const conversationSchema = new mongoose.Schema({
   // Pre-handoff zip code collection (dynamic fields used by preHandoffCheck)
   pendingHandoff: { type: Boolean, default: false },
   pendingHandoffInfo: { type: mongoose.Schema.Types.Mixed, default: null },
+  // Handoff timeout: when the bot asks for contact before escalating, stamp the
+  // moment. If the customer doesn't answer within ~30s, a sweeper escalates anyway
+  // and flags that the client never gave their info. Cleared on reply/escalation.
+  pendingHandoffAt: { type: Date, default: null },
+  pendingHandoffReason: { type: String, default: null },
+
+  // HUMAN SALE OVERRIDE — a human's verdict on whether this conversation converted,
+  // authoritative over the correlation algorithm and surviving every re-run.
+  //   "sale"    → a human knows it converted (even if the system found no match)
+  //   "no_sale" → a human knows it did NOT convert (even if the system attributed one)
+  saleOverride: {
+    verdict: { type: String, enum: ["sale", "no_sale", null], default: null },
+    note: { type: String, default: null },
+    by: { type: String, default: null },
+    at: { type: Date, default: null },
+  },
 
   // Flow AI fallback - products quoted in last bot message
   lastQuotedProducts: [{ type: mongoose.Schema.Types.Mixed }],

@@ -29,9 +29,12 @@ const NOT_NAMES = new Set([
  */
 async function harvestExtractedName(psid) {
   try {
+    // Scan the whole history, not just the first 5 — the Meta Instant Reply
+    // greeting ("¡Hola, X!") often arrives AFTER the customer's opening messages,
+    // so a 5-message window missed it and then permanently gave up.
     const firstMessages = await Message.find({ psid })
       .sort({ timestamp: 1 })
-      .limit(5)
+      .limit(60)
       .select('text')
       .lean();
 

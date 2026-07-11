@@ -284,7 +284,23 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
       if (biz.name) ci.push(`  - Nombre: ${biz.name}`);
       if (biz.fullAddress) ci.push(`  - Dirección: ${biz.fullAddress}`);
       if (biz.hours) ci.push(`  - Horario: ${biz.hours}`);
-      if (biz.phones && biz.phones.length) ci.push(`  - Teléfonos: ${biz.phones.join(" / ")}`);
+      if (biz.phones && biz.phones.length) {
+        // Present phones PROFESSIONALLY and LABELED, never as a bare slash list.
+        // 10-digit MX numbers are spaced 3-3-4 ("442 227 8247"). First phone is the
+        // store line, second is WhatsApp (per the business).
+        const fmtPhone = (p) => {
+          const d = String(p || "").replace(/\D/g, "").slice(-10);
+          return d.length === 10 ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}` : String(p || "").trim();
+        };
+        const labels = ["Teléfono de tienda", "WhatsApp"];
+        const phoneLines = biz.phones
+          .slice(0, 2)
+          .map((p, i) => `      ${labels[i] || "Teléfono"}: ${fmtPhone(p)}`)
+          .join("\n");
+        ci.push(
+          `  - Teléfonos (compártelos SIEMPRE con esta etiqueta y formato EXACTO, uno por línea, nunca en una lista con "/"):\n${phoneLines}`
+        );
+      }
       if (biz.website) ci.push(`  - Sitio web: ${biz.website}`);
       if (biz.googleMapsUrl) ci.push(`  - Google Maps: ${biz.googleMapsUrl}`);
       if (ci.length) {

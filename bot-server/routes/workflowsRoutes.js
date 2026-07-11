@@ -38,8 +38,19 @@ const requireSuperAdmin = (req, res, next) => {
   next();
 };
 
+// The Sandbox (list workflows + run one against the engine) is a safe, read-only
+// tester that "no afecta al bot en producción" — open it to staff (admin/super_user),
+// not just super_admin. MANAGING workflows (create/edit/delete/import/duplicate,
+// node-templates, ad assignment) stays super_admin via per-route guards below.
+const SANDBOX_ROLES = new Set(["super_admin", "admin", "super_user"]);
+const requireSandboxAccess = (req, res, next) => {
+  if (req.user && SANDBOX_ROLES.has(req.user.role)) return next();
+  return res.status(403).json({ success: false, error: "Solo el equipo puede usar el sandbox" });
+};
+
 router.use(authenticate);
-router.use(requireSuperAdmin);
+// NOTE: no blanket requireSuperAdmin — each route declares its own guard, so the
+// sandbox/list can be opened to admins while management stays super_admin.
 
 // --- ephemeral sandbox sessions (in-memory, lost on restart — fine for testing) ---
 const sandboxSessions = new Map(); // sessionId -> { workflowId, state, personaName }
@@ -57,7 +68,7 @@ const SANDBOX_PERSONA_POOL = ["Carolina", "Mireya", "Claudia", "Fernanda", "Mira
 // Facebook ad IDs increase monotonically with creation, so fbAdId desc is the
 // reliable "newest ad first" ordering. Limit is generous so the default browse
 // list isn't truncated; search narrows by name/id.
-router.get("/ads", async (req, res) => {
+router.get("/ads", requireSuperAdmin, async (req, res) => {
   try {
     const q = (req.query.q || "").trim();
     const filter = {};
@@ -111,7 +122,7 @@ router.patch("/ads/:adId", requireLiberadoOrSuperAdmin, async (req, res) => {
 });
 
 // GET /workflows
-router.get("/", async (req, res) => {
+router.get("/", requireSandboxAccess, async (req, res) => {
   try {
     const filter = {};
     if (req.query.active === "true") filter.active = true;
@@ -123,7 +134,7 @@ router.get("/", async (req, res) => {
 });
 
 // GET /workflows/:id
-router.get("/:id", async (req, res) => {
+router.get("/:id", requireSandboxAccess, async (req, res) => {
   try {
     const wf = await Workflow.findById(req.params.id);
     if (!wf) return res.status(404).json({ success: false, error: "Workflow not found" });
@@ -189,7 +200,7 @@ router.post("/:id/duplicate", requireLiberadoOrSuperAdmin, async (req, res) => {
 const WorkflowNodeTemplate = require("../models/WorkflowNodeTemplate");
 
 // GET /workflows/node-templates/all — list saved node templates
-router.get("/node-templates/all", async (req, res) => {
+router.get("/node-templates/all", requireSuperAdmin, async (req, res) => {
   try {
     const list = await WorkflowNodeTemplate.find().sort({ updatedAt: -1 });
     res.json({ success: true, data: list });
@@ -199,7 +210,7 @@ router.get("/node-templates/all", async (req, res) => {
 });
 
 // POST /workflows/node-templates — save a node as a template
-router.post("/node-templates", async (req, res) => {
+router.post("/node-templates", requireSuperAdmin, async (req, res) => {
   try {
     const b = req.body || {};
     if (!b.name) return res.status(400).json({ success: false, error: "Template requires a name" });
@@ -220,7 +231,7 @@ router.post("/node-templates", async (req, res) => {
 });
 
 // DELETE /workflows/node-templates/:tid — remove a template
-router.delete("/node-templates/:tid", async (req, res) => {
+router.delete("/node-templates/:tid", requireSuperAdmin, async (req, res) => {
   try {
     const t = await WorkflowNodeTemplate.findByIdAndDelete(req.params.tid);
     if (!t) return res.status(404).json({ success: false, error: "Template not found" });
@@ -344,7 +355,7 @@ router.delete("/:id", requireLiberadoOrSuperAdmin, async (req, res) => {
 // POST /workflows/:id/sandbox — drive the engine against an ephemeral conversation.
 // Body: { sessionId?, message, reset?, vars? }
 // Returns: { reply, currentNode, diagnostics, sessionId }
-router.post("/:id/sandbox", async (req, res) => {
+router.post("/:id/sandbox", requireSandboxAccess, async (req, res) => {
   try {
     const wf = await Workflow.findById(req.params.id);
     if (!wf) return res.status(404).json({ success: false, error: "Workflow not found" });
@@ -381,6 +392,9 @@ router.post("/:id/sandbox", async (req, res) => {
       currentNode: { id: state.nodeId, name: wf.getNode(state.nodeId)?.name },
       diagnostics,
       history: state.history,
+      engineBuild: require("../ai/workflow").ENGINE_BUILD, // deploy verification marker
+      engineModel: process.env.WORKFLOW_MODEL || "gpt-4o", // which model production actually runs
+      verifierEnabled: process.env.REPLY_VERIFIER_ENABLED !== "false" && process.env.REPLY_VERIFIER_ENABLED !== "0", // grounding check on/off in prod
     });
   } catch (err) {
     console.error("Sandbox error:", err);

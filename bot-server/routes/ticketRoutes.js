@@ -152,11 +152,13 @@ router.put("/:id", authenticate, async (req, res) => {
       // Resolution of a reported conversation: explanation + "Sin error" flag.
       if (resolution !== undefined) ticket.resolution = resolution;
       if (noError !== undefined) ticket.noError = !!noError;
-      const closing = status === "solved" || status === "dismissed";
+      const closing = status === "solved" || status === "dismissed" || status === "ya_resuelto";
       if (closing) {
         ticket.resolvedAt = new Date();
         ticket.resolvedBy = req.user._id;
         if (status === "dismissed") ticket.noError = true;
+        // "ya_resuelto" = was a real bug but already fixed; NOT noError, but it's
+        // excluded from the report count (like Sin error) in the performance chart.
       } else if (status) {
         // Reopened → clear resolution stamps.
         ticket.resolvedAt = null;
@@ -184,7 +186,7 @@ router.put("/:id", authenticate, async (req, res) => {
     if (statusChanged) {
       const STATUS_LABEL = {
         open: "Abierto", review: "En revisión", working: "Trabajando",
-        solved: "Resuelto", dismissed: "Descartado"
+        solved: "Resuelto", dismissed: "Descartado", ya_resuelto: "Ya resuelto"
       };
       const fromLabel = STATUS_LABEL[previousStatus] || previousStatus;
       const toLabel = STATUS_LABEL[status] || status;
