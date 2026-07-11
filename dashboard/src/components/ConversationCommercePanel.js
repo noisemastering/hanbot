@@ -60,6 +60,28 @@ export default function ConversationCommercePanel({ psid }) {
     : "nunca";
   const busy = correlating || lc?.running;
 
+  // When did the SALE happen (not the conversation)? A convo can resurface today
+  // (a human sent a link) while its attributed sale is months old — so lead the
+  // purchase with its own date + age and flag "no es de hoy" so nobody reads an
+  // old sale as a today sale.
+  const saleWhen = (() => {
+    const raw = status?.conversion?.saleDate;
+    const d = raw ? new Date(raw) : null;
+    if (!d || isNaN(d.getTime())) return null;
+    const days = Math.floor((Date.now() - d.getTime()) / 86400000);
+    const months = Math.round(days / 30);
+    const ago =
+      days <= 0 ? "hoy" : days === 1 ? "ayer"
+        : days < 30 ? `hace ${days} días`
+        : days < 365 ? `hace ${months} ${months > 1 ? "meses" : "mes"}`
+        : `hace ${Math.round(days / 365)} año(s)`;
+    return {
+      date: d.toLocaleDateString("es-MX", { day: "2-digit", month: "short", year: "numeric" }),
+      ago,
+      isOld: days > 1,
+    };
+  })();
+
   return (
     <div className="border border-gray-700 rounded-lg p-3 bg-gray-800/40 text-sm">
       <div className="flex items-center justify-between mb-2">
@@ -93,17 +115,19 @@ export default function ConversationCommercePanel({ psid }) {
             on={status.purchased}
             onLabel={
               status.purchased
-                ? `Compró${status.conversion?.totalAmount ? ` — $${status.conversion.totalAmount}` : ""}`
+                ? `Compró${status.conversion?.totalAmount ? ` — $${status.conversion.totalAmount}` : ""}${saleWhen ? ` · ${saleWhen.date}` : ""}`
                 : ""
             }
             offLabel="Sin compra registrada"
           />
           {status.purchased && status.conversion && (
             <div className="pl-4 space-y-0.5">
-              <Certainty conv={status.conversion} />
-              {status.conversion.attributionReason && (
-                <p className="text-[10px] text-gray-500">{status.conversion.attributionReason}</p>
+              {saleWhen?.isOld && (
+                <div className="text-[11px] font-medium text-amber-300/90">
+                  🗓️ Venta del {saleWhen.date} · {saleWhen.ago} — no es de hoy
+                </div>
               )}
+              <Certainty conv={status.conversion} />
               {status.conversion.itemTitle && (
                 <p className="text-[11px] text-gray-400">{status.conversion.itemTitle}</p>
               )}
@@ -169,9 +193,13 @@ function Certainty({ conv }) {
       : pct >= 70 ? { color: "#fbbf24", weight: 600, size: "0.85rem" } // amber
       : pct >= 50 ? { color: "#fb923c", weight: 500, size: "0.8rem" } // muted orange
       : { color: "#9ca3af", weight: 400, size: "0.75rem" }; // faint gray (25%)
+  // The CRITERION that earned the score (the signal combo before the time/pct),
+  // shown right beside the % so the reviewer sees WHY, not just how much.
+  const criterio = conv.attributionReason ? String(conv.attributionReason).split(" · ")[0] : null;
   return (
     <span style={{ color: style.color, fontWeight: style.weight, fontSize: style.size }}>
       {pct}% de certeza{conv.undisputed ? " 🏅" : ""}{conv.ventaIndirecta ? " · venta indirecta" : ""}
+      {criterio && <span style={{ color: "#9ca3af", fontWeight: 400, fontSize: "0.75rem" }}> · {criterio}</span>}
     </span>
   );
 }

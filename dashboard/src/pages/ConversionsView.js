@@ -535,6 +535,14 @@ function ConversionsView() {
                         <span className="text-xs text-gray-400">
                           {conversion.methodLabel || '⏱️ Tiempo'}
                         </span>
+                        {conversion.certainty != null && (
+                          <span
+                            className="ml-1 text-xs font-semibold"
+                            style={{ color: conversion.certainty >= 90 ? '#34d399' : conversion.certainty >= 70 ? '#fbbf24' : conversion.certainty >= 50 ? '#fb923c' : '#9ca3af' }}
+                          >
+                            · {conversion.certainty}%
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-3 text-right">
                         <span className="text-sm font-semibold text-green-400">
