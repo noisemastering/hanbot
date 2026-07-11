@@ -11,6 +11,10 @@ export default function MatchDataCompare({ md, saleItemTitle, signals }) {
   const gap =
     md.gapHoursToSale == null ? null
       : md.gapHoursToSale < 1 ? `${Math.round(md.gapHoursToSale * 60)} min` : `${md.gapHoursToSale} h`;
+  // What the conversation was about: the discussed size(s), else the product line.
+  const convoProduct =
+    (md.convoSizes && md.convoSizes.length && md.convoSizes.join(", ")) || md.convoProduct ||
+    (s.item ? "misma medida" : null);
 
   const Row = ({ label, convo, ml, hit }) => (
     <div className="grid grid-cols-[52px_1fr_1fr] gap-1 items-baseline">
@@ -30,7 +34,7 @@ export default function MatchDataCompare({ md, saleItemTitle, signals }) {
       <Row label="Nombre" convo={md.convoName} ml={md.saleReceiverName || md.saleBuyerName} hit={s.name || s.nickname} />
       <Row label="CP" convo={md.convoZip} ml={md.saleZip} hit={s.zip} />
       <Row label="Ciudad" convo={md.convoCity} ml={md.saleCity} hit={s.city} />
-      <Row label="Producto" convo={s.item ? "misma medida" : "—"} ml={saleItemTitle} hit={s.item} />
+      <Row label="Producto" convo={convoProduct} ml={md.saleProduct || saleItemTitle} hit={s.item} />
       <Row label="Usuario" convo="—" ml={md.saleNickname} hit={s.nickname} />
       {gap && <div className="text-[10px] text-gray-500 mt-0.5">Δ clic → venta: {gap}</div>}
     </div>
