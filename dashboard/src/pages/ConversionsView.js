@@ -3,7 +3,7 @@ import toast from 'react-hot-toast';
 import API from '../api';
 import { useTranslation } from '../i18n';
 import MatchDataCompare from '../components/MatchDataCompare';
-import ConversationTranscriptModal from '../components/ConversationTranscriptModal';
+import ConversationTranscript from '../components/ConversationTranscript';
 import CorrelationControl from '../components/CorrelationControl';
 import {
   ComposedChart,
@@ -37,8 +37,8 @@ function ConversionsView() {
   const { t, locale } = useTranslation();
   const [stats, setStats] = useState(null);
   const [recentConversions, setRecentConversions] = useState([]);
-  const [transcriptPsid, setTranscriptPsid] = useState(null); // conversation viewer
-  const [matchDataConv, setMatchDataConv] = useState(null); // match-data modal
+  const [detailRow, setDetailRow] = useState(null); // conversion shown in the detail modal
+  const [detailView, setDetailView] = useState('match'); // 'match' | 'chat' toggle
   const [dailyClicks, setDailyClicks] = useState([]);
   const [loading, setLoading] = useState(true);
   const [autoCorrelating, setAutoCorrelating] = useState(false); // >3h freshness rebuild
@@ -573,7 +573,7 @@ function ConversionsView() {
                       <td className="px-4 py-3">
                         {conversion.matchDetails ? (
                           <button
-                            onClick={() => setMatchDataConv(conversion)}
+                            onClick={() => { setDetailRow(conversion); setDetailView('match'); }}
                             title="Ver datos del match"
                             className="w-8 h-8 flex items-center justify-center rounded border border-blue-600/60 text-blue-300 hover:bg-blue-600/20"
                           >
@@ -586,7 +586,7 @@ function ConversionsView() {
                       <td className="px-4 py-3">
                         {conversion.psid ? (
                           <button
-                            onClick={() => setTranscriptPsid(conversion.psid)}
+                            onClick={() => { setDetailRow(conversion); setDetailView('chat'); }}
                             title="Ver conversación"
                             className="w-8 h-8 flex items-center justify-center rounded border border-blue-600/60 text-blue-300 hover:bg-blue-600/20"
                           >
@@ -705,21 +705,34 @@ function ConversionsView() {
         </div>
       )}
 
-      {transcriptPsid && (
-        <ConversationTranscriptModal psid={transcriptPsid} onClose={() => setTranscriptPsid(null)} />
-      )}
-
-      {matchDataConv && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setMatchDataConv(null)}>
-          <div className="bg-gray-800 rounded-lg w-full max-w-2xl border border-gray-700 overflow-x-auto" onClick={(e) => e.stopPropagation()}>
+      {/* One detail modal, switchable between the match data and the chat transcript. */}
+      {detailRow && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4" onClick={() => setDetailRow(null)}>
+          <div className="bg-gray-800 rounded-lg w-full max-w-2xl border border-gray-700 flex flex-col max-h-[85vh]" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-700">
-              <span className="text-xl text-white font-medium">Datos del match</span>
-              <button onClick={() => setMatchDataConv(null)} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
+              <div className="inline-flex rounded-md overflow-hidden border border-gray-600">
+                {['match', 'chat'].map((v) => (
+                  <button
+                    key={v}
+                    onClick={() => setDetailView(v)}
+                    className={`px-4 py-1 text-sm ${detailView === v ? 'bg-blue-600 text-white' : 'text-gray-300 hover:bg-gray-700'}`}
+                  >
+                    {v === 'match' ? 'Match' : 'Chat'}
+                  </button>
+                ))}
+              </div>
+              <button onClick={() => setDetailRow(null)} className="text-gray-400 hover:text-white text-2xl leading-none">×</button>
             </div>
-            <div className="p-6">
-              <MatchDataCompare md={matchDataConv.matchDetails} saleItemTitle={matchDataConv.saleItemTitle} signals={matchDataConv.signals} large />
-              {matchDataConv.attributionReason && (
-                <p className="mt-5 pt-4 border-t border-gray-700/60 text-lg text-gray-400">{matchDataConv.attributionReason}</p>
+            <div className="p-6 overflow-x-auto">
+              {detailView === 'match' ? (
+                <>
+                  <MatchDataCompare md={detailRow.matchDetails} saleItemTitle={detailRow.saleItemTitle} signals={detailRow.signals} large />
+                  {detailRow.attributionReason && (
+                    <p className="mt-5 pt-4 border-t border-gray-700/60 text-lg text-gray-400">{detailRow.attributionReason}</p>
+                  )}
+                </>
+              ) : (
+                <ConversationTranscript psid={detailRow.psid} />
               )}
             </div>
           </div>
