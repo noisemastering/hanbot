@@ -265,6 +265,8 @@ async function correlationStatus() {
     running: !!lc.running,
     stats: lc.stats || null,
     freshHours: FRESH_HOURS,
+    // when the next scheduled (30-min) correlation is due → dashboard countdown
+    nextAt: state.correlationNextAt || null,
   };
 }
 

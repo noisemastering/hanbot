@@ -2307,7 +2307,15 @@ setTimeout(() => {
 // SystemState.running guard prevents overlap across restarts/instances.
 setTimeout(() => {
   const { runConvoCorrelation } = require('./utils/runConvoCorrelation');
+  const INTERVAL_MS = 30 * 60 * 1000;
   const tick = async () => {
+    try {
+      // stamp when the NEXT tick is due (interval fires from this tick's start)
+      const SystemState = require('./models/SystemState');
+      const st = await SystemState.getState();
+      st.correlationNextAt = new Date(Date.now() + INTERVAL_MS);
+      await st.save();
+    } catch (e) { /* non-fatal */ }
     try {
       const r = await runConvoCorrelation({});
       if (!r.skipped) console.log(`🔗 Scheduled correlation: matched=${r.matched} scanned=${r.scanned}`);
@@ -2315,7 +2323,7 @@ setTimeout(() => {
   };
   console.log('🔗 Convo↔sale correlation scheduled (every 30 min)');
   tick();
-  setInterval(tick, 30 * 60 * 1000);
+  setInterval(tick, INTERVAL_MS);
 }, 45000);
 
 // Health check - monitors tracking domain, emails alert on SSL/DNS/HTTP failure

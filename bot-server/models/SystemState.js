@@ -43,6 +43,9 @@ const systemStateSchema = new mongoose.Schema(
       ),
       default: () => ({}),
     },
+    // When the next scheduled (30-min) correlation is due — stamped each tick so
+    // the dashboard can show a countdown.
+    correlationNextAt: { type: Date, default: null },
   },
   { timestamps: true }
 );
