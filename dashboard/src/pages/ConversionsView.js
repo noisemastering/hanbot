@@ -572,9 +572,10 @@ function ConversionsView() {
                         {conversion.matchDetails ? (
                           <button
                             onClick={() => setMatchDataConv(conversion)}
-                            className="text-xs px-2 py-1 rounded border border-blue-600/60 text-blue-300 hover:bg-blue-600/20"
+                            title="Ver datos del match"
+                            className="w-8 h-8 flex items-center justify-center rounded border border-blue-600/60 text-blue-300 hover:bg-blue-600/20"
                           >
-                            Ver datos
+                            📊
                           </button>
                         ) : (
                           <span className="text-gray-600 text-xs">—</span>
@@ -584,9 +585,10 @@ function ConversionsView() {
                         {conversion.psid ? (
                           <button
                             onClick={() => setTranscriptPsid(conversion.psid)}
-                            className="text-xs px-2 py-1 rounded border border-blue-600/60 text-blue-300 hover:bg-blue-600/20"
+                            title="Ver conversación"
+                            className="w-8 h-8 flex items-center justify-center rounded border border-blue-600/60 text-blue-300 hover:bg-blue-600/20"
                           >
-                            Ver conversación
+                            💬
                           </button>
                         ) : (
                           <span className="text-gray-600 text-xs">—</span>
