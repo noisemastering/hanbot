@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import toast from 'react-hot-toast';
 import API from '../api';
 import { useTranslation } from '../i18n';
 import {
@@ -80,7 +81,21 @@ function ConversionsView() {
     ventaIndirecta: m.ventaIndirecta,
     correlationConfidence: m.confidence,
     mismatch: m.linkAudit?.mismatch, // safety-net flag
+    humanVerdict: m.humanVerdict || null, // "confirmed" | "rejected" | null
+    human: !!m.human, // synthetic human-affirmed sale (no system order)
   });
+
+  // Human override on a listed sale (deem it not-a-sale, or restore it).
+  const setRowVerdict = async (psid, verdict) => {
+    if (!psid) return;
+    try {
+      await API.post(`/correlation/override/${psid}`, { verdict });
+      await fetchData();
+      toast.success(verdict === 'no_sale' ? 'Marcada como NO venta' : 'Restaurada');
+    } catch (err) {
+      toast.error(err.response?.data?.error || 'No se pudo guardar el veredicto');
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -499,7 +514,7 @@ function ConversionsView() {
                   {recentConversions
                     .slice((currentPage - 1) * pageSize, currentPage * pageSize)
                     .map((conversion) => (
-                    <tr key={conversion.clickId || conversion.conversionData?.orderId} className="hover:bg-gray-700/20">
+                    <tr key={conversion.clickId || conversion.conversionData?.orderId} className={`hover:bg-gray-700/20 ${conversion.humanVerdict === 'rejected' ? 'opacity-40' : ''}`}>
                       <td className="px-4 py-3">
                         <div className="max-w-[200px]">
                           <p className="text-sm text-white truncate" title={conversion.productName}>
@@ -545,9 +560,27 @@ function ConversionsView() {
                         )}
                       </td>
                       <td className="px-4 py-3 text-right">
-                        <span className="text-sm font-semibold text-green-400">
+                        <span className={`text-sm font-semibold ${conversion.humanVerdict === 'rejected' ? 'text-gray-500 line-through' : 'text-green-400'}`}>
                           {formatCurrency(conversion.conversionData?.totalAmount)}
                         </span>
+                        {conversion.human && <div className="text-[10px] text-emerald-400">✓ confirmada por humano</div>}
+                        <div className="mt-1">
+                          {conversion.humanVerdict === 'rejected' ? (
+                            <button
+                              onClick={() => setRowVerdict(conversion.psid, null)}
+                              className="text-[10px] px-1.5 py-0.5 rounded border border-gray-500/60 text-gray-300 hover:bg-gray-600/30"
+                            >
+                              Restaurar
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setRowVerdict(conversion.psid, 'no_sale')}
+                              className="text-[10px] px-1.5 py-0.5 rounded border border-red-600/60 text-red-300 hover:bg-red-600/20"
+                            >
+                              No es venta
+                            </button>
+                          )}
+                        </div>
                       </td>
                       {/* Confianza column hidden for now (data still fetched). */}
                     </tr>

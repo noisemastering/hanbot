@@ -28,6 +28,19 @@ export default function ConversationCommercePanel({ psid }) {
     }
   }, [psid]);
 
+  // Human override: deem this conversation a sale / not-a-sale (or clear it).
+  const setVerdict = useCallback(async (verdict) => {
+    try {
+      await API.post(`/correlation/override/${psid}`, { verdict });
+      await load();
+      toast.success(
+        verdict === "sale" ? "Marcada como venta" : verdict === "no_sale" ? "Marcada como NO venta" : "Override eliminado"
+      );
+    } catch (err) {
+      toast.error(err.response?.data?.error || "No se pudo guardar el veredicto");
+    }
+  }, [psid, load]);
+
   // Trigger a correlation rebuild, poll until it finishes, then reload this convo.
   const correlate = useCallback(async () => {
     setCorrelating(true);
@@ -151,6 +164,36 @@ export default function ConversationCommercePanel({ psid }) {
         </div>
       ) : (
         <p className="text-gray-500 text-xs">—</p>
+      )}
+
+      {/* Human verdict — a person overrides the algorithm (both directions). */}
+      {status && (
+        <div className="mt-3 pt-2 border-t border-gray-700/60">
+          <div className="text-[10px] uppercase text-gray-500 mb-1">
+            Veredicto humano
+            {status.override === "sale" && <span className="ml-1 text-emerald-400">· marcada como VENTA</span>}
+            {status.override === "no_sale" && <span className="ml-1 text-red-400">· marcada como NO venta</span>}
+          </div>
+          <div className="flex gap-2">
+            <button
+              onClick={() => setVerdict(status.override === "sale" ? null : "sale")}
+              className={`flex-1 text-xs px-2 py-1 rounded border ${status.override === "sale" ? "bg-emerald-600 text-white border-emerald-500" : "border-emerald-600/60 text-emerald-300 hover:bg-emerald-600/20"}`}
+            >
+              {status.override === "sale" ? "✓ Es venta" : "Marcar como venta"}
+            </button>
+            <button
+              onClick={() => setVerdict(status.override === "no_sale" ? null : "no_sale")}
+              className={`flex-1 text-xs px-2 py-1 rounded border ${status.override === "no_sale" ? "bg-red-600 text-white border-red-500" : "border-red-600/60 text-red-300 hover:bg-red-600/20"}`}
+            >
+              {status.override === "no_sale" ? "✕ No es venta" : "Marcar como NO venta"}
+            </button>
+          </div>
+          {status.override && (
+            <button onClick={() => setVerdict(null)} className="mt-1 text-[10px] text-gray-500 hover:text-gray-300 underline">
+              quitar veredicto (usar el del sistema)
+            </button>
+          )}
+        </div>
       )}
 
       <button
