@@ -140,7 +140,7 @@ async function buildContext() {
     psidClickTimes.get(key).push(new Date(c.clickedAt).getTime());
   }
 
-  return { itemToFamilies, famOwnItems, cityIndex, userLoc, zipToCity, zipToState, psidClickDays, psidClickTimes };
+  return { itemToFamilies, famOwnItems, cityIndex, userLoc, zipToCity, zipToState, psidClickDays, psidClickTimes, salesDayCache: new Map() };
 }
 
 // Gather a conversation's identity signals into a normalized shape.
@@ -233,6 +233,20 @@ function parseTitleSize(title) {
   const a = parseFloat(m[1]), b = parseFloat(m[2]);
   if (!(a >= 1 && a <= 16 && b >= 1 && b <= 16)) return null;
   return `${Math.min(a, b)}x${Math.max(a, b)}`;
+}
+
+// Extract every WxL size a message text mentions (customer's words), normalized to
+// "min x max". Used to know which discussed sizes were raised on a given day.
+function extractSizes(text) {
+  const t = String(text || "").toLowerCase().replace(/(\d),(\d)/g, "$1.$2");
+  const out = new Set();
+  const rx = /(\d{1,2}(?:\.\d)?)\s*(?:x|por|×|\*)\s*(\d{1,2}(?:\.\d)?)/g;
+  let m;
+  while ((m = rx.exec(t))) {
+    const a = parseFloat(m[1]), b = parseFloat(m[2]);
+    if (a >= 1 && a <= 16 && b >= 1 && b <= 16) out.add(`${Math.min(a, b)}x${Math.max(a, b)}`);
+  }
+  return out;
 }
 
 // Identify WHICH of our products a sale is, from its TITLE (not its ML id, which
@@ -417,13 +431,14 @@ async function matchConversation(convo, ctx) {
   const MLSale = require("../models/MLSale");
   const id = convoIdentity(convo, ctx);
 
-  // No location (zip/city) and no name → nothing identity-wise to tie a sale to.
-  if (!id.zip && !id.city && !id.names.length) return null;
+  // Need SOMETHING to tie a sale to: a location, a name, or a discussed item.
+  const hasBasket = !!(id.basketSizes && id.basketSizes.size);
+  if (!id.zip && !id.city && !id.names.length && !hasBasket) return [];
 
   // GATE 1 (approved criterion): the conversation must have CLICKED a tracked link
   // to even be eligible for a sale. No clicked link → not considered.
   const clickDays = ctx.psidClickDays && ctx.psidClickDays.get(String(convo.psid));
-  if (!clickDays || !clickDays.size) return null;
+  if (!clickDays || !clickDays.size) return [];
 
   // GATE 2 (approved criterion): the sale must fall on the SAME Mexico-local DAY as a
   // click. So candidates are bounded to the click days, and each sale's day must be one.
@@ -440,10 +455,47 @@ async function matchConversation(convo, ctx) {
     const stored = ctx.cityIndex.get(id.city) || [];
     if (stored.length) add(await MLSale.find({ "shipping.city": { $in: stored }, ...timeBound }).lean());
   }
-  if (!candidates.length) return null;
+  // NO-LOCATION lookup: the convo gave no zip/city but it clicked a link and has a
+  // name or a discussed item — it can still attribute by item/name + time. Pull the
+  // sales on the actual CLICK DAYS (bounded); the tight tier windows + directional
+  // gate + item/name matching filter them down.
+  if (!id.zip && !id.city && (id.names.length || hasBasket)) {
+    const cache = ctx.salesDayCache; // shared across the run: each day fetched ONCE
+    for (const d of clickDayList) {
+      let daySales = cache && cache.get(d);
+      if (!daySales) {
+        const start = new Date(d + "T06:00:00Z").getTime(); // MX day start (UTC-6) in UTC
+        daySales = await MLSale.find({ dateCreated: { $gte: new Date(start), $lt: new Date(start + 24 * 3600e3) } }).lean();
+        if (cache) cache.set(d, daySales);
+      }
+      add(daySales);
+    }
+  }
+  if (!candidates.length) return [];
 
   const clickTimes = (ctx.psidClickTimes && ctx.psidClickTimes.get(String(convo.psid))) || [];
   const convoFamSet = new Set(id.famIds); // families the convo discussed
+
+  // Which discussed sizes were raised on which Mexico-local DAY (from the customer's
+  // messages). Only needed when >1 size was discussed — so a match can separate the
+  // size(s) talked about ON the sale's day from ones discussed on other days.
+  let dayToSizes = null;
+  if (id.basketSizes && id.basketSizes.size >= 2) {
+    const Message = require("../models/Message");
+    const msgs = await Message.find({ psid: convo.psid, senderType: "user" }).select("text timestamp createdAt").lean().catch(() => []);
+    dayToSizes = new Map();
+    for (const msg of msgs) {
+      const when = msg.timestamp || msg.createdAt;
+      if (!when) continue;
+      const day = mxDay(when);
+      let set = dayToSizes.get(day);
+      for (const sz of extractSizes(msg.text)) {
+        if (!id.basketSizes.has(sz)) continue;
+        if (!set) { set = new Set(); dayToSizes.set(day, set); }
+        set.add(sz);
+      }
+    }
+  }
 
   // HIERARCHICAL rule: return ALL qualifying (order, tier) matches for this convo,
   // sorted best→worst, so the runner can claim them tier-by-tier. A convo whose
@@ -503,11 +555,20 @@ async function matchConversation(convo, ctx) {
   }
   if (!scored.length) return [];
   scored.sort((a, b) => b.v.pct - a.v.pct || a.gd - b.gd);
-  return scored.map(({ s, m, v }) => buildMatchDoc(convo, id, s, m, v));
+  return scored.map(({ s, m, v }) => buildMatchDoc(convo, id, s, m, v, dayToSizes));
 }
 
 // Build the persisted ConvoSaleMatch document for one (convo, sale) pairing.
-function buildMatchDoc(convo, id, s, m, v) {
+function buildMatchDoc(convo, id, s, m, v, dayToSizes) {
+  // Split the discussed sizes into those raised ON the sale's day vs other days.
+  const allSizes = [...(id.basketSizes || [])];
+  const saleDay = s.dateCreated ? mxDay(s.dateCreated) : null;
+  let convoSizesOnDay = allSizes, convoSizesOther = [];
+  if (dayToSizes && saleDay) {
+    const onDaySet = dayToSizes.get(saleDay) || new Set();
+    convoSizesOnDay = allSizes.filter((sz) => onDaySet.has(sz));
+    convoSizesOther = allSizes.filter((sz) => !onDaySet.has(sz));
+  }
   return {
     _id: `${convo.psid}::${s._id}`,
     psid: convo.psid,
@@ -529,7 +590,9 @@ function buildMatchDoc(convo, id, s, m, v) {
       convoCity: id.cityRaw || null,
       saleCity: (s.shipping && s.shipping.city) || null,
       convoFamilyIds: id.famIds,
-      convoSizes: [...(id.basketSizes || [])], // human-readable sizes the convo discussed
+      convoSizes: allSizes, // all sizes the convo discussed
+      convoSizesOnDay, // sizes discussed ON the sale's day (relevant to this attribution)
+      convoSizesOther, // sizes discussed on OTHER days (not this day)
       convoProduct: id.poiName || null, // product line the convo was about (e.g. "malla sombra reforzada")
       // WHAT was bought on ML, resolved from the sale title against our catalog (id-independent).
       saleProduct: (resolveSaleProduct((s.items && s.items[0] && s.items[0].title)) || {}).label || null,

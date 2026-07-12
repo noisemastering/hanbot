@@ -43,6 +43,8 @@ const ConvoSaleMatchSchema = new mongoose.Schema(
       saleCity: String,
       convoFamilyIds: [String],
       convoSizes: { type: [String], default: undefined }, // readable sizes the convo discussed
+      convoSizesOnDay: { type: [String], default: undefined }, // discussed on the sale's day
+      convoSizesOther: { type: [String], default: undefined }, // discussed on other days
       convoProduct: { type: String }, // product line the convo was about
       saleProduct: { type: String }, // ML product bought, resolved from title vs our catalog
       saleItemIds: [String],

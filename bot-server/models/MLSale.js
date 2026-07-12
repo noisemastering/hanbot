@@ -76,5 +76,7 @@ MLSaleSchema.index({ "items.itemId": 1 });
 // Compound indexes for the correlation candidate queries (location + time window).
 MLSaleSchema.index({ "shipping.zip": 1, dateCreated: 1 });
 MLSaleSchema.index({ "shipping.city": 1, dateCreated: 1 });
+// Plain date index for the no-location lookup (fetches all sales on the click days).
+MLSaleSchema.index({ dateCreated: 1 });
 
 module.exports = mongoose.models.MLSale || mongoose.model("MLSale", MLSaleSchema);

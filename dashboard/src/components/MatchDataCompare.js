@@ -12,10 +12,14 @@ export default function MatchDataCompare({ md, saleItemTitle, signals, large }) 
   const gap =
     md.gapHoursToSale == null ? null
       : md.gapHoursToSale < 1 ? `${Math.round(md.gapHoursToSale * 60)} min` : `${md.gapHoursToSale} h`;
-  // What the conversation was about: the discussed size(s), else the product line.
-  const convoProduct =
-    (md.convoSizes && md.convoSizes.length && md.convoSizes.join(", ")) || md.convoProduct ||
-    (s.item ? "misma medida" : null);
+  // What the conversation was about, split by day: sizes raised ON the sale's day
+  // (relevant to this attribution) vs sizes discussed on OTHER days.
+  const hasSplit = Array.isArray(md.convoSizesOnDay) || Array.isArray(md.convoSizesOther);
+  const onDay = md.convoSizesOnDay || [];
+  const otherDays = md.convoSizesOther || [];
+  const convoProduct = hasSplit
+    ? (onDay.length ? onDay.join(", ") : "—")
+    : ((md.convoSizes && md.convoSizes.length && md.convoSizes.join(", ")) || md.convoProduct || (s.item ? "misma medida" : null));
 
   // Compact (panel) vs large (modal, ~80% bigger fonts).
   const fLabel = large ? "text-[16px]" : "text-[9px]";
@@ -45,6 +49,9 @@ export default function MatchDataCompare({ md, saleItemTitle, signals, large }) 
       <Row label="Ciudad" convo={md.convoCity} ml={md.saleCity} hit={s.city} />
       <Row label="Producto" convo={convoProduct} ml={md.saleProduct || saleItemTitle} hit={s.item} />
       <Row label="Usuario" convo="—" ml={md.saleNickname} hit={s.nickname} />
+      {hasSplit && otherDays.length > 0 && (
+        <div className={`${fGap} text-gray-500 mt-0.5`}>Otras medidas (otros días): {otherDays.join(", ")}</div>
+      )}
       {gap && <div className={`${fGap} text-gray-500 mt-0.5`}>Δ clic → venta: {gap}</div>}
     </div>
   );
