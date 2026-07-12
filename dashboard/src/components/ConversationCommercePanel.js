@@ -42,24 +42,19 @@ export default function ConversationCommercePanel({ psid }) {
     }
   }, [psid, load]);
 
-  // Trigger a correlation rebuild, poll until it finishes, then reload this convo.
+  // Correlate ONLY this conversation (not the whole batch): blocking + fast, then reload.
   const correlate = useCallback(async () => {
     setCorrelating(true);
     try {
-      await API.post(`/correlation/run`);
-      for (let i = 0; i < 150; i++) {
-        await new Promise((r) => setTimeout(r, 4000));
-        const s = await API.get(`/correlation/status`);
-        if (!s.data.running) break;
-      }
+      const { data } = await API.post(`/correlation/run/${psid}`);
       await load();
-      toast.success("Correlación actualizada");
+      toast.success(data?.matched ? "Venta correlacionada" : "Sin venta para esta conversación");
     } catch (err) {
       toast.error(err.response?.data?.error || "No se pudo correlacionar");
     } finally {
       setCorrelating(false);
     }
-  }, [load]);
+  }, [psid, load]);
 
   useEffect(() => {
     setStatus(null);
@@ -104,7 +99,7 @@ export default function ConversationCommercePanel({ psid }) {
           onClick={correlate}
           disabled={busy}
           className="text-xs px-2 py-0.5 rounded bg-blue-600/80 hover:bg-blue-600 text-white disabled:opacity-50"
-          title="Vuelve a correlacionar conversaciones con ventas (usa nuestra propia base de datos)"
+          title="Correlaciona SOLO esta conversación con ventas (rápido, sin correr todo el lote)"
         >
           {busy ? "Correlacionando…" : "↻ Correlacionar"}
         </button>

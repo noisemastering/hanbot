@@ -202,6 +202,95 @@ async function runConvoCorrelation({ full = false } = {}) {
   }
 }
 
+// Correlate a SINGLE conversation on demand — the dashboard's per-conversation
+// "↻ Correlacionar" button. Same tiers/gates/decay as the batch, but scoped to one
+// psid so it returns in seconds instead of scanning ~20k convos. It is CONSERVATIVE
+// about the rest of the world: it never steals an order already attributed to a
+// DIFFERENT conversation (the scheduled batch owns global re-balancing / bijection),
+// and it does NOT touch SystemState.lastCorrelationRun (so it can't clash with a batch).
+async function correlateOneConversation(psid) {
+  if (!psid) return { ok: false, error: "psid requerido" };
+  const convo = await Conversation.findOne({ psid }).select(MATCH_FIELDS + " saleOverride").lean();
+  if (!convo) return { ok: false, error: "Conversación no encontrada", notFound: true };
+
+  // Rule 7 (human-override lockout): a convo a person already ruled on is INELIGIBLE
+  // for (re)correlation — just re-assert the human verdict and return.
+  const ov = convo.saleOverride;
+  if (ov && (ov.verdict === "sale" || ov.verdict === "no_sale")) {
+    await reconcileOverride(psid, convo._id, ov);
+    return { ok: true, psid, locked: true, verdict: ov.verdict, matched: ov.verdict === "sale" ? 1 : 0 };
+  }
+
+  // Sync ONLY the recent ML sales so a just-made purchase is visible (bounded, non-fatal).
+  // This is the whole point of a manual re-correlate: "did this person just buy?"
+  try {
+    const { backfillLeanSales } = require("./mlSalesLeanImport");
+    const latest = await MLSale.findOne({}).sort({ dateCreated: -1 }).select("dateCreated").lean();
+    const syncFrom = latest ? new Date(new Date(latest.dateCreated).getTime() - SYNC_BUFFER_DAYS * 864e5) : BACKTRACE_START;
+    await backfillLeanSales(SELLER_ID, { startDate: syncFrom, concurrency: 6 });
+  } catch (e) { console.error("⚠️ single-convo ml sync failed (continuing):", e.message); }
+
+  // Enrich this one convo if it's still missing identity/basket, then re-read it.
+  let fresh = convo;
+  if (!convo.aiIdentity || !convo.itemsDiscussed) {
+    await enrichBatch([convo]);
+    fresh = await Conversation.findOne({ psid }).select(MATCH_FIELDS).lean();
+  }
+
+  const ctx = await buildContext();
+  let scored = [];
+  try { scored = (await matchConversation(fresh, ctx)) || []; } catch (e) { scored = []; }
+
+  // Orders locked by ANY human verdict are ineligible.
+  const lockedOrders = new Set(
+    (await ConvoSaleMatch.find({ humanVerdict: { $in: ["confirmed", "rejected"] } }).select("orderId").lean())
+      .map((m) => String(m.orderId)).filter(Boolean)
+  );
+  // Orders currently attributed to a DIFFERENT conversation → orderId → that convo's
+  // certainty. Mirrors the batch's global rule (highest certainty wins the order): this
+  // convo may take an order only from a STRICTLY WEAKER holder; an equal/stronger holder
+  // keeps it (the scheduled batch re-balances the loser on its next pass — self-healing).
+  const candOrderIds = [...new Set(scored.map((d) => String(d.orderId)))];
+  const heldByOther = new Map();
+  if (candOrderIds.length) {
+    const existing = await ConvoSaleMatch.find({ orderId: { $in: candOrderIds }, psid: { $ne: psid } })
+      .select("orderId certainty").lean();
+    for (const e of existing) {
+      const oid = String(e.orderId), c = e.certainty ?? 0;
+      if (!heldByOther.has(oid) || c > heldByOther.get(oid)) heldByOther.set(oid, c);
+    }
+  }
+
+  // Claim this convo's single best available order (bijection: one convo ↔ one order).
+  let claimed = null;
+  for (const doc of scored) {
+    const oid = String(doc.orderId);
+    if (lockedOrders.has(oid)) continue;
+    if (heldByOther.has(oid) && heldByOther.get(oid) >= (doc.certainty ?? 0)) continue; // stronger/equal holder keeps it
+    claimed = doc;
+    break;
+  }
+
+  if (claimed) {
+    await computeLinkAudit(claimed);
+    // Refresh: drop this convo's other (non-human) system matches AND any weaker holder
+    // of the claimed order (bijection), then upsert the claim.
+    await ConvoSaleMatch.deleteMany({ psid, _id: { $ne: claimed._id }, method: { $ne: "human" } });
+    await ConvoSaleMatch.deleteMany({ orderId: claimed.orderId, _id: { $ne: claimed._id }, humanVerdict: null });
+    await ConvoSaleMatch.updateOne({ _id: claimed._id }, { $set: claimed }, { upsert: true });
+  } else {
+    // No qualifying sale now — clear this convo's stale system matches (keep human).
+    await ConvoSaleMatch.deleteMany({ psid, method: { $ne: "human" } });
+  }
+  return {
+    ok: true, psid, single: true,
+    matched: claimed ? 1 : 0,
+    certainty: claimed ? claimed.certainty : null,
+    orderId: claimed ? claimed.orderId : null,
+    candidates: scored.length,
+  };
+}
+
 // Apply ONE conversation's human verdict onto the match collection. Called both
 // immediately when a human clicks the button AND after every correlation run.
 //   no_sale → flag every match for the psid as "rejected" (kept for audit, uncounted)
@@ -270,4 +359,4 @@ async function correlationStatus() {
   };
 }
 
-module.exports = { runConvoCorrelation, correlationStatus, reconcileOverride, applySaleOverrides, FRESH_HOURS };
+module.exports = { runConvoCorrelation, correlateOneConversation, correlationStatus, reconcileOverride, applySaleOverrides, FRESH_HOURS };

@@ -5,7 +5,7 @@ const router = express.Router();
 const ConvoSaleMatch = require("../models/ConvoSaleMatch");
 const ClickLog = require("../models/ClickLog");
 const MLSale = require("../models/MLSale");
-const { runConvoCorrelation, correlationStatus, reconcileOverride } = require("../utils/runConvoCorrelation");
+const { runConvoCorrelation, correlateOneConversation, correlationStatus, reconcileOverride } = require("../utils/runConvoCorrelation");
 const Conversation = require("../models/Conversation");
 
 // Rejected matches are kept for audit but must NOT count as conversions anywhere.
@@ -34,6 +34,19 @@ router.post("/run", async (req, res) => {
   // fire-and-forget; freshness + guard live on SystemState
   runConvoCorrelation({ full }).catch((e) => console.error("❌ convo correlation run failed:", e.message));
   res.status(202).json({ success: true, started: true, full });
+});
+
+// Correlate a SINGLE conversation on demand (blocking, fast) — the per-conversation
+// "↻ Correlacionar" button on the conversations route. Scoped to one psid so it doesn't
+// run the whole batch; returns the outcome so the panel can reload immediately.
+router.post("/run/:psid", async (req, res) => {
+  try {
+    const result = await correlateOneConversation(req.params.psid);
+    if (!result.ok) return res.status(result.notFound ? 404 : 400).json({ success: false, error: result.error });
+    res.json({ success: true, ...result });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
 });
 
 // Daily chart data: clicks/links (ClickLog) + conversions/revenue (convo_sale_matches).
