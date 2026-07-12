@@ -174,12 +174,33 @@ async function runConvoCorrelation({ full = false } = {}) {
     }
     for (const m of finalMatches) await computeLinkAudit(m);
 
-    // 3. persist. full → clean rebuild; incremental → upsert (+ drop stale rows for
-    //    orders now claimed by a different convo in this batch).
-    if (full) await ConvoSaleMatch.deleteMany({});
+    // 3. persist. full → clean rebuild; incremental → upsert while enforcing the 1:1
+    //    bijection against ALREADY-PERSISTED rows. Critical: the intra-run greedy claim
+    //    only makes finalMatches unique among THIS run — a prior run may have left a
+    //    convo on a different order, so without a cross-run cleanup a convo silently
+    //    accumulates multiple (unrelated) orders. For every convo we just re-evaluated,
+    //    drop its stale SYSTEM matches (any order it no longer claims); human verdicts
+    //    (confirmed/rejected) are preserved so Rule 7 lockouts survive.
+    if (full) {
+      await ConvoSaleMatch.deleteMany({});
+    } else {
+      const keepIds = finalMatches.map((d) => d._id);
+      const windowPsids = [...new Set(convos.map((c) => c.psid).filter(Boolean))];
+      for (let i = 0; i < windowPsids.length; i += 5000) {
+        await ConvoSaleMatch.deleteMany({
+          psid: { $in: windowPsids.slice(i, i + 5000) },
+          method: { $ne: "human" },
+          humanVerdict: null, // keep human-confirmed/rejected (Rule 7)
+          _id: { $nin: keepIds },
+        });
+      }
+    }
     if (finalMatches.length) {
       const ops = finalMatches.map((d) => [
-        { deleteMany: { filter: { orderId: d.orderId, _id: { $ne: d._id } } } },
+        // order-uniqueness: no OTHER convo keeps this order (never nuke a human row)
+        { deleteMany: { filter: { orderId: d.orderId, _id: { $ne: d._id }, humanVerdict: null, method: { $ne: "human" } } } },
+        // convo-uniqueness: this convo keeps ONLY this order (defensive belt-and-suspenders)
+        { deleteMany: { filter: { psid: d.psid, _id: { $ne: d._id }, humanVerdict: null, method: { $ne: "human" } } } },
         { updateOne: { filter: { _id: d._id }, update: { $set: d }, upsert: true } },
       ]).flat();
       for (let i = 0; i < ops.length; i += 1000) await ConvoSaleMatch.bulkWrite(ops.slice(i, i + 1000), { ordered: false });
