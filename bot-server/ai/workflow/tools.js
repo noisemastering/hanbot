@@ -56,6 +56,24 @@ function dimsOf(text) {
   return [m[1], m[2]].map(Number).sort((a, b) => a - b);
 }
 
+// Remove every W×L MEASURE from a message so any number that REMAINS is a genuine
+// quantity/count — never a dimension. Mirrors dimsOf()'s unit normalization so VERBOSE
+// forms ("6 metros por 6m", "13 metros de largo por 3 de ancho") are stripped whole,
+// not just the compact "6x6". This is the single fix for the recurring "parsed the
+// width as a piece count" bug: quantity extractors must strip measures THIS way (a naive
+// `\d+(?:x|por)\d+` misses the unit word between the number and the separator, leaking
+// the dimension's first number through as a bogus quantity → false "mayoreo").
+function stripMeasures(text) {
+  if (!text) return "";
+  return String(text)
+    .toLowerCase()
+    .replace(/(\d),(\d)/g, "$1.$2") // Mexican decimal comma
+    .replace(/(\d)\s*(?:cms?\b|cent[ií]metros?\b|m\b|mts?\b|metros?\b)/g, "$1 ") // "6m"/"6 metros" → "6 "
+    .replace(/\bde\s+(?:largo|ancho|alto|altura|fondo|lado)\b/g, " ")
+    .replace(/\b(?:largo|ancho|alto|altura|fondo)\s+de\b/g, " ")
+    .replace(/(\d+(?:\.\d+)?)\s*(?:[x×*]|por)\s*(\d+(?:\.\d+)?)/g, " "); // drop the W×L pair(s)
+}
+
 // ── TRIANGLE HARD RULE ──────────────────────────────────────────────────────
 // A triangular net has THREE sides (attributes side1/side2/side3, no "width").
 // BUSINESS RULE (hard as steel): NEVER offer, suggest, quote, or even surface a
@@ -1092,4 +1110,4 @@ function parseRollQuantity(text) {
   return null;
 }
 
-module.exports = { REGISTRY, toolDefsFor, runTool, dimsOf, findProductInFamilies, availableVariantsForProduct, availableMeasuresForFamilies, closestAvailableMeasure, nearestRollByArea, parseRollQuantity, productShade, availableShadesForMeasure };
+module.exports = { REGISTRY, toolDefsFor, runTool, dimsOf, stripMeasures, findProductInFamilies, availableVariantsForProduct, availableMeasuresForFamilies, closestAvailableMeasure, nearestRollByArea, parseRollQuantity, productShade, availableShadesForMeasure };

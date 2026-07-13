@@ -921,17 +921,18 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // retail → fall through to the normal per-unit quote + link.
   if (userMessage && /con Refuerzo.*Retail/i.test(workflow.name || "")) {
     try {
-      const { parseRollQuantity, findProductInFamilies, dimsOf } = require("./tools");
+      const { parseRollQuantity, findProductInFamilies, dimsOf, stripMeasures } = require("./tools");
       const { resolvePrice, trackedLink } = require("./priceResolver");
       const PF = require("../../models/ProductFamily");
       const refFams = require("../../models/Workflow").familyListOf(workflow) || [];
       const msg = String(userMessage);
       const dims = dimsOf(msg) || (extractAllMeasures(msg)[0] || null);
       // qty: a unit word ("3 piezas"), or a bare/worded number AFTER stripping the W×L
-      // measure (so "6 de 3x3" reads qty 6, not the 3 from the size). parseRollQuantity
-      // alone misses bare numbers and "mallas".
+      // measure (so "6 de 3x3" reads qty 6, not the 3 from the size). stripMeasures also
+      // strips VERBOSE measures ("6 metros por 6m"), so the dimension's own numbers can
+      // never leak in as a bogus quantity. parseRollQuantity alone misses bare numbers.
       const _QW = { un:1,uno:1,una:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9,diez:10 };
-      const msgND = msg.toLowerCase().replace(/\d+(?:\.\d+)?\s*(?:[x×*]|por)\s*\d+(?:\.\d+)?/g, " ");
+      const msgND = stripMeasures(msg);
       const _bN = msgND.match(/\b(\d{1,3})\b/), _wN = msgND.match(/\b(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\b/);
       const qty = parseRollQuantity(msg) || (_bN ? parseInt(_bN[1], 10) : (_wN ? _QW[_wN[1]] : null));
       if (qty && qty >= 2 && dims && refFams.length) {
@@ -1603,9 +1604,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // (borde/cinta) — numbers that don't resolve to one are ignored, so W×L
       // flows (reforzada/rollo) never misfire here.
       if (!multiHandled) {
-        const noPairs = String(userMessage)
-          .toLowerCase()
-          .replace(/\d+(?:\.\d+)?\s*(?:[x×*]|por)\s*\d+(?:\.\d+)?/g, " ") // drop W×L pairs
+        const { stripMeasures } = require("./tools");
+        const noPairs = stripMeasures(userMessage) // drops W×L pairs incl. verbose "9 metros por 18m"
           .replace(/\d+\s*%/g, " "); // drop shade %
         const nums = [...new Set((noPairs.match(/\d+(?:\.\d+)?/g) || []).map(Number))];
         if (nums.length >= 2) {
