@@ -58,7 +58,7 @@ router.get("/chart", async (req, res) => {
     const dateTo = new Date((req.query.dateTo ? new Date(req.query.dateTo) : new Date()).getTime() + MX_OFFSET_MS);
     const days = new Map(); // date → row
     const row = (d) => {
-      if (!days.has(d)) days.set(d, { date: d, links: 0, clicks: 0, sales: 0, conversions: 0, revenue: 0 });
+      if (!days.has(d)) days.set(d, { date: d, links: 0, clicks: 0, sales: 0, conversions: 0, revenue: 0, byCert: {} });
       return days.get(d);
     };
 
@@ -73,8 +73,18 @@ router.get("/chart", async (req, res) => {
 
     // conversions from our correlation (by sale date) — the ATTRIBUTED subset,
     // excluding human-rejected matches.
+    // Per-day AND per-certainty (so the dashboard's confidence slider can filter to
+    // "certainty ≥ N" entirely client-side, in realtime, without refetching). Human-
+    // confirmed matches (null certainty) are the highest trust → bucketed as 100.
     const matches = await ConvoSaleMatch.find({ "sale.dateCreated": { $gte: dateFrom, $lte: dateTo }, ...NOT_REJECTED }).select("sale.dateCreated sale.totalAmount certainty").lean();
-    for (const m of matches) { const r = row(dayKey(m.sale.dateCreated)); r.conversions++; r.revenue += m.sale.totalAmount || 0; }
+    for (const m of matches) {
+      const r = row(dayKey(m.sale.dateCreated));
+      const amt = m.sale.totalAmount || 0;
+      r.conversions++; r.revenue += amt;
+      const c = m.certainty == null ? 100 : m.certainty;
+      (r.byCert[c] = r.byCert[c] || { conversions: 0, revenue: 0 });
+      r.byCert[c].conversions++; r.byCert[c].revenue += amt;
+    }
 
     const chartData = [...days.values()].sort((a, b) => a.date.localeCompare(b.date))
       .map((r) => ({ ...r, dateLabel: new Date(r.date + "T00:00:00Z").toLocaleDateString("es-MX", { day: "2-digit", month: "short", timeZone: "UTC" }), revenue: Math.round(r.revenue) }));
@@ -88,14 +98,27 @@ router.get("/chart", async (req, res) => {
 router.get("/summary", async (req, res) => {
   try {
     const KEEP = { $match: NOT_REJECTED }; // drop human-rejected from every tile
-    const [byTier, totals, auditAgg, topProducts, humanConfirmed] = await Promise.all([
+    const [byTier, totals, auditAgg, prodAgg, humanConfirmed] = await Promise.all([
       ConvoSaleMatch.aggregate([KEEP, { $group: { _id: "$certainty", count: { $sum: 1 }, revenue: { $sum: "$sale.totalAmount" } } }, { $sort: { _id: -1 } }]),
       ConvoSaleMatch.aggregate([KEEP, { $group: { _id: null, count: { $sum: 1 }, revenue: { $sum: "$sale.totalAmount" }, avgCertainty: { $avg: "$certainty" } } }]),
       ConvoSaleMatch.aggregate([KEEP, { $group: { _id: "$linkAudit.mismatch", count: { $sum: 1 } } }]),
-      // top SELLING products FROM the correlation (same source as everything else)
-      ConvoSaleMatch.aggregate([KEEP, { $group: { _id: "$sale.itemTitle", conversions: { $sum: 1 }, totalRevenue: { $sum: "$sale.totalAmount" } } }, { $sort: { conversions: -1 } }, { $limit: 8 }]),
+      // top SELLING products FROM the correlation, split by certainty so the confidence
+      // slider can re-filter + re-rank them client-side (human/null certainty → 100).
+      ConvoSaleMatch.aggregate([KEEP, { $group: { _id: { title: "$sale.itemTitle", cert: "$certainty" }, conversions: { $sum: 1 }, revenue: { $sum: "$sale.totalAmount" } } }]),
       ConvoSaleMatch.countDocuments({ humanVerdict: "confirmed" }),
     ]);
+    // Fold the {title,cert} groups into one row per product carrying a per-tier map.
+    const prodMap = new Map();
+    for (const p of prodAgg) {
+      const name = p._id.title || "—";
+      const cert = p._id.cert == null ? 100 : p._id.cert;
+      let e = prodMap.get(name);
+      if (!e) { e = { name, conversions: 0, totalRevenue: 0, tiers: {} }; prodMap.set(name, e); }
+      e.conversions += p.conversions; e.totalRevenue += p.revenue || 0;
+      (e.tiers[cert] = e.tiers[cert] || { conversions: 0, revenue: 0 });
+      e.tiers[cert].conversions += p.conversions; e.tiers[cert].revenue += p.revenue || 0;
+    }
+    const topProducts = [...prodMap.values()].sort((a, b) => b.conversions - a.conversions).slice(0, 40);
     const rejected = await ConvoSaleMatch.countDocuments({ humanVerdict: "rejected" });
     const t = totals[0] || { count: 0, revenue: 0, avgCertainty: 0 };
     const mismatch = (auditAgg.find((x) => x._id === true) || {}).count || 0;
@@ -106,7 +129,7 @@ router.get("/summary", async (req, res) => {
       byTier: byTier.map((x) => ({ certainty: x._id, count: x.count, revenue: Math.round(x.revenue || 0) })),
       human: { confirmed: humanConfirmed, rejected },
       linkAudit: { mismatch, matchedShared },
-      topProducts: topProducts.map((x) => ({ name: x._id || "—", conversions: x.conversions, totalRevenue: Math.round(x.totalRevenue || 0) })),
+      topProducts: topProducts.map((x) => ({ name: x.name || "—", conversions: x.conversions, totalRevenue: Math.round(x.totalRevenue || 0), tiers: x.tiers })),
       status: await correlationStatus(),
     });
   } catch (e) {

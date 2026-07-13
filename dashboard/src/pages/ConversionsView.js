@@ -5,6 +5,7 @@ import { useTranslation } from '../i18n';
 import MatchDataCompare from '../components/MatchDataCompare';
 import ConversationTranscript from '../components/ConversationTranscript';
 import CorrelationControl from '../components/CorrelationControl';
+import { useAuth } from '../contexts/AuthContext';
 import {
   ComposedChart,
   Bar,
@@ -50,15 +51,25 @@ function parseReason(reason) {
 
 function ConversionsView() {
   const { t, locale } = useTranslation();
-  const [stats, setStats] = useState(null);
+  const { user, simulationMode } = useAuth();
+  // Confidence filter is a super_admin-only control for now (admins later).
+  const effectiveRole = simulationMode?.role || user?.role;
+  const isSuperAdmin = effectiveRole === 'super_admin';
+
+  const [summaryRaw, setSummaryRaw] = useState(null); // raw /summary (byTier + tiered topProducts)
   const [recentConversions, setRecentConversions] = useState([]);
   const [detailRow, setDetailRow] = useState(null); // conversion shown in the detail modal
   const [detailView, setDetailView] = useState('match'); // 'match' | 'chat' toggle
-  const [dailyClicks, setDailyClicks] = useState([]);
+  const [dailyClicks, setDailyClicks] = useState([]); // /chart rows (now carry per-day byCert)
   const [loading, setLoading] = useState(true);
   const [autoCorrelating, setAutoCorrelating] = useState(false); // >3h freshness rebuild
   const [error, setError] = useState(null);
-  const [topProducts, setTopProducts] = useState([]);
+
+  // Minimum-confidence filter (super_admin): show only sales with certainty ≥ this.
+  // 0 = show everything. All certainties are multiples of 10, so a 10-step slider is exact.
+  const [minConfidence, setMinConfidence] = useState(0);
+  // Human-confirmed matches have null certainty but are the HIGHEST trust → treat as 100.
+  const passCert = (c) => (c == null ? 100 : c) >= minConfidence;
 
   // Date range for the chart (defaults to this month → today)
   const [dateFrom] = useState(getStartOfMonthStr());
@@ -138,27 +149,11 @@ function ConversionsView() {
         API.get('/correlation/matches?limit=500'),
       ]);
 
-      const chart = chartRes.data?.chartData || [];
-      const totalLinks = chart.reduce((s, d) => s + (d.links || 0), 0);
-      const totalClicks = chart.reduce((s, d) => s + (d.clicks || 0), 0);
-      const sum = summaryRes.data || {};
-      const conversions = sum.totals?.conversions || 0;
-      const cb = { high: 0, medium: 0, low: 0 };
-      for (const tr of (sum.byTier || [])) {
-        if (tr.certainty >= 70) cb.high += tr.count;
-        else if (tr.certainty >= 50) cb.medium += tr.count;
-        else cb.low += tr.count;
-      }
-      setStats({
-        conversions,
-        totalRevenue: sum.totals?.revenue || 0,
-        clickedLinks: totalClicks,
-        clickRate: totalLinks ? Math.round((totalClicks / totalLinks) * 100) : 0,
-        confidenceBreakdown: cb,
-      });
-      setDailyClicks(chart);
+      // Store the raw responses; stats/chart/topProducts/table are all DERIVED from
+      // these + the confidence threshold (below) so the slider filters instantly.
+      setSummaryRaw(summaryRes.data || {});
+      setDailyClicks(chartRes.data?.chartData || []);
       setRecentConversions((matchesRes.data?.matches || []).map(mapMatch));
-      setTopProducts((sum.topProducts || []).map((p) => ({ _id: p.name, conversions: p.conversions, totalRevenue: p.totalRevenue })));
     } catch (err) {
       console.error('Error fetching conversion data:', err);
       setError(err.message);
@@ -220,16 +215,68 @@ function ConversionsView() {
   };
 
 
-  // Chart data comes directly from the daily API (already has clicks + conversions)
+  // ── Derived views (all react to the confidence threshold, no refetch) ──────────
+  // Chart: conversions/revenue per day = sum of the per-certainty buckets ≥ threshold.
+  // Clicks/sales/links are threshold-independent (they aren't conversions).
   const chartData = useMemo(() => {
-    return dailyClicks.map(day => ({
-      date: day.date,
-      dateLabel: day.dateLabel,
-      clicks: day.clicks || 0,
-      sales: day.sales || 0,
-      conversions: day.conversions || 0
-    }));
-  }, [dailyClicks]);
+    return (dailyClicks || []).map((day) => {
+      let conversions = 0, revenue = 0;
+      const bc = day.byCert || {};
+      for (const k of Object.keys(bc)) {
+        if (Number(k) >= minConfidence) { conversions += bc[k].conversions; revenue += bc[k].revenue || 0; }
+      }
+      return { date: day.date, dateLabel: day.dateLabel, clicks: day.clicks || 0, sales: day.sales || 0, conversions, revenue: Math.round(revenue) };
+    });
+  }, [dailyClicks, minConfidence]);
+
+  // Stat cards / donut / funnel: recomputed from the per-tier summary ≥ threshold.
+  const stats = useMemo(() => {
+    if (!summaryRaw) return null;
+    const chart = dailyClicks || [];
+    const totalLinks = chart.reduce((s, d) => s + (d.links || 0), 0);
+    const totalClicks = chart.reduce((s, d) => s + (d.clicks || 0), 0);
+    let conversions = 0, revenue = 0;
+    const cb = { high: 0, medium: 0, low: 0 };
+    for (const tr of (summaryRaw.byTier || [])) {
+      if (!passCert(tr.certainty)) continue;
+      conversions += tr.count; revenue += tr.revenue || 0;
+      const c = tr.certainty == null ? 100 : tr.certainty;
+      if (c >= 70) cb.high += tr.count; else if (c >= 50) cb.medium += tr.count; else cb.low += tr.count;
+    }
+    return {
+      conversions,
+      totalRevenue: revenue,
+      totalLinks,
+      clickedLinks: totalClicks,
+      clickRate: totalLinks ? Math.round((totalClicks / totalLinks) * 100) : 0,
+      confidenceBreakdown: cb,
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [summaryRaw, dailyClicks, minConfidence]);
+
+  // Top products: re-filter + re-rank each product by its per-tier breakdown ≥ threshold.
+  const topProducts = useMemo(() => {
+    return (summaryRaw?.topProducts || [])
+      .map((p) => {
+        let conversions = 0, revenue = 0;
+        const t = p.tiers || {};
+        for (const k of Object.keys(t)) if (Number(k) >= minConfidence) { conversions += t[k].conversions; revenue += t[k].revenue || 0; }
+        return { _id: p.name, conversions, totalRevenue: Math.round(revenue) };
+      })
+      .filter((p) => p.conversions > 0)
+      .sort((a, b) => b.totalRevenue - a.totalRevenue)
+      .slice(0, 8);
+  }, [summaryRaw, minConfidence]);
+
+  // Table: only the sales meeting the threshold.
+  const filteredConversions = useMemo(
+    () => recentConversions.filter((c) => passCert(c.certainty)),
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+    [recentConversions, minConfidence]
+  );
+
+  // Moving the slider can shrink the list below the current page → snap back to page 1.
+  useEffect(() => { setCurrentPage(1); }, [minConfidence]);
 
   if (loading) {
     return (
@@ -358,6 +405,48 @@ function ConversionsView() {
                 </div>
               </details>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Confidence filter — super_admin only (admins later). Filters every conversion
+          surface (chart, cards, donut, table, top products) to certainty ≥ N, live. */}
+      {isSuperAdmin && (
+        <div className="bg-gray-800/30 rounded-lg border border-purple-500/30 p-4 mb-6">
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-sm font-medium text-gray-200">
+                Filtro de confianza
+                <span className="ml-2 text-[10px] uppercase tracking-wide text-purple-300 bg-purple-500/15 border border-purple-500/30 rounded px-1.5 py-0.5">super admin</span>
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {minConfidence === 0
+                  ? 'Mostrando todas las ventas correlacionadas'
+                  : `Mostrando solo ventas con certeza ≥ ${minConfidence}%`}
+                {stats && <span className="text-gray-400"> · {stats.conversions} ventas</span>}
+              </p>
+            </div>
+            <span
+              className="text-2xl font-bold tabular-nums"
+              style={{ color: minConfidence === 0 ? '#9ca3af' : minConfidence >= 90 ? '#34d399' : minConfidence >= 70 ? '#fbbf24' : minConfidence >= 50 ? '#fb923c' : '#9ca3af' }}
+            >
+              {minConfidence === 0 ? 'Todas' : `≥ ${minConfidence}%`}
+            </span>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="10"
+            value={minConfidence}
+            onChange={(e) => setMinConfidence(Number(e.target.value))}
+            className="w-full accent-purple-500 cursor-pointer"
+            aria-label="Filtro de confianza mínima"
+          />
+          <div className="flex justify-between text-[10px] text-gray-500 mt-1 tabular-nums select-none">
+            {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((v) => (
+              <span key={v} className={minConfidence === v ? 'text-purple-300 font-semibold' : ''}>{v === 0 ? 'Todas' : v}</span>
+            ))}
           </div>
         </div>
       )}
@@ -518,7 +607,7 @@ function ConversionsView() {
           </div>
         </div>
         <div className="overflow-x-auto">
-          {recentConversions.length === 0 ? (
+          {filteredConversions.length === 0 ? (
             <p className="text-gray-500 text-center py-8">{t('conversions.noConversionsRecorded')}</p>
           ) : (
             <>
@@ -536,7 +625,7 @@ function ConversionsView() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-700/50">
-                  {recentConversions
+                  {filteredConversions
                     .slice((currentPage - 1) * pageSize, currentPage * pageSize)
                     .map((conversion) => (
                     <tr key={conversion.clickId || conversion.conversionData?.orderId} className={`hover:bg-gray-700/20 ${conversion.humanVerdict === 'rejected' ? 'opacity-40' : ''}`}>
@@ -627,10 +716,10 @@ function ConversionsView() {
               </table>
 
               {/* Pagination */}
-              {recentConversions.length > pageSize && (
+              {filteredConversions.length > pageSize && (
                 <div className="px-4 py-3 border-t border-gray-700/50 flex items-center justify-between">
                   <p className="text-sm text-gray-400">
-                    {t('conversions.showingRange', { from: ((currentPage - 1) * pageSize) + 1, to: Math.min(currentPage * pageSize, recentConversions.length), total: recentConversions.length })}
+                    {t('conversions.showingRange', { from: ((currentPage - 1) * pageSize) + 1, to: Math.min(currentPage * pageSize, filteredConversions.length), total: filteredConversions.length })}
                   </p>
                   <div className="flex gap-2">
                     <button
@@ -641,11 +730,11 @@ function ConversionsView() {
                       {t('common.previous')}
                     </button>
                     <span className="px-3 py-1 text-sm text-gray-400">
-                      {t('conversions.pageOf', { current: currentPage, total: Math.ceil(recentConversions.length / pageSize) })}
+                      {t('conversions.pageOf', { current: currentPage, total: Math.ceil(filteredConversions.length / pageSize) })}
                     </span>
                     <button
-                      onClick={() => setCurrentPage(p => Math.min(Math.ceil(recentConversions.length / pageSize), p + 1))}
-                      disabled={currentPage >= Math.ceil(recentConversions.length / pageSize)}
+                      onClick={() => setCurrentPage(p => Math.min(Math.ceil(filteredConversions.length / pageSize), p + 1))}
+                      disabled={currentPage >= Math.ceil(filteredConversions.length / pageSize)}
                       className="px-3 py-1 text-sm bg-gray-700/50 text-gray-300 rounded hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                       {t('common.next')}
