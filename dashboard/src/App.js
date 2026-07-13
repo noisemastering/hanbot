@@ -13,7 +13,7 @@
 import React, { useEffect, useState } from "react";
 import { Routes, Route, NavLink, Link, Navigate, useLocation, useNavigate } from "react-router-dom";
 import io from "socket.io-client";
-import { Toaster } from 'react-hot-toast';
+import toast, { Toaster } from 'react-hot-toast';
 import API from "./api";
 import ProductModal from "./components/ProductModal";
 import ProductsView from "./components/ProductsView";
@@ -1483,10 +1483,10 @@ function App() {
       });
 
       await fetchConversationStatus(psid);
-      alert(t('alert.takeoverSuccess', { psid: psid.slice(0, 16) }));
+      toast.success(t('alert.takeoverSuccess'));
     } catch (err) {
       console.error("Error taking over:", err);
-      alert(`Error: ${err.response?.data?.error || err.message}`);
+      toast.error(`Error: ${err.response?.data?.error || err.message}`);
     } finally {
       setHandoverLoading(prev => ({ ...prev, [psid]: false }));
     }
@@ -1498,10 +1498,10 @@ function App() {
       await API.post(`/api/conversation/${psid}/release`);
 
       await fetchConversationStatus(psid);
-      alert(t('alert.releaseSuccess', { psid: psid.slice(0, 16) }));
+      toast.success(t('alert.releaseSuccess'));
     } catch (err) {
       console.error("Error releasing:", err);
-      alert(`Error: ${err.response?.data?.error || err.message}`);
+      toast.error(`Error: ${err.response?.data?.error || err.message}`);
     } finally {
       setHandoverLoading(prev => ({ ...prev, [psid]: false }));
     }

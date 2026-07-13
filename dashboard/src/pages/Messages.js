@@ -7,6 +7,7 @@ import ConversationCommercePanel from "../components/ConversationCommercePanel";
 import ConversationHandoffPanel from "../components/ConversationHandoffPanel";
 import { useTranslation } from '../i18n';
 import FeatureTip from '../components/FeatureTip';
+import toast from 'react-hot-toast';
 
 const PRODUCT_LABELS = {
   malla_sombra_raschel: "Malla Raschel",
@@ -421,10 +422,10 @@ function Messages() {
         [psid]: statusRes.data
       }));
 
-      alert(t('alert.takeoverSuccess', { psid }));
+      toast.success(t('alert.takeoverSuccess'));
     } catch (err) {
       console.error("Error taking over:", err);
-      alert(`❌ Error: ${err.response?.data?.error || err.message}`);
+      toast.error(`Error: ${err.response?.data?.error || err.message}`);
     } finally {
       setLoading(prev => ({ ...prev, [psid]: false }));
     }
@@ -456,10 +457,10 @@ function Messages() {
         [psid]: statusRes.data
       }));
 
-      alert(t('alert.releaseSuccess', { psid }));
+      toast.success(t('alert.releaseSuccess'));
     } catch (err) {
       console.error("Error releasing:", err);
-      alert(`❌ Error: ${err.response?.data?.error || err.message}`);
+      toast.error(`Error: ${err.response?.data?.error || err.message}`);
     } finally {
       setLoading(prev => ({ ...prev, [psid]: false }));
     }

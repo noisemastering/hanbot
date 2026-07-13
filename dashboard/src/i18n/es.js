@@ -255,8 +255,8 @@ const es = {
   "alert.confirmDeleteUso": "¿Estás seguro de eliminar el uso \"{{name}}\"?\n\nEsta acción no se puede deshacer.",
   "alert.confirmDeleteGrupo": "¿Estás seguro de eliminar el grupo \"{{name}}\"?\n\nEsta acción no se puede deshacer.",
   "alert.confirmDeletePOS": "¿Estás seguro de eliminar el punto de venta \"{{name}}\"?\n\nEsta acción no se puede deshacer.",
-  "alert.takeoverSuccess": "Control tomado del PSID: {{psid}}...\nEl bot dejara de responder.",
-  "alert.releaseSuccess": "Conversacion liberada: {{psid}}...\nEl bot puede responder de nuevo.",
+  "alert.takeoverSuccess": "Tomaste el control · el bot ya no responderá esta conversación.",
+  "alert.releaseSuccess": "Conversación liberada · el bot puede responder de nuevo.",
 
   // ── Login ────────────────────────────────────────────────
   "login.title": "Hanlob Bot",

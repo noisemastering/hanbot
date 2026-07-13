@@ -255,8 +255,8 @@ const en = {
   "alert.confirmDeleteUso": "Are you sure you want to delete the use \"{{name}}\"?\n\nThis action cannot be undone.",
   "alert.confirmDeleteGrupo": "Are you sure you want to delete the group \"{{name}}\"?\n\nThis action cannot be undone.",
   "alert.confirmDeletePOS": "Are you sure you want to delete the point of sale \"{{name}}\"?\n\nThis action cannot be undone.",
-  "alert.takeoverSuccess": "Control taken from PSID: {{psid}}...\nThe bot will stop responding.",
-  "alert.releaseSuccess": "Conversation released: {{psid}}...\nThe bot can respond again.",
+  "alert.takeoverSuccess": "You took over · the bot will no longer reply to this conversation.",
+  "alert.releaseSuccess": "Conversation released · the bot can respond again.",
 
   // ── Login ────────────────────────────────────────────────
   "login.title": "Hanlob Bot",
