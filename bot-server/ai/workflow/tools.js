@@ -33,23 +33,14 @@ async function familyFullPath(PF, id) {
 }
 
 // Normalize a measure/product query to comparable dimension tokens.
-// Spelled-out Spanish numbers → digits (1–16, covering every valid dimension). Applied
-// BEFORE measure parsing so "tres por ocho" / "una de tres por 8" are handled exactly
-// like "3 por 8" — otherwise a worded side of the measure isn't recognized and its
-// number leaks through as a bogus quantity ("tres por 8" → qty 8). Longer words first
-// so "dieciséis" isn't eaten as "seis".
-const _NUMWORDS = {
-  un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8,
-  nueve: 9, diez: 10, once: 11, doce: 12, trece: 13, catorce: 14, quince: 15, dieciseis: 16, "dieciséis": 16,
-};
-const _NUMRE = /\b(diecis[eé]is|catorce|cuatro|cinco|siete|nueve|trece|quince|once|doce|diez|dos|tres|seis|ocho|una|uno|un)\b/gi;
-function wordsToDigits(text) {
-  return String(text || "").replace(_NUMRE, (w) => {
-    const k = w.toLowerCase();
-    const v = _NUMWORDS[k] != null ? _NUMWORDS[k] : _NUMWORDS[k.normalize("NFD").replace(/[̀-ͯ]/g, "")];
-    return v != null ? String(v) : w;
-  });
-}
+// Spelled Spanish numbers → digits, applied BEFORE measure parsing so "tres por ocho"
+// / "una de tres por 8" parse exactly like "3 por 8" (otherwise a worded side leaks its
+// number through as a bogus quantity). Routed through the SINGLE SOURCE OF TRUTH
+// converter in ai/utils/spanishNumbers — the workflow engine had rolled its own
+// digit-only regex and skipped it, which is why this bug resurfaced here after the
+// shared parsers had already solved it. Keep this delegating; never re-implement.
+const { convertSpanishNumbers } = require("../utils/spanishNumbers");
+const wordsToDigits = (t) => convertSpanishNumbers(String(t || ""));
 
 // "4x3", "4 x 3 m", "4 por 3", "tres por 8", "de 4x3 metros" → ["3","4"] (sorted).
 function dimsOf(text) {
