@@ -52,9 +52,9 @@ function parseReason(reason) {
 function ConversionsView() {
   const { t, locale } = useTranslation();
   const { user, simulationMode } = useAuth();
-  // Confidence filter is a super_admin-only control for now (admins later).
+  // Confidence filter is available to super_admin and admin.
   const effectiveRole = simulationMode?.role || user?.role;
-  const isSuperAdmin = effectiveRole === 'super_admin';
+  const canFilterConfidence = effectiveRole === 'super_admin' || effectiveRole === 'admin';
 
   const [summaryRaw, setSummaryRaw] = useState(null); // raw /summary (byTier + tiered topProducts)
   const [recentConversions, setRecentConversions] = useState([]);
@@ -409,15 +409,14 @@ function ConversionsView() {
         </div>
       )}
 
-      {/* Confidence filter — super_admin only (admins later). Filters every conversion
-          surface (chart, cards, donut, table, top products) to certainty ≥ N, live. */}
-      {isSuperAdmin && (
+      {/* Confidence filter — super_admin + admin. Filters every conversion surface
+          (chart, cards, donut, table, top products) to certainty ≥ N, live. */}
+      {canFilterConfidence && (
         <div className="bg-gray-800/30 rounded-lg border border-purple-500/30 p-4 mb-6">
           <div className="flex items-center justify-between mb-3">
             <div>
               <p className="text-sm font-medium text-gray-200">
                 Filtro de confianza
-                <span className="ml-2 text-[10px] uppercase tracking-wide text-purple-300 bg-purple-500/15 border border-purple-500/30 rounded px-1.5 py-0.5">super admin</span>
               </p>
               <p className="text-xs text-gray-500 mt-0.5">
                 {minConfidence === 0
