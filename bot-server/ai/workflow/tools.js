@@ -33,7 +33,25 @@ async function familyFullPath(PF, id) {
 }
 
 // Normalize a measure/product query to comparable dimension tokens.
-// "4x3", "4 x 3 m", "4 por 3", "de 4x3 metros" → ["4","3"] (sorted for order-insensitivity).
+// Spelled-out Spanish numbers → digits (1–16, covering every valid dimension). Applied
+// BEFORE measure parsing so "tres por ocho" / "una de tres por 8" are handled exactly
+// like "3 por 8" — otherwise a worded side of the measure isn't recognized and its
+// number leaks through as a bogus quantity ("tres por 8" → qty 8). Longer words first
+// so "dieciséis" isn't eaten as "seis".
+const _NUMWORDS = {
+  un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8,
+  nueve: 9, diez: 10, once: 11, doce: 12, trece: 13, catorce: 14, quince: 15, dieciseis: 16, "dieciséis": 16,
+};
+const _NUMRE = /\b(diecis[eé]is|catorce|cuatro|cinco|siete|nueve|trece|quince|once|doce|diez|dos|tres|seis|ocho|una|uno|un)\b/gi;
+function wordsToDigits(text) {
+  return String(text || "").replace(_NUMRE, (w) => {
+    const k = w.toLowerCase();
+    const v = _NUMWORDS[k] != null ? _NUMWORDS[k] : _NUMWORDS[k.normalize("NFD").replace(/[̀-ͯ]/g, "")];
+    return v != null ? String(v) : w;
+  });
+}
+
+// "4x3", "4 x 3 m", "4 por 3", "tres por 8", "de 4x3 metros" → ["3","4"] (sorted).
 function dimsOf(text) {
   if (!text) return null;
   // Strip metric units, including 'm'/'cm' glued to a digit ("6m" → "6",
@@ -42,8 +60,7 @@ function dimsOf(text) {
   // ("13 de largo x 3 de ancho", "13 metros de largo por 3 de ancho") — without
   // this, the number isn't adjacent to the x/por and the match fails.
   // cm goes first so it's stripped before the bare 'm' rules.
-  const m = String(text)
-    .toLowerCase()
+  const m = wordsToDigits(String(text).toLowerCase())
     .replace(/(\d),(\d)/g, "$1.$2") // Mexican decimal comma "3,5" → "3.5" (else "3,5 x 3,5" misparses to 3x5)
     .replace(/(\d)\s*(?:cms?\b|cent[ií]metros?\b|m\b|mts?\b|metros?\b)/g, "$1 ")
     .replace(/\bcms?\.?\b|\bcent[ií]metros?\b|\bmts?\.?\b|\bmetros?\b|\bm\b/g, " ")
@@ -65,8 +82,7 @@ function dimsOf(text) {
 // the dimension's first number through as a bogus quantity → false "mayoreo").
 function stripMeasures(text) {
   if (!text) return "";
-  return String(text)
-    .toLowerCase()
+  return wordsToDigits(String(text).toLowerCase())
     .replace(/(\d),(\d)/g, "$1.$2") // Mexican decimal comma
     .replace(/(\d)\s*(?:cms?\b|cent[ií]metros?\b|m\b|mts?\b|metros?\b)/g, "$1 ") // "6m"/"6 metros" → "6 "
     .replace(/\bde\s+(?:largo|ancho|alto|altura|fondo|lado)\b/g, " ")
