@@ -223,16 +223,17 @@ function convoIdentity(convo, ctx) {
   // Basket: every size the customer discussed (from itemsDiscussed backfill). Matched
   // to sales by SIZE (parsed from the sale's title), NOT item id — ML relists change
   // the id for the same product, so an id set goes stale; the size in the title doesn't.
+  // Sizes DISCUSSED in the chat (from itemsDiscussed) — drives the display/day-split.
   const basketSizes = new Set((convo.itemsDiscussed || []).map((b) => b.askedAs).filter(Boolean));
-  // POI from the CLICKED LINK (authoritative): the product they clicked is a product
-  // they wanted, so it belongs in the basket the item match runs against — even when
-  // the chat text never named the size. Fixes click→buy-same-size being mislabeled
-  // "producto distinto".
-  const clickSizes = ctx.psidClickSizes && ctx.psidClickSizes.get(String(convo.psid));
-  if (clickSizes) for (const s of clickSizes) basketSizes.add(s);
+  // POI from the CLICKED LINK (authoritative): the product they clicked is one they
+  // wanted. Kept in a SEPARATE set — poiSizes = discussed ∪ clicked — used for the ITEM
+  // MATCH + eligibility, so a click→buy of the same size is the SAME product even when
+  // the chat never named it, WITHOUT polluting the discussed-sizes display/day-split.
+  const clickSizes = new Set((ctx.psidClickSizes && ctx.psidClickSizes.get(String(convo.psid))) || []);
+  const poiSizes = new Set([...basketSizes, ...clickSizes]);
   const convoIsRollo = /rollo/i.test(`${convo.productInterest || ""} ${convo.poiRootName || ""}`);
 
-  return { zip, city, cityRaw, state, names, firstName, famIds, poiName, exactItemIds, basketSizes, convoIsRollo };
+  return { zip, city, cityRaw, state, names, firstName, famIds, poiName, exactItemIds, basketSizes, clickSizes, poiSizes, convoIsRollo };
 }
 
 // Canonical "WxL" (min×max) parsed from an ML item title — stable across relists.
@@ -289,10 +290,13 @@ const isRolloTitle = (t) => /rollo|por\s*metro/i.test(String(t || ""));
 // sales to the "+ item" tier. Match on the size (parsed from the sale title) against
 // the sizes the customer discussed (basket). Different size ⇒ different product.
 function itemMatch(sale, id) {
-  if (!id.basketSizes || !id.basketSizes.size) return false;
+  // Match against poiSizes = discussed ∪ clicked-link (the clicked product is an
+  // authoritative POI); falls back to basketSizes for older callers.
+  const pool = id.poiSizes || id.basketSizes;
+  if (!pool || !pool.size) return false;
   for (const it of sale.items || []) {
     const sz = parseTitleSize(it.title);
-    if (sz && id.basketSizes.has(sz)) return true;
+    if (sz && pool.has(sz)) return true;
   }
   return false;
 }
@@ -443,9 +447,9 @@ async function matchConversation(convo, ctx) {
   const MLSale = require("../models/MLSale");
   const id = convoIdentity(convo, ctx);
 
-  // Need SOMETHING to tie a sale to: a location, a name, or a discussed item.
-  const hasBasket = !!(id.basketSizes && id.basketSizes.size);
-  if (!id.zip && !id.city && !id.names.length && !hasBasket) return [];
+  // Need SOMETHING to tie a sale to: a location, a name, or a POI (discussed OR clicked).
+  const hasPoi = !!(id.poiSizes && id.poiSizes.size);
+  if (!id.zip && !id.city && !id.names.length && !hasPoi) return [];
 
   // GATE 1 (approved criterion): the conversation must have CLICKED a tracked link
   // to even be eligible for a sale. No clicked link → not considered.
@@ -471,7 +475,7 @@ async function matchConversation(convo, ctx) {
   // name or a discussed item — it can still attribute by item/name + time. Pull the
   // sales on the actual CLICK DAYS (bounded); the tight tier windows + directional
   // gate + item/name matching filter them down.
-  if (!id.zip && !id.city && (id.names.length || hasBasket)) {
+  if (!id.zip && !id.city && (id.names.length || hasPoi)) {
     const cache = ctx.salesDayCache; // shared across the run: each day fetched ONCE
     for (const d of clickDayList) {
       let daySales = cache && cache.get(d);
