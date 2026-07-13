@@ -27,6 +27,7 @@ const BACKTRACE_START = new Date("2025-12-01T00:00:00.000Z");
 const SELLER_ID = "482595248";
 const SYNC_BUFFER_DAYS = 2; // re-fetch the last 2 days of ML sales each run (late arrivals)
 const MATCH_WINDOW_DAYS = 35; // re-match ~35 days of convos so NEW sales attach to older chats
+const MULTI_ORDER_MIN = 70; // a client may hold >1 order only via matches ≥ this certainty
 
 const MATCH_FIELDS =
   "psid extractedName productSpecs city stateMx zipCode zipcode customOrderZipcode " +
@@ -156,20 +157,25 @@ async function runConvoCorrelation({ full = false } = {}) {
         .map((m) => String(m.orderId)).filter(Boolean)
     );
 
-    // Rule 9 (HIERARCHICAL) + Rule 5 (one order → one click, no double-claim):
-    // claim tier-by-tier, highest certainty first (gap breaks ties). Each order is
-    // taken once; a convo whose top order is taken falls back to its next-best order.
+    // Rule 9 (HIERARCHICAL) + Rule 5 (one order → one client): claim tier-by-tier,
+    // highest certainty first (gap breaks ties). CARDINALITY: each order attaches to
+    // exactly ONE client (order-uniqueness), but ONE client may hold MULTIPLE orders —
+    // only via strong matches. A convo's 2nd/3rd/… order must each be ≥70% (a real
+    // customer's several purchases); weak tiers stay capped at one order (so different
+    // buyers can't pile onto one convo through the no-location tiers).
     allScored.sort((a, b) => b.certainty - a.certainty ||
       (Math.abs(a.matchDetails.gapHoursToSale ?? 1e9) - Math.abs(b.matchDetails.gapHoursToSale ?? 1e9)));
-    const claimedOrders = new Set();
-    const claimedConvos = new Set(); // one order ↔ one conversation (bijection)
+    const claimedOrders = new Set();     // each order → exactly one client
+    const convoOrderCount = new Map();   // psid → # orders already claimed
     const finalMatches = [];
     for (const doc of allScored) {
       const oid = String(doc.orderId), pid = String(doc.psid);
       if (lockedPsids.has(pid) || lockedOrders.has(oid)) continue; // human lockout
-      if (claimedOrders.has(oid) || claimedConvos.has(pid)) continue; // already taken (either side)
+      if (claimedOrders.has(oid)) continue; // order already taken by a stronger convo
+      const held = convoOrderCount.get(pid) || 0;
+      if (held >= 1 && (doc.certainty ?? 0) < MULTI_ORDER_MIN) continue; // stacking needs ≥70%
       claimedOrders.add(oid);
-      claimedConvos.add(pid);
+      convoOrderCount.set(pid, held + 1);
       finalMatches.push(doc);
     }
     for (const m of finalMatches) await computeLinkAudit(m);
@@ -197,10 +203,10 @@ async function runConvoCorrelation({ full = false } = {}) {
     }
     if (finalMatches.length) {
       const ops = finalMatches.map((d) => [
-        // order-uniqueness: no OTHER convo keeps this order (never nuke a human row)
+        // order-uniqueness: no OTHER convo keeps this order (never nuke a human row).
+        // NOTE: no convo-uniqueness delete — a client may legitimately hold several
+        // orders (all its claimed orders are in keepIds and survive the window cleanup).
         { deleteMany: { filter: { orderId: d.orderId, _id: { $ne: d._id }, humanVerdict: null, method: { $ne: "human" } } } },
-        // convo-uniqueness: this convo keeps ONLY this order (defensive belt-and-suspenders)
-        { deleteMany: { filter: { psid: d.psid, _id: { $ne: d._id }, humanVerdict: null, method: { $ne: "human" } } } },
         { updateOne: { filter: { _id: d._id }, update: { $set: d }, upsert: true } },
       ]).flat();
       for (let i = 0; i < ops.length; i += 1000) await ConvoSaleMatch.bulkWrite(ops.slice(i, i + 1000), { ordered: false });
@@ -282,32 +288,40 @@ async function correlateOneConversation(psid) {
     }
   }
 
-  // Claim this convo's single best available order (bijection: one convo ↔ one order).
-  let claimed = null;
+  // Claim this convo's orders (best first). Each order → one client (take from a
+  // strictly-weaker holder). CARDINALITY: this client keeps its best order at any tier,
+  // then STACKS additional orders only when they're ≥70% (a real multi-purchase);
+  // weak tiers stay capped at one.
+  const claimed = [];
   for (const doc of scored) {
     const oid = String(doc.orderId);
     if (lockedOrders.has(oid)) continue;
     if (heldByOther.has(oid) && heldByOther.get(oid) >= (doc.certainty ?? 0)) continue; // stronger/equal holder keeps it
-    claimed = doc;
-    break;
+    if (claimed.length >= 1 && (doc.certainty ?? 0) < MULTI_ORDER_MIN) continue; // stacking needs ≥70%
+    claimed.push(doc);
   }
 
-  if (claimed) {
-    await computeLinkAudit(claimed);
-    // Refresh: drop this convo's other (non-human) system matches AND any weaker holder
-    // of the claimed order (bijection), then upsert the claim.
-    await ConvoSaleMatch.deleteMany({ psid, _id: { $ne: claimed._id }, method: { $ne: "human" } });
-    await ConvoSaleMatch.deleteMany({ orderId: claimed.orderId, _id: { $ne: claimed._id }, humanVerdict: null });
-    await ConvoSaleMatch.updateOne({ _id: claimed._id }, { $set: claimed }, { upsert: true });
+  if (claimed.length) {
+    for (const c of claimed) await computeLinkAudit(c);
+    const keepIds = claimed.map((c) => c._id);
+    // Drop this convo's other (non-human) system matches it no longer claims.
+    await ConvoSaleMatch.deleteMany({ psid, _id: { $nin: keepIds }, method: { $ne: "human" }, humanVerdict: null });
+    // Per claim: remove any weaker OTHER-convo holder of that order, then upsert.
+    const ops = claimed.map((d) => [
+      { deleteMany: { filter: { orderId: d.orderId, _id: { $ne: d._id }, humanVerdict: null, method: { $ne: "human" } } } },
+      { updateOne: { filter: { _id: d._id }, update: { $set: d }, upsert: true } },
+    ]).flat();
+    await ConvoSaleMatch.bulkWrite(ops, { ordered: false });
   } else {
     // No qualifying sale now — clear this convo's stale system matches (keep human).
-    await ConvoSaleMatch.deleteMany({ psid, method: { $ne: "human" } });
+    await ConvoSaleMatch.deleteMany({ psid, method: { $ne: "human" }, humanVerdict: null });
   }
   return {
     ok: true, psid, single: true,
-    matched: claimed ? 1 : 0,
-    certainty: claimed ? claimed.certainty : null,
-    orderId: claimed ? claimed.orderId : null,
+    matched: claimed.length,
+    certainty: claimed.length ? claimed[0].certainty : null,
+    orderId: claimed.length ? claimed[0].orderId : null,
+    orderIds: claimed.map((c) => c.orderId),
     candidates: scored.length,
   };
 }
