@@ -7,9 +7,28 @@ const ClickLog = require("../models/ClickLog");
 const MLSale = require("../models/MLSale");
 const { runConvoCorrelation, correlateOneConversation, correlationStatus, reconcileOverride } = require("../utils/runConvoCorrelation");
 const Conversation = require("../models/Conversation");
+const SystemState = require("../models/SystemState");
 
 // Rejected matches are kept for audit but must NOT count as conversions anywhere.
 const NOT_REJECTED = { humanVerdict: { $ne: "rejected" } };
+
+// Sales-reporting floor: the min certainty (%) that counts as a REPORTED sale.
+// Persisted on SystemState (default 10). REPORTING-ONLY — every tier is always
+// STORED; this just hides sub-floor matches from the reports (they're kept for
+// future use). Human-confirmed matches (null certainty) are top trust → always shown.
+async function getReportingFloor() {
+  try {
+    const st = await SystemState.getState();
+    const v = st.salesReportingFloorPct;
+    return Number.isFinite(v) ? v : 10;
+  } catch { return 10; }
+}
+// Mongo filter for "counts as a reported sale": not human-rejected AND (certainty ≥
+// floor OR human/null certainty). floor ≤ 0 → no floor (everything non-rejected).
+const reportFilter = (floor) =>
+  floor > 0
+    ? { humanVerdict: { $ne: "rejected" }, $or: [{ certainty: { $gte: floor } }, { certainty: null }] }
+    : { humanVerdict: { $ne: "rejected" } };
 
 // Bucket by Mexico City local day (UTC-6, no DST) — the business reads dates in
 // local time, so a sale at 02:24 UTC is "yesterday 8:24pm", not today.
@@ -20,6 +39,29 @@ const dayKey = (d) => new Date(new Date(d).getTime() - MX_OFFSET_MS).toISOString
 router.get("/status", async (req, res) => {
   try {
     res.json({ success: true, ...(await correlationStatus()) });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Sales-reporting floor (GET current / POST new). The correlation engine keeps
+// storing EVERY tier regardless — this only changes what the reports show as sales.
+router.get("/reporting-floor", async (req, res) => {
+  try {
+    res.json({ success: true, floorPct: await getReportingFloor() });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+router.post("/reporting-floor", async (req, res) => {
+  try {
+    let v = Number(req.body?.floorPct);
+    if (!Number.isFinite(v)) return res.status(400).json({ success: false, error: "floorPct inválido" });
+    v = Math.max(0, Math.min(100, Math.round(v / 10) * 10)); // clamp + snap to 10s
+    const st = await SystemState.getState();
+    st.salesReportingFloorPct = v;
+    await st.save();
+    res.json({ success: true, floorPct: v });
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
   }
@@ -72,11 +114,12 @@ router.get("/chart", async (req, res) => {
     for (const s of allSales) row(dayKey(s.dateCreated)).sales++;
 
     // conversions from our correlation (by sale date) — the ATTRIBUTED subset,
-    // excluding human-rejected matches.
+    // excluding human-rejected AND sub-floor matches (below the sales-reporting floor).
     // Per-day AND per-certainty (so the dashboard's confidence slider can filter to
     // "certainty ≥ N" entirely client-side, in realtime, without refetching). Human-
     // confirmed matches (null certainty) are the highest trust → bucketed as 100.
-    const matches = await ConvoSaleMatch.find({ "sale.dateCreated": { $gte: dateFrom, $lte: dateTo }, ...NOT_REJECTED }).select("sale.dateCreated sale.totalAmount certainty").lean();
+    const floor = await getReportingFloor();
+    const matches = await ConvoSaleMatch.find({ "sale.dateCreated": { $gte: dateFrom, $lte: dateTo }, ...reportFilter(floor) }).select("sale.dateCreated sale.totalAmount certainty").lean();
     for (const m of matches) {
       const r = row(dayKey(m.sale.dateCreated));
       const amt = m.sale.totalAmount || 0;
@@ -97,7 +140,8 @@ router.get("/chart", async (req, res) => {
 // Summary tiles + tier / linkAudit breakdown.
 router.get("/summary", async (req, res) => {
   try {
-    const KEEP = { $match: NOT_REJECTED }; // drop human-rejected from every tile
+    const floor = await getReportingFloor();
+    const KEEP = { $match: reportFilter(floor) }; // drop human-rejected AND sub-floor from every tile
     const [byTier, totals, auditAgg, prodAgg, humanConfirmed] = await Promise.all([
       ConvoSaleMatch.aggregate([KEEP, { $group: { _id: "$certainty", count: { $sum: 1 }, revenue: { $sum: "$sale.totalAmount" } } }, { $sort: { _id: -1 } }]),
       ConvoSaleMatch.aggregate([KEEP, { $group: { _id: null, count: { $sum: 1 }, revenue: { $sum: "$sale.totalAmount" }, avgCertainty: { $avg: "$certainty" } } }]),
@@ -130,6 +174,7 @@ router.get("/summary", async (req, res) => {
       human: { confirmed: humanConfirmed, rejected },
       linkAudit: { mismatch, matchedShared },
       topProducts: topProducts.map((x) => ({ name: x.name || "—", conversions: x.conversions, totalRevenue: Math.round(x.totalRevenue || 0), tiers: x.tiers })),
+      reportingFloor: floor, // sales-reporting floor in effect (min % counted as a sale)
       status: await correlationStatus(),
     });
   } catch (e) {
@@ -223,6 +268,12 @@ router.get("/matches", async (req, res) => {
     if (req.query.psid) q.psid = req.query.psid;
     if (req.query.mismatch === "1") q["linkAudit.mismatch"] = true;
     if (req.query.minCertainty) q.certainty = { $gte: Number(req.query.minCertainty) };
+    // Apply the sales-reporting floor (hide sub-floor matches) unless ?all=1 (audit).
+    // Note: rejected rows are kept here on purpose (the table dims them + offers Restore).
+    if (req.query.all !== "1" && !req.query.minCertainty) {
+      const floor = await getReportingFloor();
+      if (floor > 0) q.$or = [{ certainty: { $gte: floor } }, { certainty: null }];
+    }
     const limit = Math.min(Number(req.query.limit) || 200, 1000);
     const matches = await ConvoSaleMatch.find(q).sort({ "sale.dateCreated": -1 }).limit(limit).lean();
     res.json({ success: true, count: matches.length, matches });

@@ -46,6 +46,12 @@ const systemStateSchema = new mongoose.Schema(
     // When the next scheduled (30-min) correlation is due — stamped each tick so
     // the dashboard can show a countdown.
     correlationNextAt: { type: Date, default: null },
+    // Sales-reporting floor: the MINIMUM correlation certainty (%) that counts as a
+    // REPORTED sale in the dashboard (chart/summary/table). Default 10. This is a
+    // REPORTING filter ONLY — the correlation engine always stores every tier, even
+    // the weakest, so raising/lowering this never loses data (weak matches are kept
+    // for future use and simply hidden from the reports below the floor).
+    salesReportingFloorPct: { type: Number, default: 10 },
   },
   { timestamps: true }
 );

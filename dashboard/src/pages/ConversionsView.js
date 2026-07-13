@@ -65,11 +65,18 @@ function ConversionsView() {
   const [autoCorrelating, setAutoCorrelating] = useState(false); // >3h freshness rebuild
   const [error, setError] = useState(null);
 
-  // Minimum-confidence filter (super_admin): show only sales with certainty ≥ this.
-  // 0 = show everything. All certainties are multiples of 10, so a 10-step slider is exact.
+  // Minimum-confidence filter (admin/super_admin): show only sales with certainty ≥ this.
+  // All certainties are multiples of 10, so a 10-step slider is exact.
   const [minConfidence, setMinConfidence] = useState(0);
   // Human-confirmed matches have null certainty but are the HIGHEST trust → treat as 100.
   const passCert = (c) => (c == null ? 100 : c) >= minConfidence;
+  // Server-side sales-reporting floor (the min % that counts as a reported sale). It's
+  // the slider's hard minimum — the reports already exclude sub-floor matches, so the
+  // slider starts at the floor and can't go below it.
+  const reportingFloor = summaryRaw?.reportingFloor ?? 0;
+  useEffect(() => {
+    if (summaryRaw?.reportingFloor != null) setMinConfidence((m) => Math.max(m, summaryRaw.reportingFloor));
+  }, [summaryRaw]);
 
   // Date range for the chart (defaults to this month → today)
   const [dateFrom] = useState(getStartOfMonthStr());
@@ -419,22 +426,22 @@ function ConversionsView() {
                 Filtro de confianza
               </p>
               <p className="text-xs text-gray-500 mt-0.5">
-                {minConfidence === 0
-                  ? 'Mostrando todas las ventas correlacionadas'
+                {minConfidence <= reportingFloor
+                  ? `Mostrando todas las ventas reportadas (piso ${reportingFloor}%)`
                   : `Mostrando solo ventas con certeza ≥ ${minConfidence}%`}
                 {stats && <span className="text-gray-400"> · {stats.conversions} ventas</span>}
               </p>
             </div>
             <span
               className="text-2xl font-bold tabular-nums"
-              style={{ color: minConfidence === 0 ? '#9ca3af' : minConfidence >= 90 ? '#34d399' : minConfidence >= 70 ? '#fbbf24' : minConfidence >= 50 ? '#fb923c' : '#9ca3af' }}
+              style={{ color: minConfidence >= 90 ? '#34d399' : minConfidence >= 70 ? '#fbbf24' : minConfidence >= 50 ? '#fb923c' : '#9ca3af' }}
             >
-              {minConfidence === 0 ? 'Todas' : `≥ ${minConfidence}%`}
+              {minConfidence <= reportingFloor ? 'Todas' : `≥ ${minConfidence}%`}
             </span>
           </div>
           <input
             type="range"
-            min="0"
+            min={reportingFloor}
             max="100"
             step="10"
             value={minConfidence}
@@ -443,8 +450,8 @@ function ConversionsView() {
             aria-label="Filtro de confianza mínima"
           />
           <div className="flex justify-between text-[10px] text-gray-500 mt-1 tabular-nums select-none">
-            {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((v) => (
-              <span key={v} className={minConfidence === v ? 'text-purple-300 font-semibold' : ''}>{v === 0 ? 'Todas' : v}</span>
+            {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].filter((v) => v >= reportingFloor).map((v) => (
+              <span key={v} className={minConfidence === v ? 'text-purple-300 font-semibold' : ''}>{v === reportingFloor ? 'Todas' : v}</span>
             ))}
           </div>
         </div>

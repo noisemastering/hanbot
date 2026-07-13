@@ -19,6 +19,57 @@ function Settings() {
   const [pushLoading, setPushLoading] = useState(false);
   const [pushMessage, setPushMessage] = useState({ type: "", text: "" });
 
+  // Sales-reporting floor (admin/super_admin): the min correlation certainty that
+  // counts as a REPORTED sale. Correlations always STORE every tier — this only
+  // filters the reports (weak matches are kept for future use).
+  const canConfigReporting = user?.role === "super_admin" || user?.role === "admin";
+  const [reportingFloor, setReportingFloor] = useState(10);
+  const [floorLoading, setFloorLoading] = useState(false);
+  const [floorMessage, setFloorMessage] = useState({ type: "", text: "" });
+
+  useEffect(() => {
+    if (!canConfigReporting) return;
+    (async () => {
+      try {
+        const token = localStorage.getItem("token");
+        const res = await fetch(`${process.env.REACT_APP_API_URL}/correlation/reporting-floor`, {
+          headers: { Authorization: `Bearer ${token}` },
+        });
+        const data = await res.json();
+        if (data.success && Number.isFinite(data.floorPct)) setReportingFloor(data.floorPct);
+      } catch (err) {
+        console.error("Error loading reporting floor:", err);
+      }
+    })();
+  }, [canConfigReporting]);
+
+  const saveReportingFloor = async (pct) => {
+    setFloorLoading(true);
+    setFloorMessage({ type: "", text: "" });
+    const prev = reportingFloor;
+    setReportingFloor(pct); // optimistic
+    try {
+      const token = localStorage.getItem("token");
+      const res = await fetch(`${process.env.REACT_APP_API_URL}/correlation/reporting-floor`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ floorPct: pct }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setReportingFloor(data.floorPct);
+        setFloorMessage({ type: "success", text: `Piso de reporte guardado en ${data.floorPct}%.` });
+      } else {
+        throw new Error(data.error || "Error");
+      }
+    } catch (err) {
+      setReportingFloor(prev); // revert
+      setFloorMessage({ type: "error", text: "No se pudo guardar el piso de reporte." });
+    } finally {
+      setFloorLoading(false);
+    }
+  };
+
   // Check push notification support and status on mount
   useEffect(() => {
     const checkPushSupport = async () => {
@@ -271,6 +322,51 @@ function Settings() {
           </button>
         </div>
       </div>
+
+      {/* Sales-reporting floor (admin / super_admin) */}
+      {canConfigReporting && (
+        <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 mb-6">
+          <h3 className="text-lg font-semibold mb-1 text-gray-200">Piso de reporte de ventas</h3>
+          <p className="text-gray-400 text-sm mb-4">
+            Porcentaje mínimo de certeza que se reporta como venta en el panel de conversiones.
+            Todas las correlaciones se guardan siempre (incluso las más débiles) para uso futuro;
+            este ajuste solo cambia lo que se muestra en los reportes.
+          </p>
+          <div className="flex items-center justify-between mb-3">
+            <span className="text-sm text-gray-300">Reportar ventas con certeza ≥</span>
+            <span
+              className="text-2xl font-bold tabular-nums"
+              style={{ color: reportingFloor >= 90 ? '#34d399' : reportingFloor >= 70 ? '#fbbf24' : reportingFloor >= 50 ? '#fb923c' : '#9ca3af' }}
+            >
+              {reportingFloor}%
+            </span>
+          </div>
+          <input
+            type="range"
+            min="0"
+            max="100"
+            step="10"
+            value={reportingFloor}
+            disabled={floorLoading}
+            onChange={(e) => setReportingFloor(Number(e.target.value))}
+            onMouseUp={(e) => saveReportingFloor(Number(e.target.value))}
+            onTouchEnd={(e) => saveReportingFloor(Number(e.target.value))}
+            className="w-full accent-primary-500 cursor-pointer disabled:opacity-50"
+            aria-label="Piso de reporte de ventas"
+          />
+          <div className="flex justify-between text-[10px] text-gray-500 mt-1 tabular-nums select-none">
+            {[0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100].map((v) => (
+              <span key={v} className={reportingFloor === v ? 'text-primary-300 font-semibold' : ''}>{v}</span>
+            ))}
+          </div>
+          <p className="text-[11px] text-gray-500 mt-2">Por defecto: 10%.</p>
+          {floorMessage.text && (
+            <div className={`mt-3 p-3 rounded-lg ${floorMessage.type === "success" ? "bg-green-500/20 border border-green-500 text-green-400" : "bg-red-500/20 border border-red-500 text-red-400"}`}>
+              {floorMessage.text}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Push Notifications Section */}
       <div className="bg-gray-800/50 border border-gray-700 rounded-lg p-6 mb-6">
