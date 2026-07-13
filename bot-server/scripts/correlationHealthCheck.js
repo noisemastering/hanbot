@@ -62,11 +62,13 @@ const parseSize = (t) => {
   for (const m of sys) (byOrder[m.orderId] = byOrder[m.orderId] || new Set()).add(m.psid);
   check("order → exactly one client", Object.entries(byOrder).filter(([, s]) => s.size > 1).map(([o]) => o));
 
-  // 2. MULTI-ORDER CLIENT → every order ≥70%
+  // 2. MULTI-ORDER CLIENT → every order ≥70% AND all the SAME buyer (one chat = one client)
+  const bkey = (m) => { const s = m.sale || {}; return s.buyerId ? "id:" + s.buyerId : s.buyerNickname ? "nk:" + String(s.buyerNickname).toLowerCase().trim() : s.receiverName ? "rc:" + String(s.receiverName).normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().trim() : "?:" + m.orderId; };
   const byPsid = {};
   for (const m of sys) (byPsid[m.psid] = byPsid[m.psid] || []).push(m);
-  check("multi-order client: all orders ≥70%",
-    Object.entries(byPsid).filter(([, a]) => new Set(a.map((x) => x.orderId)).size > 1 && a.some((x) => (x.certainty ?? 100) < 70)).map(([p]) => p));
+  const multi = Object.entries(byPsid).filter(([, a]) => new Set(a.map((x) => x.orderId)).size > 1);
+  check("multi-order client: all orders ≥70%", multi.filter(([, a]) => a.some((x) => (x.certainty ?? 100) < 70)).map(([p]) => p));
+  check("multi-order client: all orders SAME buyer", multi.filter(([, a]) => new Set(a.map(bkey)).size > 1).map(([p, a]) => `${p} buyers=[${[...new Set(a.map((x) => x.sale?.buyerNickname || x.sale?.receiverName))].join(" | ")}]`));
 
   // 3. GATE — clicked link required
   check("assigned convo actually clicked a link",

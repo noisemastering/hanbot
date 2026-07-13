@@ -29,6 +29,19 @@ const SYNC_BUFFER_DAYS = 2; // re-fetch the last 2 days of ML sales each run (la
 const MATCH_WINDOW_DAYS = 35; // re-match ~35 days of convos so NEW sales attach to older chats
 const MULTI_ORDER_MIN = 70; // a client may hold >1 order only via matches ≥ this certainty
 
+// "Same client" key for order stacking: a conversation is ONE customer, so extra orders
+// may pile onto it ONLY if they're the SAME buyer (ML account id, else nickname, else
+// receiver name). Different buyers who merely match the same convo (e.g. two neighbors in
+// one zip who bought the same item) must NEVER share a chat. null = unknown → never stacks.
+const _bnorm = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().replace(/\s+/g, " ").trim();
+function buyerKeyOf(doc) {
+  const s = (doc && doc.sale) || {};
+  if (s.buyerId) return "id:" + s.buyerId;
+  if (s.buyerNickname) return "nk:" + _bnorm(s.buyerNickname);
+  if (s.receiverName) return "rc:" + _bnorm(s.receiverName);
+  return null;
+}
+
 const MATCH_FIELDS =
   "psid extractedName productSpecs city stateMx zipCode zipcode customOrderZipcode " +
   "humanSalesZipcode leadData crmName productInterest poiRootId poiRootName productFamilyId " +
@@ -167,15 +180,23 @@ async function runConvoCorrelation({ full = false } = {}) {
       (Math.abs(a.matchDetails.gapHoursToSale ?? 1e9) - Math.abs(b.matchDetails.gapHoursToSale ?? 1e9)));
     const claimedOrders = new Set();     // each order → exactly one client
     const convoOrderCount = new Map();   // psid → # orders already claimed
+    const convoBuyer = new Map();        // psid → buyer key of its claimed order(s)
     const finalMatches = [];
     for (const doc of allScored) {
       const oid = String(doc.orderId), pid = String(doc.psid);
       if (lockedPsids.has(pid) || lockedOrders.has(oid)) continue; // human lockout
       if (claimedOrders.has(oid)) continue; // order already taken by a stronger convo
       const held = convoOrderCount.get(pid) || 0;
-      if (held >= 1 && (doc.certainty ?? 0) < MULTI_ORDER_MIN) continue; // stacking needs ≥70%
+      const bkey = buyerKeyOf(doc);
+      if (held >= 1) {
+        // stacking: ≥70% AND the SAME buyer as this convo's existing order(s).
+        if ((doc.certainty ?? 0) < MULTI_ORDER_MIN) continue;
+        const existing = convoBuyer.get(pid);
+        if (!existing || !bkey || existing !== bkey) continue; // different/unknown buyer → don't stack
+      }
       claimedOrders.add(oid);
       convoOrderCount.set(pid, held + 1);
+      if (held === 0) convoBuyer.set(pid, bkey); // record the first claim's buyer
       finalMatches.push(doc);
     }
     for (const m of finalMatches) await computeLinkAudit(m);
@@ -297,7 +318,12 @@ async function correlateOneConversation(psid) {
     const oid = String(doc.orderId);
     if (lockedOrders.has(oid)) continue;
     if (heldByOther.has(oid) && heldByOther.get(oid) >= (doc.certainty ?? 0)) continue; // stronger/equal holder keeps it
-    if (claimed.length >= 1 && (doc.certainty ?? 0) < MULTI_ORDER_MIN) continue; // stacking needs ≥70%
+    if (claimed.length >= 1) {
+      // stacking: ≥70% AND the SAME buyer as the best claim (one convo = one client).
+      if ((doc.certainty ?? 0) < MULTI_ORDER_MIN) continue;
+      const first = buyerKeyOf(claimed[0]);
+      if (!first || buyerKeyOf(doc) !== first) continue;
+    }
     claimed.push(doc);
   }
 

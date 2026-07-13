@@ -624,6 +624,7 @@ function buildMatchDoc(convo, id, s, m, v, dayToSizes) {
       totalAmount: s.totalAmount,
       itemTitle: (s.items && s.items[0] && s.items[0].title) || null,
       buyerNickname: (s.buyer && s.buyer.nickname) || null,
+      buyerId: (s.buyer && s.buyer.id) || null,
       shippingCity: (s.shipping && s.shipping.city) || null,
       shippingState: (s.shipping && s.shipping.state) || null,
       shippingZip: (s.shipping && s.shipping.zip) || null,

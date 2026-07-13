@@ -61,6 +61,7 @@ const ConvoSaleMatchSchema = new mongoose.Schema(
       totalAmount: Number,
       itemTitle: String,
       buyerNickname: String,
+      buyerId: String, // ML buyer account id — canonical "same client" key for order stacking
       shippingCity: String,
       shippingState: String,
       shippingZip: String,
