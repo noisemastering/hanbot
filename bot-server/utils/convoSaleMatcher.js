@@ -131,16 +131,22 @@ async function buildContext() {
   const ClickLog = require("../models/ClickLog");
   const psidClickDays = new Map(); // day-level gate (GATE 2)
   const psidClickTimes = new Map(); // exact click timestamps (ms) → per-tier time window
-  const clicks = await ClickLog.find({ clicked: true, clickedAt: { $ne: null } }).select("psid clickedAt").lean().catch(() => []);
+  // psid → sizes of the products they CLICKED. The clicked link is the AUTHORITATIVE
+  // POI (they picked that exact product), so it feeds the item match directly — a
+  // click→buy of the same size is the SAME product even if the chat never named it.
+  const psidClickSizes = new Map();
+  const clicks = await ClickLog.find({ clicked: true, clickedAt: { $ne: null } }).select("psid clickedAt productName").lean().catch(() => []);
   for (const c of clicks) {
     const key = String(c.psid);
     if (!psidClickDays.has(key)) psidClickDays.set(key, new Set());
     psidClickDays.get(key).add(mxDay(c.clickedAt));
     if (!psidClickTimes.has(key)) psidClickTimes.set(key, []);
     psidClickTimes.get(key).push(new Date(c.clickedAt).getTime());
+    const sz = parseTitleSize(c.productName);
+    if (sz) { if (!psidClickSizes.has(key)) psidClickSizes.set(key, new Set()); psidClickSizes.get(key).add(sz); }
   }
 
-  return { itemToFamilies, famOwnItems, cityIndex, userLoc, zipToCity, zipToState, psidClickDays, psidClickTimes, salesDayCache: new Map() };
+  return { itemToFamilies, famOwnItems, cityIndex, userLoc, zipToCity, zipToState, psidClickDays, psidClickTimes, psidClickSizes, salesDayCache: new Map() };
 }
 
 // Gather a conversation's identity signals into a normalized shape.
@@ -218,6 +224,12 @@ function convoIdentity(convo, ctx) {
   // to sales by SIZE (parsed from the sale's title), NOT item id — ML relists change
   // the id for the same product, so an id set goes stale; the size in the title doesn't.
   const basketSizes = new Set((convo.itemsDiscussed || []).map((b) => b.askedAs).filter(Boolean));
+  // POI from the CLICKED LINK (authoritative): the product they clicked is a product
+  // they wanted, so it belongs in the basket the item match runs against — even when
+  // the chat text never named the size. Fixes click→buy-same-size being mislabeled
+  // "producto distinto".
+  const clickSizes = ctx.psidClickSizes && ctx.psidClickSizes.get(String(convo.psid));
+  if (clickSizes) for (const s of clickSizes) basketSizes.add(s);
   const convoIsRollo = /rollo/i.test(`${convo.productInterest || ""} ${convo.poiRootName || ""}`);
 
   return { zip, city, cityRaw, state, names, firstName, famIds, poiName, exactItemIds, basketSizes, convoIsRollo };
