@@ -1349,30 +1349,33 @@ router.get('/spend-optimization', async (req, res) => {
     const adTargetFamilyIdsMap = {}; // fbAdId -> Set<String(familyId)>
     const adSizeToFamilyMap = {};    // fbAdId -> { sizeStr -> familyId }
     const familyById = {};           // global familyId -> { _id, name }
+    // Load the ENTIRE ProductFamily tree ONCE and walk it in memory. The previous
+    // version did ~10 sequential DB queries PER ad (×112 ads ≈ 1000 round-trips ≈ 87s
+    // on the free-tier cluster). Now: one find + an in-memory parent→children index.
+    const allFamilies = await ProductFamily.find({}).select('_id name parentId').lean();
+    const childrenByParent = new Map(); // parentId(str) -> [family docs]
+    for (const f of allFamilies) {
+      familyById[String(f._id)] = f;
+      const pid = f.parentId ? String(f.parentId) : null;
+      if (pid) { if (!childrenByParent.has(pid)) childrenByParent.set(pid, []); childrenByParent.get(pid).push(f); }
+    }
     for (const ad of adDocs) {
       if (!ad.fbAdId) continue;
       const manifest = ad.convoFlowRef ? manifestByName[ad.convoFlowRef] : null;
       if (!manifest?.products?.length) continue;
-      let frontier = manifest.products.map(p => p._id);
-      const allIds = new Set(frontier.map(id => String(id)));
+      const allIds = new Set();
       const sizeMap = {};
-      const safetyMax = 5;
-      for (let depth = 0; depth < safetyMax && frontier.length > 0; depth++) {
-        const docs = await ProductFamily.find({ _id: { $in: frontier } }).select('_id name parentId').lean();
-        docs.forEach(d => {
-          familyById[String(d._id)] = d;
-          const sz = normalizeSize(d.name);
-          if (sz && !sizeMap[sz]) sizeMap[sz] = String(d._id);
-        });
-        const children = await ProductFamily.find({ parentId: { $in: frontier } }).select('_id name parentId').lean();
-        if (children.length === 0) break;
-        children.forEach(c => {
-          allIds.add(String(c._id));
-          familyById[String(c._id)] = c;
-          const sz = normalizeSize(c.name);
-          if (sz && !sizeMap[sz]) sizeMap[sz] = String(c._id);
-        });
-        frontier = children.map(c => c._id);
+      // BFS over the in-memory tree from the manifest's product roots.
+      const queue = manifest.products.map(p => String(p._id));
+      const seen = new Set();
+      while (queue.length) {
+        const id = queue.shift();
+        if (seen.has(id)) continue;
+        seen.add(id);
+        allIds.add(id);
+        const doc = familyById[id];
+        if (doc) { const sz = normalizeSize(doc.name); if (sz && !sizeMap[sz]) sizeMap[sz] = id; }
+        for (const c of (childrenByParent.get(id) || [])) queue.push(String(c._id));
       }
       if (allIds.size > 0) adTargetFamilyIdsMap[ad.fbAdId] = allIds;
       adSizeToFamilyMap[ad.fbAdId] = sizeMap;
