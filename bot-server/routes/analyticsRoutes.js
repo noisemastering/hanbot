@@ -1381,6 +1381,18 @@ router.get('/ad-performance', async (req, res) => {
       }
     }
 
+    // Per-ad count of conversations that captured Meta's ctwa_clid (the Click-to-WhatsApp
+    // click id — the deterministic key for CAPI ad attribution). WhatsApp CTWA only;
+    // populates going forward as CTWA traffic arrives.
+    const ctwaByAd = {};
+    try {
+      const ctwaAgg = await Conversation.aggregate([
+        { $match: { adId: { $ne: null }, ctwaClid: { $ne: null }, ...(hasDate ? { createdAt: dateMatch } : {}) } },
+        { $group: { _id: '$adId', count: { $sum: 1 } } }
+      ]);
+      for (const c of ctwaAgg) ctwaByAd[c._id] = c.count;
+    } catch (e) { /* non-fatal */ }
+
     // Build per-ad result
     const adMap = {};
     for (const t of totals) {
@@ -1393,6 +1405,7 @@ router.get('/ad-performance', async (req, res) => {
           clicks: t.clicks,
           conversions: t.conversions,
           revenue: t.revenue,
+          ctwaClids: ctwaByAd[t._id] || 0,
           clickRate: t.links > 0 ? ((t.clicks / t.links) * 100).toFixed(1) : '0',
           conversionRate: t.clicks > 0 ? ((t.conversions / t.clicks) * 100).toFixed(1) : '0'
         },

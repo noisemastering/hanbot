@@ -402,6 +402,7 @@ function AdPerformanceView() {
                   <th className="px-4 py-3 text-right">Click Rate</th>
                   <th className="px-4 py-3 text-right">Conv.</th>
                   <th className="px-4 py-3 text-right">Conv. Rate</th>
+                  <th className="px-4 py-3 text-right" title="Conversaciones con el click ID de Meta (CTWA) capturado — clave para atribución vía Conversions API">ctwa_clid</th>
                   {canSeeSales && <th className="px-4 py-3 text-right">Ingresos</th>}
                   <th className="px-4 py-3 text-right"></th>
                 </tr>
@@ -428,6 +429,7 @@ function AdPerformanceView() {
                     <td className="px-6 py-4 text-right text-sm text-gray-300">{ad.totals.clickRate}%</td>
                     <td className="px-6 py-4 text-right text-sm text-green-400 font-medium">{ad.totals.conversions}</td>
                     <td className="px-6 py-4 text-right text-sm text-gray-300">{ad.totals.conversionRate}%</td>
+                    <td className="px-4 py-4 text-right text-sm" style={{ color: (ad.totals.ctwaClids || 0) > 0 ? '#c4b5fd' : '#4b5563' }}>{ad.totals.ctwaClids || 0}</td>
                     {canSeeSales && <td className="px-6 py-4 text-right text-sm text-green-400 font-semibold">{formatCurrency(ad.totals.revenue)}</td>}
                     <td className="px-6 py-4 text-right">
                       <button
@@ -453,6 +455,7 @@ function AdPerformanceView() {
                   <td className="px-6 py-4 text-right text-sm text-white">
                     {grandTotals.clicks > 0 ? ((grandTotals.conversions / grandTotals.clicks) * 100).toFixed(1) : '0'}%
                   </td>
+                  <td className="px-4 py-4 text-right text-sm text-white">{ads.reduce((s, a) => s + (a.totals.ctwaClids || 0), 0)}</td>
                   {canSeeSales && <td className="px-6 py-4 text-right text-sm text-green-400">{formatCurrency(grandTotals.revenue)}</td>}
                   <td></td>
                 </tr>
