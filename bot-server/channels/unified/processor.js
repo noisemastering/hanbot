@@ -266,14 +266,16 @@ async function processMessage(normalizedMessage, io = null) {
       });
     } else if (channel === 'whatsapp') {
       // WhatsApp CTWA (Click-to-WhatsApp) ad referral
-      console.log(`📣 WhatsApp ad referral: ad=${referral.source_id}, type=${referral.source_type}`);
+      console.log(`📣 WhatsApp ad referral: ad=${referral.source_id}, type=${referral.source_type}, ctwa_clid=${referral.ctwa_clid ? 'yes' : 'no'}`);
       const waAdUpdate = {
         lastIntent: 'ad_entry',
         adId: referral.source_id || null,
         adHeadline: referral.headline || null,
         adBody: referral.body || null,
         adSourceUrl: referral.source_url || null,
-        adSourceType: referral.source_type || null
+        adSourceType: referral.source_type || null,
+        // Meta's click ID — stored so a future Purchase can be attributed to this ad via CAPI.
+        ctwaClid: referral.ctwa_clid || null
       };
 
       // Resolve ad → product context (same logic as Messenger handler)

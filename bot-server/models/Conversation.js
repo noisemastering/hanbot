@@ -46,6 +46,10 @@ const conversationSchema = new mongoose.Schema({
   adBody: { type: String, default: null },         // WhatsApp ad body text
   adSourceUrl: { type: String, default: null },    // WhatsApp ad source URL
   adSourceType: { type: String, default: null },   // WhatsApp ad source type (usually "ad")
+  // Meta Click-to-WhatsApp click ID from the referral — the deterministic key that lets a
+  // downstream Purchase be attributed to THIS ad via Meta's Conversions API (outbound to
+  // Meta only; it tells us nothing about the ML sale).
+  ctwaClid: { type: String, default: null },
   requestedSize: { type: String, default: null },  // Track last size user asked about
   productInterest: { type: String, default: null }, // Product type user is interested in (malla_sombra, borde_separador, rollo)
 
