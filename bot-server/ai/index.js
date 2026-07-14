@@ -234,7 +234,12 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
   if (loc.city && !convo.city) persist.city = loc.city;
   if ((loc.zip || loc.zipcode) && !convo.zipcode) persist.zipcode = loc.zip || loc.zipcode;
   if (lead.phone || lead.email) persist.leadData = { contact: lead.phone || lead.email };
-  if (lead.name && !convo.extractedName) persist.extractedName = lead.name;
+  // Only store a name that actually LOOKS like one (never a phrase the extractor grabbed,
+  // e.g. "que tome bien las medidas") — same validator the correlation uses.
+  if (lead.name && !convo.extractedName) {
+    const { looksLikeName } = require("../utils/convoSaleMatcher");
+    if (looksLikeName(lead.name)) persist.extractedName = lead.name;
+  }
   if (newState.product?.name && !convo.productInterest) persist.productInterest = newState.product.name;
   await updateConversation(psid, persist).catch((e) =>
     console.error("⚠️ workflowState persist failed:", e.message)

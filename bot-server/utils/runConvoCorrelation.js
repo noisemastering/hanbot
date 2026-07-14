@@ -18,7 +18,7 @@ const ConvoSaleMatch = require("../models/ConvoSaleMatch");
 const ClickLog = require("../models/ClickLog");
 const SystemState = require("../models/SystemState");
 const { extractConvoIdentity } = require("../ai/utils/convoIdentityExtractor");
-const { buildContext, matchConversation } = require("./convoSaleMatcher");
+const { buildContext, matchConversation, looksLikeName } = require("./convoSaleMatcher");
 
 const MLSale = require("../models/MLSale");
 
@@ -90,7 +90,10 @@ async function enrichBatch(convos) {
         const id = await extractConvoIdentity(userMsgs);
         let zip = null;
         if (id.zip) { const z = await ZipCode.findOne({ code: id.zip }).select("code").lean().catch(() => null); if (z) zip = id.zip; }
-        update.aiIdentity = { name: id.name, city: id.city, state: id.state, zip, extractedAt: new Date(), source: "ai" };
+        // Re-assess the extracted name: only keep it if it actually LOOKS like a name
+        // (the LLM sometimes returns a phrase like "que tome bien las medidas").
+        const name = id.name && looksLikeName(id.name) ? id.name : null;
+        update.aiIdentity = { name, city: id.city, state: id.state, zip, extractedAt: new Date(), source: "ai" };
       }
       if (Object.keys(update).length) await Conversation.updateOne({ _id: c._id }, { $set: update });
     } catch (e) { /* skip this convo */ }
