@@ -106,12 +106,18 @@ async function getConversation(psid) {
       console.log("⚠️ Could not fetch user name:", userErr.message);
     }
 
+    // The greeting addresses the customer BY name, so every source must be re-assessed
+    // as an actual name (not a phrase like "que tome bien las medidas") before it can
+    // become userName.
+    const { looksLikeName } = require("./utils/convoSaleMatcher");
+
     // Harvest first-message name (e.g. from FB Page Instant Reply) — runs at
     // most once per conversation. After this, nameHarvested=true and we never
     // try again, even if the field came back null.
     if (!convoObj.nameHarvested) {
       const harvested = await harvestExtractedName(psid);
-      if (harvested) {
+      // The first message is often a phrase, not a name — only keep it if it looks like one.
+      if (harvested && looksLikeName(harvested)) {
         convoObj.extractedName = harvested;
       }
       convoObj.nameHarvested = true;
@@ -125,6 +131,12 @@ async function getConversation(psid) {
     // actually wants to be called.
     if (convoObj.customerName && !convoObj.userName) {
       convoObj.userName = convoObj.customerName;
+    }
+    // FINAL GUARD: whatever userName ended up being (FB first_name, harvest, extraction),
+    // it must actually look like a name — else drop it so the greeting says a plain
+    // "¡Hola!" instead of "¡Hola, que tome bien las medidas!".
+    if (convoObj.userName && !looksLikeName(convoObj.userName)) {
+      convoObj.userName = null;
     }
 
     return convoObj; // 🔥 devuelve snapshot limpio del documento actualizado
