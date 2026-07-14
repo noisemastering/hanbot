@@ -27,7 +27,7 @@ function normalizeFacebookMessage(webhookEvent) {
 /**
  * Normalize WhatsApp message to unified format
  */
-function normalizeWhatsAppMessage(message, metadata) {
+function normalizeWhatsAppMessage(message, metadata, contactName = null) {
   const senderPhone = message.from;
 
   // Extract text based on message type
@@ -64,6 +64,9 @@ function normalizeWhatsAppMessage(message, metadata) {
     text: text,
     timestamp: message.timestamp * 1000, // Convert to milliseconds
     referral: referral,
+    // WhatsApp DOES give us the sender's display name in the webhook (value.contacts[].
+    // profile.name) — unlike Messenger. Thread it through so we can store it.
+    contactName: contactName || null,
     isFromPage: false, // WhatsApp messages are always from users (business can't initiate)
     recipientId: metadata.phone_number_id,
     raw: message

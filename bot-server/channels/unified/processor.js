@@ -4,6 +4,7 @@ const { generateReply } = require('../../ai/index');
 const Message = require('../../models/Message');
 const Conversation = require('../../models/Conversation');
 const User = require('../../models/User');
+const { looksLikeName } = require('../../utils/convoSaleMatcher');
 const { generateClickLink } = require('../../tracking');
 const { sendHandoffNotification } = require('../../services/pushNotifications');
 
@@ -119,12 +120,19 @@ async function updateConversation(psid, updates) {
 /**
  * Register user if needed (channel-aware)
  */
-async function registerUserIfNeeded(userId, channel, unifiedId) {
+async function registerUserIfNeeded(userId, channel, unifiedId, contactName = null) {
   // For WhatsApp, userId is phone number
   // For Facebook, userId is PSID
 
   let user;
   if (channel === 'whatsapp') {
+    // WhatsApp DOES give us the sender's display name (value.contacts[].profile.name) —
+    // validate it and split first/last so the greeting uses the first name.
+    const validName = contactName && looksLikeName(contactName) ? contactName.trim() : null;
+    const parts = validName ? validName.split(/\s+/) : [];
+    const firstName = parts[0] || '';
+    const lastName = parts.slice(1).join(' ') || '';
+
     user = await User.findOne({ whatsappPhone: userId });
 
     if (!user) {
@@ -133,12 +141,15 @@ async function registerUserIfNeeded(userId, channel, unifiedId) {
         whatsappPhone: userId,
         channel: 'whatsapp',
         unifiedId: unifiedId,
-        first_name: '', // WhatsApp doesn't provide name via API
-        last_name: '',
+        first_name: firstName,
+        last_name: lastName,
         profile_pic: '',
         last_interaction: new Date()
       });
-      console.log(`✅ WhatsApp user registered: ${userId}`);
+      console.log(`✅ WhatsApp user registered: ${userId}${validName ? ` (${validName})` : ''}`);
+    } else if (validName && !user.first_name) {
+      // Backfill the name onto an existing WA user that never captured one.
+      await User.updateOne({ _id: user._id }, { $set: { first_name: firstName, last_name: lastName } });
     }
   } else if (channel === 'facebook') {
     // Existing Facebook user registration logic (unchanged)
@@ -180,7 +191,8 @@ async function processMessage(normalizedMessage, io = null) {
     text,
     isFromPage,
     recipientId,
-    referral
+    referral,
+    contactName
   } = normalizedMessage;
 
   console.log(`\n📨 Received ${channel} message from ${userId}`);
@@ -210,8 +222,8 @@ async function processMessage(normalizedMessage, io = null) {
     return;
   }
 
-  // 3. Register user if needed
-  await registerUserIfNeeded(userId, channel, unifiedId);
+  // 3. Register user if needed (WhatsApp passes the sender's display name)
+  await registerUserIfNeeded(userId, channel, unifiedId, contactName);
 
   // 4. Save incoming message immediately (for dashboard visibility)
   await saveMessage(unifiedId, text, 'user', messageId, io);
@@ -235,6 +247,13 @@ async function processMessage(normalizedMessage, io = null) {
 
   // 6. Get/create conversation
   const conversation = await getOrCreateConversation(unifiedId, channel);
+
+  // 6b. Persist the WhatsApp display name as the customer name so BOTH the greeting and
+  // sales correlation can use it — but never overwrite a real name the customer typed.
+  if (contactName && looksLikeName(contactName) && (!conversation.extractedName || !looksLikeName(conversation.extractedName))) {
+    await updateConversation(unifiedId, { extractedName: contactName.trim() });
+    conversation.extractedName = contactName.trim();
+  }
 
   // 7. Handle campaign referrals (Facebook and WhatsApp)
   if (referral) {

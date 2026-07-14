@@ -46,10 +46,13 @@ async function handleWhatsAppWebhook(req, res, io = null) {
       for (const change of entry.changes) {
         const value = change.value;
 
-        // Handle incoming messages
+        // Handle incoming messages. WhatsApp includes the sender's display name in
+        // value.contacts[].profile.name (matched to the message by wa_id) — capture it.
         if (value.messages) {
           for (const message of value.messages) {
-            await handleIncomingMessage(message, value.metadata, io);
+            const contact = (value.contacts || []).find((c) => c.wa_id === message.from);
+            const contactName = contact?.profile?.name || null;
+            await handleIncomingMessage(message, value.metadata, io, contactName);
           }
         }
 
@@ -69,7 +72,7 @@ async function handleWhatsAppWebhook(req, res, io = null) {
 /**
  * Process an incoming WhatsApp message
  */
-async function handleIncomingMessage(message, metadata, io = null) {
+async function handleIncomingMessage(message, metadata, io = null, contactName = null) {
   const messageType = message.type;
 
   // Only process text and interactive messages
@@ -82,7 +85,7 @@ async function handleIncomingMessage(message, metadata, io = null) {
   await markMessageAsRead(message.id);
 
   // Normalize message to unified format
-  const normalizedMessage = normalizeWhatsAppMessage(message, metadata);
+  const normalizedMessage = normalizeWhatsAppMessage(message, metadata, contactName);
 
   // Pass to unified processor (connects to AI)
   await processMessage(normalizedMessage, io);
