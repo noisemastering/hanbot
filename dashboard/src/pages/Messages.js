@@ -8,6 +8,7 @@ import ConversationHandoffPanel from "../components/ConversationHandoffPanel";
 import { useTranslation } from '../i18n';
 import FeatureTip from '../components/FeatureTip';
 import toast from 'react-hot-toast';
+import { useAuth } from '../contexts/AuthContext';
 
 const PRODUCT_LABELS = {
   malla_sombra_raschel: "Malla Raschel",
@@ -31,6 +32,10 @@ function friendlyProduct(value) {
 
 function Messages() {
   const { t, locale } = useTranslation();
+  // Certainty filter is for salesman (Noemi's profile) and above — i.e. anyone who can
+  // read the conversations route (salesman is the lowest such profile).
+  const { canAccess } = useAuth();
+  const canFilterCertainty = canAccess('conversations');
   const location = useLocation();
   const navigate = useNavigate();
   const [quickActions, setQuickActions] = useState([]);
@@ -62,6 +67,7 @@ function Messages() {
   const [handoffFilter, setHandoffFilter] = useState('');
   const [stateFilter, setStateFilter] = useState('');
   const [psidFilter, setPsidFilter] = useState('');
+  const [certaintyFilter, setCertaintyFilter] = useState(0); // min correlation % (0 = all)
 
   const quickActionPsidsRef = useRef([]);
   const currentPageRef = useRef(1);
@@ -74,6 +80,7 @@ function Messages() {
   const handoffFilterRef = useRef('');
   const stateFilterRef = useRef('');
   const psidFilterRef = useRef('');
+  const certaintyFilterRef = useRef(0);
 
   // Helper function to show message excerpt
   const getMessageExcerpt = (text, maxLength = 60) => {
@@ -287,6 +294,7 @@ function Messages() {
       if (handoffFilterRef.current) params.set('handoff', handoffFilterRef.current);
       if (stateFilterRef.current) params.set('state', stateFilterRef.current);
       if (psidFilterRef.current) params.set('psid', psidFilterRef.current);
+      if (certaintyFilterRef.current > 0) params.set('minCertainty', String(certaintyFilterRef.current));
       const res = await API.get(`/conversations/grouped?${params}`);
       const convs = res.data.conversations || [];
       setFilteredConversations(convs);
@@ -400,12 +408,13 @@ function Messages() {
     handoffFilterRef.current = handoffFilter;
     stateFilterRef.current = stateFilter;
     psidFilterRef.current = psidFilter;
+    certaintyFilterRef.current = certaintyFilter;
     if (!initialLoading) {
       setCurrentPage(1);
       currentPageRef.current = 1;
       fetchFilteredPage(1);
     }
-  }, [keywordFilter, purchaseIntentFilter, productInterestFilter, sharedProductFilter, handoffFilter, stateFilter, psidFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [keywordFilter, purchaseIntentFilter, productInterestFilter, sharedProductFilter, handoffFilter, stateFilter, psidFilter, certaintyFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTakeover = async (psid) => {
     setLoading(prev => ({ ...prev, [psid]: true }));
@@ -1141,12 +1150,36 @@ function Messages() {
           <option value="human_handling" style={{ backgroundColor: "#1a1a1a" }}>En humano</option>
         </select>
 
+        {/* Certainty filter (salesman/Noemi and above) — RAW correlation %, ignores the
+            sales-reporting floor and reaches 0. Filters which chats are shown. */}
+        {canFilterCertainty && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: "0.5rem",
+            padding: "0.35rem 0.75rem", borderRadius: "8px",
+            backgroundColor: certaintyFilter > 0 ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.1)",
+            border: certaintyFilter > 0 ? "2px solid #8b5cf6" : "1px solid #555"
+          }}>
+            <span style={{ color: "#cbd5e1", fontSize: "0.8rem", whiteSpace: "nowrap" }}>Certeza ≥</span>
+            <input
+              type="range" min="0" max="100" step="10"
+              value={certaintyFilter}
+              onChange={(e) => setCertaintyFilter(Number(e.target.value))}
+              style={{ width: "110px", accentColor: "#8b5cf6", cursor: "pointer" }}
+              title="Filtra conversaciones por certeza de correlación (0 = todas)"
+            />
+            <span style={{ color: certaintyFilter > 0 ? "#c4b5fd" : "#94a3b8", fontSize: "0.85rem", fontWeight: 600, minWidth: "42px", fontVariantNumeric: "tabular-nums" }}>
+              {certaintyFilter === 0 ? "Todas" : `${certaintyFilter}%`}
+            </span>
+          </div>
+        )}
+
         {/* Clear all (only the dropdown filters, not keyword) */}
-        {(adFilter || purchaseIntentFilter || productInterestFilter || sharedProductFilter || handoffFilter || stateFilter) && (
+        {(adFilter || purchaseIntentFilter || productInterestFilter || sharedProductFilter || handoffFilter || stateFilter || certaintyFilter > 0) && (
           <button onClick={() => {
             setAdFilter('');
             setPurchaseIntentFilter(''); setProductInterestFilter('');
             setSharedProductFilter(''); setHandoffFilter(''); setStateFilter('');
+            setCertaintyFilter(0);
           }} style={{ padding: "0.5rem 0.75rem", backgroundColor: "#374151", color: "white", border: "1px solid #555", borderRadius: "8px", cursor: "pointer", fontSize: "0.85rem" }}>
             Limpiar
           </button>

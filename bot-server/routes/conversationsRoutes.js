@@ -158,7 +158,9 @@ router.get('/grouped', async (req, res) => {
       sharedProduct,     // 'yes' | 'no' — whether bot shared a product link
       handoff,           // 'yes' | 'no' — whether human handoff was requested
       state,             // 'new' | 'active' | 'closed' | 'needs_human' | 'human_handling'
-      psid               // user identifier search (FB PSID or WhatsApp number)
+      psid,              // user identifier search (FB PSID or WhatsApp number)
+      minCertainty       // correlation certainty floor for READING chats (0-100). RAW —
+                         // deliberately ignores the sales-reporting floor and reaches 0.
     } = req.query;
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit)));
@@ -204,6 +206,24 @@ router.get('/grouped', async (req, res) => {
           conversations: [],
           pagination: { page: 1, limit: limitNum, total: 0, pages: 0 }
         });
+      }
+    }
+
+    // Certainty filter (chat-reading): narrow to conversations whose correlation
+    // certainty is ≥ N. Uses the RAW match certainty on purpose — it does NOT abide by
+    // the sales-reporting floor and reaches down to 0 (0 / absent = no filter, show all,
+    // including chats with no attribution). Human-confirmed (null certainty) always passes.
+    const mc = Number(minCertainty) || 0;
+    if (mc > 0) {
+      const ConvoSaleMatch = require('../models/ConvoSaleMatch');
+      const certPsids = await ConvoSaleMatch.distinct('psid', {
+        humanVerdict: { $ne: 'rejected' },
+        $or: [{ certainty: { $gte: mc } }, { certainty: null }],
+      });
+      const certSet = new Set(certPsids.map(String));
+      adFilterPsids = adFilterPsids ? adFilterPsids.filter((p) => certSet.has(String(p))) : certPsids;
+      if (!adFilterPsids.length) {
+        return res.json({ conversations: [], pagination: { page: 1, limit: limitNum, total: 0, pages: 0 } });
       }
     }
 
