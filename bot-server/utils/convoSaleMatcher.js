@@ -309,14 +309,18 @@ function poiFuzzy(sale, poiName) {
 
 const H10M = 10 / 60; // 10 minutes in hours
 const H5M = 5 / 60; //  5 minutes in hours
+const H1M = 1 / 60; //  1 minute in hours
+const H30M = 30 / 60; // 30 minutes in hours
 
 // Per-tier decay: the base% holds for `flat` hours (the flat window), then drops
 // −10 points every `step` hours until it hits 0 (→ null, no correlation). `step: null`
 // = a HARD window (base% until `flat`, then nothing). `g` = directional click→sale gap.
-function decayScore(base, flat, step, g) {
+function decayScore(base, flat, step, g, dec = 10) {
   if (g <= flat) return base;
   if (step == null) return null; // hard time window expired
-  const pct = base - 10 * Math.ceil((g - flat) / step);
+  // −1e-9 so an EXACT boundary (e.g. g = flat + k·step) lands on k steps, not k+1
+  // (float error otherwise pushes ceil up one, e.g. 50% → 30% instead of 40% at 6 min).
+  const pct = base - dec * Math.ceil((g - flat) / step - 1e-9);
   return pct > 0 ? pct : null;
 }
 
@@ -331,32 +335,28 @@ function classify(m) {
   let pct = null, tier = "", vi = false, undisputed = false;
 
   if (m.itemMatch) {
-    // SAME product (same size the customer discussed).
-    if (m.zipMatch) {
-      if (m.nameMatch && m.nicknameMatch) { pct = decayScore(100, 24, 12, g); tier = "cp + nombre + usuario ML + item"; undisputed = pct === 100; }
-      else if (m.nameMatch) { pct = decayScore(100, 24, 6, g); tier = "cp + nombre + item"; }
-      else { pct = decayScore(90, 12, 3, g); tier = "cp + item"; }
-    } else if (m.cityMatch) {
-      if (m.nameMatch) { pct = decayScore(90, 6, 1, g); tier = "ciudad + nombre + item"; }
-      else { pct = decayScore(70, 1, 1, g); tier = "ciudad + item"; }
-    } else {
-      // no zip and no city
-      if (m.nameMatch && m.nicknameMatch) { pct = decayScore(80, 2, 1, g); tier = "nombre + usuario ML + item"; }
-      else if (m.nameMatch || m.nicknameMatch) { pct = decayScore(70, 1, 1, g); tier = "nombre/usuario ML + item"; }
-      else { pct = decayScore(20, H10M, null, g); tier = "item, sin ubicación ni nombre"; }
-    }
+    // SAME product (a size the customer discussed OR clicked). Rubric 2026-07-13:
+    // identity (name/nickname) dominates; location alone is weak + fast-decaying; and
+    // NO location AND NO name/nickname ⇒ NOT attributable (0%). Ordered top→down so
+    // every tier is reachable (city+name is checked before the location-less identity
+    // tier, otherwise a lone name would shadow it).
+    if (m.zipMatch && m.nameMatch && m.nicknameMatch) { pct = decayScore(100, 2, 1, g); tier = "cp + nombre + usuario ML + item"; undisputed = pct === 100; }
+    else if (m.nameMatch && m.nicknameMatch) { pct = decayScore(90, 2, 1, g); tier = "nombre + usuario ML + item"; }
+    else if (m.zipMatch && m.nameMatch) { pct = decayScore(80, 1, H30M, g); tier = "cp + nombre + item"; }
+    else if (m.cityMatch && m.nameMatch) { pct = decayScore(60, H10M, H5M, g); tier = "ciudad + nombre + item"; }
+    else if (m.nameMatch || m.nicknameMatch) { pct = decayScore(70, 30, 30, g); tier = "nombre/usuario ML + item"; }
+    else if (m.zipMatch) { pct = decayScore(50, H5M, H1M, g); tier = "cp + item"; }
+    else if (m.cityMatch) { pct = decayScore(20, H1M, H1M, g); tier = "ciudad + item"; }
+    // else → no zip, no city, no name/nickname → 0% (pct stays null → not attributed)
   } else {
-    // DIFFERENT product — bought something OTHER than the discussed size.
+    // DIFFERENT product (venta indirecta). Only a ZIP + strong signal attributes; the
+    // "misma familia" tiers require the bought item to share the convo's product family.
+    // Anything without a zip (or without name/nickname/family) ⇒ NOT attributable (0%).
     vi = true;
-    if (m.zipMatch) {
-      if (m.nameMatch && m.nicknameMatch) { pct = decayScore(90, 12, 12, g); tier = "producto distinto · cp + nombre + usuario ML"; }
-      else if (m.nameMatch && m.sameFamily) { pct = decayScore(80, 12, 3, g); tier = "producto distinto, misma familia · cp + nombre"; }
-      else { pct = decayScore(60, 1, 1, g); tier = "producto distinto · cp"; }
-    } else if (m.cityMatch) {
-      pct = decayScore(50, H10M, 1, g); tier = "producto distinto · ciudad";
-    } else {
-      pct = decayScore(10, H5M, null, g); tier = "producto distinto, sin ubicación";
-    }
+    if (m.zipMatch && m.nameMatch && m.nicknameMatch) { pct = decayScore(90, 2, 1, g); tier = "producto distinto · cp + nombre + usuario ML"; }
+    else if (m.zipMatch && m.nameMatch && m.sameFamily) { pct = decayScore(80, 2, H30M, g); tier = "producto distinto, misma familia · cp + nombre"; }
+    else if (m.zipMatch && m.sameFamily) { pct = decayScore(60, H5M, H1M, g, 20); tier = "producto distinto, misma familia · cp"; }
+    // else → not attributable (0%)
   }
 
   if (pct == null) return null;
