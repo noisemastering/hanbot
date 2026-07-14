@@ -21,10 +21,43 @@ const normState = (s) => String(s || "").normalize("NFD").replace(/[̀-ͯ]/g, ""
 // Mexico City local day (UTC-6) — clicks and sales are compared on the local calendar day.
 const mxDay = (d) => new Date(new Date(d).getTime() - 6 * 3600e3).toISOString().slice(0, 10);
 
-// local re-impl (not exported by conversionCorrelation)
+// Words a real customer NAME never contains — used to REJECT phrases the extractor
+// mistook for a name (e.g. "que tome bien las medidas", "quiero la cotización"). Soft
+// connectors (de/del/la/los/las/y) are intentionally NOT here so real names like
+// "María del Carmen" / "José de los Santos" still pass.
+const NAME_NON_WORDS = new Set([
+  "que", "tome", "toma", "tomen", "tomar", "bien", "mal", "muy", "medidas", "medida", "favor",
+  "porfavor", "gracias", "hola", "buenas", "buenos", "dias", "tardes", "noches", "precio", "precios",
+  "cotizacion", "cotizaciones", "cotizar", "cotice", "envio", "envios", "enviar", "enviame", "mandame",
+  "manden", "mande", "pongan", "instalador", "instalen", "instale", "quiero", "necesito", "ocupo",
+  "busco", "podria", "podrias", "puede", "puedes", "cuanto", "cuanta", "cuesta", "vale", "valen",
+  "gustaria", "informacion", "info", "disponible", "disponibles", "color", "colores", "metros", "metro",
+  "malla", "sombra", "rollo", "borde", "compro", "compre", "pague", "tengo", "tiene", "hacer", "dame",
+  "den", "ver", "checa", "revisa", "confirma", "si", "no", "pero", "como", "cuando", "donde", "porque",
+  "para", "con", "sin", "por", "es", "esta", "este", "eso", "esa",
+]);
+// Does this string plausibly LOOK like a person's name? Names are 1-5 alphabetic tokens
+// and never contain the phrase/request words above. Blocks garbage extractions from being
+// used (or displayed) as a name in correlation.
+function looksLikeName(s) {
+  const n = normalizeName(s);
+  if (!n) return false;
+  const toks = n.split(/\s+/).filter(Boolean);
+  if (!toks.length || toks.length > 5) return false;
+  if (toks.some((t) => NAME_NON_WORDS.has(t))) return false;
+  if (toks.some((t) => !/^[a-zñ'.-]{2,}$/.test(t))) return false; // alphabetic tokens, ≥2 chars
+  return true;
+}
+
+// True only when the convo's first name plausibly IS the ML username. Requires ≥4 chars
+// (so short common substrings like "que"→"enrique", "ana"→"juanana" don't false-match)
+// AND that the firstName appears at a word/segment boundary in the nickname.
 function nameInNickname(firstName, nickname) {
-  if (!firstName || !nickname || firstName.length < 3) return false;
-  return (normalizeName(nickname) || "").includes(firstName);
+  if (!firstName || !nickname || firstName.length < 4) return false;
+  const nk = normalizeName(nickname) || "";
+  // Segment the nickname on non-letters (JOSE_ENRIQUE, jose.perez, jose123) and require
+  // the firstName to START one of those segments — not merely appear somewhere inside.
+  return nk.split(/[^a-zñ]+/).filter(Boolean).some((seg) => seg.startsWith(firstName));
 }
 
 function tokensOf(name) {
@@ -187,6 +220,7 @@ function convoIdentity(convo, ctx) {
       ]
         .map(normalizeName)
         .filter(Boolean)
+        .filter(looksLikeName) // drop phrases the extractor mistook for a name ("que tome bien…")
     ),
   ];
   const firstName = names.length ? names[0].split(/\s+/)[0] : null;
@@ -635,4 +669,4 @@ function buildMatchDoc(convo, id, s, m, v, dayToSizes) {
   };
 }
 
-module.exports = { buildContext, matchConversation, convoIdentity, classify, nameMatches };
+module.exports = { buildContext, matchConversation, convoIdentity, classify, nameMatches, looksLikeName };

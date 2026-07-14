@@ -30,6 +30,7 @@ const parseSize = (t) => {
   const ZipCode = require("../models/ZipCode");
   const SystemState = require("../models/SystemState");
   const { normalizeCity } = require("../utils/conversionCorrelation");
+  const { looksLikeName } = require("../utils/convoSaleMatcher");
 
   const all = await M.find({}).lean();
   const active = all.filter((m) => m.humanVerdict !== "rejected");
@@ -113,6 +114,13 @@ const parseSize = (t) => {
   check("zip signal ⇒ zips equal", zipBad);
   check("city signal ⇒ cities equal", cityBad);
   check("item signal ⇒ sold size ∈ discussed∪clicked", itemBad);
+
+  // A name/nickname-based match must have a convo name that actually LOOKS like a name
+  // (not a phrase the extractor mistook for one, e.g. "que tome bien las medidas").
+  const nameGarbage = active
+    .filter((m) => (m.signals?.name || m.signals?.nickname) && m.matchDetails?.convoName && !looksLikeName(m.matchDetails.convoName))
+    .map((m) => `${m._id} name="${m.matchDetails.convoName}"`);
+  check("name/nickname signal ⇒ convo name looks like a name", nameGarbage);
 
   // 7. reason% == certainty
   check("reason % matches certainty",
