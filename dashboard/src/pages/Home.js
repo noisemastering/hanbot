@@ -1,7 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
 import API from "../api";
-import { correlateAndWait } from "../utils/correlate";
 import { useTranslation } from "../i18n";
 import { useAuth } from "../contexts/AuthContext";
 import FeatureTip from '../components/FeatureTip';
@@ -130,7 +129,9 @@ function Home() {
         await Promise.all([
           API.get(`/analytics/?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
           API.get(`/analytics/conversions?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
-          API.get(`/click-logs/daily?startDate=${dateFrom}&endDate=${dateTo}`),
+          // Daily chart from the SAME source as the Conversions route (convo↔sale
+          // correlation, reporting-floor–respected) so clicks/conversions/links match.
+          API.get(`/correlation/chart?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
           API.get(`/analytics/top-products?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
           API.get(`/analytics/top-region?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
           API.get(`/analytics/clicks-by-ad?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
@@ -241,7 +242,15 @@ function Home() {
     setCorrelating(true);
     startProgress();
     try {
-      await correlateAndWait({ dateFrom, dateTo });
+      // Same convo↔sale correlation as the Conversions route (fast incremental — only
+      // new convos since the last run); poll status, then refresh the chart.
+      const { data } = await API.get('/correlation/status');
+      if (!data.running) await API.post('/correlation/run');
+      for (let i = 0; i < 60; i++) { // up to ~2 min; incremental is quick
+        await new Promise((r) => setTimeout(r, 2000));
+        const s = await API.get('/correlation/status');
+        if (!s.data.running) break;
+      }
       setLastSync(new Date());
       stopProgress();
       await fetchAll();
