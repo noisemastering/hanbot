@@ -43,9 +43,14 @@ function looksLikeName(s) {
   const n = normalizeName(s);
   if (!n) return false;
   const toks = n.split(/\s+/).filter(Boolean);
-  if (!toks.length || toks.length > 5) return false;
-  if (toks.some((t) => NAME_NON_WORDS.has(t))) return false;
-  if (toks.some((t) => !/^[a-zñ'.-]{2,}$/.test(t))) return false; // alphabetic tokens, ≥2 chars
+  if (!toks.length || toks.length > 6) return false;          // absurdly long → a phrase, not a name
+  if (/\d/.test(n)) return false;                             // names don't contain digits
+  if (toks.some((t) => NAME_NON_WORDS.has(t))) return false;  // a phrase/request/verb word → not a name
+  // Must have ≥1 SUBSTANTIAL token (≥2 letters, ignoring punctuation). Single-letter
+  // middle initials ("Victor M Cruz"), connectors ("de la"), apostrophes ("Terrón") and
+  // long full names are all fine — the stopword check above is what discriminates a
+  // real name from a phrase, NOT token length/shape (that over-rejected real names).
+  if (!toks.some((t) => t.replace(/[^a-zñ]/g, "").length >= 2)) return false;
   return true;
 }
 
