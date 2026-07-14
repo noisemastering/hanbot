@@ -1035,157 +1035,6 @@ function Messages() {
         )}
       </div>
 
-      {/* Constraint filters bar */}
-      <div style={{ marginBottom: "1rem", display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
-        <span style={{ color: "#6b7280", fontSize: "0.8rem", marginRight: "0.25rem" }}>Filtros adicionales:</span>
-
-        {/* PSID / phone search */}
-        <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
-          <input
-            type="text"
-            placeholder="ID o teléfono…"
-            value={psidFilter}
-            onChange={(e) => setPsidFilter(e.target.value.trim())}
-            title="Busca por PSID de Messenger o número de WhatsApp (con o sin prefijo wa:)"
-            style={{
-              padding: "0.5rem 0.75rem",
-              backgroundColor: psidFilter ? "rgba(124, 77, 255, 0.15)" : "rgba(255, 255, 255, 0.1)",
-              color: "white",
-              border: psidFilter ? "2px solid #7c4dff" : "1px solid #555",
-              borderRadius: "8px",
-              fontSize: "0.85rem",
-              width: "180px"
-            }}
-          />
-          {psidFilter && (
-            <button onClick={() => setPsidFilter('')}
-              style={{ padding: "0.4rem 0.6rem", backgroundColor: "rgba(255,255,255,0.05)", color: "#aaa", border: "1px solid #555", borderRadius: "8px", cursor: "pointer", fontSize: "0.85rem" }}
-              title="Limpiar">✕</button>
-          )}
-        </div>
-
-        {/* Ad filter */}
-        <select value={adFilter} onChange={(e) => setAdFilter(e.target.value)}
-          style={{
-            padding: "0.5rem 0.75rem",
-            backgroundColor: adFilter ? "#7c4dff" : "rgba(255, 255, 255, 0.1)",
-            color: "white", border: adFilter ? "2px solid #7c4dff" : "1px solid #555",
-            borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem", maxWidth: "200px"
-          }}>
-          <option value="" style={{ backgroundColor: "#1a1a1a" }}>{t('messages.allAds')}</option>
-          {availableAds.map(ad => (
-            <option key={ad.adId} value={ad.adId} style={{ backgroundColor: "#1a1a1a" }}>{ad.name}</option>
-          ))}
-        </select>
-
-        {/* Purchase intent */}
-        <select value={purchaseIntentFilter} onChange={(e) => setPurchaseIntentFilter(e.target.value)}
-          style={{
-            padding: "0.5rem 0.75rem",
-            backgroundColor: purchaseIntentFilter ? "#3b82f6" : "rgba(255, 255, 255, 0.1)",
-            color: "white", border: purchaseIntentFilter ? "2px solid #3b82f6" : "1px solid #555",
-            borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem"
-          }}>
-          <option value="" style={{ backgroundColor: "#1a1a1a" }}>Intención: todas</option>
-          <option value="high" style={{ backgroundColor: "#1a1a1a" }}>Alta</option>
-          <option value="medium" style={{ backgroundColor: "#1a1a1a" }}>Media</option>
-          <option value="low" style={{ backgroundColor: "#1a1a1a" }}>Baja</option>
-        </select>
-
-        {/* Product interest */}
-        <select value={productInterestFilter} onChange={(e) => setProductInterestFilter(e.target.value)}
-          style={{
-            padding: "0.5rem 0.75rem",
-            backgroundColor: productInterestFilter ? "#f59e0b" : "rgba(255, 255, 255, 0.1)",
-            color: "white", border: productInterestFilter ? "2px solid #f59e0b" : "1px solid #555",
-            borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem"
-          }}>
-          <option value="" style={{ backgroundColor: "#1a1a1a" }}>Producto: todos</option>
-          <option value="malla_sombra" style={{ backgroundColor: "#1a1a1a" }}>Malla sombra</option>
-          <option value="borde_separador" style={{ backgroundColor: "#1a1a1a" }}>Borde separador</option>
-          <option value="rollo" style={{ backgroundColor: "#1a1a1a" }}>Rollo</option>
-          <option value="ground_cover" style={{ backgroundColor: "#1a1a1a" }}>Ground cover</option>
-          <option value="confeccionada" style={{ backgroundColor: "#1a1a1a" }}>Confeccionada</option>
-        </select>
-
-        {/* Shared product */}
-        <select value={sharedProductFilter} onChange={(e) => setSharedProductFilter(e.target.value)}
-          style={{
-            padding: "0.5rem 0.75rem",
-            backgroundColor: sharedProductFilter ? "#06b6d4" : "rgba(255, 255, 255, 0.1)",
-            color: "white", border: sharedProductFilter ? "2px solid #06b6d4" : "1px solid #555",
-            borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem"
-          }}>
-          <option value="" style={{ backgroundColor: "#1a1a1a" }}>Link compartido: todos</option>
-          <option value="yes" style={{ backgroundColor: "#1a1a1a" }}>Sí compartió</option>
-          <option value="no" style={{ backgroundColor: "#1a1a1a" }}>No compartió</option>
-        </select>
-
-        {/* Handoff */}
-        <select value={handoffFilter} onChange={(e) => setHandoffFilter(e.target.value)}
-          style={{
-            padding: "0.5rem 0.75rem",
-            backgroundColor: handoffFilter ? "#ef4444" : "rgba(255, 255, 255, 0.1)",
-            color: "white", border: handoffFilter ? "2px solid #ef4444" : "1px solid #555",
-            borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem"
-          }}>
-          <option value="" style={{ backgroundColor: "#1a1a1a" }}>Handoff: todos</option>
-          <option value="yes" style={{ backgroundColor: "#1a1a1a" }}>Pidió humano</option>
-          <option value="no" style={{ backgroundColor: "#1a1a1a" }}>No pidió</option>
-        </select>
-
-        {/* State */}
-        <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}
-          style={{
-            padding: "0.5rem 0.75rem",
-            backgroundColor: stateFilter ? "#8b5cf6" : "rgba(255, 255, 255, 0.1)",
-            color: "white", border: stateFilter ? "2px solid #8b5cf6" : "1px solid #555",
-            borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem"
-          }}>
-          <option value="" style={{ backgroundColor: "#1a1a1a" }}>Estado: todos</option>
-          <option value="new" style={{ backgroundColor: "#1a1a1a" }}>Nueva</option>
-          <option value="active" style={{ backgroundColor: "#1a1a1a" }}>Activa</option>
-          <option value="closed" style={{ backgroundColor: "#1a1a1a" }}>Cerrada</option>
-          <option value="needs_human" style={{ backgroundColor: "#1a1a1a" }}>Necesita humano</option>
-          <option value="human_handling" style={{ backgroundColor: "#1a1a1a" }}>En humano</option>
-        </select>
-
-        {/* Certainty filter (salesman/Noemi and above) — RAW correlation %, ignores the
-            sales-reporting floor and reaches 0. Filters which chats are shown. */}
-        {canFilterCertainty && (
-          <div style={{
-            display: "flex", alignItems: "center", gap: "0.5rem",
-            padding: "0.35rem 0.75rem", borderRadius: "8px",
-            backgroundColor: certaintyFilter > 0 ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.1)",
-            border: certaintyFilter > 0 ? "2px solid #8b5cf6" : "1px solid #555"
-          }}>
-            <span style={{ color: "#cbd5e1", fontSize: "0.8rem", whiteSpace: "nowrap" }}>Certeza ≥</span>
-            <input
-              type="range" min="0" max="100" step="10"
-              value={certaintyFilter}
-              onChange={(e) => setCertaintyFilter(Number(e.target.value))}
-              style={{ width: "110px", accentColor: "#8b5cf6", cursor: "pointer" }}
-              title="Filtra conversaciones por certeza de correlación (0 = todas)"
-            />
-            <span style={{ color: certaintyFilter > 0 ? "#c4b5fd" : "#94a3b8", fontSize: "0.85rem", fontWeight: 600, minWidth: "42px", fontVariantNumeric: "tabular-nums" }}>
-              {certaintyFilter === 0 ? "Todas" : `${certaintyFilter}%`}
-            </span>
-          </div>
-        )}
-
-        {/* Clear all (only the dropdown filters, not keyword) */}
-        {(adFilter || purchaseIntentFilter || productInterestFilter || sharedProductFilter || handoffFilter || stateFilter || certaintyFilter > 0) && (
-          <button onClick={() => {
-            setAdFilter('');
-            setPurchaseIntentFilter(''); setProductInterestFilter('');
-            setSharedProductFilter(''); setHandoffFilter(''); setStateFilter('');
-            setCertaintyFilter(0);
-          }} style={{ padding: "0.5rem 0.75rem", backgroundColor: "#374151", color: "white", border: "1px solid #555", borderRadius: "8px", cursor: "pointer", fontSize: "0.85rem" }}>
-            Limpiar
-          </button>
-        )}
-      </div>
-
       {/* SECTION 1: Recent Activity Table — hidden when a search filter is active */}
       {!keywordFilter && !psidFilter && <div style={{ marginBottom: "2.5rem" }}>
         <h2 style={{ color: "white", marginBottom: "1rem", fontSize: "1.3rem", fontWeight: "bold" }}>
@@ -1361,6 +1210,157 @@ function Messages() {
           </tbody>
         </table>
       </div>}
+
+      {/* Constraint filters bar — applies to the list below, NOT the 10 most recent */}
+      <div style={{ marginBottom: "1rem", display: "flex", gap: "0.5rem", flexWrap: "wrap", alignItems: "center" }}>
+        <span style={{ color: "#6b7280", fontSize: "0.8rem", marginRight: "0.25rem" }}>Filtros adicionales:</span>
+
+        {/* PSID / phone search */}
+        <div style={{ display: "flex", gap: "0.25rem", alignItems: "center" }}>
+          <input
+            type="text"
+            placeholder="ID o teléfono…"
+            value={psidFilter}
+            onChange={(e) => setPsidFilter(e.target.value.trim())}
+            title="Busca por PSID de Messenger o número de WhatsApp (con o sin prefijo wa:)"
+            style={{
+              padding: "0.5rem 0.75rem",
+              backgroundColor: psidFilter ? "rgba(124, 77, 255, 0.15)" : "rgba(255, 255, 255, 0.1)",
+              color: "white",
+              border: psidFilter ? "2px solid #7c4dff" : "1px solid #555",
+              borderRadius: "8px",
+              fontSize: "0.85rem",
+              width: "180px"
+            }}
+          />
+          {psidFilter && (
+            <button onClick={() => setPsidFilter('')}
+              style={{ padding: "0.4rem 0.6rem", backgroundColor: "rgba(255,255,255,0.05)", color: "#aaa", border: "1px solid #555", borderRadius: "8px", cursor: "pointer", fontSize: "0.85rem" }}
+              title="Limpiar">✕</button>
+          )}
+        </div>
+
+        {/* Ad filter */}
+        <select value={adFilter} onChange={(e) => setAdFilter(e.target.value)}
+          style={{
+            padding: "0.5rem 0.75rem",
+            backgroundColor: adFilter ? "#7c4dff" : "rgba(255, 255, 255, 0.1)",
+            color: "white", border: adFilter ? "2px solid #7c4dff" : "1px solid #555",
+            borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem", maxWidth: "200px"
+          }}>
+          <option value="" style={{ backgroundColor: "#1a1a1a" }}>{t('messages.allAds')}</option>
+          {availableAds.map(ad => (
+            <option key={ad.adId} value={ad.adId} style={{ backgroundColor: "#1a1a1a" }}>{ad.name}</option>
+          ))}
+        </select>
+
+        {/* Purchase intent */}
+        <select value={purchaseIntentFilter} onChange={(e) => setPurchaseIntentFilter(e.target.value)}
+          style={{
+            padding: "0.5rem 0.75rem",
+            backgroundColor: purchaseIntentFilter ? "#3b82f6" : "rgba(255, 255, 255, 0.1)",
+            color: "white", border: purchaseIntentFilter ? "2px solid #3b82f6" : "1px solid #555",
+            borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem"
+          }}>
+          <option value="" style={{ backgroundColor: "#1a1a1a" }}>Intención: todas</option>
+          <option value="high" style={{ backgroundColor: "#1a1a1a" }}>Alta</option>
+          <option value="medium" style={{ backgroundColor: "#1a1a1a" }}>Media</option>
+          <option value="low" style={{ backgroundColor: "#1a1a1a" }}>Baja</option>
+        </select>
+
+        {/* Product interest */}
+        <select value={productInterestFilter} onChange={(e) => setProductInterestFilter(e.target.value)}
+          style={{
+            padding: "0.5rem 0.75rem",
+            backgroundColor: productInterestFilter ? "#f59e0b" : "rgba(255, 255, 255, 0.1)",
+            color: "white", border: productInterestFilter ? "2px solid #f59e0b" : "1px solid #555",
+            borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem"
+          }}>
+          <option value="" style={{ backgroundColor: "#1a1a1a" }}>Producto: todos</option>
+          <option value="malla_sombra" style={{ backgroundColor: "#1a1a1a" }}>Malla sombra</option>
+          <option value="borde_separador" style={{ backgroundColor: "#1a1a1a" }}>Borde separador</option>
+          <option value="rollo" style={{ backgroundColor: "#1a1a1a" }}>Rollo</option>
+          <option value="ground_cover" style={{ backgroundColor: "#1a1a1a" }}>Ground cover</option>
+          <option value="confeccionada" style={{ backgroundColor: "#1a1a1a" }}>Confeccionada</option>
+        </select>
+
+        {/* Shared product */}
+        <select value={sharedProductFilter} onChange={(e) => setSharedProductFilter(e.target.value)}
+          style={{
+            padding: "0.5rem 0.75rem",
+            backgroundColor: sharedProductFilter ? "#06b6d4" : "rgba(255, 255, 255, 0.1)",
+            color: "white", border: sharedProductFilter ? "2px solid #06b6d4" : "1px solid #555",
+            borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem"
+          }}>
+          <option value="" style={{ backgroundColor: "#1a1a1a" }}>Link compartido: todos</option>
+          <option value="yes" style={{ backgroundColor: "#1a1a1a" }}>Sí compartió</option>
+          <option value="no" style={{ backgroundColor: "#1a1a1a" }}>No compartió</option>
+        </select>
+
+        {/* Handoff */}
+        <select value={handoffFilter} onChange={(e) => setHandoffFilter(e.target.value)}
+          style={{
+            padding: "0.5rem 0.75rem",
+            backgroundColor: handoffFilter ? "#ef4444" : "rgba(255, 255, 255, 0.1)",
+            color: "white", border: handoffFilter ? "2px solid #ef4444" : "1px solid #555",
+            borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem"
+          }}>
+          <option value="" style={{ backgroundColor: "#1a1a1a" }}>Handoff: todos</option>
+          <option value="yes" style={{ backgroundColor: "#1a1a1a" }}>Pidió humano</option>
+          <option value="no" style={{ backgroundColor: "#1a1a1a" }}>No pidió</option>
+        </select>
+
+        {/* State */}
+        <select value={stateFilter} onChange={(e) => setStateFilter(e.target.value)}
+          style={{
+            padding: "0.5rem 0.75rem",
+            backgroundColor: stateFilter ? "#8b5cf6" : "rgba(255, 255, 255, 0.1)",
+            color: "white", border: stateFilter ? "2px solid #8b5cf6" : "1px solid #555",
+            borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem"
+          }}>
+          <option value="" style={{ backgroundColor: "#1a1a1a" }}>Estado: todos</option>
+          <option value="new" style={{ backgroundColor: "#1a1a1a" }}>Nueva</option>
+          <option value="active" style={{ backgroundColor: "#1a1a1a" }}>Activa</option>
+          <option value="closed" style={{ backgroundColor: "#1a1a1a" }}>Cerrada</option>
+          <option value="needs_human" style={{ backgroundColor: "#1a1a1a" }}>Necesita humano</option>
+          <option value="human_handling" style={{ backgroundColor: "#1a1a1a" }}>En humano</option>
+        </select>
+
+        {/* Certainty filter (salesman/Noemi and above) — RAW correlation %, ignores the
+            sales-reporting floor and reaches 0. Filters which chats are shown. */}
+        {canFilterCertainty && (
+          <div style={{
+            display: "flex", alignItems: "center", gap: "0.5rem",
+            padding: "0.35rem 0.75rem", borderRadius: "8px",
+            backgroundColor: certaintyFilter > 0 ? "rgba(139,92,246,0.15)" : "rgba(255,255,255,0.1)",
+            border: certaintyFilter > 0 ? "2px solid #8b5cf6" : "1px solid #555"
+          }}>
+            <span style={{ color: "#cbd5e1", fontSize: "0.8rem", whiteSpace: "nowrap" }}>Certeza ≥</span>
+            <input
+              type="range" min="0" max="100" step="10"
+              value={certaintyFilter}
+              onChange={(e) => setCertaintyFilter(Number(e.target.value))}
+              style={{ width: "110px", accentColor: "#8b5cf6", cursor: "pointer" }}
+              title="Filtra conversaciones por certeza de correlación (0 = todas)"
+            />
+            <span style={{ color: certaintyFilter > 0 ? "#c4b5fd" : "#94a3b8", fontSize: "0.85rem", fontWeight: 600, minWidth: "42px", fontVariantNumeric: "tabular-nums" }}>
+              {certaintyFilter === 0 ? "Todas" : `${certaintyFilter}%`}
+            </span>
+          </div>
+        )}
+
+        {/* Clear all (only the dropdown filters, not keyword) */}
+        {(adFilter || purchaseIntentFilter || productInterestFilter || sharedProductFilter || handoffFilter || stateFilter || certaintyFilter > 0) && (
+          <button onClick={() => {
+            setAdFilter('');
+            setPurchaseIntentFilter(''); setProductInterestFilter('');
+            setSharedProductFilter(''); setHandoffFilter(''); setStateFilter('');
+            setCertaintyFilter(0);
+          }} style={{ padding: "0.5rem 0.75rem", backgroundColor: "#374151", color: "white", border: "1px solid #555", borderRadius: "8px", cursor: "pointer", fontSize: "0.85rem" }}>
+            Limpiar
+          </button>
+        )}
+      </div>
 
       {/* SECTION 2: All Conversations Table with Date Filtering */}
       <div>
