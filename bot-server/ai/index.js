@@ -208,6 +208,14 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
   const shouldAskZip = sharedBuyLink && !haveZip && !newState.zipAsked && !handoff;
   if (shouldAskZip) newState.zipAsked = true; // persisted via workflowState below
 
+  // DETERMINISTIC NAME CAPTURE: a name match is now the STRONGEST correlation signal
+  // (the attribution rubric gives named matches wide time windows + high certainty,
+  // while location-only matches decay in minutes). So harvest the name alongside the CP
+  // when we share a buy link and don't yet have it. Fires once per conversation.
+  const haveName = !!(convo.extractedName || lead.name);
+  const shouldAskName = sharedBuyLink && !haveName && !newState.nameAsked && !handoff;
+  if (shouldAskName) newState.nameAsked = true;
+
   const persist = {
     workflowState: newState,
     currentFlow: `workflow:${workflow.name}`,
@@ -321,10 +329,19 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
     }
   }
 
-  // Deterministic CP ask: only append if the model didn't already ask for it this
-  // turn (so we don't double-ask), and we resolved to ask above.
-  if (shouldAskZip && safeText && !/c[oó]digo postal|\bC\.?P\.?\b|\bcp\b/i.test(safeText)) {
-    safeText += "\n\nPor cierto, ¿me compartes tu código postal? Es solo para fines estadísticos. 🙏";
+  // Deterministic harvest of the CP + NAME (both correlation linchpins). Ask naturally,
+  // once each, never on a handoff turn, and never if the model already asked this turn.
+  // Combine into ONE line when we need both so it doesn't feel like a form.
+  if (safeText) {
+    const askZip = shouldAskZip && !/c[oó]digo postal|\bC\.?P\.?\b|\bcp\b/i.test(safeText);
+    const askName = shouldAskName && !/tu nombre|c[oó]mo te llamas|con qui[eé]n tengo|qui[eé]n me escribe/i.test(safeText);
+    if (askZip && askName) {
+      safeText += "\n\nPor cierto, ¿me compartes tu nombre y tu código postal? Es solo para dar seguimiento a tu pedido. 🙏";
+    } else if (askZip) {
+      safeText += "\n\nPor cierto, ¿me compartes tu código postal? Es solo para fines estadísticos. 🙏";
+    } else if (askName) {
+      safeText += "\n\nPor cierto, ¿con quién tengo el gusto? 😊";
+    }
   }
 
   return { handled: true, reply: safeText ? { type: "text", text: safeText } : null };
