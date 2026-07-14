@@ -62,7 +62,6 @@ function ConversionsView() {
   const [detailView, setDetailView] = useState('match'); // 'match' | 'chat' toggle
   const [dailyClicks, setDailyClicks] = useState([]); // /chart rows (now carry per-day byCert)
   const [loading, setLoading] = useState(true);
-  const [autoCorrelating, setAutoCorrelating] = useState(false); // >3h freshness rebuild
   const [error, setError] = useState(null);
 
   // Minimum-confidence filter (admin/super_admin): show only sales with certainty ≥ this.
@@ -170,24 +169,23 @@ function ConversionsView() {
   };
 
   // Freshness gate: the data is in our DB, so we don't re-correlate on every load.
-  // If the last correlation is >3h stale (or already running), trigger a rebuild in
-  // the background, show a non-blocking indicator, poll until done, then refresh.
+  // Correlation is kept current by the 30-min scheduler + manual "Correlacionar ahora"
+  // button, and the incremental run is fast (only new convos since the last run). So the
+  // route does NOT block on a heavy rebuild: if it happens to be stale AND nothing is
+  // already running, it quietly fires ONE fast incremental and refreshes — no big marker.
   const ensureFreshCorrelation = async () => {
     try {
       const { data } = await API.get('/correlation/status');
-      if (!data.stale && !data.running) return;
-      setAutoCorrelating(true);
-      if (data.stale && !data.running) await API.post('/correlation/run');
-      for (let i = 0; i < 150; i++) { // up to ~12.5 min
-        await new Promise((r) => setTimeout(r, 5000));
+      if (data.running || !data.stale) return; // already running, or fresh enough
+      await API.post('/correlation/run'); // fast incremental (new convos only)
+      for (let i = 0; i < 30; i++) { // up to ~1 min — incremental is quick
+        await new Promise((r) => setTimeout(r, 2000));
         const s = await API.get('/correlation/status');
         if (!s.data.running) break;
       }
       await fetchData();
     } catch (e) {
       console.error('freshness check failed:', e.message);
-    } finally {
-      setAutoCorrelating(false);
     }
   };
 
@@ -308,14 +306,6 @@ function ConversionsView() {
       {error && (
         <div className="mb-6 bg-red-500/20 border border-red-500/30 text-red-300 px-4 py-3 rounded">
           <strong>Error:</strong> {error}
-        </div>
-      )}
-
-      {/* Auto-correlation indicator (data was >3h stale → rebuilding in background) */}
-      {autoCorrelating && (
-        <div className="fixed bottom-6 right-6 z-50 bg-gray-800 border border-blue-500/40 rounded-lg px-4 py-3 shadow-lg flex items-center gap-3">
-          <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-400"></div>
-          <span className="text-sm text-gray-200">Actualizando correlación… (datos con &gt;3h)</span>
         </div>
       )}
 

@@ -26,7 +26,8 @@ const FRESH_HOURS = 3;
 const BACKTRACE_START = new Date("2025-12-01T00:00:00.000Z");
 const SELLER_ID = "482595248";
 const SYNC_BUFFER_DAYS = 2; // re-fetch the last 2 days of ML sales each run (late arrivals)
-const MATCH_WINDOW_DAYS = 35; // re-match ~35 days of convos so NEW sales attach to older chats
+const MATCH_WINDOW_DAYS = 35; // first-run fallback window when there's no last-run stamp
+const INCR_OVERLAP_MS = 2 * 3600e3; // incremental: re-scan a 2h overlap before the last run
 const MULTI_ORDER_MIN = 70; // a client may hold >1 order only via matches ≥ this certainty
 
 // "Same client" key for order stacking: a conversation is ONE customer, so extra orders
@@ -137,9 +138,15 @@ async function runConvoCorrelation({ full = false } = {}) {
       console.error("⚠️ ml_sales sync failed (continuing with existing data):", e.message);
     }
 
-    // Match window: full → Dec 2025; incremental → last ~35 days (so a freshly-synced
-    // sale still attaches to an older conversation within the time gate).
-    const since = full ? BACKTRACE_START : new Date(Date.now() - MATCH_WINDOW_DAYS * 864e5);
+    // Match window: full → Dec 2025; incremental → only convos active SINCE the last run
+    // (minus a short overlap), so an incremental touches the new trickle (~tens of convos),
+    // NOT 35 days — fast. A periodic full backtrace covers any late-sale→old-convo edge the
+    // short window misses; order-uniqueness across the window boundary is preserved by the
+    // heldOutside guard below.
+    const lastAt = state.lastCorrelationRun && state.lastCorrelationRun.at ? new Date(state.lastCorrelationRun.at).getTime() : 0;
+    const since = full
+      ? BACKTRACE_START
+      : new Date(lastAt ? lastAt - INCR_OVERLAP_MS : Date.now() - MATCH_WINDOW_DAYS * 864e5);
     const dateClause = { $or: [{ lastMessageAt: { $gte: since } }, { createdAt: { $gte: since } }] };
 
     // 1. enrich ONLY convos in the window still missing identity/basket (bounded cost)
@@ -151,6 +158,7 @@ async function runConvoCorrelation({ full = false } = {}) {
     //    now returns all its candidate matches across tiers, not just its best).
     const ctx = await buildContext();
     const convos = await Conversation.find(dateClause).select(MATCH_FIELDS).lean();
+    const windowPsids = [...new Set(convos.map((c) => String(c.psid)).filter(Boolean))];
     const allScored = [];
     for (const c of convos) {
       if (!c.psid) continue;
@@ -170,6 +178,23 @@ async function runConvoCorrelation({ full = false } = {}) {
         .map((m) => String(m.orderId)).filter(Boolean)
     );
 
+    // Order-uniqueness ACROSS the (small) incremental window: orders already held by
+    // convos OUTSIDE this window aren't re-scored, so a window convo may take such an
+    // order ONLY if it STRICTLY beats the absent holder's certainty — otherwise the
+    // absent holder keeps it. Without this, a narrow window would let a weaker new convo
+    // steal a stronger established convo's sale. (Full runs re-score everyone, so skip.)
+    const heldOutside = new Map(); // orderId → best certainty held by a non-window convo
+    if (!full) {
+      const windowSet = new Set(windowPsids);
+      const existing = await ConvoSaleMatch.find({ method: { $ne: "human" }, humanVerdict: null, orderId: { $ne: null } })
+        .select("orderId psid certainty").lean();
+      for (const e of existing) {
+        if (windowSet.has(String(e.psid))) continue;
+        const oid = String(e.orderId), c = e.certainty ?? 0;
+        if (!heldOutside.has(oid) || c > heldOutside.get(oid)) heldOutside.set(oid, c);
+      }
+    }
+
     // Rule 9 (HIERARCHICAL) + Rule 5 (one order → one client): claim tier-by-tier,
     // highest certainty first (gap breaks ties). CARDINALITY: each order attaches to
     // exactly ONE client (order-uniqueness), but ONE client may hold MULTIPLE orders —
@@ -185,7 +210,9 @@ async function runConvoCorrelation({ full = false } = {}) {
     for (const doc of allScored) {
       const oid = String(doc.orderId), pid = String(doc.psid);
       if (lockedPsids.has(pid) || lockedOrders.has(oid)) continue; // human lockout
-      if (claimedOrders.has(oid)) continue; // order already taken by a stronger convo
+      if (claimedOrders.has(oid)) continue; // order already taken by a stronger convo (this run)
+      const outside = heldOutside.get(oid);
+      if (outside != null && outside >= (doc.certainty ?? 0)) continue; // stronger/equal absent holder keeps it
       const held = convoOrderCount.get(pid) || 0;
       const bkey = buyerKeyOf(doc);
       if (held >= 1) {
@@ -212,7 +239,6 @@ async function runConvoCorrelation({ full = false } = {}) {
       await ConvoSaleMatch.deleteMany({});
     } else {
       const keepIds = finalMatches.map((d) => d._id);
-      const windowPsids = [...new Set(convos.map((c) => c.psid).filter(Boolean))];
       for (let i = 0; i < windowPsids.length; i += 5000) {
         await ConvoSaleMatch.deleteMany({
           psid: { $in: windowPsids.slice(i, i + 5000) },
