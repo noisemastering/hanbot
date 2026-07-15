@@ -119,12 +119,20 @@ async function computeLinkAudit(match) {
  * Run the correlation. `full` rebuilds from Dec 2025 (clears the collection);
  * otherwise it's incremental over conversations active since the last run.
  */
+// A run older than this with running=true is presumed DEAD (its process was killed
+// before it could reset the flag) — otherwise one interrupted run halts ALL scheduled
+// correlation indefinitely (the lock lives in the shared DB). Exceeds a full backtrace.
+const STALE_LOCK_MS = 60 * 60 * 1000;
+
 async function runConvoCorrelation({ full = false } = {}) {
   const state = await SystemState.getState();
-  if (state.lastCorrelationRun && state.lastCorrelationRun.running) {
+  const lc = state.lastCorrelationRun || {};
+  const startedMs = lc.startedAt ? new Date(lc.startedAt).getTime() : 0;
+  if (lc.running && startedMs && Date.now() - startedMs < STALE_LOCK_MS) {
     return { skipped: true, reason: "already running" };
   }
-  state.lastCorrelationRun = { ...(state.lastCorrelationRun || {}), running: true, startedAt: new Date() };
+  if (lc.running) console.warn(`⚠️ correlation lock was stale (started ${lc.startedAt}) — taking over`);
+  state.lastCorrelationRun = { ...lc, running: true, startedAt: new Date() };
   await state.save();
 
   try {
