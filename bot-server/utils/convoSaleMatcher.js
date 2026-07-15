@@ -35,6 +35,12 @@ const NAME_NON_WORDS = new Set([
   "malla", "sombra", "rollo", "borde", "compro", "compre", "pague", "tengo", "tiene", "hacer", "dame",
   "den", "ver", "checa", "revisa", "confirma", "si", "no", "pero", "como", "cuando", "donde", "porque",
   "para", "con", "sin", "por", "es", "esta", "este", "eso", "esa",
+  // commerce / business / request terms — a customer NAME is never one of these
+  // ("ventas de mayoreo", "distribuidora", "tienda", …). None are real given/surnames.
+  "ventas", "venta", "mayoreo", "menudeo", "distribuidor", "distribuidora", "reventa", "revendedor",
+  "revender", "tienda", "negocio", "empresa", "pedido", "pedidos", "factura", "facturas", "promocion",
+  "promo", "oferta", "ofertas", "descuento", "cliente", "clienta", "comprar", "compra", "vendedor",
+  "proveedor", "sucursal", "catalogo", "producto", "productos", "cantidad", "piezas", "pieza",
 ]);
 // Does this string plausibly LOOK like a person's name? Names are 1-5 alphabetic tokens
 // and never contain the phrase/request words above. Blocks garbage extractions from being
