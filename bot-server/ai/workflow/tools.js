@@ -55,7 +55,7 @@ function dimsOf(text) {
     .replace(/(\d),(\d)/g, "$1.$2") // Mexican decimal comma "3,5" → "3.5" (else "3,5 x 3,5" misparses to 3x5)
     .replace(/(\d)\s*(?:cms?\b|cent[ií]metros?\b|m\b|mts?\b|metros?\b)/g, "$1 ")
     .replace(/\bcms?\.?\b|\bcent[ií]metros?\b|\bmts?\.?\b|\bmetros?\b|\bm\b/g, " ")
-    .replace(/\bde\s+(?:largo|ancho|alto|altura|fondo|lado)\b/g, " ") // "13 de largo x 3 de ancho" → "13 x 3"
+    .replace(/\b(?:de\s+)?(?:largo|ancho|alto|altura|fondo|lado)\b/g, " ") // "13 de largo x 3 de ancho" → "13 x 3"
     .replace(/\b(?:largo|ancho|alto|altura|fondo)\s+de\b/g, " ")      // "largo de 13 x ancho de 3"
     .replace(/(\d+)\s*(?:y\s*medi[oa]|i\s*medi[oa]|imedi[oa]|y\s*1\/2)\b/g, "$1.5") // "3 imedio"/"3 y medio" → "3.5"
     .match(/(\d+(?:\.\d+)?)\s*(?:[x×*]|por)\s*(\d+(?:\.\d+)?)/);
@@ -76,7 +76,7 @@ function stripMeasures(text) {
   return wordsToDigits(String(text).toLowerCase())
     .replace(/(\d),(\d)/g, "$1.$2") // Mexican decimal comma
     .replace(/(\d)\s*(?:cms?\b|cent[ií]metros?\b|m\b|mts?\b|metros?\b)/g, "$1 ") // "6m"/"6 metros" → "6 "
-    .replace(/\bde\s+(?:largo|ancho|alto|altura|fondo|lado)\b/g, " ")
+    .replace(/\b(?:de\s+)?(?:largo|ancho|alto|altura|fondo|lado)\b/g, " ")
     .replace(/\b(?:largo|ancho|alto|altura|fondo)\s+de\b/g, " ")
     .replace(/(\d+(?:\.\d+)?)\s*(?:[x×*]|por)\s*(\d+(?:\.\d+)?)/g, " "); // drop the W×L pair(s)
 }
