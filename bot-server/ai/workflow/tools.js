@@ -596,7 +596,8 @@ REGLAS:
 - "current": el producto pertenece al FLUJO ACTUAL (misma categoría que ya está atendiendo). ${currentIsColdStart ? "NO USES ESTE VALOR — el flujo actual es de triage." : ""}
 - "other_flow": pertenece claramente a OTRO flujo activo distinto del actual (un especialista). Pon su nombre EXACTO en targetFlow.
 - "needs_human": es malla sombra o algo que Hanlob fabrica, pero ningún flujo activo lo cubre.
-- "not_sold": algo que Hanlob NO vende (toldo, lona impermeable, geomembrana, plástico agrícola, etc.).
+- "not_sold": algo que Hanlob NO vende (toldo, lona IMPERMEABLE / a prueba de agua / para la lluvia, geomembrana, plástico agrícola, etc.).
+- SINÓNIMO "LONA": muchísimos clientes dicen "lona"/"lonas" para referirse a la MALLA SOMBRA. Con contexto de SOMBRA ("al 90%", "de sombra", "% de sombra") o una medida, "lona" ES malla sombra → clasifícala como malla sombra (NUNCA not_sold). SOLO es not_sold la "lona IMPERMEABLE / a prueba de agua / para la lluvia" o el "toldo".
 
 INTERPRETA POR MEDIDAS/PRESENTACIÓN: una medida de DOS dimensiones (ANCHO x LARGO) — "6x8", "3x3", "tres x tres", "4 por 5", "6 de ancho y 8" — es POR SÍ SOLA un producto concreto: malla sombra CONFECCIONADA → enruta (other_flow) al flujo que vende malla sombra confeccionada, AUNQUE el cliente NO escriba la palabra "malla". NUNCA marques una medida de DOS dimensiones como no_product. El borde separador y los rollos se venden por UN SOLO largo lineal; una medida de DOS lados NUNCA es borde separador. Una "malla sombra" en ROLLO o "por metro" → flujo de rollo. Nombrar "malla sombra" + una medida SÍ es nombrar un producto concreto: NUNCA lo marques como no_product.
 Responde SOLO JSON: {"verdict":"no_product|current|other_flow|needs_human|not_sold","targetFlow":"<nombre exacto del flujo o null>","productName":"<el producto que pidió o null>"}`;

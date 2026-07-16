@@ -403,6 +403,10 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
       `Ofrécele la opción estándar más cercana y/o pasar con un asesor para conseguir justo lo que pide (sin inventar precio). ` +
       `NUNCA des un "no" rotundo ("no lo manejamos", "no la podemos ofrecer") sin ofrecer una alternativa real.`
   );
+  lines.push(
+    `- "LONA" = MALLA SOMBRA: muchos clientes le dicen "lona"/"lonas" a la malla sombra. Cuando la pidan con contexto de SOMBRA ("lonas al 90% de sombra", "lona para sombra") o con una medida, AFIRMA de una vez: "¡Sí! Manejamos malla sombra al 90% de sombra…" y sigue ayudándole. ` +
+      `NUNCA arranques con una negación tipo "de lonas no las manejamos" ni corrijas la palabra que usó el cliente. SOLO aclara (con tacto) que NO es impermeable si preguntan por lluvia / a prueba de agua / lona impermeable / toldo.`
+  );
   const isSinRefuerzo = realms.some((r) => /sin\s*refuerzo/i.test(r));
   if (isSinRefuerzo) {
     lines.push(
