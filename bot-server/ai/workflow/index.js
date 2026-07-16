@@ -921,16 +921,26 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // retail → fall through to the normal per-unit quote + link.
   if (userMessage && /con Refuerzo.*Retail/i.test(workflow.name || "")) {
     try {
-      const { qtyFromText, findProductInFamilies, dimsOf } = require("./tools");
+      const { orderedQty, wantsWholesale, findProductInFamilies, dimsOf } = require("./tools");
       const { resolvePrice, trackedLink } = require("./priceResolver");
       const PF = require("../../models/ProductFamily");
       const refFams = require("../../models/Workflow").familyListOf(workflow) || [];
       const msg = String(userMessage);
+      // EXPLICIT WHOLESALE REQUEST → asesor handoff for a volume quote, NO quantity
+      // required. A human hearing "quiero precio de mayoreo" connects them to an advisor;
+      // it never loops re-asking a size the customer already gave. (Was missing entirely:
+      // wholesale only fired on a quantity threshold, so a bare "mayoreo" hit nothing.)
+      if (wantsWholesale(msg)) {
+        return beginHandoff({
+          preface: `¡Claro! Para precio de MAYOREO por volumen te paso con un asesor que te dará la mejor cotización. 🙌`,
+          reason: `Mayoreo (solicitud explícita de mayoreo)`,
+        });
+      }
       const dims = dimsOf(msg) || (extractAllMeasures(msg)[0] || null);
-      // qty via the SINGLE extractor: strips the W×L measure AND the shade % before
-      // reading a bare/worded number, so neither "6 de 3x3" nor "6x3 al 90 por ciento"
-      // leaks a dimension/shade number in as a bogus piece count → false mayoreo.
-      const qty = qtyFromText(msg);
+      // qty via orderedQty: EXPLICIT signal only (unit word / order verb + number). A
+      // bare number here is a dimension or the fixed 90% shade — never a piece count. So
+      // "6x3 al 90 por ciento" → null (no mayoreo); "quiero 90 piezas" → 90 (mayoreo).
+      const qty = orderedQty(msg);
       if (qty && qty >= 2 && dims && refFams.length) {
         const leaf = await findProductInFamilies(msg, refFams, dims);
         if (leaf) {
@@ -1103,10 +1113,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             const named = [...new Set((msgC.match(new RegExp(COLORW.source, "g")) || []).map((c) => c.replace("negra", "negro").replace(/blanc[oa]/, "blanco").replace(/caf[e]/, "cafe").replace(/marr[o]n/, "marron")))];
             const namedHave = named.filter((c) => lineByColor.has(c));
             const namedMissing = named.filter((c) => !lineByColor.has(c));
-            // Quantity named this turn ("quiero 3 beige"), via the SINGLE extractor so a
-            // shade % ("al 90 por ciento") can never leak in as a piece count → false
-            // mayoreo (the recurring bug — this site used to match a raw bare number).
-            const qtyC = require("./tools").qtyFromText(msgC);
+            // Quantity named this turn ("quiero 3 beige") — EXPLICIT signal only (unit
+            // word / order verb + number). A bare number is a dimension or the fixed 90%
+            // shade, never a piece count, so "al 90 por ciento" can't trip false mayoreo.
+            const qtyC = require("./tools").orderedQty(msgC);
             const wholesaleThresholdFor = async (leafId) => {
               let wmq = null, c = await PF.findById(leafId).select("wholesaleMinQty parentId").lean().catch(() => null), i = 0;
               while (c && i++ < 8) {

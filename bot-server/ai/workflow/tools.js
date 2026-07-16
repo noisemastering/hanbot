@@ -101,6 +101,30 @@ function qtyFromText(text) {
   return word ? _QTY_WORDS[word[1]] : null;
 }
 
+// EXPLICIT order quantity ONLY — for UNPROMPTED mayoreo detection. In the manufactured
+// realm a bare number is a DIMENSION or the FIXED 90% shade, never a piece count; so we
+// only accept a count that carries an explicit signal: a unit word ("15 rollos", "3
+// piezas") or an order verb + number ("quiero 20", "necesito 15"). "6x6 al 90 por
+// ciento" → null. This is what stops the whack-a-mole: the gate never grabs a naked
+// number, so no dimension/shade phrasing can ever masquerade as a quantity.
+function orderedQty(text) {
+  const explicit = parseRollQuantity(text); // "N rollos/piezas/unidades"
+  if (explicit != null) return explicit;
+  const s = stripMeasures(text); // measure + shade removed; words → digits
+  const m = s.match(/\b(?:quiero|quisiera|necesito|ocupo|dame|d[aá]me|me\s+das|compro|comprar|llevo|llevar[ií]a?|me\s+gustar[ií]a|quisiéramos)\s+(\d{1,3})\b/);
+  return m ? parseInt(m[1], 10) : null;
+}
+
+// Explicit WHOLESALE request (intent), independent of any quantity. A human hearing
+// this connects the customer to an asesor for a volume quote — it does NOT loop asking
+// for a size already given. Negative-context guarded so "al menudeo"/"solo una" don't
+// trip it.
+function wantsWholesale(text) {
+  const s = String(text || "").toLowerCase();
+  if (/\bmenudeo\b|al\s+detalle|solo\s+una|nada\s+m[aá]s\s+una|nom[aá]s\s+una/.test(s)) return false;
+  return /\b(mayoreo|al\s+por\s+mayor|por\s+volumen|medio\s+mayoreo|revendedor|revender|reventa|distribuidora?)\b/.test(s);
+}
+
 // ── TRIANGLE HARD RULE ──────────────────────────────────────────────────────
 // A triangular net has THREE sides (attributes side1/side2/side3, no "width").
 // BUSINESS RULE (hard as steel): NEVER offer, suggest, quote, or even surface a
@@ -1137,4 +1161,4 @@ function parseRollQuantity(text) {
   return null;
 }
 
-module.exports = { REGISTRY, toolDefsFor, runTool, dimsOf, stripMeasures, findProductInFamilies, availableVariantsForProduct, availableMeasuresForFamilies, closestAvailableMeasure, nearestRollByArea, parseRollQuantity, qtyFromText, productShade, availableShadesForMeasure };
+module.exports = { REGISTRY, toolDefsFor, runTool, dimsOf, stripMeasures, findProductInFamilies, availableVariantsForProduct, availableMeasuresForFamilies, closestAvailableMeasure, nearestRollByArea, parseRollQuantity, qtyFromText, orderedQty, wantsWholesale, productShade, availableShadesForMeasure };

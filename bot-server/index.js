@@ -2016,6 +2016,19 @@ app.post("/webhook", async (req, res) => {
           }
         }
 
+        // Dedup Facebook's duplicate webhook redeliveries (same message id). The
+        // WhatsApp path already does this; Messenger didn't — so a redelivered message
+        // was reprocessed and produced the duplicate/contradictory replies (one message
+        // answered 2–3 times). Skip if we've already stored this exact message id.
+        if (messageId) {
+          const dup = await Message.findOne({ messageId }).select("_id").lean().catch(() => null);
+          if (dup) {
+            console.log(`⚠️ Duplicate Messenger message ${messageId}, skipping`);
+            res.sendStatus(200);
+            return;
+          }
+        }
+
         await registerUserIfNeeded(senderPsid);
         await saveMessage(senderPsid, messageText, "user", messageId);
 
