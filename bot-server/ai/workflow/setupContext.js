@@ -477,6 +477,7 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
         `${prodPath || prod.name}${priceTxt(pi)}. Es la opción por DEFECTO. ` +
         `El cliente YA viene de un anuncio de ESTA medida, así que es el punto de partida: si muestra interés en comprar o pide precio/info SIN especificar otra medida ` +
         `(p. ej. "quiero una", "me interesa", "cuánto cuesta", "la quiero", "comprar", "sí"), NO le preguntes qué medida necesita — asume ESTA medida y cotízala directamente con su precio y link. ` +
+        `PERO un SALUDO a secas o charla SIN señal de compra ni medida ("buenas tardes", "hola", "buenos días", "qué tal", "buenas") NO es interés de compra: contesta como humano con un saludo cálido y breve e invítalo a decirte qué busca (puedes mencionar en UNA línea, sin precio, que hay una promoción) — NO sueltes el precio ni el link todavía; eso es SOLO cuando pida precio/info o muestre interés. ` +
         `PERO ADÁPTATE: si el cliente menciona CUALQUIER otra medida (p. ej. 5x6, 3x2, 8x10), cotiza ESA medida — NUNCA le impongas la medida destacada ni cambies la que pidió. ` +
         `Responde con normalidad sus preguntas y detalles del producto (% de sombra, refuerzo, colores, envío, etc.); no escales por dudas que puedes responder.`
     ));
