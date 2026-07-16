@@ -75,10 +75,30 @@ function stripMeasures(text) {
   if (!text) return "";
   return wordsToDigits(String(text).toLowerCase())
     .replace(/(\d),(\d)/g, "$1.$2") // Mexican decimal comma
+    .replace(/(\d{2,3})\s*(?:%|por\s*ciento|porciento)/g, " ") // shade % ("90%", "90 por ciento") is a SHADE spec, never a quantity — strip it like a measure so its number can't leak in as a bogus piece count
     .replace(/(\d)\s*(?:cms?\b|cent[ií]metros?\b|m\b|mts?\b|metros?\b)/g, "$1 ") // "6m"/"6 metros" → "6 "
     .replace(/\b(?:de\s+)?(?:largo|ancho|alto|altura|fondo|lado)\b/g, " ")
     .replace(/\b(?:largo|ancho|alto|altura|fondo)\s+de\b/g, " ")
     .replace(/(\d+(?:\.\d+)?)\s*(?:[x×*]|por)\s*(\d+(?:\.\d+)?)/g, " "); // drop the W×L pair(s)
+}
+
+// THE single quantity extractor. Returns the piece/unit count in a message, or null.
+// Every mayoreo/retail-qty decision MUST go through this — do NOT re-roll an inline
+// `msg.match(/\d/)`, which is exactly how the "N piezas" false-mayoreo bug kept
+// resurfacing (it was patched at one call site while four others matched raw numbers).
+// Order of trust: (1) an EXPLICIT unit count ("15 rollos", "3 piezas"); else (2) a
+// bare/worded number that SURVIVES stripMeasures — i.e. after both the W×L measure AND
+// the shade % ("6 por 3 al 90 por ciento") are removed, so neither can leak in as qty.
+const _QTY_WORDS = { un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10 };
+function qtyFromText(text) {
+  if (!text) return null;
+  const explicit = parseRollQuantity(text);
+  if (explicit != null) return explicit;
+  const stripped = stripMeasures(text); // measures + shade gone; words already → digits
+  const bare = stripped.match(/\b(\d{1,3})\b/);
+  if (bare) return parseInt(bare[1], 10);
+  const word = stripped.match(/\b(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\b/);
+  return word ? _QTY_WORDS[word[1]] : null;
 }
 
 // ── TRIANGLE HARD RULE ──────────────────────────────────────────────────────
@@ -1117,4 +1137,4 @@ function parseRollQuantity(text) {
   return null;
 }
 
-module.exports = { REGISTRY, toolDefsFor, runTool, dimsOf, stripMeasures, findProductInFamilies, availableVariantsForProduct, availableMeasuresForFamilies, closestAvailableMeasure, nearestRollByArea, parseRollQuantity, productShade, availableShadesForMeasure };
+module.exports = { REGISTRY, toolDefsFor, runTool, dimsOf, stripMeasures, findProductInFamilies, availableVariantsForProduct, availableMeasuresForFamilies, closestAvailableMeasure, nearestRollByArea, parseRollQuantity, qtyFromText, productShade, availableShadesForMeasure };

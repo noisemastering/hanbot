@@ -921,20 +921,16 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // retail → fall through to the normal per-unit quote + link.
   if (userMessage && /con Refuerzo.*Retail/i.test(workflow.name || "")) {
     try {
-      const { parseRollQuantity, findProductInFamilies, dimsOf, stripMeasures } = require("./tools");
+      const { qtyFromText, findProductInFamilies, dimsOf } = require("./tools");
       const { resolvePrice, trackedLink } = require("./priceResolver");
       const PF = require("../../models/ProductFamily");
       const refFams = require("../../models/Workflow").familyListOf(workflow) || [];
       const msg = String(userMessage);
       const dims = dimsOf(msg) || (extractAllMeasures(msg)[0] || null);
-      // qty: a unit word ("3 piezas"), or a bare/worded number AFTER stripping the W×L
-      // measure (so "6 de 3x3" reads qty 6, not the 3 from the size). stripMeasures also
-      // strips VERBOSE measures ("6 metros por 6m"), so the dimension's own numbers can
-      // never leak in as a bogus quantity. parseRollQuantity alone misses bare numbers.
-      const _QW = { un:1,uno:1,una:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9,diez:10 };
-      const msgND = stripMeasures(msg);
-      const _bN = msgND.match(/\b(\d{1,3})\b/), _wN = msgND.match(/\b(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\b/);
-      const qty = parseRollQuantity(msg) || (_bN ? parseInt(_bN[1], 10) : (_wN ? _QW[_wN[1]] : null));
+      // qty via the SINGLE extractor: strips the W×L measure AND the shade % before
+      // reading a bare/worded number, so neither "6 de 3x3" nor "6x3 al 90 por ciento"
+      // leaks a dimension/shade number in as a bogus piece count → false mayoreo.
+      const qty = qtyFromText(msg);
       if (qty && qty >= 2 && dims && refFams.length) {
         const leaf = await findProductInFamilies(msg, refFams, dims);
         if (leaf) {
@@ -1107,13 +1103,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             const named = [...new Set((msgC.match(new RegExp(COLORW.source, "g")) || []).map((c) => c.replace("negra", "negro").replace(/blanc[oa]/, "blanco").replace(/caf[e]/, "cafe").replace(/marr[o]n/, "marron")))];
             const namedHave = named.filter((c) => lineByColor.has(c));
             const namedMissing = named.filter((c) => !lineByColor.has(c));
-            // Quantity named this turn ("quiero 3 beige"). parseRollQuantity misses a
-            // bare number without a unit word, so also accept a lone digit / worded
-            // number — safe here because a W×L measure was excluded above (hasDims).
-            const _QW = { un:1,uno:1,una:1,dos:2,tres:3,cuatro:4,cinco:5,seis:6,siete:7,ocho:8,nueve:9,diez:10 };
-            const _bareN = msgC.match(/\b(\d{1,3})\b/);
-            const _wordN = msgC.match(/\b(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\b/);
-            const qtyC = _bareN ? parseInt(_bareN[1], 10) : (_wordN ? _QW[_wordN[1]] : null);
+            // Quantity named this turn ("quiero 3 beige"), via the SINGLE extractor so a
+            // shade % ("al 90 por ciento") can never leak in as a piece count → false
+            // mayoreo (the recurring bug — this site used to match a raw bare number).
+            const qtyC = require("./tools").qtyFromText(msgC);
             const wholesaleThresholdFor = async (leafId) => {
               let wmq = null, c = await PF.findById(leafId).select("wholesaleMinQty parentId").lean().catch(() => null), i = 0;
               while (c && i++ < 8) {
