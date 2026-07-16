@@ -983,7 +983,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   if (userMessage && state.pendingZipAsk) {
     const haveZip = !!(state.location && (state.location.zip || state.location.zipcode));
     const msgHasZip = /\b\d{5}\b/.test(String(userMessage));
-    const isNewRequest = /\b(colores?|verde|negro|negra|beige|blanc|gris|precio|cu[aá]nto|medida|link|enlace|comprar|otra|otro)\b/i.test(String(userMessage)) || /\d+\s*[x×*]\s*\d+/.test(String(userMessage));
+    const isNewRequest = /\b(colores?|verde|negro|negra|beige|blanc|gris|precio|cu[aá]nto|medida|link|enlace|comprar|otra|otro)\b/i.test(String(userMessage)) || !!require("./tools").dimsOf(String(userMessage)); // dimsOf → verbose "6 por 3" counts as a fresh request too, not just compact "6x3"
     state.pendingZipAsk = false; // one-shot regardless
     if (!haveZip && !msgHasZip && !isNewRequest) {
       const reply = "¡Con gusto! ¿Me compartes tu código postal? Es solo para fines estadísticos. 🙏";
@@ -1085,7 +1085,12 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       const msgC = String(userMessage).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
       const COLORW = /\b(beige|negro|negra|verde|blanc[oa]|gris|azul|rojo|caf[e]|marr[o]n|terracota|vino)\b/;
       const asksColor = /\bcolor(es)?\b/.test(msgC) || /de\s+qu[e]\s+color/.test(msgC) || /otro\s+color/.test(msgC) || COLORW.test(msgC);
-      const hasDims = /\d+(?:\.\d+)?\s*[x×*]\s*\d+/.test(msgC); // a fresh W×L is handled by the measure path (it resolves colors too)
+      // A fresh measure this turn must go to the MEASURE path (it resolves the right
+      // product AND its colors) — NOT get swallowed here and answered for the stale
+      // anchor. dimsOf catches the VERBOSE form too ("6 por 3", "6 metros por 3"); the
+      // old compact-only /\d+x\d+/ missed "6 por 3" → it silently swapped 6x3 for the
+      // previous 6x4 anchor. (Reported: "6 por 3" answered as "la 6x4m".)
+      const hasDims = !!require("./tools").dimsOf(msgC);
       if (asksColor && !hasDims) {
         const PF = require("../../models/ProductFamily");
         const { availableVariantsForProduct } = require("./tools");
