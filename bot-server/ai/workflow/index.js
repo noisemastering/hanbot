@@ -338,6 +338,35 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     }
   }
 
+  // BARE GREETING → a plain human greeting, NEVER a promo pitch. The model kept
+  // dumping the promo (measure + price) on "buenas tardes" no matter how the prompt was
+  // worded, because the promo context outweighs a soft instruction. A greeting is not a
+  // buying signal, so handle it deterministically here — the classic "Hola, soy X, ¿en
+  // qué te puedo ayudar?" — before the model ever sees it. Only fires when the message
+  // is NOTHING but a greeting (a greeting + product/measure falls through to the flow).
+  if (userMessage) {
+    const _g = String(userMessage).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
+      .replace(/[!¡?¿.,]+/g, " ").replace(/\s+/g, " ").trim();
+    if (/^(hola+|holi|ola|buenas|buen[oa]s?( (dias|tardes|noches))?|buen dia|que tal|que onda|que hubo|saludos|hey|hello)$/.test(_g)) {
+      const greeted = Array.isArray(history) && history.some((h) => h.role === "assistant");
+      const nm = opts.personaName;
+      const reply = greeted
+        ? `¡Hola de nuevo! 😊 ¿En qué te puedo ayudar?`
+        : (nm ? `¡Hola! Soy ${nm} de Hanlob 😊 ¿En qué te puedo ayudar?` : `¡Hola! Gracias por escribir a Hanlob 😊 ¿En qué te puedo ayudar?`);
+      history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+      return {
+        reply,
+        state: { ...state, history, nodeId: currentNode.id },
+        diagnostics: {
+          workflow: { id: String(workflow._id), name: workflow.name },
+          fromNode: { id: currentNode.id, name: currentNode.name },
+          toNode: { id: currentNode.id, name: currentNode.name },
+          greeting: true,
+        },
+      };
+    }
+  }
+
   // Collect-before-handoff for the DETERMINISTIC early-return paths (steps 1.x)
   // that run BEFORE the post-node handoff gate. Mirrors that gate: if we already
   // have a reachable contact, complete the handoff now; otherwise ask for name +
