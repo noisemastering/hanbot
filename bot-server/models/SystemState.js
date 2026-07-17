@@ -52,6 +52,23 @@ const systemStateSchema = new mongoose.Schema(
     // the weakest, so raising/lowering this never loses data (weak matches are kept
     // for future use and simply hidden from the reports below the floor).
     salesReportingFloorPct: { type: Number, default: 10 },
+    // Global dashboard banner (Spec Ops). When engaged, a warning banner is shown
+    // across the WHOLE dashboard to every logged-in user. Toggled by super_admin.
+    banner: {
+      type: new mongoose.Schema(
+        {
+          engaged: { type: Boolean, default: false },
+          message: {
+            type: String,
+            default: "El uso de OpenAI se está agotando, es necesario liberar el sistema para continuar operando",
+          },
+          at: { type: Date, default: null },
+          by: { type: String, default: null },
+        },
+        { _id: false }
+      ),
+      default: () => ({}),
+    },
   },
   { timestamps: true }
 );

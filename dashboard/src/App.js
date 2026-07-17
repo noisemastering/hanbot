@@ -88,6 +88,7 @@ import ReportedConversationsView from "./pages/ReportedConversationsView";
 import KillswitchView from "./pages/KillswitchView";
 import NukeEmView from "./pages/NukeEmView";
 import LiberadoView from "./pages/LiberadoView";
+import BannerView from "./pages/BannerView";
 import MaintenanceGate from "./components/MaintenanceGate";
 import SalesOverviewView from "./pages/SalesOverviewView";
 import MessagePerformanceView from "./pages/MessagePerformanceView";
@@ -590,6 +591,14 @@ const menuItems = [
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
         )
+      },
+      {
+        id: "banner",
+        labelKey: "menu.banner",
+        path: "/spec-ops/banner",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 6h18M3 14h18M3 18h18" />
+        )
       }
     ]
   },
@@ -614,7 +623,7 @@ const menuItems = [
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, loading: authLoading, canAccess, canManageUsers, getLandingPage, logout, simulationMode, stopSimulation, liberado } = useAuth();
+  const { user, loading: authLoading, canAccess, canManageUsers, getLandingPage, logout, simulationMode, stopSimulation, liberado, banner } = useAuth();
   const { t, locale, language, changeLanguage } = useTranslation();
   const updateAvailable = useNewVersionCheck();
 
@@ -1805,6 +1814,14 @@ function App() {
           },
         }}
       />
+      {/* Global Spec Ops banner — shown across the whole dashboard for everyone when
+          a super_admin turns it on. */}
+      {banner?.engaged && banner?.message && (
+        <div className="fixed top-0 inset-x-0 z-[110] flex items-center justify-center gap-2 bg-amber-500 text-black text-sm font-semibold py-2 px-4 shadow-lg text-center">
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 00-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" /></svg>
+          <span>{banner.message}</span>
+        </div>
+      )}
       {/* New version banner */}
       {updateAvailable && (
         <div className="fixed top-0 inset-x-0 z-[100] flex items-center justify-center gap-3 bg-blue-600 text-white text-sm py-2 px-4 shadow-lg">
@@ -2558,6 +2575,7 @@ function App() {
           <Route path="/spec-ops/killswitch" element={effectiveRole === 'super_admin' ? <KillswitchView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/spec-ops/nuke" element={effectiveRole === 'super_admin' ? <NukeEmView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/spec-ops/liberado" element={effectiveRole === 'super_admin' ? <LiberadoView /> : <Navigate to={getLandingPage()} replace />} />
+          <Route path="/spec-ops/banner" element={effectiveRole === 'super_admin' ? <BannerView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/help" element={<HelpView />} />
         </Routes>
 

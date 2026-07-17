@@ -15,6 +15,8 @@ export const AuthProvider = ({ children }) => {
   // Liberado release gate (Spec Ops). false = restricted (gated features are
   // super_admin-only). Defaults restricted until the status is read.
   const [liberado, setLiberado] = useState(false);
+  // Global dashboard banner (Spec Ops). { engaged, message } or null.
+  const [banner, setBanner] = useState(null);
   const refreshLiberado = async () => {
     try {
       const t = localStorage.getItem('token');
@@ -24,11 +26,19 @@ export const AuthProvider = ({ children }) => {
         headers: { Authorization: `Bearer ${t}` },
       });
       const data = await res.json();
-      if (data && data.success) setLiberado(!!data.liberado?.engaged);
+      if (data && data.success) {
+        setLiberado(!!data.liberado?.engaged);
+        setBanner(data.banner || null);
+      }
     } catch (_) { /* keep restricted on error */ }
   };
   useEffect(() => {
-    if (user) refreshLiberado();
+    if (!user) return;
+    refreshLiberado();
+    // Poll so the banner appears/disappears across every open dashboard within ~30s
+    // of a super_admin toggling it — no reload needed.
+    const id = setInterval(refreshLiberado, 30000);
+    return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
@@ -234,7 +244,10 @@ export const AuthProvider = ({ children }) => {
     isSimulating,
     // Liberado release gate
     liberado,
-    refreshLiberado
+    refreshLiberado,
+    // Global dashboard banner
+    banner,
+    refreshBanner: refreshLiberado
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

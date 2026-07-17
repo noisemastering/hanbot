@@ -46,10 +46,13 @@ const requireSuperAdmin = (req, res, next) => {
 
 router.use(authenticate);
 
+const DEFAULT_BANNER = "El uso de OpenAI se está agotando, es necesario liberar el sistema para continuar operando";
+
 const shape = (s) => ({
   killswitch: { engaged: !!s.killswitch?.engaged, at: s.killswitch?.at || null, by: s.killswitch?.by || null },
   nuke: { engaged: !!s.nuke?.engaged, at: s.nuke?.at || null, by: s.nuke?.by || null },
   liberado: { engaged: !!s.liberado?.engaged, at: s.liberado?.at || null, by: s.liberado?.by || null },
+  banner: { engaged: !!s.banner?.engaged, message: s.banner?.message || DEFAULT_BANNER, at: s.banner?.at || null, by: s.banner?.by || null },
 });
 
 // Status — any authenticated user (drives the maintenance modal).
@@ -116,6 +119,30 @@ router.post("/liberado", requireSuperAdmin, async (req, res) => {
     res.json({ success: true, ...shape(s) });
   } catch (e) {
     res.status(500).json({ success: false, error: "No se pudo cambiar Liberado" });
+  }
+});
+
+// Global dashboard banner — super_admin. Body: { engage: boolean, message?: string }.
+// engage=true → the warning banner shows across the whole dashboard for everyone.
+router.post("/banner", requireSuperAdmin, async (req, res) => {
+  try {
+    const engage = !!req.body.engage;
+    const s = await SystemState.getState();
+    const msg = typeof req.body.message === "string" && req.body.message.trim()
+      ? req.body.message.trim()
+      : (s.banner?.message || DEFAULT_BANNER);
+    s.banner = {
+      engaged: engage,
+      message: msg,
+      at: engage ? new Date() : (s.banner?.at || null),
+      by: engage ? (req.user.username || req.user.email || "super_admin") : (s.banner?.by || null),
+    };
+    await s.save();
+    invalidate();
+    console.warn(`📣 [SpecOps] Banner ${engage ? "ON" : "off"} by ${req.user.username || req.user.email}`);
+    res.json({ success: true, ...shape(s) });
+  } catch (e) {
+    res.status(500).json({ success: false, error: "No se pudo cambiar el banner" });
   }
 });
 

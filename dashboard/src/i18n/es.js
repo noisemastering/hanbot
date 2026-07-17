@@ -68,6 +68,7 @@ const es = {
   "menu.killswitch": "Killswitch",
   "menu.nukeEm": "Nuke'em",
   "menu.liberado": "Liberado",
+  "menu.banner": "Banner",
   "menu.help": "Ayuda",
 
   // ── Common ───────────────────────────────────────────────
