@@ -1096,6 +1096,36 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     }
   }
 
+  // 1.0855 REFORZADA UNAVAILABLE COLOR — confeccionada reforzada is beige / negro /
+  // verde. If the customer names a color we DON'T carry (gris, azul, rojo…), say so and
+  // offer the real colors — NEVER silently substitute beige (reported: "6x6 color gris"
+  // got answered with a beige quote, ignoring gris).
+  if (userMessage && /con Refuerzo.*Retail/i.test(workflow.name || "")) {
+    try {
+      const msgU = String(userMessage).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      const named = [...new Set((msgU.match(/\b(gris|azul|rojo|roja|morad[oa]|turquesa|celeste|dorad[oa]|platead[oa]|terracota|marr[o]n|caf[e])\b/g) || []))];
+      if (named.length) {
+        const { dimsOf } = require("./tools");
+        const d = dimsOf(msgU);
+        const nice = named.map((c) => c.replace(/roja$/, "rojo").replace(/morada$/, "morado").replace(/dorada$/, "dorado").replace(/plateada$/, "plateado")).join(" ni ");
+        const reply = `En ${nice} no la manejamos 🙏. La malla sombra confeccionada${d ? ` de ${d[0]}x${d[1]}` : ""} la tenemos en beige, negro y verde. ¿Cuál de esos te acomoda?`;
+        history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+        return {
+          reply,
+          state: { ...state, history, nodeId: currentNode.id },
+          diagnostics: {
+            workflow: { id: String(workflow._id), name: workflow.name },
+            fromNode: { id: currentNode.id, name: currentNode.name },
+            toNode: { id: currentNode.id, name: currentNode.name },
+            unavailableColor: named,
+          },
+        };
+      }
+    } catch (err) {
+      console.error("⚠️ reforzada unavailable-color handler failed:", err.message);
+    }
+  }
+
   // 1.086 SIN-REFUERZO COLOR — sin refuerzo (con argollas) is BEIGE ONLY. A non-beige
   // color request must be answered IN-FLOW (don't route to handoff): quote stays
   // beige and we point to reforzada for other colors. Deterministic so a routing
