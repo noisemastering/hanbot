@@ -896,6 +896,33 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: leaf.name, productId: String(leaf._id) });
         return retB(`¡Perfecto! El rollo de ${len} m está en $${pi.amount}.` + (link ? ` Aquí lo compras: ${link}` : ""), { bordeQuoted: len });
       };
+      // 0) WIDTH/HEIGHT question. The borde separador is a FIXED 13 cm de alto (× the
+      // length you pick) — it is NOT sold by width. The bot used to dodge this and keep
+      // pushing the largo (reported: customer asked "cuánto mide de ancho" 3× and never
+      // got 13 cm). Answer it FIRST, then continue: if they named a single length, quote
+      // that roll; otherwise ask the largo. NOTE: "grueso/delgado" is the VARIANT, not a
+      // width question — don't trip on it (we match alto/altura/ancho/grosor, not grueso).
+      const asksBordeWidth = /\b(alto|altura|ancho|anchura|grosor|espesor)\b/i.test(msgB) || /qu[eé]\s+tan\s+(ancho|alto)/i.test(msgB);
+      if (asksBordeWidth) {
+        const width = "El borde separador mide 13 cm de alto (el largo lo eliges tú).";
+        const noWxL0 = !/\d+\s*[x×*]\s*\d+/.test(msgB);
+        const nums0 = [...new Set((msgB.replace(/\d+\s*[x×*]\s*\d+/g, " ").match(/\b\d{1,3}\b/g)) || [])];
+        if (noWxL0 && nums0.length === 1) {
+          const len = nums0[0];
+          const leaf = await findProductInFamilies(msgB, bordeFams, null).catch(() => null);
+          const ed = leaf && leaf.enabledDimensions;
+          const exactLen = leaf && new RegExp(`\\b${len}\\b`).test(`${leaf.name || ""} ${leaf.size || ""}`);
+          if (leaf && exactLen && Array.isArray(ed) && ed.length && !ed.includes("width")) {
+            const pi = await resolvePrice(leaf).catch(() => null);
+            if (pi && pi.amount) {
+              state.activeProductId = String(leaf._id);
+              state.awaitingBordeQty = { productId: String(leaf._id), length: len };
+              return retB(`${width} El rollo de ${len} m está en $${pi.amount}. ¿Cuántos rollos necesitas? 😊`, { bordeWidthAnswered: true, bordeAskQty: len });
+            }
+          }
+        }
+        return retB(`${width} Lo manejo en rollos de 6, 9, 18 y 54 m. ¿Qué largo necesitas? 😊`, { bordeWidthAnswered: true, bordeAskLength: true });
+      }
       // A) awaiting quantity from last turn (we asked "¿cuántos?")
       if (state.awaitingBordeQty) {
         const rec = state.awaitingBordeQty; state.awaitingBordeQty = null;
