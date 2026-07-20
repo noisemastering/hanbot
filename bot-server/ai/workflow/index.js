@@ -937,6 +937,20 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // non-exact lengths like 57 (the closest-size path handles those).
       const hasWxL = /\d+\s*[x×*]\s*\d+/.test(msgB);
       const allNums = [...new Set((msgB.replace(/\d+\s*[x×*]\s*\d+/g, " ").match(/\b\d{1,3}\b/g)) || [])];
+      // A2) We ALREADY quoted borde length(s) and the reply brings NO new length (a CP
+      // like "20900", a "sí claro", a "gracias"): NEVER re-ask the largo — that's the
+      // recurring bug. A real quantity closes it (2+ = mayoreo); otherwise nudge toward
+      // quantity, restating what we already sent — never re-asking which length.
+      const BORDE_LENS = ["6", "9", "18", "54"];
+      if (state.bordeQuoted && state.bordeQuoted.length && !hasWxL) {
+        const hasNewLen = allNums.some((n) => BORDE_LENS.includes(n) && !state.bordeQuoted.includes(n));
+        if (!hasNewLen) {
+          const q = parseQty();
+          if (q != null && q >= 2) { state.bordeQuoted = null; return mayoreo(q); }
+          return retB(`¡Gracias! Ya te compartí los rollos de ${state.bordeQuoted.map((l) => l + " m").join(" y ")} con sus links. ¿Cuántos necesitas para cerrar tu pedido? 😊`, { bordeQuotedNudge: state.bordeQuoted });
+        }
+        state.bordeQuoted = null; // a genuinely NEW length → fall through to resolve it
+      }
       if (!hasWxL && allNums.length === 1 && !state.awaitingBordeQty) {
         const len = allNums[0];
         // Resolve on the FULL message so "grueso/delgado" is respected (not just the length).
@@ -955,11 +969,36 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           }
         }
       }
+      // B2) TWO+ exact borde lengths at once ("18 y 54 metros") → quote EACH here and
+      // REMEMBER them (state.bordeQuoted), so the next turn (a CP, a "sí") is handled by
+      // A2 above instead of the model re-asking the largo. Was NOT handled deterministically
+      // before — the model quoted them then lost track (the reported recurring bug).
+      if (!hasWxL && allNums.length >= 2 && !state.awaitingBordeQty && !state.bordeQuoted) {
+        const variant = /delgad/i.test(msgB) ? "delgado" : "grueso";
+        const rows = []; const quoted = [];
+        for (const len of allNums) {
+          const leaf = await findProductInFamilies(`${len} m ${variant}`, bordeFams, null).catch(() => null);
+          const ed = leaf && leaf.enabledDimensions;
+          const exactLen = leaf && new RegExp(`\\b${len}\\b`).test(`${leaf.name || ""} ${leaf.size || ""}`);
+          if (leaf && exactLen && Array.isArray(ed) && ed.length && !ed.includes("width")) {
+            const pi = await resolvePrice(leaf).catch(() => null);
+            if (pi && pi.amount) {
+              const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: leaf.name, productId: String(leaf._id) });
+              rows.push(`• ${len} m: $${pi.amount}${link ? ` → ${link}` : ""}`);
+              quoted.push(String(len));
+            }
+          }
+        }
+        if (quoted.length >= 2) {
+          state.bordeQuoted = quoted;
+          return retB(`¡Claro! Te comparto las opciones:\n${rows.join("\n")}\n¿Cuántos rollos necesitas? 😊`, { bordeMultiQuoted: quoted });
+        }
+      }
       // C) borde price/product inquiry with NO length yet → deterministically ASK the
       // length (6/9/18/54 m) instead of letting the model escalate to an asesor. The
       // model, under some setups (wholesale/manual), hands off on a bare "precio del
       // borde"; the human rule is: ask the length first, always.
-      if (!hasWxL && allNums.length === 0 && !state.awaitingBordeQty) {
+      if (!hasWxL && allNums.length === 0 && !state.awaitingBordeQty && !state.bordeQuoted) {
         const wantsBorde = /(precio|cuánto|cuanto|cotiz|cost|vale|borde|separador|rollo|metr|largo)/i.test(msgB);
         if (wantsBorde) {
           return retB(`¡Claro! Manejo el borde separador en rollos de 6, 9, 18 y 54 m. ¿Qué largo necesitas? 😊`, { bordeAskLength: true });
