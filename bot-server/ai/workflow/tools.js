@@ -596,6 +596,7 @@ REGLAS:
 - "current": el producto pertenece al FLUJO ACTUAL (misma categoría que ya está atendiendo). ${currentIsColdStart ? "NO USES ESTE VALOR — el flujo actual es de triage." : ""}
 - "other_flow": pertenece claramente a OTRO flujo activo distinto del actual (un especialista). Pon su nombre EXACTO en targetFlow.
 - "needs_human": es malla sombra o algo que Hanlob fabrica, pero ningún flujo activo lo cubre.
+- MONOFILAMENTO ⇒ needs_human: la malla sombra de MONOFILAMENTO es un producto DISTINTO de la Raschel; los flujos activos venden RASCHEL, no monofilamento. Si el cliente pide EXPLÍCITAMENTE "monofilamento" (aunque dé una medida de rollo como 4.2x100 que también exista en Raschel), devuelve needs_human — la fabricamos pero NO hay flujo activo que la atienda; NUNCA la enrutes (other_flow) al flujo de Rollo/Raschel como si fuera lo mismo.
 - "not_sold": algo que Hanlob NO vende (toldo, lona IMPERMEABLE / a prueba de agua / para la lluvia, geomembrana, plástico agrícola, etc.).
 - SINÓNIMO "LONA": muchísimos clientes dicen "lona"/"lonas" para referirse a la MALLA SOMBRA. Con contexto de SOMBRA ("al 90%", "de sombra", "% de sombra") o una medida, "lona" ES malla sombra → clasifícala como malla sombra (NUNCA not_sold). SOLO es not_sold la "lona IMPERMEABLE / a prueba de agua / para la lluvia" o el "toldo".
 

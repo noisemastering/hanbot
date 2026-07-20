@@ -1440,6 +1440,18 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // the confeccionada-vs-rollo split (a 100 m measure only exists in the rollo
   // flow's realm) with no length heuristic.
   let skipLLMSwitch = false;
+  // NO-ACTIVE-FLOW PRODUCT → HUMAN. Malla MONOFILAMENTO is a distinct product from the
+  // Raschel we sell and has no active flow. It must hand off to a human — NEVER be
+  // substituted with Raschel. This runs BEFORE the measure router, which would otherwise
+  // route a roll measure (4.2x100) straight into the Raschel Rollo flow (reported bug).
+  // Skip pure comparison questions ("¿diferencia entre raschel y monofilamento?").
+  if (userMessage && /\bmonofilament/i.test(userMessage) &&
+      !/diferencia|versus|\bvs\b|comparar|comparaci[oó]n|cu[aá]l es mejor/i.test(userMessage)) {
+    return beginHandoff({
+      preface: `¡Claro! La malla de monofilamento te la cotiza mejor uno de nuestros asesores; te paso con uno para ayudarte. 🙌`,
+      reason: `Malla monofilamento (sin flujo activo) — requiere asesor`,
+    });
+  }
   // The sin-refuerzo flow self-manages measures (sin sizes → quote; missing sizes
   // → MENTION reforzada + link, never switch), so the measure router is skipped
   // while inside it.
@@ -1507,6 +1519,15 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   if (userMessage && !skipLLMSwitch && (opts._switchDepth || 0) < 2 && !opts.sandboxNoAutoSwitch) {
     try {
       const det = await detectFlowSwitch(String(userMessage), familyList, workflow);
+      if (det && det.needsHuman) {
+        // Product we make but no active flow serves it (e.g. monofilamento) → hand off
+        // to a human. NEVER substitute a lookalike active product (Raschel) as if it
+        // were what they asked for.
+        return beginHandoff({
+          preface: `¡Claro! Ese producto te lo cotiza mejor uno de nuestros asesores; te paso con uno para ayudarte. 🙌`,
+          reason: det.reason || `Producto sin flujo activo — requiere asesor`,
+        });
+      }
       if (det && det.toWorkflowId) {
         const handover = await performSwitch(det, {
           history,
@@ -2351,6 +2372,12 @@ async function detectFlowSwitch(message, familyList, currentWorkflow) {
   const sr = probe.scopeResult;
   if (sr && sr.verdict === "other_flow" && sr.toWorkflowId && String(sr.toWorkflowId) !== String(currentWorkflow._id)) {
     return { toWorkflowId: sr.toWorkflowId, toName: sr.toName, product: sr.product };
+  }
+  // A product we MAKE but no active flow covers (needs_human — e.g. monofilamento):
+  // check_product_scope set handoffRequested on the probe. Surface it so the caller
+  // hands off to a human instead of substituting a lookalike active-flow product.
+  if (probe.handoffRequested) {
+    return { needsHuman: true, reason: probe.handoffReason || null };
   }
   return null;
 }
