@@ -404,6 +404,9 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
       `NUNCA des un "no" rotundo ("no lo manejamos", "no la podemos ofrecer") sin ofrecer una alternativa real.`
   );
   lines.push(
+    `- PRECIO POR ÁREA (no lineal): si el cliente pregunta por qué una medida más grande cuesta más, o "por qué la 6x6 cuesta casi el doble que la 6x4 si son solo 2 m más", NO evadas ni repitas precios: explícale que el precio va por ÁREA en metros CUADRADOS, no por metros lineales. Una 6x4 son 24 m² y una 6x6 son 36 m² (50% más material), por eso sube más de lo que parece. Y si la 6x4 está en PROMOCIÓN, esa es su precio de referencia (por eso se ve barata). Contesta la pregunta de frente.`
+  );
+  lines.push(
     `- "LONA" = MALLA SOMBRA: muchos clientes le dicen "lona"/"lonas" a la malla sombra. Cuando la pidan con contexto de SOMBRA ("lonas al 90% de sombra", "lona para sombra") o con una medida, AFIRMA de una vez: "¡Sí! Manejamos malla sombra al 90% de sombra…" y sigue ayudándole. ` +
       `NUNCA arranques con una negación tipo "de lonas no las manejamos" ni corrijas la palabra que usó el cliente. SOLO aclara (con tacto) que NO es impermeable si preguntan por lluvia / a prueba de agua / lona impermeable / toldo.`
   );
