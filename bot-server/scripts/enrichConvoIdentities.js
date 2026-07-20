@@ -45,11 +45,7 @@ async function pool(items, n, worker) {
     try {
       const msgs = (await Message.find({ psid: c.psid, senderType: "user" }).select("text").sort({ createdAt: 1 }).lean()).map((m) => m.text);
       if (!msgs.length) { stats.noMsgs++; stats.done++; return; }
-      // Name harvesting: the customer's name comes from the automated greeting (Meta),
-      // echoed by the bot as "Hola <Nombre>, soy …". Pass the first greeting-looking bot line.
-      const gm = await Message.find({ psid: c.psid, senderType: "bot" }).select("text").sort({ createdAt: 1 }).limit(4).lean();
-      const greeting = (gm.find((m) => /\bhola\b|buen(?:os|as)\b/i.test(String(m.text || ""))) || {}).text || null;
-      const id = await extractConvoIdentity(msgs, { greeting });
+      const id = await extractConvoIdentity(msgs);
 
       // validate zip against the real MX zip DB (drop AI-hallucinated codes)
       let zipValid = null;

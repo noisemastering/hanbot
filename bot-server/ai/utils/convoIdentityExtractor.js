@@ -10,13 +10,11 @@
 
 const { getTrackedClient } = require("../../utils/trackedOpenAI");
 
-const SYSTEM = `Eres un extractor de identidad de clientes para una tienda mexicana de malla sombra. Te doy los mensajes del CLIENTE y, si existe, el SALUDO AUTOMÁTICO del asistente. Devuelve JSON:
+const SYSTEM = `Eres un extractor de identidad de clientes para una tienda mexicana de malla sombra. Te doy SOLO los mensajes del CLIENTE (no del bot) de una conversación. Devuelve JSON:
 { "name": "<nombre del cliente si lo dio, o null>", "city": "<ciudad de ENVÍO/donde vive el cliente, o null>", "state": "<estado de la república, o null>", "zip": "<código postal de 5 dígitos, o null>" }
 
 REGLAS:
-- name — COSECHA DEL SALUDO PRIMERO: el asistente saluda al cliente por su nombre (viene de Meta), p. ej. "Hola Procoro, soy Claudia de Hanlob…" → name = "Procoro"; "¡Hola Ana Ruiz! Soy Fernanda…" → "Ana Ruiz". Si te doy un SALUDO AUTOMÁTICO, toma el nombre de AHÍ como PRIMERA fuente: es el nombre que sigue a "Hola/¡Hola!" y ANTES de "soy <asesora>". OJO: NO confundas el nombre de la ASESORA ("soy Claudia", "soy Fernanda") con el del cliente. Si el saludo NO trae nombre del cliente ("Hola, soy Claudia…") o no hay saludo, entonces busca el nombre en los mensajes del cliente.
-- El SALUDO es del asistente: ÚSALO SÓLO para el name. NUNCA tomes ciudad/estado/CP del saludo (esos SÓLO salen de los mensajes del CLIENTE — el saludo puede mencionar "Querétaro" u otros datos de la tienda).
-- name (respaldo, en los mensajes del cliente): el nombre del PROPIO cliente cuando lo da ("me llamo Bernardo", "soy Tony", "es para María Pérez", o responde su nombre tras pedírselo: "Bernardo Cruz"). NO inventes. Si no hay nombre claro en ningún lado → null.
+- name: el nombre del PROPIO cliente cuando lo da ("me llamo Bernardo", "soy Tony", "es para María Pérez", o responde su nombre tras pedírselo: "Bernardo Cruz"). NO inventes. Si no hay nombre claro → null.
 - city / state: la ubicación del CLIENTE o a dónde quiere que le envíen, dicha en lenguaje natural: "envían a Tijuana", "soy de Guadalajara", "vivo en Monterrey", "aquí en Culiacán", "mando a Mérida Yucatán", "estoy en el estado de Puebla". Distingue ciudad de estado. Si solo dice el estado, deja city en null y llena state.
 - NUNCA tomes "Querétaro" como ciudad del cliente si es la ubicación de la tienda; solo si el cliente dice que ÉL está/envía a Querétaro.
 - zip: SOLO 5 dígitos que el cliente ESCRIBIÓ como su código postal (acepta con espacios: "630 23" = 63023). NUNCA infieras ni adivines un código postal a partir de la ciudad/estado; si el cliente no tecleó dígitos de CP → null.
@@ -39,21 +37,13 @@ async function extractConvoIdentity(userMessages, opts = {}) {
   let joined = msgs.map((m, i) => `${i + 1}. ${m}`).join("\n");
   if (joined.length > 4000) joined = joined.slice(0, 4000);
 
-  // Name harvesting: the automated greeting (a bot line, "Hola <Nombre>, soy …") is the
-  // PRIMARY name source. Pass it separately so the model reads the name from it but never
-  // takes location from it.
-  const greeting = typeof opts.greeting === "string" && opts.greeting.trim()
-    ? opts.greeting.trim().slice(0, 300)
-    : null;
-  const userContent = `${greeting ? `Saludo automático del asistente:\n${greeting}\n\n` : ""}Mensajes del cliente:\n${joined}`;
-
   try {
     const client = getTrackedClient();
     const res = await client.chat.completions.create({
       model: opts.model || "gpt-4o-mini",
       messages: [
         { role: "system", content: SYSTEM },
-        { role: "user", content: userContent },
+        { role: "user", content: `Mensajes del cliente:\n${joined}` },
       ],
       temperature: 0,
       max_tokens: 120,
