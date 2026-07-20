@@ -103,6 +103,21 @@ export default function ReportedConversationsView() {
         API.get(`/conversations/${selected.psid}/commerce-status`).then((r) => r.data).catch(() => null),
         API.get(`/conversations/${selected.psid}/handoff-info`).then((r) => r.data).catch(() => null),
       ]);
+      // Name harvesting: the customer's name is echoed in the bot's automated greeting
+      // ("¡Hola <Nombre>! Soy <asesora> de Hanlob…", from Meta). Read it from THERE first
+      // — the asesora's name follows "soy", so it's never confused. Fall back to a name
+      // collected during the conversation (handoff). Surfaced up top so the assessment
+      // always has the client's name without digging through the transcript.
+      const greetLine = messages.find((m) => m.senderType === "bot" && /\bhola\b/i.test(m.text || ""));
+      let harvestedName = null;
+      if (greetLine) {
+        const mm = String(greetLine.text).match(/\bhola\b[\s,¡!]+([^,!.\n]{2,40}?)\s*[,!.]\s*soy\b/i);
+        const cand = mm && mm[1].trim();
+        if (cand && !/\d/.test(cand) && cand.split(/\s+/).length <= 3) harvestedName = cand;
+      }
+      const clientName = harvestedName || (hi && hi.collected && hi.collected.name) || null;
+      const nameSrc = harvestedName ? " (cosechado del saludo)" : (hi && hi.collected && hi.collected.name ? " (de la conversación)" : "");
+
       const lines = [];
       lines.push("=== CONVERSACIÓN REPORTADA ===");
       lines.push(`Reporte: ${REASON_LABELS[selected.category] || selected.category || "—"} (severidad: ${SEV[selected.priority]?.l || selected.priority})`);
@@ -111,6 +126,7 @@ export default function ReportedConversationsView() {
       if (selected.description) lines.push(`Detalle del reporte:\n${selected.description}`);
       lines.push("");
       lines.push(`psid: ${selected.psid}`);
+      lines.push(`Nombre del cliente: ${clientName || "—"}${nameSrc}`);
       if (cs) {
         lines.push("--- ESTADO COMERCIAL ---");
         lines.push(`Link: ${cs.clicked ? `clickeado ${cs.clickedAt ? new Date(cs.clickedAt).toLocaleDateString() : ""}` : cs.hasLink ? "enviado, sin clic" : "no enviado"}`);
