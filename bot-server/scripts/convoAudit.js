@@ -27,15 +27,18 @@ CATEGORÍAS de error:
 - descuento_vago: responde "con descuento / en promoción" o "¿te interesa?" sin dar el PRECIO exacto y el LINK cuando el cliente pidió precio.
 - multimedida: el cliente pidió 2+ medidas y el bot no cotizó cada una con su propio precio/link.
 - impermeable: el cliente busca protección contra la LLUVIA o algo IMPERMEABLE, y el bot ofrece/cotiza malla sombra (que NO es impermeable, deja pasar el agua) sin aclarar que no detiene la lluvia.
+- nombre: cosecha del NOMBRE del cliente — SOLO el nombre; el código postal/CP NO entra en esta categoría. El nombre se cosecha SIEMPRE de forma PASIVA — del saludo automático (viene de Meta, ej. "Hola Bernardo, soy…") o de lo que el cliente ya dijo — NUNCA se pide. Es error si: (a) INVASIVO — el bot PIDE el NOMBRE explícitamente como trámite o "para dar seguimiento" ("¿me compartes tu nombre?", "¿cuál es tu nombre?", "¿a nombre de quién?", "regálame tu nombre"); o (b) NO COSECHA — el cliente YA dio su nombre (en un mensaje o en el saludo) y el bot lo ignora, lo vuelve a pedir, o usa un nombre equivocado. Si el bot pide "tu nombre Y tu código postal", evalúa SOLO la parte del NOMBRE (ignora el CP).
 
 NO son errores (NUNCA marcar):
 - Respuestas breves/cortas, saludos, pedir un dato faltante (medida, color, CP).
+- Pedir el CÓDIGO POSTAL / CP (ej. "¿me compartes tu código postal? es solo para fines estadísticos") NUNCA es un error de 'nombre': el CP es OTRO dato y su captura es legítima. No lo marques como 'nombre' (ni como error alguno por sí solo).
+- Pedir NOMBRE Y TELÉFONO para pasar con un ASESOR en un handoff/mayoreo genuino: eso es CORRECTO, NO es 'nombre' invasivo.
 - Borde separador SÍ se vende por largo (6/9/18/54 m): preguntar "¿qué largo?" para borde NO es error.
 - El BORDE SEPARADOR mide 13 cm de alto × el largo en metros. Una medida como "13x18m" / "13x54m" para borde es CORRECTA (13 cm × 18 m), NO es una malla de 13 m × 18 m. NUNCA la marques como error de medida ni mezcla de productos.
 - Cotizaciones válidas, handoffs legítimos.
 
 Devuelve SOLO JSON:
-{"error": true|false, "categoria": "nonsense|precio|link|negacion_falsa|descuento_vago|multimedida|impermeable|otro", "severidad": "media|alta", "cita": "<texto literal del bot>", "motivo": "<por qué; NUNCA 'breve'>"}
+{"error": true|false, "categoria": "nonsense|precio|link|negacion_falsa|descuento_vago|multimedida|impermeable|nombre|otro", "severidad": "media|alta", "cita": "<texto literal del bot>", "motivo": "<por qué; NUNCA 'breve'>"}
 Si no hay error: {"error": false}. Solo error:true si severidad media o alta; "cita" obligatoria y literal.`;
 
 async function judge(botText, contextLines) {
@@ -68,9 +71,23 @@ async function judge(botText, contextLines) {
   let judged = 0;
   for (const b of bots) {
     if (!b.text || b.text.trim().length < 2) continue;
-    const ctx = await Message.find({ psid: b.psid, timestamp: { $lt: b.timestamp } })
-      .sort({ timestamp: -1 }).limit(4).select("senderType text").lean();
-    const contextLines = ctx.reverse().map((m) => `${m.senderType === "user" ? "CLIENTE" : "BOT"}: ${(m.text || "").slice(0, 200)}`).join("\n");
+    // Context = the CURRENT session only. Walk back from the reply and STOP at a large
+    // idle gap: messages before it belong to a separate, earlier exchange (e.g. a reply
+    // to a bare "precio" 3 weeks after the original ad quote) and would mislead the judge
+    // — it'd read the old quote as the current topic. Judge the part that actually took
+    // place in this session, not stale cross-gap history.
+    const SESSION_GAP_MS = 12 * 60 * 60 * 1000; // >12h idle ⇒ previous session, drop it
+    const prior = await Message.find({ psid: b.psid, timestamp: { $lt: b.timestamp } })
+      .sort({ timestamp: -1 }).limit(8).select("senderType text timestamp").lean();
+    const sess = [];
+    let nextTs = b.timestamp.getTime();
+    for (const mm of prior) {
+      const t = new Date(mm.timestamp).getTime();
+      if (nextTs - t > SESSION_GAP_MS) break; // gap → older session, stop
+      sess.push(mm); nextTs = t;
+      if (sess.length >= 4) break;
+    }
+    const contextLines = sess.reverse().map((m) => `${m.senderType === "user" ? "CLIENTE" : "BOT"}: ${(m.text || "").slice(0, 200)}`).join("\n");
     const v = await judge(b.text, contextLines || "(sin contexto)");
     judged++;
     if (v && v.error === true && (v.severidad === "media" || v.severidad === "alta")) {
