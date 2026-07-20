@@ -87,7 +87,12 @@ async function enrichBatch(convos) {
       }
       if (!c.aiIdentity) {
         const userMsgs = msgs.filter((m) => m.senderType === "user").map((m) => m.text);
-        const id = await extractConvoIdentity(userMsgs);
+        // Name harvesting: the customer's name comes from the automated greeting (Meta),
+        // which the bot echoes as "Hola <Nombre>, soy <asesora> de Hanlob…". Pass the
+        // FIRST greeting-looking bot line so the extractor harvests the name from it;
+        // it falls back to the customer's own messages when the greeting has no name.
+        const greeting = (msgs.find((m) => m.senderType === "bot" && /\bhola\b|buen(?:os|as)\b/i.test(String(m.text || ""))) || {}).text || null;
+        const id = await extractConvoIdentity(userMsgs, { greeting });
         let zip = null;
         if (id.zip) { const z = await ZipCode.findOne({ code: id.zip }).select("code").lean().catch(() => null); if (z) zip = id.zip; }
         // Re-assess the extracted name: only keep it if it actually LOOKS like a name
