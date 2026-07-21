@@ -1,2 +1,5 @@
 node_modules/
 .env
+.env.demo
+start-demo.sh
+refresh-agentdemo.sh

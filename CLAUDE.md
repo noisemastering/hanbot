@@ -1,5 +1,24 @@
 # Claude Code Project Notes
 
+## Project Map (read this first)
+
+**What it is:** a MX-Spanish sales bot for **Hanlob** (malla sombra / shade cloth) on **Facebook Messenger + WhatsApp**, plus a **React dashboard**. Ad clicks (click-to-Messenger / CTWA) enter the bot; it quotes products, shares Mercado Libre purchase links, and hands off to a human when needed. A correlation system attributes ML sales back to conversations.
+
+**Two apps, one repo:**
+- `bot-server/` — Node/Express backend (bot + API). Deploys to **Railway**.
+- `dashboard/` — React app (analytics, conversations, Spec Ops). Deploys to **Vercel**.
+
+**The bot brain (where most fixes go):**
+- `bot-server/ai/index.js` — pipeline entry (persona, runs the engine).
+- `bot-server/ai/workflow/index.js` — the **workflow engine**: per-turn logic = deterministic gates (borde, color, quantity, flow-switch, greeting…) that run BEFORE the LLM turn; a gate can short-circuit with a reply. Most bot behavior fixes land here.
+- `bot-server/ai/workflow/setupContext.js` — builds the LLM system prompt (per-flow directives, promo preload, product knowledge).
+- `bot-server/ai/workflow/tools.js` — the AI product-scope classifier (verdicts: `no_product|current|other_flow|needs_human|not_sold`) + measure/quantity parsing (`dimsOf`, `stripMeasures`, `qtyFromText`, `orderedQty`, `wantsWholesale`). **All measure/qty parsing MUST go through these — never a raw `\d+(x|por)\d+`.**
+- **Active product flows are `Workflow` docs in Mongo** (reforzada confeccionada, sin refuerzo, rollo, borde separador, ground cover, complementos, cold-start) — inspect via the DB, not only files. Legacy flows (`ai/flows`, `ai/core`, the `*_FLOW.md` docs) coexist, but ad traffic runs on the workflow engine.
+
+**Correlation (convo↔sale attribution):** `bot-server/utils/convoSaleMatcher.js` (tiered `classify()`), `runConvoCorrelation.js` (runner), `scripts/correlationHealthCheck.js` (17 invariants). Reads our OWN DB (ml_sales + conversations + clicks).
+
+**Data:** production MongoDB Atlas (free-tier M0, ~512 MB cap). **The local server connects to the SAME prod DB** — be careful with writes/backfills.
+
 ## User Preferences
 
 **Don't suggest hard refresh.** The user always does this already. When debugging UI issues, skip directly to checking API responses, deployment status, or code issues.
@@ -70,3 +89,14 @@ Instead:
 - Check if recent code changes could have caused the issue
 - Look for syntax errors, missing files, or broken imports
 - The deployment configuration that exists is correct and should not be touched
+
+## Common Commands (run from `bot-server/`)
+
+- **Restart local server** (do after every backend change — the user tests on localhost):
+  `pkill -f "node.*index.js"; sleep 1; node index.js` — boots on `:3000`, connects to prod Mongo. Confirm with the `🚀 Server is running` / `✅ Connected to MongoDB Atlas` log lines.
+- **Deploy backend + dashboard:** `git add -A && git commit -m "…" && git push origin main`. Railway auto-deploys `bot-server` from `main`, Vercel auto-deploys `dashboard`. **One push ships both.** End commit messages with the `Co-Authored-By: Claude Opus 4.8 (1M context)` trailer.
+- **Daily convo QA audit:** `node scripts/convoAudit.js <ISO_DATE>` — LLM-judges every bot reply since the cutoff (categories: nonsense / precio / link / negacion_falsa / descuento_vago / multimedida / impermeable / nombre) + a deterministic handoff scan. Context is session-scoped (drops >12h-idle history). Watch for false positives on borde/rollo "precio" openers (the judge lacks flow context).
+- **Correlation health check:** `node scripts/correlationHealthCheck.js` — 17 invariants over the matches.
+- **Scenario battery** (synthetic flow tests, LLM-graded): `node scripts/scenarioBattery.js [--group=reforzada|coldstart|…] [--smoke] [--no-judge]`.
+
+**Testing a bot behavior end-to-end** (no server needed): drive `runWorkflowTurn(wf, initState(wf), msg, {psid, sandbox:true})` in a small `node -e` against the flow's `Workflow` doc — this is how the reported convo bugs were reproduced/verified this session.
