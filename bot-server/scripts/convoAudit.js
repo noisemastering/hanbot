@@ -22,7 +22,7 @@ Te doy el ÚLTIMO mensaje del BOT y el contexto previo. Marca SOLO errores reale
 CATEGORÍAS de error:
 - nonsense: incoherente, se contradice, ignora lo que preguntó el cliente, mezcla productos equivocados.
 - precio: da un precio que parece equivocado, contradice un precio ya dado para la misma medida, o dice "con descuento" SIN dar el precio concreto.
-- link: comparte un link genérico/de homepage, un link equivocado, o NO comparte link cuando el cliente quiere comprar.
+- link: comparte un link claramente EQUIVOCADO (de OTRO producto/medida distinta a la que se está cotizando), o NO comparte NINGÚN link cuando el cliente YA eligió producto+medida y quiere comprar. OJO — NO son errores de link: los enlaces "agente.hanlob.com.mx/r/…" son VÁLIDOS (rastreados, redirigen a Mercado Libre), NO son genéricos ni de homepage; un código /r/ DISTINTO para el MISMO producto es válido (NO es error); y el link de la TIENDA oficial cuando el cliente pregunta "cómo/dónde compro en Mercado Libre" es CORRECTO.
 - negacion_falsa: dice que NO vendemos / no manejamos algo que sí está en catálogo (malla sombra, confeccionada, rollos, borde, sobre medida).
 - descuento_vago: responde "con descuento / en promoción" o "¿te interesa?" sin dar el PRECIO exacto y el LINK cuando el cliente pidió precio.
 - multimedida: el cliente pidió 2+ medidas y el bot no cotizó cada una con su propio precio/link.
