@@ -116,12 +116,23 @@ async function judge(botText, contextLines) {
   }).lean();
   console.log(`\n[2] Handoffs — ${convos.length} in window (reason + reachable lead?)`);
   for (const c of convos) {
+    // A MANUAL takeover (an agent grabbed the convo from the dashboard) is NOT a bot
+    // handoff — by design it has no bot reason/contact. Only BOT-initiated handoffs
+    // (handoffRequested / handoffTimestamp / needs_human) are audited for reason+lead.
+    const isBotHandoff = !!(c.handoffRequested || c.handoffTimestamp || c.state === "needs_human");
+    if (!isBotHandoff) {
+      console.log(`\n    ➡️  toma-humana (manual, no es handoff del bot) | psid ${c.psid} | state=${c.state}`);
+      continue;
+    }
     const hasContact = !!((c.leadData && c.leadData.contact) || c.extractedName || c.profileName);
+    // The customer not answering the contact ask in 30s is captured in the reason and is
+    // EXPECTED (not a bot bug) — don't warn on missing contact when the reason says so.
+    const contactExpected = /sin respuesta|no proporcion|30s/i.test(c.handoffReason || "");
     const issues = [];
     if (!c.handoffReason) issues.push("SIN motivo registrado");
-    if (!hasContact) issues.push("SIN contacto (nombre/teléfono) para el humano");
+    if (!hasContact && !contactExpected) issues.push("SIN contacto (nombre/teléfono) para el humano");
     const tag = issues.length ? `⚠️  ${issues.join(" + ")}` : "✅ ok";
-    console.log(`\n    ${tag} | psid ${c.psid} | state=${c.state}`);
+    console.log(`\n    ${tag} | handoff-bot | psid ${c.psid} | state=${c.state}`);
     console.log(`        motivo: ${c.handoffReason || "(NINGUNO)"}`);
     console.log(`        brief: ${buildClientBrief(c)}`);
   }

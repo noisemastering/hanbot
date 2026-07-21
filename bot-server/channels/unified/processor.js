@@ -392,11 +392,20 @@ async function processMessage(normalizedMessage, io = null) {
 
       console.log(`💬 AI response: "${aiResponse.text.substring(0, 100)}..."`);
 
-      // 12. Send response via appropriate channel
-      await sendMessageViaChannel(channel, userId, aiResponse);
-
-      // 13. Save bot response
-      await saveMessage(unifiedId, aiResponse.text, 'bot', null, io);
+      // 12-13. Send + save — but suppress an IDENTICAL reply already sent in the last
+      // 60s (a reprocessed/retried inbound webhook re-sends the same response; the
+      // messageId dedup misses a retry that arrives with a different id). Mirrors the
+      // Messenger guard.
+      const _dupReply = await Message.findOne({
+        psid: unifiedId, senderType: 'bot', text: aiResponse.text,
+        timestamp: { $gte: new Date(Date.now() - 60000) },
+      }).select('_id').lean().catch(() => null);
+      if (_dupReply) {
+        console.log(`⚠️ Duplicate bot reply suppressed (WhatsApp) for ${unifiedId}`);
+      } else {
+        await sendMessageViaChannel(channel, userId, aiResponse);
+        await saveMessage(unifiedId, aiResponse.text, 'bot', null, io);
+      }
 
       // 14. Schedule silence follow-up (store link after 10min of inactivity)
       const { scheduleFollowUpIfNeeded } = require('../../jobs/silenceFollowUp');

@@ -281,6 +281,21 @@ io.on("connection", (socket) => {
   socket.on("disconnect", () => console.log("🔌 Cliente desconectado"));
 });
 
+// True if we ALREADY sent this EXACT bot text to this psid in the last 60s. Duplicate/
+// retried inbound webhooks (a retry can arrive with a DIFFERENT mid, so the messageId
+// dedup misses it) reprocess the message and re-send the same reply seconds later
+// (reported: the same /r/ link twice). This content guard suppresses that re-send.
+async function botJustSaid(psid, text) {
+  if (!text || !text.trim()) return false;
+  try {
+    const dup = await Message.findOne({
+      psid, senderType: "bot", text,
+      timestamp: { $gte: new Date(Date.now() - 60000) },
+    }).select("_id").lean();
+    return !!dup;
+  } catch { return false; }
+}
+
 // Emitir evento cuando se guarda un nuevo mensaje
 async function saveMessage(psid, text, senderType, messageId = null) {
   // User messages start as unanswered, bot/human messages don't need the answered field
@@ -2070,8 +2085,11 @@ app.post("/webhook", async (req, res) => {
               console.log(`✅ [DEBUG] Image sent successfully`);
             }
 
-            // Enviar texto si existe
-            if (hasText) {
+            // Enviar texto si existe — pero NO reenviar un texto IDÉNTICO que ya salió
+            // hace segundos (webhook reprocesado/reintentado → misma respuesta duplicada).
+            if (hasText && await botJustSaid(senderPsid, reply.text)) {
+              console.log(`⚠️ Duplicate bot reply suppressed for ${senderPsid}: "${reply.text.substring(0, 40)}…"`);
+            } else if (hasText) {
               console.log(`🔍 [DEBUG] Sending text to FB API: "${reply.text.substring(0, 50)}..."`);
               await callSendAPI(senderPsid, { text: reply.text });
               console.log(`✅ [DEBUG] Text sent to FB successfully`);
