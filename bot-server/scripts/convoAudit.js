@@ -71,6 +71,9 @@ async function judge(botText, contextLines) {
   let judged = 0;
   for (const b of bots) {
     if (!b.text || b.text.trim().length < 2) continue;
+    // Liberado-cap DEFERRAL — a DELIBERATE capacity limit (bot serves ≤50 convos/day
+    // while Liberado is OFF, i.e. until the client pays). Not a bug; never judge it.
+    if (/atendiendo mucha demanda|en breve te contactamos/i.test(b.text)) continue;
     // Context = the CURRENT session only. Walk back from the reply and STOP at a large
     // idle gap: messages before it belong to a separate, earlier exchange (e.g. a reply
     // to a bare "precio" 3 weeks after the original ad quote) and would mislead the judge
