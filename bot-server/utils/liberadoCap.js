@@ -8,7 +8,7 @@
 // NOT stamped, so it never consumes a slot. When Liberado is ON there is no cap.
 const { isLiberado } = require("./systemState");
 
-const DAILY_CAP = 50;
+const DAILY_CAP = 100;
 const CST_OFFSET_MS = 6 * 60 * 60 * 1000; // Mexico City = UTC-6, no DST since 2022
 
 const DEFERRAL_MESSAGE =
