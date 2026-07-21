@@ -367,6 +367,34 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     }
   }
 
+  // Passive SAME-DAY contact capture. If the customer VOLUNTEERS their name or a phone
+  // this turn, remember it on state.lead so a handoff USES it instead of re-asking
+  // (reported: gave "Eduardo Navarro" + phone, bot still asked "¿me compartes tu nombre
+  // y un teléfono?"). Stamped with the MX day so a name from a PRIOR-day session is
+  // never silently reused.
+  const _mxDay = () => new Date(Date.now() - 6 * 3600e3).toISOString().slice(0, 10);
+  if (userMessage) {
+    try {
+      const { looksLikeName } = require("../../utils/convoSaleMatcher");
+      const raw = String(userMessage);
+      state.lead = state.lead || {};
+      let gotContact = false;
+      const mm = raw.match(/\b(?:me llamo|mi nombre es|a nombre de)\s+([a-záéíóúñ.]+(?:\s+[a-záéíóúñ.]+){0,2})/i)
+        || raw.match(/\b([a-záéíóúñ.]+(?:\s+[a-záéíóúñ.]+){1,2})\s+es mi nombre\b/i)
+        || raw.match(/^\s*soy\s+([a-záéíóúñ.]+(?:\s+[a-záéíóúñ.]+){0,2})\s*$/i);
+      if (mm && looksLikeName(mm[1])) {
+        if (!state.lead.name) state.lead.name = mm[1].trim().replace(/\b([a-záéíóúñ])/g, (c) => c.toUpperCase());
+        gotContact = true;
+      }
+      const ph = raw.replace(/[\s\-().]/g, "").match(/\b(\d{10})\b/); // MX mobile = 10 digits (CP/price won't match)
+      if (ph) { if (!state.lead.phone) state.lead.phone = ph[1]; gotContact = true; }
+      // Top-level day stamp (persists across turns; nested lead fields get rebuilt). It
+      // marks the LAST day the customer gave contact, so the handoff only reuses a name
+      // that's from TODAY — never a stale prior-day one.
+      if (gotContact) state.contactDay = _mxDay();
+    } catch { /* capture is best-effort */ }
+  }
+
   // Collect-before-handoff for the DETERMINISTIC early-return paths (steps 1.x)
   // that run BEFORE the post-node handoff gate. Mirrors that gate: if we already
   // have a reachable contact, complete the handoff now; otherwise ask for name +
@@ -375,7 +403,11 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // their reply completes it next turn.
   const beginHandoff = ({ preface, reason } = {}) => {
     const pre = preface ? `${String(preface).trim()} ` : "";
-    const haveContact = !!(state.lead && (state.lead.phone || state.lead.email || state.lead.name));
+    // Same-day guard: only reuse a name/phone if the customer gave contact TODAY
+    // (state.contactDay). No stamp (legacy lead from elsewhere) still counts —
+    // backward-compatible.
+    const _fresh = !state.contactDay || state.contactDay === _mxDay();
+    const haveContact = !!(_fresh && state.lead && (state.lead.phone || state.lead.email || state.lead.name));
     if (haveContact) {
       // Persist the lead to the customer's profile at handoff — here we have MORE
       // than the zip (name + phone). Keyed by psid so correlation can use it later.
