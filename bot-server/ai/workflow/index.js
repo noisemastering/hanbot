@@ -802,12 +802,30 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             if (pi && pi.amount) {
               const sh = await shadeText(exact);
               state.activeProductId = String(exact._id);
-              // ROLL QUOTE — the client's promo format: IVA-incluido header, the
-              // requested roll(s) with "+ envío" (rolls are quoted with shipping
-              // separate, no online link), a mayoreo note, and the store line.
+              if (flowHasShades) {
+                // RASCHEL ROLLO — the client's promo format: IVA-incluido header, the
+                // requested roll(s) with "+ envío" (rolls are quoted with shipping
+                // separate, no online link), a mayoreo note, and the store line. qty
+                // UNKNOWN → ASK how many BEFORE closing (mirrors borde): a bare-number
+                // reply next turn is read as the roll count (2+ → mayoreo handoff). If
+                // they already said "un rollo" (qty===1) we don't re-ask.
+                const quote = rollPromoQuote(sh, [{ w: dims[0], l: dims[1], price: pi.amount }]);
+                if (qty == null) {
+                  state.awaitingRollQty = true;
+                  return ret(`${quote}\n\n¿Cuántos rollos necesitas? 😊`, { rollQuoted: `${dims[0]}x${dims[1]}`, rollAskQty: true });
+                }
+                return ret(quote, { rollQuoted: `${dims[0]}x${dims[1]}` });
+              }
+              // GROUND COVER (malla antimaleza) — a real ML product WITH a buy link (NOT
+              // the Raschel-roll "+ envío / no link" format) and NO shade %. Prices are
+              // + IVA. Quote price + link DIRECTLY (reported: it was mislabeled "Malla
+              // Sombra Raschel" via rollPromoQuote and withheld the link until turn 2).
+              const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: exact.name, productId: String(exact._id) });
+              const disc = pi.hasDiscount && Number.isFinite(pi.originalPrice) && pi.originalPrice > pi.amount ? `, rebajado de $${Math.round(pi.originalPrice)}` : "";
+              state.awaitingRollQty = true; // a 2+ reply next turn → mayoreo handoff
               return ret(
-                rollPromoQuote(sh, [{ w: dims[0], l: dims[1], price: pi.amount }]),
-                { rollQuoted: `${dims[0]}x${dims[1]}` }
+                `¡Claro! El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m está en $${pi.amount} + IVA${disc}.` + (link ? ` Aquí lo compras: ${link}` : "") + ` ¿Cuántos necesitas? 😊`,
+                { gcQuoted: `${dims[0]}x${dims[1]}` }
               );
             }
           }
@@ -1588,7 +1606,16 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // flow, switch deterministically — product switches need no confirmation.
   if (userMessage && !skipLLMSwitch && (opts._switchDepth || 0) < 2 && !opts.sandboxNoAutoSwitch) {
     try {
-      const det = await detectFlowSwitch(String(userMessage), familyList, workflow);
+      let det = await detectFlowSwitch(String(userMessage), familyList, workflow);
+      // SIN-REFUERZO never SWITCHES to REFORZADA — they're the SAME product (con/sin
+      // refuerzo variants). A size sin-refuerzo doesn't carry must be handled by the
+      // sin→reforzada MENTION gate further down (quote reforzada + link, NO switch, no
+      // handoff). The scope classifier tends to route "confeccionada con argollas 7x10"
+      // to the reforzada flow; dropping that switch lets the mention gate run instead.
+      if (det && det.toName && /sin\s*refuerzo/i.test(workflow.name || "") &&
+          /con\s*refuerzo/i.test(det.toName) && !/sin\s*refuerzo/i.test(det.toName)) {
+        det = null;
+      }
       if (det && det.needsHuman) {
         // Product we make but no active flow serves it (e.g. monofilamento) → hand off
         // to a human. NEVER substitute a lookalike active product (Raschel) as if it

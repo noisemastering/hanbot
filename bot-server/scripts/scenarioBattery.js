@@ -152,6 +152,12 @@ const CASES = [
   { id: "borde-closest", group: "borde", flow: "borde",
     turns: ["quiero 57 metros de borde"],
     expect: "Ofrece el largo disponible más cercano (54 m); no niega ni inventa." },
+  { id: "borde-switch-antimaleza", group: "borde", flow: "borde",
+    turns: ["precio de la malla antimaleza"],
+    expect: "Reconoce que antimaleza es GROUND COVER (otro flujo) y ayuda con ese producto (pregunta largo/área o cotiza); NUNCA responde con el borde separador ni '¿qué largo?' de borde." },
+  { id: "borde-switch-malla-rollo", group: "borde", flow: "borde",
+    turns: ["quiero malla sombra en rollo de 4.2 x 100 al 35%"],
+    expect: "Cambia al flujo de MALLA SOMBRA ROLLO y cotiza/ayuda con ese rollo; NUNCA lo trata como borde separador." },
 
   // SIN REFUERZO ──────────────────────────────────────────────────────────────
   { id: "sin-beige-only", group: "sinrefuerzo", flow: "sinrefuerzo",

@@ -589,6 +589,17 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     );
   }
 
+  // GROUND COVER realm: "antimaleza" is the SAME product (a very common alias). The
+  // flow kept DENYING it ("solo manejo Ground Cover / si necesitas malla sombra…")
+  // when the customer said "malla antimaleza" — because "malla" reads as malla sombra.
+  // Affirm it as ours and never deflect to malla sombra.
+  const isGroundCover = realms.some((r) => /ground\s*cover|antimaleza/i.test(r));
+  if (isGroundCover) {
+    lines.push(
+      `- ANTIMALEZA = GROUND COVER (MISMO PRODUCTO): "malla antimaleza", "antimaleza", "malla anti-maleza", "malla para el suelo/piso contra maleza/hierba/pasto" y "ground cover" son EXACTAMENTE el producto que vendes aquí. Si el cliente pregunta "¿tienen malla antimaleza?" responde que SÍ y CONFIRMA EXPLÍCITAMENTE que la antimaleza es tu ground cover (di la palabra "ground cover"), luego pregunta el LARGO o el ÁREA a cubrir para cotizar. NUNCA digas "solo manejo ground cover", NUNCA lo trates como si fuera otra cosa, NUNCA lo mandes a "malla sombra", y NUNCA ofrezcas "pasarlo con un asesor" (tú lo atiendes directo). El ground cover NO tiene % de sombra ni colores que elegir: no preguntes eso.`
+    );
+  }
+
   if (promo)
     lines.push(D(
       `- PROMOCIÓN ACTIVA: ${promo.text}. Preséntala cuando sea oportuno. ` +
