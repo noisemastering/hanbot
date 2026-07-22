@@ -53,6 +53,7 @@ const shape = (s) => ({
   nuke: { engaged: !!s.nuke?.engaged, at: s.nuke?.at || null, by: s.nuke?.by || null },
   liberado: { engaged: !!s.liberado?.engaged, at: s.liberado?.at || null, by: s.liberado?.by || null },
   banner: { engaged: !!s.banner?.engaged, message: s.banner?.message || DEFAULT_BANNER, at: s.banner?.at || null, by: s.banner?.by || null },
+  fbCommentReply: { engaged: !!s.fbCommentReply?.engaged, at: s.fbCommentReply?.at || null, by: s.fbCommentReply?.by || null },
 });
 
 // Status — any authenticated user (drives the maintenance modal).
@@ -143,6 +144,22 @@ router.post("/banner", requireSuperAdmin, async (req, res) => {
     res.json({ success: true, ...shape(s) });
   } catch (e) {
     res.status(500).json({ success: false, error: "No se pudo cambiar el banner" });
+  }
+});
+
+// FB comment auto-reply — super_admin. Body: { engage: boolean }. engage=true → the
+// bot publicly replies to page comments.
+router.post("/fb-comment-reply", requireSuperAdmin, async (req, res) => {
+  try {
+    const engage = !!req.body.engage;
+    const s = await SystemState.getState();
+    s.fbCommentReply = { engaged: engage, at: engage ? new Date() : null, by: engage ? (req.user.username || req.user.email || "super_admin") : null };
+    await s.save();
+    invalidate();
+    console.warn(`💬 [SpecOps] FB comment auto-reply ${engage ? "ON" : "off"} by ${req.user.username || req.user.email}`);
+    res.json({ success: true, ...shape(s) });
+  } catch (e) {
+    res.status(500).json({ success: false, error: "No se pudo cambiar el auto-reply de comentarios" });
   }
 });
 

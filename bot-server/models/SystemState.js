@@ -28,6 +28,10 @@ const systemStateSchema = new mongoose.Schema(
     // per normal permissions; no daily conversation cap). Default OFF → the gated
     // features are super_admin-only and the bot is capped at 50 conversations/day.
     liberado: { type: switchSchema, default: () => ({}) },
+    // Facebook COMMENT auto-reply. engaged=true → the bot publicly replies to page
+    // comments (via the feed webhook). Default OFF. Also enableable via the
+    // FB_COMMENT_AUTO_REPLY env var (either one turns it on).
+    fbCommentReply: { type: switchSchema, default: () => ({}) },
     // Convo↔sale correlation freshness. `at` = when the last correlation run
     // finished; the dashboard auto-triggers a rebuild when it's >3h stale.
     // `running` guards against concurrent runs across requests/instances.

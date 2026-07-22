@@ -69,6 +69,7 @@ const en = {
   "menu.nukeEm": "Nuke'em",
   "menu.liberado": "Liberado",
   "menu.banner": "Banner",
+  "menu.fbCommentReply": "FB Comments",
   "menu.help": "Help",
 
   // ── Common ───────────────────────────────────────────────

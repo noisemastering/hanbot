@@ -8,7 +8,7 @@ const SystemState = require("../models/SystemState");
 const TTL_MS = 5000;
 // liberado defaults FALSE (restricted): fail-CLOSED so a release-gated feature
 // never leaks to non-super-admins before it's explicitly released.
-let cache = { killswitch: false, nuke: false, liberado: false, at: 0 };
+let cache = { killswitch: false, nuke: false, liberado: false, fbCommentReply: false, at: 0 };
 
 async function getHaltState() {
   if (Date.now() - cache.at > TTL_MS) {
@@ -18,6 +18,7 @@ async function getHaltState() {
         killswitch: !!(s.killswitch && s.killswitch.engaged),
         nuke: !!(s.nuke && s.nuke.engaged),
         liberado: !!(s.liberado && s.liberado.engaged),
+        fbCommentReply: !!(s.fbCommentReply && s.fbCommentReply.engaged),
         at: Date.now(),
       };
     } catch (e) {
@@ -28,7 +29,7 @@ async function getHaltState() {
       cache.at = Date.now();
     }
   }
-  return { killswitch: cache.killswitch, nuke: cache.nuke, liberado: cache.liberado };
+  return { killswitch: cache.killswitch, nuke: cache.nuke, liberado: cache.liberado, fbCommentReply: cache.fbCommentReply };
 }
 
 // True when the BOT must stay silent (either switch halts message processing).
@@ -44,8 +45,14 @@ async function isLiberado() {
   return s.liberado;
 }
 
+// True when Facebook comment auto-reply is turned ON (dashboard switch).
+async function isFbCommentReplyOn() {
+  const s = await getHaltState();
+  return s.fbCommentReply;
+}
+
 function invalidate() {
   cache.at = 0;
 }
 
-module.exports = { getHaltState, isBotHalted, isLiberado, invalidate };
+module.exports = { getHaltState, isBotHalted, isLiberado, isFbCommentReplyOn, invalidate };

@@ -442,11 +442,12 @@ async function registerUserIfNeeded(senderPsid) {
 // Bot persona names for comment replies
 const commentBotNames = ["Paula", "Sofía", "Camila", "Valeria", "Daniela"];
 
-// KILLSWITCH: Set FB_COMMENT_AUTO_REPLY=true in env to enable comment auto-replies
-function isCommentAutoReplyEnabled() {
+// KILLSWITCH: enabled by the FB_COMMENT_AUTO_REPLY env var OR the Spec Ops dashboard
+// toggle (SystemState.fbCommentReply). Either one turns comment auto-replies on.
+async function isCommentAutoReplyEnabled() {
   const setting = process.env.FB_COMMENT_AUTO_REPLY;
-  // DISABLED by default, set to 'true' to enable
-  return setting === 'true' || setting === '1';
+  if (setting === 'true' || setting === '1') return true; // env forces it on
+  try { return await require('./utils/systemState').isFbCommentReplyOn(); } catch { return false; }
 }
 
 // KILLSWITCH: Set FB_SHIPPING_AUTO_REPLY=false to disable shipping-specific replies only
@@ -1005,8 +1006,9 @@ app.post("/webhook", async (req, res) => {
                 );
                 console.log(`   ✅ Stored comment context for user ${from.id}`);
 
-                // Auto-reply to comments (with killswitch)
-                if (comment_id && isCommentAutoReplyEnabled()) {
+                // Auto-reply to comments (killswitch = env var OR Spec Ops dashboard toggle)
+                const ccEnabled = comment_id ? await isCommentAutoReplyEnabled() : false;
+                if (ccEnabled) {
                   const operatorName = commentBotNames[Math.floor(Math.random() * commentBotNames.length)];
                   const { generateBotResponse } = require('./ai/responseGenerator');
                   let replyMessage = null;
@@ -1046,8 +1048,8 @@ app.post("/webhook", async (req, res) => {
                       console.log(`   ✅ Auto-reply sent (${replyType})`);
                     }
                   }
-                } else if (comment_id && !isCommentAutoReplyEnabled()) {
-                  console.log(`   ⏸️ Auto-reply disabled (FB_COMMENT_AUTO_REPLY=false)`);
+                } else if (comment_id) {
+                  console.log(`   ⏸️ Comment auto-reply is OFF (env + dashboard toggle both off)`);
                 }
               } catch (err) {
                 console.error(`   ❌ Failed to store comment context:`, err.message);

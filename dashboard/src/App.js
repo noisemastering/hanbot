@@ -89,6 +89,7 @@ import KillswitchView from "./pages/KillswitchView";
 import NukeEmView from "./pages/NukeEmView";
 import LiberadoView from "./pages/LiberadoView";
 import BannerView from "./pages/BannerView";
+import FbCommentReplyView from "./pages/FbCommentReplyView";
 import MaintenanceGate from "./components/MaintenanceGate";
 import SalesOverviewView from "./pages/SalesOverviewView";
 import MessagePerformanceView from "./pages/MessagePerformanceView";
@@ -598,6 +599,14 @@ const menuItems = [
         path: "/spec-ops/banner",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M3 6h18M3 14h18M3 18h18" />
+        )
+      },
+      {
+        id: "fb-comment-reply",
+        labelKey: "menu.fbCommentReply",
+        path: "/spec-ops/fb-comment-reply",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l.8-4A7.94 7.94 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
         )
       }
     ]
@@ -2576,6 +2585,7 @@ function App() {
           <Route path="/spec-ops/nuke" element={effectiveRole === 'super_admin' ? <NukeEmView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/spec-ops/liberado" element={effectiveRole === 'super_admin' ? <LiberadoView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/spec-ops/banner" element={effectiveRole === 'super_admin' ? <BannerView /> : <Navigate to={getLandingPage()} replace />} />
+          <Route path="/spec-ops/fb-comment-reply" element={effectiveRole === 'super_admin' ? <FbCommentReplyView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/help" element={<HelpView />} />
         </Routes>
 
