@@ -61,6 +61,29 @@ function ManualSaleForm({ psid, channel, onClose }) {
     }).catch(() => {});
   }, [psid]);
 
+  // Pre-fill from what the BOT collected in THIS conversation (handoff data) so the agent
+  // taking over doesn't re-type it. Fills only EMPTY fields (functional setState) → never
+  // clobbers CRM data that already loaded or an edit the agent made. Product isn't in CRM,
+  // so it always comes from here (product + size + shade% + color).
+  useEffect(() => {
+    if (!psid) return;
+    API.get(`/conversations/${encodeURIComponent(psid)}/handoff-info`).then(res => {
+      const c = res.data && res.data.collected;
+      if (!c) return;
+      if (c.name) setCrmName(prev => prev || c.name);
+      if (c.contact) setCrmPhone(prev => prev || c.contact);
+      if (c.zip) setZipCode(prev => prev || c.zip);
+      const prod = [
+        c.product && String(c.product).replace(/_/g, " "),
+        c.size,
+        c.percentage ? `${c.percentage}%` : null,
+        c.color,
+      ].filter(Boolean).join(" ").trim();
+      if (prod) setProductName(prev => prev || prod);
+      if (c.quantity) setQuantity(prev => (!prev || prev === "1") ? String(c.quantity) : prev);
+    }).catch(() => {});
+  }, [psid]);
+
   useEffect(() => {
     API.get('/crm/products').then(res => {
       if (res.data.success) setAllProducts(res.data.products);
