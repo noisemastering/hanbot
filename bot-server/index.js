@@ -1041,10 +1041,15 @@ app.post("/webhook", async (req, res) => {
                   if (intent.reply) {
                     const operatorName = commentBotNames[Math.floor(Math.random() * commentBotNames.length)];
                     const { generateBotResponse } = require('./ai/responseGenerator');
+                    // NAME HARVESTING for comments: the feed webhook gives us the commenter's
+                    // real name (from.name) — reliable, unlike ad DMs. Greet them by it.
+                    let custName = null;
+                    try { const { looksLikeName } = require('./utils/convoSaleMatcher'); const n = (from && from.name || '').trim(); if (n && looksLikeName(n)) custName = n; } catch (_) {}
                     const dmOpener = await generateBotResponse("comment_private_reply", {
                       operatorName,
                       userComment: message,
                       product: commentProductInterest || undefined,
+                      customerName: custName || undefined,
                     });
                     if (dmOpener) {
                       const pr = await sendPrivateReply(comment_id, dmOpener);
@@ -1704,8 +1709,26 @@ app.post("/webhook", async (req, res) => {
                 if (resolvedFromAd.flowRef) updateData.currentFlow = resolvedFromAd.flowRef;
               }
 
-              console.log(`🔄 Comment re-entry: resetting flow state for ${senderPsid} (inferred: ${inferredProduct || 'unknown'})`);
+              // NAME HARVESTING: the comment gave us the person's real name (fbUserName) —
+              // a RELIABLE source (ad DMs get blocked by Meta). Propagate it to the
+              // conversation AND the User so downstream (greeting, correlation, dashboard)
+              // has it. Validated so a business/garbage name isn't used.
+              let harvestedName = null;
+              try {
+                const { looksLikeName } = require('./utils/convoSaleMatcher');
+                const nm = (commentContext.fbUserName || '').trim();
+                if (nm && looksLikeName(nm)) { harvestedName = nm; updateData.extractedName = nm; updateData.customerName = nm; }
+              } catch (_) {}
+
+              console.log(`🔄 Comment re-entry: resetting flow state for ${senderPsid} (inferred: ${inferredProduct || 'unknown'}${harvestedName ? `, name: ${harvestedName}` : ''})`);
               await updateConversation(senderPsid, updateData);
+
+              if (harvestedName) {
+                try {
+                  const parts = harvestedName.split(/\s+/);
+                  await User.updateOne({ psid: senderPsid }, { $set: { first_name: parts[0] || '', last_name: parts.slice(1).join(' ') || '' } }, { upsert: true });
+                } catch (_) {}
+              }
 
               // Link the PSID back to comment context for future reference
               await CommentContext.updateOne(
