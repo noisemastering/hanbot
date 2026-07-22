@@ -369,8 +369,11 @@ function decayScore(base, flat, step, g, dec = 10) {
   return pct > 0 ? pct : null;
 }
 
-// The tiering rubric (agreed 2026-07-11). Each tier = base% + flat window + decay.
-// Nickname (buyer's ML username) is treated as a valid identity match with the name.
+// Tier table (chart, 2026-07-22). "Decae: NA" ⇒ NO DECAY — each tier holds its FLAT %
+// as long as the sale falls within its TIME WINDOW, then drops to nothing (no match).
+// Implemented as decayScore(base, windowHours, null, g): base% until the window, else null.
+// CP == zip (código postal). Identity = name + nickname (buyer's ML username). Tiers NOT
+// in the chart ⇒ NOT attributable (0%) — e.g. name-only, nickname-only, city-only.
 function classify(m) {
   const med = (pct) => (pct >= 70 ? "high" : pct >= 50 ? "medium" : "low");
   const g = m.gapHours == null ? Infinity : Math.abs(m.gapHours);
@@ -380,27 +383,18 @@ function classify(m) {
   let pct = null, tier = "", vi = false, undisputed = false;
 
   if (m.itemMatch) {
-    // SAME product (a size the customer discussed OR clicked). Rubric 2026-07-13:
-    // identity (name/nickname) dominates; location alone is weak + fast-decaying; and
-    // NO location AND NO name/nickname ⇒ NOT attributable (0%). Ordered top→down so
-    // every tier is reachable (city+name is checked before the location-less identity
-    // tier, otherwise a lone name would shadow it).
-    if (m.zipMatch && m.nameMatch && m.nicknameMatch) { pct = decayScore(100, 2, 1, g); tier = "cp + nombre + usuario ML + item"; undisputed = pct === 100; }
-    else if (m.nameMatch && m.nicknameMatch) { pct = decayScore(90, 2, 1, g); tier = "nombre + usuario ML + item"; }
-    else if (m.zipMatch && m.nameMatch) { pct = decayScore(80, 1, H30M, g); tier = "cp + nombre + item"; }
-    else if (m.cityMatch && m.nameMatch) { pct = decayScore(60, H10M, H5M, g); tier = "ciudad + nombre + item"; }
-    else if (m.nameMatch || m.nicknameMatch) { pct = decayScore(70, 30, 30, g); tier = "nombre/usuario ML + item"; }
-    else if (m.zipMatch) { pct = decayScore(50, H5M, H1M, g); tier = "cp + item"; }
-    else if (m.cityMatch) { pct = decayScore(20, H1M, H1M, g); tier = "ciudad + item"; }
-    // else → no zip, no city, no name/nickname → 0% (pct stays null → not attributed)
+    // SAME product (a size the customer discussed OR clicked).
+    if (m.zipMatch && m.nameMatch && m.nicknameMatch) { pct = decayScore(100, 48, null, g); tier = "cp + nombre + usuario ML + item"; undisputed = pct === 100; } // 2 días
+    else if (m.zipMatch && m.nameMatch) { pct = decayScore(90, 24, null, g); tier = "cp + nombre + item"; }        // 1 día
+    else if (m.cityMatch && m.nameMatch) { pct = decayScore(50, 24, null, g); tier = "ciudad + nombre + item"; }   // 1 día
+    else if (m.zipMatch) { pct = decayScore(25, 24, null, g); tier = "cp + item"; }                                 // 1 día
+    // else → not attributable (0%)
   } else {
-    // DIFFERENT product (venta indirecta). Only a ZIP + strong signal attributes; the
-    // "misma familia" tiers require the bought item to share the convo's product family.
-    // Anything without a zip (or without name/nickname/family) ⇒ NOT attributable (0%).
+    // DIFFERENT product (venta indirecta).
     vi = true;
-    if (m.zipMatch && m.nameMatch && m.nicknameMatch) { pct = decayScore(90, 2, 1, g); tier = "producto distinto · cp + nombre + usuario ML"; }
-    else if (m.zipMatch && m.nameMatch && m.sameFamily) { pct = decayScore(80, 2, H30M, g); tier = "producto distinto, misma familia · cp + nombre"; }
-    else if (m.zipMatch && m.sameFamily) { pct = decayScore(60, H5M, H1M, g, 20); tier = "producto distinto, misma familia · cp"; }
+    if (m.zipMatch && m.nameMatch && m.nicknameMatch) { pct = decayScore(90, 2, null, g); tier = "producto distinto · cp + nombre + usuario ML"; }               // 2 h
+    else if (m.zipMatch && m.nameMatch && m.sameFamily) { pct = decayScore(50, 12, null, g); tier = "producto distinto, misma familia · cp + nombre"; }          // 12 h
+    else if (m.zipMatch && m.sameFamily) { pct = decayScore(10, 12, null, g); tier = "producto distinto, misma familia · cp"; }                                  // 12 h
     // else → not attributable (0%)
   }
 
