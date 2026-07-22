@@ -1573,11 +1573,24 @@ app.post("/webhook", async (req, res) => {
             const CommentContext = require('./models/CommentContext');
             const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
 
-            // Try to match by comment text (first message often IS the comment)
-            const commentContext = await CommentContext.findOne({
-              commentText: { $regex: messageText.slice(0, 50).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' },
-              createdAt: { $gte: twoHoursAgo }
+            // Prefer a DIRECT ID match: the comment's from.id equals the Messenger PSID for
+            // a large share of users (Meta unified page-scoped IDs) — far more reliable than
+            // text-matching (~5% hit vs ~40% by ID). linkedPsid:null so we only seed on the
+            // FIRST DM after the comment (not re-reset the flow every message). Fall back to
+            // matching the comment TEXT against the first DM message for the rest.
+            let commentContext = await CommentContext.findOne({
+              fbUserId: senderPsid,
+              linkedPsid: null,
+              createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
             }).sort({ createdAt: -1 }).lean();
+            if (commentContext) console.log(`💬 COMMENT MATCH by ID (fbUserId==PSID)`);
+            if (!commentContext) {
+              commentContext = await CommentContext.findOne({
+                commentText: { $regex: messageText.slice(0, 50).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' },
+                createdAt: { $gte: twoHoursAgo },
+                linkedPsid: null
+              }).sort({ createdAt: -1 }).lean();
+            }
 
             if (commentContext) {
               console.log(`💬 COMMENT MATCH FOUND!`);
