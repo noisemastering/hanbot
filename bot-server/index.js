@@ -537,6 +537,29 @@ async function replyToComment(commentId, message) {
   }
 }
 
+// Send a PRIVATE reply (a DM) to whoever wrote a comment — opens a Messenger thread.
+// Uses pages_messaging (already granted), so it needs NO pages_manage_engagement / App
+// Review that a PUBLIC comment reply would. The response's recipient id (when present)
+// IS the commenter's PSID → the caller uses it to seed the conversation with context.
+async function sendPrivateReply(commentId, message) {
+  const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN;
+  try {
+    const response = await axios.post(
+      `https://graph.facebook.com/v18.0/${commentId}/private_replies`,
+      { message },
+      { headers: { Authorization: `Bearer ${FB_PAGE_TOKEN}`, "Content-Type": "application/json" } }
+    );
+    console.log(`✅ Private reply sent for comment ${commentId}:`, JSON.stringify(response.data));
+    // recipient PSID may come back as recipient_id / message_recipient / inside the id
+    const d = response.data || {};
+    const psid = d.recipient_id || d.recipient?.id || d.message_recipient?.id || null;
+    return { success: true, data: d, psid };
+  } catch (error) {
+    console.error(`❌ Error sending private reply for comment ${commentId}:`, error.response?.data || error.message);
+    return { success: false, error: error.response?.data || error.message };
+  }
+}
+
 // Reemplaza los lugares donde guardas mensajes:
 async function callSendAPI(senderPsid, messageData) {
   const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN;
@@ -1006,47 +1029,35 @@ app.post("/webhook", async (req, res) => {
                 );
                 console.log(`   ✅ Stored comment context for user ${from.id}`);
 
-                // Auto-reply to comments (killswitch = env var OR Spec Ops dashboard toggle)
+                // Reach out via a PRIVATE reply (DM) — uses pages_messaging (no App Review
+                // that a PUBLIC comment reply would need), and moves the commenter into a
+                // DM where the full bot can quote, link and close. The DM opener is
+                // context-aware (references the post's product), and when the API returns
+                // the recipient PSID we capture it so the DM opens WITH context.
                 const ccEnabled = comment_id ? await isCommentAutoReplyEnabled() : false;
                 if (ccEnabled) {
-                  const operatorName = commentBotNames[Math.floor(Math.random() * commentBotNames.length)];
-                  const { generateBotResponse } = require('./ai/responseGenerator');
-                  let replyMessage = null;
-                  let replyType = null;
-
-                  // AI intent classifier — decides whether to reply and the type
-                  // (shipping vs general) based on INTENT, not keywords. Catches
-                  // declarative purchase interest ("me interesa una malla roja")
-                  // that the old keyword `isQuestion` gate silently ignored.
                   const { classifyComment } = require('./ai/utils/commentIntent');
                   const intent = await classifyComment(message);
-
-                  if (intent.reply && intent.type === 'shipping' && isShippingAutoReplyEnabled()) {
-                    replyMessage = await generateBotResponse("comment_reply_shipping", {
+                  if (intent.reply) {
+                    const operatorName = commentBotNames[Math.floor(Math.random() * commentBotNames.length)];
+                    const { generateBotResponse } = require('./ai/responseGenerator');
+                    const dmOpener = await generateBotResponse("comment_private_reply", {
                       operatorName,
-                      userComment: message
+                      userComment: message,
+                      product: commentProductInterest || undefined,
                     });
-                    replyType = 'shipping';
-                    console.log(`   📦 Shipping comment detected (AI), auto-replying...`);
-                  }
-                  // Shipping but its killswitch is off, OR a general worth-replying
-                  // comment → general reply.
-                  else if (intent.reply) {
-                    replyMessage = await generateBotResponse("comment_reply_general", {
-                      operatorName,
-                      userComment: message
-                    });
-                    replyType = 'general';
-                    console.log(`   💬 Comment worth replying (AI, ${intent.type}), auto-replying...`);
-                  } else {
-                    console.log(`   ⏭️ Comment not worth auto-replying (AI): "${(message || '').slice(0, 50)}"`);
-                  }
-
-                  if (replyMessage) {
-                    const replyResult = await replyToComment(comment_id, replyMessage);
-                    if (replyResult.success) {
-                      console.log(`   ✅ Auto-reply sent (${replyType})`);
+                    if (dmOpener) {
+                      const pr = await sendPrivateReply(comment_id, dmOpener);
+                      if (pr.success) {
+                        console.log(`   ✅ Private reply (DM) sent to commenter`);
+                        if (pr.psid) {
+                          await CommentContext.updateOne({ fbUserId: from.id, commentId: comment_id }, { linkedPsid: pr.psid }).catch(() => {});
+                          console.log(`   🔗 Captured PSID ${pr.psid} for the commenter`);
+                        }
+                      }
                     }
+                  } else {
+                    console.log(`   ⏭️ Comment not worth a private reply (AI): "${(message || '').slice(0, 50)}"`);
                   }
                 } else if (comment_id) {
                   console.log(`   ⏸️ Comment auto-reply is OFF (env + dashboard toggle both off)`);
@@ -1573,23 +1584,24 @@ app.post("/webhook", async (req, res) => {
             const CommentContext = require('./models/CommentContext');
             const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000);
 
-            // Prefer a DIRECT ID match: the comment's from.id equals the Messenger PSID for
-            // a large share of users (Meta unified page-scoped IDs) — far more reliable than
-            // text-matching (~5% hit vs ~40% by ID). linkedPsid:null so we only seed on the
-            // FIRST DM after the comment (not re-reset the flow every message). Fall back to
-            // matching the comment TEXT against the first DM message for the rest.
+            // Match the comment to this DM by DIRECT ID (comment from.id == PSID for ~40%
+            // of users since Meta unified page-scoped IDs) OR by a linkedPsid the bot
+            // captured when it sent the private reply (covers users whose comment-id ≠
+            // PSID). Text-match is the last resort (~5% hit). Far better than text alone.
             let commentContext = await CommentContext.findOne({
-              fbUserId: senderPsid,
-              linkedPsid: null,
+              $or: [{ fbUserId: senderPsid }, { linkedPsid: senderPsid }],
               createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
             }).sort({ createdAt: -1 }).lean();
-            if (commentContext) console.log(`💬 COMMENT MATCH by ID (fbUserId==PSID)`);
+            if (commentContext) console.log(`💬 COMMENT MATCH by ${commentContext.fbUserId === senderPsid ? "fbUserId==PSID" : "linkedPsid"}`);
             if (!commentContext) {
               commentContext = await CommentContext.findOne({
                 commentText: { $regex: messageText.slice(0, 50).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), $options: 'i' },
-                createdAt: { $gte: twoHoursAgo },
-                linkedPsid: null
+                createdAt: { $gte: twoHoursAgo }
               }).sort({ createdAt: -1 }).lean();
+            }
+            // Already seeded THIS comment into the conversation? Don't re-reset every message.
+            if (commentContext && conversation?.source?.commentId && conversation.source.commentId === commentContext.commentId) {
+              commentContext = null;
             }
 
             if (commentContext) {
