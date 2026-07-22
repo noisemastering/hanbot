@@ -902,7 +902,15 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   try {
     const bordeFams = require("../../models/Workflow").familyListOf(workflow) || [];
     const isBordeFlow = /borde/i.test(workflow.name || "") || bordeFams.some((f) => /borde/i.test(f.name || ""));
-    if (userMessage && isBordeFlow) {
+    // The borde gates below fire on generic words ("precio", "ancho", a bare number). If the
+    // customer clearly names a DIFFERENT active product (antimaleza/ground cover/malla sombra/
+    // raschel/monofilamento/anti-áfido/anti-granizo), do NOT intercept as borde — fall through
+    // so the flow-switch (§1.5) can route them to that flow. Reported: antimaleza & malla-sombra
+    // rollo asks were dragged onto borde ("¿qué largo?") because "precio"/"ancho" matched here.
+    // This only YIELDS to §1.5's AI scope classifier — it never forces a switch, so a genuine
+    // borde customer who merely mentions another product still gets classified as "current".
+    const wantsNonBordeProduct = /(anti\s*malez|ground\s*cover|malla\s*(de\s*)?sombra|raschel|monofilament|anti\s*[aá]fido|anti\s*granizo|sombreo)/i.test(String(userMessage));
+    if (userMessage && isBordeFlow && !wantsNonBordeProduct) {
       const { findProductInFamilies, parseRollQuantity } = require("./tools");
       const { resolvePrice, trackedLink } = require("./priceResolver");
       const PFm = require("../../models/ProductFamily");
