@@ -148,9 +148,10 @@ const parseSize = (t) => {
   }
   check("day-split = onDay ∪ other, no overlap", dsBad);
 
-  // 10. certainty ∈ multiples of 10 (or null for human)
-  check("certainty is a multiple of 10 (or null=human)",
-    active.filter((m) => m.certainty != null && (m.certainty < 0 || m.certainty > 100 || m.certainty % 10 !== 0)).map((m) => `${m._id}:${m.certainty}`));
+  // 10. certainty ∈ multiples of 5 (or null for human). The 2026-07-22 chart introduced
+  // a 25% tier (zip-only, same item), so 5 — not 10 — is the valid granularity.
+  check("certainty is a multiple of 5 (or null=human)",
+    active.filter((m) => m.certainty != null && (m.certainty < 0 || m.certainty > 100 || m.certainty % 5 !== 0)).map((m) => `${m._id}:${m.certainty}`));
 
   // 11. no null-certainty on a non-human match
   check("no null certainty on a system match",
