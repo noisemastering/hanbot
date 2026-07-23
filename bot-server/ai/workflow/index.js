@@ -570,6 +570,23 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     }
   }
 
+  // 1.065 EXPLICIT WHOLESALE INTENT (any product flow) → asesor handoff for a volume
+  // quote, COLLECTING name+phone via beginHandoff. A bare "mayoreo"/"revendedor"/"para
+  // un vivero al mayoreo" needs NO quantity — a human hears it and connects them. This
+  // used to be reforzada-only, so rollo/borde/GC wholesale asks fell through (reported:
+  // a vivero asking "¿a cómo de mayoreo?" got a retail rollo quote instead of a handoff).
+  if (userMessage && !workflow.isColdStart) {
+    try {
+      const { wantsWholesale } = require("./tools");
+      if (wantsWholesale(String(userMessage))) {
+        return beginHandoff({
+          preface: `¡Claro que manejamos mayoreo por volumen!`,
+          reason: `Mayoreo (solicitud explícita de mayoreo)`,
+        });
+      }
+    } catch (e) { /* fall through to normal handling */ }
+  }
+
   // 1.07–1.08 ROLLO-FLOW DETERMINISTIC HANDLING. The rollo flow has fixed shades
   // (35/50/70/80/90), discrete widths and lengths, so its quoting is enforced in
   // code rather than left to the model:
@@ -684,7 +701,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // hand off if it has no price. Sets rollRecommendation/activeProductId.
         const recommend = async (area, shade) => {
           const rec = await nearestRollByArea(area, rolloFams, { shade: shade || undefined });
-          if (!rec) return ret(`Déjame conectarte con un especialista para encontrar la mejor opción para cubrir ${area} m². 🙌`, { handoffRequested: true, handoffReason: `Sin rollo para ${area} m²` });
+          if (!rec) return beginHandoff({ preface: `Para cubrir ${area} m² lo mejor es una cotización personalizada.`, reason: `Sin rollo para ${area} m²` });
           const sh = await shadeText(rec.leaf);
           const pi = await resolvePrice(rec.leaf);
           state.pendingAreaConfirm = null;
@@ -697,7 +714,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             return ret(reply, { rollAreaRecommended: `${rec.dims[0]}x${rec.dims[1]}` });
           }
           state.rollRecommendation = null;
-          return ret(`Para cubrir ${area} m² te recomiendo un rollo de ${rec.dims[0]} x ${rec.dims[1]} m; te conecto con un especialista para confirmarte el precio y el envío. 🙌`, { handoffRequested: true, handoffReason: `Rollo recomendado ${rec.dims[0]}x${rec.dims[1]} sin precio en línea` });
+          return beginHandoff({ preface: `Para cubrir ${area} m² te recomiendo un rollo de ${rec.dims[0]} x ${rec.dims[1]} m.`, reason: `Rollo recomendado ${rec.dims[0]}x${rec.dims[1]} sin precio en línea` });
         };
 
         // (a) UNAVAILABLE SHADE. Detect ANY %-shade the customer named — even one we
@@ -724,7 +741,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           }
           if (decline && !affirm && !dims && qty == null) {
             state.rollRecommendation = null;
-            return ret(`De acuerdo, un asesor se pondrá en contacto contigo para encontrar la mejor solución. 🙌`, { handoffRequested: true, handoffReason: `Cliente no aceptó el rollo recomendado — buscar mejor solución con un asesor` });
+            return beginHandoff({ preface: `De acuerdo.`, reason: `Cliente no aceptó el rollo recomendado — buscar mejor solución con un asesor` });
           }
           if (affirm && !dims && qty == null) state.rollRecommendation = null; // accepted → continue
         }
@@ -739,7 +756,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         let rollActive = !!state.activeProductId;
         if (!rollActive && dims) rollActive = !!(await findProductInFamilies(msg, rolloFams, dims));
         if (qty != null && qty >= 2 && rollActive) {
-          return ret(`¡Excelente! Para ${qty} rollos manejamos precio de MAYOREO 🙌. Te paso con un especialista para darte el mejor precio y cerrar tu pedido.`, { handoffRequested: true, handoffReason: `Mayoreo: ${qty} rollos — precio y cierre con un especialista` });
+          return beginHandoff({ preface: `Para ${qty} rollos manejamos precio de MAYOREO.`, reason: `Mayoreo: ${qty} rollos — precio y cierre con un especialista` });
         }
 
         // (c) MEASURE GIVEN
@@ -874,7 +891,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           state.activeProductId = String(doc._id);
           return ret(`El ${label} cuesta $${pi.amount}.` + (link ? ` Aquí lo puedes comprar: ${link}` : "") + ` ¿Te ayudo con algo más? 😊`, { complementQuoted: label });
         }
-        return ret(`Déjame conectarte con un especialista para confirmarte el precio del ${label}. 🙌`, { handoffRequested: true, handoffReason: `Complemento "${label}" sin precio en línea` });
+        return beginHandoff({ preface: `Para confirmarte el precio del ${label},`, reason: `Complemento "${label}" sin precio en línea` });
       };
 
       // OJILLOS / SUJETADORES → resolve the packet by piece count
@@ -947,7 +964,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         }
         return q;
       };
-      const mayoreo = (n) => retB(`¡Excelente! Para ${n} rollos de borde manejamos precio de MAYOREO 🙌. Te paso con un especialista para darte el mejor precio y cerrar tu pedido.`, { handoffRequested: true, handoffReason: `Mayoreo borde: ${n} rollos` });
+      const mayoreo = (n) => beginHandoff({ preface: `Para ${n} rollos de borde manejamos precio de MAYOREO.`, reason: `Mayoreo borde: ${n} rollos` });
       const shareLink = async (leaf, len) => {
         const pi = await resolvePrice(leaf);
         if (!pi || !pi.amount) return null;
@@ -1079,16 +1096,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       const PF = require("../../models/ProductFamily");
       const refFams = require("../../models/Workflow").familyListOf(workflow) || [];
       const msg = String(userMessage);
-      // EXPLICIT WHOLESALE REQUEST → asesor handoff for a volume quote, NO quantity
-      // required. A human hearing "quiero precio de mayoreo" connects them to an advisor;
-      // it never loops re-asking a size the customer already gave. (Was missing entirely:
-      // wholesale only fired on a quantity threshold, so a bare "mayoreo" hit nothing.)
-      if (wantsWholesale(msg)) {
-        return beginHandoff({
-          preface: `¡Claro! Para precio de MAYOREO por volumen te paso con un asesor que te dará la mejor cotización. 🙌`,
-          reason: `Mayoreo (solicitud explícita de mayoreo)`,
-        });
-      }
+      // (Explicit "mayoreo" intent is handled earlier by the flow-agnostic gate §1.065,
+      // which collects name+phone. Here we only handle the QUANTITY-threshold mayoreo.)
       const dims = dimsOf(msg) || (extractAllMeasures(msg)[0] || null);
       // qty via orderedQty: EXPLICIT signal only (unit word / order verb + number). A
       // bare number here is a dimension or the fixed 90% shade — never a piece count. So
