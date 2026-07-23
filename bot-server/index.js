@@ -1055,17 +1055,20 @@ app.post("/webhook", async (req, res) => {
                       const pr = await sendPrivateReply(comment_id, dmOpener);
                       if (pr.success) {
                         console.log(`   ✅ Private reply (DM) sent to commenter`);
-                        if (pr.psid) {
-                          await CommentContext.updateOne({ fbUserId: from.id, commentId: comment_id }, { linkedPsid: pr.psid }).catch(() => {});
-                          console.log(`   🔗 Captured PSID ${pr.psid} for the commenter`);
-                        }
+                        const upd = { replyStatus: "sent", replyType: intent.type || null };
+                        if (pr.psid) { upd.linkedPsid = pr.psid; console.log(`   🔗 Captured PSID ${pr.psid} for the commenter`); }
+                        await CommentContext.updateOne({ fbUserId: from.id, commentId: comment_id }, upd).catch(() => {});
+                      } else {
+                        await CommentContext.updateOne({ fbUserId: from.id, commentId: comment_id }, { replyStatus: "failed" }).catch(() => {});
                       }
                     }
                   } else {
                     console.log(`   ⏭️ Comment not worth a private reply (AI): "${(message || '').slice(0, 50)}"`);
+                    await CommentContext.updateOne({ fbUserId: from.id, commentId: comment_id }, { replyStatus: "not_worth_it", replyType: intent.type || null }).catch(() => {});
                   }
                 } else if (comment_id) {
                   console.log(`   ⏸️ Comment auto-reply is OFF (env + dashboard toggle both off)`);
+                  await CommentContext.updateOne({ fbUserId: from.id, commentId: comment_id }, { replyStatus: "disabled" }).catch(() => {});
                 }
               } catch (err) {
                 console.error(`   ❌ Failed to store comment context:`, err.message);

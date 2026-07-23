@@ -140,6 +140,31 @@ async function judge(botText, contextLines) {
     console.log(`        brief: ${buildClientBrief(c)}`);
   }
 
-  console.log(`\n════════ END — reply flags: ${flags.length} | handoff convos: ${convos.length} ════════\n`);
+  // ---- PART 3: Facebook comment-reply decisions ----
+  // Surface what the bot DID with each comment (sent / not_worth_it / failed / disabled)
+  // so the "garbage" is visible while we clear the bulky cases — and CATCH the misses:
+  // a comment marked not_worth_it (or failed/disabled) that actually carries a buying
+  // signal is a dropped lead the classifier wrongly filtered.
+  const CommentContext = require("../models/CommentContext");
+  const comments = await CommentContext.find({ createdAt: { $gte: CUTOFF } }).sort({ createdAt: 1 }).lean();
+  const byStatus = {};
+  for (const c of comments) { const k = c.replyStatus || "sin_estado"; byStatus[k] = (byStatus[k] || 0) + 1; }
+  console.log(`\n[3] Comentarios de Facebook — ${comments.length} en ventana`);
+  console.log(`    por estado: ${Object.entries(byStatus).map(([k, n]) => `${k}=${n}`).join(" · ") || "(ninguno)"}`);
+
+  // buyer signal = a real lead (measure / price / intent / product / shipping)
+  const BUYER = /(\d+\s*(?:[x×*]|por)\s*\d+)|\bprecio\b|cu[aá]nto|cotiz|costo|vale|\bquiero\b|ocupo|necesito|me\s+interesa|m[aá]nden|\bmalla\b|\blona\b|\brollo\b|ground\s*cover|antimaleza|\bborde\b|env[ií]o|env[ií]an|\bllega\b|disponible/i;
+  const notReplied = comments.filter((c) => c.replyStatus && c.replyStatus !== "sent");
+  const missed = notReplied.filter((c) => BUYER.test(c.commentText || ""));
+  if (notReplied.length) {
+    console.log(`\n    No respondidos (${notReplied.length}) — ⚠️ = tenía señal de compra (posible lead perdido):`);
+    for (const c of notReplied) {
+      const flag = BUYER.test(c.commentText || "") ? "⚠️ POSIBLE LEAD" : "              ";
+      console.log(`    ${flag} [${c.replyStatus}] ${c.fbUserName || "(sin nombre)"}: "${(c.commentText || "").replace(/\n/g, " ").slice(0, 70)}"`);
+    }
+  }
+  if (missed.length) console.log(`\n    🔺 ${missed.length} comentario(s) con señal de compra NO fueron respondidos — revisar el filtro de commentIntent.`);
+
+  console.log(`\n════════ END — reply flags: ${flags.length} | handoff convos: ${convos.length} | comentarios: ${comments.length} (no resp: ${notReplied.length}, posibles leads: ${missed.length}) ════════\n`);
   await mongoose.connection.close();
 })().catch((e) => { console.error(e); process.exit(1); });
