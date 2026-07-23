@@ -2081,43 +2081,70 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             console.error("⚠️ sin→reforzada mention failed:", err.message);
           }
         }
-        // The customer named a MEASURE we couldn't resolve in catalog (e.g.
-        // 13x3 — out of range). Find the closest available size so the bot
-        // offers a REAL size and asks if they still want the exact one —
-        // instead of inventing a size or saying "no manejamos decimales".
-        const closest = (oobHandled || mentionedReforzada) ? null : await toolsMod.closestAvailableMeasure(String(userMessage), familyList, wantDims);
+        // The customer named a MEASURE not exact in catalog (13x3, 8x10, 4.5x4.5,
+        // decimals). THE RULE: always offer the CLOSEST AVAILABLE size — NEVER hand
+        // off, deny, or say "medida especial" for a size we can approximate. Ceil the
+        // fractional sides first (2.8x2.9→3x3, 4.5x4.5→5x5; never undersize), then pick
+        // the nearest real size and offer it DETERMINISTICALLY — the model kept
+        // overriding the soft directive with an asesor handoff (reported: 8x10→asesor,
+        // 6x12→asesor, 10x10→asesor instead of offering 7x10 / 6x10 / 8x8).
+        const wantCeil = [Math.ceil(wantDims[0]), Math.ceil(wantDims[1])].sort((a, b) => a - b);
+        const closest = (oobHandled || mentionedReforzada) ? null : await toolsMod.closestAvailableMeasure(null, familyList, wantCeil);
         if (closest) {
-          usedClosestMeasure = true; // reply will name the nearest size, not the requested one
-          // Resolve the closest product's LIVE price + tracked link deterministically
-          // so the reply can be BRIEF and still complete. Without this the model only
-          // had {label, price} and had to make a tool call for the link — which it
-          // skips when told to be concise, producing a vague "si quieres te comparto".
+          usedClosestMeasure = true; // reply names the nearest size, not the requested one
           let cAmount = Number.isFinite(closest.price) && closest.price > 0 ? closest.price : null;
-          let cOrig = null, cLink = null;
+          let cOrig = null, cLink = null, cId = null;
           try {
             const cDoc = await toolsMod.findProductInFamilies(closest.size || closest.label || "", familyList, closest.dims);
             if (cDoc) {
+              cId = String(cDoc._id);
               const { resolvePrice, trackedLink } = require("./priceResolver");
               const cpi = await resolvePrice(cDoc);
               if (cpi && cpi.amount) {
                 cAmount = cpi.amount;
                 cOrig = cpi.hasDiscount && Number.isFinite(cpi.originalPrice) && cpi.originalPrice > cpi.amount ? Math.round(cpi.originalPrice) : null;
-                cLink = await trackedLink(cpi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: cDoc.name, productId: String(cDoc._id) });
+                cLink = await trackedLink(cpi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: cDoc.name, productId: cId });
               }
             }
           } catch (err) {
             console.error("⚠️ closest price/link resolve failed:", err.message);
           }
           if (Number.isFinite(cAmount) && cAmount > 0) {
-            allowedAmounts.push(cAmount);
-            if (cOrig) allowedAmounts.push(cOrig);
-            if (primaryQuoteAmount == null) primaryQuoteAmount = cAmount;
+            // DETERMINISTIC offer of the closest available size — enforces the rule so
+            // the model can't hand off on the size. Clean size from dims (labels can be
+            // a full product name), price + tracked link, and bind it as the active
+            // product so a follow-up ("sí, la quiero") resolves to it.
+            const cSize = closest.dims ? `${closest.dims[0]}m x ${closest.dims[1]}m` : (closest.label || "esa medida");
+            const isExact = closest.dims && closest.dims[0] === wantCeil[0] && closest.dims[1] === wantCeil[1];
+            const priceStr = `$${cAmount}${cOrig ? ` (rebajado de $${cOrig})` : ""}`;
+            // Lead with the OFFER (never a "no la manejo" that reads as a flat denial —
+            // we DO make sobre medida; we're just proposing the closest ready size).
+            const lead = isExact
+              ? `Para tu medida de ${wantDims[0]}x${wantDims[1]} m te queda la de ${cSize} en ${priceStr}.`
+              : `La medida que manejo más cercana a tu ${wantDims[0]}x${wantDims[1]} m es la de ${cSize}, en ${priceStr}.`;
+            // Affirm sobre-medida for a genuinely different size (NEVER deny custom —
+            // Hanlob does make it) — but the closest BUYABLE size stays the primary offer.
+            const customNote = isExact ? "" : ` Y si la necesitas exacta, también la hacemos a tu medida. 😊`;
+            const reply = lead + (cLink ? ` Aquí la compras: ${cLink}` : "") + customNote;
+            if (cId) state.activeProductId = cId;
+            history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+            return {
+              reply,
+              state: { ...state, history, nodeId: currentNode.id },
+              diagnostics: {
+                workflow: { id: String(workflow._id), name: workflow.name },
+                fromNode: { id: currentNode.id, name: currentNode.name },
+                toNode: { id: currentNode.id, name: currentNode.name },
+                closestMeasureOffered: cSize,
+                requestedMeasure: `${wantDims[0]}x${wantDims[1]}`,
+              },
+            };
           }
-          const priceStr = Number.isFinite(cAmount) && cAmount > 0 ? `$${cAmount}${cOrig ? ` (rebajado de $${cOrig})` : ""}` : "";
+          // No live price for the closest size (rare) → soft directive fallback (still
+          // NEVER hand off or deny for the size).
           turnContextExtra +=
-            `\n- MEDIDA NO LISTA EN CATÁLOGO (pero NO la niegues): la más cercana que sí manejamos es "${closest.label}"${priceStr ? ` ${priceStr}` : ""}${cLink ? ` (link: ${cLink})` : ""}. ` +
-            `Responde en 1–2 frases, directo: di esa medida más cercana con su precio${cLink ? " y comparte ESE link (no ofrezcas 'compartirlo', dalo ya)" : ""}, y en frase corta que su medida exacta se hace a medida con un asesor. ` +
-            `Sin relleno ni repeticiones (NO "sí, sí la manejamos", NO "puedes ver más detalles y comprarla en este enlace"). NO la niegues, NO inventes medida ni precio, NUNCA digas "no manejamos decimales".`;
+            `\n- MEDIDA NO LISTA EN CATÁLOGO (pero NO la niegues): la más cercana que sí manejamos es "${closest.label}". ` +
+            `Ofrécela con naturalidad; NO la niegues, NO inventes medida ni precio, NUNCA digas "no manejamos decimales" ni "medida especial", NUNCA hagas handoff por el tamaño.`;
         }
       } else if (turnActiveProductId) {
         // NO measure in THIS message, but there's an ACTIVE product (e.g. the
