@@ -30,7 +30,7 @@ const HANDOFF_SIGNAL = new RegExp(
   ].join("|"),
   "i"
 );
-const PHONE = /\b\d{9,10}\b/; // MX mobiles are 10 digits; tolerate a 9-digit typo the customer left
+const PHONE = /\b\d{10}\b/; // a valid phone is ALL 10 digits — a 9-digit fragment is NOT contact
 
 const norm = (t) => String(t || "").normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 

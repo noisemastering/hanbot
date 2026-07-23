@@ -305,6 +305,12 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       if (!(state.lead && state.lead.name) && looksLikeBareName(String(userMessage))) {
         state.lead = { ...(state.lead || {}), name: String(userMessage).trim() };
       }
+      // WHOLESALE: capture HOW MANY items they want (asked on the prior turn) — a small
+      // count they typed in reply. \d{1,4} bounded, so it won't grab a 10-digit phone.
+      if (state.pendingHandoff.wholesale && !(state.lead && state.lead.wholesaleQty)) {
+        const qn = (String(userMessage).match(/\b(\d{1,4})\b/) || [])[1];
+        if (qn) state.lead = { ...(state.lead || {}), wholesaleQty: qn };
+      }
       // Persist the completed lead (name + phone + zip/city) to the profile.
       if (opts.psid) {
         const nm = String((state.lead && state.lead.name) || "").trim().split(/\s+/).filter(Boolean);
@@ -316,7 +322,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           city: (state.location && state.location.city) || undefined,
         }, "handoff").catch(() => {});
       }
-      const reason = state.pendingHandoff.reason || "El cliente requiere atención de un asesor";
+      const baseReason = state.pendingHandoff.reason || "El cliente requiere atención de un asesor";
+      const reason = (state.lead && state.lead.wholesaleQty) ? `${baseReason} — interés: ~${state.lead.wholesaleQty} piezas` : baseReason;
       const who = state.lead && state.lead.name ? `, ${String(state.lead.name).split(/\s+/)[0]}` : "";
       const reply = `¡Gracias${who}! 🙌 Un asesor te contactará lo antes posible para ayudarte.`;
       history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
@@ -401,14 +408,17 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // phone — prefaced with any fact we owe the customer (a price quote, a sold-out
   // note) so one message both informs AND collects — and arm pendingHandoff so
   // their reply completes it next turn.
-  const beginHandoff = ({ preface, reason } = {}) => {
+  const beginHandoff = ({ preface, reason, wholesale } = {}) => {
     const pre = preface ? `${String(preface).trim()} ` : "";
     // Same-day guard: only reuse a name/phone if the customer gave contact TODAY
     // (state.contactDay). No stamp (legacy lead from elsewhere) still counts —
     // backward-compatible.
     const _fresh = !state.contactDay || state.contactDay === _mxDay();
     const haveContact = !!(_fresh && state.lead && (state.lead.phone || state.lead.email || state.lead.name));
-    if (haveContact) {
+    // A WHOLESALE handoff must ALSO capture HOW MANY items they want (for the volume
+    // quote) — don't escalate straight through until we have that quantity too.
+    const wholesaleNeedsQty = !!wholesale && !(state.lead && state.lead.wholesaleQty);
+    if (haveContact && !wholesaleNeedsQty) {
       // Persist the lead to the customer's profile at handoff — here we have MORE
       // than the zip (name + phone). Keyed by psid so correlation can use it later.
       if (opts.psid) {
@@ -436,11 +446,18 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         },
       };
     }
-    const reply = `${pre}¡Con gusto te paso con un asesor! 🙌 ¿Me compartes tu nombre y un teléfono para que te contacte?`;
+    // Ask for whatever we still need: the wholesale quantity (mayoreo) + name/phone.
+    // A phone must be the FULL 10 digits — nudge that in the ask.
+    const _lead = state.lead || {};
+    const _qtyAsk = wholesaleNeedsQty ? "¿Cuántas piezas te interesan? " : "";
+    const _contactAsk = (!_lead.name || !_lead.phone)
+      ? "¿Me compartes tu nombre y un teléfono a 10 dígitos para que te contacte?"
+      : "";
+    const reply = `${pre}¡Con gusto te paso con un asesor! 🙌 ${_qtyAsk}${_contactAsk}`.trim();
     history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
     return {
       reply,
-      state: { ...state, history, nodeId: currentNode.id, pendingHandoff: { reason: reason || null, attempts: 1 } },
+      state: { ...state, history, nodeId: currentNode.id, pendingHandoff: { reason: reason || null, wholesale: !!wholesale, attempts: 1 } },
       diagnostics: {
         workflow: { id: String(workflow._id), name: workflow.name },
         fromNode: { id: currentNode.id, name: currentNode.name },
@@ -582,6 +599,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         return beginHandoff({
           preface: `¡Claro que manejamos mayoreo por volumen!`,
           reason: `Mayoreo (solicitud explícita de mayoreo)`,
+          wholesale: true,
         });
       }
     } catch (e) { /* fall through to normal handling */ }
@@ -756,7 +774,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         let rollActive = !!state.activeProductId;
         if (!rollActive && dims) rollActive = !!(await findProductInFamilies(msg, rolloFams, dims));
         if (qty != null && qty >= 2 && rollActive) {
-          return beginHandoff({ preface: `Para ${qty} rollos manejamos precio de MAYOREO.`, reason: `Mayoreo: ${qty} rollos — precio y cierre con un especialista` });
+          state.lead = { ...(state.lead || {}), wholesaleQty: String(qty) };
+          return beginHandoff({ preface: `Para ${qty} rollos manejamos precio de MAYOREO.`, reason: `Mayoreo: ${qty} rollos — precio y cierre con un especialista`, wholesale: true });
         }
 
         // (c) MEASURE GIVEN
@@ -964,7 +983,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         }
         return q;
       };
-      const mayoreo = (n) => beginHandoff({ preface: `Para ${n} rollos de borde manejamos precio de MAYOREO.`, reason: `Mayoreo borde: ${n} rollos` });
+      const mayoreo = (n) => { state.lead = { ...(state.lead || {}), wholesaleQty: String(n) }; return beginHandoff({ preface: `Para ${n} rollos de borde manejamos precio de MAYOREO.`, reason: `Mayoreo borde: ${n} rollos`, wholesale: true }); };
       const shareLink = async (leaf, len) => {
         const pi = await resolvePrice(leaf);
         if (!pi || !pi.amount) return null;
@@ -1114,9 +1133,11 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           const pi = await resolvePrice(leaf).catch(() => null);
           if (wmq && qty >= wmq) {
             const unit = pi && pi.amount ? ` (cada una $${pi.amount})` : "";
+            state.lead = { ...(state.lead || {}), wholesaleQty: String(qty) };
             return beginHandoff({
               preface: `¡Claro! ${qty} piezas de ${dims[0]}x${dims[1]} m${unit} entran en precio de MAYOREO 🙌; te preparo una cotización por volumen.`,
               reason: `Mayoreo confeccionada: ${qty} piezas de ${dims[0]}x${dims[1]} (umbral mayoreo ${wmq})`,
+              wholesale: true,
             });
           }
           // qty < threshold → retail: make the UNIT price clear + tell them to just set
@@ -1340,9 +1361,11 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
                   // and tell them to just set the quantity at checkout (same link).
                   const _wmq = await wholesaleThresholdFor(_meta.id);
                   if (_wmq && qtyC >= _wmq) {
+                    state.lead = { ...(state.lead || {}), wholesaleQty: String(qtyC) };
                     return beginHandoff({
                       preface: `¡Claro! ${qtyC} piezas de ${size} en ${cap(_c1)} (cada una $${_meta.amount}) entran en precio de MAYOREO 🙌; te preparo una cotización por volumen.`,
                       reason: `Mayoreo confeccionada: ${qtyC} piezas ${size} ${_c1}`,
+                      wholesale: true,
                     });
                   }
                   reply = `${preU}la ${size} en ${cap(_c1)} cuesta $${_meta.amount}${_meta.plusIva ? " + IVA" : ""} cada una (es precio por pieza). Para ${qtyC}, al comprar solo cambia la cantidad a ${qtyC} en el mismo enlace: ${_meta.link}`;
