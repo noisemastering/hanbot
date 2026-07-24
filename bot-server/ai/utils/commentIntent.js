@@ -32,6 +32,20 @@ async function classifyComment(comment) {
   if (key.length < 2) return empty;
   if (_cache.has(key)) return _cache.get(key);
 
+  // DETERMINISTIC buyer-signal short-circuit. A comment with a clear price/measure/
+  // purchase-intent/shipping signal is ALWAYS worth a reply — never leave an obvious
+  // lead to LLM flakiness (a textbook "Precio del rollo de 18 metros?" was dropped as
+  // not_worth_it by a one-off gpt-4o-mini misfire, reported). Only ambiguous comments
+  // (greetings, praise, off-topic) fall through to the model below.
+  const shippingSig = /\benv[ií]o|env[ií]an|\bflete\b|\bllega\b|\bentrega|a\s+domicilio|\bmandan|paqueter/i.test(key);
+  const buyerSig = /\bprecio|cu[aá]nto|cotiz|costo|\bvale\b|\$|\d+\s*(?:x|×|por)\s*\d+|\d+\s*(?:m|mts|metros?)\b|\bquiero\b|me\s+interesa|\bocupo\b|\bnecesito\b|comprar|apart[ao]|\binformes?\b|\binfo\b|disponible|dispon[ií]bilidad|\bmedida/i.test(key);
+  if (buyerSig || shippingSig) {
+    const result = { reply: true, type: (shippingSig && !buyerSig) ? 'shipping' : 'general' };
+    if (_cache.size >= _CACHE_MAX) _cache.delete(_cache.keys().next().value);
+    _cache.set(key, result);
+    return result;
+  }
+
   try {
     const res = await _openai.chat.completions.create({
       model: 'gpt-4o-mini',
