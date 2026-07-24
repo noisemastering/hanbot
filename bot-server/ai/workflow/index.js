@@ -964,7 +964,12 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     // This only YIELDS to §1.5's AI scope classifier — it never forces a switch, so a genuine
     // borde customer who merely mentions another product still gets classified as "current".
     const wantsNonBordeProduct = /(anti\s*malez|ground\s*cover|malla\s*(de\s*)?sombra|raschel|monofilament|anti\s*[aá]fido|anti\s*granizo|sombreo)/i.test(String(userMessage));
-    if (userMessage && isBordeFlow && !wantsNonBordeProduct) {
+    // A DELIVERY/logistics question ("¿en cuántos días me llega?", "¿cuándo llega?",
+    // "tiempo de entrega") must NOT be treated as a borde inquiry — the ask-length gate's
+    // trigger matches "cuánto" inside "cuántos días" and answered a shipping question with
+    // "¿qué largo necesitas?" (reported). Yield so the turn answers about delivery instead.
+    const isDeliveryQuestion = /(cu[aá]nto?s?\s+d[ií]as|cu[aá]ndo\s+(me\s+)?(llega|lleg[ao]|entregan|sale)|tiempo\s+de\s+(entrega|env[ií]o)|en\s+cu[aá]nto\s+(tiempo|llega)|d[ií]as?\s+(en\s+)?(llega|entrega|env)|cu[aá]nto\s+tarda|rastreo|paqueter[ií]a|gu[ií]a\s+de\s+env)/i.test(String(userMessage));
+    if (userMessage && isBordeFlow && !wantsNonBordeProduct && !isDeliveryQuestion) {
       const { findProductInFamilies, parseRollQuantity } = require("./tools");
       const { resolvePrice, trackedLink } = require("./priceResolver");
       const PFm = require("../../models/ProductFamily");

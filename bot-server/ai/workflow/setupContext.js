@@ -395,6 +395,13 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     console.error("⚠️ available-measures resolution failed:", err.message);
   }
 
+  // NEVER compare a size to ITSELF. On a garbled "¿la 4x3 es más chica?" the model
+  // replied "la 4x3 es más chica que una 4x3" (nonsense, reported). If only ONE measure
+  // is named, describe/quote it — never invent a comparison against the same size.
+  lines.push(
+    `- SI EL CLIENTE PREGUNTA SI UNA MEDIDA ES "MÁS GRANDE/CHICA" pero solo menciona UNA medida, NUNCA la compares consigo misma ni digas "X es más chica que X" (es un sinsentido). Cotiza esa medida y, si acaso, menciona el área que cubre (ancho×largo m²). Solo compara dos medidas cuando el cliente realmente mencionó DOS.`
+  );
+
   // NEVER OVER-DENY. The bot was caught flatly denying things we DO offer (custom
   // sizes, negro color). Affirm availability and offer the closest option and/or an
   // asesor instead of a hard "no" — never invent a price.
