@@ -56,6 +56,10 @@ const systemStateSchema = new mongoose.Schema(
     // the weakest, so raising/lowering this never loses data (weak matches are kept
     // for future use and simply hidden from the reports below the floor).
     salesReportingFloorPct: { type: Number, default: 10 },
+    // FB Page access token override. When set, index.js loads it into
+    // process.env.FB_PAGE_TOKEN on startup — lets us rotate the token (e.g. to add
+    // comment permissions) with a DB write instead of a Railway/env change.
+    fbPageToken: { type: String, default: null },
     // Global dashboard banner (Spec Ops). When engaged, a warning banner is shown
     // across the WHOLE dashboard to every logged-in user. Toggled by super_admin.
     banner: {

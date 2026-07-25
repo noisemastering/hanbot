@@ -58,6 +58,17 @@ mongoose.connect(process.env.MONGODB_URI)
   .then(async () => {
     console.log('✅ Connected to MongoDB Atlas');
 
+    // FB PAGE TOKEN from DB overrides the env one. The env/Railway token can go stale
+    // (e.g. missing the comment permissions); storing the current token in SystemState
+    // lets us rotate it with a DB write — no Railway/env change needed.
+    try {
+      const st = await require('./models/SystemState').getState();
+      if (st && st.fbPageToken && st.fbPageToken !== process.env.FB_PAGE_TOKEN) {
+        process.env.FB_PAGE_TOKEN = st.fbPageToken;
+        console.log('🔑 FB_PAGE_TOKEN loaded from DB (overrides env)');
+      }
+    } catch (e) { console.log('ℹ️ FB token load skipped:', e.message); }
+
     // Fix User index to be sparse (allows WhatsApp users without psid)
     try {
       const db = mongoose.connection.db;
