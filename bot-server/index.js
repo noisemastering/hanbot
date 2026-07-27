@@ -874,7 +874,11 @@ app.get("/api/conversation/:psid/status", async (req, res) => {
 
 // GET /health - Simple health check endpoint
 app.get("/health", (req, res) => {
-  res.status(200).json({ status: "ok", timestamp: Date.now() });
+  // Expose the active workflow model so prod's config is verifiable without Railway
+  // access (the sandbox-vs-live model divergence was invisible until now).
+  let workflowModel = null;
+  try { workflowModel = require('./ai/workflow/llmClient').CHAT_MODEL; } catch (_) {}
+  res.status(200).json({ status: "ok", timestamp: Date.now(), workflowModel });
 });
 
 // GET /r/d/:trackCode - Direct ad link redirect (creates new ClickLog per click)
