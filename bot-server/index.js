@@ -555,15 +555,18 @@ async function replyToComment(commentId, message) {
 async function sendPrivateReply(commentId, message) {
   const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN;
   try {
+    // Messenger Send API with a comment_id recipient. The /{comment}/private_replies
+    // edge fails with (#100 sub 33) for New Pages Experience pages; THIS is the
+    // supported path and it returns the commenter's PSID (recipient_id), which we use
+    // to seed the conversation with context.
     const response = await axios.post(
-      `https://graph.facebook.com/v18.0/${commentId}/private_replies`,
-      { message },
-      { headers: { Authorization: `Bearer ${FB_PAGE_TOKEN}`, "Content-Type": "application/json" } }
+      `https://graph.facebook.com/v18.0/me/messages`,
+      { recipient: { comment_id: commentId }, message: { text: message }, messaging_type: "RESPONSE" },
+      { params: { access_token: FB_PAGE_TOKEN } }
     );
     console.log(`✅ Private reply sent for comment ${commentId}:`, JSON.stringify(response.data));
-    // recipient PSID may come back as recipient_id / message_recipient / inside the id
     const d = response.data || {};
-    const psid = d.recipient_id || d.recipient?.id || d.message_recipient?.id || null;
+    const psid = d.recipient_id || d.recipient?.id || null;
     return { success: true, data: d, psid };
   } catch (error) {
     console.error(`❌ Error sending private reply for comment ${commentId}:`, error.response?.data || error.message);
