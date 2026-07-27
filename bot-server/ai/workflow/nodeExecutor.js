@@ -73,7 +73,8 @@ async function executeNode(workflow, node, history, vars, ctx, contextBlock = ""
     try {
       resp = await client.chat.completions.create({
         model: CHAT_MODEL,
-        temperature: 0.5,
+        temperature: 0.1, // near-deterministic: keeps sandbox ≈ live (was 0.5, which let
+        // the SAME model give different answers per call — e.g. 7x7 quoted vs denied)
         max_completion_tokens: 600, // GPT-5.x require this; gpt-4o accepts it too
         messages,
         ...(tools.length ? { tools, tool_choice: "auto" } : {}),
