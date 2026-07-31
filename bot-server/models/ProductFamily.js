@@ -55,6 +55,15 @@ const productFamilySchema = new mongoose.Schema({
   sku: {
     type: String
   },
+  // Human-readable, attribute-encoded product code (CAT-TYPE-SHADE-COLOR-SIZE).
+  // The permanent join key between this MongoDB catalog and the future
+  // SQL/warehouse/production database. Assigned to sellable leaves by
+  // scripts/generateProductIds.js. Deterministic — derived from the product's
+  // own attributes, so both databases can compute the same key.
+  productCode: {
+    type: String,
+    index: true
+  },
   stock: {
     type: Number,
     default: 0
