@@ -364,6 +364,7 @@ function InventarioView() {
   const [mlItemsLoading, setMlItemsLoading] = useState(false);
   const [mlSearchTerm, setMlSearchTerm] = useState('');
   const [mlLinking, setMlLinking] = useState(false);
+  const [mlPasteUrl, setMlPasteUrl] = useState('');
 
   // ML Price Sync state
   const [mlSyncing, setMlSyncing] = useState(false);
@@ -597,6 +598,9 @@ function InventarioView() {
     setMlImportProduct(product);
     setMlSearchTerm('');
     setMlItems([]);
+    // Pre-fill the direct-paste field with the product's current ML link (if any).
+    const currentMl = (product.onlineStoreLinks || []).find(l => /mercadolibre\./i.test(l.url || ''))?.url || '';
+    setMlPasteUrl(currentMl);
   };
 
   // Handle ML search with debounce
@@ -651,6 +655,43 @@ function InventarioView() {
       }
     } catch (error) {
       console.error('Error linking ML item:', error);
+      alert(t('inventory.errorLinkingProduct'));
+    } finally {
+      setMlLinking(false);
+    }
+  };
+
+  // Directly save a pasted Mercado Libre URL as the product's ML link (no search).
+  // Reuses the same PUT /:id path as the search flow, preserving any non-ML links.
+  const saveMlPasteLink = async () => {
+    if (!mlImportProduct) return;
+    const url = mlPasteUrl.trim();
+    if (!/mercadolibre\./i.test(url)) {
+      alert(t('inventory.invalidMLUrl'));
+      return;
+    }
+    setMlLinking(true);
+    try {
+      const token = localStorage.getItem('token');
+      const existing = mlImportProduct.onlineStoreLinks || [];
+      const others = existing.filter(l => !/mercadolibre\./i.test(l.url || ''));
+      const newLinks = [...others, { url, store: 'Mercado Libre', isPreferred: others.length === 0 }];
+      const res = await fetch(`${API_URL}/product-families/${mlImportProduct._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+        body: JSON.stringify({ onlineStoreLinks: newLinks })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setProductTree(prev => updateProductInTree(prev, mlImportProduct._id, { onlineStoreLinks: newLinks }));
+        setMlImportProduct(null);
+        setMlPasteUrl('');
+        setMlSearchTerm('');
+      } else {
+        alert(t('inventory.errorLinking') + data.error);
+      }
+    } catch (error) {
+      console.error('Error saving ML link:', error);
       alert(t('inventory.errorLinkingProduct'));
     } finally {
       setMlLinking(false);
@@ -843,7 +884,7 @@ function InventarioView() {
               <span className="text-red-400">{uploadResult.error}</span>
             ) : (
               <>
-                {t('inventory.uploadDone', { updated: uploadResult.updated, unchanged: uploadResult.unchanged })}
+                {t('inventory.uploadDone', { price: uploadResult.priceUpdated, link: uploadResult.linkUpdated, unchanged: uploadResult.unchanged })}
                 {uploadResult.notFound?.length > 0 && (
                   <span className="text-amber-400"> · {t('inventory.uploadNotFound', { count: uploadResult.notFound.length })}</span>
                 )}
@@ -1155,6 +1196,27 @@ function InventarioView() {
               </p>
             </div>
 
+            {/* Paste a Mercado Libre URL directly (no search) */}
+            <div className="p-4 border-b border-gray-700">
+              <label className="block text-xs text-gray-400 mb-1">{t('inventory.pasteMLLabel')}</label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="https://articulo.mercadolibre.com.mx/MLM-..."
+                  value={mlPasteUrl}
+                  onChange={(e) => setMlPasteUrl(e.target.value)}
+                  className="flex-1 px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500 text-sm"
+                />
+                <button
+                  onClick={saveMlPasteLink}
+                  disabled={mlLinking || !mlPasteUrl.trim()}
+                  className="px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 text-sm font-medium disabled:opacity-50 whitespace-nowrap"
+                >
+                  {t('inventory.saveLink')}
+                </button>
+              </div>
+            </div>
+
             {/* Search */}
             <div className="p-4 border-b border-gray-700">
               <input
@@ -1162,7 +1224,6 @@ function InventarioView() {
                 placeholder={t('inventory.searchMinChars')}
                 value={mlSearchTerm}
                 onChange={(e) => handleMLSearchChange(e.target.value)}
-                autoFocus
                 className="w-full px-4 py-2 bg-gray-900 border border-gray-700 rounded-lg text-white placeholder-gray-500 focus:outline-none focus:border-primary-500"
               />
             </div>
