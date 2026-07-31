@@ -1,8 +1,13 @@
 // routes/productFamilyRoutes.js
 const express = require("express");
 const router = express.Router();
+const XLSX = require("xlsx");
+const multer = require("multer");
 const ProductFamily = require("../models/ProductFamily");
 const { clearCatalogCache } = require("../ai/classifier/intentClassifier");
+
+// In-memory upload (we parse the spreadsheet buffer directly; nothing is stored).
+const uploadXlsx = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
 // ============================================
 // TREE-SPECIFIC OPERATIONS
@@ -58,6 +63,89 @@ router.get("/sellable", async (req, res) => {
     );
 
     res.json({ success: true, data: productsWithFullNames });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// ============================================
+// INVENTORY SPREADSHEET — export + bulk price import (keyed by productCode)
+// ============================================
+
+// Export every coded sellable unit to an .xlsx. Codigo (= productCode) is the
+// join key; the same sheet can be edited and re-uploaded to /import-prices.
+// Defined BEFORE "/:id" so Express doesn't treat "export-inventory" as an id.
+router.get("/export-inventory", async (req, res) => {
+  try {
+    const all = await ProductFamily.find(
+      {},
+      { name: 1, parentId: 1, productCode: 1, price: 1, mlPrice: 1, stock: 1 }
+    ).lean();
+    const byId = new Map(all.map((d) => [String(d._id), d]));
+    const pathOf = (p) => {
+      const parts = [];
+      let n = p;
+      while (n) { parts.unshift(n.name); n = n.parentId ? byId.get(String(n.parentId)) : null; }
+      return parts.join(" › ");
+    };
+    const rows = all
+      .filter((p) => p.productCode)
+      .sort((a, b) => a.productCode.localeCompare(b.productCode))
+      .map((p) => ({
+        Codigo: p.productCode,
+        Producto: pathOf(p),
+        Precio: p.price ?? "",
+        Precio_ML: p.mlPrice ?? "",
+        Existencias: p.stock ?? "",
+      }));
+    const ws = XLSX.utils.json_to_sheet(rows, {
+      header: ["Codigo", "Producto", "Precio", "Precio_ML", "Existencias"],
+    });
+    ws["!cols"] = [{ wch: 24 }, { wch: 62 }, { wch: 12 }, { wch: 12 }, { wch: 12 }];
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, "Inventario");
+    const buf = XLSX.write(wb, { type: "buffer", bookType: "xlsx" });
+    res.setHeader("Content-Disposition", 'attachment; filename="inventario-hanlob.xlsx"');
+    res.setHeader(
+      "Content-Type",
+      "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    );
+    res.send(buf);
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// Bulk-update Inventario prices from an uploaded spreadsheet. Matches each row to
+// a product by Codigo (productCode) and sets its `price` (the manual Inventario
+// field). Only the Precio column is applied; unknown codes and blank/invalid
+// prices are reported back, never guessed.
+router.post("/import-prices", uploadXlsx.single("file"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, error: "No se recibió ningún archivo" });
+    const wb = XLSX.read(req.file.buffer, { type: "buffer" });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    if (!ws) return res.status(400).json({ success: false, error: "El archivo no tiene hojas" });
+    const rows = XLSX.utils.sheet_to_json(ws, { defval: "" });
+
+    let updated = 0, unchanged = 0;
+    const notFound = [], invalid = [];
+    for (const r of rows) {
+      const code = String(r.Codigo ?? r["Código"] ?? r.code ?? r.productCode ?? "").trim();
+      if (!code) continue;
+      const rawPrice = r.Precio ?? r.price ?? "";
+      const priceStr = String(rawPrice).replace(/[^0-9.]/g, "");
+      const price = parseFloat(priceStr);
+      if (priceStr === "" || !(price >= 0)) { invalid.push(code); continue; }
+      const prod = await ProductFamily.findOne({ productCode: code });
+      if (!prod) { notFound.push(code); continue; }
+      if (Number(prod.price) === price) { unchanged++; continue; }
+      prod.price = price;
+      await prod.save();
+      updated++;
+    }
+    if (updated > 0) { try { clearCatalogCache(); } catch (e) { /* cache optional */ } }
+    res.json({ success: true, total: rows.length, updated, unchanged, notFound, invalid });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

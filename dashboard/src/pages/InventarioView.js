@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useTranslation } from '../i18n';
 import FeatureTip from '../components/FeatureTip';
 
@@ -369,6 +369,11 @@ function InventarioView() {
   const [mlSyncing, setMlSyncing] = useState(false);
   const [mlSyncResult, setMlSyncResult] = useState(null);
 
+  // Excel export / bulk price import state
+  const fileInputRef = useRef(null);
+  const [uploading, setUploading] = useState(false);
+  const [uploadResult, setUploadResult] = useState(null);
+
   const fetchProductTree = async () => {
     try {
       setLoading(true);
@@ -391,6 +396,40 @@ function InventarioView() {
   useEffect(() => {
     fetchProductTree();
   }, []);
+
+  // Download the full inventory (coded sellable units) as an .xlsx. The
+  // Content-Disposition: attachment header makes the browser download it
+  // without navigating away from the page.
+  const handleExportExcel = () => {
+    window.location.href = `${API_URL}/product-families/export-inventory`;
+  };
+
+  // Upload an edited spreadsheet to bulk-update Inventario prices. Rows are
+  // matched to products by Codigo (productCode); the server reports how many
+  // were updated / unchanged / not found / invalid.
+  const handleUploadExcel = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploading(true);
+    setUploadResult(null);
+    try {
+      const fd = new FormData();
+      fd.append('file', file);
+      const res = await fetch(`${API_URL}/product-families/import-prices`, { method: 'POST', body: fd });
+      const data = await res.json();
+      if (data.success) {
+        setUploadResult(data);
+        await fetchProductTree();
+      } else {
+        setUploadResult({ error: data.error || 'Error al procesar el archivo' });
+      }
+    } catch (err) {
+      setUploadResult({ error: err.message });
+    } finally {
+      setUploading(false);
+      e.target.value = '';
+    }
+  };
 
   // Helper to update a product in the tree by ID
   const updateProductInTree = (tree, productId, updates) => {
@@ -766,6 +805,56 @@ function InventarioView() {
           {t('inventory.deactivateUnpriced')}
         </button>
 
+        {/* Export inventory to Excel */}
+        <button
+          onClick={handleExportExcel}
+          className="px-4 py-2 bg-green-500/20 border border-green-500/50 text-green-300 rounded-lg hover:bg-green-500/30 transition-colors text-sm font-medium flex items-center gap-2"
+          title={t('inventory.exportExcel')}
+        >
+          {t('inventory.exportExcel')}
+        </button>
+
+        {/* Upload Excel to bulk-update prices */}
+        <input
+          type="file"
+          ref={fileInputRef}
+          accept=".xlsx,.xls"
+          onChange={handleUploadExcel}
+          className="hidden"
+        />
+        <button
+          onClick={() => fileInputRef.current?.click()}
+          disabled={uploading}
+          className="px-4 py-2 bg-blue-500/20 border border-blue-500/50 text-blue-300 rounded-lg hover:bg-blue-500/30 transition-colors text-sm font-medium disabled:opacity-50 flex items-center gap-2"
+          title={t('inventory.uploadPrices')}
+        >
+          {uploading ? (
+            <>
+              <div className="w-4 h-4 border-2 border-blue-300 border-t-transparent rounded-full animate-spin"></div>
+              {t('inventory.uploading')}
+            </>
+          ) : (
+            t('inventory.uploadPrices')
+          )}
+        </button>
+        {uploadResult && (
+          <span className="text-xs text-gray-400">
+            {uploadResult.error ? (
+              <span className="text-red-400">{uploadResult.error}</span>
+            ) : (
+              <>
+                {t('inventory.uploadDone', { updated: uploadResult.updated, unchanged: uploadResult.unchanged })}
+                {uploadResult.notFound?.length > 0 && (
+                  <span className="text-amber-400"> · {t('inventory.uploadNotFound', { count: uploadResult.notFound.length })}</span>
+                )}
+                {uploadResult.invalid?.length > 0 && (
+                  <span className="text-amber-400"> · {t('inventory.uploadInvalid', { count: uploadResult.invalid.length })}</span>
+                )}
+              </>
+            )}
+          </span>
+        )}
+
         {/* Bulk Operations */}
         {selectedItems.size > 0 && (
           <div className="flex items-center gap-2 px-4 py-2 bg-primary-500/10 border border-primary-500/30 rounded-lg">
@@ -859,6 +948,7 @@ function InventarioView() {
                               className="rounded border-gray-600 text-primary-500"
                             />
                           </th>
+                          <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-40">{t('inventory.colCode')}</th>
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase">{t('inventory.colProduct')}</th>
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-24">{t('inventory.colSize')}</th>
                           <th className="px-3 py-2 text-left text-xs font-medium text-gray-400 uppercase w-20">{t('inventory.colColor')}</th>
@@ -879,6 +969,9 @@ function InventarioView() {
                                 onChange={() => toggleSelect(product._id)}
                                 className="rounded border-gray-600 text-primary-500"
                               />
+                            </td>
+                            <td className="px-3 py-2">
+                              <span className="text-xs font-mono text-cyan-300/80 whitespace-nowrap">{product.productCode || '—'}</span>
                             </td>
                             <td className="px-3 py-2">
                               <div className="flex items-center gap-2">
