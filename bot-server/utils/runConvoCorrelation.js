@@ -154,10 +154,24 @@ async function runConvoCorrelation({ full = false } = {}) {
     // NOT 35 days — fast. A periodic full backtrace covers any late-sale→old-convo edge the
     // short window misses; order-uniqueness across the window boundary is preserved by the
     // heldOutside guard below.
-    const lastAt = state.lastCorrelationRun && state.lastCorrelationRun.at ? new Date(state.lastCorrelationRun.at).getTime() : 0;
+    // Anchor the incremental sweep to the last actually-CORRELATED point (the newest
+    // matched sale's date) — NOT lastCorrelationRun.at, which advances on every empty
+    // tick and leaves un-correlated days permanently behind the pointer. So opening a
+    // page re-sweeps from where correlation genuinely left off (e.g. Jul 23) forward,
+    // no matter how many 0-match runs bumped the run timestamp in between. Floored at
+    // MATCH_WINDOW_DAYS so a long-stuck watermark can't force an unbounded scan.
+    const newestMatch = await ConvoSaleMatch.findOne({})
+      .sort({ "sale.dateCreated": -1 })
+      .select("sale.dateCreated")
+      .lean();
+    const correlatedThroughMs =
+      newestMatch && newestMatch.sale && newestMatch.sale.dateCreated
+        ? new Date(newestMatch.sale.dateCreated).getTime()
+        : 0;
+    const floorMs = Date.now() - MATCH_WINDOW_DAYS * 864e5;
     const since = full
       ? BACKTRACE_START
-      : new Date(lastAt ? lastAt - INCR_OVERLAP_MS : Date.now() - MATCH_WINDOW_DAYS * 864e5);
+      : new Date(Math.max(floorMs, correlatedThroughMs ? correlatedThroughMs - INCR_OVERLAP_MS : floorMs));
     const dateClause = { $or: [{ lastMessageAt: { $gte: since } }, { createdAt: { $gte: since } }] };
 
     // 1. enrich ONLY convos in the window still missing identity/basket (bounded cost)

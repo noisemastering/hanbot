@@ -636,6 +636,29 @@ function App() {
   const { t, locale, language, changeLanguage } = useTranslation();
   const updateAvailable = useNewVersionCheck();
 
+  // Correlation heartbeat — on opening ANY tab (route change) and every 30 min while
+  // the app is in use, kick a correlation run so convo↔sale matches stay fresh without
+  // a cronjob. Throttled to once / 5 min across navigations; the backend now sweeps
+  // from the last CORRELATED point, so one call catches the whole gap up to now.
+  useEffect(() => {
+    if (!user) return; // authenticated sessions only
+    let cancelled = false;
+    const kick = async () => {
+      if (cancelled) return;
+      const last = Number(sessionStorage.getItem("corrHeartbeatAt") || 0);
+      if (Date.now() - last < 5 * 60 * 1000) return; // don't spam on rapid tab switches
+      try {
+        const { data } = await API.get("/correlation/status");
+        if (cancelled || data?.running) return;
+        sessionStorage.setItem("corrHeartbeatAt", String(Date.now()));
+        await API.post("/correlation/run");
+      } catch { /* heartbeat must never disrupt the UI */ }
+    };
+    kick(); // fires on every route change (any tab)
+    const id = setInterval(kick, 30 * 60 * 1000); // and every 30 min while in use
+    return () => { cancelled = true; clearInterval(id); };
+  }, [location.pathname, user]);
+
   // All useState hooks must be called BEFORE any early returns
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(true);
