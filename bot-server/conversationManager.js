@@ -1,8 +1,59 @@
 // conversationManager.js
 const mongoose = require("mongoose");
+const axios = require("axios");
 const Conversation = require("./models/Conversation");
 const User = require("./models/User");
 const Message = require("./models/Message");
+
+// ── Facebook Messenger name harvest via the Graph Conversations API ──────────
+// The customer's real name is NOT in the ad-traffic webhook, and the User-Profile
+// API (GET /{psid}) is blocked for click-to-Messenger PSIDs. BUT the Conversations
+// API returns it in `senders[].name` (verified live: "Gloria Ramirez"). The
+// customer's sender.id === their PSID, so we pick that one. This is the ONLY
+// reliable name source for FB ad traffic, and it yields the FULL name.
+const _graphNameCooldown = new Map();
+
+async function fetchMessengerName(psid) {
+  const token = process.env.FB_PAGE_TOKEN;
+  if (!token) return null;
+  try {
+    const { data } = await axios.get("https://graph.facebook.com/v21.0/me/conversations", {
+      params: { platform: "messenger", user_id: psid, fields: "senders", access_token: token },
+      timeout: 6000,
+    });
+    const senders = data?.data?.[0]?.senders?.data || [];
+    const cust = senders.find((s) => String(s.id) === String(psid)); // the customer, not our page
+    const name = (cust?.name || "").trim();
+    return name || null;
+  } catch {
+    return null; // never let a name lookup disrupt the message flow
+  }
+}
+
+// Fetch + persist the Messenger name. Returns the name (or null).
+async function harvestMessengerName(psid) {
+  const name = await fetchMessengerName(psid);
+  const { looksLikeName } = require("./utils/convoSaleMatcher");
+  if (name && looksLikeName(name)) {
+    await Conversation.updateOne(
+      { psid },
+      { $set: { extractedName: name, customerName: name, nameHarvested: true } }
+    );
+    console.log(`👤 Harvested Messenger name for ${psid}: ${name}`);
+    return name;
+  }
+  return null;
+}
+
+// Fire-and-forget, throttled to once / 30 min per psid — safe to call on every
+// message. Persists the name so the next turn + correlation pick it up (we don't
+// block the reply on a Graph call).
+function maybeHarvestMessengerName(psid) {
+  const now = Date.now();
+  if (now - (_graphNameCooldown.get(psid) || 0) < 30 * 60 * 1000) return;
+  _graphNameCooldown.set(psid, now);
+  harvestMessengerName(psid).catch(() => {});
+}
 
 // Match the FB Page Instant Reply opener "¡Hola, Felipe!" / "Hola, Salvador!" / "¡Hola Acacia!"
 // Must be at the very start of the message. Captures the first name.
@@ -122,6 +173,16 @@ async function getConversation(psid) {
       }
       convoObj.nameHarvested = true;
     }
+
+    // FB Messenger: if we still have no real name, pull it from the Graph
+    // Conversations API (the only reliable source for ad-traffic PSIDs).
+    // Fire-and-forget + throttled — it persists extractedName for the next turn
+    // and for correlation, without adding latency to this reply. WhatsApp already
+    // captures the profile name on entry, so skip it there.
+    if (convoObj.channel !== "whatsapp" && (!convoObj.extractedName || !looksLikeName(convoObj.extractedName))) {
+      maybeHarvestMessengerName(psid);
+    }
+
     // Prefer extractedName for downstream userName usage if present
     if (convoObj.extractedName && !convoObj.userName) {
       convoObj.userName = convoObj.extractedName;
@@ -271,4 +332,6 @@ module.exports = {
   updateConversation,
   resetConversation,
   isHumanActive,
+  harvestMessengerName,
+  fetchMessengerName,
 };
