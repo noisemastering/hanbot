@@ -2025,9 +2025,10 @@ function Messages() {
               </div>
             </div>
 
-            {/* Commerce status + report-as-ticket */}
+            {/* Commerce status + report-as-ticket — collapsed while registering a sale
+                (keeps the client-data handoff panel, which helps fill the form). */}
             <div style={{ padding: "0 1rem 1rem 1rem" }}>
-              <ConversationCommercePanel psid={selectedPsid} />
+              {!showSaleForm && <ConversationCommercePanel psid={selectedPsid} />}
               {/* Handoff reason + collected client data for the agent taking over */}
               <ConversationHandoffPanel psid={selectedPsid} />
             </div>
