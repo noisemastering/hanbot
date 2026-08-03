@@ -160,7 +160,7 @@ async function judge(botText, contextLines) {
     console.log(`\n    No respondidos (${notReplied.length}) — ⚠️ = tenía señal de compra (posible lead perdido):`);
     for (const c of notReplied) {
       const flag = BUYER.test(c.commentText || "") ? "⚠️ POSIBLE LEAD" : "              ";
-      console.log(`    ${flag} [${c.replyStatus}] ${c.fbUserName || "(sin nombre)"}: "${(c.commentText || "").replace(/\n/g, " ").slice(0, 70)}"`);
+      console.log(`    ${flag} [${c.replyStatus}] ${c.fbUserName || "(sin nombre)"}: "${(c.commentText || "").replace(/\n/g, " ").slice(0, 70)}"${c.replyError ? ` — ${String(c.replyError).replace(/\n/g, " ").slice(0, 70)}` : ""}`);
     }
   }
   if (missed.length) console.log(`\n    🔺 ${missed.length} comentario(s) con señal de compra NO fueron respondidos — revisar el filtro de commentIntent.`);

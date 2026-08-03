@@ -999,7 +999,12 @@ app.post("/webhook", async (req, res) => {
           if (change.field === 'feed' && change.value?.item === 'comment') {
             const { from, post_id, message, comment_id } = change.value;
 
-            if (from?.id && post_id) {
+            // Skip our OWN page's comments — the feed webhook also fires on the
+            // page's public replies. Trying to private-reply to our own comment
+            // fails with "Private Reply To Facebook Page Not Allowed" (10903/1893062).
+            if (from?.id && from.id === process.env.FB_PAGE_ID) {
+              console.log(`   ↩️ Skipping our own page comment (${comment_id})`);
+            } else if (from?.id && post_id) {
               console.log(`💬 COMMENT DETECTED:`);
               console.log(`   User: ${from.name} (${from.id})`);
               console.log(`   Post: ${post_id}`);
@@ -1077,7 +1082,18 @@ app.post("/webhook", async (req, res) => {
                         if (pr.psid) { upd.linkedPsid = pr.psid; console.log(`   🔗 Captured PSID ${pr.psid} for the commenter`); }
                         await CommentContext.updateOne({ fbUserId: from.id, commentId: comment_id }, upd).catch(() => {});
                       } else {
-                        await CommentContext.updateOne({ fbUserId: from.id, commentId: comment_id }, { replyStatus: "failed" }).catch(() => {});
+                        // Capture WHY it failed (was discarded before → failures undiagnosable).
+                        const fbErr = pr.error && pr.error.error ? pr.error.error : pr.error;
+                        const sub = fbErr && fbErr.error_subcode;
+                        const msg = (fbErr && (fbErr.error_user_msg || fbErr.message)) || String(fbErr || "unknown");
+                        // 1893049 = user/post won't accept a private reply; 1893062 = replying to our own page.
+                        // These are platform limits, not our bug → mark "unreachable" so audits don't flag them.
+                        const status = (sub === 1893049 || sub === 1893062) ? "unreachable" : "failed";
+                        console.warn(`   ⚠️ Private reply ${status} for comment ${comment_id}: ${msg}`);
+                        await CommentContext.updateOne(
+                          { fbUserId: from.id, commentId: comment_id },
+                          { replyStatus: status, replyError: String(msg).slice(0, 300) }
+                        ).catch(() => {});
                       }
                     }
                   } else {

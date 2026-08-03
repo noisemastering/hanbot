@@ -21,10 +21,12 @@ const commentContextSchema = new mongoose.Schema({
   // What we DID with this comment, so the audit isn't guessing from an empty linkedPsid:
   //   "sent"         → private reply (DM) went out
   //   "not_worth_it" → AI judged it not worth a reply (spam/emoji/compliment/off-topic)
-  //   "failed"       → private reply attempt errored (permission / >7d old / already replied)
+  //   "failed"       → private reply attempt errored (unexpected — see replyError)
+  //   "unreachable"  → FB refused the private reply (user/post won't accept a DM, or it's our own page comment)
   //   "disabled"     → comment auto-reply toggle was OFF at the time
   replyStatus: { type: String, default: null, index: true },
   replyType: { type: String, default: null }, // classifyComment type when replied: shipping|general
+  replyError: { type: String, default: null }, // the FB error when a reply failed (so failures are diagnosable)
 
   createdAt: { type: Date, default: Date.now, expires: 604800 } // TTL: 7 days
 });

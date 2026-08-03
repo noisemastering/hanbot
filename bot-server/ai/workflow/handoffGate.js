@@ -68,4 +68,36 @@ function looksLikeBareName(text) {
   return !words.some((w) => _NOT_NAME.has(norm(w)));
 }
 
-module.exports = { extractPhone, extractName, looksLikeBareName };
+// Spanish articles / honorifics / affectionate prefixes that ride in front of a
+// given name ("El Compa Nayo Rosales", "Don Pedro", "Sr. García") — strip these
+// LEADING tokens so the greeting/first-name is the real given name, not "El".
+// (Reported: bot greeted "¡Gracias, El!" from "El Compa Nayo Rosales".)
+const NAME_LEAD_SKIP = new Set([
+  "el", "la", "los", "las", "mi", "don", "dona", "sr", "sra", "srta", "senor", "senora",
+  "ing", "lic", "dr", "dra", "compa", "compadre", "comadre", "hermano", "hermana",
+  "primo", "prima", "tio", "tia", "profe", "senorita",
+]);
+const _normTok = (w) => String(w).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "").replace(/[.,]/g, "");
+
+// Drop leading article/honorific/nickname tokens, keeping at least the last token.
+function _stripLead(full) {
+  const toks = String(full || "").trim().split(/\s+/).filter(Boolean);
+  let i = 0;
+  while (i < toks.length - 1 && NAME_LEAD_SKIP.has(_normTok(toks[i]))) i++;
+  return toks.slice(i);
+}
+
+// The real given (first) name. "El Compa Nayo Rosales" → "Nayo"; "Don Pedro" → "Pedro".
+function firstGivenName(full) {
+  const clean = _stripLead(full);
+  return clean[0] || String(full || "").trim().split(/\s+/)[0] || "";
+}
+
+// Full personal name with the leading article/honorific/nickname stripped.
+// "El Compa Nayo Rosales" → "Nayo Rosales".
+function cleanPersonName(full) {
+  const clean = _stripLead(full);
+  return clean.join(" ") || String(full || "").trim();
+}
+
+module.exports = { extractPhone, extractName, looksLikeBareName, firstGivenName, cleanPersonName };

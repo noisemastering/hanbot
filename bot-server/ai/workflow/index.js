@@ -301,7 +301,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // now (with whatever contact we have) — one ask only, we never nag or trap.
   if (userMessage && state.pendingHandoff) {
     try {
-      const { looksLikeBareName } = require("./handoffGate");
+      const { looksLikeBareName, firstGivenName, cleanPersonName } = require("./handoffGate");
       if (!(state.lead && state.lead.name) && looksLikeBareName(String(userMessage))) {
         state.lead = { ...(state.lead || {}), name: String(userMessage).trim() };
       }
@@ -313,7 +313,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       }
       // Persist the completed lead (name + phone + zip/city) to the profile.
       if (opts.psid) {
-        const nm = String((state.lead && state.lead.name) || "").trim().split(/\s+/).filter(Boolean);
+        const nm = cleanPersonName((state.lead && state.lead.name) || "").split(/\s+/).filter(Boolean);
         require("../utils/locationStats").ensureUserProfile(opts.psid, {
           first_name: nm[0] || undefined,
           last_name: nm.length > 1 ? nm.slice(1).join(" ") : undefined,
@@ -324,7 +324,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       }
       const baseReason = state.pendingHandoff.reason || "El cliente requiere atención de un asesor";
       const reason = (state.lead && state.lead.wholesaleQty) ? `${baseReason} — interés: ~${state.lead.wholesaleQty} piezas` : baseReason;
-      const who = state.lead && state.lead.name ? `, ${String(state.lead.name).split(/\s+/)[0]}` : "";
+      const who = state.lead && state.lead.name ? `, ${firstGivenName(state.lead.name)}` : "";
       const reply = `¡Gracias${who}! 🙌 Un asesor te contactará lo antes posible para ayudarte.`;
       history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
       return {
