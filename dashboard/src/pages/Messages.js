@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import API from "../api";
+import CannedReplies from "../components/CannedReplies";
 import TrackedLinkGenerator from "../components/TrackedLinkGenerator";
 import ManualSaleForm from "../components/ManualSaleForm";
 import ConversationCommercePanel from "../components/ConversationCommercePanel";
@@ -1864,6 +1865,7 @@ function Messages() {
                   }}>
                   📎
                 </button>
+                <CannedReplies onInsert={(text) => setReplyText((prev) => (prev && prev.trim() ? `${prev.replace(/\s*$/, "")} ${text}` : text))} />
                 <input
                   type="text"
                   value={replyText}
