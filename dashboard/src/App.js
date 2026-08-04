@@ -349,6 +349,14 @@ const menuItems = [
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
         )
+      },
+      {
+        id: "consumo",
+        labelKey: "menu.consumo",
+        path: "/consumo",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+        )
       }
     ]
   },
@@ -534,14 +542,6 @@ const menuItems = [
         path: "/playground/rendimiento-mensajes",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-        )
-      },
-      {
-        id: "playground-consumo",
-        labelKey: "menu.consumo",
-        path: "/playground/consumo",
-        icon: (
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
         )
       },
       {
@@ -2591,7 +2591,7 @@ function App() {
 
           {/* Inventario Route */}
           <Route path="/inventario" element={<InventarioView />} />
-          <Route path="/playground/consumo" element={effectiveRole === 'super_admin' ? <ConsumoView /> : <Navigate to={getLandingPage()} replace />} />
+          <Route path="/consumo" element={canAccess('consumo') ? <ConsumoView /> : <Navigate to={getLandingPage()} replace />} />
 
           {/* Users, Roles, and Profiles Routes */}
           <Route path="/users" element={<UsersView />} />

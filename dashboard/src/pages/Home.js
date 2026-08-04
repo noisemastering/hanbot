@@ -4,6 +4,7 @@ import API from "../api";
 import { useTranslation } from "../i18n";
 import { useAuth } from "../contexts/AuthContext";
 import FeatureTip from '../components/FeatureTip';
+import Speedometer from '../components/Speedometer';
 import {
   ComposedChart,
   Bar,
@@ -95,6 +96,14 @@ function Home() {
   const [syncProgress, setSyncProgress] = useState(0);
   const [lastSync, setLastSync] = useState(null);
   const progressRef = useRef(null);
+  const isAdminRole = effectiveRole === 'admin' || effectiveRole === 'super_admin';
+  const [consumo, setConsumo] = useState(null);
+
+  // Conversation usage (admins only) — quick-reference gauge on the landing page.
+  useEffect(() => {
+    if (!isAdminRole) return;
+    API.get('/consumo/usage').then((r) => { if (r.data.success) setConsumo(r.data); }).catch(() => {});
+  }, [isAdminRole]);
 
   // Data states
   const [analytics, setAnalytics] = useState(null);
@@ -296,6 +305,28 @@ function Home() {
           </div>
         </FeatureTip>
       </div>
+
+      {/* Consumo quick-reference gauge (admins) — links to the full Consumo page */}
+      {isAdminRole && consumo && (
+        <div
+          onClick={() => navigate('/consumo')}
+          className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 flex flex-col sm:flex-row items-center gap-4 cursor-pointer hover:border-primary-500/60 transition-colors"
+          title={t('consumo.title')}
+        >
+          <div style={{ width: 190 }} className="flex-shrink-0"><Speedometer value={consumo.total} limit={consumo.plan.monthlyLimit} /></div>
+          <div className="flex-1 min-w-0">
+            <div className="text-white font-semibold flex items-center gap-2">
+              {t('consumo.title')} <span className="text-primary-400 text-sm">→</span>
+            </div>
+            <div className="text-gray-400 text-sm mt-1">
+              {consumo.total.toLocaleString('es-MX')} / {consumo.plan.monthlyLimit.toLocaleString('es-MX')} convos · {consumo.remaining.toLocaleString('es-MX')} {t('consumo.remaining').toLowerCase()}
+            </div>
+            {consumo.overage.count > 0 && (
+              <div className="text-red-400 text-sm mt-1 font-semibold">{t('consumo.overage')}: {consumo.overage.count.toLocaleString('es-MX')}</div>
+            )}
+          </div>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Revenue + confidence semaphore */}
