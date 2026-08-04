@@ -8,7 +8,7 @@ import React, { useState, useEffect, useRef, useCallback } from "react";
 import { useTranslation } from "../i18n";
 import API from "../api";
 
-export default function CannedReplies({ onInsert }) {
+export default function CannedReplies({ onInsert, psid, agentName }) {
   const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState([]);
@@ -39,8 +39,16 @@ export default function CannedReplies({ onInsert }) {
 
   const close = () => { setOpen(false); setEditing(null); setSearch(""); };
 
-  const insert = (m) => {
-    onInsert(m.body);
+  const insert = async (m) => {
+    let text = m.body;
+    // Dynamic messages: resolve {{tokens}} live against THIS conversation before inserting.
+    if (m.dynamic || /\{\{/.test(m.body)) {
+      try {
+        const { data } = await API.post("/canned-messages/resolve", { id: m._id, psid, agentName });
+        if (data.success && data.resolved) text = data.resolved;
+      } catch (_) { /* fall back to the raw body */ }
+    }
+    onInsert(text);
     API.post(`/canned-messages/${m._id}/used`).catch(() => {});
     close();
   };

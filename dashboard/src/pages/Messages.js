@@ -35,7 +35,7 @@ function Messages() {
   const { t, locale } = useTranslation();
   // Certainty filter is for salesman (Noemi's profile) and above — i.e. anyone who can
   // read the conversations route (salesman is the lowest such profile).
-  const { canAccess } = useAuth();
+  const { canAccess, user } = useAuth();
   const canFilterCertainty = canAccess('conversations');
   const location = useLocation();
   const navigate = useNavigate();
@@ -1865,7 +1865,11 @@ function Messages() {
                   }}>
                   📎
                 </button>
-                <CannedReplies onInsert={(text) => setReplyText((prev) => (prev && prev.trim() ? `${prev.replace(/\s*$/, "")} ${text}` : text))} />
+                <CannedReplies
+                  psid={selectedPsid}
+                  agentName={user?.name || user?.username || user?.email}
+                  onInsert={(text) => setReplyText((prev) => (prev && prev.trim() ? `${prev.replace(/\s*$/, "")} ${text}` : text))}
+                />
                 <input
                   type="text"
                   value={replyText}
