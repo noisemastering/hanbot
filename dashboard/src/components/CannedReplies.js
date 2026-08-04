@@ -5,6 +5,7 @@
 // insert it into the composer. Add / edit / delete inline. Self-contained: it owns
 // its own data via /canned-messages and only calls onInsert(text) back to the composer.
 import React, { useState, useEffect, useRef, useCallback } from "react";
+import ReactDOM from "react-dom";
 import { useTranslation } from "../i18n";
 import API from "../api";
 
@@ -16,7 +17,19 @@ export default function CannedReplies({ onInsert, psid, agentName }) {
   const [editing, setEditing] = useState(null); // null | "new" | "<id>"
   const [form, setForm] = useState({ title: "", body: "" });
   const [saving, setSaving] = useState(false);
+  const [coords, setCoords] = useState(null); // fixed-position anchor for the portal popover
   const wrapRef = useRef(null);
+  const btnRef = useRef(null);
+  const popRef = useRef(null);
+
+  // The composer sits inside a scrollable (overflow) container, so the popover is
+  // rendered in a PORTAL with position:fixed — otherwise it gets clipped/hidden
+  // behind the conversation. Anchor it just above the button.
+  const openPop = () => {
+    const r = btnRef.current?.getBoundingClientRect();
+    if (r) setCoords({ left: Math.max(8, Math.min(r.left, window.innerWidth - 388)), bottom: window.innerHeight - r.top + 8 });
+    setOpen(true);
+  };
 
   const load = useCallback(async () => {
     try {
@@ -30,7 +43,11 @@ export default function CannedReplies({ onInsert, psid, agentName }) {
   // Close on outside click / Escape.
   useEffect(() => {
     if (!open) return;
-    const onDoc = (e) => { if (wrapRef.current && !wrapRef.current.contains(e.target)) close(); };
+    const onDoc = (e) => {
+      if (wrapRef.current && wrapRef.current.contains(e.target)) return;
+      if (popRef.current && popRef.current.contains(e.target)) return; // clicks inside the portal
+      close();
+    };
     const onKey = (e) => { if (e.key === "Escape") close(); };
     document.addEventListener("mousedown", onDoc);
     document.addEventListener("keydown", onKey);
@@ -78,7 +95,7 @@ export default function CannedReplies({ onInsert, psid, agentName }) {
   // ── styles (match the dark composer) ──
   const S = {
     btn: { padding: "12px 14px", borderRadius: "8px", border: "2px solid #4a4a4a", backgroundColor: "#2a2a2a", color: "white", cursor: "pointer", fontSize: "1.2rem" },
-    pop: { position: "absolute", bottom: "115%", left: 0, width: 380, maxHeight: 440, display: "flex", flexDirection: "column", backgroundColor: "#1f1f1f", border: "1px solid #3a3a3a", borderRadius: "10px", boxShadow: "0 8px 30px rgba(0,0,0,0.5)", zIndex: 50, overflow: "hidden" },
+    pop: { position: "fixed", width: 380, maxHeight: 440, display: "flex", flexDirection: "column", backgroundColor: "#1f1f1f", border: "1px solid #3a3a3a", borderRadius: "10px", boxShadow: "0 8px 30px rgba(0,0,0,0.6)", zIndex: 100000, overflow: "hidden" },
     head: { padding: "10px 12px", borderBottom: "1px solid #2f2f2f", display: "flex", gap: 8, alignItems: "center" },
     searchInput: { flex: 1, padding: "8px 10px", borderRadius: "6px", border: "1px solid #3a3a3a", backgroundColor: "#2a2a2a", color: "white", fontSize: "0.9rem" },
     list: { overflowY: "auto", padding: "6px" },
@@ -95,10 +112,10 @@ export default function CannedReplies({ onInsert, psid, agentName }) {
 
   return (
     <div ref={wrapRef} style={{ position: "relative" }}>
-      <button type="button" onClick={() => setOpen((o) => !o)} title={t("canned.button")} style={S.btn}>💬</button>
+      <button ref={btnRef} type="button" onClick={() => (open ? close() : openPop())} title={t("canned.button")} style={S.btn}>💬</button>
 
-      {open && (
-        <div style={S.pop}>
+      {open && coords && ReactDOM.createPortal(
+        <div ref={popRef} style={{ ...S.pop, left: coords.left, bottom: coords.bottom }}>
           {editing ? (
             <div style={{ padding: 12 }}>
               <div style={{ fontSize: "0.85rem", color: "#bbb", marginBottom: 8 }}>
@@ -160,7 +177,8 @@ export default function CannedReplies({ onInsert, psid, agentName }) {
               </div>
             </>
           )}
-        </div>
+        </div>,
+        document.body
       )}
     </div>
   );
