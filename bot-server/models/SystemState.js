@@ -67,9 +67,17 @@ const systemStateSchema = new mongoose.Schema(
       type: new mongoose.Schema(
         {
           name: { type: String, default: "Estándar" },
-          monthlyLimit: { type: Number, default: 1500 },
+          monthlyLimit: { type: Number, default: 1500 }, // conversation quota / month
           overageRate: { type: Number, default: 0 }, // per extra convo (currency below) — TBD with the user
           currency: { type: String, default: "MXN" },
+          // Billing (temporary home — to be moved to a proper customer/billing record later).
+          price: { type: Number, default: 300 }, // monthly plan price
+          priceCurrency: { type: String, default: "USD" },
+          dueDay: { type: Number, default: 10 }, // paid by the Nth of the month
+          cancelPolicy: { type: String, default: "anytime" },
+          paidForMonth: { type: String, default: null }, // "YYYY-MM" that has been marked paid
+          lastPaidAt: { type: Date, default: null },
+          lastPaidBy: { type: String, default: null },
         },
         { _id: false }
       ),

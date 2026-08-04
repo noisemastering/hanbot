@@ -17,6 +17,8 @@ export const AuthProvider = ({ children }) => {
   const [liberado, setLiberado] = useState(false);
   // Global dashboard banner (Spec Ops). { engaged, message } or null.
   const [banner, setBanner] = useState(null);
+  // Billing/payment status for the current month. { status: 'paid'|'due'|'overdue', price, currency, dueDay, month, ... }
+  const [payment, setPayment] = useState(null);
   const refreshLiberado = async () => {
     try {
       const t = localStorage.getItem('token');
@@ -29,6 +31,7 @@ export const AuthProvider = ({ children }) => {
       if (data && data.success) {
         setLiberado(!!data.liberado?.engaged);
         setBanner(data.banner || null);
+        setPayment(data.payment || null);
       }
     } catch (_) { /* keep restricted on error */ }
   };
@@ -247,7 +250,9 @@ export const AuthProvider = ({ children }) => {
     refreshLiberado,
     // Global dashboard banner
     banner,
-    refreshBanner: refreshLiberado
+    refreshBanner: refreshLiberado,
+    // Billing/payment status for the current month
+    payment,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

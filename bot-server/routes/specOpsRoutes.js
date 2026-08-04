@@ -48,12 +48,35 @@ router.use(authenticate);
 
 const DEFAULT_BANNER = "El uso de OpenAI se está agotando, es necesario liberar el sistema para continuar operando";
 
+// Payment status for the current calendar month (MX-local). "paid" once this month
+// is marked paid; otherwise "due" up to & including the due day, then "overdue".
+const paymentStatus = (plan) => {
+  const p = plan || {};
+  const nowMx = new Date(Date.now() - 6 * 3600e3);
+  const month = nowMx.toISOString().slice(0, 7);
+  const day = nowMx.getUTCDate();
+  const dueDay = p.dueDay || 10;
+  const paid = p.paidForMonth === month;
+  return {
+    status: paid ? "paid" : day <= dueDay ? "due" : "overdue",
+    month,
+    dueDay,
+    price: p.price != null ? p.price : 300,
+    currency: p.priceCurrency || "USD",
+    cancelPolicy: p.cancelPolicy || "anytime",
+    paidForMonth: p.paidForMonth || null,
+    lastPaidAt: p.lastPaidAt || null,
+    lastPaidBy: p.lastPaidBy || null,
+  };
+};
+
 const shape = (s) => ({
   killswitch: { engaged: !!s.killswitch?.engaged, at: s.killswitch?.at || null, by: s.killswitch?.by || null },
   nuke: { engaged: !!s.nuke?.engaged, at: s.nuke?.at || null, by: s.nuke?.by || null },
   liberado: { engaged: !!s.liberado?.engaged, at: s.liberado?.at || null, by: s.liberado?.by || null },
   banner: { engaged: !!s.banner?.engaged, message: s.banner?.message || DEFAULT_BANNER, at: s.banner?.at || null, by: s.banner?.by || null },
   fbCommentReply: { engaged: !!s.fbCommentReply?.engaged, at: s.fbCommentReply?.at || null, by: s.fbCommentReply?.by || null },
+  payment: paymentStatus(s.plan),
 });
 
 // Status — any authenticated user (drives the maintenance modal).
@@ -160,6 +183,25 @@ router.post("/fb-comment-reply", requireSuperAdmin, async (req, res) => {
     res.json({ success: true, ...shape(s) });
   } catch (e) {
     res.status(500).json({ success: false, error: "No se pudo cambiar el auto-reply de comentarios" });
+  }
+});
+
+// Mark the account as PAID for a month (defaults to the current month) — super_admin.
+// Clears the payment-due/overdue banner for that month.
+router.post("/mark-paid", requireSuperAdmin, async (req, res) => {
+  try {
+    const s = await SystemState.getState();
+    if (!s.plan) s.plan = {};
+    const nowMx = new Date(Date.now() - 6 * 3600e3);
+    const month = /^\d{4}-\d{2}$/.test(req.body.month || "") ? req.body.month : nowMx.toISOString().slice(0, 7);
+    s.plan.paidForMonth = month;
+    s.plan.lastPaidAt = new Date();
+    s.plan.lastPaidBy = req.user.username || req.user.email || "super_admin";
+    await s.save();
+    console.warn(`💵 [SpecOps] Plan marked PAID for ${month} by ${s.plan.lastPaidBy}`);
+    res.json({ success: true, ...shape(s) });
+  } catch (e) {
+    res.status(500).json({ success: false, error: "No se pudo marcar como pagado" });
   }
 });
 

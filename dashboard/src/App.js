@@ -46,6 +46,7 @@ import ResetPassword from "./pages/ResetPassword";
 import Settings from "./pages/Settings";
 import InventarioView from "./pages/InventarioView";
 import ConsumoView from "./pages/ConsumoView";
+import PaymentView from "./pages/PaymentView";
 import PuntosDeVentaView from "./pages/PuntosDeVentaView";
 import OrdersView from "./pages/OrdersView";
 import PuntoDeVentaModal from "./components/PuntoDeVentaModal";
@@ -617,6 +618,14 @@ const menuItems = [
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M21 12c0 4.418-4.03 8-9 8a9.86 9.86 0 01-4-.8L3 20l.8-4A7.94 7.94 0 013 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
         )
+      },
+      {
+        id: "pago",
+        labelKey: "menu.payment",
+        path: "/spec-ops/pago",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />
+        )
       }
     ]
   },
@@ -641,7 +650,7 @@ const menuItems = [
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, loading: authLoading, canAccess, canManageUsers, getLandingPage, logout, simulationMode, stopSimulation, liberado, banner } = useAuth();
+  const { user, loading: authLoading, canAccess, canManageUsers, getLandingPage, logout, simulationMode, stopSimulation, liberado, banner, payment } = useAuth();
   const { t, locale, language, changeLanguage } = useTranslation();
   const updateAvailable = useNewVersionCheck();
 
@@ -1863,6 +1872,18 @@ function App() {
           <span>{banner.message}</span>
         </div>
       )}
+      {/* Payment status banner — visible to admins across the whole system. Informative
+          while due (by the 10th), red alert once overdue. Hidden once marked paid. */}
+      {payment && (payment.status === 'due' || payment.status === 'overdue') && (effectiveRole === 'admin' || effectiveRole === 'super_admin') && (
+        <div className={`fixed top-0 inset-x-0 z-[108] flex items-center justify-center gap-2 text-sm font-semibold py-2 px-4 shadow-lg text-center ${payment.status === 'overdue' ? 'bg-red-600 text-white' : 'bg-indigo-600 text-white'}`}>
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            {payment.status === 'overdue'
+              ? <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 00-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" />
+              : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />}
+          </svg>
+          <span>{t(payment.status === 'overdue' ? 'payment.overdue' : 'payment.due', { price: payment.price, currency: payment.currency, day: payment.dueDay })}</span>
+        </div>
+      )}
       {/* New version banner */}
       {updateAvailable && (
         <div className="fixed top-0 inset-x-0 z-[100] flex items-center justify-center gap-3 bg-blue-600 text-white text-sm py-2 px-4 shadow-lg">
@@ -2618,6 +2639,7 @@ function App() {
           <Route path="/spec-ops/nuke" element={effectiveRole === 'super_admin' ? <NukeEmView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/spec-ops/liberado" element={effectiveRole === 'super_admin' ? <LiberadoView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/spec-ops/banner" element={effectiveRole === 'super_admin' ? <BannerView /> : <Navigate to={getLandingPage()} replace />} />
+          <Route path="/spec-ops/pago" element={effectiveRole === 'super_admin' ? <PaymentView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/spec-ops/fb-comment-reply" element={effectiveRole === 'super_admin' ? <FbCommentReplyView /> : <Navigate to={getLandingPage()} replace />} />
           <Route path="/help" element={<HelpView />} />
         </Routes>
