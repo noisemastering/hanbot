@@ -1695,6 +1695,7 @@ function Messages() {
               borderRadius: "8px",
               width: "90%",
               maxWidth: "800px",
+              height: "85vh", // stable size — collapsing the tools grows the MESSAGES, not shrinks the window
               maxHeight: "92vh",
               display: "flex",
               flexDirection: "column",
