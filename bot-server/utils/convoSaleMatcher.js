@@ -91,6 +91,24 @@ function nameMatches(convoNames, saleName) {
   return false;
 }
 
+// Convo names vs a sale name → true when the convo's SURNAME (last token, 4+ chars)
+// appears among the sale name's tokens. A shared last name is strong evidence when
+// it rides alongside zip + item + tight time, so classify() treats it as good as a
+// full-name match IN THAT CONTEXT (never on its own). Reported case: convo
+// "esperanza reyes" ↔ sale "Wendy Garcia Reyes" — same maternal surname, same CP,
+// same item, 6 min apart — clearly the same purchase.
+function lastNameMatches(convoNames, saleName) {
+  if (!saleName) return false;
+  const st = new Set(tokensOf(saleName));
+  for (const cn of convoNames || []) {
+    const ct = tokensOf(cn);
+    if (ct.length < 2) continue; // need at least first + last to have a surname to test
+    const last = ct[ct.length - 1];
+    if (last.length >= 4 && st.has(last)) return true;
+  }
+  return false;
+}
+
 /**
  * Build the lookup maps needed to match (call once, reuse across conversations).
  * @returns {Promise<{itemToFamilies: Map<string,Set<string>>, cityIndex: Map<string,string[]>, userLoc: Map<string,object>}>}
@@ -384,8 +402,9 @@ function classify(m) {
 
   if (m.itemMatch) {
     // SAME product (a size the customer discussed OR clicked).
-    if (m.zipMatch && m.nameMatch && m.nicknameMatch) { pct = decayScore(100, 48, null, g); tier = "cp + nombre + usuario ML + item"; undisputed = pct === 100; } // 2 días
+    if (m.zipMatch && (m.nameMatch || m.lastNameMatch) && m.nicknameMatch) { pct = decayScore(100, 48, null, g); tier = m.nameMatch ? "cp + nombre + usuario ML + item" : "cp + apellido + usuario ML + item"; undisputed = pct === 100; } // 2 días
     else if (m.zipMatch && m.nameMatch) { pct = decayScore(90, 24, null, g); tier = "cp + nombre + item"; }        // 1 día
+    else if (m.zipMatch && m.lastNameMatch) { pct = decayScore(90, 24, null, g); tier = "cp + apellido + item"; }  // 1 día — last name is as good as full name WHEN zip + item both match
     else if (m.cityMatch && m.nameMatch) { pct = decayScore(50, 24, null, g); tier = "ciudad + nombre + item"; }   // 1 día
     else if (m.zipMatch) { pct = decayScore(25, 24, null, g); tier = "cp + item"; }                                 // 1 día
     // else → not attributable (0%)
@@ -595,6 +614,7 @@ async function matchConversation(convo, ctx) {
       zipMatch: !!id.zip && normZip(s.shipping && s.shipping.zip) === id.zip,
       cityMatch: !!id.city && normalizeCity(s.shipping && s.shipping.city) === id.city,
       nameMatch: nameMatches(id.names, receiver) || nameMatches(id.names, buyerName),
+      lastNameMatch: lastNameMatches(id.names, receiver) || lastNameMatches(id.names, buyerName),
       nicknameMatch: id.firstName ? nameInNickname(id.firstName, nick) : false,
       itemMatch: itemMatch(s, id),
       sameFamily,
@@ -634,7 +654,7 @@ function buildMatchDoc(convo, id, s, m, v, dayToSizes) {
     undisputed: v.undisputed,
     ventaIndirecta: v.ventaIndirecta,
     reason: v.reason,
-    signals: { zip: m.zipMatch, city: m.cityMatch, name: m.nameMatch, nickname: m.nicknameMatch, item: m.itemMatch },
+    signals: { zip: m.zipMatch, city: m.cityMatch, name: m.nameMatch, lastName: m.lastNameMatch, nickname: m.nicknameMatch, item: m.itemMatch },
     matchDetails: {
       convoName: id.names[0] || null,
       saleReceiverName: (s.shipping && s.shipping.receiverName) || null,

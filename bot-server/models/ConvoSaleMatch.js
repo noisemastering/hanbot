@@ -27,6 +27,7 @@ const ConvoSaleMatchSchema = new mongoose.Schema(
       zip: { type: Boolean, default: false },
       city: { type: Boolean, default: false },
       name: { type: Boolean, default: false },
+      lastName: { type: Boolean, default: false }, // convo surname == a sale-name token (as good as full name when zip+item)
       nickname: { type: Boolean, default: false },
       item: { type: Boolean, default: false },
     },
