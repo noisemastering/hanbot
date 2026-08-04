@@ -45,6 +45,7 @@ import ForgotPassword from "./pages/ForgotPassword";
 import ResetPassword from "./pages/ResetPassword";
 import Settings from "./pages/Settings";
 import InventarioView from "./pages/InventarioView";
+import ConsumoView from "./pages/ConsumoView";
 import PuntosDeVentaView from "./pages/PuntosDeVentaView";
 import OrdersView from "./pages/OrdersView";
 import PuntoDeVentaModal from "./components/PuntoDeVentaModal";
@@ -532,6 +533,14 @@ const menuItems = [
         path: "/playground/rendimiento-mensajes",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        )
+      },
+      {
+        id: "playground-consumo",
+        labelKey: "menu.consumo",
+        path: "/playground/consumo",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
         )
       },
       {
@@ -2561,6 +2570,7 @@ function App() {
 
           {/* Inventario Route */}
           <Route path="/inventario" element={<InventarioView />} />
+          <Route path="/playground/consumo" element={effectiveRole === 'super_admin' ? <ConsumoView /> : <Navigate to={getLandingPage()} replace />} />
 
           {/* Users, Roles, and Profiles Routes */}
           <Route path="/users" element={<UsersView />} />

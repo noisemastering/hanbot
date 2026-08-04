@@ -60,6 +60,21 @@ const systemStateSchema = new mongoose.Schema(
     // process.env.FB_PAGE_TOKEN on startup — lets us rotate the token (e.g. to add
     // comment permissions) with a DB write instead of a Railway/env change.
     fbPageToken: { type: String, default: null },
+    // Billing plan (Consumo route). monthlyLimit conversations included per calendar
+    // month; conversations beyond it bill at overageRate each. A "conversation" =
+    // a user message that opens a >=23h gap since that PSID's previous user message.
+    plan: {
+      type: new mongoose.Schema(
+        {
+          name: { type: String, default: "Estándar" },
+          monthlyLimit: { type: Number, default: 1500 },
+          overageRate: { type: Number, default: 0 }, // per extra convo (currency below) — TBD with the user
+          currency: { type: String, default: "MXN" },
+        },
+        { _id: false }
+      ),
+      default: () => ({}),
+    },
     // Global dashboard banner (Spec Ops). When engaged, a warning banner is shown
     // across the WHOLE dashboard to every logged-in user. Toggled by super_admin.
     banner: {
