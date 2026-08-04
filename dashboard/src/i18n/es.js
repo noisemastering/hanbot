@@ -26,7 +26,7 @@ const es = {
   "consumo.overage": "Excedente",
   "consumo.rateTBD": "tarifa por definir",
   "consumo.byDay": "Conversaciones por día",
-  "payment.due": "💳 Tu pago mensual de {{price}} {{currency}} vence el día {{day}}. Cancela cuando quieras.",
+  "payment.due": "💳 Tu pago mensual de {{price}} {{currency}} vence el día {{day}}.",
   "payment.overdue": "⚠️ Pago vencido: tu plan de {{price}} {{currency}} debía pagarse antes del día {{day}}. Regulariza para continuar sin interrupciones.",
   "menu.pos": "Puntos de Venta",
   "menu.campaigns": "Campañas",

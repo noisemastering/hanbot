@@ -26,7 +26,7 @@ const en = {
   "consumo.overage": "Overage",
   "consumo.rateTBD": "rate TBD",
   "consumo.byDay": "Conversations per day",
-  "payment.due": "💳 Your monthly payment of {{price}} {{currency}} is due by the {{day}}th. Cancel anytime.",
+  "payment.due": "💳 Your monthly payment of {{price}} {{currency}} is due by the {{day}}th.",
   "payment.overdue": "⚠️ Payment overdue: your {{price}} {{currency}} plan was due before the {{day}}th. Please settle to avoid interruptions.",
   "menu.pos": "Points of Sale",
   "menu.campaigns": "Campaigns",
