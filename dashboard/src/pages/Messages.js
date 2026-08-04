@@ -50,6 +50,7 @@ function Messages() {
   const [refreshing, setRefreshing] = useState(false);
   const [showLinkGenerator, setShowLinkGenerator] = useState(false);
   const [showSaleForm, setShowSaleForm] = useState(false);
+  const [showReportPanel, setShowReportPanel] = useState(false); // collapsed by default → messages get the space
   const [replyText, setReplyText] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
   const [pendingHandoffs, setPendingHandoffs] = useState([]);
@@ -2029,13 +2030,32 @@ function Messages() {
               </div>
             </div>
 
-            {/* Commerce status + report-as-ticket — collapsed while registering a sale
-                (keeps the client-data handoff panel, which helps fill the form). */}
-            <div style={{ padding: "0 1rem 1rem 1rem" }}>
-              {!showSaleForm && <ConversationCommercePanel psid={selectedPsid} />}
-              {/* Handoff reason + collected client data for the agent taking over */}
-              <ConversationHandoffPanel psid={selectedPsid} />
-            </div>
+            {/* Sale/report tools — COLLAPSED by default so the messages get the vertical
+                space. Expand only when needed. While registering a sale we skip the
+                toggle and just keep the client-data handoff panel (helps fill the form). */}
+            {!showSaleForm ? (
+              <>
+                <div style={{ padding: "0 1rem 0.5rem 1rem" }}>
+                  <button
+                    onClick={() => setShowReportPanel((v) => !v)}
+                    style={{ width: "100%", padding: "8px 12px", background: "#232323", border: "1px solid #333", borderRadius: "8px", color: "#bbb", cursor: "pointer", fontSize: "0.85rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}
+                  >
+                    <span>🧾 {t('messages.reportTools')}</span>
+                    <span>{showReportPanel ? "▾" : "▸"}</span>
+                  </button>
+                </div>
+                {showReportPanel && (
+                  <div style={{ padding: "0 1rem 1rem 1rem" }}>
+                    <ConversationCommercePanel psid={selectedPsid} />
+                    <ConversationHandoffPanel psid={selectedPsid} />
+                  </div>
+                )}
+              </>
+            ) : (
+              <div style={{ padding: "0 1rem 1rem 1rem" }}>
+                <ConversationHandoffPanel psid={selectedPsid} />
+              </div>
+            )}
 
             {/* Tracked Link Generator */}
             {showLinkGenerator && (

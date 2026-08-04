@@ -1081,6 +1081,7 @@ const en = {
   "messages.copyNumber": "Copy number",
   "messages.openWhatsApp": "Open in WhatsApp",
   "messages.sendChannel": "Send {{icon}}",
+  "messages.reportTools": "Sale / report options",
   "canned.button": "Quick replies",
   "canned.search": "Search reply…",
   "canned.new": "New reply",
