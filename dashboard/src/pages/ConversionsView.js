@@ -5,6 +5,7 @@ import { useTranslation } from '../i18n';
 import MatchDataCompare from '../components/MatchDataCompare';
 import ConversationTranscript from '../components/ConversationTranscript';
 import CorrelationControl from '../components/CorrelationControl';
+import CorrelationBadge from '../components/CorrelationBadge';
 import { useAuth } from '../contexts/AuthContext';
 import {
   ComposedChart,
@@ -297,9 +298,12 @@ function ConversionsView() {
   return (
     <div className="p-6">
       {/* Header */}
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-white">{t('conversions.pageTitle')}</h1>
-        <p className="text-gray-400 mt-1">{t('conversions.pageSubtitle')}</p>
+      <div className="mb-6 flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold text-white">{t('conversions.pageTitle')}</h1>
+          <p className="text-gray-400 mt-1">{t('conversions.pageSubtitle')}</p>
+        </div>
+        <CorrelationBadge />
       </div>
 
       {/* Error Alert */}

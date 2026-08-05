@@ -5,6 +5,7 @@ import { useTranslation } from "../i18n";
 import { useAuth } from "../contexts/AuthContext";
 import FeatureTip from '../components/FeatureTip';
 import Speedometer from '../components/Speedometer';
+import CorrelationBadge from '../components/CorrelationBadge';
 import {
   ComposedChart,
   Bar,
@@ -286,7 +287,10 @@ function Home() {
     <div className="p-6 space-y-6">
       {/* Row 1: Date range + KPI Cards */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-2">
-        <h1 className="text-2xl font-bold text-white">{t("home.pageTitle")}</h1>
+        <div className="flex items-center gap-3 flex-wrap">
+          <h1 className="text-2xl font-bold text-white">{t("home.pageTitle")}</h1>
+          {isAdminRole && <CorrelationBadge />}
+        </div>
         <FeatureTip id="home-date-range" title="Periodo de tiempo" text="Cambia el periodo para ver datos de 7, 30 o 90 días." position="bottom">
           <div className="flex gap-2">
             {[7, 15, 30, 90].map((d) => (

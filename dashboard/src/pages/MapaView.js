@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { useTranslation } from '../i18n';
 import MexicoMap from '../components/MexicoMap';
+import CorrelationBadge from '../components/CorrelationBadge';
 
 const METRICS = [
   { key: 'ml', labelKey: 'mapa.ml' },
@@ -34,6 +35,9 @@ export default function MapaView() {
         </div>
       </div>
 
+      {(metric === 'ventas' || metric === 'ml') && (
+        <div className="mb-3"><CorrelationBadge autorun={metric === 'ventas'} /></div>
+      )}
       <div className="bg-gray-800/40 border border-gray-700/50 rounded-xl p-4">
         <MexicoMap metric={metric} />
       </div>

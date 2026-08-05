@@ -23,6 +23,7 @@ const { buildContext, matchConversation, looksLikeName } = require("./convoSaleM
 const MLSale = require("../models/MLSale");
 
 const FRESH_HOURS = 3;
+const FULL_FRESH_HOURS = 24; // a FULL rebuild older than this is considered stale
 const BACKTRACE_START = new Date("2025-12-01T00:00:00.000Z");
 const SELLER_ID = "482595248";
 const SYNC_BUFFER_DAYS = 2; // re-fetch the last 2 days of ML sales each run (late arrivals)
@@ -290,7 +291,9 @@ async function runConvoCorrelation({ full = false } = {}) {
 
     const stats = { matched: finalMatches.length, scanned: convos.length, since, full: !!full };
     const fresh = await SystemState.getState();
-    fresh.lastCorrelationRun = { at: new Date(), running: false, startedAt: null, stats };
+    const now = new Date();
+    fresh.lastCorrelationRun = { at: now, running: false, startedAt: null, stats };
+    if (full) fresh.lastFullCorrelationAt = now; // track FULL rebuilds separately
     await fresh.save();
     return { ok: true, ...stats };
   } catch (err) {
@@ -459,6 +462,8 @@ async function correlationStatus() {
   const lc = state.lastCorrelationRun || {};
   const at = lc.at ? new Date(lc.at) : null;
   const ageHours = at ? (Date.now() - at.getTime()) / 3600e3 : Infinity;
+  const fullAt = state.lastFullCorrelationAt ? new Date(state.lastFullCorrelationAt) : null;
+  const fullAgeHours = fullAt ? (Date.now() - fullAt.getTime()) / 3600e3 : Infinity;
   return {
     lastRun: at,
     ageHours: at ? Math.round(ageHours * 10) / 10 : null,
@@ -468,6 +473,11 @@ async function correlationStatus() {
     freshHours: FRESH_HOURS,
     // when the next scheduled (30-min) correlation is due → dashboard countdown
     nextAt: state.correlationNextAt || null,
+    // FULL-rebuild freshness (drives the sales-view "run-if-stale" + last-run badge)
+    lastFullAt: fullAt,
+    fullAgeHours: fullAt ? Math.round(fullAgeHours * 10) / 10 : null,
+    fullStale: fullAgeHours > FULL_FRESH_HOURS,
+    fullFreshHours: FULL_FRESH_HOURS,
   };
 }
 

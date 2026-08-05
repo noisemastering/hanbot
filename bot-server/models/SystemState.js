@@ -50,6 +50,10 @@ const systemStateSchema = new mongoose.Schema(
     // When the next scheduled (30-min) correlation is due — stamped each tick so
     // the dashboard can show a countdown.
     correlationNextAt: { type: Date, default: null },
+    // When the last FULL correlation (complete rebuild) finished. Tracked separately
+    // from lastCorrelationRun.at (which advances on every incremental tick) so a
+    // sales view can tell when a full pass last ran and trigger one if it's stale.
+    lastFullCorrelationAt: { type: Date, default: null },
     // Sales-reporting floor: the MINIMUM correlation certainty (%) that counts as a
     // REPORTED sale in the dashboard (chart/summary/table). Default 10. This is a
     // REPORTING filter ONLY — the correlation engine always stores every tier, even
