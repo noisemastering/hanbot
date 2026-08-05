@@ -23,7 +23,7 @@ const ALIAS = {
 const keyOf = (name) => { const k = strip(name); return ALIAS[k] || k; };
 
 const W = 900, H = 560, PAD = 12;
-const UNIT = { ml: "ventas ML", ventas: "ventas", conversations: "convos", clicks: "clicks" };
+const UNIT = { ml: "ventas ML", ventas: "ventas", conversations: "convos", clicks: "personas" };
 
 export default function MexicoMap({ metric = "sales", onSelectState }) {
   const [geo, setGeo] = useState(null);

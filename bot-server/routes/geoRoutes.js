@@ -66,15 +66,14 @@ router.get("/by-state", async (req, res) => {
       for (const st of stateMap.values()) tally.set(st, (tally.get(st) || 0) + 1);
       rows = toRows(tally);
 
-    } else { // clicks
+    } else { // clicks — count DISTINCT clickers (people), not click events, so it's
+      // apples-to-apples with conversations (each clicker averages ~2 click events;
+      // summing events made clicks look ~2x convos, which was misleading).
       const ClickLog = require("../models/ClickLog");
-      const perPsid = await ClickLog.aggregate([
-        { $match: { psid: { $nin: [null, ""] } } },
-        { $group: { _id: "$psid", n: { $sum: 1 } } },
-      ]);
-      const stateMap = await statesForPsids(perPsid.map((c) => c._id));
+      const psids = await ClickLog.distinct("psid", { psid: { $nin: [null, ""] } });
+      const stateMap = await statesForPsids(psids);
       const tally = new Map();
-      for (const c of perPsid) { const st = stateMap.get(c._id); if (st) tally.set(st, (tally.get(st) || 0) + c.n); }
+      for (const st of stateMap.values()) tally.set(st, (tally.get(st) || 0) + 1);
       rows = toRows(tally);
     }
 
