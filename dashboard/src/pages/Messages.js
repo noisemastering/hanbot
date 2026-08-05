@@ -1872,12 +1872,17 @@ function Messages() {
                   agentName={user?.name || user?.username || user?.email}
                   onInsert={(text) => setReplyText((prev) => (prev && prev.trim() ? `${prev.replace(/\s*$/, "")} ${text}` : text))}
                 />
-                <input
-                  type="text"
+                <textarea
                   value={replyText}
                   onChange={(e) => setReplyText(e.target.value)}
-                  onKeyPress={(e) => e.key === 'Enter' && !sendingReply && handleSendReply()}
+                  onKeyDown={(e) => {
+                    // Enter sends; Shift+Enter inserts a newline. A textarea (not a
+                    // single-line input) preserves the \n line breaks that canned
+                    // messages carry — an <input type="text"> silently strips them.
+                    if (e.key === 'Enter' && !e.shiftKey && !sendingReply) { e.preventDefault(); handleSendReply(); }
+                  }}
                   placeholder={t('messages.replyVia', { channel: getChannelDisplay(selectedChannel).label })}
+                  rows={1}
                   style={{
                     flex: 1,
                     padding: "12px",
@@ -1885,7 +1890,12 @@ function Messages() {
                     border: `2px solid ${getChannelDisplay(selectedChannel).color}40`,
                     backgroundColor: "#2a2a2a",
                     color: "white",
-                    fontSize: "1rem"
+                    fontSize: "1rem",
+                    resize: "vertical",
+                    minHeight: "44px",
+                    maxHeight: "160px",
+                    fontFamily: "inherit",
+                    lineHeight: 1.4
                   }}
                   disabled={sendingReply}
                 />
