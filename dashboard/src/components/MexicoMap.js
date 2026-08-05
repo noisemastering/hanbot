@@ -39,7 +39,9 @@ export default function MexicoMap({ metric = "sales", onSelectState }) {
     // current one ("one click behind"). Only apply the response if this effect run
     // is still the active one AND the server echoed back the metric we asked for.
     let active = true;
-    setCounts({}); // clear immediately so the map can't show the previous metric's data
+    // Keep the previous metric's colors visible until the new data lands (no fade to
+    // gray) — easier to eyeball the difference. The guards below still prevent a stale
+    // response from overwriting the current one.
     API.get(`/geo/by-state?metric=${metric}`).then((r) => {
       if (!active || !r.data.success || r.data.metric !== metric) return;
       const m = {};
