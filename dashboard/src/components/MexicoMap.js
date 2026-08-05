@@ -29,6 +29,7 @@ export default function MexicoMap({ metric = "sales", onSelectState }) {
   const [geo, setGeo] = useState(null);
   const [counts, setCounts] = useState({});
   const [hover, setHover] = useState(null); // { name, count, x, y }
+  const [loading, setLoading] = useState(false);
   const wrapRef = useRef(null);
 
   useEffect(() => {
@@ -43,12 +44,13 @@ export default function MexicoMap({ metric = "sales", onSelectState }) {
     // Keep the previous metric's colors visible until the new data lands (no fade to
     // gray) — easier to eyeball the difference. The guards below still prevent a stale
     // response from overwriting the current one.
+    setLoading(true);
     API.get(`/geo/by-state?metric=${metric}`).then((r) => {
       if (!active || !r.data.success || r.data.metric !== metric) return;
       const m = {};
       for (const row of r.data.data) m[keyOf(row.state)] = row.count;
       setCounts(m);
-    }).catch(() => {});
+    }).catch(() => {}).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [metric]);
 
@@ -103,7 +105,14 @@ export default function MexicoMap({ metric = "sales", onSelectState }) {
 
   return (
     <div ref={wrapRef} style={{ position: "relative" }}>
-      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto" }}>
+      {loading && (
+        <div style={{ position: "absolute", top: 10, right: 10, display: "flex", alignItems: "center", gap: 8, background: "rgba(15,17,23,0.85)", border: "1px solid #333", borderRadius: 8, padding: "6px 12px", fontSize: 12, color: "#cbd5e1", zIndex: 6 }}>
+          <span style={{ width: 14, height: 14, border: "2px solid #4a7cff", borderTopColor: "transparent", borderRadius: "50%", display: "inline-block", animation: "mmspin 0.7s linear infinite" }} />
+          Cargando…
+          <style>{`@keyframes mmspin { to { transform: rotate(360deg); } }`}</style>
+        </div>
+      )}
+      <svg viewBox={`0 0 ${W} ${H}`} style={{ width: "100%", height: "auto", opacity: loading ? 0.6 : 1, transition: "opacity 0.2s" }}>
         {paths.map((p) => (
           <path
             key={p.name}
