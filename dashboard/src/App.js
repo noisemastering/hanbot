@@ -47,6 +47,7 @@ import Settings from "./pages/Settings";
 import InventarioView from "./pages/InventarioView";
 import ConsumoView from "./pages/ConsumoView";
 import PaymentView from "./pages/PaymentView";
+import MapaView from "./pages/MapaView";
 import PuntosDeVentaView from "./pages/PuntosDeVentaView";
 import OrdersView from "./pages/OrdersView";
 import PuntoDeVentaModal from "./components/PuntoDeVentaModal";
@@ -542,6 +543,14 @@ const menuItems = [
         path: "/playground/rendimiento-mensajes",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        )
+      },
+      {
+        id: "playground-mapa",
+        labelKey: "menu.mapa",
+        path: "/playground/mapa",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
         )
       },
       {
@@ -2593,6 +2602,7 @@ function App() {
           {/* Inventario Route */}
           <Route path="/inventario" element={<InventarioView />} />
           <Route path="/consumo" element={canAccess('consumo') ? <ConsumoView /> : <Navigate to={getLandingPage()} replace />} />
+          <Route path="/playground/mapa" element={effectiveRole === 'super_admin' ? <MapaView /> : <Navigate to={getLandingPage()} replace />} />
 
           {/* Users, Roles, and Profiles Routes */}
           <Route path="/users" element={<UsersView />} />
