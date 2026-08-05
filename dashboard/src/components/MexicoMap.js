@@ -23,6 +23,7 @@ const ALIAS = {
 const keyOf = (name) => { const k = strip(name); return ALIAS[k] || k; };
 
 const W = 900, H = 560, PAD = 12;
+const UNIT = { ml: "ventas ML", ventas: "ventas", conversations: "convos", clicks: "clicks" };
 
 export default function MexicoMap({ metric = "sales", onSelectState }) {
   const [geo, setGeo] = useState(null);
@@ -121,7 +122,7 @@ export default function MexicoMap({ metric = "sales", onSelectState }) {
       {hover && (
         <div style={{ position: "absolute", left: hover.x + 12, top: hover.y + 12, pointerEvents: "none", background: "#0f1117", border: "1px solid #333", borderRadius: 8, padding: "6px 10px", fontSize: 13, color: "#fff", whiteSpace: "nowrap", zIndex: 5, boxShadow: "0 4px 16px rgba(0,0,0,0.5)" }}>
           <div style={{ fontWeight: 600 }}>{hover.name}</div>
-          <div style={{ color: "#9ae6b4" }}>{hover.count.toLocaleString("es-MX")} {metric === "sales" ? "ventas" : "convos"}</div>
+          <div style={{ color: "#9ae6b4" }}>{hover.count.toLocaleString("es-MX")} {UNIT[metric] || ""}</div>
         </div>
       )}
 
