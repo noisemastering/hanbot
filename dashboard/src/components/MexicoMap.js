@@ -15,6 +15,10 @@ const ALIAS = {
   "distrito federal": "ciudad de mexico",
   "estado de mexico": "mexico",
   "cdmx": "ciudad de mexico",
+  // Official INEGI long names (from the ZipCode table) → GeoJSON short names.
+  "coahuila de zaragoza": "coahuila",
+  "michoacan de ocampo": "michoacan",
+  "veracruz de ignacio de la llave": "veracruz",
 };
 const keyOf = (name) => { const k = strip(name); return ALIAS[k] || k; };
 
