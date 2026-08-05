@@ -51,13 +51,13 @@ function Messages() {
   const [showLinkGenerator, setShowLinkGenerator] = useState(false);
   const [showSaleForm, setShowSaleForm] = useState(false);
   const [showReportPanel, setShowReportPanel] = useState(false); // collapsed by default → messages get the space
+  const [replyText, setReplyText] = useState('');
+  const [sendingReply, setSendingReply] = useState(false);
   const replyRef = useRef(null); // composer textarea (auto-grows to fit multi-line content)
   useEffect(() => {
     const el = replyRef.current;
     if (el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 160) + 'px'; }
   }, [replyText]);
-  const [replyText, setReplyText] = useState('');
-  const [sendingReply, setSendingReply] = useState(false);
   const [pendingHandoffs, setPendingHandoffs] = useState([]);
   const [initialLoading, setInitialLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
