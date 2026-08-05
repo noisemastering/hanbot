@@ -23,7 +23,7 @@ const ALIAS = {
 const keyOf = (name) => { const k = strip(name); return ALIAS[k] || k; };
 
 const W = 900, H = 560, PAD = 12;
-const UNIT = { ml: "ventas ML", ventas: "ventas", conversations: "convos", clicks: "personas" };
+const UNIT = { ml: "ventas ML", ventas: "ventas", conversations: "conversaciones", clicks: "personas" };
 // Thermometer scale stops (p = position 0..1 on the sqrt-scaled value, c = [r,g,b]).
 const STOPS = [
   { p: 0.0, c: [59, 130, 246] },   // blue   — cold / low
