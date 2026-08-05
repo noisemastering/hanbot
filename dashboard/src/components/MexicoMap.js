@@ -34,13 +34,19 @@ export default function MexicoMap({ metric = "sales", onSelectState }) {
     fetch("/geo/mexicoStates.json").then((r) => r.json()).then(setGeo).catch(() => {});
   }, []);
   useEffect(() => {
+    // Guard against out-of-order responses: the `sales` aggregation (103k docs) is
+    // slower than `conversations`, so a stale earlier response could overwrite the
+    // current one ("one click behind"). Only apply the response if this effect run
+    // is still the active one AND the server echoed back the metric we asked for.
+    let active = true;
+    setCounts({}); // clear immediately so the map can't show the previous metric's data
     API.get(`/geo/by-state?metric=${metric}`).then((r) => {
-      if (r.data.success) {
-        const m = {};
-        for (const row of r.data.data) m[keyOf(row.state)] = row.count;
-        setCounts(m);
-      }
+      if (!active || !r.data.success || r.data.metric !== metric) return;
+      const m = {};
+      for (const row of r.data.data) m[keyOf(row.state)] = row.count;
+      setCounts(m);
     }).catch(() => {});
+    return () => { active = false; };
   }, [metric]);
 
   // Projection: bbox over all coords → cos-corrected equirectangular fit to the viewBox.
