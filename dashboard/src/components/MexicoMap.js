@@ -24,6 +24,15 @@ const keyOf = (name) => { const k = strip(name); return ALIAS[k] || k; };
 
 const W = 900, H = 560, PAD = 12;
 const UNIT = { ml: "ventas ML", ventas: "ventas", conversations: "convos", clicks: "personas" };
+// Thermometer scale stops (p = position 0..1 on the sqrt-scaled value, c = [r,g,b]).
+const STOPS = [
+  { p: 0.0, c: [59, 130, 246] },   // blue   — cold / low
+  { p: 0.35, c: [34, 197, 94] },   // green
+  { p: 0.6, c: [234, 179, 8] },    // yellow
+  { p: 0.8, c: [249, 115, 22] },   // orange
+  { p: 1.0, c: [239, 68, 68] },    // red    — hot / high
+];
+const RAMP_CSS = "linear-gradient(90deg, #2a2f3a, rgb(59,130,246), rgb(34,197,94), rgb(234,179,8), rgb(249,115,22), rgb(239,68,68))";
 
 export default function MexicoMap({ metric = "sales", onSelectState }) {
   const [geo, setGeo] = useState(null);
@@ -87,12 +96,17 @@ export default function MexicoMap({ metric = "sales", onSelectState }) {
 
   const max = useMemo(() => Math.max(1, ...paths.map((p) => p.count)), [paths]);
 
-  // color ramp: slate (low) → green (high), sqrt-scaled for the skewed distribution.
+  // Thermometer color ramp: blue (cold/low) → green → yellow → orange → red (hot/high),
+  // sqrt-scaled for the skewed distribution so mid-values are readable.
   const color = (c) => {
-    if (!c) return "#2a2f3a";
+    if (!c) return "#2a2f3a"; // no data → neutral gray
     const t = Math.sqrt(c / max);
-    const lo = [30, 41, 59], hi = [34, 197, 94];
-    const mix = lo.map((v, i) => Math.round(v + (hi[i] - v) * t));
+    let lo = STOPS[0], hi = STOPS[STOPS.length - 1];
+    for (let i = 0; i < STOPS.length - 1; i++) {
+      if (t >= STOPS[i].p && t <= STOPS[i + 1].p) { lo = STOPS[i]; hi = STOPS[i + 1]; break; }
+    }
+    const f = hi.p === lo.p ? 0 : (t - lo.p) / (hi.p - lo.p);
+    const mix = lo.c.map((v, i) => Math.round(v + (hi.c[i] - v) * f));
     return `rgb(${mix[0]},${mix[1]},${mix[2]})`;
   };
 
@@ -138,7 +152,7 @@ export default function MexicoMap({ metric = "sales", onSelectState }) {
       {/* legend */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 12, color: "#888" }}>
         <span>0</span>
-        <div style={{ width: 160, height: 10, borderRadius: 5, background: "linear-gradient(90deg, #2a2f3a, rgb(30,41,59), rgb(34,197,94))" }} />
+        <div style={{ width: 220, height: 10, borderRadius: 5, background: RAMP_CSS }} />
         <span>{max.toLocaleString("es-MX")}</span>
       </div>
     </div>
