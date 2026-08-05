@@ -1884,9 +1884,10 @@ function App() {
           <span>{t(payment.status === 'overdue' ? 'payment.overdue' : 'payment.due', { price: payment.price, currency: payment.currency, day: payment.dueDay })}</span>
         </div>
       )}
-      {/* New version banner */}
+      {/* New version banner — sits ABOVE the payment banner (z-109 > 108) so the
+          "reload" action is never covered; still below the Spec Ops banner (z-110). */}
       {updateAvailable && (
-        <div className="fixed top-0 inset-x-0 z-[100] flex items-center justify-center gap-3 bg-blue-600 text-white text-sm py-2 px-4 shadow-lg">
+        <div className="fixed top-0 inset-x-0 z-[109] flex items-center justify-center gap-3 bg-blue-600 text-white text-sm py-2 px-4 shadow-lg">
           <span>{t('app.updateAvailable')}</span>
           <button
             onClick={() => window.location.reload()}
