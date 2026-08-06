@@ -11,21 +11,23 @@ const router = express.Router();
 
 const norm = (s) => String(s || "").padStart(5, "0");
 
-// Resolve psid → state (short name), using the stored state or deriving it from the
-// user's zip via the ZipCode table. Shared by the conversations + clicks metrics.
-async function statesForPsids(psids) {
+// Resolve psids to { state, zip } entries — using the stored state or deriving it
+// from the user's zip via the ZipCode table. Returns one entry per psid that has a
+// resolvable state (zip may be null). Shared by the conversations + clicks metrics.
+async function resolveEntries(psids) {
   const User = require("../models/User");
   const ZipCode = require("../models/ZipCode");
   const users = await User.find({ psid: { $in: psids } }).select("psid location.state location.zipcode").lean();
   const needZip = [...new Set(users.filter((u) => !u.location?.state && u.location?.zipcode).map((u) => norm(u.location.zipcode)))];
   const zdocs = needZip.length ? await ZipCode.find({ code: { $in: needZip } }).select("code state").lean() : [];
   const zmap = new Map(zdocs.map((z) => [z.code, z.state]));
-  const map = new Map();
+  const out = [];
   for (const u of users) {
-    const st = u.location?.state || zmap.get(norm(u.location?.zipcode));
-    if (st) map.set(u.psid, st);
+    const zip = u.location?.zipcode ? norm(u.location.zipcode) : null;
+    const state = u.location?.state || (zip ? zmap.get(zip) : null);
+    if (state) out.push({ psid: u.psid, state, zip });
   }
-  return map;
+  return out;
 }
 
 const toRows = (tally) =>
@@ -45,49 +47,50 @@ router.get("/by-state", async (req, res) => {
       if (!from && !to) return {};
       const c = {}; if (from) c.$gte = from; if (to) c.$lt = to; return { [field]: c };
     };
-    let rows;
+    let rows, zips = 0; // zips = distinct zip codes behind the total
 
     if (metric === "ml") {
       const MLSale = require("../models/MLSale");
       const agg = await MLSale.aggregate([
         { $match: { "shipping.state": { $nin: [null, ""] }, ...inRange("dateCreated") } },
-        { $group: { _id: "$shipping.state", count: { $sum: 1 } } },
+        { $group: { _id: "$shipping.state", count: { $sum: 1 }, zips: { $addToSet: "$shipping.zip" } } },
       ]);
       rows = toRows(new Map(agg.map((r) => [r._id, r.count])));
+      zips = new Set(agg.flatMap((r) => r.zips).filter(Boolean)).size;
 
     } else if (metric === "ventas") {
       const ConvoSaleMatch = require("../models/ConvoSaleMatch");
       const MLSale = require("../models/MLSale");
       const orderIds = [...new Set((await ConvoSaleMatch.find({}).select("orderId").lean()).map((m) => String(m.orderId)))];
       const sales = orderIds.length
-        ? await MLSale.find({ _id: { $in: orderIds }, ...inRange("dateCreated") }).select("shipping.state").lean() : [];
-      const tally = new Map();
-      for (const s of sales) { const st = s.shipping?.state; if (st) tally.set(st, (tally.get(st) || 0) + 1); }
-      rows = toRows(tally);
+        ? await MLSale.find({ _id: { $in: orderIds }, ...inRange("dateCreated") }).select("shipping.state shipping.zip").lean() : [];
+      const tally = new Map(); const zset = new Set();
+      for (const s of sales) { const st = s.shipping?.state; if (st) { tally.set(st, (tally.get(st) || 0) + 1); if (s.shipping?.zip) zset.add(s.shipping.zip); } }
+      rows = toRows(tally); zips = zset.size;
 
     } else if (metric === "conversations") {
       // Conversations active in the window (lastMessageAt), resolved to the user's state.
       const Conversation = require("../models/Conversation");
       const psids = await Conversation.distinct("psid", inRange("lastMessageAt"));
-      const stateMap = await statesForPsids(psids);
-      const tally = new Map();
-      for (const st of stateMap.values()) tally.set(st, (tally.get(st) || 0) + 1);
-      rows = toRows(tally);
+      const entries = await resolveEntries(psids);
+      const tally = new Map(); const zset = new Set();
+      for (const e of entries) { tally.set(e.state, (tally.get(e.state) || 0) + 1); if (e.zip) zset.add(e.zip); }
+      rows = toRows(tally); zips = zset.size;
 
     } else { // clicks — distinct clickers (people) in the window
       const ClickLog = require("../models/ClickLog");
       const psids = await ClickLog.distinct("psid", { psid: { $nin: [null, ""] }, ...inRange("clickedAt") });
-      const stateMap = await statesForPsids(psids);
-      const tally = new Map();
-      for (const st of stateMap.values()) tally.set(st, (tally.get(st) || 0) + 1);
-      rows = toRows(tally);
+      const entries = await resolveEntries(psids);
+      const tally = new Map(); const zset = new Set();
+      for (const e of entries) { tally.set(e.state, (tally.get(e.state) || 0) + 1); if (e.zip) zset.add(e.zip); }
+      rows = toRows(tally); zips = zset.size;
     }
 
     const total = rows.reduce((a, r) => a + r.count, 0);
     // Daily average over the selected span (whole days, min 1).
     const days = from && to ? Math.max(1, Math.round((to.getTime() - from.getTime()) / 864e5)) : null;
     const dailyAvg = days ? Math.round((total / days) * 10) / 10 : null;
-    res.json({ success: true, metric, total, days, dailyAvg, data: rows });
+    res.json({ success: true, metric, total, zips, days, dailyAvg, data: rows });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

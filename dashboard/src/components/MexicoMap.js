@@ -37,7 +37,7 @@ const RAMP_CSS = "linear-gradient(90deg, #2a2f3a, rgb(59,130,246), rgb(34,197,94
 export default function MexicoMap({ metric = "ml", from, to, onSelectState }) {
   const [geo, setGeo] = useState(null);
   const [counts, setCounts] = useState({});
-  const [stats, setStats] = useState({ total: 0, dailyAvg: null });
+  const [stats, setStats] = useState({ total: 0, dailyAvg: null, zips: 0 });
   const [hover, setHover] = useState(null); // { name, count, x, y }
   const [loading, setLoading] = useState(false);
   const wrapRef = useRef(null);
@@ -61,7 +61,7 @@ export default function MexicoMap({ metric = "ml", from, to, onSelectState }) {
       const m = {};
       for (const row of r.data.data) m[keyOf(row.state)] = row.count;
       setCounts(m);
-      setStats({ total: r.data.total || 0, dailyAvg: r.data.dailyAvg });
+      setStats({ total: r.data.total || 0, dailyAvg: r.data.dailyAvg, zips: r.data.zips || 0 });
     }).catch(() => {}).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
   }, [metric, from, to]);
@@ -161,6 +161,7 @@ export default function MexicoMap({ metric = "ml", from, to, onSelectState }) {
         </div>
         <span style={{ color: "#cbd5e1" }}>
           Total: <b style={{ color: "#fff" }}>{stats.total.toLocaleString("es-MX")}</b> {UNIT[metric] || ""}
+          {stats.zips > 0 && <> de <b style={{ color: "#fff" }}>{stats.zips.toLocaleString("es-MX")}</b> códigos postales</>}
         </span>
         {stats.dailyAvg != null && (
           <span style={{ color: "#cbd5e1" }}>
