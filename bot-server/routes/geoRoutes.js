@@ -30,8 +30,16 @@ async function resolveEntries(psids) {
   return out;
 }
 
+// tally: Map<state, { count, zips:Set }> → sorted rows with per-state zip counts.
 const toRows = (tally) =>
-  [...tally.entries()].map(([state, count]) => ({ state, count })).sort((a, b) => b.count - a.count);
+  [...tally.entries()]
+    .map(([state, v]) => ({ state, count: v.count, zips: v.zips ? v.zips.size : 0 }))
+    .sort((a, b) => b.count - a.count);
+const bump = (tally, state, zip) => {
+  let e = tally.get(state);
+  if (!e) { e = { count: 0, zips: new Set() }; tally.set(state, e); }
+  e.count++; if (zip) e.zips.add(zip);
+};
 
 // GET /geo/by-state?metric=ml|ventas|conversations|clicks&from=ISO&to=ISO
 // from/to bound the metric's own timestamp; omit both for all-time. Returns per-state
@@ -47,7 +55,7 @@ router.get("/by-state", async (req, res) => {
       if (!from && !to) return {};
       const c = {}; if (from) c.$gte = from; if (to) c.$lt = to; return { [field]: c };
     };
-    let rows, zips = 0; // zips = distinct zip codes behind the total
+    const tally = new Map(); // state → { count, zips:Set }
 
     if (metric === "ml") {
       const MLSale = require("../models/MLSale");
@@ -55,8 +63,7 @@ router.get("/by-state", async (req, res) => {
         { $match: { "shipping.state": { $nin: [null, ""] }, ...inRange("dateCreated") } },
         { $group: { _id: "$shipping.state", count: { $sum: 1 }, zips: { $addToSet: "$shipping.zip" } } },
       ]);
-      rows = toRows(new Map(agg.map((r) => [r._id, r.count])));
-      zips = new Set(agg.flatMap((r) => r.zips).filter(Boolean)).size;
+      for (const r of agg) tally.set(r._id, { count: r.count, zips: new Set((r.zips || []).filter(Boolean)) });
 
     } else if (metric === "ventas") {
       const ConvoSaleMatch = require("../models/ConvoSaleMatch");
@@ -64,33 +71,27 @@ router.get("/by-state", async (req, res) => {
       const orderIds = [...new Set((await ConvoSaleMatch.find({}).select("orderId").lean()).map((m) => String(m.orderId)))];
       const sales = orderIds.length
         ? await MLSale.find({ _id: { $in: orderIds }, ...inRange("dateCreated") }).select("shipping.state shipping.zip").lean() : [];
-      const tally = new Map(); const zset = new Set();
-      for (const s of sales) { const st = s.shipping?.state; if (st) { tally.set(st, (tally.get(st) || 0) + 1); if (s.shipping?.zip) zset.add(s.shipping.zip); } }
-      rows = toRows(tally); zips = zset.size;
+      for (const s of sales) if (s.shipping?.state) bump(tally, s.shipping.state, s.shipping.zip);
 
     } else if (metric === "conversations") {
       // Conversations active in the window (lastMessageAt), resolved to the user's state.
       const Conversation = require("../models/Conversation");
       const psids = await Conversation.distinct("psid", inRange("lastMessageAt"));
-      const entries = await resolveEntries(psids);
-      const tally = new Map(); const zset = new Set();
-      for (const e of entries) { tally.set(e.state, (tally.get(e.state) || 0) + 1); if (e.zip) zset.add(e.zip); }
-      rows = toRows(tally); zips = zset.size;
+      for (const e of await resolveEntries(psids)) bump(tally, e.state, e.zip);
 
     } else { // clicks — distinct clickers (people) in the window
       const ClickLog = require("../models/ClickLog");
       const psids = await ClickLog.distinct("psid", { psid: { $nin: [null, ""] }, ...inRange("clickedAt") });
-      const entries = await resolveEntries(psids);
-      const tally = new Map(); const zset = new Set();
-      for (const e of entries) { tally.set(e.state, (tally.get(e.state) || 0) + 1); if (e.zip) zset.add(e.zip); }
-      rows = toRows(tally); zips = zset.size;
+      for (const e of await resolveEntries(psids)) bump(tally, e.state, e.zip);
     }
 
+    const rows = toRows(tally);
     const total = rows.reduce((a, r) => a + r.count, 0);
+    const zips = new Set(); tally.forEach((v) => v.zips.forEach((z) => zips.add(z)));
     // Daily average over the selected span (whole days, min 1).
     const days = from && to ? Math.max(1, Math.round((to.getTime() - from.getTime()) / 864e5)) : null;
     const dailyAvg = days ? Math.round((total / days) * 10) / 10 : null;
-    res.json({ success: true, metric, total, zips, days, dailyAvg, data: rows });
+    res.json({ success: true, metric, total, zips: zips.size, days, dailyAvg, data: rows });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }

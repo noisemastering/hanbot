@@ -37,6 +37,7 @@ const RAMP_CSS = "linear-gradient(90deg, #2a2f3a, rgb(59,130,246), rgb(34,197,94
 export default function MexicoMap({ metric = "ml", from, to, onSelectState }) {
   const [geo, setGeo] = useState(null);
   const [counts, setCounts] = useState({});
+  const [zipsByState, setZipsByState] = useState({});
   const [stats, setStats] = useState({ total: 0, dailyAvg: null, zips: 0 });
   const [hover, setHover] = useState(null); // { name, count, x, y }
   const [loading, setLoading] = useState(false);
@@ -58,9 +59,10 @@ export default function MexicoMap({ metric = "ml", from, to, onSelectState }) {
     const qs = `metric=${metric}${from ? `&from=${encodeURIComponent(from)}` : ""}${to ? `&to=${encodeURIComponent(to)}` : ""}`;
     API.get(`/geo/by-state?${qs}`).then((r) => {
       if (!active || !r.data.success || r.data.metric !== metric) return;
-      const m = {};
-      for (const row of r.data.data) m[keyOf(row.state)] = row.count;
+      const m = {}, z = {};
+      for (const row of r.data.data) { m[keyOf(row.state)] = row.count; z[keyOf(row.state)] = row.zips || 0; }
       setCounts(m);
+      setZipsByState(z);
       setStats({ total: r.data.total || 0, dailyAvg: r.data.dailyAvg, zips: r.data.zips || 0 });
     }).catch(() => {}).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
@@ -93,9 +95,10 @@ export default function MexicoMap({ metric = "ml", from, to, onSelectState }) {
       const g = f.geometry;
       const polys = g.type === "MultiPolygon" ? g.coordinates : [g.coordinates];
       const d = polys.map((poly) => poly.map(ring).join(" ")).join(" ");
-      return { name: f.properties.name, d, count: counts[keyOf(f.properties.name)] || 0 };
+      const k = keyOf(f.properties.name);
+      return { name: f.properties.name, d, count: counts[k] || 0, zips: zipsByState[k] || 0 };
     });
-  }, [geo, project, counts]);
+  }, [geo, project, counts, zipsByState]);
 
   const max = useMemo(() => Math.max(1, ...paths.map((p) => p.count)), [paths]);
 
@@ -115,7 +118,7 @@ export default function MexicoMap({ metric = "ml", from, to, onSelectState }) {
 
   const onMove = (e, p) => {
     const rect = wrapRef.current?.getBoundingClientRect();
-    setHover({ name: p.name, count: p.count, x: e.clientX - (rect?.left || 0), y: e.clientY - (rect?.top || 0) });
+    setHover({ name: p.name, count: p.count, zips: p.zips, x: e.clientX - (rect?.left || 0), y: e.clientY - (rect?.top || 0) });
   };
 
   if (!geo) return <div className="text-gray-500 p-8 text-center">Cargando mapa…</div>;
@@ -149,6 +152,9 @@ export default function MexicoMap({ metric = "ml", from, to, onSelectState }) {
         <div style={{ position: "absolute", left: hover.x + 12, top: hover.y + 12, pointerEvents: "none", background: "#0f1117", border: "1px solid #333", borderRadius: 8, padding: "6px 10px", fontSize: 13, color: "#fff", whiteSpace: "nowrap", zIndex: 5, boxShadow: "0 4px 16px rgba(0,0,0,0.5)" }}>
           <div style={{ fontWeight: 600 }}>{hover.name}</div>
           <div style={{ color: "#9ae6b4" }}>{hover.count.toLocaleString("es-MX")} {UNIT[metric] || ""}</div>
+          {hover.zips > 0 && (
+            <div style={{ color: "#94a3b8", fontSize: 11 }}>de {hover.zips.toLocaleString("es-MX")} códigos postales</div>
+          )}
         </div>
       )}
 
@@ -161,7 +167,6 @@ export default function MexicoMap({ metric = "ml", from, to, onSelectState }) {
         </div>
         <span style={{ color: "#cbd5e1" }}>
           Total: <b style={{ color: "#fff" }}>{stats.total.toLocaleString("es-MX")}</b> {UNIT[metric] || ""}
-          {stats.zips > 0 && <> de <b style={{ color: "#fff" }}>{stats.zips.toLocaleString("es-MX")}</b> códigos postales</>}
         </span>
         {stats.dailyAvg != null && (
           <span style={{ color: "#cbd5e1" }}>
