@@ -66,10 +66,17 @@ export default function CorrelationBadge({ autorun = true }) {
           Correlacionando ventas…
           <style>{`@keyframes cbspin { to { transform: rotate(360deg); } }`}</style>
         </>
-      ) : (
+      ) : status.lastFullAt ? (
         <>
           <span style={{ color: "#22c55e" }}>●</span>
           Última correlación completa: {ago(status.lastFullAt)}
+        </>
+      ) : (
+        // No FULL run recorded yet, but incrementals keep matches fresh — show the last
+        // run rather than a misleading "nunca".
+        <>
+          <span style={{ color: "#eab308" }}>●</span>
+          Última correlación: {ago(status.lastRun)}
         </>
       )}
     </div>

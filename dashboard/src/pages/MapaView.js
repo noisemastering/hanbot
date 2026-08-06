@@ -63,8 +63,9 @@ export default function MapaView() {
         </div>
       </div>
 
-      {(metric === 'ventas' || metric === 'ml') && (
-        <div className="mb-3"><CorrelationBadge autorun={metric === 'ventas'} /></div>
+      {/* Only Ventas depends on correlation; the other metrics are raw ML/click/chat data. */}
+      {metric === 'ventas' && (
+        <div className="mb-3"><CorrelationBadge autorun /></div>
       )}
       <div className="bg-gray-800/40 border border-gray-700/50 rounded-xl p-4">
         <MexicoMap metric={metric} from={from} to={to} />
