@@ -387,6 +387,23 @@ function decayScore(base, flat, step, g, dec = 10) {
   return pct > 0 ? pct : null;
 }
 
+// FREQUENCY / DENSITY dampener for NAMELESS attributions (item + CP, no name). When we
+// can't name the buyer, our confidence hinges on how much ambient sales activity that
+// zip has: a purchase in a zip that rarely sells is almost surely the clicker's; the
+// same purchase in a zip that sells constantly is likely just the next routine order.
+//
+// The window is NOT a fixed clock — it falls out of the zip's own cadence. With C =
+// other same-zip same-day sales (the "confusers"), the zip's competing rate is λ = C/24
+// per hour, and a sale Δt hours after the click keeps confidence e^(−λ·Δt): few of the
+// zip's natural sale-intervals between click and purchase → strong; many → weak. C = 0
+// (no other sales that day) → factor 1 (no penalty). See map/density discussion.
+function densityFactor(zipDaySales, gapHours) {
+  const competitors = Math.max(0, (zipDaySales || 1) - 1); // exclude the candidate sale itself
+  if (competitors === 0) return 1;
+  const lambda = competitors / 24; // per hour
+  return Math.exp(-lambda * Math.max(0, gapHours || 0));
+}
+
 // Tier table (chart, 2026-07-22). "Decae: NA" ⇒ NO DECAY — each tier holds its FLAT %
 // as long as the sale falls within its TIME WINDOW, then drops to nothing (no match).
 // Implemented as decayScore(base, windowHours, null, g): base% until the window, else null.
@@ -398,7 +415,17 @@ function classify(m) {
   const gTxt = m.gapHours == null ? "s/tiempo"
     : g < 1 ? `${Math.round(g * 60)}min` : `${Math.round(g * 10) / 10}h`;
 
-  let pct = null, tier = "", vi = false, undisputed = false;
+  let pct = null, tier = "", vi = false, undisputed = false, dens = null;
+
+  // Apply the frequency/density dampener to a NAMELESS tier's base %. Returns the damped
+  // pct (null if it collapses to 0) and records the density for the reason string.
+  const damp = (base) => {
+    if (base == null) return null;
+    const factor = densityFactor(m.zipDaySales, g);
+    dens = { competitors: Math.max(0, (m.zipDaySales || 1) - 1), factor: Math.round(factor * 100) / 100 };
+    const p = Math.round(base * factor);
+    return p >= 1 ? p : null; // a busy-enough zip can dampen it out of attributability
+  };
 
   if (m.itemMatch) {
     // SAME product (a size the customer discussed OR clicked).
@@ -406,19 +433,21 @@ function classify(m) {
     else if (m.zipMatch && m.nameMatch) { pct = decayScore(90, 24, null, g); tier = "cp + nombre + item"; }        // 1 día
     else if (m.zipMatch && m.lastNameMatch) { pct = decayScore(90, 24, null, g); tier = "cp + apellido + item"; }  // 1 día — last name is as good as full name WHEN zip + item both match
     else if (m.cityMatch && m.nameMatch) { pct = decayScore(50, 24, null, g); tier = "ciudad + nombre + item"; }   // 1 día
-    else if (m.zipMatch) { pct = decayScore(25, 24, null, g); tier = "cp + item"; }                                 // 1 día
+    else if (m.zipMatch) { pct = damp(decayScore(25, 24, null, g)); tier = "cp + item"; }                           // 1 día · NAMELESS → density-damped
     // else → not attributable (0%)
   } else {
     // DIFFERENT product (venta indirecta).
     vi = true;
     if (m.zipMatch && m.nameMatch && m.nicknameMatch) { pct = decayScore(90, 2, null, g); tier = "producto distinto · cp + nombre + usuario ML"; }               // 2 h
     else if (m.zipMatch && m.nameMatch && m.sameFamily) { pct = decayScore(50, 12, null, g); tier = "producto distinto, misma familia · cp + nombre"; }          // 12 h
-    else if (m.zipMatch && m.sameFamily) { pct = decayScore(10, 12, null, g); tier = "producto distinto, misma familia · cp"; }                                  // 12 h
+    else if (m.zipMatch && m.sameFamily) { pct = damp(decayScore(10, 12, null, g)); tier = "producto distinto, misma familia · cp"; }                            // 12 h · NAMELESS → density-damped
     // else → not attributable (0%)
   }
 
   if (pct == null) return null;
-  return { pct, confidence: med(pct), undisputed, ventaIndirecta: vi, reason: `${tier} · ${gTxt} (${pct}%)` };
+  const densTxt = dens && dens.competitors > 0
+    ? ` · ${dens.competitors} venta${dens.competitors > 1 ? "s" : ""}/día mismo CP ×${dens.factor}` : "";
+  return { pct, confidence: med(pct), undisputed, ventaIndirecta: vi, density: dens, reason: `${tier} · ${gTxt}${densTxt} (${pct}%)` };
 }
 
 const ORPHAN_WINDOW_MS = 5 * 60000; // ±5 min
@@ -547,6 +576,17 @@ async function matchConversation(convo, ctx) {
   }
   if (!candidates.length) return [];
 
+  // Base rate for the density dampener: how many sales each (zip, MX-day) produced —
+  // the "confusers" a nameless attribution competes against. Free: candidates already
+  // hold every same-zip sale across the click-day span (pulled by shipping.zip above).
+  const zipDayCounts = new Map();
+  for (const s of candidates) {
+    const z = normZip(s.shipping && s.shipping.zip);
+    if (!z || !s.dateCreated) continue;
+    const key = z + "|" + mxDay(s.dateCreated);
+    zipDayCounts.set(key, (zipDayCounts.get(key) || 0) + 1);
+  }
+
   const clickTimes = (ctx.psidClickTimes && ctx.psidClickTimes.get(String(convo.psid))) || [];
   const convoFamSet = new Set(id.famIds); // families the convo discussed
 
@@ -620,6 +660,8 @@ async function matchConversation(convo, ctx) {
       sameFamily,
       gapHours,
       minutes: nearestCt == null ? null : Math.round((tSale - nearestCt) / 60000),
+      // same-zip same-day sale count (base rate for the nameless-tier density dampener)
+      zipDaySales: (s.shipping && normZip(s.shipping.zip)) ? (zipDayCounts.get(normZip(s.shipping.zip) + "|" + mxDay(s.dateCreated)) || 1) : 1,
     };
 
     const v = classify(m);
@@ -675,6 +717,10 @@ function buildMatchDoc(convo, id, s, m, v, dayToSizes) {
       poiFuzzy: poiFuzzy(s, id.poiName),
       minutesConvoToSale: m.minutes,
       gapHoursToSale: m.gapHours == null ? null : Math.round(m.gapHours * 10) / 10,
+      // Density dampener (nameless tiers only): same-zip same-day sale count + the
+      // applied confidence factor. null factor ⇒ tier wasn't density-damped.
+      zipDaySales: m.zipDaySales || null,
+      densityFactor: v.density ? v.density.factor : null,
     },
     sale: {
       orderId: s._id,
