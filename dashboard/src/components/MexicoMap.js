@@ -34,9 +34,10 @@ const STOPS = [
 ];
 const RAMP_CSS = "linear-gradient(90deg, #2a2f3a, rgb(59,130,246), rgb(34,197,94), rgb(234,179,8), rgb(249,115,22), rgb(239,68,68))";
 
-export default function MexicoMap({ metric = "sales", onSelectState }) {
+export default function MexicoMap({ metric = "ml", from, to, onSelectState }) {
   const [geo, setGeo] = useState(null);
   const [counts, setCounts] = useState({});
+  const [stats, setStats] = useState({ total: 0, dailyAvg: null });
   const [hover, setHover] = useState(null); // { name, count, x, y }
   const [loading, setLoading] = useState(false);
   const wrapRef = useRef(null);
@@ -54,14 +55,16 @@ export default function MexicoMap({ metric = "sales", onSelectState }) {
     // gray) — easier to eyeball the difference. The guards below still prevent a stale
     // response from overwriting the current one.
     setLoading(true);
-    API.get(`/geo/by-state?metric=${metric}`).then((r) => {
+    const qs = `metric=${metric}${from ? `&from=${encodeURIComponent(from)}` : ""}${to ? `&to=${encodeURIComponent(to)}` : ""}`;
+    API.get(`/geo/by-state?${qs}`).then((r) => {
       if (!active || !r.data.success || r.data.metric !== metric) return;
       const m = {};
       for (const row of r.data.data) m[keyOf(row.state)] = row.count;
       setCounts(m);
+      setStats({ total: r.data.total || 0, dailyAvg: r.data.dailyAvg });
     }).catch(() => {}).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [metric]);
+  }, [metric, from, to]);
 
   // Projection: bbox over all coords → cos-corrected equirectangular fit to the viewBox.
   const project = useMemo(() => {
@@ -149,11 +152,21 @@ export default function MexicoMap({ metric = "sales", onSelectState }) {
         </div>
       )}
 
-      {/* legend */}
-      <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 8, fontSize: 12, color: "#888" }}>
-        <span>0</span>
-        <div style={{ width: 220, height: 10, borderRadius: 5, background: RAMP_CSS }} />
-        <span>{max.toLocaleString("es-MX")}</span>
+      {/* legend + totals */}
+      <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 12, marginTop: 8, fontSize: 12, color: "#888" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <span>0</span>
+          <div style={{ width: 200, height: 10, borderRadius: 5, background: RAMP_CSS }} />
+          <span>{max.toLocaleString("es-MX")}</span>
+        </div>
+        <span style={{ color: "#cbd5e1" }}>
+          Total: <b style={{ color: "#fff" }}>{stats.total.toLocaleString("es-MX")}</b> {UNIT[metric] || ""}
+        </span>
+        {stats.dailyAvg != null && (
+          <span style={{ color: "#cbd5e1" }}>
+            Promedio diario: <b style={{ color: "#9ae6b4" }}>{stats.dailyAvg.toLocaleString("es-MX")}</b>
+          </span>
+        )}
       </div>
     </div>
   );
