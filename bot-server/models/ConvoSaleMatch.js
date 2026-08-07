@@ -52,6 +52,8 @@ const ConvoSaleMatchSchema = new mongoose.Schema(
       poiFuzzy: Boolean, // product-root-name appeared in item title (weak signal, informational)
       minutesConvoToSale: Number,
       gapHoursToSale: Number, // hours from chat's last activity → sale (0 = purchased during the chat)
+      zipDaySales: Number, // sales in this zip on the sale's day (base rate for the density dampener)
+      densityFactor: Number, // confidence multiplier applied to nameless tiers (null = not damped)
     },
 
     // denormalized sale snapshot so the match is reviewable without a join
