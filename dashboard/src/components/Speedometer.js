@@ -17,7 +17,7 @@ function arc(cx, cy, r, a1, a2) {
   return `M ${p1.x.toFixed(2)} ${p1.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
 }
 
-export default function Speedometer({ value = 0, limit = 1500 }) {
+export default function Speedometer({ value = 0, limit = 3000 }) {
   const cx = 160, cy = 158, r = 122, stroke = 20;
   const max = Math.max(limit * (4 / 3), value * 1.05); // limit at ~75% of the dial; grow if over
   const clamp = (v) => Math.min(1, Math.max(0, v / max));

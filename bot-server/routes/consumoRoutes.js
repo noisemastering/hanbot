@@ -48,8 +48,8 @@ router.get("/usage", async (req, res) => {
     const today = daily.find((d) => d.date === todayKey)?.count || 0;
 
     const state = await SystemState.getState();
-    const p = (state.plan && state.plan.monthlyLimit) ? state.plan : { name: "Estándar", monthlyLimit: 1500, overageRate: 0, currency: "MXN" };
-    const limit = p.monthlyLimit || 1500;
+    const p = (state.plan && state.plan.monthlyLimit) ? state.plan : { name: "Estándar", monthlyLimit: 3000, overageRate: 0, currency: "MXN" };
+    const limit = p.monthlyLimit || 3000;
     const overCount = Math.max(0, total - limit);
     const overageRate = p.overageRate || 0;
 

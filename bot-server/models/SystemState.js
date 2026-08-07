@@ -71,7 +71,7 @@ const systemStateSchema = new mongoose.Schema(
       type: new mongoose.Schema(
         {
           name: { type: String, default: "Estándar" },
-          monthlyLimit: { type: Number, default: 1500 }, // conversation quota / month
+          monthlyLimit: { type: Number, default: 3000 }, // conversation quota / month
           overageRate: { type: Number, default: 0 }, // per extra convo (currency below) — TBD with the user
           currency: { type: String, default: "MXN" },
           // Billing (temporary home — to be moved to a proper customer/billing record later).
