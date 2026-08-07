@@ -370,6 +370,11 @@ function poiFuzzy(sale, poiName) {
   return (sale.items || []).some((it) => poiMatchesProduct(poiName, it.title));
 }
 
+// Clock-skew grace for the directional gate: an ad click and its immediate purchase
+// can log 1–6 min out of order (our ClickLog write vs ML's order timestamp), so a click
+// up to this long AFTER the sale still counts as simultaneous (gap 0) — but ONLY when
+// there's no genuine click BEFORE the sale that day (a real before-click always wins).
+const CLICK_SKEW_GRACE_MS = 15 * 60000;
 const H10M = 10 / 60; // 10 minutes in hours
 const H5M = 5 / 60; //  5 minutes in hours
 const H1M = 1 / 60; //  1 minute in hours
@@ -633,10 +638,17 @@ async function matchConversation(convo, ctx) {
     // it is NOT attributable. gapHours is then the (always ≥0) sale−click distance,
     // and each tier enforces its own window on it in classify().
     const sd = mxDay(s.dateCreated);
-    let nearestCt = null; // latest same-day click at/before the sale
-    for (const ct of clickTimes) { if (mxDay(ct) === sd && ct <= tSale && (nearestCt == null || ct > nearestCt)) nearestCt = ct; }
-    if (nearestCt == null) continue; // sale happened before any same-day click → skip
-    const gapHours = (tSale - nearestCt) / 3600e3;
+    let nearestCt = null; // latest same-day click at/before the sale (the causal click — preferred)
+    let graceCt = null;   // earliest same-day click just AFTER the sale (clock-skew fallback only)
+    for (const ct of clickTimes) {
+      if (mxDay(ct) !== sd) continue;
+      if (ct <= tSale) { if (nearestCt == null || ct > nearestCt) nearestCt = ct; }
+      else if (ct <= tSale + CLICK_SKEW_GRACE_MS) { if (graceCt == null || ct < graceCt) graceCt = ct; }
+    }
+    // A genuine before-click always wins; only if there's none that day do we accept a
+    // within-grace after-click (a same-moment conversion whose click logged late) as gap 0.
+    if (nearestCt == null && graceCt == null) continue; // sale not tied to any same-day click → skip
+    const gapHours = nearestCt != null ? (tSale - nearestCt) / 3600e3 : 0;
 
     // Same FAMILY: the sale's item (or an ancestor of it) is a family the convo discussed.
     let sameFamily = false;
@@ -659,7 +671,7 @@ async function matchConversation(convo, ctx) {
       itemMatch: itemMatch(s, id),
       sameFamily,
       gapHours,
-      minutes: nearestCt == null ? null : Math.round((tSale - nearestCt) / 60000),
+      minutes: nearestCt != null ? Math.round((tSale - nearestCt) / 60000) : (graceCt != null ? 0 : null),
       // same-zip same-day sale count (base rate for the nameless-tier density dampener)
       zipDaySales: (s.shipping && normZip(s.shipping.zip)) ? (zipDayCounts.get(normZip(s.shipping.zip) + "|" + mxDay(s.dateCreated)) || 1) : 1,
     };
