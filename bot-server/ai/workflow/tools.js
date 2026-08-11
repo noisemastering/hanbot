@@ -42,6 +42,28 @@ async function familyFullPath(PF, id) {
 const { convertSpanishNumbers } = require("../utils/spanishNumbers");
 const wordsToDigits = (t) => convertSpanishNumbers(String(t || ""));
 
+// LABELED dimensions with NO separator: "largo 15 y de ancho 4", "largo 15 ancho 4",
+// "15 de largo por 4 de ancho" (the "y"/no-connector forms dimsOf's x|por match misses).
+// Only fires when BOTH a length AND a width are explicitly labeled — unambiguous, so it
+// can't grab a bare quantity. Number may sit before or after its label word.
+function labeledDims(text) {
+  const t = wordsToDigits(String(text).toLowerCase())
+    .replace(/(\d),(\d)/g, "$1.$2")
+    .replace(/(\d)\s*(?:cms?\b|cent[ií]metros?\b|m\b|mts?\b|metros?\b)/g, "$1 ");
+  const grab = (labels) => {
+    // label then number: "largo 15", "largo de 15"
+    let mm = t.match(new RegExp(`\\b(?:${labels})\\s+(?:de\\s+)?(\\d+(?:\\.\\d+)?)`));
+    if (mm) return mm[1];
+    // number then label: "15 de largo", "15 largo"
+    mm = t.match(new RegExp(`(\\d+(?:\\.\\d+)?)\\s+(?:de\\s+)?(?:${labels})\\b`));
+    return mm ? mm[1] : null;
+  };
+  const L = grab("largo|alto|altura|fondo");
+  const A = grab("ancho|lado");
+  if (L == null || A == null) return null;
+  return [Number(L), Number(A)].sort((a, b) => a - b);
+}
+
 // "4x3", "4 x 3 m", "4 por 3", "tres por 8", "de 4x3 metros" → ["3","4"] (sorted).
 function dimsOf(text) {
   if (!text) return null;
@@ -59,7 +81,10 @@ function dimsOf(text) {
     .replace(/\b(?:largo|ancho|alto|altura|fondo)\s+de\b/g, " ")      // "largo de 13 x ancho de 3"
     .replace(/(\d+)\s*(?:y\s*medi[oa]|i\s*medi[oa]|imedi[oa]|y\s*1\/2)\b/g, "$1.5") // "3 imedio"/"3 y medio" → "3.5"
     .match(/(\d+(?:\.\d+)?)\s*(?:[x×*]|por)\s*(\d+(?:\.\d+)?)/);
-  if (!m) return null;
+  // Fallback: no x|por separator, but the customer labeled both dims ("largo 15 y
+  // de ancho 4"). Without this the deterministic measure gate is skipped and the
+  // model free-forms a size that may not exist in the catalog.
+  if (!m) return labeledDims(text);
   // Sort numerically so "6x4" and "4x6" compare equal regardless of order.
   return [m[1], m[2]].map(Number).sort((a, b) => a - b);
 }
@@ -77,6 +102,12 @@ function stripMeasures(text) {
     .replace(/(\d),(\d)/g, "$1.$2") // Mexican decimal comma
     .replace(/(\d{2,3})\s*(?:%|por\s*ciento|porciento)/g, " ") // shade % ("90%", "90 por ciento") is a SHADE spec, never a quantity — strip it like a measure so its number can't leak in as a bogus piece count
     .replace(/(\d)\s*(?:cms?\b|cent[ií]metros?\b|m\b|mts?\b|metros?\b)/g, "$1 ") // "6m"/"6 metros" → "6 "
+    // LABELED dimension number+word ("largo 15", "15 de largo", "ancho de 4") — strip
+    // the NUMBER together with its label so a separator-less measure ("largo 15 ancho 4")
+    // can't leak "15"/"4" into qtyFromText as a bogus piece count. Mirrors dimsOf's
+    // labeledDims path; runs BEFORE the bare label-word strip below.
+    .replace(/\b(?:largo|ancho|alto|altura|fondo|lado)\s+(?:de\s+)?\d+(?:\.\d+)?/g, " ")
+    .replace(/\d+(?:\.\d+)?\s+(?:de\s+)?(?:largo|ancho|alto|altura|fondo|lado)\b/g, " ")
     .replace(/\b(?:de\s+)?(?:largo|ancho|alto|altura|fondo|lado)\b/g, " ")
     .replace(/\b(?:largo|ancho|alto|altura|fondo)\s+de\b/g, " ")
     .replace(/(\d+(?:\.\d+)?)\s*(?:[x×*]|por)\s*(\d+(?:\.\d+)?)/g, " "); // drop the W×L pair(s)

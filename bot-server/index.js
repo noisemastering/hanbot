@@ -1033,8 +1033,15 @@ app.post("/webhook", async (req, res) => {
                     const ProductFamily = require('./models/ProductFamily');
                     const resolved = await resolveByPostId(post_id);
                     if (resolved?.productIds?.length) {
-                      const pid = resolved.mainProductId || resolved.productIds[0];
-                      const prod = await ProductFamily.findById(pid).lean();
+                      // Ad productIds can contain STALE refs (deleted leaves); pick the
+                      // FIRST that still resolves to a real product, main first. Blindly
+                      // taking productIds[0] yielded a dead ref → null interest.
+                      const pids = [resolved.mainProductId, ...resolved.productIds].filter(Boolean);
+                      let prod = null;
+                      for (const pid of pids) {
+                        prod = await ProductFamily.findById(pid).lean();
+                        if (prod) break;
+                      }
                       if (prod) commentProductInterest = await getProductInterest(prod);
                     }
                   }
@@ -1685,8 +1692,14 @@ app.post("/webhook", async (req, res) => {
 
                 const resolvedSettings = await resolveByPostId(postId);
                 if (resolvedSettings && resolvedSettings.productIds && resolvedSettings.productIds.length > 0) {
-                  const productId = resolvedSettings.mainProductId || resolvedSettings.productIds[0];
-                  const product = await ProductFamily.findById(productId).lean();
+                  // Skip STALE product refs (deleted leaves); pick the first that still
+                  // resolves, main first — a blind productIds[0] often hit a dead ref.
+                  const pids = [resolvedSettings.mainProductId, ...resolvedSettings.productIds].filter(Boolean);
+                  let product = null;
+                  for (const pid of pids) {
+                    product = await ProductFamily.findById(pid).lean();
+                    if (product) break;
+                  }
                   if (product) {
                     inferredProduct = await getProductInterest(product);
                     resolvedFromAd = resolvedSettings;

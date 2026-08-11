@@ -292,7 +292,10 @@ async function syncAds() {
   const fbAds = await fetchAllPages(
     `${AD_ACCOUNT_ID}/ads`,
     {
-      fields: "name,status,adset_id,creative{title,body,call_to_action_type,object_story_spec,image_url,video_id,thumbnail_url,link_url}"
+      // effective_object_story_id = the pageId_postId of the post backing this ad.
+      // It's how a Facebook COMMENT (whose webhook gives us that same post id) maps
+      // back to the ad → campaign → product, so a comment lands in the right flow.
+      fields: "name,status,adset_id,creative{title,body,call_to_action_type,object_story_spec,image_url,video_id,thumbnail_url,link_url,effective_object_story_id}"
     }
   );
 
@@ -338,6 +341,13 @@ async function syncAds() {
         status: fb.status,
         adSetId: parentAdSet._id
       };
+
+      // The post/story id backing this ad → lets a comment (same post id) resolve to
+      // this ad's product. Without it, resolveByPostId never matches and every comment
+      // falls to cold-start with no product.
+      if (fb.creative?.effective_object_story_id) {
+        updateFields.postId = fb.creative.effective_object_story_id;
+      }
 
       // Only set creative if we extracted any data
       if (Object.keys(creative).length > 0) {
