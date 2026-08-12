@@ -437,7 +437,7 @@ function classify(m) {
     if (m.zipMatch && (m.nameMatch || m.lastNameMatch) && m.nicknameMatch) { pct = decayScore(100, 48, null, g); tier = m.nameMatch ? "cp + nombre + usuario ML + item" : "cp + apellido + usuario ML + item"; undisputed = pct === 100; } // 2 días
     else if (m.zipMatch && m.nameMatch) { pct = decayScore(90, 24, null, g); tier = "cp + nombre + item"; }        // 1 día
     else if (m.zipMatch && m.lastNameMatch) { pct = decayScore(90, 24, null, g); tier = "cp + apellido + item"; }  // 1 día — last name is as good as full name WHEN zip + item both match
-    else if (m.cityMatch && m.nameMatch) { pct = decayScore(50, 24, null, g); tier = "ciudad + nombre + item"; }   // 1 día
+    else if (m.cityMatch && m.nameMatch) { pct = decayScore(70, 24, null, g); tier = "ciudad + nombre + item"; }   // 1 día
     else if (m.zipMatch) { pct = damp(decayScore(50, 24, null, g)); tier = "cp + item"; }                           // 1 día · NAMELESS → density-damped (50% ceiling in a quiet zip-day, scales down as same-day sales rise)
     // else → not attributable (0%)
   } else {
