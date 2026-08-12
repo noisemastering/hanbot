@@ -24,7 +24,11 @@ const MLSale = require("../models/MLSale");
 
 const FRESH_HOURS = 3;
 const FULL_FRESH_HOURS = 24; // a FULL rebuild older than this is considered stale
-const BACKTRACE_START = new Date("2025-12-01T00:00:00.000Z");
+const BACKTRACE_START = new Date("2025-12-01T00:00:00.000Z"); // ML-sync fallback when the DB is empty
+// How far a FULL rebuild reaches back (rolling). Kept at 1 month FOR NOW so full runs
+// stay fast; the full pass is windowed + non-destructive (scoped delete + heldOutside),
+// so matches OLDER than this window are preserved, never wiped. Raise to widen scope.
+const BACKTRACE_DAYS = 30;
 const SELLER_ID = "482595248";
 const SYNC_BUFFER_DAYS = 2; // re-fetch the last 2 days of ML sales each run (late arrivals)
 const MATCH_WINDOW_DAYS = 35; // first-run fallback window when there's no last-run stamp
@@ -171,7 +175,7 @@ async function runConvoCorrelation({ full = false } = {}) {
         : 0;
     const floorMs = Date.now() - MATCH_WINDOW_DAYS * 864e5;
     const since = full
-      ? BACKTRACE_START
+      ? new Date(Date.now() - BACKTRACE_DAYS * 864e5) // rolling 1-month backtrace (windowed, non-destructive)
       : new Date(Math.max(floorMs, correlatedThroughMs ? correlatedThroughMs - INCR_OVERLAP_MS : floorMs));
     const dateClause = { $or: [{ lastMessageAt: { $gte: since } }, { createdAt: { $gte: since } }] };
 
@@ -204,13 +208,15 @@ async function runConvoCorrelation({ full = false } = {}) {
         .map((m) => String(m.orderId)).filter(Boolean)
     );
 
-    // Order-uniqueness ACROSS the (small) incremental window: orders already held by
-    // convos OUTSIDE this window aren't re-scored, so a window convo may take such an
-    // order ONLY if it STRICTLY beats the absent holder's certainty — otherwise the
-    // absent holder keeps it. Without this, a narrow window would let a weaker new convo
-    // steal a stronger established convo's sale. (Full runs re-score everyone, so skip.)
+    // Order-uniqueness ACROSS the window: orders already held by convos OUTSIDE this
+    // window aren't re-scored, so a window convo may take such an order ONLY if it
+    // STRICTLY beats the absent holder's certainty — otherwise the absent holder keeps
+    // it. Without this, a narrow window would let a weaker new convo steal a stronger
+    // established convo's sale. Applies to BOTH incremental AND full now — the full pass
+    // is also windowed (rolling BACKTRACE_DAYS), so it must protect out-of-window matches
+    // instead of wiping and re-scoring the whole history.
     const heldOutside = new Map(); // orderId → best certainty held by a non-window convo
-    if (!full) {
+    {
       const windowSet = new Set(windowPsids);
       const existing = await ConvoSaleMatch.find({ method: { $ne: "human" }, humanVerdict: null, orderId: { $ne: null } })
         .select("orderId psid certainty").lean();
@@ -261,9 +267,11 @@ async function runConvoCorrelation({ full = false } = {}) {
     //    accumulates multiple (unrelated) orders. For every convo we just re-evaluated,
     //    drop its stale SYSTEM matches (any order it no longer claims); human verdicts
     //    (confirmed/rejected) are preserved so Rule 7 lockouts survive.
-    if (full) {
-      await ConvoSaleMatch.deleteMany({});
-    } else {
+    // Scoped delete for BOTH full and incremental: drop only the stale SYSTEM matches of
+    // the convos we JUST re-evaluated (this window). Matches for convos OUTSIDE the window
+    // (older than BACKTRACE_DAYS) are preserved — the full pass no longer wipes the whole
+    // collection, so a 1-month backtrace can't destroy months of prior attribution.
+    {
       const keepIds = finalMatches.map((d) => d._id);
       for (let i = 0; i < windowPsids.length; i += 5000) {
         await ConvoSaleMatch.deleteMany({
