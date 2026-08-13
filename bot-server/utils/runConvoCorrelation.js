@@ -129,7 +129,9 @@ async function computeLinkAudit(match) {
 // correlation indefinitely (the lock lives in the shared DB). Exceeds a full backtrace.
 const STALE_LOCK_MS = 60 * 60 * 1000;
 
-async function runConvoCorrelation({ full = false } = {}) {
+// `since` (optional) overrides the full-run reach for a ONE-OFF deep backtrace (e.g.
+// the initial Dec-2025 rebuild) without touching the rolling BACKTRACE_DAYS default.
+async function runConvoCorrelation({ full = false, since: sinceOverride = null } = {}) {
   const state = await SystemState.getState();
   const lc = state.lastCorrelationRun || {};
   const startedMs = lc.startedAt ? new Date(lc.startedAt).getTime() : 0;
@@ -175,7 +177,7 @@ async function runConvoCorrelation({ full = false } = {}) {
         : 0;
     const floorMs = Date.now() - MATCH_WINDOW_DAYS * 864e5;
     const since = full
-      ? new Date(Date.now() - BACKTRACE_DAYS * 864e5) // rolling 1-month backtrace (windowed, non-destructive)
+      ? (sinceOverride ? new Date(sinceOverride) : new Date(Date.now() - BACKTRACE_DAYS * 864e5)) // rolling 1-month backtrace (windowed, non-destructive); sinceOverride for a one-off deep rebuild
       : new Date(Math.max(floorMs, correlatedThroughMs ? correlatedThroughMs - INCR_OVERLAP_MS : floorMs));
     const dateClause = { $or: [{ lastMessageAt: { $gte: since } }, { createdAt: { $gte: since } }] };
 
