@@ -24,7 +24,11 @@ const MLSale = require("../models/MLSale");
 
 const FRESH_HOURS = 3;
 const FULL_FRESH_HOURS = 24; // a FULL rebuild older than this is considered stale
-const BACKTRACE_START = new Date("2025-12-01T00:00:00.000Z"); // ML-sync fallback when the DB is empty
+// Correlation baseline: the funnel effectively starts Feb 2026 — Dec 2025 / Jan 2026
+// captured no names/zips (and few tracked clicks), so a deep backtrace found ZERO
+// matches before Feb 15. Anchoring here caps any full rebuild to real data and serves
+// as the ML-sync fallback when the DB is empty.
+const BACKTRACE_START = new Date("2026-02-01T00:00:00.000Z");
 // How far a FULL rebuild reaches back (rolling). Kept at 1 month FOR NOW so full runs
 // stay fast; the full pass is windowed + non-destructive (scoped delete + heldOutside),
 // so matches OLDER than this window are preserved, never wiped. Raise to widen scope.
