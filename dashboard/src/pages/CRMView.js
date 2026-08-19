@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import API from '../api';
 import { useAuth } from '../contexts/AuthContext';
 import ManualSaleForm from '../components/ManualSaleForm';
@@ -7,7 +8,9 @@ const inputClass = "w-full px-3 py-1.5 bg-gray-900/50 border border-gray-600/50 
 
 function CRMView() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const isSuperAdmin = user?.role === 'super_admin';
+  const openDetail = (psid) => navigate(`/crm/${encodeURIComponent(psid)}`);
 
   const [customers, setCustomers] = useState([]);
   const [initialLoad, setInitialLoad] = useState(true);
@@ -218,7 +221,12 @@ function CRMView() {
                 ) : (
                   <React.Fragment key={c.psid}>
                   <tr className="hover:bg-gray-700/20">
-                    <td className="px-6 py-3 text-sm text-white font-medium">{toTitleCase(c.crmName) || '-'}</td>
+                    <td className="px-6 py-3 text-sm font-medium">
+                      <button onClick={() => openDetail(c.psid)} title="Ver detalle del cliente"
+                        className="text-white hover:text-purple-300 hover:underline text-left">
+                        {toTitleCase(c.crmName) || '-'}
+                      </button>
+                    </td>
                     <td className="px-6 py-3 text-sm text-gray-300">{c.crmPhone || '-'}</td>
                     <td className="px-6 py-3 text-sm text-gray-300">{c.crmEmail || '-'}</td>
                     <td className="px-6 py-3 text-sm text-gray-300">
@@ -226,6 +234,13 @@ function CRMView() {
                     </td>
                     <td className="px-4 py-3">
                       <div className="flex gap-1">
+                        <button onClick={() => openDetail(c.psid)} title="Ver detalle"
+                          className="p-1.5 rounded hover:bg-purple-500/20 text-purple-400">
+                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                          </svg>
+                        </button>
                         <button onClick={() => setSalePsid(salePsid === c.psid ? null : c.psid)} title="Registrar venta"
                           className={`p-1.5 rounded hover:bg-green-500/20 ${salePsid === c.psid ? 'text-green-300 bg-green-500/20' : 'text-green-400'}`}>
                           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
