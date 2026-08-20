@@ -241,6 +241,8 @@ function convoIdentity(convo, ctx) {
   const names = [
     ...new Set(
       [
+        convo.customerName, // platform-captured name (Messenger/WhatsApp profile) — set at chat start, ~100% coverage. THE primary name source; was previously ignored, starving the cp+nombre tiers.
+        convo.name,
         convo.extractedName,
         convo.productSpecs && convo.productSpecs.customerName,
         convo.leadData && convo.leadData.name,

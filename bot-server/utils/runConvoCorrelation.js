@@ -53,7 +53,7 @@ function buyerKeyOf(doc) {
 }
 
 const MATCH_FIELDS =
-  "psid extractedName productSpecs city stateMx zipCode zipcode customOrderZipcode " +
+  "psid customerName name extractedName productSpecs city stateMx zipCode zipcode customOrderZipcode " +
   "humanSalesZipcode leadData crmName productInterest poiRootId poiRootName productFamilyId " +
   "aiIdentity adMainProductId itemsDiscussed createdAt lastMessageAt updatedAt";
 
