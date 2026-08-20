@@ -81,7 +81,11 @@ async function processNotification(notificationData) {
 
     // Correlate with ClickLog to attribute to PSID
     // Only correlate paid orders (successful purchases)
-    if (orderDetail.status === 'paid') {
+    // RETIRED: the legacy per-order correlateOrder wrote a SECOND, divergent attribution
+    // into ClickLog. ConvoSaleMatch (runConvoCorrelation) is now the single source of
+    // truth and projects itself into ClickLog, so this real-time writer is disabled to
+    // stop the two systems from fighting. Set LEGACY_ML_CORRELATION=1 to re-enable.
+    if (orderDetail.status === 'paid' && process.env.LEGACY_ML_CORRELATION === '1') {
       console.log(`💰 Order ${orderId} is paid - attempting correlation...`);
       const correlationResult = await correlateOrder(orderDetail, sellerId);
 

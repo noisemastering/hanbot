@@ -133,6 +133,65 @@ async function computeLinkAudit(match) {
 // correlation indefinitely (the lock lives in the shared DB). Exceeds a full backtrace.
 const STALE_LOCK_MS = 60 * 60 * 1000;
 
+// PROJECTION: mirror ConvoSaleMatch (the single source of truth) into the ClickLog
+// attribution fields the whole dashboard reads (converted / conversionData / certainty).
+// This retires the second, divergent attribution system: every page that reads
+// ClickLog.converted (ml-orders, crm/sales, analytics, sales-overview, …) now shows the
+// SAME numbers as /conversions. Manual conversions (correlationMethod: 'manual') are
+// never touched. Scoped to the window's psids so it mirrors the correlation's own scope.
+async function syncMatchesToClickLog(matches, windowPsids) {
+  const ClickLog = require("../models/ClickLog");
+  // 1. Clear prior SYSTEM (non-manual) conversions for the re-evaluated psids — this
+  //    wipes both stale legacy flags and prior projections, leaving manual sales intact.
+  for (let i = 0; i < windowPsids.length; i += 5000) {
+    await ClickLog.updateMany(
+      { psid: { $in: windowPsids.slice(i, i + 5000) }, correlationMethod: { $ne: "manual" }, converted: true },
+      { $set: { converted: false, convertedAt: null, correlatedOrderId: null, correlationCertainty: null, correlationConfidence: null, correlationMethod: null, correlationUndisputed: false, ventaIndirecta: false, attributionReason: null } }
+    );
+  }
+  if (!matches.length) return 0;
+  // 2. Load the clicks of the matched psids once.
+  const psids = [...new Set(matches.map((m) => String(m.psid)))];
+  const clicks = await ClickLog.find({ psid: { $in: psids }, clicked: true, clickedAt: { $ne: null } }).select("_id psid clickedAt").lean();
+  const byPsid = new Map();
+  for (const c of clicks) { const k = String(c.psid); if (!byPsid.has(k)) byPsid.set(k, []); byPsid.get(k).push(c); }
+  // 3. Flag ONE click per matched order (the causal click: latest at/before the sale,
+  //    else the psid's most recent) with the match's attribution.
+  const ops = []; let flagged = 0;
+  for (const m of matches) {
+    const list = byPsid.get(String(m.psid)); if (!list || !list.length) continue;
+    const tSale = m.sale && m.sale.dateCreated ? new Date(m.sale.dateCreated).getTime() : Infinity;
+    let pick = null;
+    for (const c of list) { const t = new Date(c.clickedAt).getTime(); if (t <= tSale && (!pick || t > new Date(pick.clickedAt).getTime())) pick = c; }
+    if (!pick) pick = list.reduce((a, b) => (new Date(a.clickedAt) > new Date(b.clickedAt) ? a : b));
+    const s = m.sale || {};
+    const nameParts = String((m.matchDetails && m.matchDetails.saleBuyerName) || s.receiverName || "").trim().split(/\s+/).filter(Boolean);
+    ops.push({ updateOne: { filter: { _id: pick._id }, update: { $set: {
+      converted: true,
+      // convertedAt = the SALE's date, NOT the projection run time — otherwise every
+      // historical conversion collapses onto "today" and breaks period filtering.
+      convertedAt: s.dateCreated ? new Date(s.dateCreated) : new Date(),
+      correlatedOrderId: String(m.orderId),
+      correlationCertainty: m.certainty != null ? m.certainty : null,
+      correlationConfidence: m.confidence || null,
+      correlationMethod: m.ventaIndirecta ? "convo_sale_indirect" : "convo_sale",
+      correlationUndisputed: !!m.undisputed, ventaIndirecta: !!m.ventaIndirecta,
+      attributionReason: m.reason || null,
+      conversionData: {
+        orderId: String(m.orderId), orderStatus: s.status,
+        buyerId: s.buyerId ? String(s.buyerId) : null, buyerNickname: s.buyerNickname || null,
+        buyerFirstName: nameParts[0] || null, buyerLastName: nameParts.slice(1).join(" ") || null,
+        receiverName: s.receiverName || null,
+        totalAmount: s.totalAmount, orderDate: s.dateCreated, itemTitle: s.itemTitle,
+        shippingCity: s.shippingCity, shippingState: s.shippingState, shippingZipCode: s.shippingZip,
+      },
+    } } } });
+    flagged++;
+  }
+  for (let i = 0; i < ops.length; i += 1000) await ClickLog.bulkWrite(ops.slice(i, i + 1000), { ordered: false });
+  return flagged;
+}
+
 // `since` (optional) overrides the full-run reach for a ONE-OFF deep backtrace (e.g.
 // the initial Dec-2025 rebuild) without touching the rolling BACKTRACE_DAYS default.
 async function runConvoCorrelation({ full = false, since: sinceOverride = null } = {}) {
@@ -303,7 +362,13 @@ async function runConvoCorrelation({ full = false, since: sinceOverride = null }
     //    wiped them; the authoritative verdicts live on Conversation.saleOverride).
     await applySaleOverrides();
 
-    const stats = { matched: finalMatches.length, scanned: convos.length, since, full: !!full };
+    // 5. project the matches into ClickLog so every legacy dashboard reader shows the
+    //    SAME attribution as /conversions (single source of truth).
+    let flagged = 0;
+    try { flagged = await syncMatchesToClickLog(finalMatches, windowPsids); }
+    catch (e) { console.error("⚠️ ClickLog projection failed (matches still saved):", e.message); }
+
+    const stats = { matched: finalMatches.length, scanned: convos.length, since, full: !!full, flagged };
     const fresh = await SystemState.getState();
     const now = new Date();
     fresh.lastCorrelationRun = { at: now, running: false, startedAt: null, stats };
