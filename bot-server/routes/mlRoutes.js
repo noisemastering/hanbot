@@ -7,6 +7,7 @@ const router = express.Router();
 const ss = require('simple-statistics');
 const ClickLog = require('../models/ClickLog');
 const Conversation = require('../models/Conversation');
+const { detectGender } = require('../utils/genderDetector');
 
 // ─── HELPERS ────────────────────────────────────────────────────────────────
 
@@ -970,9 +971,69 @@ router.get('/forecast-by-product', async (req, res) => {
   }
 });
 
-// ─── 2. CUSTOMER SEGMENTATION ───────────────────────────────────────────────
-// Cross-tab analysis: State × Gender × Product Size breakdown.
-// Helper: fetch orders for a date range
+// ─── 2. CAMPAIGN SEGMENTATION (CLICKER-based) ───────────────────────────────
+// Insight Meta can't give: segment by the CLICKER's gender (the person who clicked
+// the ad and chatted — Conversation.customerName), NOT the ML purchaser. The
+// purchaser's gender is unreliable (the ML account holder differs from the clicker
+// ~half the time), so we ignore it. Two figures:
+//   1. clicks by CLICKER gender  → who is our advertising actually reaching
+//   2. purchases we're ≥50% confident about → gender-AGNOSTIC (count + rate on clicks)
+function sizeOf(title) {
+  if (!title) return null;
+  const m = String(title).match(/(\d+)\s*m?\s*[xX×]\s*(\d+)\s*m/);
+  return m ? `${m[1]}x${m[2]}m` : null;
+}
+
+async function clickerSegments(dateFrom, dateTo) {
+  const dm = {};
+  if (dateFrom) dm.$gte = new Date(dateFrom);
+  if (dateTo) dm.$lte = new Date(dateTo);
+  const hasDate = Object.keys(dm).length > 0;
+
+  // 1. All ad clicks in range.
+  const clicks = await ClickLog.find({ clicked: true, clickedAt: { $ne: null }, ...(hasDate ? { clickedAt: dm } : {}) })
+    .select('psid productName').lean();
+  const totalClicks = clicks.length;
+
+  // 2. Clicker gender per psid, from the conversation name we harvest at chat start.
+  const psids = [...new Set(clicks.map((c) => String(c.psid)).filter(Boolean))];
+  const genderByPsid = new Map();
+  for (let i = 0; i < psids.length; i += 5000) {
+    const convos = await Conversation.find({ psid: { $in: psids.slice(i, i + 5000) } })
+      .select('psid customerName name extractedName crmName').lean();
+    for (const cv of convos) {
+      const nm = cv.customerName || cv.name || cv.extractedName || cv.crmName || '';
+      genderByPsid.set(String(cv.psid), detectGender(String(nm).trim().split(/\s+/)[0] || ''));
+    }
+  }
+
+  // 3. Clicks by clicker gender (+ product-size split — which segment clicks what).
+  const clicksByGender = { male: 0, female: 0, unknown: 0 };
+  const sizeGender = {}; // size → { male, female, unknown, total }
+  for (const c of clicks) {
+    const g = genderByPsid.get(String(c.psid)) || 'unknown';
+    clicksByGender[g]++;
+    const sz = sizeOf(c.productName);
+    if (sz) {
+      if (!sizeGender[sz]) sizeGender[sz] = { male: 0, female: 0, unknown: 0, total: 0 };
+      sizeGender[sz][g]++; sizeGender[sz].total++;
+    }
+  }
+
+  // 4. Purchases we're ≥50% confident about, in range (by SALE date). Gender-agnostic.
+  const convAgg = await ClickLog.aggregate([
+    { $match: { converted: true, correlationCertainty: { $gte: 50 }, ...(hasDate ? { convertedAt: dm } : {}) } },
+    { $group: { _id: '$conversionData.orderId', revenue: { $first: '$conversionData.totalAmount' } } },
+    { $group: { _id: null, n: { $sum: 1 }, revenue: { $sum: { $ifNull: ['$revenue', 0] } } } },
+  ]);
+  const conversions = convAgg[0]?.n || 0;
+  const revenue = Math.round(convAgg[0]?.revenue || 0);
+
+  return { totalClicks, clicksByGender, sizeGender, conversions, revenue,
+    conversionRate: totalClicks ? conversions / totalClicks : 0 };
+}
+
+// (legacy, unused) purchaser-gender cross-tab kept for reference
 async function fetchSegmentOrders(dateFrom, dateTo) {
   const dateMatch = {};
   if (dateFrom) dateMatch.$gte = new Date(dateFrom);
@@ -1053,82 +1114,38 @@ router.get('/segments', async (req, res) => {
       prevFrom = new Date(from.getTime() - lengthMs - 1).toISOString();
     }
 
-    const [orders, prevOrders] = await Promise.all([
-      fetchSegmentOrders(dateFrom, dateTo),
-      prevFrom ? fetchSegmentOrders(prevFrom, prevTo) : Promise.resolve([])
+    const [cur, prev] = await Promise.all([
+      clickerSegments(dateFrom, dateTo),
+      prevFrom ? clickerSegments(prevFrom, prevTo) : Promise.resolve(null),
     ]);
 
-    if (orders.length < 20) {
-      return res.json({ success: true, data: { stateGender: [], topSizes: [], totalCustomers: 0, trends: null } });
-    }
-
-    const current = computeSegments(orders);
-    const previous = computeSegments(prevOrders);
-
-    const currentTotal = orders.length;
-    const previousTotal = prevOrders.length;
-
-    // 1. State × Gender cross-tab (top 12 states) — with SHARE trend per state
-    const stateGender = Object.entries(current.stateGenderRaw)
-      .sort((a, b) => b[1].total - a[1].total)
-      .slice(0, 12)
-      .map(([state, data]) => {
-        const prev = previous.stateGenderRaw[state];
-        return {
-          state,
-          male: data.male,
-          female: data.female,
-          unknown: data.unknown,
-          total: data.total,
-          revenue: Math.round(data.revenue),
-          malePercent: Math.round(data.male / data.total * 100),
-          femalePercent: Math.round(data.female / data.total * 100),
-          avgOrder: Math.round(data.revenue / data.total),
-          trend: shareTrend(data.total, currentTotal, prev?.total || 0, previousTotal)
-        };
-      });
-
-    // 2. Top product sizes — with SHARE trend per size
-    const topSizes = Object.entries(current.sizeGenderRaw)
+    // Product size × CLICKER gender — which segment clicks which product (top 10).
+    const topSizes = Object.entries(cur.sizeGender)
       .sort((a, b) => b[1].total - a[1].total)
       .slice(0, 10)
-      .map(([size, data]) => {
-        const prev = previous.sizeGenderRaw[size];
-        return {
-          size,
-          male: data.male,
-          female: data.female,
-          total: data.total,
-          revenue: Math.round(data.revenue),
-          malePercent: Math.round(data.male / data.total * 100),
-          femalePercent: Math.round(data.female / data.total * 100),
-          avgOrder: Math.round(data.revenue / data.total),
-          trend: shareTrend(data.total, currentTotal, prev?.total || 0, previousTotal)
-        };
-      });
+      .map(([size, d]) => ({
+        size, male: d.male, female: d.female, unknown: d.unknown, total: d.total,
+        malePercent: Math.round((d.male / d.total) * 100),
+        femalePercent: Math.round((d.female / d.total) * 100),
+      }));
 
-    // 3. Global gender split — SHARE trends (who's tilting toward whom?)
-    const genderTotals = current.genderTotals;
-    const genderTrends = {
-      male: shareTrend(genderTotals.male, currentTotal, previous.genderTotals.male, previousTotal),
-      female: shareTrend(genderTotals.female, currentTotal, previous.genderTotals.female, previousTotal),
-      unknown: shareTrend(genderTotals.unknown, currentTotal, previous.genderTotals.unknown, previousTotal)
-    };
+    const shareTr = (g) => prev ? shareTrend(cur.clicksByGender[g], cur.totalClicks, prev.clicksByGender[g], prev.totalClicks) : null;
 
     res.json({
       success: true,
       data: {
-        stateGender,
+        // headline
+        totalClicks: cur.totalClicks,
+        conversions: cur.conversions,          // ≥50% confident purchases (gender-agnostic)
+        conversionRate: cur.conversionRate,    // conversions / clicks
+        revenue: cur.revenue,
+        // who our ads reach — by CLICKER gender (not purchaser)
+        clicksByGender: cur.clicksByGender,
+        clickGenderTrends: prev ? { male: shareTr('male'), female: shareTr('female'), unknown: shareTr('unknown') } : null,
+        // which segment clicks which product
         topSizes,
-        genderTotals,
-        genderTrends,
-        totalCustomers: orders.length,
-        previousPeriod: {
-          totalCustomers: prevOrders.length,
-          dateFrom: prevFrom,
-          dateTo: prevTo
-        }
-      }
+        previousPeriod: prev ? { totalClicks: prev.totalClicks, conversions: prev.conversions, dateFrom: prevFrom, dateTo: prevTo } : null,
+      },
     });
   } catch (err) {
     console.error('❌ ML segments error:', err.message);
