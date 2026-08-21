@@ -1254,7 +1254,11 @@ router.get('/ad-performance', async (req, res) => {
         $match: {
           adId: { $ne: null },
           converted: true,
-          ...(hasDate ? { createdAt: dateMatch } : {})
+          // count correlations ≥50% confidence, and filter by the SALE date
+          // (convertedAt), not the click's creation date — a recent sale from an
+          // older click was being dropped.
+          correlationCertainty: { $gte: 50 },
+          ...(hasDate ? { convertedAt: dateMatch } : {})
         }
       },
       // Deduplicate by orderId per ad per day
@@ -1263,7 +1267,7 @@ router.get('/ad-performance', async (req, res) => {
           _id: {
             orderId: '$conversionData.orderId',
             adId: '$adId',
-            date: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'America/Mexico_City' } }
+            date: { $dateToString: { format: '%Y-%m-%d', date: '$convertedAt', timezone: 'America/Mexico_City' } }
           },
           revenue: { $first: '$conversionData.totalAmount' }
         }
@@ -1318,7 +1322,11 @@ router.get('/ad-performance', async (req, res) => {
         $match: {
           adId: { $ne: null },
           converted: true,
-          ...(hasDate ? { createdAt: dateMatch } : {})
+          // count correlations ≥50% confidence, and filter by the SALE date
+          // (convertedAt), not the click's creation date — a recent sale from an
+          // older click was being dropped.
+          correlationCertainty: { $gte: 50 },
+          ...(hasDate ? { convertedAt: dateMatch } : {})
         }
       },
       // First deduplicate by orderId — keep one ClickLog per order

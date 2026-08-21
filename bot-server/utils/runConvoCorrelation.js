@@ -141,6 +141,7 @@ const STALE_LOCK_MS = 60 * 60 * 1000;
 // never touched. Scoped to the window's psids so it mirrors the correlation's own scope.
 async function syncMatchesToClickLog(matches, windowPsids) {
   const ClickLog = require("../models/ClickLog");
+  const { detectGender } = require("./genderDetector"); // segmentation infers gender from conversionData.buyerGender
   // 1. Clear prior SYSTEM (non-manual) conversions for the re-evaluated psids — this
   //    wipes both stale legacy flags and prior projections, leaving manual sales intact.
   for (let i = 0; i < windowPsids.length; i += 5000) {
@@ -181,6 +182,7 @@ async function syncMatchesToClickLog(matches, windowPsids) {
         orderId: String(m.orderId), orderStatus: s.status,
         buyerId: s.buyerId ? String(s.buyerId) : null, buyerNickname: s.buyerNickname || null,
         buyerFirstName: nameParts[0] || null, buyerLastName: nameParts.slice(1).join(" ") || null,
+        buyerGender: detectGender(nameParts[0] || ""), // drives the segmentation gender chart
         receiverName: s.receiverName || null,
         totalAmount: s.totalAmount, orderDate: s.dateCreated, itemTitle: s.itemTitle,
         shippingCity: s.shippingCity, shippingState: s.shippingState, shippingZipCode: s.shippingZip,

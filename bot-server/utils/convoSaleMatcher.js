@@ -109,6 +109,24 @@ function lastNameMatches(convoNames, saleName) {
   return false;
 }
 
+// STRICT full-name match for the NO-LOCATION tier, where there's no zip to corroborate.
+// Requires BOTH the first name AND the surname (last token, 4+ chars) to appear in the
+// sale name. Rejects the common-first-name collisions that nameMatches() (2 shared
+// tokens) lets through — "Miguel Angel Mayorga" vs "Miguel Angel Rivas" share the
+// compound FIRST name but no surname, so they're NOT the same person. Conservative by
+// design: without location, a false attribution is worse than a missed one.
+function strictFullNameMatch(convoNames, saleName) {
+  if (!saleName) return false;
+  const st = new Set(tokensOf(saleName));
+  for (const cn of convoNames || []) {
+    const ct = tokensOf(cn);
+    if (ct.length < 2) continue; // need first + surname
+    const first = ct[0], last = ct[ct.length - 1];
+    if (first !== last && first.length >= 3 && last.length >= 4 && st.has(first) && st.has(last)) return true;
+  }
+  return false;
+}
+
 /**
  * Build the lookup maps needed to match (call once, reuse across conversations).
  * @returns {Promise<{itemToFamilies: Map<string,Set<string>>, cityIndex: Map<string,string[]>, userLoc: Map<string,object>}>}
@@ -441,6 +459,13 @@ function classify(m) {
     else if (m.zipMatch && m.lastNameMatch) { pct = decayScore(90, 24, null, g); tier = "cp + apellido + item"; }  // 1 día — last name is as good as full name WHEN zip + item both match
     else if (m.cityMatch && m.nameMatch) { pct = decayScore(70, 24, null, g); tier = "ciudad + nombre + item"; }   // 1 día
     else if (m.zipMatch) { pct = damp(decayScore(50, 24, null, g)); tier = "cp + item"; }                           // 1 día · NAMELESS → density-damped (50% ceiling in a quiet zip-day, scales down as same-day sales rise)
+    // NO LOCATION but the sale's buyer/receiver FULL NAME matches + same item + clicked
+    // link + directional same-day. Recovers buyers we can name (~100%) but never got a
+    // zip for (~77%). FULL name only — last-name-only (apellido) without location is NOT
+    // used here: common MX surnames (Hernández/García/Martínez) collide across different
+    // people and produced false matches. A last name needs a zip to corroborate (the
+    // cp + apellido tier above).
+    else if (m.fullNameMatch) { pct = decayScore(60, 24, null, g); tier = "nombre completo + item"; }               // 1 día · nombre completo (nombre+apellido), sin ubicación
     // else → not attributable (0%)
   } else {
     // DIFFERENT product (venta indirecta).
@@ -669,6 +694,7 @@ async function matchConversation(convo, ctx) {
       cityMatch: !!id.city && normalizeCity(s.shipping && s.shipping.city) === id.city,
       nameMatch: nameMatches(id.names, receiver) || nameMatches(id.names, buyerName),
       lastNameMatch: lastNameMatches(id.names, receiver) || lastNameMatches(id.names, buyerName),
+      fullNameMatch: strictFullNameMatch(id.names, receiver) || strictFullNameMatch(id.names, buyerName),
       nicknameMatch: id.firstName ? nameInNickname(id.firstName, nick) : false,
       itemMatch: itemMatch(s, id),
       sameFamily,
