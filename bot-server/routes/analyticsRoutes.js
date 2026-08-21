@@ -1224,7 +1224,8 @@ router.get('/ad-performance', async (req, res) => {
     const { dateFrom, dateTo } = req.query;
     // Minimum correlation confidence to count a conversion (campaign-manager selectable).
     // 0 = count every match regardless of confidence; default 50.
-    const minConf = Math.max(0, Math.min(100, parseInt(req.query.minConfidence, 10) || 50));
+    const rawConf = parseInt(req.query.minConfidence, 10);
+    const minConf = Number.isFinite(rawConf) ? Math.max(0, Math.min(100, rawConf)) : 50; // 0 must stay 0 (Todas), not fall back to 50
     const dateMatch = {};
     if (dateFrom) dateMatch.$gte = new Date(dateFrom);
     if (dateTo) dateMatch.$lte = new Date(dateTo);
