@@ -36,6 +36,8 @@ function AdPerformanceView() {
   };
   const [dateFrom, setDateFrom] = useState(daysAgoISO(30));
   const [dateTo, setDateTo] = useState(todayISO());
+  // Minimum correlation confidence to count a conversion (0 = todas las ventas).
+  const [minConfidence, setMinConfidence] = useState(50);
   // Days span derived from the selected range (used by legacy endpoints expecting ?days=N)
   const range = useMemo(() => {
     const ms = new Date(dateTo).getTime() - new Date(dateFrom).getTime();
@@ -60,7 +62,7 @@ function AdPerformanceView() {
       const dateFromISO = `${dateFrom}T00:00:00.000Z`;
       const dateToISO = `${dateTo}T23:59:59.999Z`;
       const [res, directDailyRes, directByAdRes, handoffRes, deviceRes, spendRes] = await Promise.all([
-        API.get(`/analytics/ad-performance?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
+        API.get(`/analytics/ad-performance?dateFrom=${dateFromISO}&dateTo=${dateToISO}&minConfidence=${minConfidence}`),
         API.get(`/click-logs/direct-ad/daily?days=${range}`),
         API.get(`/click-logs/direct-ad/by-ad?days=${range}`),
         API.get(`/analytics/daily-handoffs-sales?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
@@ -87,7 +89,7 @@ function AdPerformanceView() {
   useEffect(() => {
     fetchData();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [dateFrom, dateTo]);
+  }, [dateFrom, dateTo, minConfidence]);
 
   const runCorrelation = async () => {
     setCorrelating(true);
@@ -237,11 +239,27 @@ function AdPerformanceView() {
             <h1 className="text-2xl font-bold text-white">Rendimiento de Anuncios</h1>
           </FeatureTip>
         </div>
-        <PeriodSelector
-          dateFrom={dateFrom}
-          dateTo={dateTo}
-          onChange={({ from, to }) => { setDateFrom(from); setDateTo(to); }}
-        />
+        <div className="flex flex-wrap items-center gap-3">
+          <label className="flex items-center gap-2 text-sm text-gray-400" title="Confianza mínima de correlación para contar una venta como conversión">
+            <span>Confianza ≥</span>
+            <select
+              value={minConfidence}
+              onChange={(e) => setMinConfidence(Number(e.target.value))}
+              className="bg-gray-800 border border-gray-600/50 rounded-lg px-2.5 py-1.5 text-white text-sm focus:outline-none focus:border-purple-500/50"
+            >
+              <option value={0}>Todas (&gt;0%)</option>
+              <option value={25}>25%</option>
+              <option value={50}>50%</option>
+              <option value={70}>70%</option>
+              <option value={90}>90%</option>
+            </select>
+          </label>
+          <PeriodSelector
+            dateFrom={dateFrom}
+            dateTo={dateTo}
+            onChange={({ from, to }) => { setDateFrom(from); setDateTo(to); }}
+          />
+        </div>
       </div>
 
       {/* Summary Cards */}

@@ -1222,6 +1222,9 @@ router.get('/clicks-by-ad', async (req, res) => {
 router.get('/ad-performance', async (req, res) => {
   try {
     const { dateFrom, dateTo } = req.query;
+    // Minimum correlation confidence to count a conversion (campaign-manager selectable).
+    // 0 = count every match regardless of confidence; default 50.
+    const minConf = Math.max(0, Math.min(100, parseInt(req.query.minConfidence, 10) || 50));
     const dateMatch = {};
     if (dateFrom) dateMatch.$gte = new Date(dateFrom);
     if (dateTo) dateMatch.$lte = new Date(dateTo);
@@ -1257,7 +1260,7 @@ router.get('/ad-performance', async (req, res) => {
           // count correlations ≥50% confidence, and filter by the SALE date
           // (convertedAt), not the click's creation date — a recent sale from an
           // older click was being dropped.
-          correlationCertainty: { $gte: 50 },
+          correlationCertainty: { $gte: minConf },
           ...(hasDate ? { convertedAt: dateMatch } : {})
         }
       },
@@ -1325,7 +1328,7 @@ router.get('/ad-performance', async (req, res) => {
           // count correlations ≥50% confidence, and filter by the SALE date
           // (convertedAt), not the click's creation date — a recent sale from an
           // older click was being dropped.
-          correlationCertainty: { $gte: 50 },
+          correlationCertainty: { $gte: minConf },
           ...(hasDate ? { convertedAt: dateMatch } : {})
         }
       },
