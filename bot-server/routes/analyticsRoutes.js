@@ -1527,7 +1527,9 @@ router.get('/daily-handoffs-sales', async (req, res) => {
 router.get('/conversions-by-geography', async (req, res) => {
   try {
     const { dateFrom, dateTo, adId } = req.query;
-    const match = { converted: true };
+    const rawConf = parseInt(req.query.minConfidence, 10);
+    const minConf = Number.isFinite(rawConf) ? Math.max(0, Math.min(100, rawConf)) : 50;
+    const match = { converted: true, correlationCertainty: { $gte: minConf } };
     if (dateFrom || dateTo) {
       match.convertedAt = {};
       if (dateFrom) match.convertedAt.$gte = new Date(dateFrom);
@@ -1565,7 +1567,9 @@ router.get('/conversions-by-geography', async (req, res) => {
 router.get('/conversions-by-gender', async (req, res) => {
   try {
     const { dateFrom, dateTo, adId } = req.query;
-    const match = { converted: true };
+    const rawConf = parseInt(req.query.minConfidence, 10);
+    const minConf = Number.isFinite(rawConf) ? Math.max(0, Math.min(100, rawConf)) : 50;
+    const match = { converted: true, correlationCertainty: { $gte: minConf } };
     if (dateFrom || dateTo) {
       match.convertedAt = {};
       if (dateFrom) match.convertedAt.$gte = new Date(dateFrom);

@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom';
 import API from '../api';
 import { abbrState } from '../utils/stateAbbr';
 import PeriodSelector from '../components/PeriodSelector';
+import MarketScoreCard from '../components/MarketScoreCard';
 import {
   ComposedChart, Bar, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer
 } from 'recharts';
@@ -201,6 +202,9 @@ function AdDetailView() {
           <p className="text-xl font-bold text-white">${t.conversions > 0 ? ((adSpend?.spend || 0) / t.conversions).toFixed(0) : '—'}</p>
         </div>
       </div>
+
+      {/* Puntuación vs. mercado — para este anuncio */}
+      <MarketScoreCard spend={adSpend?.spend || 0} impressions={adSpend?.impressions || 0} clicks={t.clicks} conversions={t.conversions} revenue={t.revenue} />
 
       {/* Daily Chart */}
       {chartData.length > 0 && (
