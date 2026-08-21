@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import API from '../api';
 import FeatureTip from '../components/FeatureTip';
 import PeriodSelector from '../components/PeriodSelector';
+import MexicoMap from '../components/MexicoMap';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend } from 'recharts';
 
 const tooltipStyle = { backgroundColor: '#1F2937', border: '1px solid #374151', borderRadius: '8px', color: '#F3F4F6', fontSize: '13px' };
@@ -46,8 +47,11 @@ function CustomerSegmentationView() {
   const revenue = data?.revenue || 0;
   const cg = data?.clicksByGender || { male: 0, female: 0, unknown: 0 };
   const trends = data?.clickGenderTrends || {};
-  const topSizes = data?.topSizes || [];
+  const byAd = data?.byAd || [];
+  const unknownLocation = data?.unknownLocation || 0;
   const known = (cg.male + cg.female) || 1; // for the male/female split among gendered clicks
+  const fromISO = `${dateFrom}T00:00:00.000Z`;
+  const toISO = `${dateTo}T23:59:59.999Z`;
 
   return (
     <div className="p-6 space-y-6">
@@ -116,23 +120,42 @@ function CustomerSegmentationView() {
         </div>
       </div>
 
-      {/* Which product each gender clicks */}
-      {topSizes.length > 0 && (
+      {/* By STATE — the map (clicks by clicker's state) + the unknown buckets */}
+      <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+        <h2 className="text-lg font-semibold text-white mb-1">Por estado · dónde hacen clic</h2>
+        <p className="text-sm text-gray-500 mb-4">Distribución de clics por el estado de quien clicó (según el CP que capturamos).</p>
+        <MexicoMap metric="clicks" from={fromISO} to={toISO} />
+        <div className="grid grid-cols-2 gap-4 mt-5">
+          <div className="bg-gray-900/40 border border-gray-700/50 rounded-lg p-4">
+            <p className="text-xs text-gray-400 mb-1">Ubicación desconocida</p>
+            <p className="text-2xl font-bold text-gray-300">{num(unknownLocation)} <span className="text-base text-gray-500">({Math.round(unknownLocation / (clicks || 1) * 100)}%)</span></p>
+            <p className="text-xs text-gray-500 mt-1">clics sin CP capturado — no aparecen en el mapa</p>
+          </div>
+          <div className="bg-gray-900/40 border border-gray-700/50 rounded-lg p-4">
+            <p className="text-xs text-gray-400 mb-1">Género sin determinar</p>
+            <p className="text-2xl font-bold text-gray-300">{num(cg.unknown)} <span className="text-base text-gray-500">({Math.round(cg.unknown / (clicks || 1) * 100)}%)</span></p>
+            <p className="text-xs text-gray-500 mt-1">nombres que el diccionario no clasifica</p>
+          </div>
+        </div>
+      </div>
+
+      {/* By AD — which ad each segment clicks */}
+      {byAd.length > 0 && (
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
-          <h2 className="text-lg font-semibold text-white mb-1">Qué medida clica cada género</h2>
-          <p className="text-sm text-gray-500 mb-4">Clics por medida de producto, divididos por el género de quien clicó.</p>
-          <div className="h-80">
+          <h2 className="text-lg font-semibold text-white mb-1">Por anuncio · quién clica cada uno</h2>
+          <p className="text-sm text-gray-500 mb-4">Clics por anuncio, divididos por el género de quien clicó.</p>
+          <div className="h-96">
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topSizes} margin={{ top: 5, right: 20, bottom: 5, left: 0 }}>
+              <BarChart data={byAd} layout="vertical" margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis dataKey="size" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} />
-                <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} />
-                <Tooltip content={({ active, payload, label }) => {
+                <XAxis type="number" tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} />
+                <YAxis type="category" dataKey="name" width={150} tick={{ fill: '#9CA3AF', fontSize: 11 }} axisLine={{ stroke: '#374151' }} />
+                <Tooltip content={({ active, payload }) => {
                   if (!active || !payload?.length) return null;
                   const d = payload[0].payload;
                   return (
                     <div style={tooltipStyle} className="p-3 text-sm">
-                      <p className="text-white font-medium mb-1">{label}</p>
+                      <p className="text-white font-medium mb-1">{d.name}</p>
                       <p style={{ color: '#3B82F6' }}>Hombres: {d.male} ({d.malePercent}%)</p>
                       <p style={{ color: '#EC4899' }}>Mujeres: {d.female} ({d.femalePercent}%)</p>
                       <p style={{ color: '#9CA3AF' }}>Sin determinar: {d.unknown} · Total clics: {d.total}</p>
@@ -142,7 +165,7 @@ function CustomerSegmentationView() {
                 <Legend wrapperStyle={{ color: '#9CA3AF' }} />
                 <Bar dataKey="male" name="Hombres" stackId="g" fill="#3B82F6" />
                 <Bar dataKey="female" name="Mujeres" stackId="g" fill="#EC4899" />
-                <Bar dataKey="unknown" name="Sin determinar" stackId="g" fill="#6B7280" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="unknown" name="Sin determinar" stackId="g" fill="#6B7280" radius={[0, 4, 4, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
