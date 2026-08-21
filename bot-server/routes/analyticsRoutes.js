@@ -1552,6 +1552,72 @@ router.get('/daily-handoffs-sales', async (req, res) => {
   }
 });
 
+// Resolve CLICKER attributes (state from captured location, gender from the chat name)
+// for a set of clicks — same basis as segmentación. Used by the clicks-by-* charts.
+async function clickerAttributes(psids) {
+  const { detectGender } = require('../utils/genderDetector');
+  const User = require('../models/User');
+  const ZipCode = require('../models/ZipCode');
+  const genderByPsid = new Map(), stateByPsid = new Map();
+  for (let i = 0; i < psids.length; i += 5000) {
+    const slice = psids.slice(i, i + 5000);
+    const convos = await Conversation.find({ psid: { $in: slice } }).select('psid customerName name extractedName crmName').lean();
+    for (const cv of convos) {
+      const nm = cv.customerName || cv.name || cv.extractedName || cv.crmName || '';
+      genderByPsid.set(String(cv.psid), detectGender(String(nm).trim().split(/\s+/)[0] || ''));
+    }
+    const users = await User.find({ psid: { $in: slice } }).select('psid location.state location.zipcode').lean();
+    const needZip = [...new Set(users.filter(u => !u.location?.state && u.location?.zipcode).map(u => String(u.location.zipcode).padStart(5, '0')))];
+    const zdocs = needZip.length ? await ZipCode.find({ code: { $in: needZip } }).select('code state').lean() : [];
+    const zmap = new Map(zdocs.map(z => [z.code, z.state]));
+    for (const u of users) {
+      const st = u.location?.state || zmap.get(String(u.location?.zipcode || '').padStart(5, '0'));
+      if (st) stateByPsid.set(String(u.psid), st);
+    }
+  }
+  return { genderByPsid, stateByPsid };
+}
+
+function clickMatch(req) {
+  const { dateFrom, dateTo, adId } = req.query;
+  const q = { clicked: true, clickedAt: { $ne: null } };
+  if (dateFrom || dateTo) {
+    q.clickedAt = {};
+    if (dateFrom) q.clickedAt.$gte = new Date(dateFrom);
+    if (dateTo) q.clickedAt.$lte = new Date(dateTo);
+  }
+  if (adId) q.adId = adId;
+  return q;
+}
+
+// GET /analytics/clicks-by-geography — CLICKS by the clicker's Mexican state (excludes
+// unknown-location clicks; % is of located clicks). This is ad-performance, so it tracks
+// where our ads land, not where the few sales ship.
+router.get('/clicks-by-geography', async (req, res) => {
+  try {
+    const clicks = await ClickLog.find(clickMatch(req)).select('psid').lean();
+    const { stateByPsid } = await clickerAttributes([...new Set(clicks.map(c => String(c.psid)).filter(Boolean))]);
+    const tally = {}; let located = 0;
+    for (const c of clicks) { const st = stateByPsid.get(String(c.psid)); if (st) { tally[st] = (tally[st] || 0) + 1; located++; } }
+    const denom = located || 1;
+    const data = Object.entries(tally).map(([state, count]) => ({ state, count, percentage: Math.round((count / denom) * 1000) / 10 })).sort((a, b) => b.count - a.count);
+    res.json({ success: true, data });
+  } catch (err) { console.error('❌ clicks-by-geography error:', err.message); res.status(500).json({ success: false, error: err.message }); }
+});
+
+// GET /analytics/clicks-by-gender — CLICKS by the clicker's inferred gender.
+router.get('/clicks-by-gender', async (req, res) => {
+  try {
+    const clicks = await ClickLog.find(clickMatch(req)).select('psid').lean();
+    const { genderByPsid } = await clickerAttributes([...new Set(clicks.map(c => String(c.psid)).filter(Boolean))]);
+    const tally = { male: 0, female: 0, unknown: 0 };
+    for (const c of clicks) tally[genderByPsid.get(String(c.psid)) || 'unknown']++;
+    const total = clicks.length || 1;
+    const data = ['male', 'female', 'unknown'].map(g => ({ gender: g, count: tally[g], percentage: Math.round((tally[g] / total) * 1000) / 10 }));
+    res.json({ success: true, data });
+  } catch (err) { console.error('❌ clicks-by-gender error:', err.message); res.status(500).json({ success: false, error: err.message }); }
+});
+
 // GET /analytics/conversions-by-geography — conversion counts by Mexican state
 router.get('/conversions-by-geography', async (req, res) => {
   try {

@@ -62,8 +62,8 @@ function AdDetailView() {
           API.get(`/ads?search=${fbAdId}`),
           API.get(`/click-logs/direct-ad/daily?days=${range}&adId=${fbAdId}`),
           API.get(`/analytics/daily-handoffs-sales?dateFrom=${dateFromISO}&dateTo=${dateToISO}&adId=${fbAdId}`),
-          API.get(`/analytics/conversions-by-geography?dateFrom=${dateFromISO}&dateTo=${dateToISO}&adId=${fbAdId}`),
-          API.get(`/analytics/conversions-by-gender?dateFrom=${dateFromISO}&dateTo=${dateToISO}&adId=${fbAdId}`),
+          API.get(`/analytics/clicks-by-geography?dateFrom=${dateFromISO}&dateTo=${dateToISO}&adId=${fbAdId}`),
+          API.get(`/analytics/clicks-by-gender?dateFrom=${dateFromISO}&dateTo=${dateToISO}&adId=${fbAdId}`),
           API.get(`/analytics/device-breakdown?dateFrom=${dateFromISO}&dateTo=${dateToISO}&adId=${fbAdId}`),
           API.get(`/analytics/fb-spend?dateFrom=${dateFrom}&dateTo=${dateTo}&level=ad`),
           API.get(`/analytics/human-conversions?dateFrom=${dateFromISO}&dateTo=${dateToISO}&adId=${fbAdId}`),
@@ -330,7 +330,7 @@ function AdDetailView() {
           {geoData.length > 0 && (
             <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
               <h2 className="text-lg font-semibold text-white mb-1">Distribución geográfica</h2>
-              <p className="text-sm text-gray-500 mb-4">Top estados por conversiones</p>
+              <p className="text-sm text-gray-500 mb-4">Top estados por clics (de quienes clicaron)</p>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -354,7 +354,7 @@ function AdDetailView() {
           {genderData.length > 0 && (
             <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
               <h2 className="text-lg font-semibold text-white mb-1">Género</h2>
-              <p className="text-sm text-gray-500 mb-4">Compradores por género</p>
+              <p className="text-sm text-gray-500 mb-4">Clics por género de quien clicó</p>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
