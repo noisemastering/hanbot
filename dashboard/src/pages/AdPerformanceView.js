@@ -62,6 +62,7 @@ function AdPerformanceView() {
   const [fbSpendTotals, setFbSpendTotals] = useState({ spend: 0, impressions: 0, clicks: 0 });
   const [geoData, setGeoData] = useState([]);
   const [genderData, setGenderData] = useState([]);
+  const [humanConversions, setHumanConversions] = useState(0);
   const [correlating, setCorrelating] = useState(false);
   const [correlationProgress, setCorrelationProgress] = useState(null);
 
@@ -70,7 +71,7 @@ function AdPerformanceView() {
     try {
       const dateFromISO = `${dateFrom}T00:00:00.000Z`;
       const dateToISO = `${dateTo}T23:59:59.999Z`;
-      const [res, directDailyRes, directByAdRes, handoffRes, deviceRes, spendRes, geoRes, genderRes] = await Promise.all([
+      const [res, directDailyRes, directByAdRes, handoffRes, deviceRes, spendRes, geoRes, genderRes, humanRes] = await Promise.all([
         API.get(`/analytics/ad-performance?dateFrom=${dateFromISO}&dateTo=${dateToISO}&minConfidence=${minConfidence}`),
         API.get(`/click-logs/direct-ad/daily?days=${range}`),
         API.get(`/click-logs/direct-ad/by-ad?days=${range}`),
@@ -78,7 +79,8 @@ function AdPerformanceView() {
         API.get(`/analytics/device-breakdown?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/analytics/fb-spend?dateFrom=${dateFrom}&dateTo=${dateTo}&level=ad`),
         API.get(`/analytics/conversions-by-geography?dateFrom=${dateFromISO}&dateTo=${dateToISO}&minConfidence=${minConfidence}`),
-        API.get(`/analytics/conversions-by-gender?dateFrom=${dateFromISO}&dateTo=${dateToISO}&minConfidence=${minConfidence}`)
+        API.get(`/analytics/conversions-by-gender?dateFrom=${dateFromISO}&dateTo=${dateToISO}&minConfidence=${minConfidence}`),
+        API.get(`/analytics/human-conversions?dateFrom=${dateFromISO}&dateTo=${dateToISO}`)
       ]);
       setAds(res.data?.ads || []);
       setDirectDaily(directDailyRes.data?.data?.daily || []);
@@ -92,6 +94,7 @@ function AdPerformanceView() {
       setFbSpendTotals(spendRes.data?.totals || { spend: 0, impressions: 0, clicks: 0 });
       setGeoData(geoRes.data?.data || []);
       setGenderData(genderRes.data?.data || []);
+      setHumanConversions(humanRes.data?.data?.total || 0);
     } catch (err) {
       console.error('Error fetching ad performance:', err);
     } finally {
@@ -364,7 +367,7 @@ function AdPerformanceView() {
       )}
 
       {/* Puntuación vs. mercado — after the chart */}
-      <MarketScoreCard spend={fbSpendTotals.spend} impressions={fbSpendTotals.impressions} clicks={grandTotals.clicks} conversions={grandTotals.conversions} revenue={grandTotals.revenue} />
+      <MarketScoreCard spend={fbSpendTotals.spend} impressions={fbSpendTotals.impressions} clicks={grandTotals.clicks} conversions={grandTotals.conversions} revenue={grandTotals.revenue} humanConversions={humanConversions} />
 
       {/* Geo + Gender donuts (conversion-based → correlation-dependent) */}
       {(geoData.length > 0 || genderData.length > 0) && (

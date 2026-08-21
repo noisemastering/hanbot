@@ -1451,6 +1451,35 @@ router.get('/ad-performance', async (req, res) => {
   }
 });
 
+// GET /analytics/human-conversions — wholesale (mayoreo) + special-size (medida
+// especial / sobre medida) requests that route to a HUMAN instead of a purchase link.
+// In this business these never produce a click, so they must be added to the conversion
+// rates or those products' demand is invisible. Counted from handoffs by reason.
+const WHOLESALE_RE = /mayoreo|wholesale/i;
+const SPECIAL_SIZE_RE = /custom (order|malla)|medida grande|medida especial|sobre\s*medida|a la medida|both sides/i;
+router.get('/human-conversions', async (req, res) => {
+  try {
+    const { dateFrom, dateTo, adId } = req.query;
+    const match = { handoffRequested: true, handoffReason: { $nin: [null, ''] } };
+    if (dateFrom || dateTo) {
+      match.handoffTimestamp = {};
+      if (dateFrom) match.handoffTimestamp.$gte = new Date(dateFrom);
+      if (dateTo) match.handoffTimestamp.$lte = new Date(dateTo);
+    }
+    if (adId) match.adId = adId;
+    const rows = await Conversation.find(match).select('handoffReason').lean();
+    let wholesale = 0, special = 0;
+    for (const r of rows) {
+      if (WHOLESALE_RE.test(r.handoffReason)) wholesale++;
+      else if (SPECIAL_SIZE_RE.test(r.handoffReason)) special++;
+    }
+    res.json({ success: true, data: { total: wholesale + special, wholesale, special } });
+  } catch (err) {
+    console.error('❌ human-conversions error:', err.message);
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // GET /analytics/daily-handoffs-sales — handoffs + manual sales per day
 router.get('/daily-handoffs-sales', async (req, res) => {
   try {

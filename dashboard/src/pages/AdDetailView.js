@@ -40,6 +40,7 @@ function AdDetailView() {
   const [genderData, setGenderData] = useState([]);
   const [deviceData, setDeviceData] = useState([]);
   const [adSpend, setAdSpend] = useState(null);
+  const [humanConversions, setHumanConversions] = useState(0);
 
 
   const formatCurrency = (amount) => {
@@ -56,7 +57,7 @@ function AdDetailView() {
         const dateFromISO = `${dateFrom}T00:00:00.000Z`;
         const dateToISO = `${dateTo}T23:59:59.999Z`;
 
-        const [perfRes, adInfoRes, directRes, handoffRes, geoRes, genderRes, deviceRes, spendRes] = await Promise.all([
+        const [perfRes, adInfoRes, directRes, handoffRes, geoRes, genderRes, deviceRes, spendRes, humanRes] = await Promise.all([
           API.get(`/analytics/ad-performance?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
           API.get(`/ads?search=${fbAdId}`),
           API.get(`/click-logs/direct-ad/daily?days=${range}&adId=${fbAdId}`),
@@ -65,6 +66,7 @@ function AdDetailView() {
           API.get(`/analytics/conversions-by-gender?dateFrom=${dateFromISO}&dateTo=${dateToISO}&adId=${fbAdId}`),
           API.get(`/analytics/device-breakdown?dateFrom=${dateFromISO}&dateTo=${dateToISO}&adId=${fbAdId}`),
           API.get(`/analytics/fb-spend?dateFrom=${dateFrom}&dateTo=${dateTo}&level=ad`),
+          API.get(`/analytics/human-conversions?dateFrom=${dateFromISO}&dateTo=${dateToISO}&adId=${fbAdId}`),
         ]);
 
         const allAds = perfRes.data?.ads || [];
@@ -85,6 +87,7 @@ function AdDetailView() {
         setDeviceData(deviceRes.data?.data || []);
         const spendRow = (spendRes.data?.data || []).find(r => r.adId === fbAdId);
         setAdSpend(spendRow || null);
+        setHumanConversions(humanRes.data?.data?.total || 0);
       } catch (err) {
         console.error('Error fetching ad detail:', err);
       } finally {
@@ -203,9 +206,6 @@ function AdDetailView() {
         </div>
       </div>
 
-      {/* Puntuación vs. mercado — para este anuncio */}
-      <MarketScoreCard spend={adSpend?.spend || 0} impressions={adSpend?.impressions || 0} clicks={t.clicks} conversions={t.conversions} revenue={t.revenue} />
-
       {/* Daily Chart */}
       {chartData.length > 0 && (
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
@@ -232,6 +232,9 @@ function AdDetailView() {
           </div>
         </div>
       )}
+
+      {/* Puntuación vs. mercado — chart first, then rates */}
+      <MarketScoreCard spend={adSpend?.spend || 0} impressions={adSpend?.impressions || 0} clicks={t.clicks} conversions={t.conversions} revenue={t.revenue} humanConversions={humanConversions} />
 
       {/* Direct Links Chart */}
       {directChartData.length > 0 && (
