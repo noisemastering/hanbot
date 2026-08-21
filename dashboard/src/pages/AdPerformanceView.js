@@ -320,46 +320,14 @@ function AdPerformanceView() {
         </div>
       </div>
 
-      {/* Puntuación vs. mercado mexicano */}
-      <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
-        <div className="flex items-baseline justify-between mb-1">
-          <h2 className="text-lg font-semibold text-white">Puntuación vs. mercado</h2>
-          <span className="text-xs text-gray-500">benchmarks de anuncios · ecommerce México</span>
-        </div>
-        <p className="text-sm text-gray-500 mb-4">Cómo se compara tu desempeño en el periodo contra el promedio del mercado mexicano.</p>
-        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-          {marketScore.map((m) => {
-            const badge = { bueno: 'bg-green-500/20 text-green-400', promedio: 'bg-amber-500/20 text-amber-400', bajo: 'bg-red-500/20 text-red-400' };
-            const label = { bueno: 'Bueno', promedio: 'Promedio', bajo: 'Bajo' };
-            const fmtVal = (v) => m.unit === '$' ? `$${Math.round(v).toLocaleString('es-MX')}` : m.unit === 'x' ? `${v.toFixed(1)}x` : `${v.toFixed(1)}%`;
-            const fmtBench = m.unit === '$' ? `$${m.benchmark.toLocaleString('es-MX')}` : m.unit === 'x' ? `${m.benchmark}x` : `${m.benchmark}%`;
-            return (
-              <div key={m.key} className={`rounded-lg p-4 border ${m.reliable ? 'bg-gray-900/40 border-gray-700/50' : 'bg-gray-900/20 border-gray-700/30'}`}>
-                <div className="flex items-center justify-between mb-1">
-                  <span className="flex items-center gap-1 text-xs text-gray-400">
-                    {m.label}
-                    <span className="relative group inline-flex">
-                      <svg className="w-3.5 h-3.5 text-gray-500 hover:text-gray-300 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                      </svg>
-                      <span role="tooltip" className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-20 w-56 rounded-lg bg-gray-900 border border-gray-700 p-2.5 text-[11px] leading-snug text-gray-200 shadow-xl">
-                        {m.tip}
-                      </span>
-                    </span>
-                    {!m.reliable && <span className="text-[10px] text-gray-600">atribuido</span>}
-                  </span>
-                  {m.rating && <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${badge[m.rating]}`}>{label[m.rating]}</span>}
-                </div>
-                <p className={`text-2xl font-bold ${m.reliable ? 'text-white' : 'text-gray-400'}`}>{m.value != null ? fmtVal(m.value) : '—'}</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  mercado: {fmtBench}
-                  {m.delta != null && <span className={`ml-2 font-medium ${m.delta >= 0 ? 'text-green-400' : 'text-red-400'}`}>{m.delta >= 0 ? '+' : ''}{m.delta}%</span>}
-                </p>
-              </div>
-            );
-          })}
-        </div>
-        <p className="text-xs text-gray-600 mt-4">CTR, CPC y CPM vienen directo de Facebook (confiables). Conversión, CPA y ROAS dependen de la atribución (marcados “atribuido”) — al subcontar ventas, se ven peor de lo real; tómalos como piso.</p>
+      {/* Anything beyond clicks depends on correlation — state it up front */}
+      <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl px-5 py-3.5 flex items-start gap-3">
+        <svg className="w-5 h-5 text-amber-400 flex-none mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" />
+        </svg>
+        <p className="text-sm text-amber-200/90 leading-snug">
+          <b>Los clics y sus métricas (CTR, CPC, CPM) son datos directos de Facebook.</b> Todo lo que va más allá del clic — conversiones, ingresos, CPA, ROAS — depende de la <b>correlación venta↔clic</b>, que hoy subcuenta. Tómalo como un piso, no como el total real.
+        </p>
       </div>
 
       {/* Device Breakdown */}
@@ -409,6 +377,48 @@ function AdPerformanceView() {
           <CorrelateButton />
         </div>
       )}
+
+      {/* Puntuación vs. mercado — after the chart */}
+      <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+        <div className="flex items-baseline justify-between mb-1">
+          <h2 className="text-lg font-semibold text-white">Puntuación vs. mercado</h2>
+          <span className="text-xs text-gray-500">benchmarks de anuncios · ecommerce México</span>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">Cómo se compara tu desempeño en el periodo contra el promedio del mercado mexicano.</p>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {marketScore.map((m) => {
+            const badge = { bueno: 'bg-green-500/20 text-green-400', promedio: 'bg-amber-500/20 text-amber-400', bajo: 'bg-red-500/20 text-red-400' };
+            const label = { bueno: 'Bueno', promedio: 'Promedio', bajo: 'Bajo' };
+            const fmtVal = (v) => m.unit === '$' ? `$${Math.round(v).toLocaleString('es-MX')}` : m.unit === 'x' ? `${v.toFixed(1)}x` : `${v.toFixed(1)}%`;
+            const fmtBench = m.unit === '$' ? `$${m.benchmark.toLocaleString('es-MX')}` : m.unit === 'x' ? `${m.benchmark}x` : `${m.benchmark}%`;
+            return (
+              <div key={m.key} className={`rounded-lg p-4 border ${m.reliable ? 'bg-gray-900/40 border-gray-700/50' : 'bg-gray-900/20 border-gray-700/30'}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="flex items-center gap-1 text-xs text-gray-400">
+                    {m.label}
+                    <span className="relative group inline-flex">
+                      <svg className="w-3.5 h-3.5 text-gray-500 hover:text-gray-300 cursor-help" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span role="tooltip" className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-20 w-56 rounded-lg bg-gray-900 border border-gray-700 p-2.5 text-[11px] leading-snug text-gray-200 shadow-xl">
+                        {m.tip}
+                      </span>
+                    </span>
+                    {!m.reliable && <span className="text-[10px] text-gray-600">atribuido</span>}
+                  </span>
+                  {m.rating && <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${badge[m.rating]}`}>{label[m.rating]}</span>}
+                </div>
+                <p className={`text-2xl font-bold ${m.reliable ? 'text-white' : 'text-gray-400'}`}>{m.value != null ? fmtVal(m.value) : '—'}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  mercado: {fmtBench}
+                  {m.delta != null && <span className={`ml-2 font-medium ${m.delta >= 0 ? 'text-green-400' : 'text-red-400'}`}>{m.delta >= 0 ? '+' : ''}{m.delta}%</span>}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-xs text-gray-600 mt-4">CTR, CPC y CPM vienen directo de Facebook (confiables). Conversión, CPA y ROAS dependen de la correlación (marcados “atribuido”) — al subcontar ventas, se ven peor de lo real; tómalos como piso.</p>
+      </div>
 
       {/* Direct Links Chart — right below main chart */}
       {directChartData.length > 0 && (
