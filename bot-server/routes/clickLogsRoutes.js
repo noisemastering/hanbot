@@ -33,6 +33,50 @@ const authenticate = async (req, res, next) => {
 router.use(authenticate);
 
 // GET /click-logs - Get all click logs with pagination and filtering
+// Build an ACCURATE product name by climbing the ProductFamily tree from a leaf.
+// ClickLog.productName is often just the leaf/color ("Verde", "Color Beige") — ambiguous
+// (a "Color Beige" could be a 2x100 rollo OR a 6x4 confeccionada). Compose the full name:
+// categoría + % sombra + presentación + medida + color.
+function _composeName(chain) { // chain = [root, …, leaf]
+  if (!chain.length) return null;
+  const leaf = chain[chain.length - 1];
+  const text = chain.map((n) => n.name || "").join(" ");
+  const root = (chain[0].name || "").replace(/malla sombra raschel/i, "Malla Sombra");
+  const shade = (text.match(/(\d{2,3})\s*%/) || [])[1];
+  const typeM = text.match(/rollo|confeccionada|ground\s*cover|antimaleza|borde|separador|cinta|cord[oó]n|kit|sujetador/i);
+  const type = typeM ? typeM[0][0].toUpperCase() + typeM[0].slice(1) : null;
+  const size = leaf.size || chain.map((n) => n.size).filter(Boolean).pop() || null;
+  const color = /^color\s+/i.test(leaf.name || "") ? leaf.name.replace(/^color\s+/i, "") : null;
+  const parts = [root];
+  if (shade) parts.push(shade + "%");
+  if (type) parts.push(type);
+  if (size) parts.push(size);
+  if (color) parts.push(color);
+  else if (!/^(color|medida|rectangular)/i.test(leaf.name || "")) parts.push(leaf.name);
+  return parts.filter(Boolean).join(" ").trim() || leaf.name;
+}
+
+async function fullProductNames(productIds) {
+  const PF = require("../models/ProductFamily");
+  const ids = [...new Set(productIds.filter(Boolean).map(String))];
+  if (!ids.length) return new Map();
+  const nodeMap = new Map();
+  let toFetch = ids;
+  for (let depth = 0; depth < 8 && toFetch.length; depth++) {
+    const docs = await PF.find({ _id: { $in: toFetch } }).select("name parentId size").lean();
+    const next = [];
+    for (const d of docs) { nodeMap.set(String(d._id), d); if (d.parentId && !nodeMap.has(String(d.parentId))) next.push(String(d.parentId)); }
+    toFetch = [...new Set(next)];
+  }
+  const names = new Map();
+  for (const id of ids) {
+    const chain = []; let node = nodeMap.get(id);
+    for (let i = 0; i < 8 && node; i++) { chain.unshift(node); node = node.parentId ? nodeMap.get(String(node.parentId)) : null; }
+    if (chain.length) names.set(id, _composeName(chain));
+  }
+  return names;
+}
+
 router.get("/", async (req, res) => {
   try {
     const {
@@ -76,9 +120,17 @@ router.get("/", async (req, res) => {
       ClickLog.find(filter)
         .sort({ createdAt: -1 })
         .limit(parseInt(limit))
-        .skip(skip),
+        .skip(skip)
+        .lean(),
       ClickLog.countDocuments(filter)
     ]);
+
+    // Overwrite the bare stored name with the full tree-derived name where we can.
+    const names = await fullProductNames(clickLogs.map((l) => l.productId));
+    for (const l of clickLogs) {
+      const fn = names.get(String(l.productId));
+      if (fn) l.productName = fn;
+    }
 
     res.json({
       success: true,
