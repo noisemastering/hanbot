@@ -210,6 +210,29 @@ function AdPerformanceView() {
     }), { links: 0, clicks: 0, conversions: 0, revenue: 0 });
   }, [ads]);
 
+  // Puntuación vs. mercado mexicano (benchmarks de anuncios de Facebook, ecommerce/retail MX, MXN).
+  // Ajustables aquí si tienes metas propias. reliable=true → dato directo de Facebook;
+  // reliable=false → depende de la atribución (sesgado por el subconteo de ventas).
+  const marketScore = useMemo(() => {
+    const { spend, impressions } = fbSpendTotals;
+    const { clicks, conversions, revenue } = grandTotals;
+    const B = [
+      { key: 'ctr',  label: 'CTR',        benchmark: 1.0, unit: '%', higher: true,  reliable: true,  value: impressions ? (clicks / impressions) * 100 : null, hint: 'clicks ÷ impresiones' },
+      { key: 'cpc',  label: 'CPC',        benchmark: 5,   unit: '$', higher: false, reliable: true,  value: clicks ? spend / clicks : null,                   hint: 'gasto ÷ clicks' },
+      { key: 'cpm',  label: 'CPM',        benchmark: 70,  unit: '$', higher: false, reliable: true,  value: impressions ? (spend / impressions) * 1000 : null, hint: 'gasto ÷ mil impresiones' },
+      { key: 'conv', label: 'Conversión', benchmark: 1.5, unit: '%', higher: true,  reliable: false, value: clicks ? (conversions / clicks) * 100 : null,     hint: 'conversiones ÷ clicks' },
+      { key: 'cpa',  label: 'CPA',        benchmark: 300, unit: '$', higher: false, reliable: false, value: conversions ? spend / conversions : null,          hint: 'gasto ÷ conversiones' },
+      { key: 'roas', label: 'ROAS',       benchmark: 2.5, unit: 'x', higher: true,  reliable: false, value: spend ? revenue / spend : null,                    hint: 'ingresos ÷ gasto' },
+    ];
+    return B.map((m) => {
+      if (m.value == null) return { ...m, rating: null, delta: null };
+      const ratio = m.higher ? m.value / m.benchmark : m.benchmark / m.value;
+      const rating = ratio >= 1.15 ? 'bueno' : ratio >= 0.85 ? 'promedio' : 'bajo';
+      const delta = Math.round((ratio - 1) * 100); // % mejor/peor que el mercado
+      return { ...m, rating, delta };
+    });
+  }, [fbSpendTotals, grandTotals]);
+
   if (loading) {
     return (
       <div className="p-6 flex items-center justify-center min-h-[60vh]">
@@ -289,6 +312,37 @@ function AdPerformanceView() {
           <p className="text-sm text-gray-400">Ingresos</p>
           <p className="text-2xl font-bold text-green-400">{formatCurrency(grandTotals.revenue)}</p>
         </div>
+      </div>
+
+      {/* Puntuación vs. mercado mexicano */}
+      <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+        <div className="flex items-baseline justify-between mb-1">
+          <h2 className="text-lg font-semibold text-white">Puntuación vs. mercado</h2>
+          <span className="text-xs text-gray-500">benchmarks de anuncios · ecommerce México</span>
+        </div>
+        <p className="text-sm text-gray-500 mb-4">Cómo se compara tu desempeño en el periodo contra el promedio del mercado mexicano.</p>
+        <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+          {marketScore.map((m) => {
+            const badge = { bueno: 'bg-green-500/20 text-green-400', promedio: 'bg-amber-500/20 text-amber-400', bajo: 'bg-red-500/20 text-red-400' };
+            const label = { bueno: 'Bueno', promedio: 'Promedio', bajo: 'Bajo' };
+            const fmtVal = (v) => m.unit === '$' ? `$${Math.round(v).toLocaleString('es-MX')}` : m.unit === 'x' ? `${v.toFixed(1)}x` : `${v.toFixed(1)}%`;
+            const fmtBench = m.unit === '$' ? `$${m.benchmark.toLocaleString('es-MX')}` : m.unit === 'x' ? `${m.benchmark}x` : `${m.benchmark}%`;
+            return (
+              <div key={m.key} className={`rounded-lg p-4 border ${m.reliable ? 'bg-gray-900/40 border-gray-700/50' : 'bg-gray-900/20 border-gray-700/30'}`}>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-xs text-gray-400" title={m.hint}>{m.label}{!m.reliable && <span className="ml-1 text-[10px] text-gray-600">atribuido</span>}</span>
+                  {m.rating && <span className={`text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full ${badge[m.rating]}`}>{label[m.rating]}</span>}
+                </div>
+                <p className={`text-2xl font-bold ${m.reliable ? 'text-white' : 'text-gray-400'}`}>{m.value != null ? fmtVal(m.value) : '—'}</p>
+                <p className="text-xs text-gray-500 mt-1">
+                  mercado: {fmtBench}
+                  {m.delta != null && <span className={`ml-2 font-medium ${m.delta >= 0 ? 'text-green-400' : 'text-red-400'}`}>{m.delta >= 0 ? '+' : ''}{m.delta}%</span>}
+                </p>
+              </div>
+            );
+          })}
+        </div>
+        <p className="text-xs text-gray-600 mt-4">CTR, CPC y CPM vienen directo de Facebook (confiables). Conversión, CPA y ROAS dependen de la atribución (marcados “atribuido”) — al subcontar ventas, se ven peor de lo real; tómalos como piso.</p>
       </div>
 
       {/* Device Breakdown */}
