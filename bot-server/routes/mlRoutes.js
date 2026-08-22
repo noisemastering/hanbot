@@ -263,7 +263,12 @@ router.get('/forecast-v2', async (req, res) => {
       // Mapped onto the revenue/orders slots so the standard forecast math applies unchanged.
       const linkMatch = { createdAt: { $gte: since } };
       const clickMatch = { clicked: true, clickedAt: { $gte: since } };
-      if (familyFilter) { linkMatch.productId = { $in: familyFilter }; clickMatch.productId = { $in: familyFilter }; }
+      // ClickLog.productId is stored as a STRING, so match string ids (familyFilter is ObjectIds).
+      if (familyFilter) {
+        const familyFilterStr = familyFilter.map(String);
+        linkMatch.productId = { $in: familyFilterStr };
+        clickMatch.productId = { $in: familyFilterStr };
+      }
       const [linksDaily, clicksDaily] = await Promise.all([
         ClickLog.aggregate([
           { $match: linkMatch },
