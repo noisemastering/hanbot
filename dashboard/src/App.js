@@ -776,6 +776,7 @@ function App() {
   const [topProduct, setTopProduct] = useState(null);
   const [topRegion, setTopRegion] = useState(null);
   const [linksToday, setLinksToday] = useState({ served: 0, clicked: 0 });
+  const [promotedProducts, setPromotedProducts] = useState(0);
 
   // Analytics page loading state
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
@@ -935,6 +936,16 @@ function App() {
       }
     } catch (error) {
       console.error("Error fetching links today:", error);
+    }
+  };
+
+  const fetchPromotedProducts = async () => {
+    try {
+      const res = await fetch(`${API_URL}/analytics/promoted-products`);
+      const data = await res.json();
+      if (data.success) setPromotedProducts(data.count || 0);
+    } catch (error) {
+      console.error("Error fetching promoted products:", error);
     }
   };
 
@@ -1608,7 +1619,8 @@ function App() {
         fetchAdMetrics(),
         fetchTopProducts(),
         fetchTopRegion(),
-        fetchLinksToday()
+        fetchLinksToday(),
+        fetchPromotedProducts()
       ]).finally(() => setAnalyticsLoading(false));
     }
   }, [location.pathname]);
@@ -2360,6 +2372,22 @@ function App() {
                       <div className="w-12 h-12 bg-teal-500/20 rounded-lg flex items-center justify-center">
                         <svg className="w-6 h-6 text-teal-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+                        </svg>
+                      </div>
+                    </div>
+                  </Link>
+
+                  {/* Productos promocionados — cuántas líneas de producto se anuncian */}
+                  <Link to="/ad-performance" className="bg-gradient-to-br from-indigo-500/10 to-indigo-600/5 backdrop-blur-lg border border-indigo-500/20 rounded-xl p-6 hover:border-indigo-500/40 transition-colors cursor-pointer">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-400 mb-1">Productos promocionados</p>
+                        <h3 className="text-3xl font-bold text-white">{promotedProducts}</h3>
+                        <p className="text-sm text-indigo-400">líneas de producto</p>
+                      </div>
+                      <div className="w-12 h-12 bg-indigo-500/20 rounded-lg flex items-center justify-center">
+                        <svg className="w-6 h-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
                         </svg>
                       </div>
                     </div>

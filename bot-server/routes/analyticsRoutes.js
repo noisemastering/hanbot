@@ -961,6 +961,29 @@ router.get('/links-today', async (req, res) => {
   }
 });
 
+// Distinct PRODUCT LINES being promoted across ACTIVE ads. Each ad promotes one
+// line via its convo flow; count the distinct flows and give them friendly names.
+router.get('/promoted-products', async (req, res) => {
+  try {
+    const Ad = require('../models/Ad');
+    const LINE_NAMES = {
+      convo_confeccionadaRetail: 'Reforzada confeccionada',
+      convo_confeccionadaSRRetail: 'Sin refuerzo',
+      convo_rolloRaschelWholesale: 'Rollo',
+      convo_bordeSeparadorRetail: 'Borde separador',
+      convo_bordeSeparadorWholesale: 'Borde separador (mayoreo)',
+      convo_groundcoverWholesale: 'Ground cover',
+      convo_vende_malla: 'Mayoreo / Vende malla'
+    };
+    const ads = await Ad.find({ status: 'ACTIVE' }, 'convoFlowRef').lean();
+    const flows = [...new Set(ads.map(a => a.convoFlowRef).filter(Boolean))];
+    const lines = flows.map(f => LINE_NAMES[f] || f);
+    res.json({ success: true, count: flows.length, lines, activeAds: ads.length });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/top-region', async (req, res) => {
   try {
     const { dateFrom, dateTo } = req.query;
