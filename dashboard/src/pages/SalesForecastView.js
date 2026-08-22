@@ -868,7 +868,7 @@ function SalesForecastView({ mode = 'sales' }) {
                             )}
                             {d.revenue != null && showAdBoost && d.organicBase == null && <p style={{ color: '#10B981' }}>Real: {fmtMoney(d.revenue)}</p>}
                             {d.movingAvg != null && <p style={{ color: '#06B6D4' }}>Promedio 7d: {fmtMoney(d.movingAvg)}</p>}
-                            {d.forecast != null && <p style={{ color: '#8B5CF6' }}>Proyección: {fmtMoney(d.forecast)}</p>}
+                            {d.forecast != null && <p style={{ color: isEng ? '#10B981' : '#8B5CF6' }}>Proyección: {fmtMoney(d.forecast)}</p>}
                             {d.simForecast != null && <p style={{ color: '#F59E0B' }}>Simulación: {fmtMoney(d.simForecast)} ({d.simForecast > d.forecast ? '+' : ''}{((d.simForecast - d.forecast) / d.forecast * 100).toFixed(0)}%)</p>}
                             {d.upper != null && <p style={{ color: '#9CA3AF' }}>Rango: {fmtMoney(d.lower)} – {fmtMoney(d.upper)}</p>}
                           </div>
