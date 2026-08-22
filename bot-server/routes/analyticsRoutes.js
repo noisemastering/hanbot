@@ -942,8 +942,14 @@ router.get('/ad-metrics', async (req, res) => {
 // clicked = of any links, how many were clicked today (clicked:true, clickedAt today)
 router.get('/links-today', async (req, res) => {
   try {
-    const now = new Date();
-    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    // "Today" in Mexico time — the browser (Mexico) drives the other day cards, but
+    // this runs on Railway (UTC), so pin the day boundary to America/Mexico_City
+    // (fixed UTC−6, no DST since 2022) instead of the server clock.
+    const parts = new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit'
+    }).formatToParts(new Date());
+    const g = (t) => Number(parts.find((p) => p.type === t).value);
+    const start = new Date(Date.UTC(g('year'), g('month') - 1, g('day'), 6, 0, 0)); // 00:00 CST = 06:00 UTC
     const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
     const [served, clicked] = await Promise.all([
       ClickLog.countDocuments({ createdAt: { $gte: start, $lt: end } }),
