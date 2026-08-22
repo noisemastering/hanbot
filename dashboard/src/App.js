@@ -2291,7 +2291,7 @@ function App() {
                       <div className="flex items-center justify-between">
                         <div>
                           <p className="text-sm font-medium text-gray-400 mb-1">{t('overview.topRegion')}</p>
-                          <h3 className="text-2xl font-bold text-white">{topRegion.state}</h3>
+                          <h3 className="text-2xl font-bold text-white">{/^(estado de m[eé]xico|m[eé]xico)$/i.test((topRegion.state || '').trim()) ? 'Edomex' : topRegion.state}</h3>
                           <p className="text-sm text-purple-400">{topRegion.conversations} {t('overview.conversations')}</p>
                         </div>
                         <div className="w-12 h-12 bg-purple-500/20 rounded-lg flex items-center justify-center">
