@@ -811,7 +811,7 @@ function SalesForecastView({ mode = 'sales' }) {
                 )}
                 {isEng && <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-blue-500 inline-block" /> {L.secondary}</span>}
                 {effectiveZoom === 'daily' && <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-cyan-500 inline-block" /> Promedio 7d</span>}
-                <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-purple-500 inline-block" /> Proyección</span>
+                <span className="flex items-center gap-1.5"><span className={`w-3 h-3 inline-block ${isEng ? 'rounded-sm bg-green-500/40' : 'rounded-full bg-purple-500'}`} /> Proyección</span>
                 {simActive && <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-500 inline-block" /> Simulación</span>}
                 {hasAdData && (
                   <button onClick={() => setShowAdBoost(v => !v)}
@@ -862,7 +862,11 @@ function SalesForecastView({ mode = 'sales' }) {
                         <Bar dataKey="adBoost" name="Boost de Ads" stackId="rev" fill="#3B82F6" fillOpacity={0.8} radius={[3, 3, 0, 0]} />
                       </>
                     ) : (
-                      <Bar dataKey="revenue" name={L.primary} fill="#10B981" fillOpacity={0.7} radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="revenue" name={L.primary} stackId="clx" fill="#10B981" fillOpacity={0.7} radius={[3, 3, 0, 0]} />
+                    )}
+                    {/* Engagement: projected clics continue the green series as translucent bars */}
+                    {isEng && (
+                      <Bar dataKey="forecast" name="Proyección" stackId="clx" fill="#10B981" fillOpacity={0.28} radius={[3, 3, 0, 0]} />
                     )}
                     {isEng && (
                       <Line type="monotone" dataKey="orders" name={L.secondary} stroke="#3B82F6" strokeWidth={2} dot={false} connectNulls={false} />
@@ -870,7 +874,10 @@ function SalesForecastView({ mode = 'sales' }) {
                     {effectiveZoom === 'daily' && (
                       <Line type="monotone" dataKey="movingAvg" name="Promedio 7d" stroke="#06B6D4" strokeWidth={2} dot={false} connectNulls={false} />
                     )}
-                    <Line type="monotone" dataKey="forecast" name="Proyección" stroke="#8B5CF6" strokeWidth={2.5} strokeDasharray="6 3" dot={{ fill: '#8B5CF6', r: 3 }} connectNulls={false} />
+                    {/* Sales keeps the purple projection line; engagement shows it as translucent bars above */}
+                    {!isEng && (
+                      <Line type="monotone" dataKey="forecast" name="Proyección" stroke="#8B5CF6" strokeWidth={2.5} strokeDasharray="6 3" dot={{ fill: '#8B5CF6', r: 3 }} connectNulls={false} />
+                    )}
                     {simActive && (
                       <Line type="monotone" dataKey="simForecast" name="Simulación" stroke="#F59E0B" strokeWidth={2.5} dot={{ fill: '#F59E0B', r: 3, stroke: '#F59E0B' }} connectNulls={false} />
                     )}
