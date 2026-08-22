@@ -821,13 +821,13 @@ function SalesForecastView({ mode = 'sales' }) {
                 )}
               </div>
             </div>
-            <div className="h-80 overflow-x-auto">
-              <div style={{ minWidth: Math.max(600, chartData.length * (effectiveZoom === 'daily' ? 16 : effectiveZoom === 'weekly' ? 40 : 60)) }}>
+            <div className="h-80">
+              <div style={{ width: '100%', height: '100%' }}>
                 <ResponsiveContainer width="100%" height={320}>
                   <ComposedChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis dataKey="dateLabel" tick={{ fill: '#9CA3AF', fontSize: 10 }} />
-                    <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
+                    <XAxis dataKey="dateLabel" tick={{ fill: '#9CA3AF', fontSize: 10 }} interval="preserveStartEnd" minTickGap={24} />
+                    <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} tickFormatter={v => isEng ? Math.round(v).toLocaleString('es-MX') : `$${(v / 1000).toFixed(0)}k`} />
                     <Tooltip contentStyle={tooltipStyle}
                       content={({ active, payload, label }) => {
                         if (!active || !payload?.length) return null;
