@@ -56,6 +56,22 @@ function _composeName(chain) { // chain = [root, …, leaf]
   return parts.filter(Boolean).join(" ").trim() || leaf.name;
 }
 
+// Fallback when there's no productId: many color-option links store only "Verde"/"Negro"
+// but carry the ML listing URL, whose slug IS the product (…/malla-sombra-90-raschel-4mx8m-reforzada).
+function nameFromUrl(url, fallback) {
+  if (!url) return fallback;
+  const mm = url.match(/mercadolibre\.com\.mx\/([a-z0-9-]+)/i);
+  if (!mm) return fallback;
+  const slug = mm[1].replace(/^hanlob-/, "");
+  if (!/malla|raschel|borde|ground|cover|cinta|cord/i.test(slug)) return fallback; // not a product slug
+  let name = slug.replace(/(\d+)\s*m\s*x\s*(\d+)\s*m/gi, "$1x$2m").replace(/-/g, " ");
+  name = name.replace(/\b(\d{2,3})\s+raschel/i, "$1% raschel");
+  name = name.replace(/\s+/g, " ").trim().split(" ").map((w) => (/^\d/.test(w) ? w : w.charAt(0).toUpperCase() + w.slice(1))).join(" ");
+  const color = /^color\s+/i.test(fallback || "") ? fallback.replace(/^color\s+/i, "") : fallback;
+  if (color && !new RegExp("\\b" + color + "\\b", "i").test(name)) name += " " + color;
+  return name;
+}
+
 async function fullProductNames(productIds) {
   const PF = require("../models/ProductFamily");
   const ids = [...new Set(productIds.filter(Boolean).map(String))];
@@ -125,11 +141,13 @@ router.get("/", async (req, res) => {
       ClickLog.countDocuments(filter)
     ]);
 
-    // Overwrite the bare stored name with the full tree-derived name where we can.
+    // Accurate name: climb the product tree from productId; else derive it from the ML
+    // listing URL (color-option links have no productId but do carry the URL).
     const names = await fullProductNames(clickLogs.map((l) => l.productId));
     for (const l of clickLogs) {
       const fn = names.get(String(l.productId));
       if (fn) l.productName = fn;
+      else if (l.originalUrl) l.productName = nameFromUrl(l.originalUrl, l.productName);
     }
 
     res.json({
