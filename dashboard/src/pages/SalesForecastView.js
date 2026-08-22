@@ -699,7 +699,7 @@ function SalesForecastView({ mode = 'sales' }) {
               <p className="text-2xl font-bold text-green-400">{fmtMoney(data.totalHistoryRevenue)}</p>
             </div>
             <div className={`bg-gray-800/50 border rounded-xl p-5 ${simActive ? 'border-amber-500/30' : 'border-purple-500/20'}`}>
-              <p className="text-xs text-gray-400">Proyección 14 días</p>
+              <p className="text-xs text-gray-400">Proyección {data.horizon || (data.forecast?.length ?? 14)} días</p>
               {simActive && simTotalForecast != null ? (
                 <>
                   <p className="text-2xl font-bold text-amber-400">{fmtMoney(simTotalForecast)}</p>
@@ -720,6 +720,41 @@ function SalesForecastView({ mode = 'sales' }) {
               </p>
             </div>
           </div>
+
+          {/* Insights / señales */}
+          {data.insights && (
+            <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5">
+              <div className="flex items-baseline justify-between mb-3">
+                <h3 className="text-sm font-semibold text-white">Señales</h3>
+                <span className="text-xs text-gray-500">proyección a {data.insights.horizonDays} días</span>
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-xs text-gray-400">Momentum (7d vs. 7d prev.)</p>
+                  <p className={`text-lg font-bold ${data.insights.momentum >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                    {data.insights.momentum >= 0 ? '↗ +' : '↘ '}{data.insights.momentum}%
+                  </p>
+                  <p className="text-xs text-gray-500 mt-0.5">cambio de corto plazo</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">Ritmo proyectado</p>
+                  <p className="text-lg font-bold text-white">{fmtMoney(data.insights.projectedDailyAvg)}<span className="text-xs text-gray-500">/día</span></p>
+                  <p className={`text-xs mt-0.5 ${data.insights.paceVsRecent >= 0 ? 'text-green-400' : 'text-red-400'}`}>{data.insights.paceVsRecent >= 0 ? '+' : ''}{data.insights.paceVsRecent}% vs. últimos 7d</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">Mejor día</p>
+                  <p className="text-lg font-bold text-cyan-400">{data.insights.bestDay}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">×{data.insights.bestDayMultiplier} vs. promedio · flojo: {data.insights.worstDay}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400">Crecimiento semanal</p>
+                  <p className={`text-lg font-bold ${data.insights.weeklyGrowth >= 0 ? 'text-green-400' : 'text-red-400'}`}>{data.insights.weeklyGrowth >= 0 ? '+' : ''}{data.insights.weeklyGrowth}%</p>
+                  <p className="text-xs text-gray-500 mt-0.5">tendencia por semana</p>
+                </div>
+              </div>
+              <p className="text-xs text-gray-600 mt-4">Proyección de {data.insights.horizonDays} días (~la mitad del historial). El rango se ensancha con el horizonte: mientras más lejos, mayor incertidumbre.</p>
+            </div>
+          )}
 
           {/* Attribution cards */}
           {data.metaAttribution && (

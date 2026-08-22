@@ -520,29 +520,43 @@ router.get('/forecast-v2', async (req, res) => {
       } : {})
     }));
 
-    // Forecast (14 days)
+    // Forecast horizon scales with the history window — ~half of it, so 6 months
+    // of history projects ~3 months ahead (clamped to 14–365 days).
+    const horizon = Math.min(365, Math.max(14, Math.floor(parseInt(days) / 2)));
+
     const last14 = daily.slice(-14);
     const recentBase = last14.length > 0 ? ss.mean(last14.map(d => d.revenue)) : overallMean;
-    const weeklySlope = weeklyReg.m / 7;
+    const dailySlope = weeklyReg.m / 7;
+    // Damped trend (Holt): each day out contributes φ^k of the slope, so the trend
+    // tapers instead of extrapolating linearly to absurd values over long horizons.
+    const PHI = 0.985;
+    const ordersPerRevenue = overallMean > 0 ? ss.mean(daily.map(d => d.orders)) / overallMean : 1;
 
     const forecast = [];
-    for (let i = 0; i < 14; i++) {
+    let dampedTrend = 0;
+    for (let i = 0; i < horizon; i++) {
+      dampedTrend += dailySlope * Math.pow(PHI, i);
       const d = new Date();
       d.setDate(d.getDate() + i + 1);
       const dow = d.getDay();
       const month = d.getMonth();
-      const trendAdj = recentBase + weeklySlope * i;
+      // Bound the projected level to 0.5×–2× the recent base so a short-term dip (or
+      // spike) can't extrapolate the whole horizon to ~zero (or explode). Preserves
+      // the day-of-week shape and a mild trend without the naive collapse.
+      const trendAdj = Math.max(recentBase * 0.5, Math.min(recentBase * 2, recentBase + dampedTrend));
       const dowAdj = trendAdj * dowMultiplier[dow];
       const seasonAdj = dowAdj * monthMultiplier[month];
       const projected = Math.max(0, Math.round(seasonAdj));
+      // Band widens with the horizon — uncertainty grows ~√(weeks out).
+      const band = stdDev * Math.sqrt(1 + i / 7);
       forecast.push({
         date: d.toISOString().split('T')[0],
         dateLabel: d.toLocaleDateString('es-MX', { day: 'numeric', month: 'short' }),
         dow: DOW_NAMES[dow],
         revenue: projected,
-        upper: Math.round(projected + stdDev),
-        lower: Math.max(0, Math.round(projected - stdDev)),
-        orders: Math.max(0, Math.round(projected / (overallMean / ss.mean(daily.map(d => d.orders)) || 1)))
+        upper: Math.round(projected + band),
+        lower: Math.max(0, Math.round(projected - band)),
+        orders: Math.max(0, Math.round(projected * ordersPerRevenue))
       });
     }
 
@@ -552,6 +566,27 @@ router.get('/forecast-v2', async (req, res) => {
 
     const totalHistoryRevenue = daily.reduce((s, d) => s + d.revenue, 0);
     const totalForecastRevenue = forecast.reduce((s, d) => s + d.revenue, 0);
+    const totalForecastOrders = forecast.reduce((s, d) => s + d.orders, 0);
+
+    // ── INSIGHTS ── short-term momentum, best day, projected pace vs recent.
+    const prev7Avg = daily.length >= 14 ? ss.mean(daily.slice(-14, -7).map(d => d.revenue)) : firstWeekAvg;
+    const momentum = prev7Avg > 0 ? ((lastWeekAvg - prev7Avg) / prev7Avg * 100) : 0;
+    const bestDowIdx = dowMultiplier.reduce((best, v, i) => v > dowMultiplier[best] ? i : best, 0);
+    const worstDowIdx = dowMultiplier.reduce((worst, v, i) => v < dowMultiplier[worst] ? i : worst, 0);
+    const projectedDailyAvg = horizon > 0 ? totalForecastRevenue / horizon : 0;
+    const insights = {
+      horizonDays: horizon,
+      projectedTotal: Math.round(totalForecastRevenue),
+      projectedOrders: totalForecastOrders,
+      projectedDailyAvg: Math.round(projectedDailyAvg),
+      // projected pace vs the last 7 real days (are we accelerating or cooling off?)
+      paceVsRecent: lastWeekAvg > 0 ? +(((projectedDailyAvg - lastWeekAvg) / lastWeekAvg) * 100).toFixed(1) : 0,
+      momentum: +momentum.toFixed(1),
+      bestDay: DOW_NAMES[bestDowIdx],
+      bestDayMultiplier: +dowMultiplier[bestDowIdx].toFixed(2),
+      worstDay: DOW_NAMES[worstDowIdx],
+      weeklyGrowth: overallMean > 0 ? +((dailySlope * 7) / overallMean * 100).toFixed(1) : 0
+    };
 
     const dowSummary = DOW_NAMES.map((name, i) => ({
       day: name,
@@ -603,6 +638,8 @@ router.get('/forecast-v2', async (req, res) => {
       success: true,
       data: {
         basis,
+        horizon,
+        insights,
         reach: effectiveReach,
         channel: effectiveChannel,
         productFamilyId: productFamilyId || null,
