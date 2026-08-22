@@ -937,20 +937,25 @@ router.get('/ad-metrics', async (req, res) => {
 });
 
 // GET /analytics/top-region - Get most active region by conversations
+// "Today" window in Mexico time. The browser (Mexico) drives the day cards, but
+// this runs on Railway (UTC), so pin the boundary to America/Mexico_City
+// (fixed UTC−6, no DST since 2022) instead of the server clock.
+function mexicoTodayRange() {
+  const parts = new Intl.DateTimeFormat('en-CA', {
+    timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).formatToParts(new Date());
+  const g = (t) => Number(parts.find((p) => p.type === t).value);
+  const start = new Date(Date.UTC(g('year'), g('month') - 1, g('day'), 6, 0, 0)); // 00:00 CST = 06:00 UTC
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+  return { start, end };
+}
+
 // Links served vs clicked TODAY (for the "Mensajes del día" summary row).
 // served  = purchase links generated today (ClickLog.createdAt within today)
 // clicked = of any links, how many were clicked today (clicked:true, clickedAt today)
 router.get('/links-today', async (req, res) => {
   try {
-    // "Today" in Mexico time — the browser (Mexico) drives the other day cards, but
-    // this runs on Railway (UTC), so pin the day boundary to America/Mexico_City
-    // (fixed UTC−6, no DST since 2022) instead of the server clock.
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Mexico_City', year: 'numeric', month: '2-digit', day: '2-digit'
-    }).formatToParts(new Date());
-    const g = (t) => Number(parts.find((p) => p.type === t).value);
-    const start = new Date(Date.UTC(g('year'), g('month') - 1, g('day'), 6, 0, 0)); // 00:00 CST = 06:00 UTC
-    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    const { start, end } = mexicoTodayRange();
     const [served, clicked] = await Promise.all([
       ClickLog.countDocuments({ createdAt: { $gte: start, $lt: end } }),
       ClickLog.countDocuments({ clicked: true, clickedAt: { $gte: start, $lt: end } })
@@ -963,6 +968,20 @@ router.get('/links-today', async (req, res) => {
 
 // Distinct PRODUCT LINES being promoted across ACTIVE ads. Each ad promotes one
 // line via its convo flow; count the distinct flows and give them friendly names.
+// Handoffs to a human TODAY (for the "Mensajes del día" summary row).
+router.get('/handoffs-today', async (req, res) => {
+  try {
+    const { start, end } = mexicoTodayRange();
+    const count = await Conversation.countDocuments({
+      handoffRequested: true,
+      handoffTimestamp: { $gte: start, $lt: end }
+    });
+    res.json({ success: true, count });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/promoted-products', async (req, res) => {
   try {
     const Ad = require('../models/Ad');

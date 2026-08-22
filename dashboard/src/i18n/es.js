@@ -200,7 +200,7 @@ const es = {
   // ── Overview / Dashboard ─────────────────────────────────
   "overview.todayStats": "Estadísticas de Hoy",
   "overview.totalMessages": "Mensajes Totales",
-  "overview.uniqueUsers": "Usuarios Únicos",
+  "overview.uniqueUsers": "Chats únicos",
   "overview.responseRate": "Tasa de Respuesta",
   "overview.unanswered": "Sin Responder",
   "overview.activeCampaigns": "Campañas Activas",

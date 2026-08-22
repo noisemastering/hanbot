@@ -777,6 +777,7 @@ function App() {
   const [topRegion, setTopRegion] = useState(null);
   const [linksToday, setLinksToday] = useState({ served: 0, clicked: 0 });
   const [promotedProducts, setPromotedProducts] = useState(0);
+  const [handoffsToday, setHandoffsToday] = useState(0);
 
   // Analytics page loading state
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
@@ -946,6 +947,16 @@ function App() {
       if (data.success) setPromotedProducts(data.count || 0);
     } catch (error) {
       console.error("Error fetching promoted products:", error);
+    }
+  };
+
+  const fetchHandoffsToday = async () => {
+    try {
+      const res = await fetch(`${API_URL}/analytics/handoffs-today`);
+      const data = await res.json();
+      if (data.success) setHandoffsToday(data.count || 0);
+    } catch (error) {
+      console.error("Error fetching handoffs today:", error);
     }
   };
 
@@ -1620,7 +1631,8 @@ function App() {
         fetchTopProducts(),
         fetchTopRegion(),
         fetchLinksToday(),
-        fetchPromotedProducts()
+        fetchPromotedProducts(),
+        fetchHandoffsToday()
       ]).finally(() => setAnalyticsLoading(false));
     }
   }, [location.pathname]);
@@ -2292,6 +2304,21 @@ function App() {
                       <div className="w-12 h-12 bg-cyan-500/20 rounded-lg flex items-center justify-center">
                         <svg className="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Handoffs hoy */}
+                  <div onClick={() => navigate('/conversations')} className="bg-gradient-to-br from-orange-500/10 to-orange-600/5 backdrop-blur-lg border border-orange-500/20 rounded-xl p-6 cursor-pointer hover:border-orange-500/40 hover:scale-[1.02] transition-all">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-400 mb-1">Handoffs</p>
+                        <h3 className="text-3xl font-bold text-white">{handoffsToday}</h3>
+                      </div>
+                      <div className="w-12 h-12 bg-orange-500/20 rounded-lg flex items-center justify-center">
+                        <svg className="w-6 h-6 text-orange-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
                         </svg>
                       </div>
                     </div>
