@@ -982,6 +982,27 @@ router.get('/handoffs-today', async (req, res) => {
   }
 });
 
+// Handoffs to a human over a date range (for period dashboards). Falls back to
+// today (Mexico) when no range is given.
+router.get('/handoffs-count', async (req, res) => {
+  try {
+    const { dateFrom, dateTo } = req.query;
+    let range;
+    if (dateFrom || dateTo) {
+      range = {};
+      if (dateFrom) range.$gte = new Date(dateFrom);
+      if (dateTo) range.$lte = new Date(dateTo);
+    } else {
+      const { start, end } = mexicoTodayRange();
+      range = { $gte: start, $lt: end };
+    }
+    const count = await Conversation.countDocuments({ handoffRequested: true, handoffTimestamp: range });
+    res.json({ success: true, count });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/promoted-products', async (req, res) => {
   try {
     const Ad = require('../models/Ad');

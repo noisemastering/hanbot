@@ -56,15 +56,15 @@ Still need Google Auth and/or 2FA for a finished product
 
 | Route | What it does | Status | Missing |
 |---|---|---|---|
-| `/analytics` | Analytics dashboard | 👀 | |
+| `/analytics` | Analytics dashboard | ✅ | |
 | `/ad-performance` | Ad performance overview | ✅ | |
 | `/ad-performance/:fbAdId` | Single ad detail | ✅ | |
 | `/ads` | Ads list | ✅ | |
 | `/adsets` | Ad sets | ✅ | |
 | `/campaigns` | Campaigns | ✅ | |
 | `/click-logs` | Tracked-link click logs | ✅ | |
-| `/tracked-links` | Tracked links manager | 👀 | |
-| `/spend-optimization` | Ad spend optimization | 👀 | |
+| `/tracked-links` | Tracked links manager | ✅ | |
+| `/spend-optimization` | Ad spend optimization | ❌ | Removed - Functionality relocated on ad-performance|
 | `/inteligencia-artificial` | Campaign intelligence (AI) | 🟡 | |
 | `/segmentacion` | Customer segmentation | ✅ | |
 | `/cross-sell` | Cross-sell rules | 🟡 | |

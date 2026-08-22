@@ -66,6 +66,8 @@ function CampaignHome() {
   const [fbSpendDaily, setFbSpendDaily] = useState([]);
   const [topProducts, setTopProducts] = useState([]);
   const [lastCorrelatedAt, setLastCorrelatedAt] = useState(null);
+  const [handoffs, setHandoffs] = useState(0);
+  const [promotedProducts, setPromotedProducts] = useState(0);
 
   // Link generator state
   const [showLinkGen, setShowLinkGen] = useState(false);
@@ -92,7 +94,7 @@ function CampaignHome() {
       const dateFromISO = `${dateFrom}T00:00:00.000Z`;
       const dateToISO = `${dateTo}T23:59:59.999Z`;
 
-      const [analyticsRes, adPerfRes, clicksRes, sourceRes, geoRes, genderRes, spendRes, productsRes, spendDailyRes, lastCorrRes] = await Promise.all([
+      const [analyticsRes, adPerfRes, clicksRes, sourceRes, geoRes, genderRes, spendRes, productsRes, spendDailyRes, lastCorrRes, handoffsRes, promotedRes] = await Promise.all([
         API.get(`/analytics/?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/analytics/ad-performance?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/click-logs/daily?startDate=${dateFrom}&endDate=${dateTo}`),
@@ -103,6 +105,8 @@ function CampaignHome() {
         API.get(`/analytics/top-products?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
         API.get(`/analytics/fb-spend-daily?dateFrom=${dateFrom}&dateTo=${dateTo}`),
         API.get(`/analytics/last-correlation`),
+        API.get(`/analytics/handoffs-count?dateFrom=${dateFromISO}&dateTo=${dateToISO}`),
+        API.get(`/analytics/promoted-products`),
       ]);
 
       setAnalytics(analyticsRes.data);
@@ -116,6 +120,8 @@ function CampaignHome() {
       setTopProducts((productsRes.data?.allProducts || []).slice(0, 5));
       setFbSpendDaily(spendDailyRes.data?.data || []);
       setLastCorrelatedAt(lastCorrRes.data?.lastCorrelatedAt || null);
+      setHandoffs(handoffsRes.data?.count || 0);
+      setPromotedProducts(promotedRes.data?.count || 0);
     } catch (err) {
       console.error("Error fetching campaign dashboard:", err);
     } finally {
@@ -384,6 +390,20 @@ function CampaignHome() {
           <p className="text-sm text-gray-400 mb-1">Impresiones</p>
           <h3 className="text-2xl font-bold text-gray-300">{fbSpendTotals.impressions.toLocaleString()}</h3>
           <p className="text-xs text-gray-500 mt-1">{periodLabel}</p>
+        </div>
+
+        {/* Handoffs (periodo) */}
+        <div className="bg-gradient-to-br from-orange-500/10 to-orange-600/5 backdrop-blur-lg border border-orange-500/20 rounded-xl p-5">
+          <p className="text-sm text-gray-400 mb-1">Handoffs</p>
+          <h3 className="text-2xl font-bold text-orange-400">{handoffs.toLocaleString()}</h3>
+          <p className="text-xs text-gray-500 mt-1">{periodLabel}</p>
+        </div>
+
+        {/* Productos promocionados (líneas activas) */}
+        <div className="bg-gradient-to-br from-indigo-500/10 to-indigo-600/5 backdrop-blur-lg border border-indigo-500/20 rounded-xl p-5">
+          <p className="text-sm text-gray-400 mb-1">Productos promocionados</p>
+          <h3 className="text-2xl font-bold text-indigo-400">{promotedProducts.toLocaleString()}</h3>
+          <p className="text-xs text-gray-500 mt-1">líneas de producto</p>
         </div>
       </div>
 
