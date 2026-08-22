@@ -28,7 +28,15 @@ const LOADING_STAGES = [
   { text: 'Preparando visualización...', duration: 1500 }
 ];
 
-function SalesForecastView() {
+function SalesForecastView({ mode = 'sales' }) {
+  // mode: 'sales' (revenue/orders from ML) | 'engagement' (clics/links from ClickLog).
+  const isEng = mode === 'engagement';
+  const L = isEng
+    ? { title: 'Pronóstico de Interacción', primary: 'Clics', secondary: 'Links', sub: 'Selecciona un producto para proyectar clics y links' }
+    : { title: 'Pronóstico de Ventas', primary: 'Ingresos', secondary: 'Órdenes', sub: '{L.sub}' };
+  // Primary-metric formatter: currency for sales, plain count for engagement.
+  const fmtMoney = isEng ? (n) => Math.round(n || 0).toLocaleString('es-MX') : fmt;
+
   // ── Product tree navigation ──
   const [families, setFamilies] = useState([]);
   const [navStack, setNavStack] = useState([]);
@@ -155,8 +163,9 @@ function SalesForecastView() {
       const params = new URLSearchParams({
         days: d.toString(),
         channel: ch,
-        seasonality: 'true'
+        seasonality: isEng ? 'false' : 'true'
       });
+      if (isEng) params.set('basis', 'engagement');
       if (productId) {
         params.set('productFamilyId', productId);
         params.set('includeSubfamilies', 'true');
@@ -167,7 +176,15 @@ function SalesForecastView() {
       console.error('Forecast error:', err);
       return null;
     }
-  }, []);
+  }, [isEng]);
+
+  // Engagement mode has no channel picker — auto-generate once a product is chosen.
+  useEffect(() => {
+    if (isEng && selectedProduct && !data && !loading) {
+      generate(selectedProduct.id, channel, days);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isEng, selectedProduct]);
 
   // ── Generate forecast (called explicitly, not on product selection) ──
   const generate = useCallback((productId, ch, d) => {
@@ -200,10 +217,12 @@ function SalesForecastView() {
   const [chartZoom, setChartZoom] = useState('auto');
   const [showAdBoost, setShowAdBoost] = useState(true);
 
-  // Auto-select zoom based on period
-  const effectiveZoom = chartZoom === 'auto'
-    ? (days >= 180 ? 'monthly' : days >= 60 ? 'weekly' : 'daily')
-    : chartZoom;
+  // Auto-select zoom based on period. Engagement has no monthly series, so it
+  // never uses 'monthly' (would render empty).
+  const autoZoom = isEng
+    ? (days >= 60 ? 'weekly' : 'daily')
+    : (days >= 180 ? 'monthly' : days >= 60 ? 'weekly' : 'daily');
+  const effectiveZoom = chartZoom === 'auto' ? autoZoom : (isEng && chartZoom === 'monthly' ? 'weekly' : chartZoom);
 
   // Check if ad attribution data exists
   const hasAdData = data?.history?.some(d => d.adRevenue > 0);
@@ -236,6 +255,7 @@ function SalesForecastView() {
       weeks.push({
         dateLabel: chunk[0].dateLabel + '–' + chunk[chunk.length - 1].dateLabel,
         revenue: hasHistory ? chunk.reduce((s, d) => s + (d.revenue || 0), 0) : null,
+        orders: chunk.reduce((s, d) => s + (d.orders || 0), 0),
         movingAvg: null,
         forecast: hasForecast ? chunk.reduce((s, d) => s + (d.forecast || 0), 0) : null,
         upper: hasForecast ? chunk.reduce((s, d) => s + (d.upper || 0), 0) : null,
@@ -465,8 +485,8 @@ function SalesForecastView() {
   if (!selectedProduct) {
     return (
       <div>
-        <h1 className="text-3xl font-bold text-white mb-2">Pronóstico de Ventas</h1>
-        <p className="text-gray-400 mb-6">Selecciona un producto para generar la proyección</p>
+        <h1 className="text-3xl font-bold text-white mb-2">{L.title}</h1>
+        <p className="text-gray-400 mb-6">{L.sub}</p>
 
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
           <h3 className="text-lg font-semibold text-white mb-4">¿Para qué producto es la proyección?</h3>
@@ -541,11 +561,11 @@ function SalesForecastView() {
     );
   }
 
-  // ── RENDER: Product selected, pick channel to start ──
-  if (selectedProduct && !data && !loading) {
+  // ── RENDER: Product selected, pick channel to start (sales only; engagement auto-generates) ──
+  if (!isEng && selectedProduct && !data && !loading) {
     return (
       <div>
-        <h1 className="text-3xl font-bold text-white mb-1">Pronóstico de Ventas</h1>
+        <h1 className="text-3xl font-bold text-white mb-1">{L.title}</h1>
         <div className="flex items-center gap-2 mb-6">
           <span className="text-sm text-primary-400 font-medium">{selectedProduct.path}</span>
           <button onClick={changeProduct} className="text-xs text-gray-500 hover:text-white px-2 py-0.5 rounded hover:bg-gray-700/50 transition-colors">Cambiar</button>
@@ -572,7 +592,7 @@ function SalesForecastView() {
     const progress = ((loadingStage + 1) / LOADING_STAGES.length) * 100;
     return (
       <div>
-        <h1 className="text-3xl font-bold text-white mb-2">Pronóstico de Ventas</h1>
+        <h1 className="text-3xl font-bold text-white mb-2">{L.title}</h1>
         <p className="text-gray-400 mb-6">{selectedProduct.path}</p>
 
         <div className="flex flex-col items-center justify-center min-h-[50vh]">
@@ -620,7 +640,7 @@ function SalesForecastView() {
     <div className={`transition-opacity duration-700 pb-20 ${revealed ? 'opacity-100' : 'opacity-0'}`}>
       <div className="flex justify-between items-start mb-6">
         <div>
-          <h1 className="text-3xl font-bold text-white mb-1">Pronóstico de Ventas</h1>
+          <h1 className="text-3xl font-bold text-white mb-1">{L.title}</h1>
           <div className="flex items-center gap-2">
             <span className="text-sm text-primary-400 font-medium">{selectedProduct.path}</span>
             <button onClick={changeProduct} className="text-xs text-gray-500 hover:text-white px-2 py-0.5 rounded hover:bg-gray-700/50 transition-colors">
@@ -633,20 +653,23 @@ function SalesForecastView() {
       {/* Controls bar: channel + backtrace */}
       <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 mb-6">
         <div className="flex flex-wrap items-center gap-4">
-          {/* Channel selector */}
-          <div className="flex gap-1">
-            {CHANNELS.map(ch => (
-              <button key={ch.id} onClick={() => handleChannelChange(ch.id)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                  channel === ch.id ? 'bg-primary-500 text-white' : 'bg-gray-900/50 text-gray-400 hover:text-white hover:bg-gray-700/50'
-                }`}
-                title={ch.desc}>
-                {ch.label}
-              </button>
-            ))}
-          </div>
-
-          <div className="w-px h-6 bg-gray-700" />
+          {/* Channel selector — sales only (engagement has no sales channel) */}
+          {!isEng && (
+            <>
+              <div className="flex gap-1">
+                {CHANNELS.map(ch => (
+                  <button key={ch.id} onClick={() => handleChannelChange(ch.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+                      channel === ch.id ? 'bg-primary-500 text-white' : 'bg-gray-900/50 text-gray-400 hover:text-white hover:bg-gray-700/50'
+                    }`}
+                    title={ch.desc}>
+                    {ch.label}
+                  </button>
+                ))}
+              </div>
+              <div className="w-px h-6 bg-gray-700" />
+            </>
+          )}
 
           {/* Backtrace date */}
           <div className="flex items-center gap-2">
@@ -672,23 +695,23 @@ function SalesForecastView() {
           {/* KPI cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5">
-              <p className="text-xs text-gray-400">Ingresos ({days >= 730 ? '2a' : days >= 365 ? '1a' : days >= 180 ? '6m' : days + 'd'})</p>
-              <p className="text-2xl font-bold text-green-400">{fmt(data.totalHistoryRevenue)}</p>
+              <p className="text-xs text-gray-400">{L.primary} ({days >= 730 ? '2a' : days >= 365 ? '1a' : days >= 180 ? '6m' : days + 'd'})</p>
+              <p className="text-2xl font-bold text-green-400">{fmtMoney(data.totalHistoryRevenue)}</p>
             </div>
             <div className={`bg-gray-800/50 border rounded-xl p-5 ${simActive ? 'border-amber-500/30' : 'border-purple-500/20'}`}>
               <p className="text-xs text-gray-400">Proyección 14 días</p>
               {simActive && simTotalForecast != null ? (
                 <>
-                  <p className="text-2xl font-bold text-amber-400">{fmt(simTotalForecast)}</p>
-                  <p className="text-xs text-gray-500">Base: {fmt(data.totalForecastRevenue)}</p>
+                  <p className="text-2xl font-bold text-amber-400">{fmtMoney(simTotalForecast)}</p>
+                  <p className="text-xs text-gray-500">Base: {fmtMoney(data.totalForecastRevenue)}</p>
                 </>
               ) : (
-                <p className="text-2xl font-bold text-purple-400">{fmt(data.totalForecastRevenue)}</p>
+                <p className="text-2xl font-bold text-purple-400">{fmtMoney(data.totalForecastRevenue)}</p>
               )}
             </div>
             <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5">
               <p className="text-xs text-gray-400">Promedio diario</p>
-              <p className="text-2xl font-bold text-white">{fmt(data.avgDailyRevenue)}</p>
+              <p className="text-2xl font-bold text-white">{fmtMoney(data.avgDailyRevenue)}</p>
             </div>
             <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5">
               <p className="text-xs text-gray-400">Tendencia</p>
@@ -703,18 +726,18 @@ function SalesForecastView() {
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <div className="bg-blue-500/5 border border-blue-500/20 rounded-xl p-4">
                 <p className="text-xs text-gray-400">Atribuidas a Ads</p>
-                <p className="text-xl font-bold text-blue-400">{fmt(data.metaAttribution.totalAdRevenue)}</p>
+                <p className="text-xl font-bold text-blue-400">{fmtMoney(data.metaAttribution.totalAdRevenue)}</p>
                 <p className="text-xs text-gray-500 mt-1">{data.metaAttribution.adRevenuePercent}% del total</p>
               </div>
               <div className="bg-gray-700/30 border border-gray-600/30 rounded-xl p-4">
                 <p className="text-xs text-gray-400">Sin atribución</p>
-                <p className="text-xl font-bold text-gray-300">{fmt(data.metaAttribution.totalOrganicRevenue)}</p>
+                <p className="text-xl font-bold text-gray-300">{fmtMoney(data.metaAttribution.totalOrganicRevenue)}</p>
                 <p className="text-xs text-gray-500 mt-1">{(100 - data.metaAttribution.adRevenuePercent).toFixed(1)}% — sin link tracked</p>
               </div>
               {data.manualSales && data.manualSales.totalOrders > 0 && (
                 <div className="bg-orange-500/5 border border-orange-500/20 rounded-xl p-4">
                   <p className="text-xs text-gray-400">Ventas manuales</p>
-                  <p className="text-xl font-bold text-orange-400">{fmt(data.manualSales.totalRevenue)}</p>
+                  <p className="text-xl font-bold text-orange-400">{fmtMoney(data.manualSales.totalRevenue)}</p>
                   <p className="text-xs text-gray-500 mt-1">{data.manualSales.totalOrders} ventas</p>
                 </div>
               )}
@@ -734,7 +757,7 @@ function SalesForecastView() {
               <div className="flex items-center gap-4">
                 <h2 className="text-lg font-semibold text-white">Proyección integrada</h2>
                 <div className="flex gap-1 bg-gray-900/50 rounded-lg p-0.5">
-                  {[['monthly', 'Mes'], ['weekly', 'Sem'], ['daily', 'Día']].map(([z, label]) => (
+                  {[['monthly', 'Mes'], ['weekly', 'Sem'], ['daily', 'Día']].filter(([z]) => !isEng || z !== 'monthly').map(([z, label]) => (
                     <button key={z} onClick={() => setChartZoom(z)}
                       className={`px-2.5 py-1 rounded text-xs font-medium transition-all ${effectiveZoom === z ? 'bg-gray-700 text-white' : 'text-gray-500 hover:text-gray-300'}`}>
                       {label}
@@ -749,8 +772,9 @@ function SalesForecastView() {
                     <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-blue-500 inline-block" /> Boost de Ads</span>
                   </>
                 ) : (
-                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> Real</span>
+                  <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-sm bg-green-500 inline-block" /> {isEng ? L.primary : 'Real'}</span>
                 )}
+                {isEng && <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-blue-500 inline-block" /> {L.secondary}</span>}
                 {effectiveZoom === 'daily' && <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-cyan-500 inline-block" /> Promedio 7d</span>}
                 <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-purple-500 inline-block" /> Proyección</span>
                 {simActive && <span className="flex items-center gap-1.5"><span className="w-3 h-3 rounded-full bg-amber-500 inline-block" /> Simulación</span>}
@@ -776,19 +800,20 @@ function SalesForecastView() {
                         return (
                           <div style={tooltipStyle} className="p-3 text-sm">
                             <p className="text-white font-medium mb-1">{label} {d.dow ? `(${d.dow})` : ''}</p>
-                            {d.revenue != null && !showAdBoost && <p style={{ color: '#10B981' }}>Real: {fmt(d.revenue)}</p>}
+                            {d.revenue != null && !showAdBoost && <p style={{ color: '#10B981' }}>{isEng ? L.primary : 'Real'}: {fmtMoney(d.revenue)}</p>}
+                            {isEng && d.orders != null && <p style={{ color: '#3B82F6' }}>{L.secondary}: {Math.round(d.orders).toLocaleString('es-MX')}</p>}
                             {d.revenue != null && showAdBoost && d.organicBase != null && (
                               <>
-                                <p style={{ color: '#10B981' }}>Sin atribución: {fmt(d.organicBase)}</p>
-                                <p style={{ color: '#3B82F6' }}>Boost de Ads: {fmt(d.adBoost)}</p>
-                                <p style={{ color: '#9CA3AF' }}>Total: {fmt(d.revenue)}</p>
+                                <p style={{ color: '#10B981' }}>Sin atribución: {fmtMoney(d.organicBase)}</p>
+                                <p style={{ color: '#3B82F6' }}>Boost de Ads: {fmtMoney(d.adBoost)}</p>
+                                <p style={{ color: '#9CA3AF' }}>Total: {fmtMoney(d.revenue)}</p>
                               </>
                             )}
-                            {d.revenue != null && showAdBoost && d.organicBase == null && <p style={{ color: '#10B981' }}>Real: {fmt(d.revenue)}</p>}
-                            {d.movingAvg != null && <p style={{ color: '#06B6D4' }}>Promedio 7d: {fmt(d.movingAvg)}</p>}
-                            {d.forecast != null && <p style={{ color: '#8B5CF6' }}>Proyección: {fmt(d.forecast)}</p>}
-                            {d.simForecast != null && <p style={{ color: '#F59E0B' }}>Simulación: {fmt(d.simForecast)} ({d.simForecast > d.forecast ? '+' : ''}{((d.simForecast - d.forecast) / d.forecast * 100).toFixed(0)}%)</p>}
-                            {d.upper != null && <p style={{ color: '#9CA3AF' }}>Rango: {fmt(d.lower)} – {fmt(d.upper)}</p>}
+                            {d.revenue != null && showAdBoost && d.organicBase == null && <p style={{ color: '#10B981' }}>Real: {fmtMoney(d.revenue)}</p>}
+                            {d.movingAvg != null && <p style={{ color: '#06B6D4' }}>Promedio 7d: {fmtMoney(d.movingAvg)}</p>}
+                            {d.forecast != null && <p style={{ color: '#8B5CF6' }}>Proyección: {fmtMoney(d.forecast)}</p>}
+                            {d.simForecast != null && <p style={{ color: '#F59E0B' }}>Simulación: {fmtMoney(d.simForecast)} ({d.simForecast > d.forecast ? '+' : ''}{((d.simForecast - d.forecast) / d.forecast * 100).toFixed(0)}%)</p>}
+                            {d.upper != null && <p style={{ color: '#9CA3AF' }}>Rango: {fmtMoney(d.lower)} – {fmtMoney(d.upper)}</p>}
                           </div>
                         );
                       }}
@@ -802,7 +827,10 @@ function SalesForecastView() {
                         <Bar dataKey="adBoost" name="Boost de Ads" stackId="rev" fill="#3B82F6" fillOpacity={0.8} radius={[3, 3, 0, 0]} />
                       </>
                     ) : (
-                      <Bar dataKey="revenue" name="Ingresos" fill="#10B981" fillOpacity={0.7} radius={[3, 3, 0, 0]} />
+                      <Bar dataKey="revenue" name={L.primary} fill="#10B981" fillOpacity={0.7} radius={[3, 3, 0, 0]} />
+                    )}
+                    {isEng && (
+                      <Line type="monotone" dataKey="orders" name={L.secondary} stroke="#3B82F6" strokeWidth={2} dot={false} connectNulls={false} />
                     )}
                     {effectiveZoom === 'daily' && (
                       <Line type="monotone" dataKey="movingAvg" name="Promedio 7d" stroke="#06B6D4" strokeWidth={2} dot={false} connectNulls={false} />
@@ -831,7 +859,7 @@ function SalesForecastView() {
               <div className="flex items-center gap-3">
                 {simActive && simTotalForecast != null && (
                   <span className="text-xs px-2 py-1 rounded bg-amber-500/10 border border-amber-500/30 text-amber-400">
-                    Simulación: {fmt(simTotalForecast)} ({simTotalForecast > data.totalForecastRevenue ? '+' : ''}{((simTotalForecast - data.totalForecastRevenue) / data.totalForecastRevenue * 100).toFixed(0)}%)
+                    Simulación: {fmtMoney(simTotalForecast)} ({simTotalForecast > data.totalForecastRevenue ? '+' : ''}{((simTotalForecast - data.totalForecastRevenue) / data.totalForecastRevenue * 100).toFixed(0)}%)
                   </span>
                 )}
                 <svg className={`w-4 h-4 text-gray-500 transition-transform ${simOpen ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -866,7 +894,7 @@ function SalesForecastView() {
                 {/* Current campaign info */}
                 {simParams?.summary && (
                   <div className="flex flex-wrap gap-3 text-xs">
-                    <span className="px-2 py-1 rounded bg-gray-700/50 text-gray-300">Presupuesto actual: <span className="text-white font-medium">{fmt(simParams.summary.totalDailyBudget)}/día</span></span>
+                    <span className="px-2 py-1 rounded bg-gray-700/50 text-gray-300">Presupuesto actual: <span className="text-white font-medium">{fmtMoney(simParams.summary.totalDailyBudget)}/día</span></span>
                     <span className="px-2 py-1 rounded bg-gray-700/50 text-gray-300">Anuncios activos: <span className="text-white font-medium">{simParams.summary.totalActiveAds}</span></span>
                     <span className="px-2 py-1 rounded bg-gray-700/50 text-gray-300">Tipo: <span className="text-white font-medium">{simParams.summary.adTypes.click > simParams.summary.adTypes.presence ? 'Mayormente clics' : simParams.summary.adTypes.presence > simParams.summary.adTypes.click ? 'Mayormente presencia' : 'Mixto'}</span></span>
                     {simParams.summary.targetLocations?.length > 0 && (
@@ -1047,10 +1075,10 @@ function SalesForecastView() {
                               return (
                                 <div style={tooltipStyle} className="p-3 text-sm">
                                   <p className="text-white font-medium mb-1">{label} — {w.dateRange}</p>
-                                  <p style={{ color: '#8B5CF6' }}>Base: {fmt(w.baseline)}</p>
-                                  <p style={{ color: '#F59E0B' }}>Simulación: {fmt(w.simulated)}</p>
-                                  <p style={{ color: '#10B981' }}>Orgánico: {fmt(w.organic)}</p>
-                                  <p style={{ color: '#3B82F6' }}>Ads: {fmt(w.adContribution)}</p>
+                                  <p style={{ color: '#8B5CF6' }}>Base: {fmtMoney(w.baseline)}</p>
+                                  <p style={{ color: '#F59E0B' }}>Simulación: {fmtMoney(w.simulated)}</p>
+                                  <p style={{ color: '#10B981' }}>Orgánico: {fmtMoney(w.organic)}</p>
+                                  <p style={{ color: '#3B82F6' }}>Ads: {fmtMoney(w.adContribution)}</p>
                                   <p style={{ color: '#9CA3AF' }}>Fatiga: {w.fatigue}% | Temporada: {w.seasonality}x</p>
                                 </div>
                               );
@@ -1072,21 +1100,21 @@ function SalesForecastView() {
                     <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
                       <div className="bg-gray-900/50 rounded-lg p-3 text-center">
                         <p className="text-xs text-gray-500">Sin cambios ({simWeeks} sem)</p>
-                        <p className="text-sm font-medium text-purple-400">{fmt(campaignProjection.totalBaseline)}</p>
+                        <p className="text-sm font-medium text-purple-400">{fmtMoney(campaignProjection.totalBaseline)}</p>
                       </div>
                       <div className="bg-amber-500/5 border border-amber-500/20 rounded-lg p-3 text-center">
                         <p className="text-xs text-gray-500">Con simulación</p>
-                        <p className="text-sm font-bold text-amber-400">{fmt(campaignProjection.totalSimulated)}</p>
+                        <p className="text-sm font-bold text-amber-400">{fmtMoney(campaignProjection.totalSimulated)}</p>
                       </div>
                       <div className="bg-gray-900/50 rounded-lg p-3 text-center">
                         <p className="text-xs text-gray-500">Diferencia</p>
                         <p className={`text-sm font-bold ${campaignProjection.totalSimulated >= campaignProjection.totalBaseline ? 'text-green-400' : 'text-red-400'}`}>
-                          {campaignProjection.totalSimulated >= campaignProjection.totalBaseline ? '+' : ''}{fmt(campaignProjection.totalSimulated - campaignProjection.totalBaseline)}
+                          {campaignProjection.totalSimulated >= campaignProjection.totalBaseline ? '+' : ''}{fmtMoney(campaignProjection.totalSimulated - campaignProjection.totalBaseline)}
                         </p>
                       </div>
                       <div className="bg-gray-900/50 rounded-lg p-3 text-center">
-                        <p className="text-xs text-gray-500">Ventas proyectadas</p>
-                        <p className="text-sm font-bold text-white">{fmt(campaignProjection.marginalReturn)}/sem</p>
+                        <p className="text-xs text-gray-500">{isEng ? 'Clics proyectados' : 'Ventas proyectadas'}</p>
+                        <p className="text-sm font-bold text-white">{fmtMoney(campaignProjection.marginalReturn)}/sem</p>
                       </div>
                     </div>
 
@@ -1185,7 +1213,7 @@ function SalesForecastView() {
             <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
               <h2 className="text-lg font-semibold text-white mb-1">Patrón semanal</h2>
               <p className="text-sm text-gray-500 mb-4">
-                Mejor día: <span className="text-green-400 font-medium">{bestDayName}</span> ({fmt(bestDayAvg)}) — Peor día: <span className="text-red-400 font-medium">{worstDayName}</span> ({fmt(worstDayAvg)})
+                Mejor día: <span className="text-green-400 font-medium">{bestDayName}</span> ({fmtMoney(bestDayAvg)}) — Peor día: <span className="text-red-400 font-medium">{worstDayName}</span> ({fmtMoney(worstDayAvg)})
               </p>
               <div className="h-48">
                 <ResponsiveContainer width="100%" height="100%">
@@ -1193,7 +1221,7 @@ function SalesForecastView() {
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                     <XAxis dataKey="day" tick={{ fill: '#9CA3AF', fontSize: 11 }} />
                     <YAxis tick={{ fill: '#9CA3AF', fontSize: 11 }} tickFormatter={v => `$${(v / 1000).toFixed(0)}k`} />
-                    <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} formatter={v => [fmt(v), 'Promedio']} />
+                    <Tooltip contentStyle={tooltipStyle} labelStyle={tooltipLabelStyle} itemStyle={tooltipItemStyle} formatter={v => [fmtMoney(v), 'Promedio']} />
                     <Bar dataKey="avg" name="Promedio" radius={[4, 4, 0, 0]}>
                       {data.dowSummary.map((d, i) => (
                         <Cell key={i}
@@ -1226,9 +1254,9 @@ function SalesForecastView() {
                         return (
                           <div style={tooltipStyle} className="p-3 text-sm">
                             <p className="text-white font-medium mb-1">{label}</p>
-                            <p style={{ color: '#10B981' }}>Ingresos: {fmt(d.revenue)}</p>
-                            {d.isPartial && d.projected && <p style={{ color: '#8B5CF6' }}>Proyección mes: {fmt(d.projected)}</p>}
-                            <p style={{ color: '#9CA3AF' }}>Órdenes: {d.orders} | Ticket: {fmt(d.avgOrder)}</p>
+                            <p style={{ color: '#10B981' }}>Ingresos: {fmtMoney(d.revenue)}</p>
+                            {d.isPartial && d.projected && <p style={{ color: '#8B5CF6' }}>Proyección mes: {fmtMoney(d.projected)}</p>}
+                            <p style={{ color: '#9CA3AF' }}>Órdenes: {d.orders} | Ticket: {fmtMoney(d.avgOrder)}</p>
                           </div>
                         );
                       }}

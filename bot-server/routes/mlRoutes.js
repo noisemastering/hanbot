@@ -203,6 +203,11 @@ router.get('/forecast-v2', async (req, res) => {
       seasonality = 'false'
     } = req.query;
 
+    // basis: 'sales' (revenue/orders from ML) | 'engagement' (clicks/links from ClickLog).
+    // In engagement mode the SAME forecast math runs with revenue:=clicks, orders:=links,
+    // and the ML-only overlays (channel merge, meta attribution, monthly, seasonality) are skipped.
+    const basis = req.query.basis === 'engagement' ? 'engagement' : 'sales';
+
     // Legacy compat
     const effectiveChannel = source === 'ml+meta' ? 'campaigns' : (channel || source || 'ml');
     const effectiveReach = scope === 'product' ? 'product' : (reach || scope || 'global');
@@ -248,12 +253,32 @@ router.get('/forecast-v2', async (req, res) => {
 
     // ── QUERY DATA ──
     // Channel mapping: 'all' and 'online' and 'mercadolibre' all use MLOrder as base
-    const useMLOrder = ['all', 'online', 'mercadolibre', 'ml'].includes(effectiveChannel);
-    const includeManual = ['all', 'manual'].includes(effectiveChannel);
-    const includeCampaigns = ['all', 'campaigns'].includes(effectiveChannel);
+    const useMLOrder = basis === 'sales' && ['all', 'online', 'mercadolibre', 'ml'].includes(effectiveChannel);
+    const includeManual = basis === 'sales' && ['all', 'manual'].includes(effectiveChannel);
+    const includeCampaigns = basis === 'sales' && ['all', 'campaigns'].includes(effectiveChannel);
     let daily;
 
-    if (effectiveChannel === 'manual') {
+    if (basis === 'engagement') {
+      // ENGAGEMENT: primary series = clicks (by clickedAt), secondary = links (by createdAt).
+      // Mapped onto the revenue/orders slots so the standard forecast math applies unchanged.
+      const linkMatch = { createdAt: { $gte: since } };
+      const clickMatch = { clicked: true, clickedAt: { $gte: since } };
+      if (familyFilter) { linkMatch.productId = { $in: familyFilter }; clickMatch.productId = { $in: familyFilter }; }
+      const [linksDaily, clicksDaily] = await Promise.all([
+        ClickLog.aggregate([
+          { $match: linkMatch },
+          { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$createdAt', timezone: 'America/Mexico_City' } }, count: { $sum: 1 } } }
+        ]),
+        ClickLog.aggregate([
+          { $match: clickMatch },
+          { $group: { _id: { $dateToString: { format: '%Y-%m-%d', date: '$clickedAt', timezone: 'America/Mexico_City' } }, count: { $sum: 1 } } }
+        ])
+      ]);
+      const map = new Map();
+      linksDaily.forEach(d => map.set(d._id, { _id: d._id, revenue: 0, orders: d.count }));
+      clicksDaily.forEach(d => { const e = map.get(d._id) || { _id: d._id, revenue: 0, orders: 0 }; e.revenue = d.count; map.set(d._id, e); });
+      daily = [...map.values()].sort((a, b) => a._id.localeCompare(b._id));
+    } else if (effectiveChannel === 'manual') {
       // Manual sales only (CRM standalone sales)
       daily = await ClickLog.aggregate([
         { $match: { converted: true, correlationMethod: 'manual', createdAt: { $gte: since } } },
@@ -449,7 +474,7 @@ router.get('/forecast-v2', async (req, res) => {
 
     // ── SEASONALITY (month-of-year multipliers from full history) ──
     let monthMultiplier = Array(12).fill(1); // default: no adjustment
-    if (seasonality === 'true') {
+    if (seasonality === 'true' && basis === 'sales') {
       // Get ALL MLOrder monthly data for seasonality
       const allMonthly = await MLOrder.aggregate([
         { $match: { status: 'paid' } },
@@ -530,8 +555,8 @@ router.get('/forecast-v2', async (req, res) => {
       count: dowBuckets[i].length
     }));
 
-    // Monthly breakdown from MLOrder
-    const mlMonthly = await MLOrder.aggregate([
+    // Monthly breakdown from MLOrder — sales basis only (engagement has no ML monthly).
+    const mlMonthly = basis === 'sales' ? await MLOrder.aggregate([
       { $match: { status: 'paid' } },
       ...(familyFilter ? [{ $unwind: '$items' }, { $match: { 'items.productFamilyId': { $in: familyFilter } } }] : []),
       { $group: {
@@ -540,7 +565,7 @@ router.get('/forecast-v2', async (req, res) => {
         orders: { $sum: 1 }
       }},
       { $sort: { _id: 1 } }
-    ]);
+    ]) : [];
 
     const now = new Date();
     const currentMonth = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}`;
@@ -572,6 +597,7 @@ router.get('/forecast-v2', async (req, res) => {
     res.json({
       success: true,
       data: {
+        basis,
         reach: effectiveReach,
         channel: effectiveChannel,
         productFamilyId: productFamilyId || null,

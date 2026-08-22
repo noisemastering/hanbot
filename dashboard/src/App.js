@@ -2715,7 +2715,7 @@ function App() {
           <Route path="/ml-orders" element={<OrdersView />} />
           <Route path="/ml-importer" element={<MLImporterView />} />
           <Route path="/playground/mercado-libre" element={<MLPlaygroundView />} />
-          <Route path="/forecast" element={<SalesForecastView />} />
+          <Route path="/forecast" element={<SalesForecastView mode="engagement" />} />
           <Route path="/playground/conversion" element={<ConversionProbabilityView />} />
           <Route path="/playground/rendimiento-mensajes" element={<MessagePerformanceView />} />
 

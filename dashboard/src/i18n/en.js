@@ -55,7 +55,7 @@ const en = {
   "menu.spendOptimization": "Optimization",
   "menu.flujos": "Flow Structure",
   "menu.convoFlows": "Flows",
-  "menu.forecast": "Forecast",
+  "menu.forecast": "Forecast (Clicks)",
   "menu.simulador": "Sandbox",
   "menu.intelligence": "Artificial Intelligence",
   "menu.mlImport": "Import Orders",
