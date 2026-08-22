@@ -520,9 +520,9 @@ router.get('/forecast-v2', async (req, res) => {
       } : {})
     }));
 
-    // Forecast horizon scales with the history window — ~half of it, so 6 months
-    // of history projects ~3 months ahead (clamped to 14–365 days).
-    const horizon = Math.min(365, Math.max(14, Math.floor(parseInt(days) / 2)));
+    // Forecast horizon MATCHES the history window — 6 months back → 6 months
+    // ahead (clamped to 14–730 days). Symmetric so seasonality has a full runway.
+    const horizon = Math.min(730, Math.max(14, parseInt(days)));
 
     const last14 = daily.slice(-14);
     const recentBase = last14.length > 0 ? ss.mean(last14.map(d => d.revenue)) : overallMean;

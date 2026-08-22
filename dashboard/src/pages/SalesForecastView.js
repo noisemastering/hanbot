@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useMemo, useCallback, useRef } from 'react';
 import API from '../api';
 import {
   ComposedChart, Bar, Line, Area, BarChart, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, ReferenceLine, Cell
@@ -473,6 +473,26 @@ function SalesForecastView({ mode = 'sales' }) {
     }));
   }, [baseChartData, simActive, campaignProjection]);
 
+  // ── Chart scroll: fit "the whole projection + half the history" in the default
+  // viewport, keep the older history reachable by scrolling left. ──
+  const chartScrollRef = useRef(null);
+  const [chartMinW, setChartMinW] = useState(0);
+  useLayoutEffect(() => {
+    const el = chartScrollRef.current;
+    if (!el || !chartData.length) { setChartMinW(0); return; }
+    const cw = el.clientWidth;
+    const forecastPts = chartData.filter(d => d.forecast != null).length;
+    const historyPts = Math.max(0, chartData.length - forecastPts);
+    const visible = Math.max(1, forecastPts + historyPts / 2); // projection + half history
+    const inner = Math.max(cw, Math.round((cw / visible) * chartData.length));
+    setChartMinW(inner);
+  }, [chartData]);
+  // Once the width is applied, park the scroll at the right edge (shows the projection).
+  useEffect(() => {
+    const el = chartScrollRef.current;
+    if (el && chartMinW) requestAnimationFrame(() => { el.scrollLeft = el.scrollWidth; });
+  }, [chartMinW]);
+
   // Simulated totals
   const simTotalForecast = useMemo(() => {
     if (!simActive || !campaignProjection) return null;
@@ -752,7 +772,7 @@ function SalesForecastView({ mode = 'sales' }) {
                   <p className="text-xs text-gray-500 mt-0.5">tendencia por semana</p>
                 </div>
               </div>
-              <p className="text-xs text-gray-600 mt-4">Proyección de {data.insights.horizonDays} días (~la mitad del historial). El rango se ensancha con el horizonte: mientras más lejos, mayor incertidumbre.</p>
+              <p className="text-xs text-gray-600 mt-4">Proyección de {data.insights.horizonDays} días (mismo tramo que el historial). Desliza el chart a la izquierda para ver el historial completo. El rango se ensancha con el horizonte: mientras más lejos, mayor incertidumbre.</p>
             </div>
           )}
 
@@ -821,8 +841,8 @@ function SalesForecastView({ mode = 'sales' }) {
                 )}
               </div>
             </div>
-            <div className="h-80">
-              <div style={{ width: '100%', height: '100%' }}>
+            <div ref={chartScrollRef} className="h-80 overflow-x-auto">
+              <div style={{ minWidth: chartMinW || '100%', height: '100%' }}>
                 <ResponsiveContainer width="100%" height={320}>
                   <ComposedChart data={chartData} margin={{ top: 5, right: 20, bottom: 5, left: 10 }}>
                     <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
