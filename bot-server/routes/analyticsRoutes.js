@@ -937,6 +937,24 @@ router.get('/ad-metrics', async (req, res) => {
 });
 
 // GET /analytics/top-region - Get most active region by conversations
+// Links served vs clicked TODAY (for the "Mensajes del día" summary row).
+// served  = purchase links generated today (ClickLog.createdAt within today)
+// clicked = of any links, how many were clicked today (clicked:true, clickedAt today)
+router.get('/links-today', async (req, res) => {
+  try {
+    const now = new Date();
+    const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const end = new Date(start.getTime() + 24 * 60 * 60 * 1000);
+    const [served, clicked] = await Promise.all([
+      ClickLog.countDocuments({ createdAt: { $gte: start, $lt: end } }),
+      ClickLog.countDocuments({ clicked: true, clickedAt: { $gte: start, $lt: end } })
+    ]);
+    res.json({ success: true, served, clicked });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/top-region', async (req, res) => {
   try {
     const { dateFrom, dateTo } = req.query;

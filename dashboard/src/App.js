@@ -775,6 +775,7 @@ function App() {
   // Top selling product through ads
   const [topProduct, setTopProduct] = useState(null);
   const [topRegion, setTopRegion] = useState(null);
+  const [linksToday, setLinksToday] = useState({ served: 0, clicked: 0 });
 
   // Analytics page loading state
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
@@ -922,6 +923,18 @@ function App() {
       }
     } catch (error) {
       console.error("Error fetching top region:", error);
+    }
+  };
+
+  const fetchLinksToday = async () => {
+    try {
+      const res = await fetch(`${API_URL}/analytics/links-today`);
+      const data = await res.json();
+      if (data.success) {
+        setLinksToday({ served: data.served || 0, clicked: data.clicked || 0 });
+      }
+    } catch (error) {
+      console.error("Error fetching links today:", error);
     }
   };
 
@@ -1594,7 +1607,8 @@ function App() {
         fetchClickStats(),
         fetchAdMetrics(),
         fetchTopProducts(),
-        fetchTopRegion()
+        fetchTopRegion(),
+        fetchLinksToday()
       ]).finally(() => setAnalyticsLoading(false));
     }
   }, [location.pathname]);
@@ -2236,6 +2250,36 @@ function App() {
                       <div className="w-12 h-12 bg-amber-500/20 rounded-lg flex items-center justify-center">
                         <svg className="w-6 h-6 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Links servidos hoy */}
+                  <div onClick={() => navigate('/click-logs')} className="bg-gradient-to-br from-indigo-500/10 to-indigo-600/5 backdrop-blur-lg border border-indigo-500/20 rounded-xl p-6 cursor-pointer hover:border-indigo-500/40 hover:scale-[1.02] transition-all">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-400 mb-1">Links servidos</p>
+                        <h3 className="text-3xl font-bold text-white">{linksToday.served}</h3>
+                      </div>
+                      <div className="w-12 h-12 bg-indigo-500/20 rounded-lg flex items-center justify-center">
+                        <svg className="w-6 h-6 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.828 10.172a4 4 0 010 5.656l-3 3a4 4 0 01-5.656-5.656l1.5-1.5m8.485-2.828a4 4 0 00-5.656 0l-1.5 1.5" />
+                        </svg>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Links clicados hoy */}
+                  <div onClick={() => navigate('/click-logs')} className="bg-gradient-to-br from-cyan-500/10 to-cyan-600/5 backdrop-blur-lg border border-cyan-500/20 rounded-xl p-6 cursor-pointer hover:border-cyan-500/40 hover:scale-[1.02] transition-all">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className="text-sm font-medium text-gray-400 mb-1">Links clicados</p>
+                        <h3 className="text-3xl font-bold text-white">{linksToday.clicked}</h3>
+                      </div>
+                      <div className="w-12 h-12 bg-cyan-500/20 rounded-lg flex items-center justify-center">
+                        <svg className="w-6 h-6 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 15l-2 5L9 9l11 4-5 2zm0 0l5 5M7.188 2.239l.777 2.897M5.136 7.965l-2.898-.777M13.95 4.05l-2.122 2.122m-5.657 5.656l-2.12 2.122" />
                         </svg>
                       </div>
                     </div>
