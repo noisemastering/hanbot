@@ -1128,7 +1128,7 @@ function SalesForecastView({ mode = 'sales' }) {
                     <label className="text-xs text-gray-400">Tipo de anuncio:</label>
                     <div className="flex gap-1">
                       {[
-                        ['current', `${simParams?.summary?.adTypes?.click > simParams?.summary?.adTypes?.presence ? 'Clics' : simParams?.summary?.adTypes?.presence > simParams?.summary?.adTypes?.click ? 'Presencia' : 'Mixto'} (actual)`],
+                        ['current', 'Actual'],
                         ['click', 'Clics'],
                         ['presence', 'Presencia']
                       ].map(([val, label]) => (
