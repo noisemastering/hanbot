@@ -310,9 +310,7 @@ function SalesForecastView({ mode = 'sales' }) {
     : dailyChartData;
 
   // ── Simulation: compute "what if" forecast line ──
-  // The campaign simulator is revenue/ad-attribution based — it belongs to the
-  // sales forecast only, never the click-based route.
-  const simActive = !isEng && simOpen && (sim.budgetMult !== 1 || sim.adCount > 0 || sim.adType !== 'current' || sim.targetExpansion > 0);
+  const simActive = simOpen && (sim.budgetMult !== 1 || sim.adCount > 0 || sim.adType !== 'current' || sim.targetExpansion > 0);
 
   // ── CAMPAIGN SIMULATION MODEL ──
   // Generates a week-by-week projection for a campaign of N weeks.
@@ -321,11 +319,27 @@ function SalesForecastView({ mode = 'sales' }) {
   const simModel = useMemo(() => {
     if (!data) return null;
 
+    const historyDays = data.history?.length || 1;
+
+    // Engagement: all clics are ad-driven (click-to-Messenger), so budget/ads
+    // scale the whole click base with diminishing returns toward a ceiling.
+    if (isEng) {
+      const totalClicks = data.totalHistoryRevenue || 0;
+      const weeklyAdRevenue = (totalClicks / historyDays) * 7; // weekly clics
+      const ceilingMult = 3; // headroom: spend can lift clics toward ~3× current
+      const weeklyCeiling = weeklyAdRevenue * ceilingMult;
+      const currentPosition = weeklyAdRevenue > 0 ? 1 / ceilingMult : 0;
+      return {
+        weeklyOrganic: 0, weeklyAdRevenue, weeklyCeiling, ceilingMult,
+        adPct: 1, currentPosition, organicRevenue: 0, adRevenue: totalClicks,
+        totalRevenue: totalClicks, historyDays, seasonMults: {}
+      };
+    }
+
     const totalRevenue = data.totalHistoryRevenue || 0;
     const adRevenue = data.metaAttribution?.totalAdRevenue || 0;
     const organicRevenue = Math.max(0, totalRevenue - adRevenue);
     const adPct = totalRevenue > 0 ? adRevenue / totalRevenue : 0;
-    const historyDays = data.history?.length || 1;
 
     // Weekly averages from actual data
     const weeklyOrganic = (organicRevenue / historyDays) * 7;
@@ -352,7 +366,7 @@ function SalesForecastView({ mode = 'sales' }) {
       adPct, currentPosition, organicRevenue, adRevenue, totalRevenue,
       historyDays, seasonMults
     };
-  }, [data]);
+  }, [data, isEng]);
 
   // Generate week-by-week campaign projection
   const campaignProjection = useMemo(() => {
@@ -909,8 +923,7 @@ function SalesForecastView({ mode = 'sales' }) {
             </div>
           </div>
 
-          {/* ── SIMULATION PANEL ("What if") — sales forecast only, never the click route ── */}
-          {!isEng && (
+          {/* ── SIMULATION PANEL ("What if") — clics or ventas ── */}
           <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl mb-8 mt-[30px]">
             <button onClick={() => setSimOpen(v => !v)}
               className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-700/20 transition-colors">
@@ -1131,7 +1144,7 @@ function SalesForecastView({ mode = 'sales' }) {
                         <ComposedChart data={campaignProjection.weeks} margin={{ top: 5, right: 10, bottom: 5, left: 10 }}>
                           <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
                           <XAxis dataKey="label" tick={{ fill: '#9CA3AF', fontSize: 10 }} />
-                          <YAxis tick={{ fill: '#9CA3AF', fontSize: 10 }} tickFormatter={v => '$' + (v / 1000).toFixed(0) + 'k'} />
+                          <YAxis tick={{ fill: '#9CA3AF', fontSize: 10 }} tickFormatter={v => isEng ? Math.round(v).toLocaleString('es-MX') : '$' + (v / 1000).toFixed(0) + 'k'} />
                           <Tooltip contentStyle={tooltipStyle}
                             content={({ active, payload, label }) => {
                               if (!active || !payload?.length) return null;
@@ -1200,7 +1213,6 @@ function SalesForecastView({ mode = 'sales' }) {
               </div>
             )}
           </div>
-          )}
 
           {/* Seasonality breakdown */}
           {data.seasonSummary && (() => {
