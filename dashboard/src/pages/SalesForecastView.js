@@ -28,6 +28,20 @@ const LOADING_STAGES = [
   { text: 'Preparando visualización...', duration: 1500 }
 ];
 
+// Small info-icon tooltip for stat labels.
+function InfoTip({ text }) {
+  return (
+    <span className="relative group inline-flex align-middle ml-1">
+      <svg className="w-3.5 h-3.5 text-gray-500 hover:text-gray-300 cursor-help shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+      </svg>
+      <span role="tooltip" className="pointer-events-none absolute left-1/2 -translate-x-1/2 bottom-full mb-2 hidden group-hover:block z-30 w-64 rounded-lg bg-gray-900 border border-gray-700 p-3 text-[13px] font-normal normal-case leading-snug text-gray-200 shadow-xl text-left">
+        {text}
+      </span>
+    </span>
+  );
+}
+
 function SalesForecastView({ mode = 'sales' }) {
   // mode: 'sales' (revenue/orders from ML) | 'engagement' (clics/links from ClickLog).
   const isEng = mode === 'engagement';
@@ -731,11 +745,11 @@ function SalesForecastView({ mode = 'sales' }) {
           {/* KPI cards */}
           <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5">
-              <p className="text-xs text-gray-400">{L.primary} ({days >= 730 ? '2a' : days >= 365 ? '1a' : days >= 180 ? '6m' : days + 'd'})</p>
+              <p className="text-xs text-gray-400 flex items-center">{L.primary} ({days >= 730 ? '2a' : days >= 365 ? '1a' : days >= 180 ? '6m' : days + 'd'})<InfoTip text={`Total de ${isEng ? 'clics en links de compra' : 'ingresos'} durante el periodo histórico seleccionado (arriba eliges 30d–2a).`} /></p>
               <p className="text-2xl font-bold text-green-400">{fmtMoney(data.totalHistoryRevenue)}</p>
             </div>
             <div className={`bg-gray-800/50 border rounded-xl p-5 ${simActive ? 'border-amber-500/30' : 'border-purple-500/20'}`}>
-              <p className="text-xs text-gray-400">Proyección {data.horizon || (data.forecast?.length ?? 14)} días</p>
+              <p className="text-xs text-gray-400 flex items-center">Proyección {data.horizon || (data.forecast?.length ?? 14)} días<InfoTip text={`Suma de ${isEng ? 'clics' : 'ingresos'} proyectados para el horizonte (máx. ~3 meses). Es una estimación de tendencia: entre más lejos, menos confiable. "Base" es la proyección sin simulación.`} /></p>
               {simActive && simTotalForecast != null ? (
                 <>
                   <p className="text-2xl font-bold text-amber-400">{fmtMoney(simTotalForecast)}</p>
@@ -746,11 +760,11 @@ function SalesForecastView({ mode = 'sales' }) {
               )}
             </div>
             <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5">
-              <p className="text-xs text-gray-400">Promedio diario</p>
+              <p className="text-xs text-gray-400 flex items-center">Promedio diario<InfoTip text={`Promedio de ${isEng ? 'clics' : 'ingresos'} por día en el periodo histórico seleccionado.`} /></p>
               <p className="text-2xl font-bold text-white">{fmtMoney(data.avgDailyRevenue)}</p>
             </div>
             <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5">
-              <p className="text-xs text-gray-400">Tendencia</p>
+              <p className="text-xs text-gray-400 flex items-center">Tendencia<InfoTip text="Cambio entre la primera y la última semana del historial. Positivo = subiendo, negativo = bajando. Mide la dirección de todo el periodo." /></p>
               <p className={`text-2xl font-bold ${data.trend >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                 {data.trend >= 0 ? '↗' : '↘'} {data.trend > 0 ? '+' : ''}{data.trend}%
               </p>
@@ -766,29 +780,29 @@ function SalesForecastView({ mode = 'sales' }) {
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <div>
-                  <p className="text-xs text-gray-400">Momentum (7d vs. 7d prev.)</p>
+                  <p className="text-xs text-gray-400 flex items-center">Momentum (7d vs. 7d prev.)<InfoTip text="Cambio de los últimos 7 días contra los 7 anteriores. Señal de corto plazo, más reciente que la Tendencia (que mira todo el periodo)." /></p>
                   <p className={`text-lg font-bold ${data.insights.momentum >= 0 ? 'text-green-400' : 'text-red-400'}`}>
                     {data.insights.momentum >= 0 ? '↗ +' : '↘ '}{data.insights.momentum}%
                   </p>
                   <p className="text-xs text-gray-500 mt-0.5">cambio de corto plazo</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400">Ritmo proyectado</p>
+                  <p className="text-xs text-gray-400 flex items-center">Ritmo proyectado<InfoTip text={`${isEng ? 'Clics' : 'Ingresos'} por día que proyecta el modelo en promedio, y cómo se comparan contra tu promedio de los últimos 7 días reales.`} /></p>
                   <p className="text-lg font-bold text-white">{fmtMoney(data.insights.projectedDailyAvg)}<span className="text-xs text-gray-500">/día</span></p>
                   <p className={`text-xs mt-0.5 ${data.insights.paceVsRecent >= 0 ? 'text-green-400' : 'text-red-400'}`}>{data.insights.paceVsRecent >= 0 ? '+' : ''}{data.insights.paceVsRecent}% vs. últimos 7d</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400">Mejor día</p>
+                  <p className="text-xs text-gray-400 flex items-center">Mejor día<InfoTip text={`Día de la semana con más ${isEng ? 'clics' : 'ventas'} en promedio (y el más flojo). El ×N indica cuántas veces el promedio diario recibe ese día.`} /></p>
                   <p className="text-lg font-bold text-cyan-400">{data.insights.bestDay}</p>
                   <p className="text-xs text-gray-500 mt-0.5">×{data.insights.bestDayMultiplier} vs. promedio · flojo: {data.insights.worstDay}</p>
                 </div>
                 <div>
-                  <p className="text-xs text-gray-400">Crecimiento semanal</p>
+                  <p className="text-xs text-gray-400 flex items-center">Crecimiento semanal<InfoTip text="Pendiente de la tendencia expresada como cambio por semana (regresión sobre las semanas del historial)." /></p>
                   <p className={`text-lg font-bold ${data.insights.weeklyGrowth >= 0 ? 'text-green-400' : 'text-red-400'}`}>{data.insights.weeklyGrowth >= 0 ? '+' : ''}{data.insights.weeklyGrowth}%</p>
                   <p className="text-xs text-gray-500 mt-0.5">tendencia por semana</p>
                 </div>
               </div>
-              <p className="text-xs text-gray-600 mt-4">Proyección de {data.insights.horizonDays} días (mismo tramo que el historial). Desliza el chart a la izquierda para ver el historial completo. El rango se ensancha con el horizonte: mientras más lejos, mayor incertidumbre.</p>
+              <p className="text-xs text-gray-600 mt-4">Proyección de {data.insights.horizonDays} días (máx. ~3 meses — más allá el rango se vuelve demasiado ancho para ser útil). Desliza el chart a la izquierda para ver el historial completo.</p>
             </div>
           )}
 

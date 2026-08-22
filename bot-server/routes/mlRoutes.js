@@ -67,7 +67,7 @@ router.get('/forecast', async (req, res) => {
     }
 
     // ── Day-of-week average multipliers ──
-    const DOW_NAMES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const DOW_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
     const dowBuckets = [[], [], [], [], [], [], []];
     daily.forEach(d => {
       const dow = new Date(d._id + 'T12:00:00').getDay();
@@ -439,7 +439,7 @@ router.get('/forecast-v2', async (req, res) => {
     }
 
     // ── STANDARD FORECAST ALGORITHM (same as v1) ──
-    const DOW_NAMES = ['Dom', 'Lun', 'Mar', 'Mié', 'Jue', 'Vie', 'Sáb'];
+    const DOW_NAMES = ['Domingo', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado'];
     const dowBuckets = [[], [], [], [], [], [], []];
     daily.forEach(d => {
       const dow = new Date(d._id + 'T12:00:00').getDay();
@@ -520,9 +520,9 @@ router.get('/forecast-v2', async (req, res) => {
       } : {})
     }));
 
-    // Forecast horizon MATCHES the history window — 6 months back → 6 months
-    // ahead (clamped to 14–730 days). Symmetric so seasonality has a full runway.
-    const horizon = Math.min(730, Math.max(14, parseInt(days)));
+    // Forecast horizon capped at ~3 months (90 days) — beyond that the projection
+    // is just trend extrapolation with a very wide band, so it says little.
+    const horizon = Math.min(90, Math.max(14, parseInt(days)));
 
     const last14 = daily.slice(-14);
     const recentBase = last14.length > 0 ? ss.mean(last14.map(d => d.revenue)) : overallMean;
