@@ -236,6 +236,35 @@ function AdDetailView() {
       {/* Puntuación vs. mercado — chart first, then rates */}
       <MarketScoreCard spend={adSpend?.spend || 0} impressions={adSpend?.impressions || 0} clicks={t.clicks} conversions={t.conversions} revenue={t.revenue} humanConversions={humanConversions} />
 
+      {/* Recomendación — acción sugerida para este anuncio (misma clasificación de la vieja Optimización de Gasto) */}
+      {(() => {
+        const spend = adSpend?.spend || 0;
+        const roi = spend > 0 ? t.revenue / spend : 0;
+        let key = 'no_data';
+        if (spend === 0) key = 'no_data';
+        else if (t.conversions === 0) key = 'no_conversions';
+        else if (roi >= 20) key = 'optimal';
+        else if (roi >= 5) key = 'good';
+        else if (roi >= 1) key = 'moderate';
+        else key = 'diminishing';
+        const effLabel = { optimal: 'Óptimo', good: 'Bueno', moderate: 'Moderado', diminishing: 'Decreciente', no_conversions: 'Sin conversiones', no_data: 'Sin datos' };
+        const effColor = { optimal: 'bg-green-500/10 border-green-500/30 text-green-400', good: 'bg-cyan-500/10 border-cyan-500/30 text-cyan-400', moderate: 'bg-amber-500/10 border-amber-500/30 text-amber-400', diminishing: 'bg-red-500/10 border-red-500/30 text-red-400', no_conversions: 'bg-gray-500/10 border-gray-500/30 text-gray-400', no_data: 'bg-gray-500/10 border-gray-500/30 text-gray-400' };
+        const rec = { optimal: 'Escalar presupuesto', good: 'Mantener y optimizar', moderate: 'Revisar targeting', diminishing: 'Reducir o pausar', no_conversions: 'Revisar flujo o pausar', no_data: 'Datos insuficientes' };
+        return (
+          <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
+            <div className="flex items-baseline justify-between mb-3">
+              <h2 className="text-lg font-semibold text-white">Recomendación</h2>
+              <span className="text-xs text-gray-500">ROI atribuido: {roi.toFixed(1)}x</span>
+            </div>
+            <div className="flex items-center gap-4">
+              <span className={`text-xs font-bold uppercase tracking-wide px-2.5 py-1 rounded-full border ${effColor[key]}`}>{effLabel[key]}</span>
+              <span className="text-lg font-semibold text-white">{rec[key]}</span>
+            </div>
+            <p className="text-xs text-gray-600 mt-4">Basada en el ROI atribuido (ingresos ÷ inversión). Como las ventas se subcuentan, el ROI es un <b>piso</b>: un anuncio marcado “Decreciente” puede estar rindiendo mejor de lo que se ve. Tómalo como señal, no veredicto.</p>
+          </div>
+        );
+      })()}
+
       {/* Direct Links Chart */}
       {directChartData.length > 0 && (
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">

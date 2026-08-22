@@ -1,0 +1,284 @@
+<title>Reglas de Correlación · HanlobBot</title>
+<style>
+  :root{
+    --bg:#eef1ef; --surface:#ffffff; --surface-2:#f6f8f7;
+    --ink:#141a1c; --muted:#5a6a64; --hair:#e0e7e3; --hairline:#dfe6e2;
+    --accent:#1f7a67; --accent-deep:#0d4a3d;
+    /* sequential confidence ramp (low → high) */
+    --c10:#cfe0da; --c25:#a9cfc4; --c50:#7cbba9; --c70:#3f9b87; --c90:#1f7a67; --c100:#0d5748;
+    --alta:#1f7a67; --media:#b9791f; --baja:#6b7a74;
+    --shadow:0 1px 2px rgba(16,40,34,.06),0 8px 24px rgba(16,40,34,.06);
+    --maxw:860px;
+  }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0e1214; --surface:#161c1f; --surface-2:#121719;
+      --ink:#e8efec; --muted:#93a49d; --hair:#26302d; --hairline:#26302d;
+      --accent:#4fc0a8; --accent-deep:#7fd8c4;
+      --c10:#2a3a35; --c25:#325248; --c50:#367d6b; --c70:#3f9b87; --c90:#5cc3ab; --c100:#8fe0cd;
+      --alta:#5cc3ab; --media:#d6a44e; --baja:#7d8e87;
+      --shadow:0 1px 2px rgba(0,0,0,.4),0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="light"]{
+    --bg:#eef1ef; --surface:#ffffff; --surface-2:#f6f8f7; --ink:#141a1c; --muted:#5a6a64; --hair:#e0e7e3; --hairline:#dfe6e2;
+    --accent:#1f7a67; --accent-deep:#0d4a3d;
+    --c10:#cfe0da; --c25:#a9cfc4; --c50:#7cbba9; --c70:#3f9b87; --c90:#1f7a67; --c100:#0d5748;
+    --alta:#1f7a67; --media:#b9791f; --baja:#6b7a74;
+  }
+  :root[data-theme="dark"]{
+    --bg:#0e1214; --surface:#161c1f; --surface-2:#121719; --ink:#e8efec; --muted:#93a49d; --hair:#26302d; --hairline:#26302d;
+    --accent:#4fc0a8; --accent-deep:#7fd8c4;
+    --c10:#2a3a35; --c25:#325248; --c50:#367d6b; --c70:#3f9b87; --c90:#5cc3ab; --c100:#8fe0cd;
+    --alta:#5cc3ab; --media:#d6a44e; --baja:#7d8e87;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:var(--bg);color:var(--ink);
+    font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+    line-height:1.55;-webkit-font-smoothing:antialiased;font-variant-numeric:tabular-nums;}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:48px 24px 72px;}
+  .mono{font-family:ui-monospace,"SF Mono",Menlo,Consolas,monospace;}
+  .eyebrow{font-size:12px;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);font-weight:650;}
+  h1{font-size:clamp(28px,5vw,40px);line-height:1.08;margin:.28em 0 .12em;letter-spacing:-.02em;text-wrap:balance;font-weight:750;}
+  .sub{color:var(--muted);font-size:16px;max-width:60ch;margin:0;}
+  .date{color:var(--muted);font-size:12.5px;margin-top:10px;}
+  section{margin-top:40px;}
+  h2{font-size:12px;letter-spacing:.13em;text-transform:uppercase;color:var(--muted);font-weight:650;
+     margin:0 0 16px;padding-bottom:9px;border-bottom:1px solid var(--hairline);
+     display:flex;align-items:baseline;gap:10px;}
+  h2 .n{color:var(--accent);font-variant-numeric:tabular-nums;}
+  h3{font-size:15px;margin:22px 0 6px;font-weight:680;letter-spacing:-.01em;}
+  p{margin:0 0 12px;}
+  .lead{font-size:16.5px;}
+  .note{background:var(--surface-2);border:1px solid var(--hairline);border-radius:12px;padding:14px 16px;
+    color:var(--muted);font-size:14px;display:flex;gap:12px;align-items:flex-start;}
+  .note b{color:var(--ink);}
+  .dot{flex:none;width:8px;height:8px;border-radius:50%;background:var(--accent);margin-top:7px;}
+
+  /* gates as stepper */
+  .gates{display:grid;gap:12px;}
+  .gate{display:grid;grid-template-columns:auto 1fr;gap:14px;align-items:start;
+    background:var(--surface);border:1px solid var(--hairline);border-radius:12px;padding:15px 17px;box-shadow:var(--shadow);}
+  .gate .num{width:26px;height:26px;border-radius:8px;background:var(--accent);color:#fff;font-weight:700;font-size:14px;
+    display:grid;place-items:center;margin-top:1px;}
+  :root[data-theme="dark"] .gate .num,@media (prefers-color-scheme:dark){}
+  .gate h4{margin:0 0 3px;font-size:15px;font-weight:670;}
+  .gate p{margin:0;color:var(--muted);font-size:13.5px;}
+
+  /* tier chart */
+  .tierhead,.tier{display:grid;grid-template-columns:1fr 168px 74px 62px;gap:14px;align-items:center;}
+  .tierhead{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);padding:0 2px 8px;font-weight:600;}
+  .tier{padding:9px 2px;border-top:1px solid var(--hairline);}
+  .tier .sig{font-size:14px;font-weight:560;}
+  .tier .sig small{color:var(--muted);font-weight:400;}
+  .track{height:12px;border-radius:6px;background:var(--surface-2);overflow:hidden;position:relative;border:1px solid var(--hairline);}
+  .fill{height:100%;border-radius:6px 0 0 6px;}
+  .pct{font-weight:720;font-size:15px;text-align:right;font-variant-numeric:tabular-nums;}
+  .pct small{font-weight:500;color:var(--muted);font-size:12px;}
+  .win{font-size:12.5px;color:var(--muted);text-align:right;}
+  .band{display:inline-block;font-size:10.5px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+    padding:2px 7px;border-radius:999px;color:#fff;}
+  .band.alta{background:var(--alta);} .band.media{background:var(--media);} .band.baja{background:var(--baja);}
+  .zero{color:var(--muted);font-size:13.5px;margin-top:14px;padding:11px 14px;border:1px dashed var(--hairline);border-radius:10px;}
+  .zero b{color:var(--ink);}
+
+  /* density */
+  .formula{font-size:20px;color:var(--accent-deep);background:var(--surface-2);border:1px solid var(--hairline);
+    border-radius:12px;padding:16px 20px;text-align:center;margin:6px 0 14px;letter-spacing:.01em;}
+  .chartcard{background:var(--surface);border:1px solid var(--hairline);border-radius:14px;padding:18px 18px 8px;box-shadow:var(--shadow);}
+  .chartcap{color:var(--muted);font-size:12.5px;margin:2px 2px 12px;}
+  svg{display:block;width:100%;height:auto;overflow:visible;}
+  .grid line{stroke:var(--hairline);stroke-width:1;}
+  .axis text{fill:var(--muted);font-size:11px;font-family:inherit;}
+  .curve{fill:none;stroke-width:2.4;stroke-linecap:round;stroke-linejoin:round;}
+  .clab{font-size:11.5px;font-weight:680;}
+  .exgrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:6px;}
+  .ex{background:var(--surface);border:1px solid var(--hairline);border-radius:11px;padding:12px 13px;}
+  .ex .k{font-size:12px;color:var(--muted);}
+  .ex .v{font-size:22px;font-weight:740;margin-top:2px;}
+  .ex .v small{font-size:12px;font-weight:500;color:var(--muted);}
+  ul.keys{margin:14px 0 0;padding:0;list-style:none;display:grid;gap:9px;}
+  ul.keys li{display:grid;grid-template-columns:auto 1fr;gap:11px;font-size:14px;}
+  ul.keys .k{flex:none;width:7px;height:7px;border-radius:50%;background:var(--accent);margin-top:8px;}
+  ul.keys b{font-weight:640;}
+  .reasonbox{margin-top:14px;font-size:13px;color:var(--muted);}
+  .reasonbox .mono{color:var(--ink);background:var(--surface-2);border:1px solid var(--hairline);border-radius:8px;padding:8px 11px;display:inline-block;margin-top:5px;font-size:12.5px;}
+
+  /* two-col */
+  .cols{display:grid;grid-template-columns:1fr 1fr;gap:20px;}
+  .card{background:var(--surface);border:1px solid var(--hairline);border-radius:12px;padding:16px 18px;box-shadow:var(--shadow);}
+  .labels{display:grid;gap:8px;margin-top:4px;}
+  .labels .row{display:flex;align-items:center;gap:10px;font-size:14px;}
+  .foot{margin-top:44px;padding-top:16px;border-top:1px solid var(--hairline);color:var(--muted);font-size:12px;}
+  .foot .mono{font-size:11.5px;}
+  @media (max-width:680px){
+    .tierhead,.tier{grid-template-columns:1fr 84px 56px;}
+    .tierhead .h-win,.tier .track{display:none;}
+    .cols{grid-template-columns:1fr;}
+    .exgrid{grid-template-columns:1fr;}
+  }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="eyebrow">HanlobBot · Atribución de ventas</div>
+    <h1>Reglas de Correlación<br>Venta ↔ Conversación</h1>
+    <p class="sub">Cómo se liga una venta de Mercado Libre a una conversación del bot, y con cuánta confianza.</p>
+    <div class="date">Actualizado 12 ago 2026</div>
+  </header>
+
+  <section>
+    <p class="lead">La correlación parte de la <b>conversación</b>: solo un chat que hizo clic en un enlace rastreado puede atribuirse una venta. A cada par (conversación, venta) se le asigna un porcentaje de confianza según qué señales de identidad coinciden y cuánto tiempo pasó entre el clic y la compra.</p>
+    <div class="note"><span class="dot"></span><div><b>Universo atribuible.</b> Solo ~8,700 conversaciones clicaron un enlace rastreado — son las únicas atribuibles. La mayoría de las ventas de ML son tráfico orgánico (sin clic) y nunca se emparejan: no hay conversación con la cual ligarlas.</div></div>
+  </section>
+
+  <section>
+    <h2><span class="n">1</span> Compuertas de elegibilidad · deben cumplirse las cuatro</h2>
+    <div class="gates">
+      <div class="gate"><div class="num">1</div><div><h4>Clic en enlace rastreado</h4><p>La conversación debe haber dado clic. El tiempo se mide desde el clic real (<span class="mono">clickedAt</span>), no desde que el bot compartió el enlace.</p></div></div>
+      <div class="gate"><div class="num">2</div><div><h4>Mismo día (hora de México)</h4><p>La venta cae en el mismo día calendario local que un clic.</p></div></div>
+      <div class="gate"><div class="num">3</div><div><h4>Dirección + tolerancia de 15 min</h4><p>El clic causal es el más reciente en/antes de la venta. Si ese día no hubo clic previo, un clic hasta <b>15 min después</b> cuenta como simultáneo (brecha 0) — rescata la compra del mismo instante cuyo clic se registró tarde. Un clic horas después se rechaza.</p></div></div>
+      <div class="gate"><div class="num">4</div><div><h4>Mismo estado</h4><p>Si el estado de la conversación y el de la venta difieren, es otro cliente. El estado del CP es la autoridad.</p></div></div>
+    </div>
+  </section>
+
+  <section>
+    <h2><span class="n">2</span> Niveles de confianza · mismo producto</h2>
+    <div class="tierhead"><span>Señales que coinciden</span><span>Confianza</span><span class="pct" style="text-align:right">%</span><span class="h-win" style="text-align:right">Ventana</span></div>
+    <div id="tiersMain"></div>
+  </section>
+
+  <section>
+    <h2><span class="n">3</span> Niveles de confianza · producto distinto <span style="color:var(--muted);text-transform:none;letter-spacing:0;font-weight:400">(venta indirecta)</span></h2>
+    <p style="color:var(--muted);font-size:14px;margin-top:-6px">Preguntó por un producto y compró otro de la misma familia. Ventanas más cortas: la relación es más débil.</p>
+    <div class="tierhead"><span>Señales que coinciden</span><span>Confianza</span><span class="pct" style="text-align:right">%</span><span class="h-win" style="text-align:right">Ventana</span></div>
+    <div id="tiersInd"></div>
+    <div class="zero">Cualquier combinación <b>no listada</b> → <b>0 % (no atribuible)</b>: solo nombre, solo ciudad o solo usuario ML no bastan.</div>
+  </section>
+
+  <section>
+    <h2><span class="n">4</span> Atenuación por densidad · solo niveles sin nombre</h2>
+    <p>Sin el nombre del comprador, lo único que liga la venta es <b>CP + ítem</b> — y eso vale distinto según cuánto vende ese CP <i>ese día</i>. En un CP tranquilo, una compra tras el clic es casi con certeza de quien clicó; en uno muy activo, podría ser solo la siguiente venta rutinaria de la zona.</p>
+    <p>La ventana no es un reloj fijo: sale de la cadencia del propio CP. Con <b class="mono">C</b> = otras ventas del mismo CP ese día, la confianza se multiplica por:</p>
+    <div class="formula mono">factor = e<sup>−(C / 24) · Δt</sup></div>
+    <p style="color:var(--muted);font-size:14px">donde <b>Δt</b> = horas entre el clic y la compra. Pocos “intervalos típicos” del CP entre clic y compra → fuerte; muchos → débil.</p>
+
+    <div class="chartcard">
+      <div class="chartcap">Factor de confianza vs. horas desde el clic, por número de otras ventas del CP ese día</div>
+      <svg id="densChart" viewBox="0 0 640 300" role="img" aria-label="Curva de atenuación por densidad"></svg>
+    </div>
+
+    <h3>Ejemplos · base 50 %, brecha 2 h</h3>
+    <div class="exgrid">
+      <div class="ex"><div class="k">0 otras ventas (CP tranquilo)</div><div class="v" style="color:var(--c100)">50%<small> · ×1.00</small></div></div>
+      <div class="ex"><div class="k">4 otras ventas</div><div class="v" style="color:var(--c70)">36%<small> · ×0.72</small></div></div>
+      <div class="ex"><div class="k">9 otras ventas (CP activo)</div><div class="v" style="color:var(--c25)">24%<small> · ×0.47</small></div></div>
+    </div>
+
+    <ul class="keys">
+      <li><span class="k"></span><span><b>C = 0 → sin penalización</b> (el 50 % o el 10 % quedan completos).</span></li>
+      <li><span class="k"></span><span><b>Brecha corta = menos castigo</b> — a los 30 min apenas baja aun en un CP activo; a las horas, baja más.</span></li>
+      <li><span class="k"></span><span><b>Un CP suficientemente activo</b> puede atenuar la coincidencia hasta dejarla <b>no atribuible</b> (cae a 0).</span></li>
+      <li><span class="k"></span><span><b>Los niveles con nombre/apellido/usuario ML no se tocan</b> — la identidad ya descarta la coincidencia.</span></li>
+      <li><span class="k"></span><span><b>Estacional gratis:</b> como C se mide por día, en temporada de calor la ventana se aprieta sola.</span></li>
+    </ul>
+    <div class="reasonbox">Cada coincidencia guarda la evidencia (<span class="mono">zipDaySales</span>, <span class="mono">densityFactor</span>). La razón se lee así:
+      <br><span class="mono">cp + item · 9.1h · 4 ventas/día mismo CP ×0.22 (6%)</span></div>
+  </section>
+
+  <section>
+    <h2><span class="n">5</span> Etiquetas y alcance</h2>
+    <div class="cols">
+      <div class="card">
+        <h3 style="margin-top:2px">Etiquetas de confianza</h3>
+        <div class="labels">
+          <div class="row"><span class="band alta">alta</span><span>≥ 70 %</span></div>
+          <div class="row"><span class="band media">media</span><span>50 – 69 %</span></div>
+          <div class="row"><span class="band baja">baja</span><span>&lt; 50 %</span></div>
+        </div>
+        <p style="color:var(--muted);font-size:13px;margin:14px 0 0">Por eso “ciudad + nombre + ítem” (70 %) ahora es confianza <b style="color:var(--alta)">alta</b>.</p>
+      </div>
+      <div class="card">
+        <h3 style="margin-top:2px">Alcance y mantenimiento</h3>
+        <ul class="keys" style="margin-top:2px">
+          <li><span class="k"></span><span><b>Backtrace: 1 mes móvil.</b> El recálculo completo cubre 30 días y preserva las coincidencias más antiguas — no las borra.</span></li>
+          <li><span class="k"></span><span><b>Una orden = un cliente.</b> Una conversación tiene varias órdenes solo con coincidencias ≥ 70 % y mismo comprador.</span></li>
+          <li><span class="k"></span><span><b>Bloqueo humano:</b> un veredicto de asesor queda fuera de la recorrelación automática.</span></li>
+        </ul>
+      </div>
+    </div>
+  </section>
+
+  <div class="foot">Fuente: <span class="mono">bot-server/utils/convoSaleMatcher.js</span> (niveles + compuertas) · <span class="mono">runConvoCorrelation.js</span> (alcance). No aplicado, en pausa: decaimiento temporal en niveles con identidad.</div>
+</div>
+
+<script>
+(function(){
+  // ---- tier bar charts (sequential confidence ramp) ----
+  var css=getComputedStyle(document.documentElement);
+  function ramp(p){ // pick sequential step by percentage
+    var v='--c10'; if(p>=100)v='--c100'; else if(p>=90)v='--c90'; else if(p>=70)v='--c70'; else if(p>=50)v='--c50'; else if(p>=25)v='--c25';
+    return 'var('+v+')';
+  }
+  function band(p){ return p>=70?'alta':(p>=50?'media':'baja'); }
+  var main=[
+    {s:'CP + (nombre | apellido) + usuario ML + ítem',p:100,pl:'100',w:'2 días'},
+    {s:'CP + nombre + ítem',p:90,pl:'90',w:'1 día'},
+    {s:'CP + apellido + ítem',p:90,pl:'90',w:'1 día'},
+    {s:'ciudad + nombre + ítem',p:70,pl:'70',w:'1 día'},
+    {s:'CP + ítem <small>(sin nombre)</small>',p:50,pl:'≤50',w:'1 día',damp:true},
+  ];
+  var ind=[
+    {s:'CP + nombre + usuario ML',p:90,pl:'90',w:'2 h'},
+    {s:'CP + nombre + misma familia',p:50,pl:'50',w:'12 h'},
+    {s:'CP + misma familia <small>(sin nombre)</small>',p:10,pl:'≤10',w:'12 h',damp:true},
+  ];
+  function render(rows,el){
+    el.innerHTML=rows.map(function(r){
+      var b=band(r.p);
+      return '<div class="tier">'+
+        '<span class="sig">'+r.s+(r.damp?' <span title="atenuado por densidad" style="color:var(--muted)">✦</span>':'')+'</span>'+
+        '<span class="track"><span class="fill" style="width:'+r.p+'%;background:'+ramp(r.p)+'"></span></span>'+
+        '<span class="pct">'+r.pl+'<small>%</small></span>'+
+        '<span class="win">'+r.w+' <span class="band '+b+'" style="margin-left:4px">'+b+'</span></span>'+
+      '</div>';
+    }).join('');
+  }
+  render(main,document.getElementById('tiersMain'));
+  render(ind,document.getElementById('tiersInd'));
+
+  // ---- density decay chart ----
+  var svg=document.getElementById('densChart');
+  var W=640,H=300,ML=44,MR=54,MT=14,MB=34;
+  var pw=W-ML-MR, ph=H-MT-MB;
+  var xmax=12; // hours
+  function X(t){return ML + (t/xmax)*pw;}
+  function Y(f){return MT + (1-f)*ph;}
+  var NS='http://www.w3.org/2000/svg';
+  function el(n,a){var e=document.createElementNS(NS,n);for(var k in a)e.setAttribute(k,a[k]);return e;}
+  // grid + y axis (factor 0..1)
+  var g=el('g',{class:'grid'}); svg.appendChild(g);
+  var ax=el('g',{class:'axis'}); svg.appendChild(ax);
+  [0,0.25,0.5,0.75,1].forEach(function(f){
+    g.appendChild(el('line',{x1:ML,y1:Y(f),x2:ML+pw,y2:Y(f)}));
+    var t=el('text',{x:ML-9,y:Y(f)+4,'text-anchor':'end'}); t.textContent=f.toFixed(2); ax.appendChild(t);
+  });
+  [0,3,6,9,12].forEach(function(h){
+    var t=el('text',{x:X(h),y:H-12,'text-anchor':'middle'}); t.textContent=h+'h'; ax.appendChild(t);
+  });
+  var yl=el('text',{x:ML-32,y:MT-2,'text-anchor':'start'}); yl.textContent='factor'; ax.appendChild(yl);
+  // curves, sequential by C (light→dark = busier zip)
+  var series=[{C:0,col:'--c100'},{C:2,col:'--c70'},{C:4,col:'--c50'},{C:9,col:'--c25'}];
+  series.forEach(function(s){
+    var d='',n=80;
+    for(var i=0;i<=n;i++){var t=(i/n)*xmax; var f=Math.exp(-(s.C/24)*t); d+=(i?'L':'M')+X(t).toFixed(1)+' '+Y(f).toFixed(1)+' ';}
+    var col=css.getPropertyValue(s.col).trim();
+    svg.appendChild(el('path',{class:'curve',d:d,stroke:col}));
+    // endpoint dot + direct label
+    var fe=Math.exp(-(s.C/24)*xmax);
+    svg.appendChild(el('circle',{cx:X(xmax),cy:Y(fe),r:3.4,fill:col}));
+    var lab=el('text',{x:X(xmax)+8,y:Y(fe)+4,class:'clab',fill:col});
+    lab.textContent='C='+s.C; svg.appendChild(lab);
+  });
+})();
+</script>

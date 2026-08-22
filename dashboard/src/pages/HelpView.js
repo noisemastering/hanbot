@@ -54,16 +54,6 @@ const sections = [
     ]
   },
   {
-    id: 'optimization',
-    title: 'Optimización de Gasto',
-    icon: '💰',
-    content: [
-      { q: '¿Qué muestra esta vista?', a: 'Compara la inversión en cada anuncio contra los ingresos que generó. Clasifica cada anuncio como Óptimo, Bueno, Moderado o Decreciente según su eficiencia.' },
-      { q: '¿Qué es el CPA?', a: 'Costo Por Adquisición = Inversión ÷ Conversiones. Cuánto te cuesta cada venta.' },
-      { q: '¿Qué significa "On-target" vs "Cross-sell"?', a: 'On-target = ventas del producto que el anuncio promociona. Cross-sell = ventas de otros productos. Si tu anuncio de 6x4 vende más 3x4, hay un desalineamiento.' }
-    ]
-  },
-  {
     id: 'flujos',
     title: 'Flujos',
     icon: '🔀',
