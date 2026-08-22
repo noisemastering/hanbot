@@ -310,7 +310,9 @@ function SalesForecastView({ mode = 'sales' }) {
     : dailyChartData;
 
   // ── Simulation: compute "what if" forecast line ──
-  const simActive = simOpen && (sim.budgetMult !== 1 || sim.adCount > 0 || sim.adType !== 'current' || sim.targetExpansion > 0);
+  // The campaign simulator is revenue/ad-attribution based — it belongs to the
+  // sales forecast only, never the click-based route.
+  const simActive = !isEng && simOpen && (sim.budgetMult !== 1 || sim.adCount > 0 || sim.adType !== 'current' || sim.targetExpansion > 0);
 
   // ── CAMPAIGN SIMULATION MODEL ──
   // Generates a week-by-week projection for a campaign of N weeks.
@@ -907,7 +909,8 @@ function SalesForecastView({ mode = 'sales' }) {
             </div>
           </div>
 
-          {/* ── SIMULATION PANEL ("What if") ── */}
+          {/* ── SIMULATION PANEL ("What if") — sales forecast only, never the click route ── */}
+          {!isEng && (
           <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl mb-8 mt-[30px]">
             <button onClick={() => setSimOpen(v => !v)}
               className="w-full px-6 py-4 flex items-center justify-between hover:bg-gray-700/20 transition-colors">
@@ -1197,6 +1200,7 @@ function SalesForecastView({ mode = 'sales' }) {
               </div>
             )}
           </div>
+          )}
 
           {/* Seasonality breakdown */}
           {data.seasonSummary && (() => {

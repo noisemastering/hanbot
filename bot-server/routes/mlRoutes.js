@@ -527,23 +527,24 @@ router.get('/forecast-v2', async (req, res) => {
     const last14 = daily.slice(-14);
     const recentBase = last14.length > 0 ? ss.mean(last14.map(d => d.revenue)) : overallMean;
     const dailySlope = weeklyReg.m / 7;
-    // Damped trend (Holt): each day out contributes φ^k of the slope, so the trend
-    // tapers instead of extrapolating linearly to absurd values over long horizons.
-    const PHI = 0.985;
     const ordersPerRevenue = overallMean > 0 ? ss.mean(daily.map(d => d.orders)) / overallMean : 1;
 
+    // Trend as a smooth bounded RAMP across the whole horizon, so the projection
+    // clearly expresses direction instead of dropping to a floor and flat-lining.
+    // Total change = recent weekly growth compounded over the horizon, capped so it
+    // can't collapse to zero or explode; then distributed linearly day by day.
+    const weeksAhead = horizon / 7;
+    const weeklyGrowthRate = overallMean > 0 ? (dailySlope * 7) / overallMean : 0;
+    const totalChange = Math.max(-0.7, Math.min(1.5, weeklyGrowthRate * weeksAhead));
+
     const forecast = [];
-    let dampedTrend = 0;
     for (let i = 0; i < horizon; i++) {
-      dampedTrend += dailySlope * Math.pow(PHI, i);
       const d = new Date();
       d.setDate(d.getDate() + i + 1);
       const dow = d.getDay();
       const month = d.getMonth();
-      // Bound the projected level to 0.5×–2× the recent base so a short-term dip (or
-      // spike) can't extrapolate the whole horizon to ~zero (or explode). Preserves
-      // the day-of-week shape and a mild trend without the naive collapse.
-      const trendAdj = Math.max(recentBase * 0.5, Math.min(recentBase * 2, recentBase + dampedTrend));
+      const frac = horizon > 1 ? i / (horizon - 1) : 1;        // 0 → 1 across the horizon
+      const trendAdj = recentBase * (1 + totalChange * frac);   // smooth ramp from base
       const dowAdj = trendAdj * dowMultiplier[dow];
       const seasonAdj = dowAdj * monthMultiplier[month];
       const projected = Math.max(0, Math.round(seasonAdj));
