@@ -65,7 +65,7 @@ Still need Google Auth and/or 2FA for a finished product
 | `/click-logs` | Tracked-link click logs | ✅ | |
 | `/tracked-links` | Tracked links manager | ✅ | |
 | `/spend-optimization` | Ad spend optimization | ❌ | Removed - Functionality relocated on ad-performance|
-| `/inteligencia-artificial` | Campaign intelligence (AI) | 🟡 | |
+| `/inteligencia-artificial` | Campaign intelligence (AI) | ✅ | |
 | `/segmentacion` | Customer segmentation | ✅ | |
 | `/cross-sell` | Cross-sell rules | 🟡 | |
 

@@ -5,6 +5,7 @@ import { correlateAndWait } from '../utils/correlate';
 import FeatureTip from '../components/FeatureTip';
 import PeriodSelector from '../components/PeriodSelector';
 import MarketScoreCard from '../components/MarketScoreCard';
+import MexicoMap from '../components/MexicoMap';
 import { abbrState } from '../utils/stateAbbr';
 import {
   ComposedChart,
@@ -45,6 +46,7 @@ function AdPerformanceView() {
   const [dateTo, setDateTo] = useState(todayISO());
   // Minimum correlation confidence to count a conversion (0 = todas las ventas).
   const [minConfidence, setMinConfidence] = useState(50);
+  const [showMap, setShowMap] = useState(false);
   // Days span derived from the selected range (used by legacy endpoints expecting ?days=N)
   const range = useMemo(() => {
     const ms = new Date(dateTo).getTime() - new Date(dateFrom).getTime();
@@ -374,8 +376,16 @@ function AdPerformanceView() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {geoData.length > 0 && (
             <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
-              <h2 className="text-lg font-semibold text-white mb-1">Distribución geográfica</h2>
-              <p className="text-sm text-gray-500 mb-4">Top estados por clics (de quienes clicaron)</p>
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-white mb-1">Distribución geográfica</h2>
+                  <p className="text-sm text-gray-500">Top estados por clics (de quienes clicaron)</p>
+                </div>
+                <button onClick={() => setShowMap(true)}
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary-500/10 text-primary-400 border border-primary-500/30 hover:bg-primary-500/20 transition-colors">
+                  🗺️ Ver Mapa
+                </button>
+              </div>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -408,6 +418,24 @@ function AdPerformanceView() {
               </div>
             </div>
           )}
+        </div>
+      )}
+
+      {/* Mapa de clics por estado (modal) */}
+      {showMap && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setShowMap(false)}>
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-auto p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Clics por estado</h2>
+                <p className="text-sm text-gray-500">Ubicación de quienes clicaron en el periodo seleccionado</p>
+              </div>
+              <button onClick={() => setShowMap(false)} className="shrink-0 text-gray-400 hover:text-white p-1 rounded hover:bg-gray-700/50">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <MexicoMap metric="clicks" from={`${dateFrom}T00:00:00.000Z`} to={`${dateTo}T23:59:59.999Z`} />
+          </div>
         </div>
       )}
 
