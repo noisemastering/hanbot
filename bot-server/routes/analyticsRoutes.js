@@ -1003,6 +1003,36 @@ router.get('/handoffs-count', async (req, res) => {
   }
 });
 
+// Handoffs attributed to the AD that started the conversation, classified by
+// reason. For human-needed lines (rollo/mayoreo/medida) a handoff IS the win.
+router.get('/handoffs-by-ad', async (req, res) => {
+  try {
+    const { dateFrom, dateTo } = req.query;
+    const match = { handoffRequested: true, adId: { $ne: null } };
+    if (dateFrom || dateTo) {
+      match.handoffTimestamp = {};
+      if (dateFrom) match.handoffTimestamp.$gte = new Date(dateFrom);
+      if (dateTo) match.handoffTimestamp.$lte = new Date(dateTo);
+    }
+    const rows = await Conversation.find(match).select('adId handoffReason').lean();
+    const WHOLESALE_RE = /mayoreo|wholesale|rollo/i;
+    const SPECIAL_RE = /custom (order|malla)|medida grande|medida especial|sobre\s*medida|a la medida|both sides/i;
+    const byAd = {};
+    for (const r of rows) {
+      const id = String(r.adId);
+      if (!byAd[id]) byAd[id] = { adId: id, handoffs: 0, wholesale: 0, special: 0, other: 0 };
+      byAd[id].handoffs++;
+      const reason = r.handoffReason || '';
+      if (WHOLESALE_RE.test(reason)) byAd[id].wholesale++;
+      else if (SPECIAL_RE.test(reason)) byAd[id].special++;
+      else byAd[id].other++;
+    }
+    res.json({ success: true, data: Object.values(byAd), total: rows.length });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 router.get('/promoted-products', async (req, res) => {
   try {
     const Ad = require('../models/Ad');
