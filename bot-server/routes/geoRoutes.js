@@ -81,7 +81,21 @@ router.get("/by-state", async (req, res) => {
 
     } else { // clicks — distinct clickers (people) in the window
       const ClickLog = require("../models/ClickLog");
-      const psids = await ClickLog.distinct("psid", { psid: { $nin: [null, ""] }, ...inRange("clickedAt") });
+      let psids = await ClickLog.distinct("psid", { psid: { $nin: [null, ""] }, ...inRange("clickedAt") });
+      // Optional gender filter — clicker gender from the captured name (male|female).
+      const gender = ["male", "female"].includes(req.query.gender) ? req.query.gender : null;
+      if (gender) {
+        const Conversation = require("../models/Conversation");
+        const { detectGender } = require("../utils/genderDetector");
+        const convos = await Conversation.find({ psid: { $in: psids } })
+          .select("psid customerName name extractedName crmName").lean();
+        const gByPsid = new Map();
+        for (const cv of convos) {
+          const nm = cv.customerName || cv.name || cv.extractedName || cv.crmName || "";
+          gByPsid.set(String(cv.psid), detectGender(String(nm).trim().split(/\s+/)[0] || ""));
+        }
+        psids = psids.filter((p) => gByPsid.get(String(p)) === gender);
+      }
       for (const e of await resolveEntries(psids)) bump(tally, e.state, e.zip);
     }
 

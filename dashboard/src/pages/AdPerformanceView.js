@@ -47,6 +47,8 @@ function AdPerformanceView() {
   // Minimum correlation confidence to count a conversion (0 = todas las ventas).
   const [minConfidence, setMinConfidence] = useState(50);
   const [showMap, setShowMap] = useState(false);
+  const [showGenderMap, setShowGenderMap] = useState(false);
+  const [mapGender, setMapGender] = useState(''); // '' = todos, 'male', 'female'
   // Days span derived from the selected range (used by legacy endpoints expecting ?days=N)
   const range = useMemo(() => {
     const ms = new Date(dateTo).getTime() - new Date(dateFrom).getTime();
@@ -402,8 +404,16 @@ function AdPerformanceView() {
           )}
           {genderData.length > 0 && (
             <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-6">
-              <h2 className="text-lg font-semibold text-white mb-1">Género</h2>
-              <p className="text-sm text-gray-500 mb-4">Clics por género de quien clicó</p>
+              <div className="flex items-start justify-between mb-4">
+                <div>
+                  <h2 className="text-lg font-semibold text-white mb-1">Género</h2>
+                  <p className="text-sm text-gray-500">Clics por género de quien clicó</p>
+                </div>
+                <button onClick={() => setShowGenderMap(true)}
+                  className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-primary-500/10 text-primary-400 border border-primary-500/30 hover:bg-primary-500/20 transition-colors">
+                  🗺️ Ver Mapa
+                </button>
+              </div>
               <div className="h-72">
                 <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
@@ -435,6 +445,32 @@ function AdPerformanceView() {
               </button>
             </div>
             <MexicoMap metric="clicks" from={`${dateFrom}T00:00:00.000Z`} to={`${dateTo}T23:59:59.999Z`} />
+          </div>
+        </div>
+      )}
+
+      {/* Mapa de clics por género y estado (modal) */}
+      {showGenderMap && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setShowGenderMap(false)}>
+          <div className="bg-gray-900 border border-gray-700 rounded-2xl w-full max-w-4xl max-h-[90vh] overflow-auto p-6" onClick={e => e.stopPropagation()}>
+            <div className="flex items-start justify-between mb-4">
+              <div>
+                <h2 className="text-lg font-semibold text-white">Clics por género y estado</h2>
+                <p className="text-sm text-gray-500">Dónde clican hombres vs. mujeres (género de quien clicó)</p>
+              </div>
+              <button onClick={() => setShowGenderMap(false)} className="shrink-0 text-gray-400 hover:text-white p-1 rounded hover:bg-gray-700/50">
+                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+            <div className="flex gap-1 mb-4">
+              {[['', 'Todos'], ['male', 'Hombres'], ['female', 'Mujeres']].map(([val, label]) => (
+                <button key={val} onClick={() => setMapGender(val)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${mapGender === val ? 'bg-primary-500 text-white' : 'bg-gray-800/50 text-gray-400 border border-gray-700/50 hover:text-white'}`}>
+                  {label}
+                </button>
+              ))}
+            </div>
+            <MexicoMap metric="clicks" gender={mapGender || undefined} from={`${dateFrom}T00:00:00.000Z`} to={`${dateTo}T23:59:59.999Z`} />
           </div>
         </div>
       )}

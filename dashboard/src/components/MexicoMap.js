@@ -34,7 +34,7 @@ const STOPS = [
 ];
 const RAMP_CSS = "linear-gradient(90deg, #2a2f3a, rgb(59,130,246), rgb(34,197,94), rgb(234,179,8), rgb(249,115,22), rgb(239,68,68))";
 
-export default function MexicoMap({ metric = "ml", from, to, onSelectState }) {
+export default function MexicoMap({ metric = "ml", from, to, gender, onSelectState }) {
   const [geo, setGeo] = useState(null);
   const [counts, setCounts] = useState({});
   const [zipsByState, setZipsByState] = useState({});
@@ -56,7 +56,7 @@ export default function MexicoMap({ metric = "ml", from, to, onSelectState }) {
     // gray) — easier to eyeball the difference. The guards below still prevent a stale
     // response from overwriting the current one.
     setLoading(true);
-    const qs = `metric=${metric}${from ? `&from=${encodeURIComponent(from)}` : ""}${to ? `&to=${encodeURIComponent(to)}` : ""}`;
+    const qs = `metric=${metric}${from ? `&from=${encodeURIComponent(from)}` : ""}${to ? `&to=${encodeURIComponent(to)}` : ""}${gender ? `&gender=${gender}` : ""}`;
     API.get(`/geo/by-state?${qs}`).then((r) => {
       if (!active || !r.data.success || r.data.metric !== metric) return;
       const m = {}, z = {};
@@ -66,7 +66,7 @@ export default function MexicoMap({ metric = "ml", from, to, onSelectState }) {
       setStats({ total: r.data.total || 0, dailyAvg: r.data.dailyAvg, zips: r.data.zips || 0 });
     }).catch(() => {}).finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [metric, from, to]);
+  }, [metric, from, to, gender]);
 
   // Projection: bbox over all coords → cos-corrected equirectangular fit to the viewBox.
   const project = useMemo(() => {
