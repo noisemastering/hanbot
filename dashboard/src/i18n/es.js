@@ -70,7 +70,6 @@ const es = {
   "menu.importer": "Importador",
   "menu.bot": "Bot",
   "menu.intents": "Intents",
-  "menu.flows": "Flujos (Legacy)",
   "menu.aiUsage": "Costos IA",
   "menu.workflows": "Workflows (beta)",
   "menu.adWorkflow": "Flujo en anuncio",

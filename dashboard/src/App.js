@@ -71,7 +71,6 @@ import TrackedLinksView from "./pages/TrackedLinksView";
 import MLImporterView from "./pages/MLImporterView";
 import MLPlaygroundView from "./pages/MLPlaygroundView";
 import SalesForecastView from "./pages/SalesForecastView";
-import FlowPromptsView from "./pages/FlowPromptsView";
 import WorkflowsView from "./pages/WorkflowsView";
 import AiUsageView from "./pages/AiUsageView";
 import CustomerSegmentationView from "./pages/CustomerSegmentationView";
@@ -95,8 +94,6 @@ import FbCommentReplyView from "./pages/FbCommentReplyView";
 import MaintenanceGate from "./components/MaintenanceGate";
 import SalesOverviewView from "./pages/SalesOverviewView";
 import MessagePerformanceView from "./pages/MessagePerformanceView";
-// FlowsView replaced by FlowPromptsView
-// FlujosView replaced by FlowPromptsView
 import ApiHealthAlerts from "./components/ApiHealthAlerts";
 import SimulationModeSelector from "./components/SimulationModeSelector";
 import useNewVersionCheck from "./hooks/useNewVersionCheck";
@@ -442,14 +439,6 @@ const menuItems = [
         path: "/bot/simulador",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-4l-4 4v-4z" />
-        )
-      },
-      {
-        id: "flows",
-        labelKey: "menu.flows",
-        path: "/flujos",
-        icon: (
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17V7m0 10a2 2 0 01-2 2H5a2 2 0 01-2-2V7a2 2 0 012-2h2a2 2 0 012 2m0 10a2 2 0 002 2h2a2 2 0 002-2M9 7a2 2 0 012-2h2a2 2 0 012 2m0 10V7m0 10a2 2 0 002 2h2a2 2 0 002-2V7a2 2 0 00-2-2h-2a2 2 0 00-2 2" />
         )
       },
       {
@@ -1729,7 +1718,7 @@ function App() {
     if (!child || child.isLabel) return true;
     // Spec Ops (killswitch / nuke) — super_admin only.
     if (child.id === 'killswitch' || child.id === 'nuke' || child.id === 'liberado') return effectiveRole === 'super_admin';
-    if (child.id === 'flows' || child.id === 'intents' || child.id === 'ai-usage') return effectiveRole === 'super_admin';
+    if (child.id === 'intents' || child.id === 'ai-usage') return effectiveRole === 'super_admin';
     // Flow attachment to ads is Liberado-gated: super_admin-only until released.
     if (child.id === 'ad-workflow' && !liberado) return effectiveRole === 'super_admin';
     if (child.id === 'ad-workflow' || child.id === 'promos') {
@@ -2577,7 +2566,6 @@ function App() {
           <Route path="/tracked-links" element={<TrackedLinksView />} />
 
           {/* Flujos Route */}
-          <Route path="/flujos" element={<FlowPromptsView />} />
           <Route path="/workflows" element={<WorkflowsView />} />
           <Route path="/playground/simulador" element={<ConvoSimulatorView />} />
           <Route path="/bot/simulador" element={<ConvoSimulatorView sandboxOnly />} />
