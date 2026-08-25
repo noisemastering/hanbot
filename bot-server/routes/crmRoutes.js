@@ -403,30 +403,20 @@ router.delete('/customers/:psid/tags/:tag', async (req, res) => {
 // GET /crm/products - Autocomplete product names (full inherited names from ProductFamily)
 router.get('/products', async (req, res) => {
   try {
-    const sellable = await ProductFamily.find({ sellable: true, active: true })
-      .populate('parentId')
-      .sort({ name: 1 })
-      .lean();
-
-    // Build full inherited names by walking the parent chain
-    const names = await Promise.all(sellable.map(async (product) => {
-      const hierarchy = [];
-      let current = product;
-      while (current) {
-        hierarchy.unshift(current.name);
-        if (current.parentId) {
-          if (typeof current.parentId === 'object' && current.parentId.name) {
-            current = current.parentId;
-          } else {
-            current = await ProductFamily.findById(current.parentId).lean();
-          }
-        } else {
-          current = null;
-        }
+    // Load the whole tree ONCE and walk parents in memory (was N+1 findById per
+    // level × ~192 products, which stalled the autocomplete on the free-tier DB).
+    const all = await ProductFamily.find({}).select('_id name parentId sellable active').lean();
+    const byId = new Map(all.map(f => [String(f._id), f]));
+    const fullName = (f) => {
+      const parts = [];
+      let cur = f, guard = 0;
+      while (cur && guard++ < 12) {
+        parts.unshift(cur.name);
+        cur = cur.parentId ? byId.get(String(cur.parentId)) : null;
       }
-      return hierarchy.join(' - ');
-    }));
-
+      return parts.join(' - ');
+    };
+    const names = all.filter(f => f.sellable && f.active).map(fullName);
     const unique = [...new Set(names)].sort();
     res.json({ success: true, products: unique });
   } catch (error) {
@@ -438,10 +428,22 @@ router.get('/products', async (req, res) => {
 // POST /crm/standalone-sale — Register a manual sale without requiring an existing conversation
 router.post('/standalone-sale', async (req, res) => {
   try {
-    const { productName, totalAmount, quantity, notes, crmName, crmPhone, crmEmail, zipCode, saleDate } = req.body;
+    const { items, productName, totalAmount, quantity, notes, crmName, crmPhone, crmEmail, zipCode, saleDate } = req.body;
 
-    if (!productName || !totalAmount) {
-      return res.status(400).json({ success: false, error: 'Producto y monto son requeridos' });
+    // Accept either a multi-product items[] array or the legacy single-product body.
+    const rawItems = Array.isArray(items) && items.length
+      ? items
+      : [{ productName, amount: totalAmount, quantity }];
+    const lineItems = rawItems
+      .map(it => ({
+        productName: String(it.productName || '').trim(),
+        amount: parseFloat(it.amount != null ? it.amount : it.totalAmount),
+        quantity: parseInt(it.quantity, 10) || 1
+      }))
+      .filter(it => it.productName && it.amount > 0);
+
+    if (!lineItems.length) {
+      return res.status(400).json({ success: false, error: 'Al menos un producto con monto es requerido' });
     }
 
     // Validate saleDate is within 30 days
@@ -494,46 +496,45 @@ router.post('/standalone-sale', async (req, res) => {
       }
     }
 
-    // Create the ClickLog (sale record)
+    // Create one ClickLog (sale record) per line item, all sharing the customer.
     const { randomUUID } = require('crypto');
     const { detectGender } = require('../utils/genderDetector');
-    const clickId = `manual-${randomUUID().slice(0, 8)}`;
+    const firstName = crmName?.trim()?.split(' ')[0]?.toLowerCase() || null;
+    const gender = detectGender(crmName?.trim()?.split(' ')[0] || '');
 
-    const clickLog = new ClickLog({
-      clickId,
-      psid,
-      originalUrl: 'manual-sale',
-      productName,
-      clicked: true,
-      clickedAt: saleDateObj,
-      converted: true,
-      convertedAt: saleDateObj,
-      correlationMethod: 'manual',
-      correlationConfidence: 'high',
-      conversionData: {
-        totalAmount: parseFloat(totalAmount),
-        paidAmount: parseFloat(totalAmount),
-        itemTitle: productName,
-        itemQuantity: parseInt(quantity) || 1,
-        orderId: clickId,
-        orderDate: saleDateObj,
-        buyerFirstName: crmName?.trim()?.split(' ')[0]?.toLowerCase() || null,
-        buyerGender: detectGender(crmName?.trim()?.split(' ')[0] || ''),
-        manualNotes: notes || null
-      }
-    });
+    const created = [];
+    let total = 0;
+    for (const it of lineItems) {
+      const clickId = `manual-${randomUUID().slice(0, 8)}`;
+      const clickLog = new ClickLog({
+        clickId,
+        psid,
+        originalUrl: 'manual-sale',
+        productName: it.productName,
+        clicked: true,
+        clickedAt: saleDateObj,
+        converted: true,
+        convertedAt: saleDateObj,
+        correlationMethod: 'manual',
+        correlationConfidence: 'high',
+        conversionData: {
+          totalAmount: it.amount,
+          paidAmount: it.amount,
+          itemTitle: it.productName,
+          itemQuantity: it.quantity,
+          orderId: clickId,
+          orderDate: saleDateObj,
+          buyerFirstName: firstName,
+          buyerGender: gender,
+          manualNotes: notes || null
+        }
+      });
+      await clickLog.save();
+      created.push(clickId);
+      total += it.amount;
+    }
 
-    await clickLog.save();
-
-    res.json({
-      success: true,
-      clickLog: {
-        clickId: clickLog.clickId,
-        productName,
-        totalAmount: parseFloat(totalAmount),
-        psid
-      }
-    });
+    res.json({ success: true, count: created.length, totalAmount: total, psid });
   } catch (err) {
     console.error('❌ Standalone sale error:', err.message);
     res.status(500).json({ success: false, error: err.message });

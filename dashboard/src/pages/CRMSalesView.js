@@ -20,7 +20,9 @@ function CRMSalesView() {
   const [sales, setSales] = useState([]);
   const [loading, setLoading] = useState(true);
   const [showAddSale, setShowAddSale] = useState(false);
-  const [saleForm, setSaleForm] = useState({ crmName: '', crmPhone: '', crmEmail: '', zipCode: '', productName: '', totalAmount: '', quantity: '1', notes: '', saleDate: new Date().toISOString().split('T')[0] });
+  const [saleForm, setSaleForm] = useState({ crmName: '', crmPhone: '', crmEmail: '', zipCode: '', notes: '', saleDate: new Date().toISOString().split('T')[0] });
+  const [items, setItems] = useState([{ productName: '', amount: '', quantity: '1' }]);
+  const [activeItemIdx, setActiveItemIdx] = useState(0);
   const [saving, setSaving] = useState(false);
   const [saleSuccess, setSaleSuccess] = useState(null);
   const [productList, setProductList] = useState([]);
@@ -80,18 +82,21 @@ function CRMSalesView() {
     }).catch(() => {});
   }, []);
 
-  // Product suggestions
+  // Product suggestions for the active item row
   useEffect(() => {
-    if (saleForm.productName.length >= 1 && productList.length > 0) {
-      const q = saleForm.productName.toLowerCase();
-      const matches = productList.filter(p => p.toLowerCase().includes(q)).slice(0, 8);
-      setProductSuggestions(matches);
-      setShowSuggestions(matches.length > 0);
+    const q = (items[activeItemIdx]?.productName || '').toLowerCase();
+    if (q.length >= 1 && productList.length > 0) {
+      setProductSuggestions(productList.filter(p => p.toLowerCase().includes(q)).slice(0, 8));
     } else {
       setProductSuggestions([]);
-      setShowSuggestions(false);
     }
-  }, [saleForm.productName, productList]);
+  }, [items, activeItemIdx, productList]);
+
+  const updateItem = (i, field, val) => setItems(prev => prev.map((it, idx) => idx === i ? { ...it, [field]: val } : it));
+  const addItem = () => setItems(prev => [...prev, { productName: '', amount: '', quantity: '1' }]);
+  const removeItem = (i) => setItems(prev => prev.length > 1 ? prev.filter((_, idx) => idx !== i) : prev);
+  const validItems = items.filter(it => it.productName.trim() && parseFloat(it.amount) > 0);
+  const totalAmount = items.reduce((s, it) => s + (parseFloat(it.amount) || 0), 0);
 
   // Close suggestions on outside click
   useEffect(() => {
@@ -103,14 +108,12 @@ function CRMSalesView() {
   }, []);
 
   const handleAddSale = async () => {
-    if (!saleForm.productName.trim() || !saleForm.totalAmount) return;
+    if (!validItems.length) return;
     setSaving(true);
     setSaleSuccess(null);
     try {
       const res = await API.post('/crm/standalone-sale', {
-        productName: saleForm.productName.trim(),
-        totalAmount: parseFloat(saleForm.totalAmount),
-        quantity: parseInt(saleForm.quantity) || 1,
+        items: validItems.map(it => ({ productName: it.productName.trim(), amount: parseFloat(it.amount), quantity: parseInt(it.quantity) || 1 })),
         notes: saleForm.notes.trim() || undefined,
         crmName: saleForm.crmName.trim() || undefined,
         crmPhone: saleForm.crmPhone.trim() || undefined,
@@ -119,8 +122,11 @@ function CRMSalesView() {
         saleDate: saleForm.saleDate ? new Date(saleForm.saleDate + 'T12:00:00').toISOString() : undefined
       });
       if (res.data.success) {
-        setSaleSuccess(`${saleForm.productName} — $${parseFloat(saleForm.totalAmount).toLocaleString()}`);
-        setSaleForm({ crmName: '', crmPhone: '', crmEmail: '', zipCode: '', productName: '', totalAmount: '', quantity: '1', notes: '', saleDate: new Date().toISOString().split('T')[0] });
+        const n = res.data.count || validItems.length;
+        setSaleSuccess(`${n} producto${n === 1 ? '' : 's'} — $${totalAmount.toLocaleString('es-MX')}`);
+        setSaleForm({ crmName: '', crmPhone: '', crmEmail: '', zipCode: '', notes: '', saleDate: new Date().toISOString().split('T')[0] });
+        setItems([{ productName: '', amount: '', quantity: '1' }]);
+        setActiveItemIdx(0);
         fetchSales();
         setTimeout(() => { setSaleSuccess(null); setShowAddSale(false); }, 2500);
       }
@@ -203,36 +209,50 @@ function CRMSalesView() {
                     placeholder="76900" className="w-full px-3 py-2 bg-gray-900/50 border border-gray-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-green-500/50" />
                 </div>
               </div>
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                <div className="relative" ref={suggestionsRef}>
-                  <label className="block text-xs text-gray-400 mb-1">Producto *</label>
-                  <input type="text" value={saleForm.productName}
-                    onChange={e => setSaleForm(f => ({ ...f, productName: e.target.value }))}
-                    onFocus={() => { if (saleForm.productName.length >= 1 && productSuggestions.length > 0) setShowSuggestions(true); }}
-                    placeholder="Buscar producto..."
-                    className="w-full px-3 py-2 bg-gray-900/50 border border-gray-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-green-500/50" />
-                  {showSuggestions && productSuggestions.length > 0 && (
-                    <div className="absolute z-10 left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
-                      {productSuggestions.map((p, i) => (
-                        <button key={i} type="button"
-                          onClick={() => { setSaleForm(f => ({ ...f, productName: p })); setShowSuggestions(false); }}
-                          className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
-                          {p}
-                        </button>
-                      ))}
+              {/* Productos (uno o varios) */}
+              <div className="space-y-2">
+                <div className="grid grid-cols-12 gap-2 px-1">
+                  <label className="col-span-7 block text-xs text-gray-400">Producto *</label>
+                  <label className="col-span-2 block text-xs text-gray-400">Monto *</label>
+                  <label className="col-span-2 block text-xs text-gray-400">Cantidad</label>
+                  <span className="col-span-1" />
+                </div>
+                {items.map((it, i) => (
+                  <div key={i} className="grid grid-cols-12 gap-2 items-start">
+                    <div className="col-span-7 relative" ref={i === activeItemIdx ? suggestionsRef : null}>
+                      <input type="text" value={it.productName}
+                        onChange={e => { updateItem(i, 'productName', e.target.value); setActiveItemIdx(i); setShowSuggestions(true); }}
+                        onFocus={() => { setActiveItemIdx(i); if (it.productName.length >= 1) setShowSuggestions(true); }}
+                        placeholder="Buscar producto..."
+                        className="w-full px-3 py-2 bg-gray-900/50 border border-gray-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-green-500/50" />
+                      {showSuggestions && activeItemIdx === i && productSuggestions.length > 0 && (
+                        <div className="absolute z-10 left-0 right-0 mt-1 bg-gray-800 border border-gray-600 rounded-lg shadow-lg max-h-48 overflow-y-auto">
+                          {productSuggestions.map((p, j) => (
+                            <button key={j} type="button"
+                              onClick={() => { updateItem(i, 'productName', p); setShowSuggestions(false); }}
+                              className="w-full text-left px-3 py-2 text-sm text-gray-300 hover:bg-gray-700/50 hover:text-white transition-colors">
+                              {p}
+                            </button>
+                          ))}
+                        </div>
+                      )}
                     </div>
-                  )}
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-400 mb-1">Monto total *</label>
-                  <input type="number" value={saleForm.totalAmount} onChange={e => setSaleForm(f => ({ ...f, totalAmount: e.target.value }))}
-                    placeholder="690" className="w-full px-3 py-2 bg-gray-900/50 border border-gray-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-green-500/50" />
-                </div>
-                <div>
-                  <label className="block text-xs text-gray-400 mb-1">Cantidad</label>
-                  <input type="number" value={saleForm.quantity} onChange={e => setSaleForm(f => ({ ...f, quantity: e.target.value }))}
-                    min="1" className="w-full px-3 py-2 bg-gray-900/50 border border-gray-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-green-500/50" />
-                </div>
+                    <input type="number" value={it.amount} onChange={e => updateItem(i, 'amount', e.target.value)}
+                      placeholder="690" className="col-span-2 px-3 py-2 bg-gray-900/50 border border-gray-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-green-500/50" />
+                    <input type="number" min="1" value={it.quantity} onChange={e => updateItem(i, 'quantity', e.target.value)}
+                      className="col-span-2 px-3 py-2 bg-gray-900/50 border border-gray-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-green-500/50" />
+                    <button type="button" onClick={() => removeItem(i)} disabled={items.length === 1}
+                      title="Quitar producto"
+                      className="col-span-1 flex items-center justify-center py-2 text-gray-500 hover:text-red-400 disabled:opacity-30 disabled:cursor-not-allowed">
+                      ✕
+                    </button>
+                  </div>
+                ))}
+                <button type="button" onClick={addItem}
+                  className="text-xs text-green-400 hover:text-green-300 font-medium">+ Agregar producto</button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-end">
                 <div>
                   <label className="block text-xs text-gray-400 mb-1">Fecha de venta</label>
                   <input type="date" value={saleForm.saleDate} onChange={e => setSaleForm(f => ({ ...f, saleDate: e.target.value }))}
@@ -240,15 +260,16 @@ function CRMSalesView() {
                     min={new Date(Date.now() - 30 * 86400000).toISOString().split('T')[0]}
                     className="w-full px-3 py-2 bg-gray-900/50 border border-gray-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-green-500/50" />
                 </div>
+                <p className="text-sm text-gray-400 pb-2">Total: <span className="text-white font-semibold">${totalAmount.toLocaleString('es-MX')}</span></p>
               </div>
               <div>
                 <label className="block text-xs text-gray-400 mb-1">Notas (opcional)</label>
                 <input type="text" value={saleForm.notes} onChange={e => setSaleForm(f => ({ ...f, notes: e.target.value }))}
                   placeholder="Notas adicionales..." className="w-full px-3 py-2 bg-gray-900/50 border border-gray-600/50 rounded-lg text-white text-sm focus:outline-none focus:border-green-500/50" />
               </div>
-              <button onClick={handleAddSale} disabled={saving || !saleForm.productName.trim() || !saleForm.totalAmount}
+              <button onClick={handleAddSale} disabled={saving || !validItems.length}
                 className="px-5 py-2 bg-green-600 text-white rounded-lg text-sm font-medium hover:bg-green-700 disabled:opacity-50 transition-all">
-                {saving ? 'Registrando...' : 'Registrar venta'}
+                {saving ? 'Registrando...' : `Registrar venta${validItems.length > 1 ? ` (${validItems.length} productos)` : ''}`}
               </button>
             </div>
           )}
