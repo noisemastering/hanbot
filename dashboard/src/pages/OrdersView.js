@@ -279,6 +279,10 @@ function OrdersView() {
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-white">{t('orders.title')}</h2>
         <p className="text-sm text-gray-400 mt-1">Seller {sellerId}</p>
+        <div className="mt-3 flex items-start gap-2 rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs text-blue-300/90">
+          <span>ℹ️</span>
+          <span>Estas son <b>ventas reales de Mercado Libre</b>, sin importar su origen: incluye tanto las atribuidas a anuncios de Meta como las orgánicas y de otros canales. No dependen de la correlación con anuncios.</span>
+        </div>
       </div>
 
       {/* Sales Metrics Cards */}
