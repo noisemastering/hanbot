@@ -497,7 +497,7 @@ function OrdersView() {
 
                   // Date format with year to verify
                   const shortDate = order.date_created
-                    ? new Date(order.date_created).toLocaleDateString(locale, { day: '2-digit', month: 'short', year: '2-digit' })
+                    ? new Date(order.date_created).toLocaleDateString(locale, { day: '2-digit', month: 'short', year: 'numeric' })
                     : 'N/A';
 
                   return (

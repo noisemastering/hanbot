@@ -79,16 +79,14 @@ Still need Google Auth and/or 2FA for a finished product
 | `/master-catalog` | Master catalog | ✅ | |
 | `/promos` | Promotions / special offers | ✅ | |
 | `/usos-grupos` | Use-case groups | 🟡 | |
-| `/profiles` | Buyer profiles | 🟡 | |
+| `/profiles` | Buyer profiles | ✅ | |
 | `/company-info` | Company info | ✅ | |
 
 ## Flows & AI
 
 | Route | What it does | Status | Missing |
 |---|---|---|---|
-| `/flows` | Flow prompts | 🟡 | |
-| `/flujos` | Flow prompts (alias of `/flows`) | 🟡 | |
-| `/workflows` | Workflow engine builder | 🟡 | |
+| `/workflows` | Workflow engine builder | ✅  | |
 | `/bot/simulador` | Conversation simulator | ✅ | |
 | `/bot/costos-ia` | AI cost view | ✅ | |
 
