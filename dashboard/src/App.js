@@ -2719,8 +2719,6 @@ function App() {
           <Route path="/playground/conversion" element={<ConversionProbabilityView />} />
           <Route path="/playground/rendimiento-mensajes" element={<MessagePerformanceView />} />
 
-          {/* Bot Configuration Routes */}
-          <Route path="/flows" element={<FlowPromptsView />} />
 
           {/* Tickets Route */}
           <Route path="/tickets" element={<TicketsView />} />

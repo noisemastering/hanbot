@@ -34,7 +34,7 @@ Still need Google Auth and/or 2FA for a finished product
 | `/conversations` | Messages inbox — live chats, canned replies, sale/report tools | 🟡 | Review usability |
 | `/crm` | Customer list | ✅ | |
 | `/crm/:psid` | Single customer detail | ✅ | |
-| `/crm/sales` | CRM sales view | 🟡 | Reflects only sales attached to the system not ML overall. Form must allow to select more than 1 product to the sale.|
+| `/crm/sales` | CRM sales view | ✅ | Reflects only sales attached to the system not ML overall.|
 | `/reported-convos` | Review reported conversations; resolve / "sin error" | ✅ | |
 | `/tickets` | Support tickets | ✅ | |
 | `/notifications` | Notifications feed | ✅ |  |
