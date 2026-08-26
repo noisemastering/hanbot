@@ -67,7 +67,7 @@ const es = {
   "menu.profiles": "Perfiles",
   "menu.mercadoLibre": "Mercado Libre",
   "menu.orders": "Pedidos",
-  "menu.importer": "Importador",
+  "menu.importer": "Importar a Inventario",
   "menu.bot": "Bot",
   "menu.intents": "Intents",
   "menu.aiUsage": "Costos IA",
