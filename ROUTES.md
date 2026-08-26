@@ -46,7 +46,7 @@ Still need Google Auth and/or 2FA for a finished product
 | `/conversions` | Convo↔sale correlation — attributed conversions + confidence | ✅ | Adjust criteria if needed |
 | `/sales-overview` | Sales overview | ✅ | Shows all registered sales ML and Manual |
 | `/manual-sales` | Manually registered sales | ✅ | |
-| `/ml-orders` | Mercado Libre orders | 👀 | |
+| `/ml-orders` | Mercado Libre orders | ✅ | |
 | `/ml-import` | ML order import | 👀 | |
 | `/ml-importer` | ML bulk importer | 👀 | |
 | `/forecast` | Sales forecast + campaign simulator | 🟡 | |

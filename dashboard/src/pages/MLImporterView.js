@@ -15,6 +15,7 @@ function MLImporterView() {
   const [saving, setSaving] = useState(false);
   const [filter, setFilter] = useState('unlinked'); // 'all', 'unlinked', 'linked', 'inactive'
   const [itemStatuses, setItemStatuses] = useState({}); // ML item statuses (inactive, etc.)
+  const [mlDisconnected, setMlDisconnected] = useState(false); // ML OAuth token expired → needs reconnect
 
   // Fetch sellable products from Inventario
   const fetchProducts = async () => {
@@ -44,6 +45,9 @@ function MLImporterView() {
       console.log('ML items response:', data);
       if (data.success) {
         setMlItems(data.items || []);
+        setMlDisconnected(false);
+      } else if (data.needsReauth) {
+        setMlDisconnected(true);
       } else {
         console.error('Error fetching ML items:', data.error);
         alert(t('mlImporter.errorLoading') + data.error);
@@ -264,6 +268,23 @@ function MLImporterView() {
           {t('mlImporter.pageSubtitle')}
         </p>
       </div>
+
+      {/* ML disconnected — token expired, needs reconnect */}
+      {mlDisconnected && (
+        <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4">
+          <div className="flex items-start gap-2">
+            <span className="text-lg">⚠️</span>
+            <div>
+              <p className="text-sm font-semibold text-amber-300">Mercado Libre desconectado</p>
+              <p className="text-xs text-amber-200/80">La sesión con Mercado Libre expiró. Reconecta la cuenta para volver a cargar productos y órdenes.</p>
+            </div>
+          </div>
+          <a href={`${API_URL}/ml/oauth/authorize?redirect=1`} target="_blank" rel="noopener noreferrer"
+            className="shrink-0 px-4 py-2 rounded-lg bg-amber-500 text-gray-900 text-sm font-semibold hover:bg-amber-400 transition-colors text-center">
+            Reconectar Mercado Libre
+          </a>
+        </div>
+      )}
 
       {/* Stats & Controls */}
       <div className="mb-4 flex flex-wrap gap-4 items-center">

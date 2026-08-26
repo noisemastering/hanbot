@@ -67,6 +67,12 @@ router.get("/oauth/authorize", async (req, res) => {
 
     console.log(`🔗 OAuth URL generated (PSID: ${psid || 'none'})`);
 
+    // ?redirect=1 → send the browser straight to ML login (one-click reconnect).
+    // A fresh state is generated each visit, so there's no 10-min TTL race.
+    if (req.query.redirect) {
+      return res.redirect(url);
+    }
+
     res.json({
       success: true,
       authUrl: url,
@@ -574,10 +580,18 @@ router.get("/items", authenticate, async (req, res) => {
       items
     });
   } catch (error) {
-    console.error("❌ Error fetching ML items:", error.response?.data || error.message);
-    res.status(500).json({
+    const mlErr = error.response?.data;
+    // The ML OAuth refresh token expired → the account must be reconnected.
+    const needsReauth = mlErr?.error === "invalid_grant" ||
+      /invalid_grant|refresh token|authorization code/i.test(error.message || "");
+    console.error("❌ Error fetching ML items:", mlErr || error.message);
+    res.status(needsReauth ? 502 : 500).json({
       success: false,
-      error: "Failed to fetch ML items",
+      needsReauth,
+      reconnectUrl: needsReauth ? "/ml/oauth/authorize?redirect=1" : undefined,
+      error: needsReauth
+        ? "La conexión con Mercado Libre expiró. Reconecta la cuenta para volver a cargar productos."
+        : "Failed to fetch ML items",
       details: process.env.NODE_ENV === "development" ? error.message : undefined
     });
   }
