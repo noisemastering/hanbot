@@ -54,7 +54,22 @@ async function refreshMLTokenIfNeeded() {
 }
 
 async function getValidMLToken() {
-  // hace refresh si toca y devuelve un token válido
+  // Prefer the DB-stored seller auth (utils/mercadoLibreOAuth) — it holds the
+  // CURRENT, self-refreshing token. The env token below rotates out of sync
+  // (→ invalid_grant) and must only be a fallback, not the primary source.
+  try {
+    const { getValidAccessToken } = require("./utils/mercadoLibreOAuth");
+    const MercadoLibreAuth = require("./models/MercadoLibreAuth");
+    const auth = await MercadoLibreAuth.findOne({ active: true }).select("sellerId").lean();
+    const sellerId = auth?.sellerId || process.env.ML_SELLER_ID;
+    if (sellerId) {
+      const token = await getValidAccessToken(sellerId);
+      if (token) return token;
+    }
+  } catch (e) {
+    console.warn("⚠️ DB ML token unavailable, falling back to env token:", e.message);
+  }
+  // Legacy env-based fallback
   await refreshMLTokenIfNeeded();
   return accessToken;
 }
