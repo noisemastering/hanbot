@@ -197,12 +197,14 @@ async function buildContext() {
   const ZipCode = require("../models/ZipCode");
   const zipToCity = new Map();
   const zipToState = new Map(); // zip → state, so a convo's state can gate city matches
-  const zips = await ZipCode.find({}).select("code city municipality state").lean().catch(() => []);
+  const zipCentroids = new Map(); // zip → {lat,lng} — for ≤7km near-miss distance matching
+  const zips = await ZipCode.find({}).select("code city municipality state lat lng").lean().catch(() => []);
   for (const z of zips) {
     const c = z.city || z.municipality;
     const key = z.code ? String(z.code).replace(/\D/g, "").padStart(5, "0") : null;
     if (key && c) zipToCity.set(key, c);
     if (key && z.state) zipToState.set(key, z.state);
+    if (key && z.lat != null && z.lng != null) zipCentroids.set(key, { lat: z.lat, lng: z.lng });
   }
 
   // psid → set of Mexico-local DAYS on which they CLICKED a tracked link (approved
@@ -226,7 +228,7 @@ async function buildContext() {
     if (sz) { if (!psidClickSizes.has(key)) psidClickSizes.set(key, new Set()); psidClickSizes.get(key).add(sz); }
   }
 
-  return { itemToFamilies, famOwnItems, cityIndex, userLoc, zipToCity, zipToState, psidClickDays, psidClickTimes, psidClickSizes, salesDayCache: new Map() };
+  return { itemToFamilies, famOwnItems, cityIndex, userLoc, zipToCity, zipToState, zipCentroids, psidClickDays, psidClickTimes, psidClickSizes, salesDayCache: new Map() };
 }
 
 // Gather a conversation's identity signals into a normalized shape.
@@ -452,12 +454,36 @@ function classify(m) {
     return p >= 1 ? p : null; // a busy-enough zip can dampen it out of attributability
   };
 
+  // NEAR-MISS proximity: 1 at 0 km → 0 at NEAR_KM. Used only when zipNearMatch.
+  const proximity = m.zipDistanceKm != null ? Math.max(0, 1 - m.zipDistanceKm / NEAR_KM) : 0;
+  // Near + NAME: the name is the strong signal; the ≤7km location corroborates, so
+  // distance only modulates ±40%.
+  const nearName = (base, flat) => {
+    const b = decayScore(base, flat, null, g);
+    if (b == null) return null;
+    const p = Math.round(b * (0.6 + 0.4 * proximity));
+    return p >= 1 ? p : null;
+  };
+  // Near + ITEM (nameless): both distance AND neighborhood-sales density bite —
+  // strong only when the buyer is close AND the 7km area is sparse.
+  const nearBare = (base, flat) => {
+    const b = decayScore(base, flat, null, g);
+    if (b == null) return null;
+    const factor = densityFactor(m.neighborhoodDaySales, g);
+    dens = { competitors: Math.max(0, (m.neighborhoodDaySales || 1) - 1), factor: Math.round(factor * 100) / 100, near: true };
+    const p = Math.round(base * proximity * factor);
+    return p >= 1 ? p : null;
+  };
+
   if (m.itemMatch) {
     // SAME product (a size the customer discussed OR clicked).
     if (m.zipMatch && (m.nameMatch || m.lastNameMatch) && m.nicknameMatch) { pct = decayScore(100, 48, null, g); tier = m.nameMatch ? "cp + nombre + usuario ML + item" : "cp + apellido + usuario ML + item"; undisputed = pct === 100; } // 2 días
     else if (m.zipMatch && m.nameMatch) { pct = decayScore(90, 24, null, g); tier = "cp + nombre + item"; }        // 1 día
     else if (m.zipMatch && m.lastNameMatch) { pct = decayScore(90, 24, null, g); tier = "cp + apellido + item"; }  // 1 día — last name is as good as full name WHEN zip + item both match
     else if (m.cityMatch && m.nameMatch) { pct = decayScore(70, 24, null, g); tier = "ciudad + nombre + item"; }   // 1 día
+    // NEAR-MISS + NAME: different zip but ≤7km + a matching name + same item. Only
+    // reached when it's NOT the same exact zip nor same city+name (those tiers win).
+    else if (m.zipNearMatch && (m.nameMatch || m.fullNameMatch)) { pct = nearName(72, 24); tier = `cercanía (${m.zipDistanceKm}km) + nombre + item`; } // 1 día
     else if (m.zipMatch) { pct = damp(decayScore(50, 24, null, g)); tier = "cp + item"; }                           // 1 día · NAMELESS → density-damped (50% ceiling in a quiet zip-day, scales down as same-day sales rise)
     // NO LOCATION but the sale's buyer/receiver FULL NAME matches + same item + clicked
     // link + directional same-day. Recovers buyers we can name (~100%) but never got a
@@ -466,6 +492,9 @@ function classify(m) {
     // people and produced false matches. A last name needs a zip to corroborate (the
     // cp + apellido tier above).
     else if (m.fullNameMatch) { pct = decayScore(60, 24, null, g); tier = "nombre completo + item"; }               // 1 día · nombre completo (nombre+apellido), sin ubicación
+    // NEAR-MISS, NAMELESS: ≤7km + same item, no name. Weak by default; real only when
+    // the 7km area is sparse (few competing sales) AND the buyer is close.
+    else if (m.zipNearMatch) { pct = nearBare(45, 24); tier = `cercanía (${m.zipDistanceKm}km) + item`; }            // 1 día · density+proximity damped
     // else → not attributable (0%)
   } else {
     // DIFFERENT product (venta indirecta).
@@ -478,7 +507,7 @@ function classify(m) {
 
   if (pct == null) return null;
   const densTxt = dens && dens.competitors > 0
-    ? ` · ${dens.competitors} venta${dens.competitors > 1 ? "s" : ""}/día mismo CP ×${dens.factor}` : "";
+    ? ` · ${dens.competitors} venta${dens.competitors > 1 ? "s" : ""}/día ${dens.near ? "en 7km" : "mismo CP"} ×${dens.factor}` : "";
   return { pct, confidence: med(pct), undisputed, ventaIndirecta: vi, density: dens, reason: `${tier} · ${gTxt}${densTxt} (${pct}%)` };
 }
 
@@ -562,6 +591,31 @@ async function matchOrphanByBasket(convo, id, MLSale) {
  * Find the best sale match for one conversation. Returns a ConvoSaleMatch-shaped
  * object or null. Requires a ctx from buildContext().
  */
+// ── ZIP-PROXIMITY (near-miss) ──────────────────────────────────────────────
+// A lead often clicks from their home zip but ships to a nearby one (work, a
+// relative, the nearest town with a real address). We can't assume anyone sits at
+// the centroid, so instead of exact-zip-only we treat every zip within NEAR_KM of
+// the clicker's centroid as "the same neighborhood". How much a near-miss is worth
+// then scales with proximity AND local density: in a sparse area few people share
+// that radius (≈ same lead); in a dense metro hundreds do (weak on its own).
+const NEAR_KM = 7;
+const pad5 = (z) => String(z || "").replace(/\D/g, "").padStart(5, "0");
+function haversineKm(a, b) {
+  const R = 6371, t = (x) => (x * Math.PI) / 180;
+  const dLat = t(b.lat - a.lat), dLng = t(b.lng - a.lng);
+  const s = Math.sin(dLat / 2) ** 2 + Math.cos(t(a.lat)) * Math.cos(t(b.lat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(s));
+}
+const _nearZipCache = new Map(); // padded zip → [padded zips within NEAR_KM] (per-process, cheap)
+function nearbyZips(centroids, zip) {
+  if (_nearZipCache.has(zip)) return _nearZipCache.get(zip);
+  const c = centroids.get(zip);
+  const out = [];
+  if (c) for (const [z, p] of centroids) { if (z !== zip && haversineKm(c, p) <= NEAR_KM) out.push(z); }
+  _nearZipCache.set(zip, out);
+  return out;
+}
+
 async function matchConversation(convo, ctx) {
   const MLSale = require("../models/MLSale");
   const id = convoIdentity(convo, ctx);
@@ -582,10 +636,19 @@ async function matchConversation(convo, ctx) {
   const maxDay = new Date(clickDayList[clickDayList.length - 1] + "T00:00:00Z");
   const timeBound = { dateCreated: { $gte: new Date(minDay.getTime()), $lte: new Date(maxDay.getTime() + 36 * 3600e3) } };
 
+  // Clicker centroid + the ring of zips within NEAR_KM (for the near-miss tier).
+  const centroids = ctx.zipCentroids || new Map();
+  const clickerZip5 = id.zip ? pad5(id.zip) : null;
+  const clickerCentroid = clickerZip5 ? centroids.get(clickerZip5) : null;
+  const nearZips = clickerCentroid ? nearbyZips(centroids, clickerZip5) : [];
+  const nearZipSet = new Set(nearZips);
+
   const candidates = [];
   const seen = new Set();
   const add = (arr) => { for (const s of arr) { const k = String(s._id); if (!seen.has(k)) { seen.add(k); candidates.push(s); } } };
   if (id.zip) add(await MLSale.find({ "shipping.zip": id.zip, ...timeBound }).lean());
+  // NEAR-MISS: sales shipped to a DIFFERENT zip within NEAR_KM of the clicker's zip.
+  if (nearZips.length) add(await MLSale.find({ "shipping.zip": { $in: nearZips }, ...timeBound }).lean());
   if (id.city) {
     const stored = ctx.cityIndex.get(id.city) || [];
     if (stored.length) add(await MLSale.find({ "shipping.city": { $in: stored }, ...timeBound }).lean());
@@ -612,11 +675,18 @@ async function matchConversation(convo, ctx) {
   // the "confusers" a nameless attribution competes against. Free: candidates already
   // hold every same-zip sale across the click-day span (pulled by shipping.zip above).
   const zipDayCounts = new Map();
+  // Same base-rate idea, but for the 7km NEIGHBORHOOD (per MX-day): the "confusers"
+  // a near-miss competes against — few in a sparse area, many in a dense metro.
+  const nbhdDayCounts = new Map();
   for (const s of candidates) {
     const z = normZip(s.shipping && s.shipping.zip);
     if (!z || !s.dateCreated) continue;
-    const key = z + "|" + mxDay(s.dateCreated);
-    zipDayCounts.set(key, (zipDayCounts.get(key) || 0) + 1);
+    const day = mxDay(s.dateCreated);
+    zipDayCounts.set(z + "|" + day, (zipDayCounts.get(z + "|" + day) || 0) + 1);
+    const z5 = pad5(z);
+    if (clickerCentroid && (z5 === clickerZip5 || nearZipSet.has(z5))) {
+      nbhdDayCounts.set(day, (nbhdDayCounts.get(day) || 0) + 1);
+    }
   }
 
   const clickTimes = (ctx.psidClickTimes && ctx.psidClickTimes.get(String(convo.psid))) || [];
@@ -653,11 +723,18 @@ async function matchConversation(convo, ctx) {
     // GATE 2 enforced: the sale's local day must be one of the click days.
     if (!clickDays.has(mxDay(s.dateCreated))) continue;
 
-    // HARD CROSS-STATE GUARD: if the convo and the sale are in different states,
-    // it's a different customer — never a match, even when the city NAME collides
-    // (e.g. Juárez Chihuahua vs Juárez Nuevo León). The zip's state is authoritative.
+    // Zip-to-zip distance (centroids). A verified ≤NEAR_KM gap is a genuine near
+    // neighbor even across a state line, so it bypasses the cross-state guard below.
+    const saleZip5 = pad5(s.shipping && s.shipping.zip);
+    const saleCentroid = centroids.get(saleZip5);
+    const zipDistanceKm = (clickerCentroid && saleCentroid) ? haversineKm(clickerCentroid, saleCentroid) : null;
+    const isNear = zipDistanceKm != null && zipDistanceKm <= NEAR_KM;
+
+    // HARD CROSS-STATE GUARD: different states = different customer (e.g. Juárez
+    // Chihuahua vs Juárez Nuevo León) — UNLESS the two zips are genuinely ≤NEAR_KM
+    // apart (a real border-straddling neighbor). The zip's state is authoritative.
     const saleState = normState(s.shipping && s.shipping.state);
-    if (id.state && saleState && id.state !== saleState) continue;
+    if (id.state && saleState && id.state !== saleState && !isNear) continue;
 
     // TIME + DIRECTION (approved criterion): a sale can ONLY be caused by a click
     // that PRECEDED it — a click can't cause an earlier purchase. Take the latest
@@ -702,6 +779,11 @@ async function matchConversation(convo, ctx) {
       minutes: nearestCt != null ? Math.round((tSale - nearestCt) / 60000) : (graceCt != null ? 0 : null),
       // same-zip same-day sale count (base rate for the nameless-tier density dampener)
       zipDaySales: (s.shipping && normZip(s.shipping.zip)) ? (zipDayCounts.get(normZip(s.shipping.zip) + "|" + mxDay(s.dateCreated)) || 1) : 1,
+      // NEAR-MISS: different zip but within NEAR_KM of the clicker's centroid.
+      zipNearMatch: isNear && normZip(s.shipping && s.shipping.zip) !== id.zip,
+      zipDistanceKm: zipDistanceKm != null ? Math.round(zipDistanceKm * 10) / 10 : null,
+      // sales in the 7km neighborhood that MX-day (density base rate for near-miss)
+      neighborhoodDaySales: nbhdDayCounts.get(mxDay(s.dateCreated)) || 1,
     };
 
     const v = classify(m);
@@ -736,7 +818,7 @@ function buildMatchDoc(convo, id, s, m, v, dayToSizes) {
     undisputed: v.undisputed,
     ventaIndirecta: v.ventaIndirecta,
     reason: v.reason,
-    signals: { zip: m.zipMatch, city: m.cityMatch, name: m.nameMatch, lastName: m.lastNameMatch, nickname: m.nicknameMatch, item: m.itemMatch },
+    signals: { zip: m.zipMatch, near: !!m.zipNearMatch, distanceKm: m.zipDistanceKm, city: m.cityMatch, name: m.nameMatch, lastName: m.lastNameMatch, nickname: m.nicknameMatch, item: m.itemMatch },
     matchDetails: {
       convoName: id.names[0] || null,
       saleReceiverName: (s.shipping && s.shipping.receiverName) || null,
