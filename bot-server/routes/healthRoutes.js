@@ -63,6 +63,29 @@ router.get("/alerts", authenticate, async (req, res) => {
   try {
     const alerts = await ApiHealth.getActiveAlerts();
 
+    // ML-OFFLINE HANDOFFS: sales the bot had to escalate because it couldn't read
+    // the live Mercado Libre price (an infra failure, not a customer need). A cluster
+    // in 24h means ML is likely down — surface it before it quietly kills more sales.
+    try {
+      const Conversation = require("../models/Conversation");
+      const since24 = new Date(Date.now() - 24 * 3600e3);
+      const mlOff = await Conversation.find({
+        handoffRequested: true,
+        handoffReason: /mercado libre sin conexi/i,
+        handoffTimestamp: { $gte: since24 },
+      }).select("handoffTimestamp").sort({ handoffTimestamp: 1 }).lean();
+      const ML_OFFLINE_ALERT_MIN = 2; // tunable: ≥N in 24h → alert
+      if (mlOff.length >= ML_OFFLINE_ALERT_MIN) {
+        alerts.push({
+          service: "ml-offline",
+          errorCode: null,
+          errorMessage: `${mlOff.length} venta${mlOff.length > 1 ? "s" : ""} escalada${mlOff.length > 1 ? "s" : ""} a un asesor porque el bot no pudo leer el precio en vivo de Mercado Libre. Revisa la conexión con ML.`,
+          errorsLast24h: mlOff.length,
+          since: mlOff[0].handoffTimestamp,
+        });
+      }
+    } catch (e) { /* non-fatal: the alert is best-effort */ }
+
     res.json({
       success: true,
       alerts,

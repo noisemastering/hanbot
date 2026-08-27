@@ -9,14 +9,16 @@ const SERVICE_NAMES = {
   openai: 'OpenAI',
   mercadolibre: 'Mercado Libre',
   facebook: 'Facebook',
-  mongodb: 'MongoDB'
+  mongodb: 'MongoDB',
+  'ml-offline': 'Mercado Libre sin conexión'
 };
 
 const SERVICE_ICONS = {
   openai: '🤖',
   mercadolibre: '🛒',
   facebook: '📱',
-  mongodb: '🗄️'
+  mongodb: '🗄️',
+  'ml-offline': '🔌'
 };
 
 function ApiHealthAlerts() {
@@ -138,7 +140,7 @@ function ApiHealthAlerts() {
                 {alert.errorMessage || t('apiHealth.apiErrorDetected')}
               </p>
               <div className="flex items-center space-x-4 mt-1 text-xs text-gray-400">
-                <span>{t('apiHealth.consecutiveErrors')} {alert.consecutiveErrors}</span>
+                {alert.consecutiveErrors != null && <span>{t('apiHealth.consecutiveErrors')} {alert.consecutiveErrors}</span>}
                 <span>{t('apiHealth.errorsLast24h')} {alert.errorsLast24h}</span>
                 <span>
                   {t('apiHealth.since')} {new Date(alert.since).toLocaleString(locale, {
