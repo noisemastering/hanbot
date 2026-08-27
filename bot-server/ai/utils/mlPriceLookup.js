@@ -159,8 +159,12 @@ async function getMLPrice(mlUrl, dbPrice) {
     return result;
   } catch (err) {
     console.error(`⚠️ [mlPrice] Failed to fetch ${mlItemId}: ${err.message}`);
-    // Fallback to DB price
-    return { price: dbPrice, originalPrice: null, hasDiscount: false, discountPercent: 0, source: 'db' };
+    // fetchFailed = ML was UNREACHABLE (token/network/server), NOT a 404 (listing
+    // gone = a data issue). Only auth/network/5xx count as "ML offline" so a
+    // downstream handoff is labeled correctly.
+    const status = err.response?.status;
+    const fetchFailed = !status || status === 401 || status === 403 || status >= 500;
+    return { price: dbPrice, originalPrice: null, hasDiscount: false, discountPercent: 0, source: 'db', fetchFailed };
   }
 }
 

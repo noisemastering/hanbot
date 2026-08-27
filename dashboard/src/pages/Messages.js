@@ -133,6 +133,19 @@ function Messages() {
   const getHandoffStyle = (handoffReason) => {
     const r = (handoffReason || '').toLowerCase();
 
+    // ORANGE — SYSTEM: the bot couldn't read the live Mercado Libre price and had
+    // to escalate. NOT a customer need — an infra issue (ML offline). Flagged first
+    // so it's never mislabeled as a normal quote handoff.
+    if (r.includes('mercado libre sin conexión') || r.includes('ml sin conexión')) {
+      return {
+        backgroundColor: '#3a1a00',
+        borderColor: '#ff8f00',
+        textColor: '#ffb74d',
+        icon: '🔌',
+        label: 'ML sin conexión'
+      };
+    }
+
     // RED — Urgent: customer upset, bot broke, or explicit human request
     const isUrgent =
       r.includes('frustrad') ||

@@ -70,6 +70,7 @@ async function resolvePrice(product) {
 
   // 1. LIVE ML price — the source of truth. Quote it whenever we can fetch it.
   //    This NEVER downgrades while a live price exists.
+  let mlOffline = false; // ML was UNREACHABLE (not just "listing had no price")
   if (link) {
     try {
       const r = await getMLPrice(link, invPrice);
@@ -85,7 +86,9 @@ async function resolvePrice(product) {
           originalPrice: r.originalPrice || null,
         };
       }
+      if (r && r.fetchFailed) mlOffline = true; // couldn't reach ML at all
     } catch (err) {
+      mlOffline = true;
       console.error("⚠️ resolvePrice ML lookup failed:", err.message);
     }
   }
@@ -102,8 +105,11 @@ async function resolvePrice(product) {
         amount: null,
         source: null,
         handoff: true,
+        mlOffline, // true → this handoff was forced by ML being unreachable, not a real price issue
         link,
-        handoffReason: `Sin precio ML en vivo; inventario ($${invPrice}) por debajo del último precio ML ($${syncedMl}) — validar con un asesor`,
+        handoffReason: mlOffline
+          ? `⚠️ Mercado Libre sin conexión — no se pudo leer el precio en vivo; inventario ($${invPrice}) por debajo del último precio ML ($${syncedMl}) — validar con un asesor`
+          : `Sin precio ML en vivo; inventario ($${invPrice}) por debajo del último precio ML ($${syncedMl}) — validar con un asesor`,
       };
     }
     // 2b. No conflict (Inventario ≥ synced, or no Inventario) → quote the
