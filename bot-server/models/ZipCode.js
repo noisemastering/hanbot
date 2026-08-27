@@ -17,7 +17,11 @@ const zipCodeSchema = new mongoose.Schema({
   neighborhoods: [{
     name: { type: String, required: true },
     type: { type: String } // Colonia, Fraccionamiento, Unidad habitacional, etc.
-  }]
+  }],
+  // Centroid coordinates (from GeoNames) — used to measure zip-to-zip distance
+  // for near-miss sale↔lead correlation. null until imported.
+  lat: { type: Number, default: null },
+  lng: { type: Number, default: null }
 }, { timestamps: true });
 
 // Helper to get shipping estimate based on zone

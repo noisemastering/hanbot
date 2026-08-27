@@ -47,10 +47,10 @@ Still need Google Auth and/or 2FA for a finished product
 | `/sales-overview` | Sales overview | ✅ | Shows all registered sales ML and Manual |
 | `/manual-sales` | Manually registered sales | ✅ | |
 | `/ml-orders` | Mercado Libre orders | ✅ | |
-| `/ml-import` | ML order import | 👀 | |
-| `/ml-importer` | ML bulk importer | 👀 | |
+| `/ml-import` | ML order import | ✅ | Importa de históricos|
+| `/ml-importer` | ML bulk importer | ✅ | Importa a inventario |
 | `/forecast` | Sales forecast + campaign simulator | 🟡 | |
-| `/pos` | Point of sale | 👀 | |
+| `/pos` | Point of sale | ✅ | |
 
 ## Analytics & Ads
 
