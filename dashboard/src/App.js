@@ -273,7 +273,7 @@ const menuItems = [
       {
         id: "ad-workflow",
         labelKey: "menu.adWorkflow",
-        path: "/playground/anuncio-flujo",
+        path: "/anuncio-flujo",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z" />
         )
@@ -1719,8 +1719,6 @@ function App() {
     // Spec Ops (killswitch / nuke) — super_admin only.
     if (child.id === 'killswitch' || child.id === 'nuke' || child.id === 'liberado') return effectiveRole === 'super_admin';
     if (child.id === 'intents' || child.id === 'ai-usage') return effectiveRole === 'super_admin';
-    // Flow attachment to ads is Liberado-gated: super_admin-only until released.
-    if (child.id === 'ad-workflow' && !liberado) return effectiveRole === 'super_admin';
     if (child.id === 'ad-workflow' || child.id === 'promos') {
       // Administrador de Campaña profile + above levels (super_user, admin, super_admin).
       return (
@@ -2570,7 +2568,9 @@ function App() {
           <Route path="/playground/simulador" element={<ConvoSimulatorView />} />
           <Route path="/bot/simulador" element={<ConvoSimulatorView sandboxOnly />} />
           <Route path="/promos" element={<PromosView />} />
-          <Route path="/playground/anuncio-flujo" element={(liberado || effectiveRole === 'super_admin') ? <AdWorkflowAssignView /> : <Navigate to={getLandingPage()} replace />} />
+          <Route path="/anuncio-flujo" element={(effectiveRole === 'super_admin' || effectiveRole === 'admin' || effectiveRole === 'super_user' || canAccess('ad-workflow')) ? <AdWorkflowAssignView /> : <Navigate to={getLandingPage()} replace />} />
+          {/* Legacy path (was under playground) → new location */}
+          <Route path="/playground/anuncio-flujo" element={<Navigate to="/anuncio-flujo" replace />} />
           <Route path="/inteligencia-artificial" element={<CampaignIntelligenceView />} />
           <Route path="/ml-import" element={<MLOrderImportView />} />
 
