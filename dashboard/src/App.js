@@ -639,7 +639,7 @@ const menuItems = [
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, loading: authLoading, canAccess, canManageUsers, getLandingPage, logout, simulationMode, stopSimulation, liberado, banner, payment } = useAuth();
+  const { user, loading: authLoading, canAccess, canManageUsers, getLandingPage, logout, simulationMode, stopSimulation, banner, payment } = useAuth();
   const { t, locale, language, changeLanguage } = useTranslation();
   const updateAvailable = useNewVersionCheck();
 
