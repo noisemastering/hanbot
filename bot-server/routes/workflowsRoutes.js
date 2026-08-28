@@ -48,6 +48,17 @@ const requireSandboxAccess = (req, res, next) => {
   return res.status(403).json({ success: false, error: "Solo el equipo puede usar el sandbox" });
 };
 
+// Ad↔flow ASSIGNMENT (attach a flow to an ad) + reading the flow/ad lists it needs
+// is open to super_admin, admin, super_user, and the "Administrador de campaña"
+// profile — matching the dashboard's canAccess('ad-workflow'). MANAGING workflows
+// (create/edit/delete/import) stays super_admin via requireSuperAdmin below.
+const requireAdWorkflowAccess = (req, res, next) => {
+  const u = req.user || {};
+  if (SANDBOX_ROLES.has(u.role)) return next();
+  if (u.role === "user" && u.profile === "campaign_manager") return next();
+  return res.status(403).json({ success: false, error: "Sin acceso a asignación de flujos en anuncios" });
+};
+
 router.use(authenticate);
 // NOTE: no blanket requireSuperAdmin — each route declares its own guard, so the
 // sandbox/list can be opened to admins while management stays super_admin.
@@ -68,7 +79,7 @@ const SANDBOX_PERSONA_POOL = ["Carolina", "Mireya", "Claudia", "Fernanda", "Mira
 // Facebook ad IDs increase monotonically with creation, so fbAdId desc is the
 // reliable "newest ad first" ordering. Limit is generous so the default browse
 // list isn't truncated; search narrows by name/id.
-router.get("/ads", requireSuperAdmin, async (req, res) => {
+router.get("/ads", requireAdWorkflowAccess, async (req, res) => {
   try {
     const q = (req.query.q || "").trim();
     const filter = {};
@@ -93,7 +104,7 @@ router.get("/ads", requireSuperAdmin, async (req, res) => {
 
 // PATCH /workflows/ads/:adId — attach/detach a workflow, set its vars, toggle on/off.
 // Body: { workflowId?, workflowSetup?, workflowEnabled? }
-router.patch("/ads/:adId", requireLiberadoOrSuperAdmin, async (req, res) => {
+router.patch("/ads/:adId", requireAdWorkflowAccess, async (req, res) => {
   try {
     const ad = await Ad.findById(req.params.adId);
     if (!ad) return res.status(404).json({ success: false, error: "Ad not found" });
@@ -121,8 +132,8 @@ router.patch("/ads/:adId", requireLiberadoOrSuperAdmin, async (req, res) => {
   }
 });
 
-// GET /workflows
-router.get("/", requireSandboxAccess, async (req, res) => {
+// GET /workflows — flow list (needed by the ad-assignment picker too).
+router.get("/", requireAdWorkflowAccess, async (req, res) => {
   try {
     const filter = {};
     if (req.query.active === "true") filter.active = true;
