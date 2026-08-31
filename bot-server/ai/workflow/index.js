@@ -1757,11 +1757,15 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   {
     const knownZip = state.location && (state.location.zip || state.location.zipcode);
     const knownCity = state.location && state.location.city;
-    if (knownZip || knownCity) {
+    if (knownZip) {
+      // A returning customer may ship somewhere else this time — don't assume the
+      // zip on file is the destination. Confirm which CP for THIS order.
       turnContextExtra +=
-        `\n- DATO YA CAPTURADO (NO lo vuelvas a pedir): ya tienes ${knownZip ? `el código postal del cliente (${knownZip})` : ""}` +
-        `${knownZip && knownCity ? " y " : ""}${knownCity ? `su ciudad (${knownCity})` : ""}. ` +
-        `Úsalo para el envío/cotización; NUNCA le pidas de nuevo el código postal ni la ciudad.`;
+        `\n- CP YA REGISTRADO (${knownZip}): es de una conversación previa y el cliente podría enviar a OTRA dirección esta vez. NO lo asumas como destino de este pedido. ` +
+        `Al concretar la compra/envío, confirma de forma natural a qué código postal le llegaría el pedido ESTA VEZ (el mismo ${knownZip} u otro).`;
+    } else if (knownCity) {
+      turnContextExtra +=
+        `\n- CIUDAD YA CAPTURADA (${knownCity}): úsala de contexto; al concretar el envío confirma a qué código postal le llegaría el pedido esta vez.`;
     }
   }
   // RAIN/WATERPROOF: never sell malla sombra as a rain solution — it's shade mesh.

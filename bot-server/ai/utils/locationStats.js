@@ -121,28 +121,33 @@ function containsMLLink(responseText) {
  * @returns {object} { text, askedStats: boolean }
  */
 async function appendStatsQuestionToResponse(responseText, convo, psid, userMessage = null) {
-  // Don't ask if already asked
-  if (convo.askedLocationStats) {
+  // Only relevant when we're sharing a purchase link (a real order moment).
+  if (!containsMLLink(responseText)) {
     return { text: responseText, askedStats: false };
   }
 
-  // Don't ask if we already have their location (city/state OR just zip)
-  if ((convo.city && convo.stateMx) || convo.zipcode || convo.customOrderZipcode) {
-    return { text: responseText, askedStats: false };
-  }
-
-  // Don't ask if the customer's CURRENT message contains a zip code
+  // Don't ask if the customer's CURRENT message already contains a zip code
   // (it hasn't been persisted to convo yet at this point in the pipeline)
   if (userMessage && /\b\d{5}\b/.test(userMessage)) {
     return { text: responseText, askedStats: false };
   }
 
-  // Only ask if response contains ML link (price quote with purchase link)
-  if (!containsMLLink(responseText)) {
+  // RETURNING customer with a zip on file: a new order may ship elsewhere, so
+  // CONFIRM which zip this time (ask again even if we asked before — it's a new link).
+  const knownZip = convo.zipcode || convo.customOrderZipcode;
+  if (knownZip) {
+    await updateConversation(psid, { pendingLocationResponse: true, lastLinkSentAt: new Date() });
+    return {
+      text: responseText + `\n\nVi que antes usaste el CP ${knownZip}. ¿A ese te llega el pedido esta vez, o a otro código postal?`,
+      askedStats: true
+    };
+  }
+
+  // No zip yet: ask once per session.
+  if (convo.askedLocationStats || (convo.city && convo.stateMx)) {
     return { text: responseText, askedStats: false };
   }
 
-  // Append question and mark as asked
   await updateConversation(psid, {
     askedLocationStats: true,
     pendingLocationResponse: true,
