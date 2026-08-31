@@ -330,7 +330,7 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
   // turn (so we don't double-ask), and we resolved to ask above. We NEVER ask for the
   // name — that's captured passively (greeting/profile/what the customer volunteers).
   if (shouldAskZip && safeText && !/c[oó]digo postal|\bC\.?P\.?\b|\bcp\b/i.test(safeText)) {
-    safeText += "\n\nPor cierto, ¿me compartes tu código postal? Es solo para fines estadísticos. 🙏";
+    safeText += "\n\nPor cierto, ¿a qué código postal te llegaría el pedido? 📍";
   }
 
   return { handled: true, reply: safeText ? { type: "text", text: safeText } : null };

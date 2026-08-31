@@ -152,7 +152,7 @@ async function appendStatsQuestionToResponse(responseText, convo, psid, userMess
   console.log("📊 Appending zip code question to price quote response");
 
   return {
-    text: responseText + '\n\n¿Me puedes compartir tu código postal para fines estadísticos?',
+    text: responseText + '\n\n¿A qué código postal te llegaría el pedido?',
     askedStats: true
   };
 }

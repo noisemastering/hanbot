@@ -1174,7 +1174,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     const isNewRequest = /\b(colores?|verde|negro|negra|beige|blanc|gris|precio|cu[aá]nto|medida|link|enlace|comprar|otra|otro)\b/i.test(String(userMessage)) || !!require("./tools").dimsOf(String(userMessage)); // dimsOf → verbose "6 por 3" counts as a fresh request too, not just compact "6x3"
     state.pendingZipAsk = false; // one-shot regardless
     if (!haveZip && !msgHasZip && !isNewRequest) {
-      const reply = "¡Con gusto! ¿Me compartes tu código postal? Es solo para fines estadísticos. 🙏";
+      const reply = "¡Con gusto! ¿A qué código postal te llegaría el pedido? 📍";
       history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
       return {
         reply,
