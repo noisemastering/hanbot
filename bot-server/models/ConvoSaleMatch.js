@@ -17,6 +17,7 @@ const ConvoSaleMatchSchema = new mongoose.Schema(
     orderId: { type: String }, // ml_sales _id (ML order id)
 
     certainty: { type: Number }, // 0-100
+    priority: { type: Number }, // 1 name > 2 same-zip nameless > 3 near-zip nameless (claim order)
     confidence: { type: String }, // high | medium | low
     undisputed: { type: Boolean, default: false },
     ventaIndirecta: { type: Boolean, default: false },

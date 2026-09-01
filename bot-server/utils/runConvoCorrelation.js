@@ -256,6 +256,26 @@ async function runConvoCorrelation({ full = false, since: sinceOverride = null }
     const ctx = await buildContext();
     const convos = await Conversation.find(dateClause).select(MATCH_FIELDS).lean();
     const windowPsids = [...new Set(convos.map((c) => String(c.psid)).filter(Boolean))];
+
+    // PROMOTION: also re-score the convos behind existing UNCERTAIN (≤60%) matches,
+    // even if they're outside the time window. New data (e.g. a sale's buyer name
+    // backfilled, or a stronger convo now qualifying) can promote a ≤60% match to a
+    // higher tier; the claim below reassigns the sale to the better match and the
+    // order-uniqueness cleanup deletes the superseded uncertain one. Promotion
+    // overrides the prior assignment. ≥70% matches are stable (not re-pulled here).
+    {
+      const inWindow = new Set(windowPsids);
+      const uncertainPsids = [...new Set(
+        (await ConvoSaleMatch.find({ certainty: { $lte: 60 }, method: { $ne: "human" }, humanVerdict: null })
+          .select("psid").lean()).map((m) => String(m.psid)).filter(Boolean)
+      )].filter((p) => !inWindow.has(p));
+      if (uncertainPsids.length) {
+        const extra = await Conversation.find({ psid: { $in: uncertainPsids } }).select(MATCH_FIELDS).lean();
+        for (const c of extra) convos.push(c);
+        windowPsids.push(...uncertainPsids);
+      }
+    }
+
     const allScored = [];
     for (const c of convos) {
       if (!c.psid) continue;
@@ -300,7 +320,11 @@ async function runConvoCorrelation({ full = false, since: sinceOverride = null }
     // only via strong matches. A convo's 2nd/3rd/… order must each be ≥70% (a real
     // customer's several purchases); weak tiers stay capped at one order (so different
     // buyers can't pile onto one convo through the no-location tiers).
-    allScored.sort((a, b) => b.certainty - a.certainty ||
+    // PRIORITY first (1 name > 2 same-zip nameless > 3 near-zip nameless): a name
+    // match claims the sale before any nameless one, even at a lower %. Within a
+    // priority level, highest % wins, then the tighter click→sale gap.
+    allScored.sort((a, b) => (a.priority || 9) - (b.priority || 9) ||
+      b.certainty - a.certainty ||
       (Math.abs(a.matchDetails.gapHoursToSale ?? 1e9) - Math.abs(b.matchDetails.gapHoursToSale ?? 1e9)));
     const claimedOrders = new Set();     // each order → exactly one client
     const convoOrderCount = new Map();   // psid → # orders already claimed

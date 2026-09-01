@@ -127,6 +127,20 @@ function strictFullNameMatch(convoNames, saleName) {
   return false;
 }
 
+// EXACT name match: the harvested (convo) name and the sale name are the SAME name —
+// identical set of significant tokens (order/accents ignored). A missing/extra
+// surname, a nickname, or a partial is NOT exact → that's a "variant". Gates the 100% tier.
+function exactNameMatch(convoNames, saleName) {
+  const st = new Set(tokensOf(saleName));
+  if (!st.size) return false;
+  for (const cn of convoNames || []) {
+    const cs = new Set(tokensOf(cn));
+    if (cs.size < 2) continue; // need a full name (first + surname) to claim "exact"
+    if (cs.size === st.size && [...cs].every((w) => st.has(w))) return true;
+  }
+  return false;
+}
+
 /**
  * Build the lookup maps needed to match (call once, reuse across conversations).
  * @returns {Promise<{itemToFamilies: Map<string,Set<string>>, cityIndex: Map<string,string[]>, userLoc: Map<string,object>}>}
@@ -442,73 +456,49 @@ function classify(m) {
   const gTxt = m.gapHours == null ? "s/tiempo"
     : g < 1 ? `${Math.round(g * 60)}min` : `${Math.round(g * 10) / 10}h`;
 
-  let pct = null, tier = "", vi = false, undisputed = false, dens = null;
+  let pct = null, tier = "", vi = false, undisputed = false;
 
-  // Apply the frequency/density dampener to a NAMELESS tier's base %. Returns the damped
-  // pct (null if it collapses to 0) and records the density for the reason string.
-  const damp = (base) => {
-    if (base == null) return null;
-    const factor = densityFactor(m.zipDaySales, g);
-    dens = { competitors: Math.max(0, (m.zipDaySales || 1) - 1), factor: Math.round(factor * 100) / 100 };
-    const p = Math.round(base * factor);
-    return p >= 1 ? p : null; // a busy-enough zip can dampen it out of attributability
-  };
-
-  // NEAR-MISS proximity: 1 at 0 km → 0 at NEAR_KM. Used only when zipNearMatch.
-  const proximity = m.zipDistanceKm != null ? Math.max(0, 1 - m.zipDistanceKm / NEAR_KM) : 0;
-  // Near + NAME: the name is the strong signal; the ≤7km location corroborates, so
-  // distance only modulates ±40%.
-  const nearName = (base, flat) => {
-    const b = decayScore(base, flat, null, g);
-    if (b == null) return null;
-    const p = Math.round(b * (0.6 + 0.4 * proximity));
-    return p >= 1 ? p : null;
-  };
-  // Near + ITEM (nameless): both distance AND neighborhood-sales density bite —
-  // strong only when the buyer is close AND the 7km area is sparse.
-  const nearBare = (base, flat) => {
-    const b = decayScore(base, flat, null, g);
-    if (b == null) return null;
-    const factor = densityFactor(m.neighborhoodDaySales, g);
-    dens = { competitors: Math.max(0, (m.neighborhoodDaySales || 1) - 1), factor: Math.round(factor * 100) / 100, near: true };
-    const p = Math.round(base * proximity * factor);
+  // Flat within the day (GATE 2 already bounds to the click day + directional gate).
+  const flat = (p) => decayScore(p, 24, null, g);
+  // Linear decay hi→lo across 0–60 min; NULL after 60 min (hard 1h window).
+  const linHour = (hi, lo) => {
+    if (g > 1) return null;
+    const t = Math.max(0, Math.min(1, g)); // g in hours → fraction of the hour
+    const p = Math.round(hi - (hi - lo) * t);
     return p >= 1 ? p : null;
   };
 
-  if (m.itemMatch) {
-    // SAME product (a size the customer discussed OR clicked).
-    if (m.zipMatch && (m.nameMatch || m.lastNameMatch) && m.nicknameMatch) { pct = decayScore(100, 48, null, g); tier = m.nameMatch ? "cp + nombre + usuario ML + item" : "cp + apellido + usuario ML + item"; undisputed = pct === 100; } // 2 días
-    else if (m.zipMatch && m.nameMatch) { pct = decayScore(90, 24, null, g); tier = "cp + nombre + item"; }        // 1 día
-    else if (m.zipMatch && m.lastNameMatch) { pct = decayScore(90, 24, null, g); tier = "cp + apellido + item"; }  // 1 día — last name is as good as full name WHEN zip + item both match
-    else if (m.cityMatch && m.nameMatch) { pct = decayScore(70, 24, null, g); tier = "ciudad + nombre + item"; }   // 1 día
-    // NEAR-MISS + NAME: different zip but ≤7km + a matching name + same item. Only
-    // reached when it's NOT the same exact zip nor same city+name (those tiers win).
-    else if (m.zipNearMatch && (m.nameMatch || m.fullNameMatch)) { pct = nearName(72, 24); tier = `cercanía (${m.zipDistanceKm}km) + nombre + item`; } // 1 día
-    else if (m.zipMatch) { pct = damp(decayScore(50, 24, null, g)); tier = "cp + item"; }                           // 1 día · NAMELESS → density-damped (50% ceiling in a quiet zip-day, scales down as same-day sales rise)
-    // NO LOCATION but the sale's buyer/receiver FULL NAME matches + same item + clicked
-    // link + directional same-day. Recovers buyers we can name (~100%) but never got a
-    // zip for (~77%). FULL name only — last-name-only (apellido) without location is NOT
-    // used here: common MX surnames (Hernández/García/Martínez) collide across different
-    // people and produced false matches. A last name needs a zip to corroborate (the
-    // cp + apellido tier above).
-    else if (m.fullNameMatch) { pct = decayScore(60, 24, null, g); tier = "nombre completo + item"; }               // 1 día · nombre completo (nombre+apellido), sin ubicación
-    // NEAR-MISS, NAMELESS: ≤7km + same item, no name. Weak by default; real only when
-    // the 7km area is sparse (few competing sales) AND the buyer is close.
-    else if (m.zipNearMatch) { pct = nearBare(45, 24); tier = `cercanía (${m.zipDistanceKm}km) + item`; }            // 1 día · density+proximity damped
-    // else → not attributable (0%)
+  // Rubric axes: NAME (exacto | variante | —), CP (mismo | cercano | —), ITEM (mismo | distinto).
+  const sameItem = !!m.itemMatch;
+  const exact = !!m.exactNameMatch;
+  const variant = !exact && (m.fullNameMatch || m.nameMatch || m.lastNameMatch || m.nicknameMatch);
+  const cpSame = !!m.zipMatch;
+  const cpNear = !m.zipMatch && !!m.zipNearMatch;
+  vi = !sameItem;
+  let priority = 9;
+
+  if (exact) {
+    // NAME exacto → 100%, salvo exacto + CP cercano + mismo item = 90% (el CP
+    // distinto-pero-cercano introduce una pizca de duda cuando es el mismo item).
+    priority = 1;
+    if (cpNear && sameItem) { pct = flat(90); tier = `nombre exacto + CP cercano (${m.zipDistanceKm}km)`; }
+    else { pct = flat(100); tier = "nombre exacto"; }
+    undisputed = pct === 100;
+  } else if (variant) {
+    priority = 1;
+    if (cpSame) { pct = flat(100); tier = "variante de nombre + CP"; undisputed = pct === 100; }
+    else if (cpNear) { pct = sameItem ? flat(85) : linHour(60, 40); tier = `variante de nombre + CP cercano (${m.zipDistanceKm}km)`; }
+    else { pct = sameItem ? flat(50) : linHour(50, 30); tier = "variante de nombre, sin CP"; }
   } else {
-    // DIFFERENT product (venta indirecta).
-    vi = true;
-    if (m.zipMatch && m.nameMatch && m.nicknameMatch) { pct = decayScore(90, 2, null, g); tier = "producto distinto · cp + nombre + usuario ML"; }               // 2 h
-    else if (m.zipMatch && m.nameMatch && m.sameFamily) { pct = decayScore(50, 12, null, g); tier = "producto distinto, misma familia · cp + nombre"; }          // 12 h
-    else if (m.zipMatch && m.sameFamily) { pct = damp(decayScore(10, 12, null, g)); tier = "producto distinto, misma familia · cp"; }                            // 12 h · NAMELESS → density-damped
-    // else → not attributable (0%)
+    // SIN nombre.
+    if (cpSame) { priority = 2; pct = sameItem ? flat(85) : linHour(70, 50); tier = "mismo CP, sin nombre"; }
+    else if (cpNear) { priority = 3; pct = sameItem ? linHour(50, 25) : null; tier = `CP cercano (${m.zipDistanceKm}km), sin nombre`; }
+    // sin nombre + sin CP → 0% (no attributable)
   }
 
   if (pct == null) return null;
-  const densTxt = dens && dens.competitors > 0
-    ? ` · ${dens.competitors} venta${dens.competitors > 1 ? "s" : ""}/día ${dens.near ? "en 7km" : "mismo CP"} ×${dens.factor}` : "";
-  return { pct, confidence: med(pct), undisputed, ventaIndirecta: vi, density: dens, reason: `${tier} · ${gTxt}${densTxt} (${pct}%)` };
+  const distTxt = !sameItem ? " · producto distinto (crédito al item vendido)" : "";
+  return { pct, confidence: med(pct), undisputed, ventaIndirecta: vi, priority, reason: `${tier}${distTxt} · ${gTxt} (${pct}%)` };
 }
 
 const ORPHAN_WINDOW_MS = 5 * 60000; // ±5 min
@@ -555,6 +545,7 @@ async function matchOrphanByBasket(convo, id, MLSale) {
     conversationId: convo._id,
     orderId: s._id,
     certainty: 60,
+    priority: 3,
     confidence: "medium",
     undisputed: false,
     ventaIndirecta: false,
@@ -772,6 +763,7 @@ async function matchConversation(convo, ctx) {
       nameMatch: nameMatches(id.names, receiver) || nameMatches(id.names, buyerName),
       lastNameMatch: lastNameMatches(id.names, receiver) || lastNameMatches(id.names, buyerName),
       fullNameMatch: strictFullNameMatch(id.names, receiver) || strictFullNameMatch(id.names, buyerName),
+      exactNameMatch: exactNameMatch(id.names, receiver) || exactNameMatch(id.names, buyerName),
       nicknameMatch: id.firstName ? nameInNickname(id.firstName, nick) : false,
       itemMatch: itemMatch(s, id),
       sameFamily,
@@ -814,6 +806,7 @@ function buildMatchDoc(convo, id, s, m, v, dayToSizes) {
     conversationId: convo._id,
     orderId: s._id,
     certainty: v.pct,
+    priority: v.priority || 9, // 1 name > 2 same-zip nameless > 3 near-zip nameless (claim order)
     confidence: v.confidence,
     undisputed: v.undisputed,
     ventaIndirecta: v.ventaIndirecta,

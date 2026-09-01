@@ -125,6 +125,12 @@ function SalesOverviewView() {
         </div>
       </div>
 
+      {/* Reallocation notice — attributions can shift as better data arrives */}
+      <div className="flex items-start gap-2 rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-300/90">
+        <span>ℹ️</span>
+        <span>Algunas ventas pueden reasignarse si llega mejor información (p. ej. cuando aparece el nombre del comprador). Una atribución de baja certeza se promueve y reasigna al cliente correcto cuando los datos lo permiten.</span>
+      </div>
+
       {/* All-time banner */}
       {data?.allTimeTotals && (
         <div className="bg-gradient-to-r from-blue-600/10 to-purple-600/10 border border-blue-500/20 rounded-xl px-6 py-4">
