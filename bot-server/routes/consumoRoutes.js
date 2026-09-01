@@ -24,28 +24,43 @@ function currentMonthStr() {
   const mx = new Date(Date.now() - 6 * 3600e3);
   return mx.toISOString().slice(0, 7);
 }
+// The calendar month before monthStr ("YYYY-MM").
+function prevMonthStr(monthStr) {
+  const [y, mo] = monthStr.split("-").map(Number);
+  const d = new Date(Date.UTC(y, mo - 2, 1)); // mo-2 = zero-based previous month
+  return d.toISOString().slice(0, 7);
+}
+
+// New (session-opener) convos per MX-day for a calendar month. A convo is NEW when the
+// user's previous message (same PSID) was >=23h earlier (or there was none).
+async function monthDaily(monthStr) {
+  const { start, end } = monthBounds(monthStr);
+  const lookback = new Date(start.getTime() - GAP_MS); // so the month's first msg per psid knows its predecessor
+  const rows = await Message.aggregate([
+    { $match: { senderType: "user", timestamp: { $gte: lookback, $lt: end } } },
+    { $setWindowFields: { partitionBy: "$psid", sortBy: { timestamp: 1 }, output: { prevTs: { $shift: { output: "$timestamp", by: -1 } } } } },
+    { $addFields: { isNew: { $or: [{ $eq: ["$prevTs", null] }, { $gte: [{ $subtract: ["$timestamp", "$prevTs"] }, GAP_MS] }] } } },
+    { $match: { isNew: true, timestamp: { $gte: start } } },
+    { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$timestamp", timezone: TZ } }, count: { $sum: 1 } } },
+    { $sort: { _id: 1 } },
+  ], { allowDiskUse: true });
+  return rows.map((r) => ({ date: r._id, count: r.count }));
+}
 
 // GET /consumo/usage?month=YYYY-MM  → daily + month totals vs plan.
 router.get("/usage", async (req, res) => {
   try {
     const monthStr = /^\d{4}-\d{2}$/.test(req.query.month || "") ? req.query.month : currentMonthStr();
-    const { start, end } = monthBounds(monthStr);
-    const lookback = new Date(start.getTime() - GAP_MS); // so the month's first msg per psid knows its predecessor
 
-    // Gap detection server-side ($shift window fn) → keep only session-openers in-month → group by MX day.
-    const rows = await Message.aggregate([
-      { $match: { senderType: "user", timestamp: { $gte: lookback, $lt: end } } },
-      { $setWindowFields: { partitionBy: "$psid", sortBy: { timestamp: 1 }, output: { prevTs: { $shift: { output: "$timestamp", by: -1 } } } } },
-      { $addFields: { isNew: { $or: [{ $eq: ["$prevTs", null] }, { $gte: [{ $subtract: ["$timestamp", "$prevTs"] }, GAP_MS] }] } } },
-      { $match: { isNew: true, timestamp: { $gte: start } } },
-      { $group: { _id: { $dateToString: { format: "%Y-%m-%d", date: "$timestamp", timezone: TZ } }, count: { $sum: 1 } } },
-      { $sort: { _id: 1 } },
-    ], { allowDiskUse: true });
-
-    const daily = rows.map((r) => ({ date: r._id, count: r.count }));
+    const daily = await monthDaily(monthStr);
     const total = daily.reduce((a, d) => a + d.count, 0);
     const todayKey = new Date(Date.now() - 6 * 3600e3).toISOString().slice(0, 10);
     const today = daily.find((d) => d.date === todayKey)?.count || 0;
+
+    // Previous calendar month's total — a reference point for the gauge (esp. early in a month).
+    const prevStr = prevMonthStr(monthStr);
+    const prevDaily = await monthDaily(prevStr);
+    const lastMonth = { month: prevStr, total: prevDaily.reduce((a, d) => a + d.count, 0) };
 
     const state = await SystemState.getState();
     const p = (state.plan && state.plan.monthlyLimit) ? state.plan : { name: "Estándar", monthlyLimit: 3000, overageRate: 0, currency: "MXN" };
@@ -61,6 +76,7 @@ router.get("/usage", async (req, res) => {
       today,
       remaining: Math.max(0, limit - total),
       overage: { count: overCount, rate: overageRate, cost: overCount * overageRate },
+      lastMonth,
       daily,
     });
   } catch (err) {

@@ -17,9 +17,10 @@ function arc(cx, cy, r, a1, a2) {
   return `M ${p1.x.toFixed(2)} ${p1.y.toFixed(2)} A ${r} ${r} 0 ${large} 1 ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
 }
 
-export default function Speedometer({ value = 0, limit = 3000 }) {
+export default function Speedometer({ value = 0, limit = 3000, reference = null, referenceLabel = "" }) {
   const cx = 160, cy = 158, r = 122, stroke = 20;
-  const max = Math.max(limit * (4 / 3), value * 1.05); // limit at ~75% of the dial; grow if over
+  const hasRef = reference != null && reference > 0;
+  const max = Math.max(limit * (4 / 3), value * 1.05, hasRef ? reference * 1.05 : 0); // limit at ~75% of the dial; grow if over
   const clamp = (v) => Math.min(1, Math.max(0, v / max));
   const angleFor = (v) => START + SWEEP * clamp(v);
   const valAngle = angleFor(value);
@@ -59,6 +60,21 @@ export default function Speedometer({ value = 0, limit = 3000 }) {
           </text>
         </g>
       ))}
+      {/* reference marker (e.g. last month's total) — a sky-blue tick on the dial */}
+      {hasRef && (() => {
+        const a = angleFor(reference);
+        const o = pt(cx, cy, r + 6, a);
+        const i = pt(cx, cy, r - stroke - 3, a);
+        const lbl = pt(cx, cy, r + 16, a);
+        return (
+          <g>
+            <line x1={i.x} y1={i.y} x2={o.x} y2={o.y} stroke="#38bdf8" strokeWidth={3} strokeLinecap="round" />
+            <text x={lbl.x} y={lbl.y + 3} textAnchor="middle" fontSize="9" fill="#38bdf8" fontWeight={600}>
+              {referenceLabel || Math.round(reference).toLocaleString()}
+            </text>
+          </g>
+        );
+      })()}
       {/* needle */}
       <line x1={needleBack.x} y1={needleBack.y} x2={needle.x} y2={needle.y} stroke={over ? "#ef4444" : "#e8e8e8"} strokeWidth={3.5} strokeLinecap="round" />
       <circle cx={cx} cy={cy} r={9} fill="#1a1a1a" stroke={over ? "#ef4444" : "#e8e8e8"} strokeWidth={3} />

@@ -45,6 +45,13 @@ const CONFIDENCE_COLORS = {
   low: COLORS.red,
 };
 
+// "2026-08" → "Agosto" (MX-Spanish month name, capitalized)
+const MONTHS_ES = ["Enero", "Febrero", "Marzo", "Abril", "Mayo", "Junio", "Julio", "Agosto", "Septiembre", "Octubre", "Noviembre", "Diciembre"];
+const monthLabelEs = (ym) => {
+  const mo = Number(String(ym || "").split("-")[1]);
+  return mo >= 1 && mo <= 12 ? MONTHS_ES[mo - 1] : "Mes anterior";
+};
+
 const PRODUCT_COLORS = ["#10B981", "#34D399", "#6EE7B7", "#A7F3D0", "#065F46"];
 const REGION_COLORS = ["#06B6D4", "#22D3EE", "#67E8F9", "#A5F3FC", "#0E7490"];
 const AD_COLORS = ["#8B5CF6", "#A78BFA", "#C4B5FD", "#7C3AED", "#6D28D9"];
@@ -317,7 +324,7 @@ function Home() {
           className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-4 flex flex-col sm:flex-row items-center gap-4 cursor-pointer hover:border-primary-500/60 transition-colors"
           title={t('consumo.title')}
         >
-          <div style={{ width: 190 }} className="flex-shrink-0"><Speedometer value={consumo.total} limit={consumo.plan.monthlyLimit} /></div>
+          <div style={{ width: 190 }} className="flex-shrink-0"><Speedometer value={consumo.total} limit={consumo.plan.monthlyLimit} reference={consumo.lastMonth?.total} referenceLabel={consumo.lastMonth?.total?.toLocaleString('es-MX')} /></div>
           <div className="flex-1 min-w-0">
             <div className="text-white font-semibold flex items-center gap-2">
               {t('consumo.title')} <span className="text-primary-400 text-sm">→</span>
@@ -325,6 +332,12 @@ function Home() {
             <div className="text-gray-400 text-sm mt-1">
               {consumo.total.toLocaleString('es-MX')} / {consumo.plan.monthlyLimit.toLocaleString('es-MX')} convos · {consumo.remaining.toLocaleString('es-MX')} {t('consumo.remaining').toLowerCase()}
             </div>
+            {consumo.lastMonth?.total > 0 && (
+              <div className="text-sky-400 text-xs mt-1 flex items-center gap-1.5">
+                <span className="inline-block w-2.5 h-0.5 bg-sky-400 rounded-full" />
+                {monthLabelEs(consumo.lastMonth.month)}: {consumo.lastMonth.total.toLocaleString('es-MX')} convos
+              </div>
+            )}
             {consumo.overage.count > 0 && (
               <div className="text-red-400 text-sm mt-1 font-semibold">{t('consumo.overage')}: {consumo.overage.count.toLocaleString('es-MX')}</div>
             )}
