@@ -371,7 +371,7 @@ function AdPerformanceView() {
       )}
 
       {/* Puntuación vs. mercado — after the chart */}
-      <MarketScoreCard spend={fbSpendTotals.spend} impressions={fbSpendTotals.impressions} clicks={grandTotals.clicks} conversions={grandTotals.conversions} revenue={grandTotals.revenue} humanConversions={humanConversions} />
+      <MarketScoreCard spend={fbSpendTotals.spend} impressions={fbSpendTotals.impressions} fbClicks={fbSpendTotals.clicks} clicks={grandTotals.clicks} conversions={grandTotals.conversions} revenue={grandTotals.revenue} humanConversions={humanConversions} />
 
       {/* Geo + Gender donuts (conversion-based → correlation-dependent) */}
       {(geoData.length > 0 || genderData.length > 0) && (

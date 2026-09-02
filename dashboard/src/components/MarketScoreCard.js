@@ -3,16 +3,19 @@ import React, { useMemo } from 'react';
 // Puntuación vs. mercado mexicano — benchmarks de anuncios de Facebook (ecommerce/retail MX, MXN).
 // Editable aquí si tienes metas propias. reliable=true → dato directo de Facebook;
 // reliable=false → depende de la correlación (sesgado por el subconteo de ventas).
-export default function MarketScoreCard({ spend = 0, impressions = 0, clicks = 0, conversions = 0, revenue = 0, humanConversions = 0 }) {
+// `fbClicks` = link clicks reported by Facebook (the reliable denominator for CTR/CPC).
+// `clicks` = clicks we correlated into the bot/attribution (used for Conversión only).
+export default function MarketScoreCard({ spend = 0, impressions = 0, fbClicks = 0, clicks = 0, conversions = 0, revenue = 0, humanConversions = 0 }) {
+  const ctrClicks = fbClicks || clicks; // fall back to attributed if FB spend didn't load
   // Wholesale + special-size requests go to a HUMAN (no click), so they're added to the
   // conversion count used by Conversión & CPA. ROAS stays on click revenue (handoffs
   // carry no confirmed amount). Stated below so the user always knows they're included.
   const totalConv = conversions + humanConversions;
   const metrics = useMemo(() => {
     const B = [
-      { key: 'ctr',  label: 'CTR',        benchmark: 1.0, unit: '%', higher: true,  reliable: true,  value: impressions ? (clicks / impressions) * 100 : null,
+      { key: 'ctr',  label: 'CTR',        benchmark: 1.0, unit: '%', higher: true,  reliable: true,  value: impressions ? (ctrClicks / impressions) * 100 : null,
         tip: 'CTR (Click-Through Rate): de cada 100 personas que vieron el anuncio, cuántas hicieron clic. Más alto = el anuncio atrae mejor. Fórmula: clicks ÷ impresiones.' },
-      { key: 'cpc',  label: 'CPC',        benchmark: 5,   unit: '$', higher: false, reliable: true,  value: clicks ? spend / clicks : null,
+      { key: 'cpc',  label: 'CPC',        benchmark: 5,   unit: '$', higher: false, reliable: true,  value: ctrClicks ? spend / ctrClicks : null,
         tip: 'CPC (Costo Por Clic): cuánto pagas, en promedio, por cada clic. Más bajo = más eficiente. Fórmula: gasto ÷ clicks.' },
       { key: 'cpm',  label: 'CPM',        benchmark: 70,  unit: '$', higher: false, reliable: true,  value: impressions ? (spend / impressions) * 1000 : null,
         tip: 'CPM (Costo Por Mil impresiones): cuánto cuesta que mil personas vean el anuncio. Más bajo = mejor alcance por peso. Fórmula: gasto ÷ impresiones × 1000.' },
@@ -30,7 +33,7 @@ export default function MarketScoreCard({ spend = 0, impressions = 0, clicks = 0
       const delta = Math.round((ratio - 1) * 100);
       return { ...m, rating, delta };
     });
-  }, [spend, impressions, clicks, totalConv, revenue]);
+  }, [spend, impressions, ctrClicks, clicks, totalConv, revenue]);
 
   const badge = { bueno: 'bg-green-500/20 text-green-400', promedio: 'bg-amber-500/20 text-amber-400', bajo: 'bg-red-500/20 text-red-400' };
   const label = { bueno: 'Bueno', promedio: 'Promedio', bajo: 'Bajo' };
