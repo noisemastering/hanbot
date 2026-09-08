@@ -7,6 +7,7 @@
 //      signal a human handoff (never invent a price).
 //   4. else not quotable.
 const { getMLPrice } = require("../utils/mlPriceLookup");
+const marketplace = require("../marketplace");
 
 function mlLinkOf(product) {
   const links = product?.onlineStoreLinks || [];
@@ -38,9 +39,85 @@ function noLinkResult(base, product) {
   };
 }
 
-async function resolvePrice(product) {
+// ALTERNATE MARKETPLACE resolution. A campaign routed THIS product to a non-default
+// POS (e.g. the client's own store). Price/link/refund/delivery come from that POS;
+// everything else stays on the default channel. Same guarantees as the ML path: a
+// sold-out or price-less product hands off, and we NEVER invent a price.
+async function resolveViaAltPos(product, pos) {
+  const label = pos?.name || "otra tienda";
+  const linkInfo = marketplace.linkForPos(product, pos) || {};
+  const link = linkInfo.url || null;
+  const invPrice = numericPrice(product.price);
+  const plusIvaBase = !!product.priceExcludesTax;
+
+  // LINK-ONLY alt (e.g. the Hanlob store, trial mode): the PRICE stays on the
+  // default channel (live ML → the source of truth); we only swap the buy LINK to
+  // this POS's link for the routed products. No price API is queried.
+  if (pos.kind !== "http_price_api") {
+    const base = await resolvePrice(product, {}); // normal ML/inventario hierarchy
+    // Only relink when there's a real price to quote AND an alt link to point to;
+    // otherwise leave the default result (incl. its handoff) exactly as-is.
+    if (!link || !(numericPrice(base.amount) > 0)) return base;
+    const out = { ...base, link, marketplace: label, linkFrom: label };
+    // If the default path would've handed off ONLY for lacking a purchase link, the
+    // alt link now lets the customer self-serve → clear that specific handoff.
+    if (base.quoteThenHandoff) {
+      out.handoff = false;
+      out.quoteThenHandoff = false;
+      delete out.handoffReason;
+    }
+    return out;
+  }
+
+  // STOCK GATE — same rule as the default path.
+  if (product.active !== false && product.sellable === true && product.stock != null && Number(product.stock) < 1) {
+    return {
+      amount: null, source: null, handoff: true, soldOut: true, link, marketplace: label,
+      handoffReason: `Producto AGOTADO en ${label}: ${product.name || "producto del flujo"} — pasar con un asesor para seguimiento/aviso`,
+    };
+  }
+
+  let r;
+  try {
+    r = await marketplace.priceViaPos(pos, { link, dbPrice: invPrice, sku: linkInfo.sku });
+  } catch (err) {
+    r = { available: false, fetchFailed: true, reason: err.message };
+  }
+
+  if (r && r.available && numericPrice(r.price)) {
+    const buyLink = r.url || link; // prefer the store's own canonical buy URL
+    return noLinkResult(
+      {
+        amount: numericPrice(r.price),
+        source: "alt",
+        marketplace: label,
+        live: true,
+        link: buyLink,
+        plusIva: r.taxIncluded === false ? true : plusIvaBase,
+        currency: r.currency || "MXN",
+        hasDiscount: !!r.hasDiscount,
+        originalPrice: r.originalPrice || null,
+        policies: pos?.policies || null,
+      },
+      product
+    );
+  }
+
+  // No live price via the alt store → NEVER invent one. Hand off, labeled by store.
+  return {
+    amount: null, source: null, handoff: true, link, marketplace: label, altOffline: !!r?.fetchFailed,
+    handoffReason: r?.fetchFailed
+      ? `⚠️ ${label} sin conexión — no se pudo leer el precio en vivo de ${product.name || "el producto"}; validar con un asesor`
+      : `Sin precio en vivo en ${label} para ${product.name || "el producto"} — validar con un asesor`,
+  };
+}
+
+async function resolvePrice(product, opts = {}) {
   const empty = { amount: null, source: null, handoff: false, link: null };
   if (!product) return empty;
+
+  // A campaign routed this product to an alternate marketplace → resolve there.
+  if (opts.altPos) return resolveViaAltPos(product, opts.altPos);
 
   // STOCK GATE: an active, sellable product with NO stock is still OFFERED, but
   // it's SOLD OUT → acknowledge it AND HAND OFF to a human (capture the lead so a
@@ -167,8 +244,13 @@ function isGenericMlUrl(url) {
   return path === ""; // bare domain or just "/"
 }
 
-// The official store link from the company's configured marketplaces (prefer ML).
+// The official store link. Prefer the CORE store (default POS — interchangeable),
+// then fall back to the company's configured marketplaces (ML-preferring heuristic).
 async function officialStoreUrl() {
+  try {
+    const def = await marketplace.getDefaultPos();
+    if (def?.defaultUrl) return def.defaultUrl;
+  } catch { /* fall through to marketplaces list */ }
   try {
     const { getBusinessInfo } = require("../../businessInfoManager");
     const biz = await getBusinessInfo();

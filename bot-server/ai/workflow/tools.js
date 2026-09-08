@@ -695,6 +695,16 @@ const REGISTRY = {
       const { resolvePrice, trackedLink } = require("./priceResolver");
       const requested = (input.product || "").trim();
 
+      // Campaign-scoped alternate marketplace: price these products through the alt
+      // POS (same as the preload), else the default ML/inventario path.
+      const altOptFor = (d) =>
+        ctx.altPos && d && d._id && (ctx.altProductIds || []).map(String).includes(String(d._id))
+          ? { altPos: ctx.altPos }
+          : {};
+      // Price-source suffix: ML shows nothing; an alt store names itself; else inventario.
+      const srcLabel = (p) =>
+        p.source === "ml" ? "" : p.source === "alt" ? ` (en ${p.marketplace || "otra tienda"})` : " (inventario)";
+
       // Resolve ONE measure/product → a customer-facing quote line, or null if it
       // can't be found. Sets handoff only for a sellable-but-priceless product.
       const quoteOne = async (q) => {
@@ -706,7 +716,7 @@ const REGISTRY = {
           if (nums.length === 1) doc = await findProductInFamilies(nums[0], ctx.families);
         }
         if (!doc) return { ok: false };
-        const pInfo = await resolvePrice(doc);
+        const pInfo = await resolvePrice(doc, altOptFor(doc));
         if (pInfo.soldOut) {
           // Active but out of stock → acknowledge AND hand off (capture the lead).
           ctx.handoffRequested = true;
@@ -730,7 +740,7 @@ const REGISTRY = {
             pInfo.hasDiscount && Number(pInfo.originalPrice) > Number(pInfo.amount)
               ? ` (CON DESCUENTO, rebajado de $${Math.round(pInfo.originalPrice)})`
               : "";
-          const price = pInfo.amount ? ` Precio: $${pInfo.amount}${pInfo.plusIva ? " + IVA" : ""}${disc}${pInfo.source === "ml" ? "" : " (inventario)"}.` : "";
+          const price = pInfo.amount ? ` Precio: $${pInfo.amount}${pInfo.plusIva ? " + IVA" : ""}${disc}${srcLabel(pInfo)}.` : "";
           const linkPart = link ? `Link de compra: ${link}.` : "";
           // Price but NO purchase link → quote it AND hand off to close the sale.
           if (pInfo.quoteThenHandoff || (pInfo.handoff && !link)) {
@@ -809,7 +819,7 @@ const REGISTRY = {
           pi.hasDiscount && Number(pi.originalPrice) > Number(pi.amount)
             ? ` (CON DESCUENTO, rebajado de $${Math.round(pi.originalPrice)})`
             : "";
-        const price = pi.amount ? ` Precio: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${disc}${pi.source === "ml" ? "" : " (inventario)"}.` : "";
+        const price = pi.amount ? ` Precio: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${disc}${srcLabel(pi)}.` : "";
         const linkPart = link ? `Link de compra: ${link}.` : "";
         // Price but NO purchase link → quote it AND hand off to close the sale.
         if (pi.quoteThenHandoff || (pi.handoff && !link)) {

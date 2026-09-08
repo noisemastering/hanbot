@@ -20,6 +20,17 @@ const { route } = require("./router");
 const { executeNode } = require("./nodeExecutor");
 const { resolveSetupContext } = require("./setupContext");
 
+// Alternate-marketplace routing option for a resolvePrice call. Returns { altPos }
+// when this product is one the campaign routed to a non-default POS, else {} (the
+// normal ML/default path). Used to keep IN-FLOW quotes consistent with the preload.
+function altOpt(state, doc) {
+  const ids = state && state.altProductIds;
+  if (state && state.altPos && doc && doc._id && Array.isArray(ids) && ids.map(String).includes(String(doc._id))) {
+    return { altPos: state.altPos };
+  }
+  return {};
+}
+
 // Current date/time + open/closed status in Mexico (Querétaro) time. The LLM
 // has no clock, so we compute it server-side and inject it as a fact each turn.
 // Business hours: Mon–Fri 08:00–18:00, Sat 09:00–14:00, Sun closed.
@@ -222,7 +233,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     try {
       const Workflow = require("../../models/Workflow");
       const familyList = Workflow.familyListOf(workflow);
-      const { contextBlock, product, priceInfo, catalog, preloadedAmounts, promoPitch, promoQuote } = await resolveSetupContext(
+      const { contextBlock, product, priceInfo, catalog, preloadedAmounts, promoPitch, promoQuote, altPos, altProductIds } = await resolveSetupContext(
         workflow.setup,
         state.setupOverrides,
         familyList,
@@ -239,6 +250,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       state.preloadedAmounts = preloadedAmounts || []; // every preloaded product's price (clamp allow-set)
       state.promoPitch = promoPitch || null; // verbatim sales pitch (sent once, on ask)
       state.promoQuote = promoQuote || null; // deterministic quote when no pitch is set
+      // Alternate-marketplace routing (campaign-scoped) — so in-flow quotes for the
+      // routed products price through the same alt POS as the preload.
+      state.altPos = altPos || null;
+      state.altProductIds = altProductIds || [];
       // OPEN THE FILE ON ENGAGEMENT: entering a PRODUCT workflow (not cold-start) with a
       // message = the client asked about a valid product. Create/ensure the profile now
       // and record the product interest (POI) — even before any link or handoff. A file
@@ -721,7 +736,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           const rec = await nearestRollByArea(area, rolloFams, { shade: shade || undefined });
           if (!rec) return beginHandoff({ preface: `Para cubrir ${area} m² lo mejor es una cotización personalizada.`, reason: `Sin rollo para ${area} m²` });
           const sh = await shadeText(rec.leaf);
-          const pi = await resolvePrice(rec.leaf);
+          const pi = await resolvePrice(rec.leaf, altOpt(state, rec.leaf));
           state.pendingAreaConfirm = null;
           if (pi && pi.amount) {
             const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: rec.leaf.name, productId: String(rec.leaf._id) });
@@ -834,7 +849,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // ground cover has none, so the exact size alone is enough to ask qty.
           const flowHasShades = carried.size > 0;
           if ((qty == null || qty === 1) && (reqShade || !flowHasShades)) {
-            const pi = await resolvePrice(exact);
+            const pi = await resolvePrice(exact, altOpt(state, exact));
             if (pi && pi.amount) {
               const sh = await shadeText(exact);
               state.activeProductId = String(exact._id);
@@ -904,7 +919,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         };
       };
       const quote = async (doc, label) => {
-        const pi = await resolvePrice(doc);
+        const pi = await resolvePrice(doc, altOpt(state, doc));
         if (pi && pi.amount && !pi.handoff) {
           const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: doc.name, productId: String(doc._id) });
           state.activeProductId = String(doc._id);
@@ -990,7 +1005,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       };
       const mayoreo = (n) => { state.lead = { ...(state.lead || {}), wholesaleQty: String(n) }; return beginHandoff({ preface: `Para ${n} rollos de borde manejamos precio de MAYOREO.`, reason: `Mayoreo borde: ${n} rollos`, wholesale: true }); };
       const shareLink = async (leaf, len) => {
-        const pi = await resolvePrice(leaf);
+        const pi = await resolvePrice(leaf, altOpt(state, leaf));
         if (!pi || !pi.amount) return null;
         const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: leaf.name, productId: String(leaf._id) });
         return retB(`¡Perfecto! El rollo de ${len} m está en $${pi.amount}.` + (link ? ` Aquí lo compras: ${link}` : ""), { bordeQuoted: len });
@@ -1012,7 +1027,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           const ed = leaf && leaf.enabledDimensions;
           const exactLen = leaf && new RegExp(`\\b${len}\\b`).test(`${leaf.name || ""} ${leaf.size || ""}`);
           if (leaf && exactLen && Array.isArray(ed) && ed.length && !ed.includes("width")) {
-            const pi = await resolvePrice(leaf).catch(() => null);
+            const pi = await resolvePrice(leaf, altOpt(state, leaf)).catch(() => null);
             if (pi && pi.amount) {
               state.activeProductId = String(leaf._id);
               state.awaitingBordeQty = { productId: String(leaf._id), length: len };
@@ -1057,7 +1072,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         const ed = leaf && leaf.enabledDimensions;
         const exactLen = leaf && new RegExp(`\\b${len}\\b`).test(`${leaf.name || ""} ${leaf.size || ""}`);
         if (leaf && exactLen && Array.isArray(ed) && ed.length && !ed.includes("width")) {
-          const pi = await resolvePrice(leaf);
+          const pi = await resolvePrice(leaf, altOpt(state, leaf));
           if (pi && pi.amount) {
             state.activeProductId = String(leaf._id);
             const q = parseRollQuantity(msgB); // explicit "N rollos" only (the bare number IS the length here)
@@ -1080,7 +1095,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           const ed = leaf && leaf.enabledDimensions;
           const exactLen = leaf && new RegExp(`\\b${len}\\b`).test(`${leaf.name || ""} ${leaf.size || ""}`);
           if (leaf && exactLen && Array.isArray(ed) && ed.length && !ed.includes("width")) {
-            const pi = await resolvePrice(leaf).catch(() => null);
+            const pi = await resolvePrice(leaf, altOpt(state, leaf)).catch(() => null);
             if (pi && pi.amount) {
               const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: leaf.name, productId: String(leaf._id) });
               rows.push(`• ${len} m: $${pi.amount}${link ? ` → ${link}` : ""}`);
@@ -1135,7 +1150,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             if (Number.isFinite(c.wholesaleMinQty) && c.wholesaleMinQty > 0) { wmq = c.wholesaleMinQty; break; }
             c = c.parentId ? await PF.findById(c.parentId).select("parentId wholesaleMinQty").lean().catch(() => null) : null;
           }
-          const pi = await resolvePrice(leaf).catch(() => null);
+          const pi = await resolvePrice(leaf, altOpt(state, leaf)).catch(() => null);
           if (wmq && qty >= wmq) {
             const unit = pi && pi.amount ? ` (cada una $${pi.amount})` : "";
             state.lead = { ...(state.lead || {}), wholesaleQty: String(qty) };
@@ -1320,7 +1335,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           const colorMeta = new Map();   // "beige" → { id, amount, link, plusIva }
           for (const v of variants) {
             const leaf = await PF.findById(v.id).lean().catch(() => null);
-            const pi = leaf ? await resolvePrice(leaf).catch(() => null) : null;
+            const pi = leaf ? await resolvePrice(leaf, altOpt(state, leaf)).catch(() => null) : null;
             if (pi && Number.isFinite(pi.amount) && pi.amount > 0 && !pi.soldOut) {
               const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: `${anchor.size || ""} ${v.label}`.trim(), productId: v.id });
               // If THIS color also carries a live discount, mention it (rebajado de $X).
@@ -1495,7 +1510,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       } else {
         const doc = await PF.findById(state.product._id).lean().catch(() => null);
         if (doc && doc.sellable) {
-          const pi = await resolvePrice(doc);
+          const pi = await resolvePrice(doc, altOpt(state, doc));
           if (pi && pi.soldOut) {
             // Active but out of stock → acknowledge AND hand off (capture the lead
             // so a human follows up / notifies when it returns).
@@ -1818,7 +1833,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             lines.push(`  • ${tag}: no es medida estándar — ofrécele la más cercana o pásalo con un asesor.`);
             continue;
           }
-          const pi = await resolvePrice(doc);
+          const pi = await resolvePrice(doc, altOpt(state, doc));
           if (pi && pi.soldOut) {
             // Active but out of stock → note it AND escalate (capture the lead).
             lines.push(`  • ${tag}: SÍ la manejamos pero está AGOTADA por ahora — NO compartas link; el sistema la pasará con un asesor.`);
@@ -1884,7 +1899,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             const lines = [], customerLines = [];
             let needHandoff = false;
             for (const { n, doc } of hits) {
-              const pi = await resolvePrice(doc);
+              const pi = await resolvePrice(doc, altOpt(state, doc));
               if (pi && pi.amount) {
                 noteAmount(pi, false);
                 const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: doc.name, productId: String(doc._id) });
@@ -2063,7 +2078,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             const refFams = await reforzadaFamilies();
             const refLeaf = refFams.length ? await toolsMod.findProductInFamilies(String(userMessage), refFams, wantDims) : null;
             if (refLeaf) {
-              const pi = await resolvePrice(refLeaf);
+              const pi = await resolvePrice(refLeaf, altOpt(state, refLeaf));
               if (pi && pi.amount && !pi.soldOut) {
                 const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: refLeaf.name, productId: String(refLeaf._id) });
                 // DETERMINISTIC — the model kept dropping the "not in sin refuerzo"
@@ -2108,7 +2123,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             if (cDoc) {
               cId = String(cDoc._id);
               const { resolvePrice, trackedLink } = require("./priceResolver");
-              const cpi = await resolvePrice(cDoc);
+              const cpi = await resolvePrice(cDoc, altOpt(state, cDoc));
               if (cpi && cpi.amount) {
                 cAmount = cpi.amount;
                 cOrig = cpi.hasDiscount && Number.isFinite(cpi.originalPrice) && cpi.originalPrice > cpi.amount ? Math.round(cpi.originalPrice) : null;
@@ -2164,7 +2179,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         const { resolvePrice, trackedLink } = require("./priceResolver");
         const doc = await PF.findById(turnActiveProductId).lean().catch(() => null);
         if (doc && doc.sellable) {
-          const pi = await resolvePrice(doc);
+          const pi = await resolvePrice(doc, altOpt(state, doc));
           turnPriceInfo = pi;
           if (pi && pi.soldOut) {
             // Active but out of stock → acknowledge AND hand off (capture the lead).
@@ -2285,6 +2300,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     catalog: state.catalog || null, // resolved catalog for share_catalog tool
     catalogToSend: null, // set by share_catalog → maybeRunAdWorkflow sends the document
     psid: opts.psid || null, // enables psid-traceable links in share_* tools
+    altPos: state.altPos || null, // campaign-scoped alternate marketplace (POS doc)
+    altProductIds: state.altProductIds || [], // product ids routed to the alt POS
   };
   // DETERMINISTIC HANDOFF: if this turn's price resolution needs human price
   // validation, escalate for real (set the flag the caller acts on) with the

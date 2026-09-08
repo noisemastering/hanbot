@@ -100,6 +100,18 @@ const productFamilySchema = new mongoose.Schema({
     isPreferred: {
       type: Boolean,
       default: false  // Mark the main/preferred link (e.g., Mercado Libre)
+    },
+    // Optional link to the PointOfSale this URL belongs to. When a campaign routes
+    // this product to an alternate marketplace, we match the alt POS to its link here.
+    posId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'PointOfSale',
+    },
+    // The store's OWN product identifier, used to query that store's price API
+    // (kind:'http_price_api'). For ML this is unused (the URL carries the item id).
+    sku: {
+      type: String,
+      trim: true,
     }
   }],
   // ML SELLER-ITEM ids this product's listing(s) resolve to (MLM…). Populated by

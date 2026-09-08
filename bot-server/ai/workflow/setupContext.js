@@ -33,6 +33,9 @@ function mergeSetup(base = {}, override = {}) {
       kind: pick(o.catalog?.kind, base.catalog?.kind),
       value: pick(o.catalog?.value, base.catalog?.value),
     },
+    // Campaign-scoped ALTERNATE MARKETPLACE: route the listed products to a non-
+    // default POS for price/link/refund/delivery. { posId, productIds:[...] }.
+    altMarketplace: pick(o.altMarketplace, base.altMarketplace) || null,
   };
 }
 
@@ -249,6 +252,25 @@ async function resolveCatalog(familyList) {
 async function resolveSetupContext(workflowSetup, overrides, families, opts = {}) {
   const setup = mergeSetup(workflowSetup, overrides);
   const lines = [];
+
+  // ALTERNATE MARKETPLACE (campaign-scoped): resolve the alt POS once and build the
+  // set of product ids it applies to. Every price resolution for a listed product
+  // then routes through that POS (price/link/refund/delivery); all others use the
+  // default channel. resolvePriceFor() is the single entry the rest of this fn uses.
+  let altPos = null;
+  const altProductIds = new Set(
+    (setup.altMarketplace?.productIds || []).map((id) => String(id))
+  );
+  if (setup.altMarketplace?.posId && altProductIds.size) {
+    try {
+      const marketplace = require("../marketplace");
+      altPos = await marketplace.getPosById(setup.altMarketplace.posId);
+    } catch (e) {
+      console.error("⚠️ [setupContext] alt POS load failed:", e.message);
+    }
+  }
+  const usesAlt = (prod) => !!(altPos && prod?._id && altProductIds.has(String(prod._id)));
+  const resolvePriceFor = (prod) => resolvePrice(prod, usesAlt(prod) ? { altPos } : {});
 
   // Accept either a single family object (legacy) or an array of families.
   const familyList = Array.isArray(families) ? families.filter((f) => f && f.id) : families && families.id ? [families] : [];
@@ -467,7 +489,7 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     if (pi && Number.isFinite(pi.originalPrice) && pi.originalPrice > 0) preloadedAmounts.push(pi.originalPrice);
   };
   const priceTxt = (pi) =>
-    pi && (pi.source === "ml" || pi.source === "inventario" || pi.source === "promo")
+    pi && (pi.source === "ml" || pi.source === "inventario" || pi.source === "promo" || pi.source === "alt")
       ? ` ($${pi.amount})`
       : "";
 
@@ -495,7 +517,29 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
         `PERO ADÁPTATE: si el cliente menciona CUALQUIER otra medida (p. ej. 5x6, 3x2, 8x10), cotiza ESA medida — NUNCA le impongas la medida destacada ni cambies la que pidió. ` +
         `Responde con normalidad sus preguntas y detalles del producto (% de sombra, refuerzo, colores, envío, etc.); no escales por dudas que puedes responder.`
     ));
-    if (pi && pi.source === "ml") {
+    if (pi && pi.source === "alt") {
+      // Alternate marketplace (campaign-routed). State the store, and its refund/
+      // delivery policy INSTEAD of the default channel's; everything else is default.
+      const { trackedLink } = require("./priceResolver");
+      const store = pi.marketplace || "otra tienda";
+      const plink = await trackedLink(pi.link, {
+        psid: opts.psid || null,
+        sandbox: !!opts.sandbox,
+        productName: prod.name,
+        productId: prod._id ? String(prod._id) : null,
+      });
+      const pol = pi.policies || {};
+      const polTxt = [
+        pol.delivery?.etaDays ? `envío: ${pol.delivery.etaDays} días${pol.delivery.cost != null ? (pol.delivery.cost === 0 ? " (gratis)" : ` ($${pol.delivery.cost})`) : ""}` : null,
+        pol.refund?.windowDays ? `devoluciones: ${pol.refund.windowDays} días` : null,
+      ].filter(Boolean).join("; ");
+      lines.push(D(
+        `- PRECIO: $${pi.amount}${pi.plusIva ? " + IVA" : ""} (fuente: ${store}${pi.hasDiscount ? `, con descuento desde $${pi.originalPrice}` : ""}). ` +
+          `Este producto se vende a través de ${store}. DÍSELO al cliente con naturalidad (que la compra, el precio, el envío y las devoluciones son con ${store}). ` +
+          (polTxt ? `Políticas de ${store} → ${polTxt}. ` : "") +
+          `Cotiza este precio. Link: ${plink || "(usa la herramienta)"}.`
+      ));
+    } else if (pi && pi.source === "ml") {
       const { trackedLink } = require("./priceResolver");
       const plink = await trackedLink(pi.link, {
         psid: opts.psid || null,
@@ -526,15 +570,15 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
   if (resolved.length === 1 && resolved[0].sellable === true) {
     // A single SPECIFIC measure was preloaded → it's the default.
     product = resolved[0];
-    priceInfo = await resolvePrice(product);
+    priceInfo = await resolvePriceFor(product);
     noteResolved(priceInfo);
     await pushDefault(product, priceInfo);
   } else if (resolved.length > 1) {
     product = resolved[0];
-    priceInfo = await resolvePrice(product); // tool back-compat: default to first
+    priceInfo = await resolvePriceFor(product); // tool back-compat: default to first
     const items = [];
     for (const p of resolved) {
-      const pi = await resolvePrice(p);
+      const pi = await resolvePriceFor(p);
       noteResolved(pi);
       // NAMES ONLY — never list inline prices for multiple products. Listing
       // each measure's price side-by-side lets the model copy one measure's
@@ -689,6 +733,10 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     preloadedAmounts,
     promoPitch: (promo && promo.pitch) || null, // verbatim sales pitch (sent once, on ask)
     promoQuote, // deterministic quote (product + price + link) when no pitch is set
+    // Alternate-marketplace routing for this conversation, threaded onto ctx so the
+    // share_product_link tool prices in-flow requests through the same alt POS.
+    altPos: altPos || null,
+    altProductIds: [...altProductIds],
   };
 }
 
