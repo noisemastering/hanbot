@@ -265,8 +265,19 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     try {
       const marketplace = require("../marketplace");
       altPos = await marketplace.getPosById(setup.altMarketplace.posId);
+      // Expand routing to the whole SUBTREE of each selected node. The ad picks SIZE
+      // nodes (e.g. "6x5"), but the engine resolves and prices their COLOR-leaf
+      // children (e.g. "6x5 beige") — whose ids aren't the ones selected. Include all
+      // descendant ids so routing matches the leaf actually quoted.
+      const PF = require("../../models/ProductFamily");
+      let frontier = [...altProductIds];
+      for (let depth = 0; depth < 6 && frontier.length; depth++) {
+        const kids = await PF.find({ parentId: { $in: frontier } }).select("_id").lean();
+        frontier = kids.map((k) => String(k._id)).filter((id) => !altProductIds.has(id));
+        frontier.forEach((id) => altProductIds.add(id));
+      }
     } catch (e) {
-      console.error("⚠️ [setupContext] alt POS load failed:", e.message);
+      console.error("⚠️ [setupContext] alt POS/subtree load failed:", e.message);
     }
   }
   const usesAlt = (prod) => !!(altPos && prod?._id && altProductIds.has(String(prod._id)));
