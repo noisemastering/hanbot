@@ -701,9 +701,10 @@ const REGISTRY = {
         ctx.altPos && d && d._id && (ctx.altProductIds || []).map(String).includes(String(d._id))
           ? { altPos: ctx.altPos }
           : {};
-      // Price-source suffix: ML shows nothing; an alt store names itself; else inventario.
+      // Price-source suffix: an alt store (link-only or http) names itself; plain ML
+      // shows nothing; else inventario.
       const srcLabel = (p) =>
-        p.source === "ml" ? "" : p.source === "alt" ? ` (en ${p.marketplace || "otra tienda"})` : " (inventario)";
+        p.marketplace ? ` (compra en ${p.marketplace})` : p.source === "ml" ? "" : " (inventario)";
 
       // Resolve ONE measure/product → a customer-facing quote line, or null if it
       // can't be found. Sets handoff only for a sellable-but-priceless product.

@@ -58,7 +58,8 @@ async function resolveViaAltPos(product, pos) {
     // Only relink when there's a real price to quote AND an alt link to point to;
     // otherwise leave the default result (incl. its handoff) exactly as-is.
     if (!link || !(numericPrice(base.amount) > 0)) return base;
-    const out = { ...base, link, marketplace: label, linkFrom: label };
+    // Price stays from the default channel; link + refund/delivery come from this POS.
+    const out = { ...base, link, marketplace: label, linkFrom: label, policies: pos?.policies || null };
     // If the default path would've handed off ONLY for lacking a purchase link, the
     // alt link now lets the customer self-serve → clear that specific handoff.
     if (base.quoteThenHandoff) {

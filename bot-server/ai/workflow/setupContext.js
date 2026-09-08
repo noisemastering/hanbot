@@ -128,7 +128,13 @@ async function loadProductDoc(productSpecific) {
 
 // Resolve the promo: its name AND its featured product (so a promo-driven ad can
 // use that product as the DEFAULT measure). Returns { text, name, product, priceInfo }.
-async function resolvePromo(hasPromo) {
+// resolvePriceFor / linkFor (passed in from resolveSetupContext) carry the
+// campaign's alternate-marketplace routing so a promo-featured product that is
+// routed to an alt POS is quoted/linked through it, not ML. They default to the
+// plain ML path when no routing applies (or the caller omits them).
+async function resolvePromo(hasPromo, opts = {}) {
+  const resolvePriceFor = opts.resolvePriceFor || ((leaf) => resolvePrice(leaf));
+  const linkFor = opts.linkFor || ((leaf) => mlLinkOf(leaf));
   if (!hasPromo) return null;
   if (typeof hasPromo === "string" && mongoose.isValidObjectId(hasPromo)) {
     try {
@@ -159,8 +165,8 @@ async function resolvePromo(hasPromo) {
         const ov = overrideFor(rawId) ?? overrideFor(leaf._id);
         const priceInfo =
           ov != null
-            ? { amount: ov, source: "promo", handoff: false, link: mlLinkOf(leaf) }
-            : await resolvePrice(leaf);
+            ? { amount: ov, source: "promo", handoff: false, link: linkFor(leaf) }
+            : await resolvePriceFor(leaf);
         products.push({ doc: leaf, name: leaf.name, id: String(leaf._id), priceInfo });
       }
       const featured = products[0] || null;
@@ -282,6 +288,15 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
   }
   const usesAlt = (prod) => !!(altPos && prod?._id && altProductIds.has(String(prod._id)));
   const resolvePriceFor = (prod) => resolvePrice(prod, usesAlt(prod) ? { altPos } : {});
+  // The buy link for a product, honoring alt routing: the alt store's link when the
+  // product is routed there, else the default ML link.
+  const linkFor = (prod) => {
+    if (usesAlt(prod)) {
+      const li = require("../marketplace").linkForPos(prod, altPos);
+      if (li && li.url) return li.url;
+    }
+    return mlLinkOf(prod);
+  };
 
   // Accept either a single family object (legacy) or an array of families.
   const familyList = Array.isArray(families) ? families.filter((f) => f && f.id) : families && families.id ? [families] : [];
@@ -506,7 +521,7 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
 
   // Resolve the promo up front — a promo-driven ad uses the promo's featured
   // product as the DEFAULT measure when no specific measure is preloaded.
-  const promo = await resolvePromo(setup.hasPromo);
+  const promo = await resolvePromo(setup.hasPromo, { resolvePriceFor, linkFor });
 
   // Push the DEFAULT/featured measure. It's a default for unspecified requests —
   // NOT a lock. The bot must still adapt to any other size the customer names
@@ -558,9 +573,27 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
         productName: prod.name,
         productId: prod._id ? String(prod._id) : null,
       });
-      lines.push(D(
-        `- PRECIO: $${pi.amount} (fuente: Mercado Libre${pi.hasDiscount ? `, con descuento desde $${pi.originalPrice}` : ""}). Cotiza este precio. Link: ${plink || "(usa la herramienta)"}.`
-      ));
+      // LINK-ONLY alt store: the ML price is only a reference; the customer BUYS on
+      // the alt store, so frame envío/devoluciones around it and NEVER mention
+      // Mercado Libre or "compra protegida" for this product.
+      if (pi.marketplace) {
+        const pol = pi.policies || {};
+        const polTxt = [
+          pol.delivery?.etaDays ? `envío ${pol.delivery.etaDays} días${pol.delivery.cost != null ? (pol.delivery.cost === 0 ? " (gratis)" : ` ($${pol.delivery.cost})`) : ""}` : null,
+          pol.refund?.windowDays ? `devoluciones ${pol.refund.windowDays} días` : null,
+        ].filter(Boolean).join("; ");
+        lines.push(D(
+          `- PRECIO: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${pi.hasDiscount ? `, con descuento desde $${pi.originalPrice}` : ""}. ` +
+            `Este producto se compra en ${pi.marketplace}: comparte el link de ${pi.marketplace} y, si el cliente pregunta por compra/envío/devoluciones, dile que son con ${pi.marketplace}. ` +
+            `NO menciones Mercado Libre ni "compra protegida de Mercado Libre" para este producto. ` +
+            (polTxt ? `Políticas de ${pi.marketplace}: ${polTxt}. ` : "") +
+            `Link: ${plink || "(usa la herramienta)"}.`
+        ));
+      } else {
+        lines.push(D(
+          `- PRECIO: $${pi.amount} (fuente: Mercado Libre${pi.hasDiscount ? `, con descuento desde $${pi.originalPrice}` : ""}). Cotiza este precio. Link: ${plink || "(usa la herramienta)"}.`
+        ));
+      }
     } else if (pi && pi.source === "inventario") {
       lines.push(D(`- PRECIO: $${pi.amount} (fuente: Inventario). Cotiza este precio.`));
     } else if (pi && pi.source === "promo") {
