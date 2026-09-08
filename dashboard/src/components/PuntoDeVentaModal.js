@@ -8,7 +8,9 @@ function PuntoDeVentaModal({ puntoDeVenta, onSave, onClose }) {
     defaultUrl: '',
     icon: '',
     description: '',
-    active: true
+    active: true,
+    kind: 'mercadolibre',
+    isDefault: false
   });
 
   useEffect(() => {
@@ -18,7 +20,9 @@ function PuntoDeVentaModal({ puntoDeVenta, onSave, onClose }) {
         defaultUrl: puntoDeVenta.defaultUrl || '',
         icon: puntoDeVenta.icon || '',
         description: puntoDeVenta.description || '',
-        active: puntoDeVenta.active !== undefined ? puntoDeVenta.active : true
+        active: puntoDeVenta.active !== undefined ? puntoDeVenta.active : true,
+        kind: puntoDeVenta.kind || 'mercadolibre',
+        isDefault: !!puntoDeVenta.isDefault
       });
     }
   }, [puntoDeVenta]);
@@ -119,6 +123,39 @@ function PuntoDeVentaModal({ puntoDeVenta, onSave, onClose }) {
                   className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500 resize-none"
                   placeholder={t('posModal.descriptionPlaceholder')}
                 />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-300 mb-2">
+                  Tipo de precio / adaptador
+                </label>
+                <select
+                  name="kind"
+                  value={formData.kind}
+                  onChange={handleChange}
+                  className="w-full px-4 py-2 bg-gray-900/50 border border-gray-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-primary-500"
+                >
+                  <option value="mercadolibre">Mercado Libre (precio en vivo por API de ML)</option>
+                  <option value="link_only">Solo link (precio del canal por defecto, solo cambia el link)</option>
+                  <option value="http_price_api">API de precio propia (la tienda expone su endpoint)</option>
+                </select>
+                <p className="text-xs text-gray-500 mt-1">
+                  "Solo link": el bot cotiza el precio en vivo del canal por defecto y solo cambia el link de compra a esta tienda.
+                </p>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <input
+                  type="checkbox"
+                  id="isDefault"
+                  name="isDefault"
+                  checked={formData.isDefault}
+                  onChange={handleChange}
+                  className="w-4 h-4 text-primary-500 bg-gray-900/50 border-gray-700 rounded focus:ring-primary-500 focus:ring-2"
+                />
+                <label htmlFor="isDefault" className="text-sm font-medium text-gray-300">
+                  Tienda principal (canal por defecto) — solo una debe tenerlo
+                </label>
               </div>
 
               <div className="flex items-center space-x-2">

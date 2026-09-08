@@ -198,6 +198,79 @@ function PromoPicker({ familyIds, value, onChange }) {
   );
 }
 
+// Marketplace alterno: route a SUBSET of the already-selected products to a non-
+// default point of sale (e.g. the Hanlob store). Price stays live from the default
+// channel; only the buy link (and refund/delivery, if the POS defines them) come
+// from the alt store. Everything off this list stays on the default marketplace.
+function AltMarketplacePicker({ products, value, onChange }) {
+  const [pos, setPos] = useState([]);
+  const sel = Array.isArray(products) ? products : [];
+  const posId = value?.posId || "";
+  const routed = new Set((value?.productIds || []).map(String));
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await API.get("/points-of-sale", { params: { active: true } });
+        setPos(res.data?.data || []);
+      } catch {
+        /* non-fatal */
+      }
+    })();
+  }, []);
+
+  const setPosId = (id) => {
+    if (!id) return onChange(null); // clear the whole alt-marketplace routing
+    // Keep only routed ids that are still selected above.
+    const keep = [...routed].filter((r) => sel.some((p) => String(p.id) === r));
+    onChange({ posId: id, productIds: keep });
+  };
+  const toggle = (id) => {
+    if (!posId) return;
+    const next = new Set(routed);
+    next.has(String(id)) ? next.delete(String(id)) : next.add(String(id));
+    onChange({ posId, productIds: [...next] });
+  };
+
+  return (
+    <div className="space-y-2">
+      <Sel
+        label="Marketplace alterno (opcional)"
+        val={posId}
+        onChange={setPosId}
+        opts={[
+          { value: "", label: "— usar el marketplace por defecto —" },
+          ...pos.map((p) => ({ value: p._id, label: `${p.name}${p.kind && p.kind !== "mercadolibre" ? ` · ${p.kind}` : ""}` })),
+        ]}
+      />
+      {posId && (
+        <div className="rounded-lg border border-gray-700/50 bg-gray-900/30 p-3">
+          <p className="text-xs text-gray-400 mb-2">
+            ¿Cuáles de los productos seleccionados arriba se venden por este marketplace? El resto usa el canal por defecto.
+          </p>
+          {sel.length === 0 ? (
+            <p className="text-xs text-amber-400">Selecciona productos arriba primero.</p>
+          ) : (
+            <div className="space-y-1 max-h-48 overflow-y-auto">
+              {sel.map((p) => (
+                <label key={String(p.id)} className="flex items-center gap-2 text-sm text-gray-200 cursor-pointer">
+                  <input type="checkbox" checked={routed.has(String(p.id))} onChange={() => toggle(p.id)} />
+                  <span>{p.name || String(p.id)}</span>
+                </label>
+              ))}
+            </div>
+          )}
+          {routed.size > 0 && (
+            <p className="text-[11px] text-sky-400 mt-2">
+              {routed.size} producto(s) → este marketplace · precio en vivo del canal por defecto, link de este marketplace.
+            </p>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 // hideAdvanced: drop the buyer/tone/purchase/channel selects (used by the sandbox,
 // which only needs promo + product selection). Default shows all fields.
 export default function SetupFields({ value = {}, onChange, familyIds = null, hideAdvanced = false }) {
@@ -225,6 +298,15 @@ export default function SetupFields({ value = {}, onChange, familyIds = null, hi
       <Labeled label="Promoción (dentro de la familia)">
         <PromoPicker familyIds={familyIds} value={v.hasPromo} onChange={(x) => set({ hasPromo: x })} />
       </Labeled>
+      {!hideAdvanced && (
+        <div className="col-span-2">
+          <AltMarketplacePicker
+            products={v.products}
+            value={v.altMarketplace}
+            onChange={(am) => set({ altMarketplace: am })}
+          />
+        </div>
+      )}
       {/* Catalog and store link are NOT set per-ad (recipe for divergence).
           The store link comes from the company's available marketplaces, and
           the catalog from the product tree (climbing up to the general
