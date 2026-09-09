@@ -311,6 +311,28 @@ async function sanitizeMarketplaceLinks(text, opts = {}) {
   return out;
 }
 
+// DETERMINISTIC ALT-LINK ENFORCEMENT — when the turn quoted a product routed to an
+// alternate marketplace, the customer must be sent to THAT store, never Mercado
+// Libre. The model (or the grounding verifier) sometimes re-emits a raw ML URL it
+// saw earlier in the conversation; this rewrites every ML URL in the reply to the
+// tracked alt-store link. Caller gates this on the TURN's own quoted product, so a
+// non-routed measure's ML link is never touched.
+// @param {string} text
+// @param {{altLink:string, psid?:string, sandbox?:boolean, productName?:string, productId?:string}} opts
+// @returns {Promise<string>}
+async function enforceAltMarketplaceLink(text, opts = {}) {
+  if (!text || !opts.altLink) return text;
+  if (!/mercadolibre\.com/i.test(text)) return text; // nothing to rewrite
+  const tracked =
+    (await trackedLink(opts.altLink, {
+      psid: opts.psid,
+      sandbox: opts.sandbox,
+      productName: opts.productName,
+      productId: opts.productId,
+    })) || opts.altLink;
+  return text.replace(/https?:\/\/[^\s)]*mercadolibre\.com[^\s)]*/gi, tracked);
+}
+
 // DETERMINISTIC PRICE CLAMP — prices are NOT the model's to author.
 //
 // The engine resolves the canonical price for the product under discussion each
@@ -402,4 +424,4 @@ function clampMeasures(text, canonical, allowedPairs = []) {
   return { text: out, changed };
 }
 
-module.exports = { resolvePrice, mlLinkOf, trackedLink, sanitizeMarketplaceLinks, clampPrices, clampMeasures, isGenericMlUrl, officialStoreUrl };
+module.exports = { resolvePrice, mlLinkOf, trackedLink, sanitizeMarketplaceLinks, enforceAltMarketplaceLink, clampPrices, clampMeasures, isGenericMlUrl, officialStoreUrl };

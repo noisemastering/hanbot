@@ -1924,7 +1924,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         }
       }
 
-      const found = multiHandled ? null : await resolveInFamilyMeasure(String(userMessage), familyList, wantDims);
+      const found = multiHandled ? null : await resolveInFamilyMeasure(String(userMessage), familyList, wantDims, { altPos: state.altPos, altProductIds: state.altProductIds });
       if (multiHandled) {
         // handled above
       } else if (found && found.priceInfo) {
@@ -1994,8 +1994,13 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           const shadeNote = sm
             ? `\n- ACLARA LA SOMBRA (obligatorio): el cliente pidió ${sm.requested}%, pero en la medida ${wantDims ? `${wantDims[0]}x${wantDims[1]} m` : "esa"} NO manejamos ${sm.requested}%. Lo que le vas a ofrecer es ${sm.actual}%${sm.available && sm.available.length ? ` (disponibles en esa medida: ${sm.available.map((s) => s + "%").join(", ")})` : ""}. DILE con naturalidad que en esa medida no tenemos ${sm.requested}% y ofrécele la de ${sm.actual}% (o las opciones disponibles) — NUNCA la cotices como si fuera ${sm.requested}%.`
             : "";
+          const srcTag = pi.marketplace ? ` (compra en ${pi.marketplace})` : pi.source === "ml" ? " (Mercado Libre)" : " (inventario)";
+          const altNote = pi.marketplace
+            ? ` Este producto se compra en ${pi.marketplace}: comparte SU link y, si preguntan por compra/envío/devoluciones, dile que son con ${pi.marketplace}; NO menciones Mercado Libre ni "compra protegida de Mercado Libre" para este producto.`
+            : "";
           turnContextExtra =
-            `\n- COTIZACIÓN SOLICITADA AHORA: el cliente pregunta por "${found.name}". Precio $${pi.amount}${pi.plusIva ? " + IVA" : ""}${disc}${pi.source === "ml" ? " (Mercado Libre)" : " (inventario)"}.` +
+            `\n- COTIZACIÓN SOLICITADA AHORA: el cliente pregunta por "${found.name}". Precio $${pi.amount}${pi.plusIva ? " + IVA" : ""}${disc}${srcTag}.` +
+            altNote +
             (link ? ` Link: ${link}.` : "") +
             (pi.plusIva ? ` Este precio es MÁS IVA: al cotizar di SIEMPRE "$${pi.amount} + IVA" o "más IVA".` : "") +
             shipNote +
@@ -2461,6 +2466,31 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     }
   }
 
+  // DETERMINISTIC ALT-LINK ENFORCEMENT — runs LAST. When THIS turn quoted a product
+  // routed to an alternate marketplace, the buy link must point to that store, never
+  // Mercado Libre. The model/verifier sometimes re-emits a raw ML URL it saw earlier
+  // in the conversation; rewrite any ML URL to the tracked alt-store link. Gated on
+  // the TURN's own quoted product (turnPriceInfo), so a non-routed measure (e.g. a
+  // 5x8 quoted from ML) is never touched.
+  if (text && turnPriceInfo && turnPriceInfo.marketplace && turnPriceInfo.link && /mercadolibre\.com/i.test(text)) {
+    try {
+      const { enforceAltMarketplaceLink } = require("./priceResolver");
+      const enforced = await enforceAltMarketplaceLink(text, {
+        altLink: turnPriceInfo.link,
+        psid: opts.psid || null,
+        sandbox: !!opts.sandbox,
+        productName: (state.product && state.product.name) || null,
+        productId: turnActiveProductId || (state.product && state.product._id ? String(state.product._id) : null),
+      });
+      if (enforced !== text) {
+        console.warn(`🔗 [workflow] enforced alt-marketplace link (${turnPriceInfo.marketplace}) for ${opts.psid || "(no psid)"}`);
+        text = enforced;
+      }
+    } catch (e) {
+      console.error("⚠️ alt-link enforce failed:", e.message);
+    }
+  }
+
   // 5. record the reply
   if (text) {
     history.push({ role: "assistant", text, nodeId: movedTo.id, at: new Date() });
@@ -2569,7 +2599,7 @@ async function detectFlowSwitch(message, familyList, currentWorkflow) {
 // wantDims is the AI-extracted measure from the customer message (passed in so
 // we don't re-extract); only fires for measure messages so plain "precio" keeps
 // the preloaded one.
-async function resolveInFamilyMeasure(message, familyList, wantDims) {
+async function resolveInFamilyMeasure(message, familyList, wantDims, routeOpts = {}) {
   const toolsMod = require("./tools");
   const isLengthOnly = (d) =>
     Array.isArray(d?.enabledDimensions) && d.enabledDimensions.length > 0 && !d.enabledDimensions.includes("width");
@@ -2611,7 +2641,14 @@ async function resolveInFamilyMeasure(message, familyList, wantDims) {
       shadeMismatch = { requested: reqShade, actual: actualShade, available };
     }
   }
-  return { name: doc.name, id: String(doc._id), priceInfo: await resolvePrice(doc), variants, shadeMismatch };
+  // Honor campaign alternate-marketplace routing for the resolved leaf (same rule
+  // as altOpt): quote via the alt POS when this product is routed there.
+  const altIds = routeOpts && routeOpts.altProductIds;
+  const altOpt =
+    routeOpts && routeOpts.altPos && Array.isArray(altIds) && altIds.map(String).includes(String(doc._id))
+      ? { altPos: routeOpts.altPos }
+      : {};
+  return { name: doc.name, id: String(doc._id), priceInfo: await resolvePrice(doc, altOpt), variants, shadeMismatch };
 }
 
 // Carry the conversation over to flow B and run its opening turn. Shared by the
