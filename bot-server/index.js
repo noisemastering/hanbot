@@ -920,6 +920,21 @@ app.get("/r/d/:trackCode", async (req, res) => {
   }
 });
 
+// Append our clickId as `ref` to a non-ML redirect destination, so the alt store
+// (Hanlob) can capture it at checkout and attribute the order back to this click.
+// ML destinations are returned unchanged; a malformed URL falls back to the raw url.
+function withClickRef(url, clickId) {
+  if (!url || !clickId) return url;
+  if (/mercadolibre\.com/i.test(url)) return url; // ML attribution is by item id
+  try {
+    const u = new URL(url);
+    u.searchParams.set("ref", clickId);
+    return u.toString();
+  } catch {
+    return url;
+  }
+}
+
 // GET /r/:clickId - Click tracking redirect
 app.get("/r/:clickId", async (req, res) => {
   try {
@@ -949,8 +964,12 @@ app.get("/r/:clickId", async (req, res) => {
       console.log(`📊 Click tracked: ${clickId} -> ${clickLog.originalUrl}`);
     }
 
-    // Always redirect regardless
-    res.redirect(302, clickLog.originalUrl);
+    // Always redirect regardless. For a NON-Mercado-Libre destination (e.g. the
+    // Hanlob store), append our clickId as `ref` so that store can capture it at
+    // checkout and tie the resulting order back to this click — the attribution
+    // hook we never had on ML. ML links are left untouched (attribution there is by
+    // item id) and a malformed URL falls back to the raw destination.
+    res.redirect(302, withClickRef(clickLog.originalUrl, clickId));
   } catch (error) {
     console.error("❌ Error processing click:", error);
     res.status(500).send("Error processing redirect");
