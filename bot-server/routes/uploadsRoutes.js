@@ -424,13 +424,17 @@ router.post('/catalog/global', uploadCatalog.single('catalog'), async (req, res)
       return res.status(400).json({ success: false, error: 'No file uploaded' });
     }
 
-    const BizInfo = mongoose.model('BusinessInfo');
-    let info = await BizInfo.findById('hanlob-info');
+    // Write to the SAME doc the bot reads for the catalog: CompanyInfo 'hanlob'
+    // (via businessInfoManager.getBusinessInfo). The old code targeted an
+    // unregistered 'BusinessInfo' model, so this endpoint 500'd and uploads never
+    // persisted, while the bot kept serving the stale CompanyInfo.catalog URL.
+    const CompanyInfo = require('../models/CompanyInfo');
+    let info = await CompanyInfo.findById('hanlob');
     if (!info) {
-      info = new BizInfo({ _id: 'hanlob-info' });
+      info = new CompanyInfo({ _id: 'hanlob' });
     }
 
-    // Delete old catalog if exists
+    // Delete old catalog file if we have its Cloudinary id
     if (info.catalog?.publicId) {
       await deleteFile(info.catalog.publicId).catch(err => {
         console.warn('Could not delete old global catalog:', err.message);
@@ -445,6 +449,9 @@ router.post('/catalog/global', uploadCatalog.single('catalog'), async (req, res)
     };
     await info.save();
 
+    // Bust the 5-min cache so the bot serves the new catalog immediately.
+    try { require('../businessInfoManager').invalidateCache(); } catch (_) {}
+
     res.json({ success: true, data: { catalog: info.catalog } });
   } catch (error) {
     console.error('Error uploading global catalog:', error);
@@ -458,18 +465,21 @@ router.post('/catalog/global', uploadCatalog.single('catalog'), async (req, res)
  */
 router.delete('/catalog/global', async (req, res) => {
   try {
-    const BizInfo = mongoose.model('BusinessInfo');
-    const info = await BizInfo.findById('hanlob-info');
+    const CompanyInfo = require('../models/CompanyInfo');
+    const info = await CompanyInfo.findById('hanlob');
     if (!info) {
-      return res.status(404).json({ success: false, error: 'BusinessInfo not found' });
+      return res.status(404).json({ success: false, error: 'CompanyInfo not found' });
     }
 
     if (info.catalog?.publicId) {
-      await deleteFile(info.catalog.publicId);
+      await deleteFile(info.catalog.publicId).catch(err => {
+        console.warn('Could not delete global catalog file:', err.message);
+      });
     }
 
     info.catalog = undefined;
     await info.save();
+    try { require('../businessInfoManager').invalidateCache(); } catch (_) {}
 
     res.json({ success: true });
   } catch (error) {
@@ -484,8 +494,8 @@ router.delete('/catalog/global', async (req, res) => {
  */
 router.get('/catalog/global', async (req, res) => {
   try {
-    const BizInfo = mongoose.model('BusinessInfo');
-    const info = await BizInfo.findById('hanlob-info').select('catalog').lean();
+    const CompanyInfo = require('../models/CompanyInfo');
+    const info = await CompanyInfo.findById('hanlob').select('catalog').lean();
 
     res.json({ success: true, data: { catalog: info?.catalog || null } });
   } catch (error) {

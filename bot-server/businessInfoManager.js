@@ -54,6 +54,14 @@ async function getBusinessInfo() {
   };
 }
 
+// Drop the cache so the next getBusinessInfo() re-reads the DB. Call after any
+// write to CompanyInfo (e.g. a catalog upload) so the bot picks it up immediately
+// instead of waiting out the 5-minute TTL.
+function invalidateCache() {
+  _cache = null;
+  _cacheExpiry = 0;
+}
+
 // Backwards-compatible constants — now dynamic getters that use cache
 // These are still used across many files via destructuring
 let _mapsUrl = "https://www.google.com/maps/place/Malla+Sombra+Hanlob/@20.5946169,-100.4630917,17z";
@@ -68,7 +76,7 @@ CompanyInfo.findById("hanlob").lean().then(info => {
 }).catch(() => {});
 
 // Use defineProperty so MAPS_URL and STORE_ADDRESS always return the latest cached value
-const _exports = { getBusinessInfo };
+const _exports = { getBusinessInfo, invalidateCache };
 Object.defineProperty(_exports, 'MAPS_URL', { get: () => _mapsUrl });
 Object.defineProperty(_exports, 'STORE_ADDRESS', { get: () => _storeAddress });
 

@@ -51,6 +51,7 @@ const companyInfoSchema = new mongoose.Schema({
   // Catalog
   catalog: {
     url: String,
+    publicId: String, // Cloudinary public_id, so the old file can be deleted on re-upload
     name: String,
     uploadedAt: Date
   },
