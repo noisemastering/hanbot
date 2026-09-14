@@ -1040,11 +1040,21 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // A) awaiting quantity from last turn (we asked "¿cuántos?")
       if (state.awaitingBordeQty) {
         const rec = state.awaitingBordeQty; state.awaitingBordeQty = null;
-        const q = parseQty();
-        if (q != null && q >= 2) return mayoreo(q);
-        const leaf = await PFm.findById(rec.productId).lean().catch(() => null);
-        const out = leaf ? await shareLink(leaf, rec.length) : null;
-        if (out) return out;
+        // A number glued to a length unit ("el de 18 m") is the client PIVOTING to a
+        // different roll length, NOT the answer to "¿cuántos rollos?" — reading it as
+        // a count sent "el de 18 m" to mayoreo as "18 rollos" (reported). An EXPLICIT
+        // count ("N rollos/piezas") is still honored even alongside a length.
+        const explicitQ = parseRollQuantity(msgB);
+        if (explicitQ != null && explicitQ >= 2) return mayoreo(explicitQ);
+        const looksLikeLength = /\b\d{1,3}(?:\.\d+)?\s*(?:m|mts?|metros?)\b/i.test(msgB);
+        if (!looksLikeLength) {
+          const q = parseQty();
+          if (q != null && q >= 2) return mayoreo(q);
+          const leaf = await PFm.findById(rec.productId).lean().catch(() => null);
+          const out = leaf ? await shareLink(leaf, rec.length) : null;
+          if (out) return out;
+        }
+        // else: a length pivot → fall through so section B resolves that roll.
       }
       // B) a new SINGLE, EXACT length (no W×L, exactly one length number) → resolve to a
       // LENGTH-ONLY borde product. Skip 2+ lengths (multi-length path quotes each) and
