@@ -103,6 +103,21 @@ function captureZipReply(text) {
 // and the cold-start path.
 //   sourceLabel: a string for logs ("ad=… " or "coldstart")
 //   initOverrides: setup vars to seed a fresh state (ad.workflowSetup or {})
+// Stable fingerprint of a setup object (key order independent), so we can tell
+// whether the ad's setup actually CHANGED since this conversation captured it.
+function setupSignature(obj) {
+  const norm = (v) => {
+    if (Array.isArray(v)) return v.map(norm);
+    if (v && typeof v === "object") return Object.keys(v).sort().reduce((a, k) => { a[k] = norm(v[k]); return a; }, {});
+    return v;
+  };
+  let s;
+  try { s = JSON.stringify(norm(obj || {})); } catch { return "x"; }
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return String(h);
+}
+
 async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLabel, initOverrides = {} }) {
   const { runWorkflowTurn, initState } = require("./workflow");
 
@@ -122,8 +137,24 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
   // Reuse persisted state only if it belongs to THIS workflow; otherwise start
   // fresh, seeding the setup vars as per-conversation overrides.
   let state = convo.workflowState;
+  const setupSig = setupSignature(initOverrides);
   if (!state || String(state.workflowId) !== String(workflow._id)) {
     state = initState(workflow, {}, initOverrides || {});
+    state.setupSig = setupSig;
+  } else if (state.setupSig !== setupSig) {
+    // The ad's setup CHANGED after this conversation started (new promo, different
+    // products, an alternate marketplace…). The engine resolves the setup context
+    // ONCE and caches it on the conversation, so those edits never reached returning
+    // customers — they stayed on the setup captured weeks earlier (reported: a convo
+    // opened Aug 22 kept quoting the ML link after the store was routed to Hanlob).
+    // Refresh the overrides and drop the cached block so it re-resolves this turn;
+    // product/promo/catalog/altPos all re-derive from it. Conversation progress is
+    // kept: activeProductId is only set when empty, and the pinned promo lines stay
+    // suppressed once the bot has already replied.
+    console.log(`♻️ [engine] setup changed for ${psid} — re-resolving setup context`);
+    state.setupOverrides = initOverrides || {};
+    state.contextBlock = undefined;
+    state.setupSig = setupSig;
   }
 
   // DETERMINISTIC CP REPLY CAPTURE: last turn we asked for the customer's código
