@@ -171,30 +171,6 @@ function isNoMeasureBuyingSignal(text) {
   return false;
 }
 
-// A BARE affirmative ("ok", "sí", "va", "dale"). On its own it means nothing — it's
-// only a buying signal when WE just offered to send the buy link (see below).
-function looksAffirmative(text) {
-  return /^(s[ií]+|ok+|okay|oka|va|vale|sale|dale|claro|porfa(vor)?|por\s*favor|de\s*acuerdo|perfecto|adelante|listo|as[ií]\s*es|correcto|est[aá]\s*bien)[\s.,!]*$/i
-    .test(String(text || "").trim());
-}
-
-// Did OUR last message offer to share the purchase link / ask if they're interested?
-// Then a bare "ok" is a YES to buying, not plain acknowledgement.
-function botOfferedPurchaseLink(history) {
-  for (let i = (history || []).length - 1; i >= 0; i--) {
-    if (history[i].role !== "assistant") continue;
-    return /te\s+(comparto|paso|env[ií]o|mando)\s+(el\s+)?(link|enlace)|(link|enlace)\s+para\s+(completar|comprar|tu\s+compra)|quieres\s+que\s+te\s+(lo\s+)?(comparta|pase|mande)|te\s+interesa|te\s+gustar[ií]a/i
-      .test(String(history[i].text || ""));
-  }
-  return false;
-}
-
-// An explicit request for the link is a buying signal by itself ("mándame el link").
-function asksForLink(text) {
-  const t = String(text || "").trim();
-  return /\b(mand[aáe]\w*|env[ií]a\w*|p[aá]sa\w*|dame|d[eé]jame|comparte\w*|quiero|regálame|regalame)\s+(me\s+)?(el\s+|un\s+)?(link|enlace)\b/i.test(t)
-    || /^(el\s+)?(link|enlace)\b[\s.,!?]*$/i.test(t);
-}
 
 // The customer wants RAIN/WATERPROOF protection. Malla sombra is shade mesh — it
 // is NOT impermeable (water passes through) — so we must never push it as a rain
@@ -1560,13 +1536,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     !state.promoDismissed &&
     state.product &&
     state.product._id &&
-    // A bare "ok"/"sí" right after WE offered the link is a YES to buying — quote the
-    // product + link deterministically. Left to the model it improvised: in August it
-    // escalated to a human ("¿me compartes tu nombre y teléfono?"), and with only a
-    // knowledge rule it sent the generic STORE profile instead of the product link.
-    (isNoMeasureBuyingSignal(String(userMessage)) ||
-      asksForLink(String(userMessage)) ||
-      (looksAffirmative(String(userMessage)) && botOfferedPurchaseLink(history))) &&
+    isNoMeasureBuyingSignal(String(userMessage)) &&
     extractAllMeasures(String(userMessage)).length === 0
   ) {
     try {
