@@ -16,6 +16,10 @@
 //   5. append the assistant reply
 //   6. FLOW SWITCH: if a tool requested handing to another flow, load it, carry
 //      over the conversation + basket + client data, and run its opening turn.
+// How long a "give me your name + phone" ask stays pending. Past this, a returning
+// customer's message is a NEW question, not the contact info we asked for.
+const PENDING_HANDOFF_TTL_MS = 12 * 60 * 60 * 1000; // 12h
+
 const { route } = require("./router");
 const { executeNode } = require("./nodeExecutor");
 const { resolveSetupContext } = require("./setupContext");
@@ -314,6 +318,33 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // 1.03 PENDING-HANDOFF RESUME. Last turn we asked for name + phone before
   // completing a handoff. Capture a bare-name reply too, then complete the handoff
   // now (with whatever contact we have) — one ask only, we never nag or trap.
+  // A pending ask must NOT swallow whatever the customer says next, forever. Two
+  // guards (reported 3×: a 4x5 quote, a quality-complaint detail, and a payment
+  // question — all answered with "un asesor te contactará" instead):
+  //   (a) STALE — the ask is hours/weeks old; the customer came back with a NEW
+  //       question, not the phone number we asked for back then.
+  //   (b) NOT CONTACT INFO — the message carries no name/phone but clearly IS a
+  //       question (a measure, a price/payment/shipping ask, a "?").
+  // In either case drop the pending ask and let the turn be answered normally.
+  if (userMessage && state.pendingHandoff) {
+    try {
+      const { extractPhone, extractName, looksLikeBareName } = require("./handoffGate");
+      const _m = String(userMessage);
+      const askedAt = state.pendingHandoff.askedAt ? new Date(state.pendingHandoff.askedAt).getTime() : null;
+      const isStale = askedAt ? Date.now() - askedAt > PENDING_HANDOFF_TTL_MS : false;
+      const hasContact = !!(extractPhone(_m) || extractName(_m) || looksLikeBareName(_m));
+      const isNewQuestion =
+        /\?|\bprecio\b|cu[aá]nto|c[oó]mo\b|pag(?:o|a|ar|ar[ií]a|an)\b|env[ií]o|entrega|medida|garant|instalaci|\d{1,3}\s*[x×]\s*\d{1,3}/i.test(_m);
+      if (isStale || (!hasContact && isNewQuestion)) {
+        console.log(
+          `🧹 [workflow] dropping pending handoff ask (${isStale ? "stale" : "new question, not contact info"}) for ${opts.psid || "(no psid)"}`
+        );
+        state.pendingHandoff = null;
+      }
+    } catch (err) {
+      console.error("⚠️ pending-handoff guard failed:", err.message);
+    }
+  }
   if (userMessage && state.pendingHandoff) {
     try {
       const { looksLikeBareName, firstGivenName, cleanPersonName } = require("./handoffGate");
@@ -472,7 +503,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
     return {
       reply,
-      state: { ...state, history, nodeId: currentNode.id, pendingHandoff: { reason: reason || null, wholesale: !!wholesale, attempts: 1 } },
+      state: { ...state, history, nodeId: currentNode.id, pendingHandoff: { reason: reason || null, wholesale: !!wholesale, attempts: 1, askedAt: new Date() } },
       diagnostics: {
         workflow: { id: String(workflow._id), name: workflow.name },
         fromNode: { id: currentNode.id, name: currentNode.name },
@@ -2373,7 +2404,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           lead: ctx.lead || state.lead || null,
           location: ctx.location || state.location || null,
           nodeId: movedTo.id,
-          pendingHandoff: { reason: ctx.handoffReason || null, attempts: 1 },
+          pendingHandoff: { reason: ctx.handoffReason || null, attempts: 1, askedAt: new Date() },
         },
         diagnostics: {
           workflow: { id: String(workflow._id), name: workflow.name },
