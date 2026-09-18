@@ -401,10 +401,60 @@ async function releaseGateReply(createdAtDates) {
   return { type: "text", text: DEFERRAL_MESSAGE };
 }
 
+// Once a conversation is in a HUMAN state the engine goes silent — but the customer
+// may still be answering the bot's LAST question ("¿me compartes tu nombre y un
+// teléfono?"). Capture that contact silently so the lead isn't lost and the handoff
+// note stops claiming they never gave it. Reported: the client sent name + phone 98s
+// after the ask, but the 30s pending-handoff timeout had already flipped the convo to
+// needs_human and stamped "NO proporcionó su información de contacto", so his name,
+// phone, city and request were dropped on the floor while sitting in the transcript.
+async function captureLateContact(psid, userMessage, convo) {
+  if (!userMessage) return;
+  try {
+    const { extractPhone, extractName } = require("./workflow/handoffGate");
+    const msg = String(userMessage);
+    const phone = extractPhone(msg);
+    const name = extractName(msg);
+    if (!phone && !name) return;
+
+    const ws = convo.workflowState || {};
+    const lead = { ...(ws.lead || {}) };
+    if (phone && !lead.phone) lead.phone = phone;
+    // "mi nombre es Ruben Aceves mi tel es…" → the extractor keeps the trailing "mi".
+    // Cut at words that are never part of a name (keeps particles like "de los").
+    if (name && !lead.name) {
+      lead.name = String(name)
+        .trim()
+        .replace(/\s+(mi|mis|tel|telefono|tel[eé]fono|cel|celular|n[uú]mero|numero|whats?app|vivo|radico)\b.*$/i, "")
+        .trim();
+    }
+    const patch = { workflowState: { ...ws, lead } };
+
+    // The 30s timeout may have stamped "NO proporcionó su información de contacto".
+    // That's no longer true — correct it so the agent sees the real data.
+    const prev = String(convo.handoffReason || "");
+    if (/NO proporcion|sin respuesta en 30s/i.test(prev)) {
+      patch.handoffReason =
+        prev.replace(/\s*—\s*⚠️.*$/s, "").trim() +
+        ` — ✅ el cliente SÍ dio sus datos después: ${[lead.name, lead.phone].filter(Boolean).join(" / ")}`;
+    }
+    await updateConversation(psid, patch);
+    require("./utils/locationStats")
+      .ensureUserProfile(psid, {
+        first_name: (lead.name || "").split(/\s+/)[0] || undefined,
+        phone: lead.phone || undefined,
+      }, "late_contact")
+      .catch(() => {});
+    console.log(`📇 [engine] late contact captured for ${psid} (human-handled): ${[lead.name, lead.phone].filter(Boolean).join(" / ")}`);
+  } catch (e) {
+    console.error("⚠️ late contact capture failed:", e.message);
+  }
+}
+
 async function maybeRunAdWorkflow(userMessage, psid) {
   const Conversation = require("../models/Conversation");
   const convo = await Conversation.findOne({ psid })
-    .select("adId channel state workflowState extractedName city zipcode productInterest botPersonaName")
+    .select("adId channel state workflowState extractedName city zipcode productInterest botPersonaName handoffReason")
     .lean();
   if (!convo || !convo.adId) return null; // not an ad conversation
 
@@ -417,7 +467,7 @@ async function maybeRunAdWorkflow(userMessage, psid) {
   if (!ad || !ad.workflowEnabled || !ad.workflowId) return null;
 
   // From here the conversation is OWNED by the engine — no legacy fallthrough.
-  if (WORKFLOW_HUMAN_STATES.has(convo.state)) return { owned: true, reply: null }; // human handling → silent
+  if (WORKFLOW_HUMAN_STATES.has(convo.state)) { await captureLateContact(psid, userMessage, convo); return { owned: true, reply: null }; } // human handling → silent
   try {
     const Workflow = require("../models/Workflow");
     const workflow = await Workflow.findById(ad.workflowId);
@@ -449,7 +499,7 @@ async function maybeRunAdWorkflow(userMessage, psid) {
 async function maybeRunColdStartWorkflow(userMessage, psid) {
   const Conversation = require("../models/Conversation");
   const convo = await Conversation.findOne({ psid })
-    .select("adId channel state workflowState extractedName city zipcode productInterest botPersonaName convoFlowRef")
+    .select("adId channel state workflowState extractedName city zipcode productInterest botPersonaName convoFlowRef handoffReason")
     .lean();
   if (!convo) return null;
   // FULL CUTOVER: the engine owns EVERY conversation the ad-workflow path didn't
@@ -463,7 +513,7 @@ async function maybeRunColdStartWorkflow(userMessage, psid) {
   if (!workflow) return null; // safety net: no cold-start flow at all → legacy (should never happen in prod)
 
   // OWNED by cold-start from here — no legacy/convo_flow fallthrough.
-  if (WORKFLOW_HUMAN_STATES.has(convo.state)) return { owned: true, reply: null };
+  if (WORKFLOW_HUMAN_STATES.has(convo.state)) { await captureLateContact(psid, userMessage, convo); return { owned: true, reply: null }; }
   // Rule 1: a post-July-1 cold-start workflow is frozen until Liberado.
   const gatedCs = await releaseGateReply([workflow.createdAt]);
   if (gatedCs) return { owned: true, reply: gatedCs };
