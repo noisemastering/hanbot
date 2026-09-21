@@ -138,10 +138,19 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
   // fresh, seeding the setup vars as per-conversation overrides.
   let state = convo.workflowState;
   const setupSig = setupSignature(initOverrides);
-  if (!state || String(state.workflowId) !== String(workflow._id)) {
+  // A prior turn may have SWITCHED the conversation into another flow (performSwitch
+  // stamps comesFromFlowSwitch). That state legitimately points at a workflow other
+  // than the entry one, and runWorkflowTurn self-corrects to it — but re-initialising
+  // here wiped it EVERY turn, so a switched conversation could never advance.
+  // Reported: cold-start → rollo, customer gave "2 x 100" then "la de 80%", and the
+  // remembered measure was gone each turn, so the bot kept asking for the size it
+  // already had until he left. A genuinely new ad entry clears workflowState upstream,
+  // so keeping switched state here can't strand anyone on a stale flow.
+  const switchedFlow = !!(state && state.setupOverrides && state.setupOverrides.comesFromFlowSwitch);
+  if (!state || (!switchedFlow && String(state.workflowId) !== String(workflow._id))) {
     state = initState(workflow, {}, initOverrides || {});
     state.setupSig = setupSig;
-  } else if (state.setupSig !== setupSig) {
+  } else if (!switchedFlow && state.setupSig !== setupSig) {
     // The ad's setup CHANGED after this conversation started (new promo, different
     // products, an alternate marketplace…). The engine resolves the setup context
     // ONCE and caches it on the conversation, so those edits never reached returning
