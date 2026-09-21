@@ -1520,7 +1520,29 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // (client pivoted to another measure) — so a customer CIRCLING BACK to ask for
   // the promo re-surfaces it. The verbatim pitch is sent only once; re-asks get
   // the cheap deterministic quote.
-  if (userMessage && !state.purchased && !rainIntent && (state.promoPitch || state.promoQuote) && (!state.promoPitchSent || state.promoDismissed)) {
+  // THE MEASURE THE CUSTOMER NAMED THIS TURN — resolved ONCE, here, because several
+  // gates need it. The AI extractor is the only thing that catches prose phrasings
+  // ("4 m. De largo por 3.60 m de ancho"); dimsOf/extractAllMeasures are the digit
+  // fallbacks. It used to be computed far below the promo gate, so the promo hijacked
+  // a turn whose measure only the AI could see (reported: that exact question was
+  // answered with the 6x4 promo at $699, his measure ignored entirely).
+  let turnWantDims = null;
+  if (userMessage) {
+    try {
+      const { extractMeasure } = require("../utils/measureExtractor");
+      const { dimsOf } = require("./tools");
+      turnWantDims =
+        (await extractMeasure(String(userMessage))) ||
+        dimsOf(String(userMessage)) ||
+        extractAllMeasures(String(userMessage))[0] ||
+        null;
+    } catch (e) {
+      console.error("⚠️ measure extraction failed:", e.message);
+    }
+  }
+  // NAMED A MEASURE ⇒ NOT a promo request: he asked about THAT size.
+  const namesAMeasure = !!turnWantDims;
+  if (userMessage && !state.purchased && !rainIntent && !namesAMeasure && (state.promoPitch || state.promoQuote) && (!state.promoPitchSent || state.promoDismissed)) {
     try {
       const { wantsPromo } = require("../utils/promoIntent");
       if (await wantsPromo(String(userMessage))) {
@@ -1582,7 +1604,11 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     state.product &&
     state.product._id &&
     isNoMeasureBuyingSignal(String(userMessage)) &&
-    extractAllMeasures(String(userMessage)).length === 0
+    // NO measure named this turn. Must use the turn's AI-resolved measure, not just the
+    // digit matcher: "4 m. De largo por 3.60 m de ancho" is invisible to
+    // extractAllMeasures, so this gate quoted the preloaded PROMO (6x4, $699) and
+    // ignored the size he actually asked for (reported).
+    !turnWantDims
   ) {
     try {
       const PF = require("../../models/ProductFamily");
@@ -1893,11 +1919,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // tres" → null even though "tres x tres" works); dimsOf only sees digits.
       // extractAllMeasures normalizes worded numbers deterministically, so use its
       // first hit as a final fallback — worded single-measures never go unparsed.
-      const wantDims =
-        (await extractMeasure(String(userMessage))) ||
-        dimsOf(String(userMessage)) ||
-        extractAllMeasures(String(userMessage))[0] ||
-        null;
+      const wantDims = turnWantDims; // resolved once per turn, above the promo gate
 
       // ── MULTI-MEASURE ─────────────────────────────────────────────────────
       // If the message names 2+ measures ("6x6m y otra de 6x8m"), quote EACH with
