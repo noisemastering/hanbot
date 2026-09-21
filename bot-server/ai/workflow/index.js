@@ -232,6 +232,12 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
 
   const vars = state.vars || {};
   const history = Array.isArray(state.history) ? [...state.history] : [];
+  // Facts contributed by the early gates. A gate must NOT end the turn just because
+  // it recognised ONE topic — a single message can raise several (a measure AND a
+  // payment question), and several messages can deserve one answer. Gates push their
+  // fact here and the turn continues, so the model composes ONE reply covering
+  // everything. Prices/links are still resolved deterministically elsewhere.
+  const earlyFacts = [];
 
   // Resolve the setup CONTEXT once per (flow within a) conversation.
   if (state.contextBlock === undefined) {
@@ -570,22 +576,15 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         return false;
       }
     })();
-    if ((isContraEntrega || asksPayment || isTrustConcern) && !alsoNamesMeasure) {
-      const leadIn = isTrustConcern && !isContraEntrega ? "Entiendo tu preocupación, tu compra está protegida. 🙌 " : "";
-      const reply =
-        leadIn +
-        "La compra se realiza por Mercado Libre con compra protegida (si no llega o llega mal, te devuelven tu dinero) y el pago es al momento de ordenar en línea. No manejamos pago contra entrega, salvo que recojas directamente en nuestra planta en Querétaro. ¿Te comparto el link para completar tu compra? 😊";
-      history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
-      return {
-        reply,
-        state: { ...state, history, nodeId: currentNode.id },
-        diagnostics: {
-          workflow: { id: String(workflow._id), name: workflow.name },
-          fromNode: { id: currentNode.id, name: currentNode.name },
-          toNode: { id: currentNode.id, name: currentNode.name },
-          paymentAnswered: true,
-        },
-      };
+    if (isContraEntrega || asksPayment || isTrustConcern) {
+      earlyFacts.push(
+        `- PAGO / CONTRA ENTREGA (contesta TÚ, nunca escales por esto): la compra se realiza por Mercado Libre con COMPRA PROTEGIDA ` +
+          `(si no llega o llega mal, le devuelven su dinero) y el pago es al momento de ordenar en línea. NO manejamos pago contra entrega, ` +
+          `salvo que recoja directamente en nuestra planta en Querétaro. ` +
+          (isTrustConcern && !isContraEntrega ? `El cliente muestra desconfianza: reconócelo con empatía y explícale la compra protegida. ` : "") +
+          `Dilo con naturalidad EN ESTE MISMO MENSAJE, junto con todo lo demás que haya preguntado (si pidió una medida, cotízala también). ` +
+          `NUNCA pases al cliente con un asesor por una pregunta de pago.`
+      );
     }
   }
 
@@ -2368,9 +2367,14 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // is still answered by the deterministic promo path (step 1.1) regardless. The
   // tag never reaches the model.
   const promoAlreadyShown = state.promoDismissed || history.some((h) => h.role === "assistant");
-  const effectiveContext = promoAlreadyShown
-    ? contextBlock.split("\n").filter((l) => !l.includes("§D§")).join("\n")
-    : contextBlock.replace(/§D§/g, "");
+  const effectiveContext =
+    (promoAlreadyShown
+      ? contextBlock.split("\n").filter((l) => !l.includes("§D§")).join("\n")
+      : contextBlock.replace(/§D§/g, "")) +
+    // Facts the early gates contributed this turn (payment, etc.) — appended here so
+    // they survive the gates that overwrite turnContextExtra, and so the ROUTER sees
+    // them too (it was the router that used to escalate payment questions).
+    (earlyFacts.length ? "\n" + earlyFacts.join("\n") : "");
 
   // 2. route
   const decision = await route(workflow, currentNode, history, effectiveContext);
