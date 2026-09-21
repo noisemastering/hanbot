@@ -551,14 +551,26 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     // Cash-on-delivery / pay-at-home, incl. "pagar a domicilio", "cuando llegue",
     // "al recogerlo", "se paga al recibir".
     const isContraEntrega =
-      /contra\s*-?\s*entrega|contraentrega|pag\w*\s*(al\s*(recibir|entregar|recoger\w*|llegar)|a\s*domicilio|en\s*(domicilio|casa)|cuando\s*(llegue|me\s*llegue|lo\s*reciba))|cobr\w*\s*(al\s*(recibir|entregar)|a\s*domicilio)|se\s*paga\s*al\s*(recibir|entregar)|hasta\s*que\s*(me\s*)?(llegue|lo\s*reciba)/.test(msgPay);
+      /contra\s*-?\s*entrega|contraentrega|pag\w*\s*(?:\w+\s+){0,2}(al\s*(recibir|entregar|recoger\w*|llegar)|a\s*domicilio|en\s*(domicilio|casa)|cuando\s*(llegue|me\s*llegue|lo\s*reciba))|cobr\w*\s*(?:\w+\s+){0,2}(al\s*(recibir|entregar)|a\s*domicilio)|se\s*paga\s*al\s*(recibir|entregar)|hasta\s*que\s*(me\s*)?(llegue|lo\s*reciba)/.test(msgPay);
     // Trust / scam concern (incl. typos like "eztafa") — same protected-purchase answer.
     const isTrustConcern =
       /e[sz]taf\w*|fraud\w*|\btim[oa]\b|enga[ñn]\w*|desconf\w*|no\s*(me\s*)?conf[ií]\w*|es\s*confiab\w*|no\s*es\s*confiab\w*|es\s*segur\w*|sera\s*segur\w*|me\s*da\s*(miedo|pendiente|cosa)|\bmiedo\b/.test(msgPay);
     const asksPayment =
       /(como|de que forma|de que manera|donde|cual)\b[^?.!]{0,25}\b(pago|pagar|se paga)\b/.test(msgPay) ||
       /forma de pago|metodo de pago|como se hace la compra|como es la compra|como se realiza la compra|como comprar|como se compra/.test(msgPay);
-    if (isContraEntrega || asksPayment || isTrustConcern) {
+    // If the SAME message also names a measure ("una de ocho por cuatro / paga uno al
+    // recibir"), don't short-circuit with the payment answer alone — that drops the
+    // quote the customer actually asked for (reported: "no le paso link ni precio").
+    // Let the normal measure path quote it; the payment rule is in the knowledge base.
+    const alsoNamesMeasure = (() => {
+      try {
+        const { dimsOf } = require("./tools");
+        return !!(dimsOf(String(userMessage)) || extractAllMeasures(String(userMessage)).length);
+      } catch {
+        return false;
+      }
+    })();
+    if ((isContraEntrega || asksPayment || isTrustConcern) && !alsoNamesMeasure) {
       const leadIn = isTrustConcern && !isContraEntrega ? "Entiendo tu preocupación, tu compra está protegida. 🙌 " : "";
       const reply =
         leadIn +
