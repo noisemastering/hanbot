@@ -1125,6 +1125,40 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           }
         }
       }
+      // B1) NEAREST LENGTH. A single length we DON'T carry ("el de 50 m") must get the
+      // closest one we DO carry (54 m) with its price + link — never a bare "no lo
+      // tengo", never a smaller default, never an escalation (reported: it denied 50 m
+      // and pushed the 18 m instead of offering the 54 m). The malla flow already
+      // resolves nearest measures deterministically; borde didn't, so the model
+      // improvised — a knowledge rule alone held in only 1 of 3 runs.
+      // Requires an explicit length unit so a bare quantity reply ("2") can never be
+      // read as a length.
+      const isLengthAsk = /\b\d{1,3}\s*(?:m\b|mts?\b|metros?\b)/i.test(msgB);
+      if (!hasWxL && isLengthAsk && allNums.length === 1 && !state.awaitingBordeQty) {
+        const want = parseInt(allNums[0], 10);
+        if (Number.isFinite(want) && !BORDE_LENS.includes(String(want))) {
+          // Nearest by absolute difference; on a tie prefer the LARGER (it covers the need).
+          const nearest = BORDE_LENS.map(Number).sort((a, b) => Math.abs(a - want) - Math.abs(b - want) || b - a)[0];
+          const q = msgB.replace(new RegExp(`\\b${want}\\b`), String(nearest));
+          const leaf = await findProductInFamilies(q, bordeFams, null).catch(() => null);
+          const ok = leaf && new RegExp(`\\b${nearest}\\b`).test(`${leaf.name || ""} ${leaf.size || ""}`);
+          if (ok) {
+            const pi = await resolvePrice(leaf, altOpt(state, leaf));
+            if (pi && pi.amount) {
+              const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: leaf.name, productId: String(leaf._id) });
+              state.activeProductId = String(leaf._id);
+              state.awaitingBordeQty = { productId: String(leaf._id), length: String(nearest) };
+              return retB(
+                `El de ${want} m no lo manejamos; el más cercano es el rollo de ${nearest} m, en $${pi.amount}.` +
+                  (link ? ` Aquí lo compras: ${link}` : "") +
+                  ` ¿Cuántos rollos necesitas? 😊`,
+                { bordeNearestLength: `${want}→${nearest}` }
+              );
+            }
+          }
+        }
+      }
+
       // B2) TWO+ exact borde lengths at once ("18 y 54 metros") → quote EACH here and
       // REMEMBER them (state.bordeQuoted), so the next turn (a CP, a "sí") is handled by
       // A2 above instead of the model re-asking the largo. Was NOT handled deterministically
