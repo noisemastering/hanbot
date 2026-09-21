@@ -42,3 +42,6 @@ CLAUDE.md
 *.tmp
 .cache/
 bot-server/.env.bak
+
+# Legacy config snapshot (taken before deleting the dead collections)
+legacy-backup/
