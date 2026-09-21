@@ -1,4 +1,5 @@
 import React, { useEffect, useState, useRef, useCallback } from "react";
+import { byTimestampAsc } from "../utils/sortMessages";
 import { useLocation, useNavigate } from "react-router-dom";
 import API from "../api";
 import CannedReplies from "../components/CannedReplies";
@@ -253,8 +254,7 @@ function Messages() {
   const fetchFullConversation = async (psid) => {
     try {
       const res = await API.get(`/conversations/${psid}`);
-      // Reverse to show oldest first (chronological order, like a chat)
-      setFullConversation([...res.data].reverse());
+      setFullConversation(byTimestampAsc(res.data));
     } catch (err) {
       console.error("Error fetching full conversation:", err);
     }

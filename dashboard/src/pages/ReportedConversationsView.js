@@ -6,6 +6,7 @@
 // solved (with an explanation) or "Sin error", and copy the whole conversation +
 // all context as text to paste for a fix.
 import React, { useEffect, useState, useCallback } from "react";
+import { byTimestampAsc } from "../utils/sortMessages";
 import toast from "react-hot-toast";
 import API from "../api";
 import ConversationCommercePanel from "../components/ConversationCommercePanel";
@@ -65,16 +66,7 @@ export default function ReportedConversationsView() {
     setConvoLoading(true);
     try {
       const res = await API.get(`/conversations/${t.psid}`);
-      // Sort by timestamp (oldest first). Blindly reversing assumed the API always
-      // returned newest-first, which it doesn't — that's what jumbled the order.
-      // Messages with no timestamp keep their relative position at the end.
-      setMessages(
-        [...res.data].sort((a, b) => {
-          const ta = a?.timestamp ? new Date(a.timestamp).getTime() : Infinity;
-          const tb = b?.timestamp ? new Date(b.timestamp).getTime() : Infinity;
-          return ta - tb;
-        })
-      );
+      setMessages(byTimestampAsc(res.data));
     } catch (e) {
       toast.error("No se pudo cargar la conversación");
     } finally {

@@ -4,6 +4,7 @@
 // the shared Match/Chat modal. Fetches GET /conversations/:psid (bare array of
 // Message docs, newest-first) and renders them oldest-first.
 import React, { useEffect, useState } from "react";
+import { byTimestampAsc } from "../utils/sortMessages";
 import API from "../api";
 
 export default function ConversationTranscript({ psid }) {
@@ -18,7 +19,7 @@ export default function ConversationTranscript({ psid }) {
       .then((r) => {
         if (!alive) return;
         const arr = Array.isArray(r.data) ? r.data : r.data?.messages || [];
-        setMessages([...arr].reverse());
+        setMessages(byTimestampAsc(arr));
       })
       .catch((e) => alive && setError(e.response?.data?.error || "No se pudo cargar la conversación"));
     return () => { alive = false; };
