@@ -1313,6 +1313,15 @@ app.post("/webhook", async (req, res) => {
           state: "active",
           lastIntent: "ad_entry",
           currentFlow: null,
+          // START OVER on the NEW ad. workflowState is the ENGINE's state (flow,
+          // node, history, setup overrides, preloaded product, promo, marketplace
+          // routing) and was the ONE thing this reset never cleared — so a customer
+          // who left and came back through a DIFFERENT ad kept the previous ad's
+          // flow and setup, and got quoted through the old ad's channel (reported:
+          // re-entry on the Hanlob-routed ad still handed out Mercado Libre links).
+          // This branch only runs for a genuinely new entry (different ad, or the
+          // same ad after 24h+), so an accidental re-click never wipes a live chat.
+          workflowState: null,
           campaignRef: referral.ref || null,
           adId: referral.ad_id || null,
           campaignId: referral.campaign_id || null,
