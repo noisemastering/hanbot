@@ -1904,6 +1904,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       `Pregúntale si le sirve para dar sombra / reducir el calor (que es para lo que sí funciona).`;
   }
   let turnColors = null;
+  let directQuote = null; // a fully-resolved quote the engine returns itself (see below)
   if (userMessage) {
     try {
       // AI measure extraction (customer free-text) — done ONCE per turn and
@@ -2122,6 +2123,34 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // mayoreo threshold (step 1.085 already routed 2+ ≥ wholesaleMinQty to
           // mayoreo), so quote it as retail — but ACKNOWLEDGE the quantity and give
           // the TOTAL (the bot used to answer a bare unit price, ignoring "2 piezas").
+          // RETURN THE QUOTE OURSELVES for the plain case. Everything is already
+          // resolved (exact product, price, discount, link) — handing it to the model
+          // to phrase left room for it to stall ("¿te comparto info de esa medida?"
+          // instead of quoting; ~0.5% of replies, reported). The measure is still
+          // parsed by the AI and the price still comes from the live lookup; only the
+          // wording of this one sentence becomes fixed.
+          // NOT taken when the same message raises anything else (a question, envío,
+          // pago, color…): then the model answers everything, using the context above.
+          // A message may deserve several answers — this must never swallow one.
+          if (link && !sm && Number.isFinite(pi.amount)) {
+            const leftover = String(userMessage)
+              .replace(/\d+(?:[.,]\d+)?\s*[x×*]\s*\d+(?:[.,]\d+)?/gi, " ")
+              .replace(/[^\p{L}\s]/gu, " ")
+              .trim()
+              .split(/\s+/)
+              .filter((w) => w && !/^(precio|cuanto|cuánto|cuesta|vale|sale|la|el|lo|de|del|una|un|uno|m|mt|mts|metro|metros|por|quiero|necesito|info|informacion|información|tienen|tiene|hay|mide|medida|medidas|malla|sombra|beige|esa|ese|esta|este)$/i.test(w));
+            const onlyTheMeasure = !/[?¿]/.test(String(userMessage)) && leftover.length === 0;
+            if (onlyTheMeasure) {
+              const sizeTxt = wantDims ? `${wantDims[0]}x${wantDims[1]} m` : found.name;
+              const discTxt = pi.hasDiscount && Number.isFinite(pi.originalPrice) && pi.originalPrice > pi.amount
+                ? `, rebajada de $${Math.round(pi.originalPrice)}`
+                : "";
+              directQuote =
+                `Sí, la de ${sizeTxt} en beige está en $${pi.amount}${pi.plusIva ? " + IVA" : ""}${discTxt}. ` +
+                `Aquí la compras: ${link}`;
+            }
+          }
+
           const askedQty = require("./tools").parseRollQuantity(String(userMessage));
           if (askedQty && askedQty >= 2 && Number.isFinite(pi.amount)) {
             const total = pi.amount * askedQty;
@@ -2152,6 +2181,26 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             options.push({ label: v.label, link: vlink });
           }
           turnColors = { size: found.size || null, options };
+        }
+        if (directQuote) {
+          history.push({ role: "assistant", text: directQuote, nodeId: currentNode.id, at: new Date() });
+          return {
+            reply: directQuote,
+            state: {
+              ...state,
+              history,
+              nodeId: currentNode.id,
+              activeProductId: turnActiveProductId || state.activeProductId || null,
+              priceInfo: turnPriceInfo || state.priceInfo || null,
+              availableColors: turnColors || state.availableColors || null,
+            },
+            diagnostics: {
+              workflow: { id: String(workflow._id), name: workflow.name },
+              fromNode: { id: currentNode.id, name: currentNode.name },
+              toNode: { id: currentNode.id, name: currentNode.name },
+              directQuote: found.name,
+            },
+          };
         }
       } else if (wantDims) {
         const toolsMod = require("./tools");
