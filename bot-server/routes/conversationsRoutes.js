@@ -35,6 +35,9 @@ function uploadBufferToCloudinary(buffer, options) {
  * after the customer's last message, requires the page to have the
  * Human Agent permission approved).
  */
+const isWindowError = (e) =>
+  !!e && e.code === 10 && (e.subcode === 2018278 || /outside.*allowed.*window/i.test(e.message || ''));
+
 async function postToMessengerSendAPI(psid, messagePayload) {
   const FB_PAGE_TOKEN = process.env.FB_PAGE_TOKEN;
   const url = "https://graph.facebook.com/v18.0/me/messages";
@@ -72,8 +75,7 @@ async function postToMessengerSendAPI(psid, messagePayload) {
   //  10 / subcode 2018278 = "This message is sent outside the allowed window"
   //  613 = rate limit (don't retry with tag, just throw)
   //  10 (general policy) often correlates with window expiration
-  const isWindowExpired =
-    first.code === 10 && (first.subcode === 2018278 || /outside.*allowed.*window/i.test(first.message || ''));
+  const isWindowExpired = isWindowError(first);
 
   if (isWindowExpired) {
     console.log(`⏰ 24h window expired for ${psid}, retrying with HUMAN_AGENT tag`);
@@ -740,14 +742,20 @@ router.post('/reply', async (req, res) => {
 
   } catch (error) {
     const fb = error.fbError || error.firstError;
-    console.error('❌ Error sending reply:', fb || error.message);
-    // Try to give the agent something useful to act on
+    console.error('❌ Error sending reply:', fb || error.message, error.firstError ? `(1er intento: ${error.firstError.message})` : '');
+    // Try to give the agent something useful to act on.
+    // NOTE: when the 24h window is closed we retry with the HUMAN_AGENT tag, and THAT
+    // retry is what fails if the page doesn't have the Human Agent feature approved by
+    // Meta. Its error (often a generic code 100) used to be reported as "PSID inválido",
+    // which sent agents chasing a nonexistent problem. Diagnose from the FIRST error.
     let userMessage = error.message || 'Failed to send reply';
-    if (fb?.code === 10 && (fb.subcode === 2018278 || /outside.*allowed.*window/i.test(fb.message || ''))) {
-      userMessage = 'Han pasado más de 7 días sin que el cliente escriba. Messenger no permite enviar el mensaje. Pídele al cliente que escriba primero.';
+    if (isWindowError(error.firstError) || isWindowError(fb)) {
+      userMessage = error.firstError
+        ? 'El cliente no escribe desde hace más de 24 h, así que Messenger cerró la ventana de respuesta. El reintento con la etiqueta HUMAN_AGENT también falló (la página no tiene aprobada esa función en Meta). Solo se le puede escribir cuando el cliente vuelva a escribir.'
+        : 'Messenger no permite enviar el mensaje: la ventana de respuesta está cerrada. Pídele al cliente que escriba primero.';
     } else if (fb?.code === 613) {
       userMessage = 'Límite de envío alcanzado en Messenger. Espera un momento e intenta de nuevo.';
-    } else if (fb?.code === 100) {
+    } else if (fb?.code === 100 && /psid|recipient|user/i.test(fb.message || '')) {
       userMessage = 'PSID inválido o el usuario bloqueó la página.';
     } else if (fb?.message) {
       userMessage = `Messenger: ${fb.message}`;
