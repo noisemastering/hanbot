@@ -454,11 +454,12 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
   // sizes, negro color). Affirm availability and offer the closest option and/or an
   // asesor instead of a hard "no" — never invent a price.
   lines.push(
-    `- NUNCA NIEGUES DE MÁS: si el cliente pide una medida, color o variante que no está lista directamente en catálogo, NO lo niegues tajantemente. ` +
-      `PRIMERO ofrécele TÚ la opción estándar MÁS CERCANA de las MEDIDAS DISPONIBLES de arriba, con su precio y su link — elígela por diferencia ` +
-      `(si pide 50 m y manejas 6, 9, 18 y 54 m, la más cercana es 54 m; en empate, la que le alcance). NUNCA le ofrezcas una MÁS CHICA "porque está disponible" ` +
-      `ni te limites a decir que no la tienes. Pasar con un asesor NO es la salida para esto: sólo ofrécelo si el cliente insiste en la medida exacta después de ` +
-      `que ya le diste la más cercana. NUNCA des un "no" rotundo ("no lo manejamos", "no la podemos ofrecer") sin ofrecer una alternativa real.`
+    `- TÚ NO DECIDES SI UNA MEDIDA EXISTE: eso ya lo resolvió el sistema. Si en el contexto de este turno viene una medida con su PRECIO y su LINK, ` +
+      `esa medida SÍ la manejamos — cotízala y ya. NUNCA la niegues, NUNCA digas que "no está en el rango" ni que es "medida especial", y NUNCA la compares ` +
+      `contra el rango de arriba para decidir si existe (el rango es sólo para responder "¿qué medidas manejan?", y NO tiene orientación: 10x5 es lo mismo que 5x10). ` +
+      `SÓLO cuando este contexto diga explícitamente que la medida NO está en catálogo debes ofrecer la MÁS CERCANA de las MEDIDAS DISPONIBLES, con su precio y su link, ` +
+      `elegida por diferencia (nunca una más chica "porque está disponible"). Pasar con un asesor no es la salida: sólo si el cliente insiste en la medida exacta ` +
+      `después de que ya le diste la más cercana. NUNCA des un "no" rotundo ("no lo manejamos", "no la podemos ofrecer") sin ofrecer una alternativa real.`
   );
   lines.push(
     `- PRECIO POR ÁREA (no lineal): si el cliente pregunta por qué una medida más grande cuesta más, o "por qué la 6x6 cuesta casi el doble que la 6x4 si son solo 2 m más", NO evadas ni repitas precios: explícale que el precio va por ÁREA en metros CUADRADOS, no por metros lineales. Una 6x4 son 24 m² y una 6x6 son 36 m² (50% más material), por eso sube más de lo que parece. Y si la 6x4 está en PROMOCIÓN, esa es su precio de referencia (por eso se ve barata). Contesta la pregunta de frente.`
