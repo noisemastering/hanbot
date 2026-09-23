@@ -2133,13 +2133,14 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // pago, color…): then the model answers everything, using the context above.
           // A message may deserve several answers — this must never swallow one.
           if (link && !sm && Number.isFinite(pi.amount)) {
-            const leftover = String(userMessage)
-              .replace(/\d+(?:[.,]\d+)?\s*[x×*]\s*\d+(?:[.,]\d+)?/gi, " ")
-              .replace(/[^\p{L}\s]/gu, " ")
-              .trim()
-              .split(/\s+/)
-              .filter((w) => w && !/^(precio|cuanto|cuánto|cuesta|vale|sale|la|el|lo|de|del|una|un|uno|m|mt|mts|metro|metros|por|quiero|necesito|info|informacion|información|tienen|tiene|hay|mide|medida|medidas|malla|sombra|beige|esa|ese|esta|este)$/i.test(w));
-            const onlyTheMeasure = !/[?¿]/.test(String(userMessage)) && leftover.length === 0;
+            // The test is NOT "no extra words" — people write "es de 10 x 5 la que
+            // necesito si la maneja". It's "does this message raise any OTHER topic".
+            // If it doesn't, the quote IS the whole answer and we return it.
+            const rest = String(userMessage).replace(/\d+(?:[.,]\d+)?\s*[x×*]\s*\d+(?:[.,]\d+)?/gi, " ");
+            const otherTopic =
+              /env[ií]|entrega|paga|pago|pagar|contra\s*entrega|tarjeta|transferencia|factur|garant|instalaci|sucursal|ubicaci|direcci|d[oó]nde|color|negro|verde|blanco|mayoreo|descuento|cu[aá]nt[oa]s\s|rollo|borde|antimaleza|ground|kit|cord[oó]n|lluvia|impermeable|dura|duraci[oó]n/i.test(rest);
+            const secondMeasure = extractAllMeasures(String(userMessage)).length > 1;
+            const onlyTheMeasure = !otherTopic && !secondMeasure;
             if (onlyTheMeasure) {
               const sizeTxt = wantDims ? `${wantDims[0]}x${wantDims[1]} m` : found.name;
               const discTxt = pi.hasDiscount && Number.isFinite(pi.originalPrice) && pi.originalPrice > pi.amount
