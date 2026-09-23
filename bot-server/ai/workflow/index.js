@@ -547,46 +547,11 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     // but the promo is dismissed so it won't try to re-sell.
   }
 
-  // 1.055 PAYMENT / PAGO CONTRA ENTREGA. Fixed, known answer — but the LLM router
-  // intermittently ESCALATES it to a human (and the grounding verifier only
-  // sometimes rescues it). Answer it deterministically (matches the knowledge base)
-  // so it NEVER hands off: purchase via Mercado Libre with compra protegida, paid at
-  // order time; no cash-on-delivery except pickup at the Querétaro plant.
-  if (userMessage) {
-    const msgPay = String(userMessage).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-    // Cash-on-delivery / pay-at-home, incl. "pagar a domicilio", "cuando llegue",
-    // "al recogerlo", "se paga al recibir".
-    const isContraEntrega =
-      /contra\s*-?\s*entrega|contraentrega|pag\w*\s*(?:\w+\s+){0,2}(al\s*(recibir|entregar|recoger\w*|llegar)|a\s*domicilio|en\s*(domicilio|casa)|cuando\s*(llegue|me\s*llegue|lo\s*reciba))|cobr\w*\s*(?:\w+\s+){0,2}(al\s*(recibir|entregar)|a\s*domicilio)|se\s*paga\s*al\s*(recibir|entregar)|hasta\s*que\s*(me\s*)?(llegue|lo\s*reciba)/.test(msgPay);
-    // Trust / scam concern (incl. typos like "eztafa") — same protected-purchase answer.
-    const isTrustConcern =
-      /e[sz]taf\w*|fraud\w*|\btim[oa]\b|enga[ñn]\w*|desconf\w*|no\s*(me\s*)?conf[ií]\w*|es\s*confiab\w*|no\s*es\s*confiab\w*|es\s*segur\w*|sera\s*segur\w*|me\s*da\s*(miedo|pendiente|cosa)|\bmiedo\b/.test(msgPay);
-    const asksPayment =
-      /(como|de que forma|de que manera|donde|cual)\b[^?.!]{0,25}\b(pago|pagar|se paga)\b/.test(msgPay) ||
-      /forma de pago|metodo de pago|como se hace la compra|como es la compra|como se realiza la compra|como comprar|como se compra/.test(msgPay);
-    // If the SAME message also names a measure ("una de ocho por cuatro / paga uno al
-    // recibir"), don't short-circuit with the payment answer alone — that drops the
-    // quote the customer actually asked for (reported: "no le paso link ni precio").
-    // Let the normal measure path quote it; the payment rule is in the knowledge base.
-    const alsoNamesMeasure = (() => {
-      try {
-        const { dimsOf } = require("./tools");
-        return !!(dimsOf(String(userMessage)) || extractAllMeasures(String(userMessage)).length);
-      } catch {
-        return false;
-      }
-    })();
-    if (isContraEntrega || asksPayment || isTrustConcern) {
-      earlyFacts.push(
-        `- PAGO / CONTRA ENTREGA (contesta TÚ, nunca escales por esto): la compra se realiza por Mercado Libre con COMPRA PROTEGIDA ` +
-          `(si no llega o llega mal, le devuelven su dinero) y el pago es al momento de ordenar en línea. NO manejamos pago contra entrega, ` +
-          `salvo que recoja directamente en nuestra planta en Querétaro. ` +
-          (isTrustConcern && !isContraEntrega ? `El cliente muestra desconfianza: reconócelo con empatía y explícale la compra protegida. ` : "") +
-          `Dilo con naturalidad EN ESTE MISMO MENSAJE, junto con todo lo demás que haya preguntado (si pidió una medida, cotízala también). ` +
-          `NUNCA pases al cliente con un asesor por una pregunta de pago.`
-      );
-    }
-  }
+  // PAYMENT: no gate here on purpose. Detecting "is this a payment question" with a
+  // regex kept failing on the next phrasing ("El pago como es!?", "forma de pago"),
+  // and each miss let the turn fall through and escalate. The answer now lives in the
+  // flow's knowledge, which is injected on EVERY turn, so no detection is needed and
+  // no phrasing can be missed.
 
   // 1.06 MEASURE CLARIFY RESUME. Last turn we asked the client to choose between
   // two products that share the asked measure (different families). Match their
