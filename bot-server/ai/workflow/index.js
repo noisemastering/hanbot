@@ -1166,8 +1166,23 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // borde"; the human rule is: ask the length first, always.
       if (!hasWxL && allNums.length === 0 && !state.awaitingBordeQty && !state.bordeQuoted) {
         const wantsBorde = /(precio|cuánto|cuanto|cotiz|cost|vale|borde|separador|rollo|metr|largo)/i.test(msgB);
-        if (wantsBorde) {
+        // Only ask the length when the message asks NOTHING ELSE. Words like "cuánto"
+        // appear in plenty of other questions ("cuánto mide de ancho", "cuánto tarda
+        // en llegar", "cómo es el pago"), and intercepting those replaced the answer
+        // with "¿qué largo necesitas?" — the customer's actual question never reached
+        // the model. When something else is asked we contribute the borde facts and
+        // let the turn continue, so the reply covers both.
+        const asksSomethingElse =
+          /alto|altura|ancho|anchura|grosor|espesor|sobresale|entierra|env[ií]|entrega|tarda|llega|paga|pago|tarjeta|factur|garant|instalaci|color|negro|verde|material|dura|ubicaci|sucursal|mayoreo/i.test(msgB);
+        if (wantsBorde && !asksSomethingElse) {
           return retB(`¡Claro! Manejo el borde separador en rollos de 6, 9, 18 y 54 m. ¿Qué largo necesitas? 😊`, { bordeAskLength: true });
+        }
+        if (wantsBorde && asksSomethingElse) {
+          earlyFacts.push(
+            `- BORDE SEPARADOR: se maneja en rollos de 6, 9, 18 y 54 m (el alto es fijo: 13 cm). ` +
+              `Responde PRIMERO lo que el cliente preguntó y, si todavía no sabes qué largo quiere, pregúntaselo al final del mismo mensaje. ` +
+              `NO lo pases con un asesor por una pregunta que puedes contestar.`
+          );
         }
       }
     }
