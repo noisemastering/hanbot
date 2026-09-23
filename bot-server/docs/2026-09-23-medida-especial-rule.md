@@ -26,3 +26,38 @@ oversized 12x11 still behaves - offers the closest we carry, 7x10 at $3450.
 
 Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
 Claude-Session: https://claude.ai/code/session_01EVNqQpRQb93YUSJ5yVbfrQ
+
+---
+
+## Update — rule rewritten as evaluate-then-decide
+
+The guard above stopped the damage but not the cause. Measured the cause directly by
+giving the model the rule and nothing else:
+
+| Prompt given to the model | Correct verdicts |
+|---|---|
+| Just the condition -> true/false | 4/4 |
+| Condition **welded to its action** ("SÍ la fabricamos... pásalo con un asesor... NUNCA digas que no") | 1/4 |
+| Same + asked to justify | 1/4 |
+
+Same condition, same measures. The model can do the comparison; it stops doing it
+when the condition and the action share a sentence. It pattern-matches "medida
+grande -> especial -> handoff" and then writes a justification that contradicts its
+own arithmetic ("uno de los lados es de 9 metros" for a rule that requires both).
+
+The rule in `cotizar` (both malla flows) is now split into steps:
+
+    PASO 1 (sólo comparar, sin decidir): toma los dos números y quédate con el MENOR.
+            Es ESPECIAL sólo si ese MENOR es >= 8 m, o si el cliente confirma decimales.
+            10 x 5 -> menor 5 -> NO.  9 x 6 -> menor 6 -> NO.  9 x 10 -> menor 9 -> SÍ.
+    PASO 2 — si NO es especial: medida ESTÁNDAR, cotízala normal. No la llames especial.
+    PASO 3 — si SÍ es especial: sí la fabricamos, pásalo con un asesor (request_handoff).
+
+Re-ran the exact question format that had failed: **7/7** (10x5, 9x6, 8x4, 9x10, 8x8,
+4x4, 12x3). End to end in the flow: "10 X 5" -> $1044 + link, "9x6 que vale" -> $1979
++ link, neither escalates.
+
+Known gap: "quiero una de 9x10" (a genuine special measure) is answered by the
+nearest-measure path with 7x10 at $3450 before the special-measure rule is reached,
+so it never offers to make it to measure. Separate issue - a gate short-circuiting -
+not the true/false problem fixed here.
