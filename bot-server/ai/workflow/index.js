@@ -2308,11 +2308,28 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
               },
             };
           }
-          // No live price for the closest size (rare) → soft directive fallback (still
-          // NEVER hand off or deny for the size).
-          turnContextExtra +=
-            `\n- MEDIDA NO LISTA EN CATÁLOGO (pero NO la niegues): la más cercana que sí manejamos es "${closest.label}". ` +
-            `Ofrécela con naturalidad; NO la niegues, NO inventes medida ni precio, NUNCA digas "no manejamos decimales" ni "medida especial", NUNCA hagas handoff por el tamaño.`;
+          // NEAREST SIZE FOUND BUT NOT QUOTABLE (no live price / no link) → offer it,
+          // then hand off. "Nothing to quote ⇒ escalate" is the oldest rule in the
+          // project; it was dropped in 37cf982 (2026-05-27) when the promo-cage fix
+          // replaced the escalation branch with a catalog-wide search and left no
+          // floor under it, and the workflow cutover never brought it back. Note this
+          // is NOT a handoff over the SIZE (that stays forbidden — the branch above
+          // offers any size we can price); it's a handoff because we have no price to
+          // give, which is the one thing the bot must never improvise.
+          const _cSizeNP = closest.dims ? `${closest.dims[0]}m x ${closest.dims[1]}m` : (closest.label || "esa medida");
+          return beginHandoff({
+            preface: `La medida que manejo más cercana a tu ${wantDims[0]}x${wantDims[1]} m es la de ${_cSizeNP}, pero deja confirmo el precio contigo.`,
+            reason: `Medida ${wantDims[0]}x${wantDims[1]} m — la más cercana (${_cSizeNP}) no tiene precio en línea; cotizar con asesor`,
+          });
+        }
+        if (!oobHandled && !mentionedReforzada) {
+          // NOTHING in the catalog comes close to the requested measure → nothing to
+          // quote at all. Same restored rule: never leave the customer with a question
+          // or an improvised answer — affirm we make it and escalate with the measure.
+          return beginHandoff({
+            preface: `Tu medida de ${wantDims[0]}x${wantDims[1]} m sí la fabricamos a la medida.`,
+            reason: `Medida ${wantDims[0]}x${wantDims[1]} m sin equivalente en catálogo — cotización sobre medida con asesor`,
+          });
         }
       } else if (turnActiveProductId) {
         // NO measure in THIS message, but there's an ACTIVE product (e.g. the
