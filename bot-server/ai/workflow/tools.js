@@ -61,7 +61,21 @@ function labeledDims(text) {
   const L = grab("largo|alto|altura|fondo");
   const A = grab("ancho|lado");
   if (L == null || A == null) return null;
-  return [Number(L), Number(A)].sort((a, b) => a - b);
+  return normalizeCmPair([Number(L), Number(A)]);
+}
+
+// Customers routinely write the measure in CENTIMETRES with no unit: "330 por 555"
+// means 3.30 x 5.55 m. A 3-digit side is never metres — nobody shades 330 m — so the
+// pair came in as cm and gets divided by 100. This is unit handling, not interpretation:
+// without it the price lookup searches for a 330x555 leaf, finds nothing, and the model
+// is left with a measure it can't quote (it then loops on "¿te refieres a...?" forever,
+// which is exactly how conversation 38884521031194173 stalled for 3 days).
+// Only 2-D pairs pass through here; 1-D lengths (rollo metres, the borde's 13 cm height)
+// never reach it.
+const CM_SIDE_MIN = 100;
+function normalizeCmPair(pair) {
+  if (!pair) return pair;
+  return pair.map((n) => (n >= CM_SIDE_MIN ? n / 100 : n)).sort((a, b) => a - b);
 }
 
 // "4x3", "4 x 3 m", "4 por 3", "tres por 8", "de 4x3 metros" → ["3","4"] (sorted).
@@ -86,7 +100,7 @@ function dimsOf(text) {
   // model free-forms a size that may not exist in the catalog.
   if (!m) return labeledDims(text);
   // Sort numerically so "6x4" and "4x6" compare equal regardless of order.
-  return [m[1], m[2]].map(Number).sort((a, b) => a - b);
+  return normalizeCmPair([m[1], m[2]].map(Number));
 }
 
 // Remove every W×L MEASURE from a message so any number that REMAINS is a genuine
