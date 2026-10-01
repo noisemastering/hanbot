@@ -70,6 +70,19 @@ const paymentStatus = (plan) => {
   };
 };
 
+// The contracted plan terms. Defaults mirror the schema so a never-configured plan
+// still reads back consistently.
+const planShape = (p) => ({
+  name: p?.name || "Estándar",
+  monthlyLimit: p?.monthlyLimit != null ? p.monthlyLimit : 3000,
+  overageRate: p?.overageRate != null ? p.overageRate : 0,
+  currency: p?.currency || "MXN",
+  price: p?.price != null ? p.price : 300,
+  priceCurrency: p?.priceCurrency || "USD",
+  dueDay: p?.dueDay || 10,
+  cancelPolicy: p?.cancelPolicy || "anytime",
+});
+
 const shape = (s) => ({
   killswitch: { engaged: !!s.killswitch?.engaged, at: s.killswitch?.at || null, by: s.killswitch?.by || null },
   nuke: { engaged: !!s.nuke?.engaged, at: s.nuke?.at || null, by: s.nuke?.by || null },
@@ -202,6 +215,73 @@ router.post("/mark-paid", requireSuperAdmin, async (req, res) => {
     res.json({ success: true, ...shape(s) });
   } catch (e) {
     res.status(500).json({ success: false, error: "No se pudo marcar como pagado" });
+  }
+});
+
+// Read the plan as configured — super_admin. Separate from /status (which only
+// exposes the payment half) because these are the contracted terms, not a state.
+router.get("/plan", requireSuperAdmin, async (req, res) => {
+  try {
+    const s = await SystemState.getState();
+    res.json({ success: true, plan: planShape(s.plan) });
+  } catch (e) {
+    res.status(500).json({ success: false, error: "No se pudo leer el plan" });
+  }
+});
+
+// Set the contracted plan values — super_admin. Until this existed the quota was
+// whatever the schema defaulted to (3000), while the client was actually paying for
+// a different number, so we were giving away the difference every month.
+router.put("/plan", requireSuperAdmin, async (req, res) => {
+  try {
+    const s = await SystemState.getState();
+    if (!s.plan) s.plan = {};
+    const b = req.body || {};
+    const num = (v, { min = 0, max = Infinity, int = false } = {}) => {
+      const n = Number(v);
+      if (!Number.isFinite(n) || n < min || n > max) return null;
+      return int ? Math.round(n) : n;
+    };
+
+    if (b.name != null) {
+      const name = String(b.name).trim().slice(0, 60);
+      if (!name) return res.status(400).json({ success: false, error: "El nombre del plan no puede ir vacío" });
+      s.plan.name = name;
+    }
+    if (b.monthlyLimit != null) {
+      const v = num(b.monthlyLimit, { min: 1, max: 1e7, int: true });
+      if (v == null) return res.status(400).json({ success: false, error: "Conversaciones incluidas: entero mayor que 0" });
+      s.plan.monthlyLimit = v;
+    }
+    if (b.overageRate != null) {
+      const v = num(b.overageRate, { min: 0, max: 1e6 });
+      if (v == null) return res.status(400).json({ success: false, error: "Costo por conversación extra: número >= 0" });
+      s.plan.overageRate = v;
+    }
+    if (b.currency != null) s.plan.currency = String(b.currency).trim().toUpperCase().slice(0, 4) || "MXN";
+    if (b.price != null) {
+      const v = num(b.price, { min: 0, max: 1e7 });
+      if (v == null) return res.status(400).json({ success: false, error: "Precio mensual: número >= 0" });
+      s.plan.price = v;
+    }
+    if (b.priceCurrency != null) s.plan.priceCurrency = String(b.priceCurrency).trim().toUpperCase().slice(0, 4) || "USD";
+    if (b.dueDay != null) {
+      const v = num(b.dueDay, { min: 1, max: 28, int: true });
+      if (v == null) return res.status(400).json({ success: false, error: "Día de pago: entre 1 y 28" });
+      s.plan.dueDay = v;
+    }
+    if (b.cancelPolicy != null) s.plan.cancelPolicy = String(b.cancelPolicy).trim().slice(0, 40) || "anytime";
+
+    s.markModified("plan");
+    await s.save();
+    const who = req.user.username || req.user.email || "super_admin";
+    console.warn(
+      `📋 [SpecOps] Plan updated by ${who}: ${s.plan.monthlyLimit} convos incl., ` +
+        `${s.plan.price} ${s.plan.priceCurrency}/mes, extra ${s.plan.overageRate} ${s.plan.currency}, corte día ${s.plan.dueDay}`
+    );
+    res.json({ success: true, plan: planShape(s.plan), payment: paymentStatus(s.plan) });
+  } catch (e) {
+    res.status(500).json({ success: false, error: "No se pudo guardar el plan" });
   }
 });
 
