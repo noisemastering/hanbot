@@ -923,12 +923,18 @@ app.get("/r/d/:trackCode", async (req, res) => {
 // Append our clickId as `ref` to a non-ML redirect destination, so the alt store
 // (Hanlob) can capture it at checkout and attribute the order back to this click.
 // ML destinations are returned unchanged; a malformed URL falls back to the raw url.
-function withClickRef(url, clickId) {
+function withClickRef(url, clickId, psid) {
   if (!url || !clickId) return url;
   if (/mercadolibre\.com/i.test(url)) return url; // ML attribution is by item id
   try {
     const u = new URL(url);
     u.searchParams.set("ref", clickId);
+    // Also hand over the PSID itself. `ref` only resolves to a conversation inside
+    // OUR database, so a store holding just that can't trace anything on its own —
+    // which defeats the point of owning the store. With the PSID on the order they
+    // can follow the sale end-to-end in their own system, and we get a 100% certain
+    // conversation↔sale join instead of the item+zip+name inference ML forces on us.
+    if (psid) u.searchParams.set("psid", psid);
     return u.toString();
   } catch {
     return url;
@@ -969,7 +975,7 @@ app.get("/r/:clickId", async (req, res) => {
     // checkout and tie the resulting order back to this click — the attribution
     // hook we never had on ML. ML links are left untouched (attribution there is by
     // item id) and a malformed URL falls back to the raw destination.
-    res.redirect(302, withClickRef(clickLog.originalUrl, clickId));
+    res.redirect(302, withClickRef(clickLog.originalUrl, clickId, clickLog.psid));
   } catch (error) {
     console.error("❌ Error processing click:", error);
     res.status(500).send("Error processing redirect");

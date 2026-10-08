@@ -133,6 +133,16 @@ async function httpApiAdapter(pos, { sku }) {
     if (!Number.isFinite(price) || price <= 0) {
       return { available: false, source: "http", fetchFailed: false, reason: "sin precio" };
     }
+    // IVA. Retail prices in the store INCLUDE tax; wholesale prices do NOT. The bot
+    // only ever quotes retail (mayoreo always goes to an asesor), so a price that
+    // arrives flagged as tax-excluded is a wholesale price that reached the wrong
+    // path — quoting it would undercharge the customer by the IVA. Refuse it and let
+    // the caller hand off rather than present a number we'd have to walk back.
+    const taxIncluded = d.taxIncluded != null ? !!d.taxIncluded : cfg.taxIncluded !== false;
+    if (!taxIncluded) {
+      return { available: false, source: "http", fetchFailed: false, reason: "precio sin IVA (mayoreo) — no cotizable a retail" };
+    }
+
     const list = Number(d.listPrice);
     const hasDiscount = Number.isFinite(list) && list > price;
     return {
@@ -142,9 +152,7 @@ async function httpApiAdapter(pos, { sku }) {
       hasDiscount,
       discountPercent: hasDiscount ? Math.round((1 - price / list) * 100) : 0,
       currency: d.currency || "MXN",
-      // NOTE: IVA handling pending the store's confirmation (¿precios con IVA?). We
-      // trust the payload's taxIncluded, defaulting to the POS config (assume incl.).
-      taxIncluded: d.taxIncluded != null ? !!d.taxIncluded : cfg.taxIncluded !== false,
+      taxIncluded, // always true here — the guard above rejects anything else
       url: d.url || null,
       title: d.title || null,
       updatedAt: d.updatedAt || null,
