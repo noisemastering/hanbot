@@ -65,17 +65,24 @@ function labeledDims(text) {
 }
 
 // Customers routinely write the measure in CENTIMETRES with no unit: "330 por 555"
-// means 3.30 x 5.55 m. A 3-digit side is never metres — nobody shades 330 m — so the
-// pair came in as cm and gets divided by 100. This is unit handling, not interpretation:
-// without it the price lookup searches for a 330x555 leaf, finds nothing, and the model
-// is left with a measure it can't quote (it then loops on "¿te refieres a...?" forever,
-// which is exactly how conversation 38884521031194173 stalled for 3 days).
-// Only 2-D pairs pass through here; 1-D lengths (rollo metres, the borde's 13 cm height)
-// never reach it.
+// means 3.30 x 5.55 m. Nobody shades 330 m, so the pair came in as cm and gets divided
+// by 100. This is unit handling, not interpretation: without it the price lookup
+// searches for a 330x555 leaf, finds nothing, and the model is left with a measure it
+// can't quote (it then loops on "¿te refieres a...?" forever, which is exactly how
+// conversation 38884521031194173 stalled for 3 days).
+//
+// BOTH sides must look like cm. A customer writing in cm writes BOTH numbers in cm
+// ("330 por 555"), never one of each. Requiring both is what keeps the ROLLOS intact:
+// 5x100 is a real 5 m x 100 m roll, and an earlier version of this that converted any
+// single big side turned it into 1x5 m (reported conversation 28868744706094328).
+// Checked against the catalog: five sellable sizes have one side of 100 m
+// (2x100, 3x100, 4x100, 4.2x100, 5x100) and NOT ONE has both sides >= 100 — so this
+// threshold can never collide with a real product.
 const CM_SIDE_MIN = 100;
 function normalizeCmPair(pair) {
   if (!pair) return pair;
-  return pair.map((n) => (n >= CM_SIDE_MIN ? n / 100 : n)).sort((a, b) => a - b);
+  if (!pair.every((n) => n >= CM_SIDE_MIN)) return pair.slice().sort((a, b) => a - b);
+  return pair.map((n) => n / 100).sort((a, b) => a - b);
 }
 
 // "4x3", "4 x 3 m", "4 por 3", "tres por 8", "de 4x3 metros" → ["3","4"] (sorted).
