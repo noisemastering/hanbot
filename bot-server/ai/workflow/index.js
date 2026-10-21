@@ -1175,6 +1175,49 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         const asksSomethingElse =
           /alto|altura|ancho|anchura|grosor|espesor|sobresale|entierra|env[ií]|entrega|tarda|llega|paga|pago|tarjeta|factur|garant|instalaci|color|negro|verde|material|dura|ubicaci|sucursal|mayoreo/i.test(msgB);
         if (wantsBorde && !asksSomethingElse) {
+          // BROAD PRICE ASK → QUOTE THE WHOLE LIST. There are only four lengths, so
+          // "costos" / "¿a cómo está el metro?" deserves all of them with live prices
+          // and links — not another question (reported: the customer asked for costs
+          // and got "¿qué largo necesitas?"). Borde only: the other flows have far too
+          // many sizes to list. Variant defaults to grueso, same rule as B2. If no
+          // price resolves we fall back to asking the largo — never invent one.
+          // Resolve the four leaves by WALKING THE TREE, not by text match: the two
+          // variants share every length name ("Rollo de 18 m" exists under both
+          // Grueso and Delgado), so findProductInFamilies returns whichever it scores
+          // higher and the list comes out mixing both price lists. thickness is the
+          // real discriminator (3 mm = grueso, 1.5 mm = delgado).
+          const variantC = /delgad/i.test(msgB) ? "delgado" : "grueso";
+          const thickC = variantC === "delgado" ? "1.5" : "3";
+          const rowsC = []; const quotedC = [];
+          let leavesC = [];
+          let frontierC = bordeFams.map((f) => String(f.id)).filter(Boolean);
+          for (let d = 0; d < 5 && frontierC.length; d++) {
+            const kidsC = await PFm.find({ parentId: { $in: frontierC } }).lean().catch(() => []);
+            if (!kidsC.length) break;
+            leavesC.push(...kidsC.filter((k) => k.sellable === true));
+            frontierC = kidsC.map((k) => String(k._id));
+          }
+          const sameThick = leavesC.filter((k) => String(k.attributes?.thickness || "") === thickC);
+          if (sameThick.length) leavesC = sameThick; // no thickness in the catalog → quote what's there
+          const byLenC = new Map();
+          for (const k of leavesC) {
+            const L = String(k.attributes?.length || "");
+            if (BORDE_LENS.includes(L) && !byLenC.has(L)) byLenC.set(L, k);
+          }
+          for (const len of BORDE_LENS) {
+            const leaf = byLenC.get(len);
+            if (!leaf) continue;
+            const pi = await resolvePrice(leaf, altOpt(state, leaf)).catch(() => null);
+            if (pi && pi.amount) {
+              const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: leaf.name, productId: String(leaf._id) });
+              rowsC.push(`• ${len} m: $${pi.amount}${link ? ` → ${link}` : ""}`);
+              quotedC.push(String(len));
+            }
+          }
+          if (quotedC.length) {
+            state.bordeQuoted = quotedC;
+            return retB(`¡Claro! El borde separador va por rollo, en estas medidas:\n${rowsC.join("\n")}\n¿Cuál te sirve? 😊`, { bordeAllQuoted: quotedC });
+          }
           return retB(`¡Claro! Manejo el borde separador en rollos de 6, 9, 18 y 54 m. ¿Qué largo necesitas? 😊`, { bordeAskLength: true });
         }
         if (wantsBorde && asksSomethingElse) {
