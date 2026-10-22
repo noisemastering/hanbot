@@ -998,7 +998,14 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     // trigger matches "cuánto" inside "cuántos días" and answered a shipping question with
     // "¿qué largo necesitas?" (reported). Yield so the turn answers about delivery instead.
     const isDeliveryQuestion = /(cu[aá]nto?s?\s+d[ií]as|cu[aá]ndo\s+(me\s+)?(llega|lleg[ao]|entregan|sale)|tiempo\s+de\s+(entrega|env[ií]o)|en\s+cu[aá]nto\s+(tiempo|llega)|d[ií]as?\s+(en\s+)?(llega|entrega|env)|cu[aá]nto\s+tarda|rastreo|paqueter[ií]a|gu[ií]a\s+de\s+env)/i.test(String(userMessage));
-    if (userMessage && isBordeFlow && !wantsNonBordeProduct && !isDeliveryQuestion) {
+    // ASKING FOR OUR CONTACT, not about borde. This gate runs long before the phone
+    // gate, and the word-number map read the "un" in "facilitarme un num" as quantity
+    // 1 — so a customer who asked for a phone number got "¡Perfecto, 1! ¿De cuál largo
+    // los quieres?" (reported). Yield so the contact gate answers him.
+    const isContactRequest =
+      /\b(num(ero)?s?|tel(efono|éfono)?s?|cel(ular)?|whats?app?|wasap|wpp|contacto|marcar|llamar|hablar|comunicar\w*)\b/i.test(String(userMessage)) &&
+      !/\bmi\s+(num|tel|cel|whats)/i.test(String(userMessage));
+    if (userMessage && isBordeFlow && !wantsNonBordeProduct && !isDeliveryQuestion && !isContactRequest) {
       const { findProductInFamilies, parseRollQuantity } = require("./tools");
       const { resolvePrice, trackedLink } = require("./priceResolver");
       const PFm = require("../../models/ProductFamily");
@@ -1556,9 +1563,19 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   if (userMessage && state.pendingZipAsk) {
     const haveZip = !!(state.location && (state.location.zip || state.location.zipcode));
     const msgHasZip = /\b\d{5}\b/.test(String(userMessage));
-    const isNewRequest = /\b(colores?|verde|negro|negra|beige|blanc|gris|precio|cu[aá]nto|medida|link|enlace|comprar|otra|otro)\b/i.test(String(userMessage)) || !!require("./tools").dimsOf(String(userMessage)); // dimsOf → verbose "6 por 3" counts as a fresh request too, not just compact "6x3"
+    // Fire ONLY on a bland acknowledgement. This used to be a BLOCKLIST of topic
+    // words, which meant any topic it hadn't anticipated got swallowed: "Grado de
+    // protección que ofrece y tiempo de garantía" was answered with "¿a qué código
+    // postal te llegaría el pedido?" and the customer's two questions were never
+    // answered (reported). An allowlist can only ever drop the CP ask, never a question.
+    const ackTxt = String(userMessage).trim();
+    const isBlandAck =
+      ackTxt.length <= 45 &&
+      !/[?¿]/.test(ackTxt) &&
+      !/\b(que|qu[eé]|cual|cu[aá]l|cuanto|cu[aá]nto|como|c[oó]mo|donde|d[oó]nde|cuando|cu[aá]ndo|quien|qui[eé]n|porque|por\s*qu[eé]|sirve|tiene[n]?|manejan|hay|puedo|puede[n]?|grado|garant\w*|protecci\w*|dura\w*|env[ií]\w*|entrega|paga\w*|pago|factur\w*|color\w*|medida|precio|metro\w*|rollo|ubicaci\w*|direcci\w*|telefono|tel[eé]fono|num\w*|cotiz\w*|descuento|mayoreo|disponib\w*|stock)\b/i.test(ackTxt) &&
+      !require("./tools").dimsOf(ackTxt);
     state.pendingZipAsk = false; // one-shot regardless
-    if (!haveZip && !msgHasZip && !isNewRequest) {
+    if (!haveZip && !msgHasZip && isBlandAck) {
       const reply = "¡Con gusto! ¿A qué código postal te llegaría el pedido? 📍";
       history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
       return {
@@ -1637,6 +1654,53 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // 1.0865 CONTACT-NUMBER REQUEST — the customer asks for OUR phone ("algún número",
   // "un teléfono", "a qué número marco", "su whatsapp"). SHARE our numbers directly —
   // never mistake it for "quiero hablar con un humano" and hand off asking for THEIR
+  // 1.0865 LOCATION / SHIPPING COVERAGE. Reported twice: the bot kept OFFERING the
+  // address ("si gustas te comparto la ubicación exacta") instead of sharing it, and
+  // it escalated "¿Dónde están ubicados? ¿Hacen envíos?" to an asesor — two questions
+  // whose answers sit in CompanyInfo. Share them; never offer, never escalate.
+  if (userMessage) {
+    try {
+      const msgL = String(userMessage).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+      const asksWhere = /\b(donde (estan|se (ubican|encuentran))|ubicaci|ubicados?|direccion|domicilio|sucursal|tienda fisica|planta|en que (estado|ciudad)|de donde son|maps|mapa|como llego)\b/.test(msgL);
+      const asksShipsTo = /\b(hacen? env[ií]?o?s?|envian|mandan|llega(n)? a|cobertura|a toda la republica|a todo el pais)\b/.test(msgL);
+      if (asksWhere || asksShipsTo) {
+        const { getBusinessInfo } = require("../../businessInfoManager");
+        const bizL = await getBusinessInfo().catch(() => null);
+        if (bizL && (bizL.fullAddress || bizL.googleMapsUrl)) {
+          const parts = [];
+          parts.push(`Estamos en ${bizL.city || "Querétaro"}${bizL.state && bizL.state !== bizL.city ? `, ${bizL.state}` : ""} y hacemos envíos a toda la República. 📦`);
+          if (bizL.fullAddress) parts.push(`📍 ${bizL.fullAddress}`);
+          if (bizL.googleMapsUrl) parts.push(`🌐 ${bizL.googleMapsUrl}`);
+          // Only OWN the turn when location/shipping is all they asked. Anything else
+          // in the message and we contribute the facts and let the turn answer both.
+          const restL = msgL
+            .replace(/\b(donde|estan|se|ubican|encuentran|ubicaci\w*|ubicados?|direccion|domicilio|sucursal|planta|maps|mapa|como|llego|hacen?|env[ií]?o?s?|envian|mandan|llegan?|cobertura|a|toda|todo|la|republica|el|pais|en|que|estado|ciudad|de|son|y|hola|buenas?|buenos?|dias|tardes|gracias|por|favor)\b/g, " ")
+            .replace(/[^a-z0-9]/g, "")
+            .trim();
+          if (!restL) {
+            const reply = parts.join("\n");
+            history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+            return {
+              reply,
+              state: { ...state, history, nodeId: currentNode.id },
+              diagnostics: {
+                workflow: { id: String(workflow._id), name: workflow.name },
+                fromNode: { id: currentNode.id, name: currentNode.name },
+                toNode: { id: currentNode.id, name: currentNode.name },
+                locationAnswered: true,
+              },
+            };
+          }
+          earlyFacts.push(
+            `- UBICACIÓN Y ENVÍOS (compártelos TAL CUAL en este mismo mensaje, nunca los ofrezcas "si gustas" ni pases con un asesor por esto):\n  ${parts.join("\n  ")}`
+          );
+        }
+      }
+    } catch (err) {
+      console.error("⚠️ location gate failed:", err.message);
+    }
+  }
+
   // contact (reported bug: "No compartió nuestros números antes del handoff").
   if (userMessage) {
     try {
@@ -1644,7 +1708,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // Are they GIVING their own number (not asking for ours)? Skip if so.
       const givingOwn = /\bmi\b[^]*\b(numero|telefono|tel|whats?app?|whats|wasap|wpp)\b/.test(msgP) || /\d{10}/.test(msgP.replace(/\D/g, ""));
       const hasPhoneWord = /\btelefono\b|\btel\b|\bwhat?sapp?\b|\bwhats\b|\bwasap\b|\bwpp\b|\blada\b/.test(msgP);
-      const numeroReq = /\bnumero\b/.test(msgP) && /\balgun|\bun\b|\buno\b|\bsu\b|\btu\b|\bel\b|\botro\b|\bdame\b|\bdas\b|\bpasa|\btiene|\bhay\b|\bcual\b|\ba que\b|\bpara\b|\bcontacto\b|\bmarcar\b|\bllamar\b|\bhablar\b|\bcomunicar|\bme das\b/.test(msgP);
+      const numeroReq = /\bnum(ero)?\b/.test(msgP) && /\balgun|\bun\b|\buno\b|\bsu\b|\btu\b|\bel\b|\botro\b|\bdame\b|\bdas\b|\bpasa|\btiene|\bhay\b|\bcual\b|\ba que\b|\bpara\b|\bcontacto\b|\bmarcar\b|\bllamar\b|\bhablar\b|\bcomunicar|\bme das\b|\bfacilit/.test(msgP);
       const isPhoneRequest = !givingOwn && (hasPhoneWord || numeroReq);
       if (isPhoneRequest) {
         const { getBusinessInfo } = require("../../businessInfoManager");
@@ -2352,7 +2416,22 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         }
       }
 
-      const found = multiHandled ? null : await resolveInFamilyMeasure(String(userMessage), familyList, wantDims, { altPos: state.altPos, altProductIds: state.altProductIds });
+      // AREA WITHOUT SIDES ("5 metros cuadrados", "20 m2"): never resolve a product
+      // from it. There is no W×L to match, so the lookup degrades to a text match and
+      // can return a leaf from a completely different family (reported: it answered
+      // with the borde "Rollo de 54 m" at $1599, in beige, to someone asking about
+      // dark malla sombra). Ask for the two sides instead.
+      const areaOnly =
+        !wantDims &&
+        /\b\d+(?:[.,]\d+)?\s*(?:m2|m²|metros?\s+cuadrados?|mts?\s+cuadrados?)\b/i.test(String(userMessage));
+      if (areaOnly) {
+        const areaN = String(userMessage).match(/\b(\d+(?:[.,]\d+)?)\s*(?:m2|m²|metros?\s+cuadrados?|mts?\s+cuadrados?)\b/i);
+        earlyFacts.push(
+          `- EL CLIENTE DIO UN ÁREA${areaN ? ` (${areaN[1]} m²)` : ""}, NO una medida. La malla se vende por ANCHO x LARGO, así que NO cotices ningún producto todavía: ` +
+            `pregúntale de cuánto por cuánto la necesita (ancho x largo), proponiéndole un ejemplo que dé esa área. NUNCA inventes una medida ni cotices un rollo que no te pidió.`
+        );
+      }
+      const found = multiHandled || areaOnly ? null : await resolveInFamilyMeasure(String(userMessage), familyList, wantDims, { altPos: state.altPos, altProductIds: state.altProductIds });
       if (multiHandled) {
         // handled above
       } else if (found && found.priceInfo) {
@@ -2450,7 +2529,11 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // NOT taken when the same message raises anything else (a question, envío,
           // pago, color…): then the model answers everything, using the context above.
           // A message may deserve several answers — this must never swallow one.
-          if (link && !sm && Number.isFinite(pi.amount)) {
+          // Only when the customer actually named a W×L. Without dims, `found` comes
+          // from a TEXT match that can land on any family ("5 metros cuadrados" scored
+          // the borde "Rollo de 54 m"), and sizeTxt falls back to that leaf's name — so
+          // the sentence asserts a product nobody asked about.
+          if (link && !sm && Number.isFinite(pi.amount) && wantDims) {
             // The test is NOT "no extra words" — people write "es de 10 x 5 la que
             // necesito si la maneja". It's "does this message raise any OTHER topic".
             // If it doesn't, the quote IS the whole answer and we return it.
@@ -2464,8 +2547,13 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
               const discTxt = pi.hasDiscount && Number.isFinite(pi.originalPrice) && pi.originalPrice > pi.amount
                 ? `, rebajada de $${Math.round(pi.originalPrice)}`
                 : "";
+              // Never assert beige: say the colour the RESOLVED leaf actually is, and
+              // say nothing when it isn't a colour leaf. Borde is negro, ground cover
+              // is negro/blanco — all of them were being quoted "en beige".
+              const leafColor = String(found.name || "").match(/\b(beige|negro|negra|verde|blanco|blanca|gris)\b/i);
+              const colorTxt = leafColor ? ` en ${leafColor[1].toLowerCase()}` : "";
               directQuote =
-                `Sí, la de ${sizeTxt} en beige está en $${pi.amount}${pi.plusIva ? " + IVA" : ""}${discTxt}. ` +
+                `Sí, la de ${sizeTxt}${colorTxt} está en $${pi.amount}${pi.plusIva ? " + IVA" : ""}${discTxt}. ` +
                 `Aquí la compras: ${link}`;
             }
           }
