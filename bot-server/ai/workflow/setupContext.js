@@ -323,6 +323,36 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     );
   }
 
+  // NEVER leak internal vocabulary. The engine's own prompts talk about "flujos",
+  // "nodos" and "familias", and the model borrows the words: a customer asking for
+  // an invoice was told "te ayudo a ubicar el flujo correcto". Those are our words
+  // for our plumbing, not something a customer has any idea about.
+  lines.push(
+    `[INTERNO] NUNCA uses vocabulario interno con el cliente: "flujo", "nodo", "familia de productos", ` +
+      `"workflow", "catálogo interno", "handoff". Habla como un asesor: "producto", "medida", "te paso con un asesor".`
+  );
+
+  // ANSWERS PORTED BACK FROM THE DEAD LEGACY HANDLERS. These lived in
+  // ai/handlers/{service,purchase,products}.js, which stopped being reachable when
+  // 27305c0 (2026-06-15) cut the legacy tie for workflow-owned conversations — i.e.
+  // for all ad and cold-start traffic. Four months of fixes went silent in one
+  // commit and came back as customer reports one at a time: a garantía question
+  // answered "¿te refieres a malla sombra?", a "¿a cómo el metro cuadrado?" answered
+  // "¿de cuál producto me hablas?". They are company-wide facts, so they belong here
+  // rather than in any one flow's prompt.
+  lines.push(
+    `GARANTÍA Y DURABILIDAD (aplica a TODA la malla sombra — contéstalo DIRECTO, nunca preguntes primero "¿de qué producto?"):\n` +
+      `  - Garantía: 1 año.\n` +
+      `  - Vida útil: alrededor de 5 años contra degradación solar (UV), según exposición y uso.\n` +
+      `  - Las compras por Mercado Libre llevan además compra protegida.\n` +
+      `  NUNCA respondas con vaguedades tipo "varios años": da el dato.`
+  );
+  lines.push(
+    `PRECIO POR METRO CUADRADO: NO vendemos por m² ni por metro suelto. La malla confeccionada se vende por PIEZA ` +
+      `(ancho x largo) y el rollo por sus medidas. Si preguntan "¿a cómo sale el metro?", dilo con naturalidad y ` +
+      `pide la medida (o el área) para cotizar la pieza — nunca inventes un precio por m² ni dividas un precio entre metros.`
+  );
+
   // Company info — always available so any node can answer "¿dónde están?",
   // "¿horario?", "¿teléfono?" accurately. Single source of truth: CompanyInfo DB.
   try {

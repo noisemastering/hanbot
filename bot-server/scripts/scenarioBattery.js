@@ -47,6 +47,47 @@ const FLOWS = {
 // ── CASES ────────────────────────────────────────────────────────────────────
 // { id, group, flow, setup?, turns[], expect }  (expect = what a correct bot does)
 const CASES = [
+  // INFO / SERVICE Q&A ────────────────────────────────────────────────────────
+  // Every case here is a question the LEGACY ai/handlers/* answered until 27305c0
+  // (2026-06-15) cut the legacy tie, after which those answers were unreachable for
+  // all ad and cold-start traffic. Nobody noticed for four months because all 61
+  // existing scenarios test PRODUCT flows; nothing tested the Q&A that commit broke.
+  // These run on cold start, which is where an unattached ad lands. If a future
+  // cutover strands them again, this group fails instead of a customer reporting it.
+  { id: "info-garantia", group: "info", flow: "coldstart",
+    turns: ["¿Qué garantía tiene la malla?"],
+    expect: "Contesta la garantía DIRECTO (1 año) y la vida útil (~5 años contra degradación solar). NO pregunta primero de qué producto se trata, ni responde vaguedades tipo 'varios años'." },
+  { id: "info-durabilidad", group: "info", flow: "coldstart",
+    turns: ["¿Cuánto dura la malla al sol?"],
+    expect: "Da el dato concreto de vida útil (~5 años contra degradación solar), no un 'varios años' sin número." },
+  { id: "info-precio-m2", group: "info", flow: "coldstart",
+    turns: ["¿A cómo sale el metro cuadrado?"],
+    expect: "Explica que no se vende por m² sino por pieza/medida (o por rollo) y pide la medida o el área. NO responde '¿de cuál producto me hablas?' sin explicar nada, y NO inventa un precio por m²." },
+  { id: "info-area-sin-lados", group: "info", flow: "coldstart",
+    turns: ["Que precio tiene el metro de la oscura", "5 metros cuadrados"],
+    expect: "Pide ancho x largo (puede proponer un ejemplo que dé esa área). NUNCA cotiza un producto resuelto por coincidencia de texto, ni un rollo de borde, ni afirma un color que el cliente no pidió." },
+  { id: "info-ubicacion", group: "info", flow: "coldstart",
+    turns: ["¿Dónde están ubicados? ¿Hacen envíos?"],
+    expect: "COMPARTE la dirección completa y el link de Google Maps en el mensaje, y confirma envíos a toda la República. NO la ofrece ('si gustas te la comparto') ni pasa con un asesor por esto." },
+  { id: "info-telefono", group: "info", flow: "coldstart",
+    turns: ["¿Me puedes facilitar un num para comunicarme?"],
+    expect: "Comparte los teléfonos de la empresa etiquetados. NO interpreta el 'un' como una cantidad ni devuelve una cotización." },
+  { id: "info-instalacion", group: "info", flow: "coldstart",
+    turns: ["¿Ustedes la instalan o ponen la estructura?"],
+    expect: "Aclara que no hay servicio de instalación ni estructura/postes, sin negar el producto." },
+  { id: "info-factura", group: "info", flow: "coldstart",
+    turns: ["¿Dan factura?"],
+    expect: "Confirma que sí se factura. NO usa vocabulario interno con el cliente ('flujo', 'nodo', 'familia', 'handoff')." },
+  { id: "info-contra-entrega", group: "info", flow: "coldstart",
+    turns: ["¿Se puede pagar contra entrega?"],
+    expect: "Explica que el pago es en línea por Mercado Libre con compra protegida y que no hay contra entrega (salvo recoger en planta)." },
+  { id: "info-entrega-dias", group: "info", flow: "coldstart",
+    turns: ["¿En cuántos días llega?"],
+    expect: "Da un tiempo de entrega concreto (≈2 días hábiles) y aclara que varía por zona." },
+  { id: "info-cp-no-tapa-pregunta", group: "info", flow: "reforzada", setup: { hasPromo: PROMO_6X4 },
+    turns: ["quiero la de 6x4", "ok", "Grado de protección que ofrece y tiempo de garantía ... Gracias."],
+    expect: "Responde el grado de sombra Y la garantía. NO contesta '¿a qué código postal te llegaría el pedido?' dejando las preguntas sin responder." },
+
   // ENGINE-SHARED (run once, on reforzada as representative) ───────────────────
   // NOTE: CP CAPTURE (both unprompted bare "77539" and "mi cp es 45100" after we
   // asked) is an OUTER-LAYER deterministic behavior — ai/index.js runEngineWorkflow:

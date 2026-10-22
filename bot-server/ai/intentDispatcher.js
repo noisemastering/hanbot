@@ -1,3 +1,17 @@
+// ⚠️ UNREACHABLE SINCE 27305c0 (2026-06-15) — "Cut the legacy tie for workflow-owned
+// conversations". ai/index.js returns at the WORKFLOW OWNERSHIP block (~line 582);
+// everything that requires this file sits BELOW that return, so for every ad and
+// cold-start conversation — i.e. all traffic — none of this runs.
+//
+// DO NOT fix a customer-facing bug here: the fix will not ship. Four months of fixes
+// in this directory went silent in that one commit and resurfaced as customer reports
+// (location answered as an offer instead of an address, garantía never answered,
+// "¿a cómo el metro cuadrado?" answered with a question). The live answers now live in
+// ai/workflow/setupContext.js (company + product facts) and the deterministic gates in
+// ai/workflow/index.js. Scenario group `info` in scripts/scenarioBattery.js covers them.
+//
+// Kept, not deleted: the file is still imported below the cutover and by
+// ai/middleware/*, so removing it is a separate change with its own testing.
 // ai/intentDispatcher.js
 // Central dispatcher that routes intents to their handlers
 // AI classification runs FIRST, then this dispatcher routes to pure business logic handlers
