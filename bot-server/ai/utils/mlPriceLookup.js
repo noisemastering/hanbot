@@ -68,13 +68,24 @@ async function getMLPrice(mlUrl, dbPrice) {
           headers: { Authorization: `Bearer ${token}` },
           timeout: 4000,
         });
-        const win = pi.data?.results?.[0];
-        if (win?.item_id) itemId = win.item_id;
-        else if (win?.price != null) {
+        const results = pi.data?.results || [];
+        // results[0] is the BUY-BOX order, which is frequently a DIFFERENT seller.
+        // We'd then call /items/{theirId}/prices, get a 403 (we may only read our
+        // own), and silently fall back to the DB price on a product whose ML
+        // listing was alive the whole time. Always prefer OUR listing.
+        const mine = results.find((r) => String(r.seller_id) === ML_SELLER_ID);
+        const win = mine || results[0];
+        if (mine?.item_id) {
+          itemId = mine.item_id; // ours → /prices works and surfaces promotions
+        } else if (win?.price != null) {
+          // Somebody else's listing: take the price the catalog already handed us
+          // instead of a prices call we aren't allowed to make.
           const op = win.original_price && win.original_price > win.price ? win.original_price : null;
           const result = { price: win.price, originalPrice: op, hasDiscount: !!op, discountPercent: op ? Math.round((1 - win.price / op) * 100) : 0, source: "ml", fetchedAt: Date.now() };
           _cache.set(mlItemId, result);
           return result;
+        } else if (win?.item_id) {
+          itemId = win.item_id;
         }
       } catch (e1) {
         // Fallback: /products/{id} buy_box_winner (some /p/ catalog products).

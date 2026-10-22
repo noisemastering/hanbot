@@ -48,7 +48,6 @@ async function resolveViaAltPos(product, pos) {
   const linkInfo = marketplace.linkForPos(product, pos) || {};
   const link = linkInfo.url || null;
   const invPrice = numericPrice(product.price);
-  const plusIvaBase = !!product.priceExcludesTax;
 
   // LINK-ONLY alt (e.g. the Hanlob store, trial mode): the PRICE stays on the
   // default channel (live ML → the source of truth); we only swap the buy LINK to
@@ -94,7 +93,7 @@ async function resolveViaAltPos(product, pos) {
         marketplace: label,
         live: true,
         link: buyLink,
-        plusIva: r.taxIncluded === false ? true : plusIvaBase,
+        plusIva: r.taxIncluded === false, // the store told us whether its price carries IVA
         currency: r.currency || "MXN",
         hasDiscount: !!r.hasDiscount,
         originalPrice: r.originalPrice || null,
@@ -144,7 +143,11 @@ async function resolvePrice(product, opts = {}) {
   const link = mlLinkOf(product);
   const invPrice = numericPrice(product.price); // Inventario
   const syncedMl = numericPrice(product.mlPrice); // last-synced ML price (ProductFamily.mlPrice)
-  const plusIva = !!product.priceExcludesTax; // price excludes tax → quote as "+ IVA"
+  // "+ IVA" belongs to the INVENTARIO price only. A Mercado Libre price — live or
+  // last-synced — is a consumer price with tax already in it, so appending "+ IVA"
+  // to one overcharges the customer by 16% on a number we didn't even set. The flag
+  // describes product.price, not whatever ML is showing today.
+  const plusIva = !!product.priceExcludesTax; // applies to the Inventario price
 
   // 1. LIVE ML price — the source of truth. Quote it whenever we can fetch it.
   //    This NEVER downgrades while a live price exists.
@@ -159,7 +162,8 @@ async function resolvePrice(product, opts = {}) {
           live: true,
           handoff: false,
           link,
-          plusIva,
+          plusIva: false, // ML prices include IVA
+
           hasDiscount: !!r.hasDiscount,
           originalPrice: r.originalPrice || null,
         };
@@ -194,7 +198,7 @@ async function resolvePrice(product, opts = {}) {
     //     last-synced ML price (still the source of truth, just cached). If there
     //     is NO purchase link, we still QUOTE the price but HAND OFF (a customer
     //     can't self-serve without a link) — see noLinkResult.
-    return noLinkResult({ amount: syncedMl, source: "ml", live: false, link, plusIva }, product);
+    return noLinkResult({ amount: syncedMl, source: "ml", live: false, link, plusIva: false }, product); // ML price → IVA included
   }
 
   // 3. No ML price AT ALL (never synced / not an ML product) → Inventario is the

@@ -876,14 +876,17 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
                 return ret(quote, { rollQuoted: `${dims[0]}x${dims[1]}` });
               }
               // GROUND COVER (malla antimaleza) — a real ML product WITH a buy link (NOT
-              // the Raschel-roll "+ envío / no link" format) and NO shade %. Prices are
-              // + IVA. Quote price + link DIRECTLY (reported: it was mislabeled "Malla
-              // Sombra Raschel" via rollPromoQuote and withheld the link until turn 2).
+              // the Raschel-roll "+ envío / no link" format) and NO shade %. Quote price
+              // + link DIRECTLY (reported: it was mislabeled "Malla Sombra Raschel" via
+              // rollPromoQuote and withheld the link until turn 2).
+              // "+ IVA" comes from resolvePrice, never hardcoded: the catalogue price
+              // excludes tax but the LIVE ML price we actually quote already includes
+              // it, so stamping "+ IVA" here billed the customer 16% twice.
               const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: exact.name, productId: String(exact._id) });
               const disc = pi.hasDiscount && Number.isFinite(pi.originalPrice) && pi.originalPrice > pi.amount ? `, rebajado de $${Math.round(pi.originalPrice)}` : "";
               state.awaitingRollQty = true; // a 2+ reply next turn → mayoreo handoff
               return ret(
-                `¡Claro! El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m está en $${pi.amount} + IVA${disc}.` + (link ? ` Aquí lo compras: ${link}` : "") + ` ¿Cuántos necesitas? 😊`,
+                `¡Claro! El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m está en $${pi.amount}${pi.plusIva ? " + IVA" : ""}${disc}.` + (link ? ` Aquí lo compras: ${link}` : "") + ` ¿Cuántos necesitas? 😊`,
                 { gcQuoted: `${dims[0]}x${dims[1]}` }
               );
             }
