@@ -4,6 +4,7 @@ const router = express.Router();
 const axios = require('axios');
 const Message = require('../models/Message');
 const { buildClientBrief } = require('../utils/clientBrief');
+const { buildHandoffBrief } = require('../utils/handoffBrief');
 const Conversation = require('../models/Conversation');
 const { sendTextMessage: sendWhatsAppText, sendImageMessage: sendWhatsAppImage, sendDocumentMessage: sendWhatsAppDocument } = require('../channels/whatsapp/api');
 const { cloudinary } = require('../config/cloudinary');
@@ -504,9 +505,18 @@ router.get('/pending-handoffs', async (req, res) => {
         purchaseIntent: conv.purchaseIntent,
         isAfterHours,
         waitTimeMinutes,
-        brief: buildClientBrief(conv)
+        brief: buildClientBrief(conv),
+        briefDetail: buildHandoffBrief(conv)
       };
     });
+
+    // Highest-value first so the queue reads as a priority list, not a log. Ties
+    // (and the system-failure rows, which all score 0) fall back to who waited
+    // longest — the order the list had before.
+    data.sort((a, b) =>
+      (b.briefDetail?.score || 0) - (a.briefDetail?.score || 0) ||
+      (b.waitTimeMinutes || 0) - (a.waitTimeMinutes || 0)
+    );
 
     res.json({ success: true, total: data.length, data });
   } catch (error) {
@@ -1332,6 +1342,7 @@ router.get('/:psid/handoff-info', async (req, res) => {
       handoffAt: convo.handoffTimestamp || null,
       state: convo.state || null,
       brief: buildClientBrief(convo),
+      briefDetail: require('../utils/handoffBrief').buildHandoffBrief(convo),
       collected: {
         name: pick(convo.extractedName, specs.customerName, convo.userName, convo.profileName),
         contact: pick(convo.leadData && convo.leadData.contact),

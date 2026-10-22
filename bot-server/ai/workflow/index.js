@@ -1011,12 +1011,50 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         }
         return q;
       };
-      const mayoreo = (n) => { state.lead = { ...(state.lead || {}), wholesaleQty: String(n) }; return beginHandoff({ preface: `Para ${n} rollos de borde manejamos precio de MAYOREO.`, reason: `Mayoreo borde: ${n} rollos`, wholesale: true }); };
+      // CLIENT THRESHOLDS — the profile is decided by LINEAR METRES (roll length ×
+      // quantity), never by piece count:
+      //   ≤ 25 m  → residential: price + Mercado Libre link, self-serve, no asesor.
+      //   ≥ 50 m  → full roll / mayoreo: share the reference price, then capture
+      //             data for an asesor to quote. Never commit a volume price.
+      // The band between them (26–49 m) is not residential by the client's own
+      // wording, and we must not invent a rule there, so it follows the wholesale
+      // path — it's always a human who can say yes, never a wrong self-serve price.
+      const BORDE_RETAIL_MAX_M = 25;
+      // Reference price for N rolls of this length. The client's rule: ALWAYS give
+      // a number on the mayoreo path (it's what separates real prospects from
+      // browsers) while making clear the final volume price comes from an asesor.
+      const refPrice = async (len, n) => {
+        try {
+          const leaf = await findProductInFamilies(`${len} m ${/delgad/i.test(msgB) ? "delgado" : "grueso"}`, bordeFams, null);
+          const pi = leaf ? await resolvePrice(leaf, altOpt(state, leaf)) : null;
+          if (!pi || !pi.amount) return null;
+          return { unit: pi.amount, total: Math.round(pi.amount * n * 100) / 100 };
+        } catch { return null; }
+      };
+      const mayoreo = async (n, len) => {
+        state.lead = { ...(state.lead || {}), wholesaleQty: String(n) };
+        const meters = len ? Number(len) * n : null;
+        const ref = len ? await refPrice(len, n) : null;
+        // Reference price first, asesor second — never a volume price we can't honor.
+        const priceLine = ref
+          ? ` De referencia, el rollo de ${len} m está en $${ref.unit} c/u (${n} = $${ref.total}); el precio de mayoreo lo confirma un asesor.`
+          : "";
+        return beginHandoff({
+          preface: `Para ${n} rollo${n === 1 ? "" : "s"} de borde${meters ? ` (${meters} m lineales)` : ""} manejamos precio de MAYOREO.${priceLine}`,
+          reason: `Mayoreo borde: ${n} rollo(s) de ${len || "?"} m${meters ? ` = ${meters} m lineales` : ""}`,
+          wholesale: true,
+        });
+      };
       const shareLink = async (leaf, len) => {
         const pi = await resolvePrice(leaf, altOpt(state, leaf));
         if (!pi || !pi.amount) return null;
         const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: leaf.name, productId: String(leaf._id) });
         return retB(`¡Perfecto! El rollo de ${len} m está en $${pi.amount}.` + (link ? ` Aquí lo compras: ${link}` : ""), { bordeQuoted: len });
+      };
+      // The profile decision, in one place: how many linear metres is this order?
+      const isRetailOrder = (len, n) => {
+        const meters = Number(len) * Number(n);
+        return Number.isFinite(meters) && meters <= BORDE_RETAIL_MAX_M;
       };
       // 0) WIDTH/HEIGHT question. The borde separador is a FIXED 13 cm de alto (× the
       // length you pick) — it is NOT sold by width. The bot used to dodge this and keep
@@ -1053,11 +1091,13 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // a count sent "el de 18 m" to mayoreo as "18 rollos" (reported). An EXPLICIT
         // count ("N rollos/piezas") is still honored even alongside a length.
         const explicitQ = parseRollQuantity(msgB);
-        if (explicitQ != null && explicitQ >= 2) return mayoreo(explicitQ);
+        if (explicitQ != null && explicitQ >= 1 && !isRetailOrder(rec.length, explicitQ)) {
+          return await mayoreo(explicitQ, rec.length);
+        }
         const looksLikeLength = /\b\d{1,3}(?:\.\d+)?\s*(?:m|mts?|metros?)\b/i.test(msgB);
         if (!looksLikeLength) {
           const q = parseQty();
-          if (q != null && q >= 2) return mayoreo(q);
+          if (q != null && q >= 1 && !isRetailOrder(rec.length, q)) return await mayoreo(q, rec.length);
           const leaf = await PFm.findById(rec.productId).lean().catch(() => null);
           const out = leaf ? await shareLink(leaf, rec.length) : null;
           if (out) return out;
@@ -1078,7 +1118,16 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         const hasNewLen = allNums.some((n) => BORDE_LENS.includes(n) && !state.bordeQuoted.includes(n));
         if (!hasNewLen) {
           const q = parseQty();
-          if (q != null && q >= 2) { state.bordeQuoted = null; return mayoreo(q); }
+          // Linear metres need a length. With exactly ONE roll quoted we know it;
+          // with several on the table a bare "2" doesn't say 2 of WHICH, so ask
+          // instead of guessing a profile that decides retail vs asesor.
+          if (q != null && q >= 1 && state.bordeQuoted.length === 1) {
+            const only = state.bordeQuoted[0];
+            if (!isRetailOrder(only, q)) { state.bordeQuoted = null; return await mayoreo(q, only); }
+          }
+          if (q != null && q >= 1 && state.bordeQuoted.length > 1) {
+            return retB(`¡Perfecto, ${q}! ¿De cuál largo los quieres: ${state.bordeQuoted.map((l) => l + " m").join(", ")}? 😊`, { bordeNeedLengthForQty: q });
+          }
           return retB(`¡Gracias! Ya te compartí los rollos de ${state.bordeQuoted.map((l) => l + " m").join(" y ")} con sus links. ¿Cuántos necesitas para cerrar tu pedido? 😊`, { bordeQuotedNudge: state.bordeQuoted });
         }
         state.bordeQuoted = null; // a genuinely NEW length → fall through to resolve it
@@ -1094,8 +1143,12 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           if (pi && pi.amount) {
             state.activeProductId = String(leaf._id);
             const q = parseRollQuantity(msgB); // explicit "N rollos" only (the bare number IS the length here)
-            if (q != null && q >= 2) return mayoreo(q);
-            if (q === 1) return await shareLink(leaf, len);
+            if (q != null && q >= 1) {
+              return isRetailOrder(len, q) ? await shareLink(leaf, len) : await mayoreo(q, len);
+            }
+            // No quantity yet. A single roll of this length may ALREADY be a full
+            // roll (54 m ≥ 50) — then it's the mayoreo profile the moment they say
+            // "one", so ask the quantity rather than implying a self-serve sale.
             state.awaitingBordeQty = { productId: String(leaf._id), length: len };
             return retB(`¡Claro! El rollo de ${len} m está en $${pi.amount}. ¿Cuántos rollos necesitas? 😊`, { bordeAskQty: len });
           }

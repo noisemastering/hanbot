@@ -12,6 +12,15 @@ import FeatureTip from '../components/FeatureTip';
 import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 
+// Queue priority (from the server's handoff brief). "sistema" is grey on
+// purpose — the bot broke, there is no customer waiting to buy.
+const PRIORITY_COLOR = {
+  alta:    { text: "#fca5a5", bg: "#450a0a", border: "#dc2626" },
+  media:   { text: "#fcd34d", bg: "#451a03", border: "#d97706" },
+  baja:    { text: "#93c5fd", bg: "#0c2340", border: "#2563eb" },
+  sistema: { text: "#9ca3af", bg: "#1f2937", border: "#4b5563" },
+};
+
 const PRODUCT_LABELS = {
   malla_sombra_raschel: "Malla Raschel",
   malla_sombra: "Malla Confeccionada",
@@ -914,13 +923,44 @@ function Messages() {
                         </span>
                       )}
                     </td>
-                    <td style={{ padding: "10px", fontSize: "0.85rem", maxWidth: "220px" }}>
-                      <div style={{ color: handoffStyle.textColor, fontWeight: "bold", fontSize: "0.8rem", marginBottom: "2px" }}>
-                        {handoffStyle.icon} {handoffStyle.label}
+                    <td style={{ padding: "10px", fontSize: "0.85rem", maxWidth: "340px" }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: "6px", marginBottom: "3px" }}>
+                        {handoff.briefDetail && (
+                          <span style={{
+                            fontSize: "0.65rem",
+                            fontWeight: "bold",
+                            textTransform: "uppercase",
+                            padding: "2px 6px",
+                            borderRadius: "4px",
+                            border: `1px solid ${(PRIORITY_COLOR[handoff.briefDetail.priority] || PRIORITY_COLOR.baja).border}`,
+                            color: (PRIORITY_COLOR[handoff.briefDetail.priority] || PRIORITY_COLOR.baja).text,
+                            backgroundColor: (PRIORITY_COLOR[handoff.briefDetail.priority] || PRIORITY_COLOR.baja).bg,
+                            whiteSpace: "nowrap"
+                          }}>
+                            {handoff.briefDetail.priority}
+                          </span>
+                        )}
+                        <span style={{ color: handoffStyle.textColor, fontWeight: "bold", fontSize: "0.8rem" }}>
+                          {handoffStyle.icon} {handoff.briefDetail?.categoryLabel || handoffStyle.label}
+                        </span>
                       </div>
-                      <div style={{ color: "#aaa", fontSize: "0.75rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                        {getMessageExcerpt(handoff.handoffReason, 40) || '—'}
-                      </div>
+                      {/* THE BRIEF: what they want and what to do about it, so the
+                          agent can triage the queue without opening each chat. */}
+                      {handoff.briefDetail ? (
+                        <>
+                          <div style={{ color: "#e0e0e0", fontSize: "0.78rem", lineHeight: 1.3 }}
+                               title={handoff.handoffReason || ''}>
+                            {handoff.briefDetail.situation}
+                          </div>
+                          <div style={{ color: "#6ee7b7", fontSize: "0.72rem", lineHeight: 1.3, marginTop: "2px" }}>
+                            → {handoff.briefDetail.nextStep}
+                          </div>
+                        </>
+                      ) : (
+                        <div style={{ color: "#aaa", fontSize: "0.75rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                          {getMessageExcerpt(handoff.handoffReason, 40) || '—'}
+                        </div>
+                      )}
                     </td>
                     <td style={{ padding: "10px", color: "#e0e0e0", fontSize: "0.85rem" }}>
                       {friendlyProduct(handoff.productInterest || handoff.currentFlow)}
