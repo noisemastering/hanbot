@@ -152,6 +152,10 @@ async function resolvePrice(product, opts = {}) {
   // 1. LIVE ML price — the source of truth. Quote it whenever we can fetch it.
   //    This NEVER downgrades while a live price exists.
   let mlOffline = false; // ML was UNREACHABLE (not just "listing had no price")
+  // The link exists but ML has NO price behind it (404 / catalog with no winner —
+  // e.g. every one of our listings for that product is paused). The customer can't
+  // buy there, so the link must NOT be handed out as if they could.
+  let mlUnpriceable = false;
   if (link) {
     try {
       const r = await getMLPrice(link, invPrice);
@@ -169,6 +173,7 @@ async function resolvePrice(product, opts = {}) {
         };
       }
       if (r && r.fetchFailed) mlOffline = true; // couldn't reach ML at all
+      else if (r) mlUnpriceable = true; // reached ML; it has nothing to sell there
     } catch (err) {
       mlOffline = true;
       console.error("⚠️ resolvePrice ML lookup failed:", err.message);
@@ -198,6 +203,16 @@ async function resolvePrice(product, opts = {}) {
     //     last-synced ML price (still the source of truth, just cached). If there
     //     is NO purchase link, we still QUOTE the price but HAND OFF (a customer
     //     can't self-serve without a link) — see noLinkResult.
+    // A link ML won't price is a dead end for the customer: quote the last known
+    // price, but close with an asesor instead of sending them to a page where
+    // nothing is buyable.
+    if (mlUnpriceable) {
+      return {
+        amount: syncedMl, source: "ml", live: false, link: null, plusIva: false,
+        handoff: true, quoteThenHandoff: true,
+        handoffReason: `Sin publicación activa en Mercado Libre para ${product.name || "el producto"} — cotizado en $${syncedMl}; cerrar la venta con un asesor`,
+      };
+    }
     return noLinkResult({ amount: syncedMl, source: "ml", live: false, link, plusIva: false }, product); // ML price → IVA included
   }
 

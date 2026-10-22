@@ -884,7 +884,16 @@ app.get("/health", (req, res) => {
   // access (the sandbox-vs-live model divergence was invisible until now).
   let workflowModel = null;
   try { workflowModel = require('./ai/workflow/llmClient').CHAT_MODEL; } catch (_) {}
-  res.status(200).json({ status: "ok", timestamp: Date.now(), workflowModel });
+  // Also expose WHICH COMMIT is actually serving. Railway injects these on every
+  // build, so "did my push deploy?" is answerable from here instead of needing a
+  // logged-in CLI — the same reason workflowModel is published above.
+  res.status(200).json({
+    status: "ok",
+    timestamp: Date.now(),
+    workflowModel,
+    commit: process.env.RAILWAY_GIT_COMMIT_SHA || null,
+    deployedAt: process.env.RAILWAY_DEPLOYMENT_ID || null,
+  });
 });
 
 // GET /r/d/:trackCode - Direct ad link redirect (creates new ClickLog per click)

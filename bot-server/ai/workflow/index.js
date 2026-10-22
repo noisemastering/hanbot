@@ -1054,6 +1054,34 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: leaf.name, productId: String(leaf._id) });
         return retB(`¡Perfecto! El rollo de ${len} m está en $${pi.amount}.` + (link ? ` Aquí lo compras: ${link}` : ""), { bordeQuoted: len });
       };
+      // Borde leaves by LENGTH for one thickness variant. Both variants carry the
+      // same length names ("Rollo de 18 m" exists under Grueso AND Delgado), so a
+      // text match scores one or the other and a multi-row reply ends up mixing the
+      // two price lists. thickness is the real discriminator (3 mm / 1.5 mm).
+      let _bordeLeafCache = null;
+      const bordeLeavesByLength = async (variant) => {
+        if (!_bordeLeafCache) {
+          const acc = [];
+          let frontier = bordeFams.map((f) => String(f.id)).filter(Boolean);
+          for (let d = 0; d < 5 && frontier.length; d++) {
+            const kids = await PFm.find({ parentId: { $in: frontier } }).lean().catch(() => []);
+            if (!kids.length) break;
+            acc.push(...kids.filter((k) => k.sellable === true));
+            frontier = kids.map((k) => String(k._id));
+          }
+          _bordeLeafCache = acc;
+        }
+        const thick = variant === "delgado" ? "1.5" : "3";
+        const sameThick = _bordeLeafCache.filter((k) => String(k.attributes?.thickness || "") === thick);
+        const pool = sameThick.length ? sameThick : _bordeLeafCache; // no thickness data → use what exists
+        const byLen = new Map();
+        for (const k of pool) {
+          const L = String(k.attributes?.length || "");
+          if (L && !byLen.has(L)) byLen.set(L, k);
+        }
+        return byLen;
+      };
+
       // The profile decision, in one place: how many linear metres is this order?
       const isRetailOrder = (len, n) => {
         const meters = Number(len) * Number(n);
@@ -1197,18 +1225,16 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // before — the model quoted them then lost track (the reported recurring bug).
       if (!hasWxL && allNums.length >= 2 && !state.awaitingBordeQty && !state.bordeQuoted) {
         const variant = /delgad/i.test(msgB) ? "delgado" : "grueso";
+        const byLenB2 = await bordeLeavesByLength(variant);
         const rows = []; const quoted = [];
         for (const len of allNums) {
-          const leaf = await findProductInFamilies(`${len} m ${variant}`, bordeFams, null).catch(() => null);
-          const ed = leaf && leaf.enabledDimensions;
-          const exactLen = leaf && new RegExp(`\\b${len}\\b`).test(`${leaf.name || ""} ${leaf.size || ""}`);
-          if (leaf && exactLen && Array.isArray(ed) && ed.length && !ed.includes("width")) {
-            const pi = await resolvePrice(leaf, altOpt(state, leaf)).catch(() => null);
-            if (pi && pi.amount) {
-              const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: leaf.name, productId: String(leaf._id) });
-              rows.push(`• ${len} m: $${pi.amount}${link ? ` → ${link}` : ""}`);
-              quoted.push(String(len));
-            }
+          const leaf = byLenB2.get(String(len));
+          if (!leaf) continue;
+          const pi = await resolvePrice(leaf, altOpt(state, leaf)).catch(() => null);
+          if (pi && pi.amount) {
+            const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: leaf.name, productId: String(leaf._id) });
+            rows.push(`• ${len} m: $${pi.amount}${link ? ` → ${link}` : ""}`);
+            quoted.push(String(len));
           }
         }
         if (quoted.length >= 2) {
@@ -1243,23 +1269,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // higher and the list comes out mixing both price lists. thickness is the
           // real discriminator (3 mm = grueso, 1.5 mm = delgado).
           const variantC = /delgad/i.test(msgB) ? "delgado" : "grueso";
-          const thickC = variantC === "delgado" ? "1.5" : "3";
+          const byLenC = await bordeLeavesByLength(variantC);
           const rowsC = []; const quotedC = [];
-          let leavesC = [];
-          let frontierC = bordeFams.map((f) => String(f.id)).filter(Boolean);
-          for (let d = 0; d < 5 && frontierC.length; d++) {
-            const kidsC = await PFm.find({ parentId: { $in: frontierC } }).lean().catch(() => []);
-            if (!kidsC.length) break;
-            leavesC.push(...kidsC.filter((k) => k.sellable === true));
-            frontierC = kidsC.map((k) => String(k._id));
-          }
-          const sameThick = leavesC.filter((k) => String(k.attributes?.thickness || "") === thickC);
-          if (sameThick.length) leavesC = sameThick; // no thickness in the catalog → quote what's there
-          const byLenC = new Map();
-          for (const k of leavesC) {
-            const L = String(k.attributes?.length || "");
-            if (BORDE_LENS.includes(L) && !byLenC.has(L)) byLenC.set(L, k);
-          }
           for (const len of BORDE_LENS) {
             const leaf = byLenC.get(len);
             if (!leaf) continue;
@@ -1479,7 +1490,11 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // we stock (verde/negro ARE in stock). Bug (reported ×2): the promo-beige context
   // made the model say "la promo es solo beige" and escalate on verde.
   const colorAnchorId = state.activeProductId || (state.product && state.product._id) || null;
-  if (userMessage && colorAnchorId && !/sin\s*refuerzo/i.test(workflow.name || "") && !/\brollo\b|ground\s*cover|antimaleza/i.test(workflow.name || "")) {
+  // Ground cover is NOT excluded here: it really does come in negro and blanco,
+  // each its own sellable leaf with its own price and link. It used to be lumped in
+  // with the colourless rollo flow, so a "¿de qué color?" fell through to the model,
+  // which denied the colours outright and escalated on one we don't carry.
+  if (userMessage && colorAnchorId && !/sin\s*refuerzo/i.test(workflow.name || "") && !/\brollo\b/i.test(workflow.name || "")) {
     try {
       const msgC = String(userMessage).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
       const COLORW = /\b(beige|negro|negra|verde|blanc[oa]|gris|azul|rojo|caf[e]|marr[o]n|terracota|vino)\b/;
