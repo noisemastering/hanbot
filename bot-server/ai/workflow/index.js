@@ -1135,11 +1135,29 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         };
       };
 
+      // ONE length, BOTH versions, priced. When the customer names a length but not a
+      // version, asking "¿Premium o Flexible?" with no number spends the turn on a
+      // question and leaves a direct price ask unanswered ("de 6 en cuánto sale" got
+      // no price). Quote both and let them pick from the numbers.
+      const bordeBothVersions = async (len) => {
+        const parts = [];
+        for (const variant of ["grueso", "delgado"]) {
+          const byLen = await bordeLeavesByLength(variant);
+          const leaf = byLen.get(String(len));
+          if (!leaf) continue;
+          const pi = await resolvePrice(leaf, altOpt(state, leaf)).catch(() => null);
+          if (pi && pi.amount) parts.push(`${VARIANT_LABEL[variant]} $${pi.amount}`);
+        }
+        if (parts.length < 2) return null;
+        return `El rollo de ${len} m lo tenemos en dos versiones: ${parts.join(" · ")}. ` +
+          `Premium es el grueso (3 mm) y Flexible el delgado (1.5 mm). ¿Cuál te sirve? 😊`;
+      };
+
       // ONE version, four lengths, each with its price and purchase link — the
       // client's flow-2 second message. Fires once the customer names the version.
       const bordeVersionList = async (variant) => {
         const byLen = await bordeLeavesByLength(variant);
-        const rows = []; const quoted = [];
+        const rows = []; const quoted = []; const linked = [];
         for (const len of BORDE_LENS) {
           const leaf = byLen.get(len);
           if (!leaf) continue;
@@ -1148,13 +1166,20 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: leaf.name, productId: String(leaf._id) });
           rows.push(`• ${len} m: $${pi.amount}${link ? ` → ${link}` : ""}`);
           quoted.push(len);
+          if (link) linked.push(len);
         }
         if (!rows.length) return null;
+        // A length with no live listing shows its price but no link. Saying "todos con
+        // envío gratis" after it reads as an oversight, so name the exception instead.
+        const noLink = quoted.filter((l) => !linked.includes(l));
+        const shipLine = noLink.length
+          ? `Los que llevan enlace son compra directa con envío gratis; ${noLink.map((l) => l + " m").join(" y ")} ${noLink.length === 1 ? "lo surtimos" : "los surtimos"} con un asesor.`
+          : `Todos con envío gratis vía Mercado Libre.`;
         return {
           quoted,
           text:
             `¡Excelente! El borde ${VARIANT_LABEL[variant]} está disponible en:\n${rows.join("\n")}\n` +
-            `Todos con envío gratis vía Mercado Libre. ¿Cuántos metros necesitas? 😊`,
+            `${shipLine} ¿Cuántos metros necesitas? 😊`,
         };
       };
 
@@ -1289,14 +1314,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // Length picked, version still unknown. Two options, so ASK — a closed
           // choice between the two we sell, never an open question and never a
           // silent default that would quote Premium prices to a Flexible buyer.
-          const byG = await bordeLeavesByLength("grueso");
-          const byD = await bordeLeavesByLength("delgado");
-          if (byG.get(len) && byD.get(len)) {
+          const both = await bordeBothVersions(len);
+          if (both) {
             state.awaitingBordeVariant = { length: len };
-            return retB(
-              `¡Claro! El rollo de ${len} m lo tenemos en dos versiones: ${VARIANT_SPEC.grueso} y ${VARIANT_SPEC.delgado}. ¿Cuál prefieres? 😊`,
-              { bordeAskVariant: len }
-            );
+            return retB(`¡Claro! ${both}`, { bordeAskVariant: len, bordeBothPriced: true });
           }
         }
         // Resolve by thickness, not by text match: both versions carry the same length
@@ -1335,14 +1356,12 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // exactly as the client's flow-1 example does — a price here would be a
           // silent bet on one version.
           if (!variantKnown()) {
-            const byGn = await bordeLeavesByLength("grueso");
-            const byDn = await bordeLeavesByLength("delgado");
-            if (byGn.get(String(nearest)) && byDn.get(String(nearest))) {
+            const bothN = await bordeBothVersions(String(nearest));
+            if (bothN) {
               state.awaitingBordeVariant = { length: String(nearest) };
               return retB(
-                `El de ${want} m no lo manejamos; la presentación más cercana es el rollo de ${nearest} m. ` +
-                  `Lo tenemos en ${VARIANT_SPEC.grueso} y ${VARIANT_SPEC.delgado}. ¿Cuál de las dos te interesa? 😊`,
-                { bordeNearestLength: `${want}→${nearest}`, bordeAskVariant: String(nearest) }
+                `El de ${want} m no lo manejamos; la presentación más cercana es la de ${nearest} m. ${bothN}`,
+                { bordeNearestLength: `${want}→${nearest}`, bordeAskVariant: String(nearest), bordeBothPriced: true }
               );
             }
           }
