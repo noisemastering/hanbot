@@ -36,6 +36,21 @@ const RE = {
   noContact: /no proporcion[oó] su informaci[oó]n|sin datos de contacto/i,
 };
 
+// §4.1 of the borde campaign rules: the brief must name the VERSION the customer
+// asked for. The flows store it as the thickness variant; the client's words are
+// Premium (grueso) and Flexible (delgado).
+const VERSION_LABEL = { grueso: "Premium", delgado: "Flexible" };
+
+// §4.1 also asks for "consultas adicionales relevantes, como descuentos,
+// disponibilidad o envíos" — so the asesor knows what else was on the table.
+const EXTRA = [
+  [/descuento|mayoreo|volumen|al por mayor|precio especial/i, "preguntó por descuentos / mayoreo"],
+  [/env[ií]o|flete|paqueter[ií]a|entrega|llega/i, "preguntó por envío"],
+  [/disponib|stock|agotad|existencia/i, "preguntó por disponibilidad"],
+  [/factur/i, "pidió factura"],
+  [/garant[ií]a/i, "preguntó por garantía"],
+];
+
 const LABEL = {
   system: "Falla del sistema",
   complaint: "Queja / inconformidad",
@@ -113,13 +128,17 @@ function buildHandoffBrief(convo) {
   const size = first(specs.size, specs.dimensions, c.requestedSize,
     specs.width && specs.length ? `${specs.width}x${specs.length}` : null);
   const qty = first(specs.quantity, c.workflowState && c.workflowState.lead && c.workflowState.lead.wholesaleQty);
+  const ws = c.workflowState || {};
+  const variant = first(ws.bordeVariant, specs.variant);
+  const version = variant ? VERSION_LABEL[String(variant).toLowerCase()] || null : null;
+  const extras = EXTRA.filter(([re]) => re.test(reason)).map(([, label]) => label);
 
   const category = categoryOf(reason);
   const score = scoreOf({ category, hasContact: !!contact, hasQty: !!qty, hasLocation: !!location });
   const priority = priorityOf(score, category);
 
   // SITUATION — one sentence an asesor can act on without opening the thread.
-  const wants = [product, size, qty ? `${qty} pza(s)` : null].filter(Boolean).join(" ");
+  const wants = [product, version, size, qty ? `${qty} pza(s)` : null].filter(Boolean).join(" ");
   const situation =
     category === "system"
       ? `El bot falló durante la conversación${product ? ` (hablaban de ${product})` : ""}. El cliente sigue esperando.`
@@ -131,6 +150,9 @@ function buildHandoffBrief(convo) {
   if (!contact && category !== "system") {
     nextStep += " Ojo: no dejó teléfono — pídeselo al retomar el chat.";
   }
+  if (!location && category !== "system") {
+    nextStep += " Tampoco dejó código postal.";
+  }
 
   return {
     priority,            // alta | media | baja | sistema
@@ -139,12 +161,14 @@ function buildHandoffBrief(convo) {
     categoryLabel: LABEL[category],
     situation,
     nextStep,
+    extras,                        // §4.1 "consultas adicionales relevantes"
     reason: reason || null,
     customer: {
       name: name || null,
       contact: contact || null,
       location: location || null,
       product: product || null,
+      version: version || null,    // Premium | Flexible
       size: size || null,
       quantity: qty || null,
     },

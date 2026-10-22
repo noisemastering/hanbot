@@ -503,9 +503,12 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     // A phone must be the FULL 10 digits — nudge that in the ask.
     const _lead = state.lead || {};
     const _qtyAsk = wholesaleNeedsQty ? "¿Cuántas piezas te interesan? " : "";
+    const _haveZip = !!(state.location && (state.location.zip || state.location.zipcode));
     const _contactAsk = (!_lead.name || !_lead.phone)
-      ? "¿Me compartes tu nombre y un teléfono a 10 dígitos para que te contacte?"
-      : "";
+      ? `¿Me compartes tu nombre, un teléfono a 10 dígitos${_haveZip ? "" : " y tu código postal"} para que te contacte?`
+      : _haveZip
+      ? ""
+      : "¿Me compartes tu código postal para cotizarte el envío?";
     const reply = `${pre}¡Con gusto te paso con un asesor! 🙌 ${_qtyAsk}${_contactAsk}`.trim();
     history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
     return {
@@ -1032,15 +1035,17 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // Offer the options, never ask an open "¿qué largo necesitas?" — used only when
       // no price resolves, so the customer still sees what exists.
       const BORDE_MENU_FALLBACK = `Lo manejo en rollos de 6, 9, 18 y 54 m, en versión ${VARIANT_SPEC.grueso} y ${VARIANT_SPEC.delgado}. ¿Cuál te sirve? 😊`;
-      // CLIENT THRESHOLDS — the profile is decided by LINEAR METRES (roll length ×
-      // quantity), never by piece count:
-      //   ≤ 25 m  → residential: price + Mercado Libre link, self-serve, no asesor.
-      //   ≥ 50 m  → full roll / mayoreo: share the reference price, then capture
-      //             data for an asesor to quote. Never commit a volume price.
-      // The band between them (26–49 m) is not residential by the client's own
-      // wording, and we must not invent a rule there, so it follows the wholesale
-      // path — it's always a human who can say yes, never a wrong self-serve price.
-      const BORDE_RETAIL_MAX_M = 25;
+      // CLIENT THRESHOLDS, from §2.A / §3.2 / §5 of the campaign document. The
+      // profile is decided by PIECES PER PRESENTATION, not by linear metres:
+      //   individual  → up to TWO pieces of 6, 9 or 18 m, or ONE roll of 54 m:
+      //                 price + Mercado Libre link, self-serve, no asesor.
+      //   mayoreo     → THREE OR MORE pieces of 18 m, MORE THAN ONE roll of 54 m,
+      //                 or an explicit ask about volume prices/conditions: share the
+      //                 reference price, then capture data for an asesor.
+      // An earlier draft of the spec used ≤25 m / ≥50 m linear metres; this full
+      // document supersedes it, and the two disagree in practice — 2 rolls of 18 m
+      // (36 m) is individual here but escalated under the metre rule, and §3.2 warns
+      // explicitly not to read every multi-piece order as wholesale.
       // Reference price for N rolls of this length. The client's rule: ALWAYS give
       // a number on the mayoreo path (it's what separates real prospects from
       // browsers) while making clear the final volume price comes from an asesor.
@@ -1057,13 +1062,14 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         state.lead = { ...(state.lead || {}), wholesaleQty: String(n) };
         const meters = len ? Number(len) * n : null;
         const ref = len ? await refPrice(len, n) : null;
+        const vMay = variantKnown();
         // Reference price first, asesor second — never a volume price we can't honor.
         const priceLine = ref
-          ? ` De referencia, el rollo de ${len} m está en $${ref.unit} c/u (${n} = $${ref.total}); el precio de mayoreo lo confirma un asesor.`
+          ? ` De referencia, el rollo${vMay ? ` ${VARIANT_LABEL[vMay]}` : ""} de ${len} m está en $${ref.unit} c/u (${n} = $${ref.total}); el precio de mayoreo lo confirma un asesor.`
           : "";
         return beginHandoff({
-          preface: `Para ${n} rollo${n === 1 ? "" : "s"} de borde${meters ? ` (${meters} m lineales)` : ""} manejamos precio de MAYOREO.${priceLine}`,
-          reason: `Mayoreo borde: ${n} rollo(s) de ${len || "?"} m${meters ? ` = ${meters} m lineales` : ""}`,
+          preface: `Para ${n} rollo${n === 1 ? "" : "s"} de ${len ? `${len} m` : "borde"}${meters ? ` (${meters} m lineales)` : ""} manejamos precio de MAYOREO.${priceLine}`,
+          reason: `Mayoreo borde${vMay ? ` ${VARIANT_LABEL[vMay]}` : ""}: ${n} rollo(s) de ${len || "?"} m${meters ? ` = ${meters} m lineales` : ""}`,
           wholesale: true,
         });
       };
@@ -1072,9 +1078,19 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         if (!pi || !pi.amount) return null;
         const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: leaf.name, productId: String(leaf._id) });
         const vLabS = variantKnown() ? ` ${VARIANT_LABEL[variantKnown()]}` : "";
+        // NO LINK = no live listing (54 m Premium, 6/9 m Flexible are all paused on
+        // ML). Quoting the price and stopping there is a dead end: the customer can't
+        // buy it and no human knows they tried. Quote, then hand off — §3.3 rule 4 of
+        // the campaign rules ("cuando el cliente seleccione una opción sujeta a
+        // cotización personalizada, solicitar sus datos y canalizar").
+        if (!link) {
+          return beginHandoff({
+            preface: `El rollo${vLabS} de ${len} m está en $${pi.amount}, pero ahora mismo no lo tenemos publicado para compra en línea.`,
+            reason: `Borde${vLabS ? vLabS : ""} ${len} m sin publicación activa en Mercado Libre — cotizado en $${pi.amount}; cerrar la venta con un asesor`,
+          });
+        }
         return retB(
-          `¡Perfecto! El rollo${vLabS} de ${len} m está en $${pi.amount}.` +
-            (link ? ` Aquí lo compras, con envío gratis: ${link}` : ""),
+          `¡Perfecto! El rollo${vLabS} de ${len} m está en $${pi.amount}. Aquí lo compras, con envío gratis: ${link}`,
           { bordeQuoted: len }
         );
       };
@@ -1183,10 +1199,12 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         };
       };
 
-      // The profile decision, in one place: how many linear metres is this order?
+      // The profile decision, in one place.
       const isRetailOrder = (len, n) => {
-        const meters = Number(len) * Number(n);
-        return Number.isFinite(meters) && meters <= BORDE_RETAIL_MAX_M;
+        const L = Number(len), N = Number(n);
+        if (!Number.isFinite(L) || !Number.isFinite(N) || N < 1) return false;
+        if (L >= 54) return N <= 1; // more than one full roll → mayoreo
+        return N <= 2;              // 6, 9, 18 m: up to two pieces is individual
       };
       // Every model-authored borde turn carries the vocabulary and the ban on open
       // measure questions — the gates below cover the common shapes, but when the turn
@@ -1809,6 +1827,31 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       console.error("⚠️ measure extraction failed:", e.message);
     }
   }
+  // ALREADY QUOTED THE PROMO. Tell the model so it stops asking for a measure it
+  // has already been given (reported: it re-asked right after the zip reply).
+  if (state.promoQuoted && state.promoQuoted.amount && !turnWantDims) {
+    const q = state.promoQuoted;
+    earlyFacts.push(
+      `- YA COTIZASTE EN ESTA CONVERSACIÓN: ${q.label || "el producto en promoción"}${q.size ? ` (medida ${q.size})` : ""} en $${q.amount}. ` +
+        `PROHIBIDO volver a pedir la medida o el producto: ya los sabes. Si el cliente confirma interés, cierra con el precio y el link.`
+    );
+  }
+  // The catalog match sorts dimensions ascending so "6x4" and "4x6" resolve to the
+  // same leaf. That belongs in MATCHING, not in what we say: a customer who wrote
+  // "6x4" was quoted "la de 4x6 m". Render the pair the way they wrote it.
+  const rawDimOrder = (txt) => {
+    const m = String(txt || "")
+      .replace(/(\d)\s*(?:m|mts?|metros?)\b/gi, "$1 ")
+      .match(/(\d+(?:[.,]\d+)?)\s*(?:[x×*]|por)\s*(\d+(?:[.,]\d+)?)/i);
+    return m ? [m[1], m[2]].map((n) => Number(String(n).replace(",", "."))) : null;
+  };
+  const dimTxt = (dims, unit = " m") => {
+    if (!dims || dims.length !== 2) return null;
+    const raw = rawDimOrder(userMessage);
+    const key = (p) => [...p].sort((a, b) => a - b).join("|");
+    const [a, b] = raw && key(raw) === key(dims) ? raw : dims;
+    return `${a}x${b}${unit}`;
+  };
   // NAMED A MEASURE ⇒ NOT a promo request: he asked about THAT size.
   const namesAMeasure = !!turnWantDims;
   if (userMessage && !state.purchased && !rainIntent && !namesAMeasure && (state.promoPitch || state.promoQuote) && (!state.promoPitchSent || state.promoDismissed)) {
@@ -1841,9 +1884,15 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // The promo product is the active one again, so a follow-up ("Porfa")
           // re-resolves THE PROMO's price, not the previously-asked measure.
           const promoProductId = state.product && state.product._id ? String(state.product._id) : (state.activeProductId || null);
+          // REMEMBER what we just quoted. Without this the NEXT turn had no measure
+          // in context: a customer who answered the zip ask was then asked for the
+          // measure the bot had quoted two turns earlier, and had to repeat it.
+          const quotedPromo = state.promoQuote && state.promoQuote.amount
+            ? { label: state.promoQuote.label || null, amount: state.promoQuote.amount, size: state.promoQuote.size || null }
+            : state.promoQuoted || null;
           return {
             reply,
-            state: { ...state, history, promoPitchSent: true, promoDismissed: false, activeProductId: promoProductId, nodeId: currentNode.id },
+            state: { ...state, history, promoPitchSent: true, promoDismissed: false, activeProductId: promoProductId, promoQuoted: quotedPromo, nodeId: currentNode.id },
             diagnostics: {
               workflow: { id: String(workflow._id), name: workflow.name },
               fromNode: { id: currentNode.id, name: currentNode.name },
@@ -2315,7 +2364,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         if (pi.soldOut) {
           // Active but out of stock → acknowledge AND hand off (capture the lead
           // so a human follows up / notifies when it returns).
-          const askedMeasure = wantDims ? `${wantDims[0]}x${wantDims[1]}m` : found.name;
+          const askedMeasure = wantDims ? dimTxt(wantDims, "m") : found.name;
           turnHandoffReason = `Producto AGOTADO ${askedMeasure}: ${pi.handoffReason || "sin stock — pasar con un asesor"}`;
           turnHandoffPreface = `Sí manejamos la medida ${askedMeasure}, pero por el momento está agotada.`;
           turnContextExtra =
@@ -2325,7 +2374,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // Price resolved but NO purchase link → quote it AND hand off to close.
           // No link ⇒ NOT a Mercado Libre listing with free shipping baked in, so
           // the price does NOT include shipping: the quote must say "+ envío".
-          const askedMeasure = wantDims ? `${wantDims[0]}x${wantDims[1]}m` : found.name;
+          const askedMeasure = wantDims ? dimTxt(wantDims, "m") : found.name;
           turnHandoffReason = `Cotización ${askedMeasure}: ${pi.handoffReason || "sin link de compra — concretar con un asesor"}`;
           turnHandoffPreface = `La medida ${askedMeasure} tiene un precio de $${pi.amount}${pi.plusIva ? " + IVA" : ""} + envío.`;
           turnContextExtra =
@@ -2336,7 +2385,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // Reference the ACTUAL measure the customer asked for (never the leaf
           // name like "Color Beige", which made the model invent a size such as
           // "7x10"). Fire a real handoff with the deterministic reason.
-          const askedMeasure = wantDims ? `${wantDims[0]}x${wantDims[1]}m` : found.name;
+          const askedMeasure = wantDims ? dimTxt(wantDims, "m") : found.name;
           turnHandoffReason =
             `Cotización ${askedMeasure}: ${pi.handoffReason || "requiere validación de precio con un asesor"}`;
           turnContextExtra =
@@ -2371,7 +2420,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // The customer asked for a shade % we don't stock in this size → clarify.
           const sm = found.shadeMismatch;
           const shadeNote = sm
-            ? `\n- ACLARA LA SOMBRA (obligatorio): el cliente pidió ${sm.requested}%, pero en la medida ${wantDims ? `${wantDims[0]}x${wantDims[1]} m` : "esa"} NO manejamos ${sm.requested}%. Lo que le vas a ofrecer es ${sm.actual}%${sm.available && sm.available.length ? ` (disponibles en esa medida: ${sm.available.map((s) => s + "%").join(", ")})` : ""}. DILE con naturalidad que en esa medida no tenemos ${sm.requested}% y ofrécele la de ${sm.actual}% (o las opciones disponibles) — NUNCA la cotices como si fuera ${sm.requested}%.`
+            ? `\n- ACLARA LA SOMBRA (obligatorio): el cliente pidió ${sm.requested}%, pero en la medida ${dimTxt(wantDims) || "esa"} NO manejamos ${sm.requested}%. Lo que le vas a ofrecer es ${sm.actual}%${sm.available && sm.available.length ? ` (disponibles en esa medida: ${sm.available.map((s) => s + "%").join(", ")})` : ""}. DILE con naturalidad que en esa medida no tenemos ${sm.requested}% y ofrécele la de ${sm.actual}% (o las opciones disponibles) — NUNCA la cotices como si fuera ${sm.requested}%.`
             : "";
           const srcTag = pi.marketplace ? ` (compra en ${pi.marketplace})` : pi.source === "ml" ? " (Mercado Libre)" : " (inventario)";
           const altNote = pi.marketplace
@@ -2411,7 +2460,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             const secondMeasure = extractAllMeasures(String(userMessage)).length > 1;
             const onlyTheMeasure = !otherTopic && !secondMeasure;
             if (onlyTheMeasure) {
-              const sizeTxt = wantDims ? `${wantDims[0]}x${wantDims[1]} m` : found.name;
+              const sizeTxt = dimTxt(wantDims) || found.name;
               const discTxt = pi.hasDiscount && Number.isFinite(pi.originalPrice) && pi.originalPrice > pi.amount
                 ? `, rebajada de $${Math.round(pi.originalPrice)}`
                 : "";
@@ -2802,7 +2851,11 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // If this turn owed the customer a fact (price quote / sold-out note), lead
       // with it so the handoff message both informs AND collects contact.
       const preface = ctx.handoffPreface ? `${ctx.handoffPreface.trim()} ` : "";
-      const ask = `${preface}¡Con gusto te paso con un asesor! 🙌 ¿Me compartes tu nombre y un teléfono para que te contacte?`;
+      // §4 of the campaign rules: every channeled customer arrives with nombre,
+      // teléfono AND código postal. Asking for the zip later (the delivery-framed
+      // gate) only fires on the purchase path, so wholesale handoffs reached the
+      // asesor with no CP and the logistics question had to be asked again.
+      const ask = `${preface}¡Con gusto te paso con un asesor! 🙌 ¿Me compartes tu nombre, teléfono y código postal para que te contacte?`;
       history.push({ role: "assistant", text: ask, nodeId: movedTo.id, at: new Date() });
       return {
         reply: ask,

@@ -158,7 +158,7 @@ async function resolvePromo(hasPromo, opts = {}) {
         const doc = await mongoose
           .model("ProductFamily")
           .findById(rawId)
-          .select("name price mlPrice onlineStoreLinks sellable active")
+          .select("name size attributes parentId price mlPrice onlineStoreLinks sellable active")
           .lean();
         if (!doc) continue;
         const leaf = await resolveSellableLeaf(doc, colorFromText(p.colorNote, p.name));
@@ -755,9 +755,35 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     promo.priceInfo.amount > 0 &&
     !promo.priceInfo.handoff
   ) {
-    const size = (promo.product.size || "").trim().replace(/m$/i, " m").trim();
+    // SIZE. Prefer the leaf's own size; fall back to its width/length attributes,
+    // then to an ancestor's size. A promo can point straight at a COLOR LEAF
+    // ("Color Beige"), whose name is meaningless to a customer — "La Color Beige
+    // está en promoción por $649" went out live. Never label a quote with it.
+    let rawSize = (promo.product.size || "").trim();
+    const at = promo.product.attributes || {};
+    if (!rawSize && at.width && at.length) rawSize = `${at.width}x${at.length}`;
+    if (!rawSize && promo.product.parentId) {
+      try {
+        const up = await mongoose
+          .model("ProductFamily")
+          .findById(promo.product.parentId)
+          .select("name size attributes")
+          .lean();
+        if (up) {
+          rawSize = (up.size || "").trim();
+          const ua = up.attributes || {};
+          if (!rawSize && ua.width && ua.length) rawSize = `${ua.width}x${ua.length}`;
+        }
+      } catch { /* label falls back below */ }
+    }
+    const size = rawSize.replace(/m$/i, " m").trim();
     const color = colorFromText(promo.product.name, promo.name);
-    const label = size ? `la malla sombra de ${size} en color ${color}` : `la ${promo.product.name}`;
+    const isColorLeaf = /^color\b/i.test(String(promo.product.name || "").trim());
+    const label = size
+      ? `la malla sombra de ${size} en color ${color}`
+      : isColorLeaf
+      ? `la malla sombra en color ${color}`
+      : `la ${promo.product.name}`;
     let plink = promo.priceInfo.link || null;
     if (plink) {
       const { trackedLink } = require("./priceResolver");
@@ -768,7 +794,7 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
         productId: promo.product._id ? String(promo.product._id) : null,
       });
     }
-    promoQuote = { label, amount: promo.priceInfo.amount, link: plink };
+    promoQuote = { label, amount: promo.priceInfo.amount, link: plink, size: size || null };
   }
 
   return {

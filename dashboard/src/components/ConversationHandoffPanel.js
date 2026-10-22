@@ -89,6 +89,14 @@ export default function ConversationHandoffPanel({ psid }) {
             <span className="text-emerald-500">Qué sigue: </span>
             {d.nextStep}
           </p>
+          {/* §4.1: the other things the customer raised, so the asesor doesn't
+              have to read the thread to find them. */}
+          {d.extras && d.extras.length > 0 && (
+            <p className="text-amber-200/80 leading-snug mt-1.5">
+              <span className="text-amber-500/80">También: </span>
+              {d.extras.join(" · ")}
+            </p>
+          )}
         </div>
       )}
 

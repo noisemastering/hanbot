@@ -955,6 +955,11 @@ function Messages() {
                           <div style={{ color: "#6ee7b7", fontSize: "0.72rem", lineHeight: 1.3, marginTop: "2px" }}>
                             → {handoff.briefDetail.nextStep}
                           </div>
+                          {handoff.briefDetail.extras?.length > 0 && (
+                            <div style={{ color: "#fcd34d", fontSize: "0.7rem", lineHeight: 1.3, marginTop: "2px" }}>
+                              También: {handoff.briefDetail.extras.join(" · ")}
+                            </div>
+                          )}
                         </>
                       ) : (
                         <div style={{ color: "#aaa", fontSize: "0.75rem", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
