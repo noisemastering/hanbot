@@ -1671,6 +1671,18 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           parts.push(`Estamos en ${bizL.city || "Querétaro"}${bizL.state && bizL.state !== bizL.city ? `, ${bizL.state}` : ""} y hacemos envíos a toda la República. 📦`);
           if (bizL.fullAddress) parts.push(`📍 ${bizL.fullAddress}`);
           if (bizL.googleMapsUrl) parts.push(`🌐 ${bizL.googleMapsUrl}`);
+          // MOVE NOTICE — temporary and self-retiring. These are the last days at the
+          // current site; the plant moves and from Nov 1 customers find Hanlob in
+          // Colón. Shown only while CompanyInfo still holds the OLD address (C.P.
+          // 76137) AND we are before Nov 1, so it disappears on its own the moment the
+          // address is updated, and in any case after the move. No second deploy, and
+          // it can never contradict the address printed above it.
+          const MOVE_CUTOFF = Date.parse("2026-11-01T06:00:00Z"); // Nov 1, 00:00 CST
+          if (Date.now() < MOVE_CUTOFF && String(bizL.zipCode || "").trim() === "76137") {
+            parts.push(
+              "Estos son nuestros últimos días en esta ubicación: a partir del 1ero de noviembre nos podrás encontrar en nuestra planta en Colón. 🚚"
+            );
+          }
           // Only OWN the turn when location/shipping is all they asked. Anything else
           // in the message and we contribute the facts and let the turn answer both.
           const restL = msgL
