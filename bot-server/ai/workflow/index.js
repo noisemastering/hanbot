@@ -1014,6 +1014,24 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         }
         return q;
       };
+      // THE CATALOGUE, in the client's own vocabulary. Four presentations, two
+      // versions: Premium is the grueso (3 mm), Flexible the delgado (1.5 mm).
+      // Customers use either name, so every variant read goes through detectVariant
+      // and the choice sticks on state for the rest of the chat.
+      const BORDE_LENS = ["6", "9", "18", "54"];
+      const VARIANT_LABEL = { grueso: "Premium", delgado: "Flexible" };
+      const VARIANT_SPEC = { grueso: "Premium (grueso, 3 mm)", delgado: "Flexible (delgado, 1.5 mm)" };
+      const detectVariant = (s) =>
+        /\b(delgad\w*|flexible)\b/i.test(s) ? "delgado" : /\b(grues\w*|premium)\b/i.test(s) ? "grueso" : null;
+      const msgVariant = detectVariant(msgB);
+      if (msgVariant) state.bordeVariant = msgVariant;
+      // The version we KNOW (named this turn or earlier) — or null. Never guessed:
+      // defaulting silently quoted Premium prices to Flexible buyers.
+      const variantKnown = () => msgVariant || state.bordeVariant || null;
+      const VARIANT_FALLBACK = "grueso";
+      // Offer the options, never ask an open "¿qué largo necesitas?" — used only when
+      // no price resolves, so the customer still sees what exists.
+      const BORDE_MENU_FALLBACK = `Lo manejo en rollos de 6, 9, 18 y 54 m, en versión ${VARIANT_SPEC.grueso} y ${VARIANT_SPEC.delgado}. ¿Cuál te sirve? 😊`;
       // CLIENT THRESHOLDS — the profile is decided by LINEAR METRES (roll length ×
       // quantity), never by piece count:
       //   ≤ 25 m  → residential: price + Mercado Libre link, self-serve, no asesor.
@@ -1028,7 +1046,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // browsers) while making clear the final volume price comes from an asesor.
       const refPrice = async (len, n) => {
         try {
-          const leaf = await findProductInFamilies(`${len} m ${/delgad/i.test(msgB) ? "delgado" : "grueso"}`, bordeFams, null);
+          const byLenR = await bordeLeavesByLength(variantKnown() || VARIANT_FALLBACK);
+          const leaf = byLenR.get(String(len));
           const pi = leaf ? await resolvePrice(leaf, altOpt(state, leaf)) : null;
           if (!pi || !pi.amount) return null;
           return { unit: pi.amount, total: Math.round(pi.amount * n * 100) / 100 };
@@ -1052,7 +1071,12 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         const pi = await resolvePrice(leaf, altOpt(state, leaf));
         if (!pi || !pi.amount) return null;
         const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: leaf.name, productId: String(leaf._id) });
-        return retB(`¡Perfecto! El rollo de ${len} m está en $${pi.amount}.` + (link ? ` Aquí lo compras: ${link}` : ""), { bordeQuoted: len });
+        const vLabS = variantKnown() ? ` ${VARIANT_LABEL[variantKnown()]}` : "";
+        return retB(
+          `¡Perfecto! El rollo${vLabS} de ${len} m está en $${pi.amount}.` +
+            (link ? ` Aquí lo compras, con envío gratis: ${link}` : ""),
+          { bordeQuoted: len }
+        );
       };
       // Borde leaves by LENGTH for one thickness variant. Both variants carry the
       // same length names ("Rollo de 18 m" exists under Grueso AND Delgado), so a
@@ -1082,11 +1106,87 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         return byLen;
       };
 
+      // THE MENU: all four lengths with BOTH versions priced, in one table. The
+      // client's rule is to offer the available options instead of asking an open
+      // question, and there are only four, so this is the default answer to any
+      // broad borde ask. Asking the version first costs a round trip and quoting one
+      // version silently misprices the other, so both go out together; the purchase
+      // links follow once they pick (the quantity is what decides self-serve vs asesor).
+      const bordeMenu = async () => {
+        const byG = await bordeLeavesByLength("grueso");
+        const byD = await bordeLeavesByLength("delgado");
+        const rows = []; const quoted = [];
+        for (const len of BORDE_LENS) {
+          const parts = [];
+          for (const [variant, byLen] of [["grueso", byG], ["delgado", byD]]) {
+            const leaf = byLen.get(len);
+            if (!leaf) continue;
+            const pi = await resolvePrice(leaf, altOpt(state, leaf)).catch(() => null);
+            if (pi && pi.amount) parts.push(`${VARIANT_LABEL[variant]} $${pi.amount}`);
+          }
+          if (parts.length) { rows.push(`• ${len} m — ${parts.join(" · ")}`); quoted.push(len); }
+        }
+        if (!rows.length) return null;
+        return {
+          quoted,
+          text:
+            `¡Claro! El borde separador va por rollo, en 4 medidas y 2 versiones:\n${rows.join("\n")}\n` +
+            `Premium es el grueso (3 mm) y Flexible el delgado (1.5 mm). ¿Cuál te sirve? 😊`,
+        };
+      };
+
+      // ONE version, four lengths, each with its price and purchase link — the
+      // client's flow-2 second message. Fires once the customer names the version.
+      const bordeVersionList = async (variant) => {
+        const byLen = await bordeLeavesByLength(variant);
+        const rows = []; const quoted = [];
+        for (const len of BORDE_LENS) {
+          const leaf = byLen.get(len);
+          if (!leaf) continue;
+          const pi = await resolvePrice(leaf, altOpt(state, leaf)).catch(() => null);
+          if (!pi || !pi.amount) continue;
+          const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: leaf.name, productId: String(leaf._id) });
+          rows.push(`• ${len} m: $${pi.amount}${link ? ` → ${link}` : ""}`);
+          quoted.push(len);
+        }
+        if (!rows.length) return null;
+        return {
+          quoted,
+          text:
+            `¡Excelente! El borde ${VARIANT_LABEL[variant]} está disponible en:\n${rows.join("\n")}\n` +
+            `Todos con envío gratis vía Mercado Libre. ¿Cuántos metros necesitas? 😊`,
+        };
+      };
+
       // The profile decision, in one place: how many linear metres is this order?
       const isRetailOrder = (len, n) => {
         const meters = Number(len) * Number(n);
         return Number.isFinite(meters) && meters <= BORDE_RETAIL_MAX_M;
       };
+      // Every model-authored borde turn carries the vocabulary and the ban on open
+      // measure questions — the gates below cover the common shapes, but when the turn
+      // reaches the model it must still OFFER the options rather than ask for one.
+      earlyFacts.push(
+        `- BORDE SEPARADOR: 4 medidas (rollos de 6, 9, 18 y 54 m, alto fijo 13 cm) en 2 versiones: ${VARIANT_SPEC.grueso} y ${VARIANT_SPEC.delgado}. ` +
+          `PROHIBIDO preguntar "¿qué largo necesitas?" o cualquier pregunta abierta de medida: SIEMPRE ofrece las medidas disponibles con su precio, o pregunta cuál de las DOS versiones quiere. ` +
+          `Comparte precios desde el primer intercambio; las compras individuales en Mercado Libre llevan envío gratis.`
+      );
+      // A0) We asked WHICH VERSION for a length they already picked — resolve it the
+      // moment they answer, in either vocabulary (Premium/grueso, Flexible/delgado).
+      if (state.awaitingBordeVariant && msgVariant) {
+        const rec0 = state.awaitingBordeVariant; state.awaitingBordeVariant = null;
+        const by0 = await bordeLeavesByLength(msgVariant);
+        const leaf0 = by0.get(String(rec0.length));
+        const pi0 = leaf0 ? await resolvePrice(leaf0, altOpt(state, leaf0)).catch(() => null) : null;
+        if (pi0 && pi0.amount) {
+          state.activeProductId = String(leaf0._id);
+          state.awaitingBordeQty = { productId: String(leaf0._id), length: String(rec0.length) };
+          return retB(
+            `¡Excelente! El borde ${VARIANT_LABEL[msgVariant]} de ${rec0.length} m está en $${pi0.amount}. ¿Cuántos rollos necesitas? 😊`,
+            { bordeVariantPicked: msgVariant, bordeAskQty: String(rec0.length) }
+          );
+        }
+      }
       // 0) WIDTH/HEIGHT question. The borde separador is a FIXED 13 cm de alto (× the
       // length you pick) — it is NOT sold by width. The bot used to dodge this and keep
       // pushing the largo (reported: customer asked "cuánto mide de ancho" 3× and never
@@ -1112,7 +1212,12 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             }
           }
         }
-        return retB(`${width} Lo manejo en rollos de 6, 9, 18 y 54 m. ¿Qué largo necesitas? 😊`, { bordeWidthAnswered: true, bordeAskLength: true });
+        const menu0 = await bordeMenu();
+        if (menu0) {
+          state.bordeQuoted = menu0.quoted;
+          return retB(`${width}\n${menu0.text}`, { bordeWidthAnswered: true, bordeAllQuoted: menu0.quoted });
+        }
+        return retB(`${width} ${BORDE_MENU_FALLBACK}`, { bordeWidthAnswered: true, bordeAskLength: true });
       }
       // A) awaiting quantity from last turn (we asked "¿cuántos?")
       if (state.awaitingBordeQty) {
@@ -1144,10 +1249,24 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // like "20900", a "sí claro", a "gracias"): NEVER re-ask the largo — that's the
       // recurring bug. A real quantity closes it (2+ = mayoreo); otherwise nudge toward
       // quantity, restating what we already sent — never re-asking which length.
-      const BORDE_LENS = ["6", "9", "18", "54"];
       if (state.bordeQuoted && state.bordeQuoted.length && !hasWxL) {
+        // They answered with the VERSION ("Premium") after seeing the menu → send that
+        // version's four lengths with prices and links (the client's flow 2).
+        if (msgVariant && !allNums.length) {
+          const vlA2 = await bordeVersionList(msgVariant);
+          if (vlA2) {
+            state.bordeQuoted = vlA2.quoted;
+            return retB(vlA2.text, { bordeVersionList: msgVariant });
+          }
+        }
+        const explicitQtyA2 = parseRollQuantity(msgB);
+        // A number that IS one of our lengths, with no explicit "N rollos", is the
+        // customer PICKING from the menu we just sent — not a quantity. Fall through so
+        // section B resolves that roll. Without this the menu's own options came back
+        // as quantities ("¡Perfecto, 18!") because every length was already quoted.
+        const picksLength = explicitQtyA2 == null && allNums.length === 1 && BORDE_LENS.includes(allNums[0]);
         const hasNewLen = allNums.some((n) => BORDE_LENS.includes(n) && !state.bordeQuoted.includes(n));
-        if (!hasNewLen) {
+        if (!picksLength && !hasNewLen) {
           const q = parseQty();
           // Linear metres need a length. With exactly ONE roll quoted we know it;
           // with several on the table a bare "2" doesn't say 2 of WHICH, so ask
@@ -1159,30 +1278,43 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           if (q != null && q >= 1 && state.bordeQuoted.length > 1) {
             return retB(`¡Perfecto, ${q}! ¿De cuál largo los quieres: ${state.bordeQuoted.map((l) => l + " m").join(", ")}? 😊`, { bordeNeedLengthForQty: q });
           }
-          return retB(`¡Gracias! Ya te compartí los rollos de ${state.bordeQuoted.map((l) => l + " m").join(" y ")} con sus links. ¿Cuántos necesitas para cerrar tu pedido? 😊`, { bordeQuotedNudge: state.bordeQuoted });
+          return retB(`¡Gracias! Ya te pasé los precios de los rollos de ${state.bordeQuoted.map((l) => l + " m").join(", ")}. ¿Cuál te sirve y cuántos necesitas? 😊`, { bordeQuotedNudge: state.bordeQuoted });
         }
         state.bordeQuoted = null; // a genuinely NEW length → fall through to resolve it
       }
-      if (!hasWxL && allNums.length === 1 && !state.awaitingBordeQty) {
+      if (!hasWxL && allNums.length === 1 && !state.awaitingBordeQty && BORDE_LENS.includes(allNums[0])) {
         const len = allNums[0];
-        // Resolve on the FULL message so "grueso/delgado" is respected (not just the length).
-        const leaf = await findProductInFamilies(msgB, bordeFams, null).catch(() => null);
-        const ed = leaf && leaf.enabledDimensions;
-        const exactLen = leaf && new RegExp(`\\b${len}\\b`).test(`${leaf.name || ""} ${leaf.size || ""}`);
-        if (leaf && exactLen && Array.isArray(ed) && ed.length && !ed.includes("width")) {
-          const pi = await resolvePrice(leaf, altOpt(state, leaf));
-          if (pi && pi.amount) {
-            state.activeProductId = String(leaf._id);
-            const q = parseRollQuantity(msgB); // explicit "N rollos" only (the bare number IS the length here)
-            if (q != null && q >= 1) {
-              return isRetailOrder(len, q) ? await shareLink(leaf, len) : await mayoreo(q, len);
-            }
-            // No quantity yet. A single roll of this length may ALREADY be a full
-            // roll (54 m ≥ 50) — then it's the mayoreo profile the moment they say
-            // "one", so ask the quantity rather than implying a self-serve sale.
-            state.awaitingBordeQty = { productId: String(leaf._id), length: len };
-            return retB(`¡Claro! El rollo de ${len} m está en $${pi.amount}. ¿Cuántos rollos necesitas? 😊`, { bordeAskQty: len });
+        const vB = variantKnown();
+        if (!vB) {
+          // Length picked, version still unknown. Two options, so ASK — a closed
+          // choice between the two we sell, never an open question and never a
+          // silent default that would quote Premium prices to a Flexible buyer.
+          const byG = await bordeLeavesByLength("grueso");
+          const byD = await bordeLeavesByLength("delgado");
+          if (byG.get(len) && byD.get(len)) {
+            state.awaitingBordeVariant = { length: len };
+            return retB(
+              `¡Claro! El rollo de ${len} m lo tenemos en dos versiones: ${VARIANT_SPEC.grueso} y ${VARIANT_SPEC.delgado}. ¿Cuál prefieres? 😊`,
+              { bordeAskVariant: len }
+            );
           }
+        }
+        // Resolve by thickness, not by text match: both versions carry the same length
+        // names, so a text score returns whichever it likes and mixes the price lists.
+        const byLenB = await bordeLeavesByLength(vB || VARIANT_FALLBACK);
+        const leaf = byLenB.get(len);
+        const pi = leaf ? await resolvePrice(leaf, altOpt(state, leaf)).catch(() => null) : null;
+        if (leaf && pi && pi.amount) {
+          state.activeProductId = String(leaf._id);
+          const q = parseRollQuantity(msgB); // explicit "N rollos" only (the bare number IS the length here)
+          if (q != null && q >= 1) {
+            return isRetailOrder(len, q) ? await shareLink(leaf, len) : await mayoreo(q, len);
+          }
+          // No quantity yet. A single roll of this length may ALREADY be a full roll,
+          // so ask the quantity rather than implying a self-serve sale.
+          const vLabB = vB ? ` ${VARIANT_LABEL[vB]}` : "";
+          state.awaitingBordeQty = { productId: String(leaf._id), length: len };
+          return retB(`¡Claro! El rollo${vLabB} de ${len} m está en $${pi.amount}. ¿Cuántos rollos necesitas? 😊`, { bordeAskQty: len });
         }
       }
       // B1) NEAREST LENGTH. A single length we DON'T carry ("el de 50 m") must get the
@@ -1199,10 +1331,24 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         if (Number.isFinite(want) && !BORDE_LENS.includes(String(want))) {
           // Nearest by absolute difference; on a tie prefer the LARGER (it covers the need).
           const nearest = BORDE_LENS.map(Number).sort((a, b) => Math.abs(a - want) - Math.abs(b - want) || b - a)[0];
-          const q = msgB.replace(new RegExp(`\\b${want}\\b`), String(nearest));
-          const leaf = await findProductInFamilies(q, bordeFams, null).catch(() => null);
-          const ok = leaf && new RegExp(`\\b${nearest}\\b`).test(`${leaf.name || ""} ${leaf.size || ""}`);
-          if (ok) {
+          // Version unknown? Name the nearest presentation and ask which of the two,
+          // exactly as the client's flow-1 example does — a price here would be a
+          // silent bet on one version.
+          if (!variantKnown()) {
+            const byGn = await bordeLeavesByLength("grueso");
+            const byDn = await bordeLeavesByLength("delgado");
+            if (byGn.get(String(nearest)) && byDn.get(String(nearest))) {
+              state.awaitingBordeVariant = { length: String(nearest) };
+              return retB(
+                `El de ${want} m no lo manejamos; la presentación más cercana es el rollo de ${nearest} m. ` +
+                  `Lo tenemos en ${VARIANT_SPEC.grueso} y ${VARIANT_SPEC.delgado}. ¿Cuál de las dos te interesa? 😊`,
+                { bordeNearestLength: `${want}→${nearest}`, bordeAskVariant: String(nearest) }
+              );
+            }
+          }
+          const byLenB1 = await bordeLeavesByLength(variantKnown() || VARIANT_FALLBACK);
+          const leaf = byLenB1.get(String(nearest));
+          if (leaf) {
             const pi = await resolvePrice(leaf, altOpt(state, leaf));
             if (pi && pi.amount) {
               const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: leaf.name, productId: String(leaf._id) });
@@ -1210,7 +1356,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
               state.awaitingBordeQty = { productId: String(leaf._id), length: String(nearest) };
               return retB(
                 `El de ${want} m no lo manejamos; el más cercano es el rollo de ${nearest} m, en $${pi.amount}.` +
-                  (link ? ` Aquí lo compras: ${link}` : "") +
+                  (link ? ` Aquí lo compras, con envío gratis: ${link}` : "") +
                   ` ¿Cuántos rollos necesitas? 😊`,
                 { bordeNearestLength: `${want}→${nearest}` }
               );
@@ -1224,7 +1370,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // A2 above instead of the model re-asking the largo. Was NOT handled deterministically
       // before — the model quoted them then lost track (the reported recurring bug).
       if (!hasWxL && allNums.length >= 2 && !state.awaitingBordeQty && !state.bordeQuoted) {
-        const variant = /delgad/i.test(msgB) ? "delgado" : "grueso";
+        const variant = variantKnown() || VARIANT_FALLBACK;
         const byLenB2 = await bordeLeavesByLength(variant);
         const rows = []; const quoted = [];
         for (const len of allNums) {
@@ -1239,7 +1385,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         }
         if (quoted.length >= 2) {
           state.bordeQuoted = quoted;
-          return retB(`¡Claro! Te comparto las opciones:\n${rows.join("\n")}\n¿Cuántos rollos necesitas? 😊`, { bordeMultiQuoted: quoted });
+          return retB(`¡Claro! Te comparto las opciones en versión ${VARIANT_LABEL[variant]}:\n${rows.join("\n")}\nTodos con envío gratis. ¿Cuántos rollos necesitas? 😊`, { bordeMultiQuoted: quoted });
         }
       }
       // C) borde price/product inquiry with NO length yet → deterministically ASK the
@@ -1247,7 +1393,19 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // model, under some setups (wholesale/manual), hands off on a bare "precio del
       // borde"; the human rule is: ask the length first, always.
       if (!hasWxL && allNums.length === 0 && !state.awaitingBordeQty && !state.bordeQuoted) {
-        const wantsBorde = /(precio|cuánto|cuanto|cotiz|cost|vale|borde|separador|rollo|metr|largo)/i.test(msgB);
+        // A pure greeting / "Información" opener. The client's flow 2 answers it by
+        // naming the two versions and asking which — a closed choice, and the fastest
+        // route to a priced list. Without this the turn reached the model, which asked
+        // the open "¿qué largo necesitas?" we are removing.
+        const isInfoOpener = /^(?:[\s,.!¡?¿]*(?:hola|holi|buen[oa]s?(?:\s+(?:d[ií]as|tardes|noches))?|qu[eé]\s+tal|info|informaci[oó]n|informes|me\s+interesa|cotizaci[oó]n)[\s,.!¡?¿]*)+$/i.test(msgB.trim());
+        if (isInfoOpener && !variantKnown()) {
+          return retB(
+            `¡Hola! Con gusto 😊 Manejamos el borde separador en dos versiones: ${VARIANT_SPEC.grueso} y ${VARIANT_SPEC.delgado}, ` +
+              `cada una en rollos de 6, 9, 18 y 54 m. ¿Cuál versión te interesa?`,
+            { bordeInfoOpener: true }
+          );
+        }
+        const wantsBorde = /(precio|cuánto|cuanto|cotiz|cost|vale|borde|separador|rollo|metr|largo|premium|flexible|grues|delgad)/i.test(msgB);
         // Only ask the length when the message asks NOTHING ELSE. Words like "cuánto"
         // appear in plenty of other questions ("cuánto mide de ancho", "cuánto tarda
         // en llegar", "cómo es el pago"), and intercepting those replaced the answer
@@ -1268,29 +1426,27 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // Grueso and Delgado), so findProductInFamilies returns whichever it scores
           // higher and the list comes out mixing both price lists. thickness is the
           // real discriminator (3 mm = grueso, 1.5 mm = delgado).
-          const variantC = /delgad/i.test(msgB) ? "delgado" : "grueso";
-          const byLenC = await bordeLeavesByLength(variantC);
-          const rowsC = []; const quotedC = [];
-          for (const len of BORDE_LENS) {
-            const leaf = byLenC.get(len);
-            if (!leaf) continue;
-            const pi = await resolvePrice(leaf, altOpt(state, leaf)).catch(() => null);
-            if (pi && pi.amount) {
-              const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: leaf.name, productId: String(leaf._id) });
-              rowsC.push(`• ${len} m: $${pi.amount}${link ? ` → ${link}` : ""}`);
-              quotedC.push(String(len));
+          // They already named the version → that version's four lengths with prices
+          // and links. Otherwise the full menu: four lengths × two versions, priced.
+          const vC = variantKnown();
+          if (vC) {
+            const vlC = await bordeVersionList(vC);
+            if (vlC) {
+              state.bordeQuoted = vlC.quoted;
+              return retB(vlC.text, { bordeVersionList: vC });
             }
           }
-          if (quotedC.length) {
-            state.bordeQuoted = quotedC;
-            return retB(`¡Claro! El borde separador va por rollo, en estas medidas:\n${rowsC.join("\n")}\n¿Cuál te sirve? 😊`, { bordeAllQuoted: quotedC });
+          const menuC = await bordeMenu();
+          if (menuC) {
+            state.bordeQuoted = menuC.quoted;
+            return retB(menuC.text, { bordeAllQuoted: menuC.quoted });
           }
-          return retB(`¡Claro! Manejo el borde separador en rollos de 6, 9, 18 y 54 m. ¿Qué largo necesitas? 😊`, { bordeAskLength: true });
+          return retB(`¡Claro! ${BORDE_MENU_FALLBACK}`, { bordeAskLength: true });
         }
         if (wantsBorde && asksSomethingElse) {
           earlyFacts.push(
-            `- BORDE SEPARADOR: se maneja en rollos de 6, 9, 18 y 54 m (el alto es fijo: 13 cm). ` +
-              `Responde PRIMERO lo que el cliente preguntó y, si todavía no sabes qué largo quiere, pregúntaselo al final del mismo mensaje. ` +
+            `- BORDE SEPARADOR: se maneja en rollos de 6, 9, 18 y 54 m (el alto es fijo: 13 cm), en dos versiones: ${VARIANT_SPEC.grueso} y ${VARIANT_SPEC.delgado}. ` +
+              `Responde PRIMERO lo que el cliente preguntó y, si todavía no sabes qué largo quiere, OFRÉCELE las cuatro medidas y las dos versiones en el mismo mensaje — nunca preguntes "¿qué largo necesitas?" a secas. ` +
               `NO lo pases con un asesor por una pregunta que puedes contestar.`
           );
         }
