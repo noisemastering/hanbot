@@ -132,7 +132,7 @@ const CASES = [
     expect: "El cliente pide un color específico (negro): lo OFRECE con su precio y su link propio (negro y verde SÍ están en stock). NUNCA responde 'solo beige' ni escala a un asesor por un color que está en stock." },
   { id: "ref-color-first-msg", group: "reforzada", flow: "reforzada", setup: { hasPromo: PROMO_6X4 },
     turns: ["la tienes en color verde"],
-    expect: "AUNQUE sea el PRIMER mensaje (sin haber cotizado antes), OFRECE la 6x4 en VERDE con su precio y link. NUNCA escala a un asesor ni pide nombre/teléfono por un color que está en stock." },
+    expect: "AUNQUE sea el PRIMER mensaje (sin haber cotizado antes), reconoce el VERDE y lo cotiza; nunca dice 'solo beige'. Si ese color tiene publicación activa en ML, da precio Y link sin escalar. Si NO la tiene (hoy la publicación de Verde 6x4 responde 404), lo correcto es dar el precio y pasar con un asesor: nunca dejar un precio sin forma de comprarlo ni inventar un link." },
   { id: "ref-quantity-retail", group: "reforzada", flow: "reforzada", setup: { hasPromo: PROMO_6X4 },
     turns: ["quiero 3 piezas de 6x4"],
     expect: "3 piezas está por DEBAJO del mínimo de mayoreo (5 para 6x4) → es MENUDEO: cotiza el precio por pieza con su link; NO lo trata como mayoreo." },
@@ -141,7 +141,7 @@ const CASES = [
     expect: "6 piezas alcanza el mínimo de mayoreo (5 para 6x4) → reconoce que es MAYOREO/volumen y pide NOMBRE, TELÉFONO y CÓDIGO POSTAL para pasar con un asesor (los tres son obligatorios al canalizar). Debe nombrar la medida como la escribió el cliente (6x4, no 4x6)." },
   { id: "ref-measure-label", group: "reforzada", flow: "reforzada", setup: { hasPromo: PROMO_6X4 },
     turns: ["cuánto la de 8x4?"],
-    expect: "Cotiza la medida 8x4 (= 4x8 m, sí existe en catálogo) con su precio (~$989) y link. La MEDIDA que menciona debe ser 8x4 o 4x8 (mismo producto) — NUNCA otra como 7x4 (fue un bug real reportado por el cliente)." },
+    expect: "Cotiza la medida 8x4 (= 4x8 m, sí existe en catálogo) con un precio concreto y su link. NO compares el precio contra una cifra fija: ML cambia precios y promociones. Lo que se evalúa es la MEDIDA, que debe decirse 8x4 o 4x8 (mismo producto), preferentemente en el orden en que la escribió el cliente — NUNCA otra como 7x4 (fue un bug real reportado por el cliente)." },
 
   // ROLLO ─────────────────────────────────────────────────────────────────────
   { id: "rollo-ask-length-area", group: "rollo", flow: "rollo",
