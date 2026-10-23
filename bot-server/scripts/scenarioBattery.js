@@ -361,7 +361,11 @@ async function judge(c, r) {
     else if (verdict.pass === false) { fail++; byGroup[c.group].f++; }
     const mark = verdict.pass === true ? "✅" : verdict.pass === false ? "❌" : "•";
     console.log(`\n${mark} [${c.group}/${c.id}] (${c.flow})`);
-    for (const t of r.transcript) console.log(`   👤 ${t.user}\n   🤖 ${t.bot.slice(0, 160)}${t.tag ? `  [${t.tag}]` : ""}`);
+    // Print enough to judge a failure by eye. The judge always gets the FULL reply
+    // (see judge()), but at 160 chars the console cut the borde menu off at "18 m",
+    // which reads exactly like the bot never mentioned the 54 m roll — and sent me
+    // looking for a harness bug that wasn't there.
+    for (const t of r.transcript) console.log(`   👤 ${t.user}\n   🤖 ${t.bot.length > 700 ? t.bot.slice(0, 700) + " …[recortado para la consola; el juez recibió el texto completo]" : t.bot}${t.tag ? `  [${t.tag}]` : ""}`);
     if (!noJudge) console.log(`   ⇒ ${verdict.pass ? "PASS" : "FAIL"}: ${verdict.reason}`);
   }
   if (!noJudge) {
