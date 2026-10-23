@@ -1087,12 +1087,25 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       const mayoreo = async (n, len) => {
         state.lead = { ...(state.lead || {}), wholesaleQty: String(n) };
         const meters = len ? Number(len) * n : null;
-        const ref = len ? await refPrice(len, n) : null;
         const vMay = variantKnown();
         // Reference price first, asesor second — never a volume price we can't honor.
-        const priceLine = ref
-          ? ` De referencia, el rollo${vMay ? ` ${VARIANT_LABEL[vMay]}` : ""} de ${len} m está en $${ref.unit} c/u (${n} = $${ref.total}); el precio de mayoreo lo confirma un asesor.`
-          : "";
+        // With no version named we must not silently price one of the two: give both,
+        // clearly as reference, and let the asesor settle it.
+        let priceLine = "";
+        if (len && vMay) {
+          const ref = await refPrice(len, n);
+          if (ref) priceLine = ` De referencia, el rollo ${VARIANT_LABEL[vMay]} de ${len} m está en $${ref.unit} c/u (${n} = $${ref.total}); el precio de mayoreo lo confirma un asesor.`;
+        } else if (len) {
+          const both = [];
+          for (const variant of ["grueso", "delgado"]) {
+            const byLen = await bordeLeavesByLength(variant);
+            const leaf = byLen.get(String(len));
+            if (!leaf) continue;
+            const pi = await resolvePrice(leaf, altOpt(state, leaf)).catch(() => null);
+            if (pi && pi.amount) both.push(`${VARIANT_LABEL[variant]} $${pi.amount} c/u (${n} = $${Math.round(pi.amount * n * 100) / 100})`);
+          }
+          if (both.length) priceLine = ` De referencia, el rollo de ${len} m: ${both.join(" · ")}. El precio de mayoreo y la versión los confirma un asesor.`;
+        }
         return beginHandoff({
           preface: `Para ${n} rollo${n === 1 ? "" : "s"} de ${len ? `${len} m` : "borde"}${meters ? ` (${meters} m lineales)` : ""} manejamos precio de MAYOREO.${priceLine}`,
           reason: `Mayoreo borde${vMay ? ` ${VARIANT_LABEL[vMay]}` : ""}: ${n} rollo(s) de ${len || "?"} m${meters ? ` = ${meters} m lineales` : ""}`,
@@ -1272,6 +1285,14 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         const recQ = state.awaitingBordeVariant;
         const qV = parseRollQuantity(msgB) ?? parseQty();
         if (qV != null && qV >= 1 && !/\d{5}/.test(msgB)) {
+          // The profile is decided by length × quantity and NEVER by the version, so
+          // once we have the count there is nothing to wait for: route mayoreo now.
+          // Asking "¿Premium o Flexible?" first spent a turn on a question the asesor
+          // settles anyway, on exactly the lead the rules want captured fastest.
+          if (!isRetailOrder(recQ.length, qV)) {
+            state.awaitingBordeVariant = null;
+            return await mayoreo(qV, String(recQ.length));
+          }
           state.awaitingBordeVariant = { length: recQ.length, qty: qV };
           const bothV = await bordeBothVersions(String(recQ.length));
           return retB(
