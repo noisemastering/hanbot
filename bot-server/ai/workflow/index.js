@@ -1142,8 +1142,13 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
               if (pi.fullRoll) {
                 state.activeProductId = String(exact._id);
                 state.awaitingRollQty = false; // the asesor takes the quantity
+                // The color belongs in this reply too. On the FULL ROLLS negro and blanco
+                // really are the same price (both come off the price sheet), so naming a
+                // measure must not leave the customer thinking there is only one color —
+                // the bare-price answer already says "negro o blanco al mismo precio" and
+                // this path, reached by naming 4x100, said nothing about color at all.
                 return beginHandoff({
-                  preface: `¡Claro! El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m está en ${fmtMoney(pi)}. El rollo completo lo cotiza un asesor junto con el envío.`,
+                  preface: `¡Claro! El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m está en ${fmtMoney(pi)}, igual en negro y en blanco. El rollo completo lo cotiza un asesor junto con el envío.`,
                   reason: pi.handoffReason || `Rollo completo ${dims[0]}x${dims[1]} — cerrar con un asesor`,
                 });
               }
