@@ -239,6 +239,25 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // everything. Prices/links are still resolved deterministically elsewhere.
   const earlyFacts = [];
 
+  // The catalog match sorts dimensions ascending so "6x4" and "4x6" resolve to the
+  // same leaf. That belongs in MATCHING, not in what we say: a customer who wrote
+  // "6x4" was quoted "la de 4x6 m", and "6 piezas de 6x4" became "6 piezas de 4x6".
+  // Defined here, at the top of the turn, because gates all the way down render
+  // measures back to the customer.
+  const rawDimOrder = (txt) => {
+    const m = String(txt || "")
+      .replace(/(\d)\s*(?:m|mts?|metros?)\b/gi, "$1 ")
+      .match(/(\d+(?:[.,]\d+)?)\s*(?:[x×*]|por)\s*(\d+(?:[.,]\d+)?)/i);
+    return m ? [m[1], m[2]].map((n) => Number(String(n).replace(",", "."))) : null;
+  };
+  const dimTxt = (dims, unit = " m") => {
+    if (!dims || dims.length !== 2) return null;
+    const raw = rawDimOrder(userMessage);
+    const key = (p) => [...p].sort((a, b) => a - b).join("|");
+    const [a, b] = raw && key(raw) === key(dims) ? raw : dims;
+    return `${a}x${b}${unit}`;
+  };
+
   // Resolve the setup CONTEXT once per (flow within a) conversation.
   if (state.contextBlock === undefined) {
     try {
@@ -1230,10 +1249,35 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         const pi0 = leaf0 ? await resolvePrice(leaf0, altOpt(state, leaf0)).catch(() => null) : null;
         if (pi0 && pi0.amount) {
           state.activeProductId = String(leaf0._id);
+          // They had already told us HOW MANY while we were asking which version →
+          // close it now instead of asking the quantity we already have.
+          if (rec0.qty) {
+            return isRetailOrder(rec0.length, rec0.qty)
+              ? await shareLink(leaf0, String(rec0.length))
+              : await mayoreo(rec0.qty, String(rec0.length));
+          }
           state.awaitingBordeQty = { productId: String(leaf0._id), length: String(rec0.length) };
           return retB(
             `¡Excelente! El borde ${VARIANT_LABEL[msgVariant]} de ${rec0.length} m está en $${pi0.amount}. ¿Cuántos rollos necesitas? 😊`,
             { bordeVariantPicked: msgVariant, bordeAskQty: String(rec0.length) }
+          );
+        }
+      }
+      // A0b) They answered the VERSION question with a QUANTITY ("uno", "dos"). The
+      // profile needs the version before the threshold can be applied, so remember the
+      // count and ask the version once more, with both prices. Left to the model this
+      // produced "te comparto el de 54 m en Premium" with no price, and for two rolls
+      // an offer to send a purchase link for what the rules call mayoreo.
+      if (state.awaitingBordeVariant && !msgVariant) {
+        const recQ = state.awaitingBordeVariant;
+        const qV = parseRollQuantity(msgB) ?? parseQty();
+        if (qV != null && qV >= 1 && !/\d{5}/.test(msgB)) {
+          state.awaitingBordeVariant = { length: recQ.length, qty: qV };
+          const bothV = await bordeBothVersions(String(recQ.length));
+          return retB(
+            `¡Perfecto, ${qV} rollo${qV === 1 ? "" : "s"} de ${recQ.length} m! ` +
+              (bothV || `¿Lo quieres en ${VARIANT_SPEC.grueso} o ${VARIANT_SPEC.delgado}?`),
+            { bordeQtyPendingVariant: qV }
           );
         }
       }
@@ -1532,7 +1576,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             const unit = pi && pi.amount ? ` (cada una $${pi.amount})` : "";
             state.lead = { ...(state.lead || {}), wholesaleQty: String(qty) };
             return beginHandoff({
-              preface: `¡Claro! ${qty} piezas de ${dims[0]}x${dims[1]} m${unit} entran en precio de MAYOREO 🙌; te preparo una cotización por volumen.`,
+              preface: `¡Claro! ${qty} piezas de ${dimTxt(dims) || `${dims[0]}x${dims[1]} m`}${unit} entran en precio de MAYOREO 🙌; te preparo una cotización por volumen.`,
               reason: `Mayoreo confeccionada: ${qty} piezas de ${dims[0]}x${dims[1]} (umbral mayoreo ${wmq})`,
               wholesale: true,
             });
@@ -1783,11 +1827,25 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         if (variants.length > 1) {
           const lineByColor = new Map(); // "beige" → "• Beige: $X → link"
           const colorMeta = new Map();   // "beige" → { id, amount, link, plusIva }
+          const noLinkColors = new Set(); // colours we can quote but NOT sell self-serve
           for (const v of variants) {
             const leaf = await PF.findById(v.id).lean().catch(() => null);
             const pi = leaf ? await resolvePrice(leaf, altOpt(state, leaf)).catch(() => null) : null;
             if (pi && Number.isFinite(pi.amount) && pi.amount > 0 && !pi.soldOut) {
-              const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: `${anchor.size || ""} ${v.label}`.trim(), productId: v.id });
+              // GUARD: never hand out a link whose listing is for a DIFFERENT colour.
+              // Color Negro 6x4 carries the beige listing's URL, so a customer asking
+              // for negro was sent to buy beige (reported). Trust the leaf's own colour
+              // over the link, and drop the link rather than send the wrong product.
+              const normC = (c) => String(c || "").toLowerCase().replace("negra", "negro").replace("blanca", "blanco");
+              const slugC = (String(pi.link || "").match(/\b(beige|negro|negra|verde|blanco|blanca|gris)\b/i) || [])[1];
+              const leafC = (String(v.label || "").match(/\b(beige|negro|negra|verde|blanco|blanca|gris)\b/i) || [])[1];
+              const wrongColorLink = !!(slugC && leafC && normC(slugC) !== normC(leafC));
+              if (wrongColorLink) {
+                console.warn(`⚠️ [colorOffer] ${v.label} link points at a ${slugC} listing — dropping it: ${pi.link}`);
+                noLinkColors.add(String(v.label).toLowerCase());
+              }
+              const link = wrongColorLink ? null : await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: `${anchor.size || ""} ${v.label}`.trim(), productId: v.id });
+              if (!link) noLinkColors.add(String(v.label).toLowerCase());
               // If THIS color also carries a live discount, mention it (rebajado de $X).
               const disc = pi.hasDiscount && Number.isFinite(pi.originalPrice) && pi.originalPrice > pi.amount ? `, rebajado de $${Math.round(pi.originalPrice)}` : "";
               lineByColor.set(String(v.label).toLowerCase(), `• ${v.label}: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${disc}${link ? ` → ${link}` : ""}`);
@@ -1840,6 +1898,14 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
                   }
                   reply = `${preU}la ${size} en ${cap(_c1)} cuesta $${_meta.amount}${_meta.plusIva ? " + IVA" : ""} cada una (es precio por pieza). Para ${qtyC}, al comprar solo cambia la cantidad a ${qtyC} en el mismo enlace: ${_meta.link}`;
                   definitiveLink = true;
+                } else if (noLinkColors.has(_c1) && _meta) {
+                  // Quoted but not buyable online (dead or mismatched listing, e.g.
+                  // Verde 6x4 whose listing 404s) → quote, then an asesor. Dangling a
+                  // bare price with no link left the customer with nowhere to go.
+                  return beginHandoff({
+                    preface: `Sí, la ${size} en ${cap(_c1)} está en $${_meta.amount}, pero ahora mismo no la tenemos publicada para compra en línea.`,
+                    reason: `${size} ${_c1} sin publicación activa en Mercado Libre — cotizada en $${_meta.amount}; cerrar la venta con un asesor`,
+                  });
                 } else {
                   reply = `${preU}sí, la ${size} en ${cap(_c1)}:\n${lineByColor.get(_c1)}`;
                   definitiveLink = true; // one color, one link → arm the deferred CP ask
@@ -1912,22 +1978,6 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         `PROHIBIDO volver a pedir la medida o el producto: ya los sabes. Si el cliente confirma interés, cierra con el precio y el link.`
     );
   }
-  // The catalog match sorts dimensions ascending so "6x4" and "4x6" resolve to the
-  // same leaf. That belongs in MATCHING, not in what we say: a customer who wrote
-  // "6x4" was quoted "la de 4x6 m". Render the pair the way they wrote it.
-  const rawDimOrder = (txt) => {
-    const m = String(txt || "")
-      .replace(/(\d)\s*(?:m|mts?|metros?)\b/gi, "$1 ")
-      .match(/(\d+(?:[.,]\d+)?)\s*(?:[x×*]|por)\s*(\d+(?:[.,]\d+)?)/i);
-    return m ? [m[1], m[2]].map((n) => Number(String(n).replace(",", "."))) : null;
-  };
-  const dimTxt = (dims, unit = " m") => {
-    if (!dims || dims.length !== 2) return null;
-    const raw = rawDimOrder(userMessage);
-    const key = (p) => [...p].sort((a, b) => a - b).join("|");
-    const [a, b] = raw && key(raw) === key(dims) ? raw : dims;
-    return `${a}x${b}${unit}`;
-  };
   // NAMED A MEASURE ⇒ NOT a promo request: he asked about THAT size.
   const namesAMeasure = !!turnWantDims;
   if (userMessage && !state.purchased && !rainIntent && !namesAMeasure && (state.promoPitch || state.promoQuote) && (!state.promoPitchSent || state.promoDismissed)) {
