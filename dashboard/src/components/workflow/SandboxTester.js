@@ -30,15 +30,52 @@ export default function SandboxTester({ workflowId, workflowName = "", dirty, on
   const sessionRef = useRef(newSessionId());
   const scrollRef = useRef(null);
 
-  // Build a readable transcript of the simulated conversation for the report
-  // ticket (no real psid here — the transcript IS the context for the reviewer).
-  const buildTranscript = () =>
-    messages
-      .map((m) => {
-        const who = m.role === "user" ? "Cliente" : m.role === "assistant" ? "Bot" : m.role === "error" ? "Error" : "Sistema";
-        return `${who}: ${m.text}`;
-      })
-      .join("\n");
+  // Everything a reviewer needs to reproduce the turn. There is no real psid
+  // here and no stored Conversation, so this text IS the whole report: the
+  // transcript with CDMX timestamps, the flow and scenario it ran against, the
+  // Setup override, and the per-turn diagnostics the UI otherwise hides behind
+  // the "▸ diagnóstico" toggle. DB times are UTC and the business runs on CST,
+  // so every stamp is rendered in America/Mexico_City.
+  const mxTime = (d) =>
+    new Date(d).toLocaleString("es-MX", {
+      timeZone: "America/Mexico_City",
+      dateStyle: "short",
+      timeStyle: "short",
+    });
+
+  const diagLine = (d) => {
+    if (!d) return null;
+    const bits = [];
+    if (d.fromNode?.name || d.toNode?.name) {
+      bits.push(`nodo ${d.fromNode?.name || "?"} → ${d.toNode?.name || "?"}${d.edgeId ? ` (${d.edgeId})` : " (stay)"}`);
+    }
+    if (d.terminal) bits.push("terminal");
+    if (d.routerReason) bits.push(`router: ${d.routerReason}`);
+    if (d.toolCalls?.length) bits.push(`tools: ${d.toolCalls.map((t) => t.name).join(", ")}`);
+    if (d.handoffRequested) bits.push("handoff solicitado");
+    return bits.length ? bits.join(" · ") : null;
+  };
+
+  const buildReportBody = () => {
+    const L = [];
+    L.push("--- SIMULACIÓN ---");
+    L.push(`Flujo: ${workflowName || "(sin nombre)"}${workflowId ? ` [${workflowId}]` : ""}`);
+    L.push(`Scenario: ${scenario}`);
+    L.push(`Fecha y hora (CDMX): ${mxTime(Date.now())}`);
+    L.push(`Sesión: ${sessionRef.current}`);
+    L.push(`Nodo al reportar: ${currentNode?.name || "—"}`);
+    if (setup && Object.keys(setup).length > 0) L.push(`Setup (override): ${JSON.stringify(setup)}`);
+    L.push("");
+    L.push("--- CONVERSACIÓN SIMULADA ---");
+    for (const m of messages) {
+      const who =
+        m.role === "user" ? "CLIENTE" : m.role === "assistant" ? "BOT" : m.role === "error" ? "ERROR" : "SISTEMA";
+      L.push(`[${m.at ? mxTime(m.at) : "—"}] ${who}: ${m.text}`);
+      const dl = diagLine(m.diag);
+      if (dl) L.push(`    ↳ ${dl}`);
+    }
+    return L.join("\n");
+  };
 
   useEffect(() => {
     // New workflow selected → fresh conversation AND fresh setup override. Without
@@ -67,7 +104,7 @@ export default function SandboxTester({ workflowId, workflowName = "", dirty, on
     if (!text && messages.length > 0) return;
     // First message of a fresh session => this counts as a new conversation.
     const isNewConvo = messages.length === 0;
-    if (text) setMessages((m) => [...m, { role: "user", text }]);
+    if (text) setMessages((m) => [...m, { role: "user", text, at: Date.now() }]);
     setInput("");
     setSending(true);
     try {
@@ -82,11 +119,11 @@ export default function SandboxTester({ workflowId, workflowName = "", dirty, on
       setCurrentNode(data.currentNode || null);
       onCurrentNode?.(data.currentNode || null);
       if (data.reply) {
-        setMessages((m) => [...m, { role: "assistant", text: data.reply, diag: data.diagnostics }]);
+        setMessages((m) => [...m, { role: "assistant", text: data.reply, diag: data.diagnostics, at: Date.now() }]);
       } else {
         setMessages((m) => [
           ...m,
-          { role: "system", text: "(sin respuesta — nodo silencioso o terminal)", diag: data.diagnostics },
+          { role: "system", text: "(sin respuesta — nodo silencioso o terminal)", diag: data.diagnostics, at: Date.now() },
         ]);
       }
       // A send reached the engine (tokens spent). Report it so the parent can
@@ -94,7 +131,7 @@ export default function SandboxTester({ workflowId, workflowName = "", dirty, on
       onSent?.({ isNewConvo });
     } catch (err) {
       const msg = err.response?.data?.error || err.message;
-      setMessages((m) => [...m, { role: "error", text: msg }]);
+      setMessages((m) => [...m, { role: "error", text: msg, at: Date.now() }]);
       if (/ANTHROPIC_API_KEY/i.test(msg)) toast.error("Falta ANTHROPIC_API_KEY en el servidor");
     } finally {
       setSending(false);
@@ -140,14 +177,23 @@ export default function SandboxTester({ workflowId, workflowName = "", dirty, on
         <button
           onClick={() => setReportOpen(true)}
           disabled={messages.length === 0}
-          title={messages.length === 0 ? "Conversa primero para poder reportar" : "Reportar esta conversación simulada"}
-          className="px-3 py-2 text-sm rounded-lg bg-red-600/80 hover:bg-red-600 text-white disabled:opacity-50"
+          title={
+            messages.length === 0
+              ? "Conversa primero para poder reportar"
+              : "Envía esta conversación completa, el flujo y la fecha al equipo"
+          }
+          className="px-3 py-2 text-sm rounded-lg bg-red-600 hover:bg-red-500 text-white font-semibold shadow-lg shadow-red-900/30 ring-1 ring-red-400/40 disabled:opacity-40 disabled:shadow-none"
         >
-          🚩 Reportar
+          🚩 Reportar un error
         </button>
         <p className="text-xs text-amber-300/80 flex-1 min-w-[200px]">
           ⓘ {SCENARIOS.find((s) => s.value === scenario)?.hint}
           {dirty && <span className="text-amber-400"> · Tienes cambios sin guardar; el sandbox usa la versión guardada.</span>}
+          <br />
+          <span className="text-gray-500">
+            ¿El bot respondió mal? Pulsa <span className="text-red-300">Reportar un error</span>: envía al equipo la
+            conversación completa, el flujo y la fecha.
+          </span>
         </p>
       </div>
 
@@ -218,8 +264,8 @@ export default function SandboxTester({ workflowId, workflowName = "", dirty, on
         onClose={() => setReportOpen(false)}
         heading="Reportar conversación simulada"
         titlePrefix="Simulación reportada"
-        contextLine={`Simulación del workflow "${workflowName || workflowId}" (scenario: ${scenario}) reportada desde el Sandbox. PSID: ${sessionRef.current}`}
-        extra={`--- Conversación simulada ---\n${buildTranscript()}`}
+        contextLine={`Reportado desde el Sandbox · flujo "${workflowName || workflowId}" · scenario ${scenario} · ${mxTime(Date.now())} (CDMX)`}
+        extra={buildReportBody()}
         psid={sessionRef.current}
         source="sandbox_report"
       />

@@ -1,10 +1,16 @@
 // pages/ReportedConversationsView.js
 //
-// All conversations reported via "Reportar esta conversación" (tickets with
-// source 'conversation_report'). List on the left; click one to see the full
-// conversation (same panels as the Conversations route) on the right, mark it
-// solved (with an explanation) or "Sin error", and copy the whole conversation +
-// all context as text to paste for a fix.
+// Every conversation reported from the dashboard: real ones via "Reportar esta
+// conversación" (source 'conversation_report') AND simulated ones the client
+// reports from the Bot sandbox (source 'sandbox_report'). List on the left;
+// click one to see the full conversation (same panels as the Conversations
+// route) on the right, mark it solved (with an explanation) or "Sin error", and
+// copy the whole conversation + all context as text to paste for a fix.
+//
+// A sandbox report has no stored Conversation — its psid is an ephemeral
+// `sbx_…` session id — so the transcript, flow, date and per-turn diagnostics
+// all travel inside the ticket description. Fetching the convo/commerce/handoff
+// panels for one would just 404, so they are skipped.
 import React, { useEffect, useState, useCallback } from "react";
 import { byTimestampAsc } from "../utils/sortMessages";
 import toast from "react-hot-toast";
@@ -28,6 +34,10 @@ const REASON_LABELS = {
 const SEV = { low: { l: "Baja", c: "#4caf50" }, medium: { l: "Media", c: "#f5a623" }, high: { l: "Alta", c: "#f44336" } };
 const STATUS_LABEL = { open: "Abierto", review: "En revisión", working: "En proceso", solved: "Resuelto", dismissed: "Sin error", ya_resuelto: "Ya resuelto" };
 
+// Both report buttons land here. A sandbox report is self-contained (see header).
+const REPORT_SOURCES = ["conversation_report", "sandbox_report"];
+const isSandbox = (t) => t?.source === "sandbox_report";
+
 export default function ReportedConversationsView() {
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -43,7 +53,7 @@ export default function ReportedConversationsView() {
   const loadTickets = useCallback(async (silent = false) => {
     try {
       const res = await API.get("/tickets");
-      setTickets((res.data.data || []).filter((t) => t.source === "conversation_report"));
+      setTickets((res.data.data || []).filter((t) => REPORT_SOURCES.includes(t.source)));
     } catch (e) {
       if (!silent) toast.error("No se pudieron cargar los reportes");
     } finally {
@@ -62,7 +72,7 @@ export default function ReportedConversationsView() {
     setSelected(t);
     setResolution(t.resolution || "");
     setMessages([]);
-    if (!t.psid) return;
+    if (!t.psid || isSandbox(t)) return;
     setConvoLoading(true);
     try {
       const res = await API.get(`/conversations/${t.psid}`);
@@ -99,6 +109,25 @@ export default function ReportedConversationsView() {
 
   const copyAll = async () => {
     if (!selected) return;
+    // Nothing to enrich a simulation with: the description holds the transcript,
+    // the flow, the date and the diagnostics already.
+    if (isSandbox(selected)) {
+      const head = [
+        "=== SIMULACIÓN REPORTADA (Sandbox) ===",
+        `Reporte: ${REASON_LABELS[selected.category] || selected.category || "—"} (severidad: ${SEV[selected.priority]?.l || selected.priority})`,
+        `Reportado: ${new Date(selected.createdAt).toLocaleString()} por ${selected.createdBy?.username || selected.createdBy?.firstName || "—"}`,
+        `Estado: ${STATUS_LABEL[selected.status] || selected.status}`,
+        "",
+        selected.description || "",
+      ].join("\n");
+      try {
+        await navigator.clipboard.writeText(head);
+        toast.success("Simulación copiada — pégala para pedir la solución");
+      } catch (e) {
+        toast.error("No se pudo copiar");
+      }
+      return;
+    }
     try {
       const [cs, hi] = await Promise.all([
         API.get(`/conversations/${selected.psid}/commerce-status`).then((r) => r.data).catch(() => null),
@@ -178,7 +207,14 @@ export default function ReportedConversationsView() {
                     {STATUS_LABEL[t.status] || t.status}
                   </span>
                 </div>
-                <div className="text-xs text-gray-500 mt-0.5 truncate">psid {t.psid || "—"} · {new Date(t.createdAt).toLocaleDateString()}</div>
+                <div className="text-xs text-gray-500 mt-0.5 truncate">
+                  {isSandbox(t) ? (
+                    <span className="text-violet-300">🧪 Sandbox</span>
+                  ) : (
+                    <>psid {t.psid || "—"}</>
+                  )}{" "}
+                  · {new Date(t.createdAt).toLocaleDateString()}
+                </div>
               </button>
             );
           })
@@ -193,7 +229,14 @@ export default function ReportedConversationsView() {
           <div className="p-5 max-w-3xl">
             <div className="flex items-center justify-between mb-3">
               <div>
-                <h2 className="text-lg font-bold text-white">{REASON_LABELS[selected.category] || selected.category}</h2>
+                <h2 className="text-lg font-bold text-white">
+                  {REASON_LABELS[selected.category] || selected.category}
+                  {isSandbox(selected) && (
+                    <span className="ml-2 align-middle text-[11px] font-semibold px-2 py-0.5 rounded bg-violet-900/50 text-violet-300 border border-violet-700/50">
+                      🧪 Simulación
+                    </span>
+                  )}
+                </h2>
                 <p className="text-xs text-gray-500">
                   Reportado {new Date(selected.createdAt).toLocaleString()} · {STATUS_LABEL[selected.status] || selected.status}
                 </p>
@@ -209,7 +252,9 @@ export default function ReportedConversationsView() {
               </div>
             )}
 
-            {/* Conversation thread */}
+            {/* Conversation thread — a simulation has none; its transcript is
+                in the description above, diagnostics included. */}
+            {!isSandbox(selected) && (
             <div className="bg-gray-900/60 border border-gray-700 rounded-lg p-3 mb-3 max-h-[40vh] overflow-y-auto space-y-2">
               {convoLoading ? (
                 <p className="text-gray-500 text-sm">Cargando conversación…</p>
@@ -230,10 +275,15 @@ export default function ReportedConversationsView() {
                 ))
               )}
             </div>
+            )}
 
             {/* Commerce + handoff panels (same as Conversations route) */}
-            <ConversationCommercePanel psid={selected.psid} />
-            <ConversationHandoffPanel psid={selected.psid} />
+            {!isSandbox(selected) && (
+              <>
+                <ConversationCommercePanel psid={selected.psid} />
+                <ConversationHandoffPanel psid={selected.psid} />
+              </>
+            )}
 
             {/* Resolve */}
             <div className="border border-gray-700 rounded-lg p-3 bg-gray-800/40 mt-3">

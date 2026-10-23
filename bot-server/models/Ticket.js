@@ -52,7 +52,12 @@ const ticketSchema = new mongoose.Schema(
       ],
       default: null
     },
-    source: { type: String, default: "manual" }, // 'manual' | 'conversation_report'
+    // 'manual' | 'conversation_report' (a real convo) | 'sandbox_report' (a
+    // simulation from the Bot sandbox — no stored Conversation; the transcript,
+    // flow, date and diagnostics live in `description`). Both report sources are
+    // reviewed in /reported-convos; only 'conversation_report' counts toward bot
+    // performance, since a simulation is not live traffic.
+    source: { type: String, default: "manual" },
     // Resolution: explanation written when a reported conversation is closed.
     // status 'solved' = fixed (with explanation); 'dismissed' = "Sin error".
     resolution: { type: String, default: null },
