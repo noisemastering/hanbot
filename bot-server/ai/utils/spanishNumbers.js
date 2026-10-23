@@ -10,7 +10,14 @@ const NUMBER_MAP = {
   'dieciocho': '18', 'diecinueve': '19', 'veinte': '20', 'veintiuno': '21',
   'veintidós': '22', 'veintidos': '22', 'veintitrés': '23', 'veintitres': '23',
   'veinticuatro': '24', 'veinticinco': '25', 'treinta': '30', 'cuarenta': '40',
-  'cincuenta': '50', 'sesenta': '60', 'setenta': '70', 'ochenta': '80', 'noventa': '90'
+  'cincuenta': '50', 'sesenta': '60', 'setenta': '70', 'ochenta': '80', 'noventa': '90',
+  // "cuatro por cien" is how customers say 4x100, and without this the measure
+  // parser returned null, the deterministic gate never fired, and the model
+  // improvised — it asked the colour instead of quoting (reported 2026-10-23,
+  // psid 40648382988093683). Deliberately NOT 'ciento': "cuatro por ciento" is
+  // 4 PERCENT, and mapping it would turn a shade spec into a 4x100 roll. \bcien\b
+  // cannot match inside "ciento", so the two stay apart.
+  'cien': '100'
 };
 
 /**
