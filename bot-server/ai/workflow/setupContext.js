@@ -327,6 +327,17 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
   // "nodos" and "familias", and the model borrows the words: a customer asking for
   // an invoice was told "te ayudo a ubicar el flujo correcto". Those are our words
   // for our plumbing, not something a customer has any idea about.
+  // No unbacked promises. The client's words: an offer of a benefit we cannot guarantee is
+  // "not only of bad taste but also misleading". Nothing in our own text does this today —
+  // the "Llama ahora para recibir un servicio más rápido" line in the Page inbox is Meta's
+  // own prompt, not ours (it is in no prompt, no knowledge entry, no CompanyInfo, no promo,
+  // and was never stored as one of our messages) — so this is a standing guard.
+  lines.push(
+    `NUNCA prometas un beneficio que no podamos garantizar: nada de "llámanos y te atendemos más ` +
+      `rápido", "contesta ya y te damos prioridad", "últimas piezas", "aprovecha antes de que se ` +
+      `agote" ni urgencias inventadas. Solo afirma lo que es un hecho comprobable: el precio, la ` +
+      `medida, el color, el stock, el envío y las promociones que SÍ estén cargadas.`
+  );
   lines.push(
     `[INTERNO] NUNCA uses vocabulario interno con el cliente: "flujo", "nodo", "familia de productos", ` +
       `"workflow", "catálogo interno", "handoff". Habla como un asesor: "producto", "medida", "te paso con un asesor".`
@@ -767,7 +778,7 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
   const isGroundCover = realms.some((r) => /ground\s*cover|antimaleza/i.test(r));
   if (isGroundCover) {
     lines.push(
-      `- ANTIMALEZA = GROUND COVER (MISMO PRODUCTO): "malla antimaleza", "antimaleza", "malla anti-maleza", "malla para el suelo/piso contra maleza/hierba/pasto" y "ground cover" son EXACTAMENTE el producto que vendes aquí. Si el cliente pregunta "¿tienen malla antimaleza?" responde que SÍ y CONFIRMA EXPLÍCITAMENTE que la antimaleza es tu ground cover (di la palabra "ground cover"), luego pregunta el LARGO o el ÁREA a cubrir para cotizar. NUNCA digas "solo manejo ground cover", NUNCA lo trates como si fuera otra cosa, NUNCA lo mandes a "malla sombra", y NUNCA ofrezcas "pasarlo con un asesor" (tú lo atiendes directo). El ground cover NO tiene % de sombra: no preguntes eso. SÍ se maneja en DOS COLORES, NEGRO y BLANCO (cada uno con su propio precio y link) — nunca digas que no tiene colores ni ofrezcas beige o verde, que no existen en este producto.`
+      `- ANTIMALEZA = GROUND COVER (MISMO PRODUCTO): "malla antimaleza", "antimaleza", "malla anti-maleza", "malla para el suelo/piso contra maleza/hierba/pasto" y "ground cover" son EXACTAMENTE el producto que vendes aquí. Si el cliente pregunta "¿tienen malla antimaleza?" responde que SÍ y CONFIRMA EXPLÍCITAMENTE que la antimaleza es tu ground cover (di la palabra "ground cover"), luego pregunta el LARGO o el ÁREA a cubrir para cotizar. NUNCA digas "solo manejo ground cover", NUNCA lo trates como si fuera otra cosa, NUNCA lo mandes a "malla sombra", y NUNCA ofrezcas "pasarlo con un asesor" (tú lo atiendes directo). El ground cover NO tiene % de sombra: no preguntes eso. SÍ se maneja en DOS COLORES, NEGRO y BLANCO — nunca digas que no tiene colores ni ofrezcas beige o verde, que no existen en este producto. EL COLOR NO DEFINE EL PRECIO: en los ROLLOS COMPLETOS (2x100 y 4x100) negro y blanco cuestan LO MISMO, y en el resto de las medidas el color solo cambia el link y, si acaso, el precio publicado de ESE link. Así que NUNCA preguntes el color antes de dar el precio: primero da el precio de la medida y LUEGO ofrece los dos colores (si los dos traen precio y son distintos, di cada uno con su precio; si son iguales, dilo una vez para los dos). Si solo tienes el LARGO (p. ej. "quiero 25 metros"), lo que falta es el ANCHO (2 m o 4 m), porque ESO sí cambia el precio: pregunta SOLO el ancho y NO metas el color en esa misma pregunta — el color se ofrece después, junto con el precio.`
     );
   }
 

@@ -1147,11 +1147,43 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
                   reason: pi.handoffReason || `Rollo completo ${dims[0]}x${dims[1]} — cerrar con un asesor`,
                 });
               }
-              const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: exact.name, productId: String(exact._id) });
-              const disc = pi.hasDiscount && Number.isFinite(pi.originalPrice) && pi.originalPrice > pi.amount ? `, rebajado de $${Math.round(pi.originalPrice)}` : "";
+              const discOf = (q) => (q.hasDiscount && Number.isFinite(q.originalPrice) && q.originalPrice > q.amount ? `, rebajado de $${Math.round(q.originalPrice)}` : "");
+              // COLOR COMES AFTER THE PRICE, NEVER BEFORE IT. The client's note: ground
+              // cover does not price by color, so making the customer pick one to find out
+              // what it costs buys nothing — "Claro, la de 4x100 sí la manejamos. ¿La
+              // quieres en negro o en blanco?" was the whole reply to a price question.
+              // Quote the measure first and offer both colors after. The price sheet does
+              // treat negro and blanco as equal, but the LIVE ML listings do not (4x10 is
+              // $690.80 negro vs $933.90 blanco), and live is what we quote for cut pieces
+              // — so we print whatever each listing actually says instead of asserting
+              // they match, and the customer picks a color knowing both numbers.
+              let colorLines = null;
+              try {
+                const sibs = await PF.find({ parentId: exact.parentId, sellable: true, active: { $ne: false } }).lean();
+                if (sibs.length > 1) {
+                  const rows = [];
+                  for (const v of sibs) {
+                    const vp = String(v._id) === String(exact._id) ? pi : await resolvePrice(v, altOpt(state, v)).catch(() => null);
+                    if (!vp || vp.amount == null) continue;
+                    const vl = await trackedLink(vp.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: v.name, productId: String(v._id) });
+                    const label = String(v.name || "").replace(/^\s*color\s+/i, "").trim() || v.name;
+                    rows.push(`• ${label}: ${fmtMoney(vp)}${discOf(vp)}${vl ? ` — ${vl}` : ""}`);
+                  }
+                  if (rows.length > 1) colorLines = rows;
+                }
+              } catch (e) {
+                console.error("⚠️ ground cover color variants failed:", e.message);
+              }
               state.awaitingRollQty = true; // a 2+ reply next turn → mayoreo handoff
+              if (colorLines) {
+                return ret(
+                  `¡Claro! El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m lo tenemos en estos colores:\n${colorLines.join("\n")}\n¿Cuántos necesitas? 😊`,
+                  { gcQuoted: `${dims[0]}x${dims[1]}`, gcColorsOffered: colorLines.length }
+                );
+              }
+              const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: exact.name, productId: String(exact._id) });
               return ret(
-                `¡Claro! El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m está en ${fmtMoney(pi)}${disc}.` + (link ? ` Aquí lo compras: ${link}` : "") + ` ¿Cuántos necesitas? 😊`,
+                `¡Claro! El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m está en ${fmtMoney(pi)}${discOf(pi)}.` + (link ? ` Aquí lo compras: ${link}` : "") + ` ¿Cuántos necesitas? 😊`,
                 { gcQuoted: `${dims[0]}x${dims[1]}` }
               );
             }
