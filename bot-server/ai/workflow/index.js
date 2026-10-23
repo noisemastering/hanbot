@@ -23,6 +23,15 @@ const PENDING_HANDOFF_TTL_MS = 12 * 60 * 60 * 1000; // 12h
 const { route } = require("./router");
 const { executeNode } = require("./nodeExecutor");
 const { resolveSetupContext } = require("./setupContext");
+// fmtMoney renders every price the bot says (see priceResolver). Imported at
+// module scope because the per-gate destructures of priceResolver vary — some
+// pull { resolvePrice, trackedLink }, others only { trackedLink } — so a
+// formatter every gate needs must not depend on which form a gate happened to
+// use. Two gates referenced it without it being in scope and threw
+// "fmtMoney is not defined" into a try/catch, which degraded the reply into a
+// denial instead of a quote. priceResolver's dependency tree never reaches this
+// file, so this cannot cycle.
+const { fmtMoney } = require("./priceResolver");
 
 // Alternate-marketplace routing option for a resolvePrice call. Returns { altPos }
 // when this product is one the campaign routed to a non-default POS, else {} (the
@@ -187,6 +196,43 @@ function wantsWaterproof(text) {
 // look up + quote the reforzada version of a size it doesn't carry, so it can
 // MENTION "esa medida la tengo en reforzada por $X" + link (no flow switch).
 let _refFamCache = { at: 0, fams: null };
+// WHERE WE ARE / WHERE WE SHIP, in one place. §1.0865 owns the turn when that is all
+// the customer asked, but a batched message ("Solo ocupo uno!! Dónde están ubicados?")
+// is answered by an earlier gate, which used to swallow the location question whole
+// (reported: a customer asked twice and got a purchase link and a CP ask instead).
+// Any gate that owns such a turn appends this block to its own reply.
+function asksLocationOrShipping(text) {
+  const s = String(text || "").toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+  return (
+    /\b(donde (estan|se (ubican|encuentran))|ubicaci|ubicados?|direccion|domicilio|sucursal|tienda fisica|planta|en que (estado|ciudad)|de donde son|maps|mapa|como llego)\b/.test(s) ||
+    /\b(hacen? env[ií]?o?s?|envian|mandan|llega(n)? a|cobertura|a toda la republica|a todo el pais|donde lo (hacen llegar|entregan))\b/.test(s)
+  );
+}
+async function locationBlock() {
+  try {
+    const { getBusinessInfo } = require("../../businessInfoManager");
+    const biz = await getBusinessInfo().catch(() => null);
+    if (!biz || (!biz.fullAddress && !biz.googleMapsUrl)) return null;
+    const parts = [];
+    parts.push(`Estamos en ${biz.city || "Querétaro"}${biz.state && biz.state !== biz.city ? `, ${biz.state}` : ""} y hacemos envíos a toda la República. 📦`);
+    if (biz.fullAddress) parts.push(`📍 ${biz.fullAddress}`);
+    if (biz.googleMapsUrl) parts.push(`🌐 ${biz.googleMapsUrl}`);
+    // MOVE NOTICE — temporary and self-retiring. These are the last days at the
+    // current site; from Nov 1 customers find Hanlob at the Colón plant. Shown only
+    // while CompanyInfo still holds the OLD address (C.P. 76137) AND we are before
+    // Nov 1, so it disappears on its own when the address is updated and in any case
+    // after the move — no second deploy, and it can never contradict the address
+    // printed above it.
+    const MOVE_CUTOFF = Date.parse("2026-11-01T06:00:00Z"); // Nov 1, 00:00 CST
+    if (Date.now() < MOVE_CUTOFF && String(biz.zipCode || "").trim() === "76137") {
+      parts.push("Estos son nuestros últimos días en esta ubicación: a partir del 1ero de noviembre nos podrás encontrar en nuestra planta en Colón. 🚚");
+    }
+    return parts;
+  } catch {
+    return null;
+  }
+}
+
 async function reforzadaFamilies() {
   if (_refFamCache.fams && Date.now() - _refFamCache.at < 30000) return _refFamCache.fams;
   const W = require("../../models/Workflow");
@@ -394,10 +440,33 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           city: (state.location && state.location.city) || undefined,
         }, "handoff").catch(() => {});
       }
+      // A WHOLESALE lead who answers with the ORDER ITSELF ("50 rollos de 18") has
+      // earned a reference price for exactly that order: §2.B calls that price the
+      // clearest read on how real the prospect is and says explicitly not to drop it
+      // just because the ask is mayoreo. The borde gate below quotes it and re-issues
+      // this same data request, so yield the turn to it rather than closing the
+      // conversation with a bare "¡Gracias!". The quantity is already captured above.
+      // A WHOLESALE lead who comes back with a QUANTITY is still negotiating the order,
+      // not handing over contact details. Two shapes matter: the full order line
+      // ("50 rollos de 18" — §2.B wants its reference price, the clearest read on how
+      // real the prospect is) and a DOWNSIZE ("mejor solo uno"), which under §3.2 turns
+      // the request back into an individual purchase the bot can close by itself. Both
+      // closed the conversation with a bare "¡Gracias!" before. The borde gate below
+      // handles them and re-issues this same data request, so yield the turn to it.
+      const _wsMsg = String(userMessage);
+      const yieldForBordeQty =
+        state.pendingHandoff.wholesale &&
+        /borde/i.test(workflow.name || "") &&
+        (/\b\d{1,3}\s*(?:rollos?|piezas?|pzas?|tramos?|unidades?)?\s*(?:de|del)\s+(?:los?\s+)?(?:6|9|18|54)\b/i.test(_wsMsg) ||
+          (!!state.bordeWholesaleLen &&
+            !/\d{5}/.test(_wsMsg) &&
+            !/\d{10}/.test(_wsMsg.replace(/\D/g, "")) &&
+            (/\b\d{1,3}\b/.test(_wsMsg) || /\b(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\b/i.test(_wsMsg))));
       const baseReason = state.pendingHandoff.reason || "El cliente requiere atención de un asesor";
       const reason = (state.lead && state.lead.wholesaleQty) ? `${baseReason} — interés: ~${state.lead.wholesaleQty} piezas` : baseReason;
       const who = state.lead && state.lead.name ? `, ${firstGivenName(state.lead.name)}` : "";
       const reply = `¡Gracias${who}! 🙌 Un asesor te contactará lo antes posible para ayudarte.`;
+      if (!yieldForBordeQty) {
       history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
       return {
         reply,
@@ -411,6 +480,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           handoffResumed: true,
         },
       };
+      }
     } catch (err) {
       console.error("⚠️ pending-handoff resume failed:", err.message);
       state.pendingHandoff = null;
@@ -665,7 +735,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       const isRollFlow = rolloFams.length > 0 && rolloFams.every((f) => /\brollo\b|ground\s*cover|antimaleza/i.test(f.name || ""));
       if (isRollFlow) {
         const { dimsOf, findProductInFamilies, nearestRollByArea, parseRollQuantity } = require("./tools");
-        const { resolvePrice, trackedLink } = require("./priceResolver");
+        const { resolvePrice, trackedLink, fmtMoney } = require("./priceResolver");
         const PF = require("../../models/ProductFamily");
         const msg = String(userMessage);
         // Accent-insensitive for yes/no detection: \b doesn't fit accented chars
@@ -730,7 +800,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         const awaitingQty = !!state.awaitingRollQty;
         state.awaitingRollQty = false;
         let qty = parseRollQuantity(msg); // explicit "N rollos/piezas" — works anytime
-        if (qty == null && awaitingQty && !dims && !askedShade) {
+        // Same rule as the borde reader: a number carrying cm/mm is a size, not a count
+        // ("10 cm de ancho" → 10 rollos). One definition, in tools.js.
+        if (qty == null && awaitingQty && !dims && !askedShade && !require("./tools").hasUnitBoundNumber(msg)) {
           const mm = msg.match(/\b(\d{1,3})\b/);
           const W = { un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10 };
           const wm = msgN.match(/\b(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\b/);
@@ -773,13 +845,108 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             state.activeProductId = String(rec.leaf._id);
             state.rollRecommendation = { id: String(rec.leaf._id), dims: rec.dims, area };
             const shadePart = sh ? `al ${sh}% ` : "";
-            const reply = `Perfecto. Para eso te puedo recomendar un rollo ${shadePart}de ${rec.dims[0]} x ${rec.dims[1]} m, con un precio de $${pi.amount}.` + (link ? ` Te dejo el link: ${link}.` : "") + ` Dime si esta opción te convence. 😊`;
+            // A recommendation can land on a ROLLO COMPLETO (200 m² → 2x100 m), and
+            // then the full-roll rule applies here too: our price with IVA in, no
+            // link, asesor closes it. Without this the gate quoted the gross amount
+            // as if it were a self-serve price and asked "¿te convence?" with no way
+            // to buy and nobody told.
+            if (pi.fullRoll) {
+              return beginHandoff({
+                preface: `Para cubrir ${area} m² te recomiendo un rollo ${shadePart}de ${rec.dims[0]} x ${rec.dims[1]} m, en ${fmtMoney(pi)}. El rollo completo lo cotiza un asesor junto con el envío.`,
+                reason: pi.handoffReason || `Rollo completo ${rec.dims[0]}x${rec.dims[1]} recomendado para ${area} m² — cerrar con un asesor`,
+              });
+            }
+            const reply = `Perfecto. Para eso te puedo recomendar un rollo ${shadePart}de ${rec.dims[0]} x ${rec.dims[1]} m, con un precio de ${fmtMoney(pi)}.` + (link ? ` Te dejo el link: ${link}.` : "") + ` Dime si esta opción te convence. 😊`;
             return ret(reply, { rollAreaRecommended: `${rec.dims[0]}x${rec.dims[1]}` });
           }
           state.rollRecommendation = null;
           return beginHandoff({ preface: `Para cubrir ${area} m² te recomiendo un rollo de ${rec.dims[0]} x ${rec.dims[1]} m.`, reason: `Rollo recomendado ${rec.dims[0]}x${rec.dims[1]} sin precio en línea` });
         };
 
+        // (a0) "¿QUÉ MEDIDAS ESTÁN DISPONIBLES?" — GROUND COVER. Reported 2026-10-23:
+        // the customer asked exactly that and got "dime qué largo necesitas o qué área
+        // quieres cubrir", so a human had to come in and type the catalogue by hand.
+        // Ground cover is a SHORT, FIXED catalogue (2 widths × 4 lengths, negro and
+        // blanco), so offer it instead of asking an open measure question — the same
+        // rule the borde campaign states. Shades are what make the Raschel rollo
+        // catalogue too long to list, so this fires only on the shadeless flow.
+        const asksWhichSizes =
+          /\b(qu[eé]|cu[aá]l(es)?)\b[^?]*\b(medidas?|tama[nñ]os?|presentaci[oó]n(es)?|dimensiones?|anchos?|largos?|rollos?|opciones?)\b/i.test(msg) ||
+          /\b(medidas?|tama[nñ]os?|presentaciones?|anchos?|largos?)\s+(disponibles?|manejan|tienen|hay|existen)\b/i.test(msg) ||
+          /\b(qu[eé]|cu[aá]les)\s+(medidas?|tama[nñ]os?)\b/i.test(msg);
+        // A bare price ask with no measure belongs here too: "¿Cuál es el precio?" got
+        // "¿me dices qué largo necesitas o qué área quieres cubrir?" and a human had to
+        // step in and paste the catalogue (reported same day). Offer the options and
+        // their prices — unless the message asks something else, which the turn answers.
+        const asksBroadPrice =
+          /\b(precio|precios|costo|costos|cu[aá]nto\s+(cuesta|cuestan|sale|vale|valen)|cotiz\w*|a\s+c[oó]mo)\b/i.test(msg) &&
+          !/\b(env[ií]o|entrega|tarda|llega|paga|pago|tarjeta|factur|garant|instalaci|ubicaci|direcci|sucursal|mayoreo|descuento)\b/i.test(msg);
+        if ((asksWhichSizes || asksBroadPrice) && !dims && carried.size === 0 && rolloFams.length) {
+          try {
+            let frontierS = rolloFams.map((f) => String(f.id)).filter(Boolean);
+            const leavesS = [];
+            for (let d = 0; d < 5 && frontierS.length; d++) {
+              const kids = await PF.find({ parentId: { $in: frontierS } }).lean().catch(() => []);
+              if (!kids.length) break;
+              leavesS.push(...kids.filter((k) => k.sellable === true));
+              frontierS = kids.map((k) => String(k._id));
+            }
+            const byWidth = new Map();
+            for (const k of leavesS) {
+              const w = String(k.attributes?.width || "");
+              const l = String(k.attributes?.length || "");
+              if (!w || !l) continue;
+              if (!byWidth.has(w)) byWidth.set(w, new Map());
+              const m = byWidth.get(w);
+              if (!m.has(l)) m.set(l, []);
+              m.get(l).push(k);
+            }
+            // Live price for the cheapest and the dearest of each width — the ends of
+            // the range only, so the overview stays one ML round-trip per corner
+            // instead of one per SKU, and every number in it is a live number.
+            const edgePrice = async (docs, pickMax) => {
+              let best = null;
+              for (const d of docs) {
+                const pi = await resolvePrice(d, altOpt(state, d)).catch(() => null);
+                if (!pi || !pi.amount) continue;
+                if (best == null || (pickMax ? pi.amount > best : pi.amount < best)) best = pi.amount;
+              }
+              return best;
+            };
+            const rowsS = [];
+            for (const w of [...byWidth.keys()].sort((a, b) => Number(a) - Number(b))) {
+              const lens = [...byWidth.get(w).keys()].sort((a, b) => Number(a) - Number(b));
+              if (!lens.length) continue;
+              const lo = await edgePrice(byWidth.get(w).get(lens[0]), false);
+              const hi = await edgePrice(byWidth.get(w).get(lens[lens.length - 1]), true);
+              const money = (v) => (Number.isInteger(v) ? `$${v}` : `$${v.toFixed(2)}`);
+              const range = lo && hi ? ` — desde ${money(lo)} (${w}x${lens[0]} m) hasta ${money(hi)} (${w}x${lens[lens.length - 1]} m)` : "";
+              rowsS.push(`• ${w} m de ancho: ${lens.join(", ")} m${range}`);
+            }
+            if (rowsS.length) {
+              return ret(
+                `El ground cover (malla antimaleza) lo manejamos en negro y blanco, en estas medidas:\n${rowsS.join("\n")}\n` +
+                  `¿Cuál de estas te sirve? Te paso el precio exacto y el enlace de compra. 😊`,
+                { gcSizesListed: rowsS.length }
+              );
+            }
+          } catch (e) {
+            console.error("⚠️ ground cover size list failed:", e.message);
+          }
+        }
+        // (a1) AN AREA WITH NO SIDES ("200 m2", "necesito cubrir 200 metros cuadrados").
+        // The roll flow is the one that ASKS for the area, so it has to be able to act
+        // on one: recommend the nearest real roll. Reported: "Necesito cubrir 200 m2"
+        // got "dime de cuánto por cuánto lo quieres cubrir" when 4x50 m covers it
+        // exactly. (The confeccionada flow is the opposite case — there a measure is
+        // width × length and refusing to guess from an area is correct.)
+        const areaOnlyM = !dims && msg.match(/\b(\d{1,5}(?:[.,]\d+)?)\s*(?:m2|m²|metros?\s+cuadrados?|mts?\s+cuadrados?)\b/i);
+        if (areaOnlyM) {
+          const areaV = Number(String(areaOnlyM[1]).replace(",", "."));
+          if (Number.isFinite(areaV) && areaV > 0 && (reqShade || carried.size === 0)) {
+            return await recommend(areaV, reqShade);
+          }
+        }
         // (a) UNAVAILABLE SHADE. Detect ANY %-shade the customer named — even one we
         // DON'T carry (shadeInText only returns CARRIED shades, so "75%" was invisible
         // and fell through to the model, which offered 70/80 instead of saying we don't
@@ -904,11 +1071,24 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
               // "+ IVA" comes from resolvePrice, never hardcoded: the catalogue price
               // excludes tax but the LIVE ML price we actually quote already includes
               // it, so stamping "+ IVA" here billed the customer 16% twice.
+              // ROLLO COMPLETO (2 m / 4 m x 100 m): our price sheet with IVA in, no
+              // buy link, and an asesor closes it and quotes the freight. Reported
+              // five times in two days — the ML listing charged $5,314 for the
+              // 4x100 m while the direct price is $4,222.40, and the customer who
+              // saw both replied "juegan con sus precios".
+              if (pi.fullRoll) {
+                state.activeProductId = String(exact._id);
+                state.awaitingRollQty = false; // the asesor takes the quantity
+                return beginHandoff({
+                  preface: `¡Claro! El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m está en ${fmtMoney(pi)}. El rollo completo lo cotiza un asesor junto con el envío.`,
+                  reason: pi.handoffReason || `Rollo completo ${dims[0]}x${dims[1]} — cerrar con un asesor`,
+                });
+              }
               const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: exact.name, productId: String(exact._id) });
               const disc = pi.hasDiscount && Number.isFinite(pi.originalPrice) && pi.originalPrice > pi.amount ? `, rebajado de $${Math.round(pi.originalPrice)}` : "";
               state.awaitingRollQty = true; // a 2+ reply next turn → mayoreo handoff
               return ret(
-                `¡Claro! El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m está en $${pi.amount}${pi.plusIva ? " + IVA" : ""}${disc}.` + (link ? ` Aquí lo compras: ${link}` : "") + ` ¿Cuántos necesitas? 😊`,
+                `¡Claro! El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m está en ${fmtMoney(pi)}${disc}.` + (link ? ` Aquí lo compras: ${link}` : "") + ` ¿Cuántos necesitas? 😊`,
                 { gcQuoted: `${dims[0]}x${dims[1]}` }
               );
             }
@@ -929,7 +1109,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   if (userMessage && /Complementos de Instalaci/i.test(workflow.name || "")) {
     try {
       const C = require("./complementsResolver");
-      const { resolvePrice, trackedLink } = require("./priceResolver");
+      const { resolvePrice, trackedLink, fmtMoney } = require("./priceResolver");
       const PF = require("../../models/ProductFamily");
       const msg = String(userMessage);
 
@@ -1025,24 +1205,35 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       /\b(num(ero)?s?|tel(efono|éfono)?s?|cel(ular)?|whats?app?|wasap|wpp|contacto|marcar|llamar|hablar|comunicar\w*)\b/i.test(String(userMessage)) &&
       !/\bmi\s+(num|tel|cel|whats)/i.test(String(userMessage));
     if (userMessage && isBordeFlow && !wantsNonBordeProduct && !isDeliveryQuestion && !isContactRequest) {
-      const { findProductInFamilies, parseRollQuantity } = require("./tools");
-      const { resolvePrice, trackedLink } = require("./priceResolver");
+      const { findProductInFamilies } = require("./tools");
+      const { resolvePrice, trackedLink, fmtMoney } = require("./priceResolver");
       const PFm = require("../../models/ProductFamily");
       const msgB = String(userMessage);
+      // The gates below own the whole turn, so a second question riding along in the
+      // same message used to vanish: "Solo ocupo uno!! / Dónde están ubicados? / O
+      // donde lo hacen llegar?" got a purchase link and a CP ask, and the address was
+      // never shared (reported 2026-10-23). Answer the roll AND say where we are.
+      const bordeLocParts = asksLocationOrShipping(msgB) ? await locationBlock() : null;
+      const withLoc = (reply) => (bordeLocParts && bordeLocParts.length ? `${reply}\n\n${bordeLocParts.join("\n")}` : reply);
       const retB = (reply, extra) => {
+        reply = withLoc(reply);
         history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
-        return { reply, state: { ...state, history, nodeId: currentNode.id }, diagnostics: { workflow: { id: String(workflow._id), name: workflow.name }, fromNode: { id: currentNode.id, name: currentNode.name }, toNode: { id: currentNode.id, name: currentNode.name }, ...extra } };
+        return { reply, state: { ...state, history, nodeId: currentNode.id }, diagnostics: { workflow: { id: String(workflow._id), name: workflow.name }, fromNode: { id: currentNode.id, name: currentNode.name }, toNode: { id: currentNode.id, name: currentNode.name }, ...(bordeLocParts ? { locationAnswered: true } : {}), ...extra } };
       };
-      const parseQty = () => {
-        let q = parseRollQuantity(msgB);
-        if (q == null) {
-          const mm = msgB.match(/\b(\d{1,3})\b/);
-          const W = { un: 1, uno: 1, una: 1, dos: 2, tres: 3, cuatro: 4, cinco: 5, seis: 6, siete: 7, ocho: 8, nueve: 9, diez: 10 };
-          const wm = msgB.toLowerCase().match(/\b(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\b/);
-          if (mm) q = parseInt(mm[1], 10); else if (wm) q = W[wm[1]];
-        }
-        return q;
-      };
+      // WHAT THE NUMBERS IN THIS MESSAGE MEAN — read ONCE, by one function, and shared
+      // by every gate below. This replaces a local parseQty() whose rule was "the first
+      // 1-3 digit number is the quantity", plus six ad-hoc guards bolted around it at
+      // six different call sites. That arrangement shipped the same bug five times
+      // ("6x6" → 6 piezas, "tres por 8" → 8 piezas, "al 90%" → 90 piezas, "el de 18 m"
+      // → 18 rollos, "uno de 6 y uno de 18" → 6 rollos de 18): each fix guarded ONE
+      // site and the next phrasing slipped past it at another. A number's meaning is a
+      // property of the message, not of the gate reading it.
+      // Rules and the full regression list: ai/workflow/bordeOrder.js
+      // Deterministic test (no DB, no LLM): node scripts/bordeOrderTest.js
+      const { readBordeMessage } = require("./bordeOrder");
+      const readMsg = (o = {}) => readBordeMessage(msgB, o);
+      const rMsg = readMsg(); // no pending roll in context — the gates that have one re-read with it
+
       // THE CATALOGUE, in the client's own vocabulary. Four presentations, two
       // versions: Premium is the grueso (3 mm), Flexible the delgado (1.5 mm).
       // Customers use either name, so every variant read goes through detectVariant
@@ -1050,8 +1241,27 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       const BORDE_LENS = ["6", "9", "18", "54"];
       const VARIANT_LABEL = { grueso: "Premium", delgado: "Flexible" };
       const VARIANT_SPEC = { grueso: "Premium (grueso, 3 mm)", delgado: "Flexible (delgado, 1.5 mm)" };
-      const detectVariant = (s) =>
-        /\b(delgad\w*|flexible)\b/i.test(s) ? "delgado" : /\b(grues\w*|premium)\b/i.test(s) ? "grueso" : null;
+      // Naming BOTH versions in one message is normal speech and it is not ambiguous:
+      // "en verdad está mejor el premium / que el flexible" names the one they want and
+      // then the one they are dismissing. Testing delgado first turned that customer
+      // into a Flexible buyer and we quoted him the wrong roll (reported 2026-10-23).
+      // So: drop rejected/comparative mentions, and if both survive take the FIRST.
+      const detectVariant = (s) => {
+        const pick = (txt) => {
+          const d = txt.search(/\b(?:delgad\w*|flexible)/i);
+          const g = txt.search(/\b(?:grues\w*|premium)/i);
+          if (d < 0 && g < 0) return null;
+          if (d < 0) return "grueso";
+          if (g < 0) return "delgado";
+          return d < g ? "delgado" : "grueso";
+        };
+        const kept = String(s || "")
+          // "no quiero el delgado", "no me sirve el premium"
+          .replace(/\bno\s+(?:quiero|busco|me\s+sirve|es|ser[ií]a|ese|est[ée])?\s*(?:el|la|lo)?\s*(?:delgad\w*|flexible|grues\w*|premium)\b/gi, " ")
+          // "… mejor el premium QUE el flexible", "… el grueso EN VEZ DEL delgado"
+          .replace(/\b(?:que|en\s+vez\s+del?|en\s+lugar\s+del?|y\s+no)\s+[^.,;!?¡¿\n]*$/i, " ");
+        return pick(kept) || pick(String(s || ""));
+      };
       const msgVariant = detectVariant(msgB);
       if (msgVariant) state.bordeVariant = msgVariant;
       // The version we KNOW (named this turn or earlier) — or null. Never guessed:
@@ -1086,6 +1296,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       };
       const mayoreo = async (n, len) => {
         state.lead = { ...(state.lead || {}), wholesaleQty: String(n) };
+        state.bordeWholesaleTrack = true;
+        if (len) state.bordeWholesaleLen = String(len);
         const meters = len ? Number(len) * n : null;
         const vMay = variantKnown();
         // Reference price first, asesor second — never a volume price we can't honor.
@@ -1112,25 +1324,44 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           wholesale: true,
         });
       };
-      const shareLink = async (leaf, len) => {
+      const shareLink = async (leaf, len, qty = 1) => {
         const pi = await resolvePrice(leaf, altOpt(state, leaf));
         if (!pi || !pi.amount) return null;
+        state.bordeWholesaleTrack = false; // an individual sale closed → ML shipping applies again
         const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: leaf.name, productId: String(leaf._id) });
         const vLabS = variantKnown() ? ` ${VARIANT_LABEL[variantKnown()]}` : "";
+        const n = Number(qty) > 1 ? Number(qty) : 1;
         // NO LINK = no live listing (54 m Premium, 6/9 m Flexible are all paused on
         // ML). Quoting the price and stopping there is a dead end: the customer can't
         // buy it and no human knows they tried. Quote, then hand off — §3.3 rule 4 of
         // the campaign rules ("cuando el cliente seleccione una opción sujeta a
         // cotización personalizada, solicitar sus datos y canalizar").
         if (!link) {
+          // Two different reasons for having no link, and the customer must not be
+          // told the wrong one. A ROLLO COMPLETO has no link BY RULE — its listing
+          // is live and selling, we simply don't send full rolls there — so saying
+          // "no está publicado" would be a plain falsehood. Everything else here
+          // really has no active listing (54 m Premium, 6/9 m Flexible were paused).
+          const totalTxt = `$${Math.round(pi.amount * n * 100) / 100}`;
+          const unitTxt = fmtMoney(pi);
+          if (pi.fullRoll) {
+            return beginHandoff({
+              preface: withLoc(n > 1
+                ? `${n} rollos${vLabS} de ${len} m salen en ${totalTxt} (${unitTxt} c/u). El rollo completo lo cotiza un asesor junto con el envío.`
+                : `El rollo${vLabS} de ${len} m está en ${unitTxt}. El rollo completo lo cotiza un asesor junto con el envío.`),
+              reason: pi.handoffReason || `Rollo completo de ${len} m — cerrar con un asesor`,
+            });
+          }
           return beginHandoff({
-            preface: `El rollo${vLabS} de ${len} m está en $${pi.amount}, pero ahora mismo no lo tenemos publicado para compra en línea.`,
-            reason: `Borde${vLabS ? vLabS : ""} ${len} m sin publicación activa en Mercado Libre — cotizado en $${pi.amount}; cerrar la venta con un asesor`,
+            preface: withLoc(`${n > 1 ? `${n} rollos${vLabS} de ${len} m salen en ${totalTxt} (${unitTxt} c/u), pero ahora mismo no los tenemos` : `El rollo${vLabS} de ${len} m está en ${unitTxt}, pero ahora mismo no lo tenemos`} publicado${n > 1 ? "s" : ""} para compra en línea.`),
+            reason: `Borde${vLabS ? vLabS : ""} ${len} m sin publicación activa en Mercado Libre — ${n > 1 ? `${n} piezas ` : ""}cotizado en $${pi.amount} c/u; cerrar la venta con un asesor`,
           });
         }
         return retB(
-          `¡Perfecto! El rollo${vLabS} de ${len} m está en $${pi.amount}. Aquí lo compras, con envío gratis: ${link}`,
-          { bordeQuoted: len }
+          n > 1
+            ? `¡Perfecto! El rollo${vLabS} de ${len} m está en $${pi.amount}, así que ${n} te salen en $${Math.round(pi.amount * n * 100) / 100}. Aquí los compras (elige cantidad ${n}), con envío gratis: ${link}`
+            : `¡Perfecto! El rollo${vLabS} de ${len} m está en $${pi.amount}. Aquí lo compras, con envío gratis: ${link}`,
+          { bordeQuoted: len, ...(n > 1 ? { bordeQty: n } : {}) }
         );
       };
       // Borde leaves by LENGTH for one thickness variant. Both variants carry the
@@ -1253,8 +1484,80 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           `PROHIBIDO preguntar "¿qué largo necesitas?" o cualquier pregunta abierta de medida: SIEMPRE ofrece las medidas disponibles con su precio, o pregunta cuál de las DOS versiones quiere. ` +
           `Comparte precios desde el primer intercambio; las compras individuales en Mercado Libre llevan envío gratis.`
       );
+      // §3.5 — SHIPPING FOR A MAYOREO LEAD. "El envío va incluido cuando compras por
+      // Mercado Libre" is the INDIVIDUAL-purchase answer; a volume order moves by
+      // freight and the rules say to capture the código postal and the contact data so
+      // an asesor can price it. The model gave the Mercado Libre answer to a customer
+      // who had just asked for 50 rolls of 18 m, which quietly promises free shipping
+      // on an order that doesn't ship that way.
+      const asksShippingCost =
+        /env[ií]o|flete|paqueter[ií]a|transporte/i.test(msgB) &&
+        /(cu[aá]nto|costo|cuesta|precio|cobran|sale|vale|gratis|incluido|incluye|manejan|tiene)/i.test(msgB);
+      if (asksShippingCost && (state.bordeWholesaleTrack || (state.pendingHandoff && state.pendingHandoff.wholesale))) {
+        const haveZipS = !!(state.location && (state.location.zip || state.location.zipcode));
+        return retB(
+          `En pedidos de mayoreo el envío se cotiza por volumen y destino, así que lo calcula tu asesor. ` +
+            (haveZipS
+              ? `Ya tengo tu código postal; en cuanto me confirmes tu nombre y un teléfono a 10 dígitos te pasan el costo exacto. 🚚`
+              : `¿Me compartes tu código postal, tu nombre y un teléfono a 10 dígitos? Con eso te dan el costo exacto. 🚚`),
+          { bordeWholesaleShipping: true }
+        );
+      }
+      // AN ORDER OF SEVERAL PRESENTATIONS AT ONCE ("uno de 6 y uno de 18" — the
+      // client's flow-1). Each line gets its own price and purchase link, because the
+      // rules count PIECES PER PRESENTATION: 1×6 + 1×18 is two individual pieces, not
+      // a wholesale order. Returns null when no line resolves, so callers can fall back.
+      const bordeOrderReply = async (variant, pairs) => {
+        const byLenO = await bordeLeavesByLength(variant);
+        const rows = []; const noLink = []; let total = 0;
+        for (const p of pairs) {
+          const leaf = byLenO.get(String(p.len));
+          if (!leaf) continue;
+          const pi = await resolvePrice(leaf, altOpt(state, leaf)).catch(() => null);
+          if (!pi || !pi.amount) continue;
+          const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: leaf.name, productId: String(leaf._id) });
+          const sub = Math.round(pi.amount * p.qty * 100) / 100;
+          total += sub;
+          rows.push(`• ${p.qty} × ${p.len} m: $${pi.amount} c/u${p.qty > 1 ? ` = $${sub}` : ""}${link ? ` → ${link}` : ""}`);
+          if (!link) noLink.push(`${p.len} m`);
+        }
+        if (!rows.length) return null;
+        return { rows, total: Math.round(total * 100) / 100, noLink };
+      };
+      // Send a fully-resolved retail order: one line per presentation, with links.
+      const sendBordeOrder = async (variant, pairs) => {
+        const q = await bordeOrderReply(variant, pairs);
+        if (!q) return null;
+        state.bordeWholesaleTrack = false; // individual order → ML free shipping applies
+        const head = `¡Perfecto! Te comparto los precios y enlaces de compra en versión ${VARIANT_LABEL[variant]}:`;
+        // A line with no live listing can't be bought online. Quote everything, then
+        // hand off for the part we can't close — §3.3 rule 4.
+        if (q.noLink.length) {
+          return beginHandoff({
+            preface: `${head}\n${q.rows.join("\n")}\nTotal $${q.total}. ${q.noLink.join(" y ")} no ${q.noLink.length === 1 ? "está" : "están"} publicado${q.noLink.length === 1 ? "" : "s"} para compra en línea.`,
+            reason: `Borde ${VARIANT_LABEL[variant]} — pedido ${pairs.map((p) => `${p.qty}×${p.len} m`).join(" + ")}; sin publicación activa: ${q.noLink.join(", ")}`,
+          });
+        }
+        return retB(`${head}\n${q.rows.join("\n")}\nTotal $${q.total}, todos con envío gratis vía Mercado Libre. 😊`, {
+          bordeOrderQuoted: pairs.map((p) => `${p.qty}x${p.len}`),
+        });
+      };
+      // A WIDTH/HEIGHT QUESTION, recognised BEFORE anything reads a number as a count.
+      // "10 cm de ancho, me gusta que sobre" came back as "10 rollos de 54 m → MAYOREO":
+      // the pending-version gate took the 10 from "10 cm". The borde is a fixed 13 cm
+      // de alto, so a measurement here is never an order. NOTE: "grueso/delgado" is the
+      // VARIANT, not a width — match alto/altura/ancho/grosor, never grueso.
+      const asksBordeWidth = /\b(alto|altura|ancho|anchura|grosor|espesor)\b/i.test(msgB) || /qu[eé]\s+tan\s+(ancho|alto)/i.test(msgB);
       // A0) We asked WHICH VERSION for a length they already picked — resolve it the
       // moment they answer, in either vocabulary (Premium/grueso, Flexible/delgado).
+      // A multi-presentation order waits here too (the client's flow-1: "¿Los prefieres
+      // en versión Premium o Flexible?" → "Premium" → both prices and both links).
+      if (state.awaitingBordeOrder && Array.isArray(state.awaitingBordeOrder) && msgVariant) {
+        const pairsO = state.awaitingBordeOrder;
+        state.awaitingBordeOrder = null;
+        const outO = await sendBordeOrder(msgVariant, pairsO);
+        if (outO) return outO;
+      }
       if (state.awaitingBordeVariant && msgVariant) {
         const rec0 = state.awaitingBordeVariant; state.awaitingBordeVariant = null;
         const by0 = await bordeLeavesByLength(msgVariant);
@@ -1266,7 +1569,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // close it now instead of asking the quantity we already have.
           if (rec0.qty) {
             return isRetailOrder(rec0.length, rec0.qty)
-              ? await shareLink(leaf0, String(rec0.length))
+              ? await shareLink(leaf0, String(rec0.length), rec0.qty)
               : await mayoreo(rec0.qty, String(rec0.length));
           }
           state.awaitingBordeQty = { productId: String(leaf0._id), length: String(rec0.length) };
@@ -1283,8 +1586,13 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // an offer to send a purchase link for what the rules call mayoreo.
       if (state.awaitingBordeVariant && !msgVariant) {
         const recQ = state.awaitingBordeVariant;
-        const qV = parseRollQuantity(msgB) ?? parseQty();
-        if (qV != null && qV >= 1 && !/\d{5}/.test(msgB)) {
+        // The reader decides whether this reply is a COUNT for the roll we asked about
+        // or a RE-SPECIFIED order ("uno de 6 y uno de 18"). Both used to land here as
+        // "the first number is the quantity".
+        const rV = readMsg({ pendingLength: recQ.length, expectCount: true });
+        if (rV.pivotsFrom) state.awaitingBordeVariant = null;
+        const qV = rV.pivotsFrom || asksBordeWidth ? null : rV.count;
+        if (qV != null && qV >= 1) {
           // The profile is decided by length × quantity and NEVER by the version, so
           // once we have the count there is nothing to wait for: route mayoreo now.
           // Asking "¿Premium o Flexible?" first spent a turn on a question the asesor
@@ -1306,15 +1614,12 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // length you pick) — it is NOT sold by width. The bot used to dodge this and keep
       // pushing the largo (reported: customer asked "cuánto mide de ancho" 3× and never
       // got 13 cm). Answer it FIRST, then continue: if they named a single length, quote
-      // that roll; otherwise ask the largo. NOTE: "grueso/delgado" is the VARIANT, not a
-      // width question — don't trip on it (we match alto/altura/ancho/grosor, not grueso).
-      const asksBordeWidth = /\b(alto|altura|ancho|anchura|grosor|espesor)\b/i.test(msgB) || /qu[eé]\s+tan\s+(ancho|alto)/i.test(msgB);
+      // that roll; otherwise ask the largo.
       if (asksBordeWidth) {
         const width = "El borde separador mide 13 cm de alto (el largo lo eliges tú).";
-        const noWxL0 = !/\d+\s*[x×*]\s*\d+/.test(msgB);
-        const nums0 = [...new Set((msgB.replace(/\d+\s*[x×*]\s*\d+/g, " ").match(/\b\d{1,3}\b/g)) || [])];
-        if (noWxL0 && nums0.length === 1) {
-          const len = nums0[0];
+        const r0 = rMsg;
+        if (!r0.hasWxL && r0.lengths.length === 1) {
+          const len = r0.lengths[0];
           const leaf = await findProductInFamilies(msgB, bordeFams, null).catch(() => null);
           const ed = leaf && leaf.enabledDimensions;
           const exactLen = leaf && new RegExp(`\\b${len}\\b`).test(`${leaf.name || ""} ${leaf.size || ""}`);
@@ -1339,27 +1644,126 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         const rec = state.awaitingBordeQty; state.awaitingBordeQty = null;
         // A number glued to a length unit ("el de 18 m") is the client PIVOTING to a
         // different roll length, NOT the answer to "¿cuántos rollos?" — reading it as
-        // a count sent "el de 18 m" to mayoreo as "18 rollos" (reported). An EXPLICIT
-        // count ("N rollos/piezas") is still honored even alongside a length.
-        const explicitQ = parseRollQuantity(msgB);
-        if (explicitQ != null && explicitQ >= 1 && !isRetailOrder(rec.length, explicitQ)) {
-          return await mayoreo(explicitQ, rec.length);
+        // a count sent "el de 18 m" to mayoreo as "18 rollos" (reported, 64c3126), and
+        // "3 piezas de 18 m" answered to a 54 m question was routed as 3 rolls of 54.
+        // The reader settles both: it reports the count AND whether the reply moved to
+        // a different presentation.
+        const rA = readMsg({ pendingLength: rec.length, expectCount: true });
+        // THEY GAVE A C.P. INSTEAD OF A COUNT. It is never a quantity (five digits), but
+        // letting the turn fall through to the model got "Si gustas, te comparto la
+        // ubicación" — offering the address instead of sharing it, and the quantity
+        // question lost. Bank the C.P., thank them, and ask the count once more.
+        if (rA.zipLike && rA.count == null && !asksBordeWidth) {
+          const zipA = (msgB.match(/\b(\d{5})\b/) || [])[1];
+          if (zipA) {
+            state.location = { ...(state.location || {}), zip: zipA, zipcode: zipA };
+            state.awaitingBordeQty = rec; // re-arm: the NEXT number is the count
+            return retB(
+              `¡Gracias! 🙏 Ya registré tu código postal ${zipA}. ¿Cuántos rollos de ${rec.length} m necesitas? 😊`,
+              { bordeZipCaptured: zipA, bordeAskQty: rec.length }
+            );
+          }
         }
-        const looksLikeLength = /\b\d{1,3}(?:\.\d+)?\s*(?:m|mts?|metros?)\b/i.test(msgB);
-        if (!looksLikeLength) {
-          const q = parseQty();
-          if (q != null && q >= 1 && !isRetailOrder(rec.length, q)) return await mayoreo(q, rec.length);
+        const q = rA.pivotsFrom || asksBordeWidth ? null : rA.count;
+        if (q != null && q >= 1) {
+          if (!isRetailOrder(rec.length, q)) return await mayoreo(q, rec.length);
           const leaf = await PFm.findById(rec.productId).lean().catch(() => null);
-          const out = leaf ? await shareLink(leaf, rec.length) : null;
+          const out = leaf ? await shareLink(leaf, rec.length, q) : null;
           if (out) return out;
         }
         // else: a length pivot → fall through so section B resolves that roll.
       }
+      // THEY DOWNSIZED. A customer we just quoted as mayoreo who answers "mejor solo
+      // uno" has moved back to an individual purchase (§3.2 classifies on the quantity
+      // the customer expresses), and we still know which presentation we were talking
+      // about. Re-decide the profile instead of leaving them parked in a handoff — and
+      // never answer their next shipping question with the mayoreo freight line.
+      if (state.bordeWholesaleTrack && state.bordeWholesaleLen && !asksBordeWidth) {
+        const lenW = String(state.bordeWholesaleLen);
+        const rW = readMsg({ pendingLength: lenW, expectCount: true });
+        const qW = rW.pivotsFrom ? null : rW.count;
+        if (qW != null && qW >= 1 && String(qW) !== String(state.lead && state.lead.wholesaleQty)) {
+          if (!isRetailOrder(lenW, qW)) return await mayoreo(qW, lenW);
+          const vW = variantKnown();
+          const byLenW = await bordeLeavesByLength(vW || VARIANT_FALLBACK);
+          const leafW = byLenW.get(lenW);
+          if (leafW && vW) {
+            state.activeProductId = String(leafW._id);
+            const outW = await shareLink(leafW, lenW, qW);
+            if (outW) return outW;
+          }
+          const bothW = await bordeBothVersions(lenW);
+          if (bothW) {
+            state.bordeWholesaleTrack = false;
+            state.awaitingBordeVariant = { length: lenW, qty: qW };
+            return retB(`¡Claro, ${qW} rollo${qW === 1 ? "" : "s"} de ${lenW} m! ${bothW}`, { bordeDownsized: `${qW}x${lenW}` });
+          }
+        }
+      }
+      // A1b) A WHOLE ORDER IN ONE MESSAGE: quantity + presentation ("3 piezas de 18
+      // metros premium", "2 rollos de 54", "uno de 6 y uno de 18"). No gate handled this
+      // shape — A2 and B each need a SINGLE number — so it reached the model, which sold
+      // 3 pieces of 18 m and 2 rolls of 54 m with a purchase link (both are mayoreo under
+      // §2.B / §3.2 / §5) and answered "2 piezas de 9 m flexible" with the GRUESO listing
+      // at the grueso price. The profile decision belongs here, not in the model.
+      const bordeOrderPairs = rMsg.pairs;
+      if (bordeOrderPairs.length) {
+        const overLine = bordeOrderPairs.find((p) => !isRetailOrder(p.len, p.qty));
+        if (overLine) {
+          // Any line over the individual threshold makes the whole order an asesor
+          // matter. The version never changes that (§3.2 decides on pieces), so route
+          // now instead of spending a turn asking Premium or Flexible.
+          state.awaitingBordeVariant = null; state.awaitingBordeOrder = null;
+          state.awaitingBordeQty = null; state.bordeQuoted = null;
+          if (bordeOrderPairs.length === 1) return await mayoreo(overLine.qty, overLine.len);
+          state.lead = { ...(state.lead || {}), wholesaleQty: bordeOrderPairs.map((p) => `${p.qty}x${p.len}m`).join(" + ") };
+          return beginHandoff({
+            preface: `Tu pedido (${bordeOrderPairs.map((p) => `${p.qty} de ${p.len} m`).join(" y ")}) entra en precio de MAYOREO por las ${overLine.qty} piezas de ${overLine.len} m.`,
+            reason: `Mayoreo borde${variantKnown() ? ` ${VARIANT_LABEL[variantKnown()]}` : ""} — pedido ${bordeOrderPairs.map((p) => `${p.qty}×${p.len} m`).join(" + ")}`,
+            wholesale: true,
+          });
+        }
+        // Individual purchase. The version sets the price, so never guess it: ask once,
+        // remembering the order so the answer closes it (the client's flow-1).
+        const vOrd = variantKnown();
+        if (!vOrd) {
+          if (bordeOrderPairs.length === 1) {
+            const p0 = bordeOrderPairs[0];
+            const bothO = await bordeBothVersions(p0.len);
+            if (bothO) {
+              state.awaitingBordeVariant = { length: p0.len, qty: p0.qty };
+              return retB(`¡Claro, ${p0.qty} rollo${p0.qty === 1 ? "" : "s"} de ${p0.len} m! ${bothO}`, { bordeAskVariant: p0.len, bordeQtyPendingVariant: p0.qty });
+            }
+          } else {
+            state.awaitingBordeOrder = bordeOrderPairs;
+            return retB(
+              `¡Claro! ${bordeOrderPairs.map((p) => `${p.qty} de ${p.len} m`).join(" y ")}. ¿Los prefieres en versión ${VARIANT_SPEC.grueso} o ${VARIANT_SPEC.delgado}? 😊`,
+              { bordeAskVariantForOrder: bordeOrderPairs.map((p) => `${p.qty}x${p.len}`) }
+            );
+          }
+        }
+        if (vOrd) {
+          if (bordeOrderPairs.length === 1) {
+            const p0 = bordeOrderPairs[0];
+            const byLenO = await bordeLeavesByLength(vOrd);
+            const leafO = byLenO.get(String(p0.len));
+            if (leafO) {
+              state.activeProductId = String(leafO._id);
+              const outO = await shareLink(leafO, p0.len, p0.qty);
+              if (outO) return outO;
+            }
+          } else {
+            const outO = await sendBordeOrder(vOrd, bordeOrderPairs);
+            if (outO) return outO;
+          }
+        }
+      }
       // B) a new SINGLE, EXACT length (no W×L, exactly one length number) → resolve to a
       // LENGTH-ONLY borde product. Skip 2+ lengths (multi-length path quotes each) and
       // non-exact lengths like 57 (the closest-size path handles those).
-      const hasWxL = /\d+\s*[x×*]\s*\d+/.test(msgB);
-      const allNums = [...new Set((msgB.replace(/\d+\s*[x×*]\s*\d+/g, " ").match(/\b\d{1,3}\b/g)) || [])];
+      const rB = rMsg;
+      const hasWxL = rB.hasWxL;
+      const allNums = rB.lengths; // catalogue lengths named, in order of appearance
       // A2) We ALREADY quoted borde length(s) and the reply brings NO new length (a CP
       // like "20900", a "sí claro", a "gracias"): NEVER re-ask the largo — that's the
       // recurring bug. A real quantity closes it (2+ = mayoreo); otherwise nudge toward
@@ -1374,15 +1778,14 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             return retB(vlA2.text, { bordeVersionList: msgVariant });
           }
         }
-        const explicitQtyA2 = parseRollQuantity(msgB);
-        // A number that IS one of our lengths, with no explicit "N rollos", is the
-        // customer PICKING from the menu we just sent — not a quantity. Fall through so
-        // section B resolves that roll. Without this the menu's own options came back
-        // as quantities ("¡Perfecto, 18!") because every length was already quoted.
-        const picksLength = explicitQtyA2 == null && allNums.length === 1 && BORDE_LENS.includes(allNums[0]);
-        const hasNewLen = allNums.some((n) => BORDE_LENS.includes(n) && !state.bordeQuoted.includes(n));
+        // A number that IS one of our lengths, with no explicit count, is the customer
+        // PICKING from the menu we just sent — not a quantity. Fall through so section B
+        // resolves that roll. Without this the menu's own options came back as
+        // quantities ("¡Perfecto, 18!") because every length was already quoted.
+        const picksLength = !rB.countIsExplicit && allNums.length === 1;
+        const hasNewLen = allNums.some((n) => !state.bordeQuoted.includes(n));
         if (!picksLength && !hasNewLen) {
-          const q = parseQty();
+          const q = rB.count;
           // Linear metres need a length. With exactly ONE roll quoted we know it;
           // with several on the table a bare "2" doesn't say 2 of WHICH, so ask
           // instead of guessing a profile that decides retail vs asesor.
@@ -1397,7 +1800,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         }
         state.bordeQuoted = null; // a genuinely NEW length → fall through to resolve it
       }
-      if (!hasWxL && allNums.length === 1 && !state.awaitingBordeQty && BORDE_LENS.includes(allNums[0])) {
+      if (!hasWxL && allNums.length === 1 && !state.awaitingBordeQty) {
         const len = allNums[0];
         const vB = variantKnown();
         if (!vB) {
@@ -1417,9 +1820,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         const pi = leaf ? await resolvePrice(leaf, altOpt(state, leaf)).catch(() => null) : null;
         if (leaf && pi && pi.amount) {
           state.activeProductId = String(leaf._id);
-          const q = parseRollQuantity(msgB); // explicit "N rollos" only (the bare number IS the length here)
+          // EXPLICIT count only — the bare number here IS the length they just picked.
+          const q = rB.countIsExplicit ? rB.count : null;
           if (q != null && q >= 1) {
-            return isRetailOrder(len, q) ? await shareLink(leaf, len) : await mayoreo(q, len);
+            return isRetailOrder(len, q) ? await shareLink(leaf, len, q) : await mayoreo(q, len);
           }
           // No quantity yet. A single roll of this length may ALREADY be a full roll,
           // so ask the quantity rather than implying a self-serve sale.
@@ -1436,9 +1840,13 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // improvised — a knowledge rule alone held in only 1 of 3 runs.
       // Requires an explicit length unit so a bare quantity reply ("2") can never be
       // read as a length.
+      // NOTE: this path reads rMsg.numbers, not allNums (= the CATALOGUE lengths). The
+      // whole point here is a length we do NOT carry — "quiero 20 metros" — so filtering
+      // to the catalogue first makes this gate unreachable and the menu answers instead
+      // of naming the nearest presentation.
       const isLengthAsk = /\b\d{1,3}\s*(?:m\b|mts?\b|metros?\b)/i.test(msgB);
-      if (!hasWxL && isLengthAsk && allNums.length === 1 && !state.awaitingBordeQty) {
-        const want = parseInt(allNums[0], 10);
+      if (!hasWxL && isLengthAsk && rMsg.numbers.length === 1 && !state.awaitingBordeQty) {
+        const want = parseInt(rMsg.numbers[0], 10);
         if (Number.isFinite(want) && !BORDE_LENS.includes(String(want))) {
           // Nearest by absolute difference; on a tie prefer the LARGER (it covers the need).
           const nearest = BORDE_LENS.map(Number).sort((a, b) => Math.abs(a - want) - Math.abs(b - want) || b - a)[0];
@@ -1573,7 +1981,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   if (userMessage && /con Refuerzo.*Retail/i.test(workflow.name || "")) {
     try {
       const { orderedQty, wantsWholesale, findProductInFamilies, dimsOf } = require("./tools");
-      const { resolvePrice, trackedLink } = require("./priceResolver");
+      const { resolvePrice, trackedLink, fmtMoney } = require("./priceResolver");
       const PF = require("../../models/ProductFamily");
       const refFams = require("../../models/Workflow").familyListOf(workflow) || [];
       const msg = String(userMessage);
@@ -1609,7 +2017,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             state.activeProductId = String(leaf._id);
             const colorTxt = String(leaf.name || "").replace(/^\s*color\s+/i, "").trim();
             const haveZip = !!(state.location && (state.location.zip || state.location.zipcode));
-            const rr = `Claro, la ${dims[0]}x${dims[1]}${colorTxt ? " en " + colorTxt : ""} cuesta $${pi.amount}${pi.plusIva ? " + IVA" : ""} cada una (es precio por pieza). Para ${qty}, al comprar solo cambia la cantidad a ${qty} en el mismo enlace: ${link}`;
+            const rr = `Claro, la ${dims[0]}x${dims[1]}${colorTxt ? " en " + colorTxt : ""} cuesta ${fmtMoney(pi)} cada una (es precio por pieza). Para ${qty}, al comprar solo cambia la cantidad a ${qty} en el mismo enlace: ${link}`;
             history.push({ role: "assistant", text: rr, nodeId: currentNode.id, at: new Date() });
             return { reply: rr, state: { ...state, history, nodeId: currentNode.id, pendingZipAsk: haveZip ? (state.pendingZipAsk || false) : true }, diagnostics: { workflow: { id: String(workflow._id), name: workflow.name }, fromNode: { id: currentNode.id, name: currentNode.name }, toNode: { id: currentNode.id, name: currentNode.name }, retailQty: qty } };
           }
@@ -1726,32 +2134,13 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   if (userMessage) {
     try {
       const msgL = String(userMessage).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-      const asksWhere = /\b(donde (estan|se (ubican|encuentran))|ubicaci|ubicados?|direccion|domicilio|sucursal|tienda fisica|planta|en que (estado|ciudad)|de donde son|maps|mapa|como llego)\b/.test(msgL);
-      const asksShipsTo = /\b(hacen? env[ií]?o?s?|envian|mandan|llega(n)? a|cobertura|a toda la republica|a todo el pais)\b/.test(msgL);
-      if (asksWhere || asksShipsTo) {
-        const { getBusinessInfo } = require("../../businessInfoManager");
-        const bizL = await getBusinessInfo().catch(() => null);
-        if (bizL && (bizL.fullAddress || bizL.googleMapsUrl)) {
-          const parts = [];
-          parts.push(`Estamos en ${bizL.city || "Querétaro"}${bizL.state && bizL.state !== bizL.city ? `, ${bizL.state}` : ""} y hacemos envíos a toda la República. 📦`);
-          if (bizL.fullAddress) parts.push(`📍 ${bizL.fullAddress}`);
-          if (bizL.googleMapsUrl) parts.push(`🌐 ${bizL.googleMapsUrl}`);
-          // MOVE NOTICE — temporary and self-retiring. These are the last days at the
-          // current site; the plant moves and from Nov 1 customers find Hanlob in
-          // Colón. Shown only while CompanyInfo still holds the OLD address (C.P.
-          // 76137) AND we are before Nov 1, so it disappears on its own the moment the
-          // address is updated, and in any case after the move. No second deploy, and
-          // it can never contradict the address printed above it.
-          const MOVE_CUTOFF = Date.parse("2026-11-01T06:00:00Z"); // Nov 1, 00:00 CST
-          if (Date.now() < MOVE_CUTOFF && String(bizL.zipCode || "").trim() === "76137") {
-            parts.push(
-              "Estos son nuestros últimos días en esta ubicación: a partir del 1ero de noviembre nos podrás encontrar en nuestra planta en Colón. 🚚"
-            );
-          }
+      if (asksLocationOrShipping(userMessage)) {
+        const parts = await locationBlock();
+        if (parts && parts.length) {
           // Only OWN the turn when location/shipping is all they asked. Anything else
           // in the message and we contribute the facts and let the turn answer both.
           const restL = msgL
-            .replace(/\b(donde|estan|se|ubican|encuentran|ubicaci\w*|ubicados?|direccion|domicilio|sucursal|planta|maps|mapa|como|llego|hacen?|env[ií]?o?s?|envian|mandan|llegan?|cobertura|a|toda|todo|la|republica|el|pais|en|que|estado|ciudad|de|son|y|hola|buenas?|buenos?|dias|tardes|gracias|por|favor)\b/g, " ")
+            .replace(/\b(donde|estan|se|ubican|encuentran|ubicaci\w*|ubicados?|direccion|domicilio|sucursal|planta|maps|mapa|como|llego|hacen?|env[ií]?o?s?|envian|mandan|llegan?|entregan|cobertura|a|toda|todo|la|lo|los|las|le|me|mi|nos|republica|el|pais|en|que|estado|ciudad|de|son|y|o|hola|buenas?|buenos?|dias|tardes|gracias|por|favor)\b/g, " ")
             .replace(/[^a-z0-9]/g, "")
             .trim();
           if (!restL) {
@@ -1790,15 +2179,31 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       if (isPhoneRequest) {
         const { getBusinessInfo } = require("../../businessInfoManager");
         const biz = await getBusinessInfo().catch(() => null);
-        const phones = (biz && Array.isArray(biz.phones) ? biz.phones : []).filter(Boolean).slice(0, 2);
+        const fmtPhone = (p) => {
+          const d = String(p || "").replace(/\D/g, "").slice(-10);
+          return d.length === 10 ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}` : String(p || "").trim();
+        };
+        // Use the labels CompanyInfo actually stores. This used to take the first
+        // two numbers and label them BY POSITION ("Teléfono de tienda", "WhatsApp"),
+        // which is how the bot handed out 442 191 9091 as WhatsApp while the
+        // asesores hand out 442 595 7432 — the third entry, never reached by a
+        // slice(0, 2). When a label repeats, the LAST one wins: numbers are appended
+        // as they change, so the newest entry for a label is the live one.
+        const labelled = (biz && Array.isArray(biz.phonesLabelled) ? biz.phonesLabelled : [])
+          .filter((p) => p && p.number);
+        const byLabel = new Map();
+        for (const p of labelled) byLabel.set((p.label || "Teléfono").toLowerCase(), p);
+        const entries = [...byLabel.values()];
+        const phones = entries.length
+          ? entries
+          : (biz && Array.isArray(biz.phones) ? biz.phones : []).filter(Boolean).slice(0, 2).map((n) => ({ label: "Teléfono", number: n }));
         if (phones.length) {
-          const fmtPhone = (p) => {
-            const d = String(p || "").replace(/\D/g, "").slice(-10);
-            return d.length === 10 ? `${d.slice(0, 3)} ${d.slice(3, 6)} ${d.slice(6)}` : String(p || "").trim();
-          };
-          const labels = ["Teléfono de tienda", "WhatsApp"];
-          const lines = phones.map((p, i) => `${labels[i] || "Teléfono"}: ${fmtPhone(p)}`).join("\n");
-          const reply = `¡Claro! Estos son nuestros datos de contacto:\n${lines}\n\nCon gusto te atendemos por cualquiera de los dos. 😊`;
+          const lines = phones.map((p) => `${p.label || "Teléfono"}: ${fmtPhone(p.number)}`).join("\n");
+          const waLink = (biz && biz.whatsappLink) || "";
+          const reply =
+            `¡Claro! Estos son nuestros datos de contacto:\n${lines}` +
+            (waLink ? `\n${waLink}` : "") +
+            `\n\nCon gusto te atendemos por cualquiera de ${phones.length > 1 ? "ellos" : "estos medios"}. 😊`;
           history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
           return {
             reply,
@@ -1842,7 +2247,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       if (asksColor && !hasDims) {
         const PF = require("../../models/ProductFamily");
         const { availableVariantsForProduct } = require("./tools");
-        const { resolvePrice, trackedLink } = require("./priceResolver");
+        const { resolvePrice, trackedLink, fmtMoney } = require("./priceResolver");
         const anchor = await PF.findById(colorAnchorId).lean().catch(() => null);
         const variants = anchor ? await availableVariantsForProduct(anchor).catch(() => []) : [];
         if (variants.length > 1) {
@@ -1869,7 +2274,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
               if (!link) noLinkColors.add(String(v.label).toLowerCase());
               // If THIS color also carries a live discount, mention it (rebajado de $X).
               const disc = pi.hasDiscount && Number.isFinite(pi.originalPrice) && pi.originalPrice > pi.amount ? `, rebajado de $${Math.round(pi.originalPrice)}` : "";
-              lineByColor.set(String(v.label).toLowerCase(), `• ${v.label}: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${disc}${link ? ` → ${link}` : ""}`);
+              lineByColor.set(String(v.label).toLowerCase(), `• ${v.label}: ${fmtMoney(pi)}${disc}${link ? ` → ${link}` : ""}`);
               colorMeta.set(String(v.label).toLowerCase(), { id: v.id, amount: pi.amount, link, plusIva: !!pi.plusIva });
             }
           }
@@ -1917,7 +2322,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
                       wholesale: true,
                     });
                   }
-                  reply = `${preU}la ${size} en ${cap(_c1)} cuesta $${_meta.amount}${_meta.plusIva ? " + IVA" : ""} cada una (es precio por pieza). Para ${qtyC}, al comprar solo cambia la cantidad a ${qtyC} en el mismo enlace: ${_meta.link}`;
+                  reply = `${preU}la ${size} en ${cap(_c1)} cuesta ${fmtMoney(_meta)} cada una (es precio por pieza). Para ${qtyC}, al comprar solo cambia la cantidad a ${qtyC} en el mismo enlace: ${_meta.link}`;
                   definitiveLink = true;
                 } else if (noLinkColors.has(_c1) && _meta) {
                   // Quoted but not buyable online (dead or mismatched listing, e.g.
@@ -1941,6 +2346,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
               // General "¿qué colores?" (no specific color named) → list all available.
               reply = `la ${size} la tenemos en:\n${[...lineByColor.values()].join("\n")}\n¿Cuál prefieres? 😊`;
             }
+            // These branches read "…, la 6x4 la tenemos en:" after a prefix; with no
+            // prefix the message went out starting in lowercase (reported in a live
+            // reply: "la 6x4m la tenemos en:").
+            reply = reply.replace(/^([a-záéíóúñ])/, (c) => c.toUpperCase());
             history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
             return {
               reply,
@@ -2077,7 +2486,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   ) {
     try {
       const PF = require("../../models/ProductFamily");
-      const { resolvePrice, trackedLink } = require("./priceResolver");
+      const { resolvePrice, trackedLink, fmtMoney } = require("./priceResolver");
       let amount = null, link = null, plusIva = false, label = null, isPromo = false;
       // Prefer the already-resolved promo quote; else resolve the default product now.
       if (state.promoQuote && Number.isFinite(state.promoQuote.amount) && state.promoQuote.amount > 0) {
@@ -2111,7 +2520,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             if (pi.quoteThenHandoff || (pi.handoff && !link)) {
               const nm = doc.size || doc.name;
               return beginHandoff({
-                preface: `¡Claro! La malla de ${nm} tiene un precio de $${amount}${plusIva ? " + IVA" : ""}.`,
+                preface: `¡Claro! La malla de ${nm} tiene un precio de ${fmtMoney({ amount, plusIva })}.`,
                 reason: pi.handoffReason || `Sin link de compra: ${doc.name}`,
               });
             }
@@ -2123,7 +2532,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           ? label.charAt(0).toUpperCase() + label.slice(1)
           : "La malla sombra";
         const reply =
-          `¡Claro! ${name}${isPromo ? " está en promoción por" : " tiene un precio de"} $${amount}${plusIva ? " + IVA" : ""}.` +
+          `¡Claro! ${name}${isPromo ? " está en promoción por" : " tiene un precio de"} ${fmtMoney({ amount, plusIva })}.` +
           (link ? ` Puedes comprarla aquí: ${link}` : "");
         history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
         return {
@@ -2395,7 +2804,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       const allMeasures = extractAllMeasures(String(userMessage));
       if (allMeasures.length >= 2) {
         const { findProductInFamilies } = require("./tools");
-        const { resolvePrice, trackedLink } = require("./priceResolver");
+        const { resolvePrice, trackedLink, fmtMoney } = require("./priceResolver");
         turnPriceInfo = null; // a multi-quote has no single price → no clamp primary, no carried-promo pollution
         const lines = [];
         const customerLines = []; // clean, customer-facing (used as the handoff preface if we escalate)
@@ -2420,8 +2829,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             turnActiveProductId = String(doc._id);
             noteAmount(pi, false); // each price is allowed; no single primary in a multi-quote
             const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: doc.name, productId: String(doc._id) });
-            lines.push(`  • ${tag}: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${link ? ` → ${link}` : ""}`);
-            customerLines.push(`• ${tag}: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${link ? ` → ${link}` : ""}`);
+            lines.push(`  • ${tag}: ${fmtMoney(pi)}${link ? ` → ${link}` : ""}`);
+            customerLines.push(`• ${tag}: ${fmtMoney(pi)}${link ? ` → ${link}` : ""}`);
             // Price but NO purchase link → still quote it, but escalate to close.
             if (pi.quoteThenHandoff || (pi.handoff && !link)) {
               multiNeedsHandoff = true;
@@ -2462,7 +2871,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         const nums = [...new Set((noPairs.match(/\d+(?:\.\d+)?/g) || []).map(Number))];
         if (nums.length >= 2) {
           const { findProductInFamilies } = require("./tools");
-          const { resolvePrice, trackedLink } = require("./priceResolver");
+          const { resolvePrice, trackedLink, fmtMoney } = require("./priceResolver");
           const hits = [];
           for (const n of nums) {
             const doc = await findProductInFamilies(`${n} m`, familyList);
@@ -2479,8 +2888,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
                 noteAmount(pi, false);
                 const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: doc.name, productId: String(doc._id) });
                 if (pi.quoteThenHandoff || (pi.handoff && !link)) { needHandoff = true; turnHandoffReason = turnHandoffReason || `Cotización ${n} m: sin link — concretar con un asesor`; }
-                lines.push(`  • ${n} m: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${link ? ` → ${link}` : ""}`);
-                customerLines.push(`• ${n} m: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${link ? ` → ${link}` : ""}`);
+                lines.push(`  • ${n} m: ${fmtMoney(pi)}${link ? ` → ${link}` : ""}`);
+                customerLines.push(`• ${n} m: ${fmtMoney(pi)}${link ? ` → ${link}` : ""}`);
               } else if (pi && pi.soldOut) {
                 needHandoff = true; turnHandoffReason = turnHandoffReason || `AGOTADO ${n} m — pasar con un asesor`;
                 lines.push(`  • ${n} m: SÍ lo manejamos pero está AGOTADO — el sistema pasará con un asesor.`);
@@ -2538,10 +2947,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // the price does NOT include shipping: the quote must say "+ envío".
           const askedMeasure = wantDims ? dimTxt(wantDims, "m") : found.name;
           turnHandoffReason = `Cotización ${askedMeasure}: ${pi.handoffReason || "sin link de compra — concretar con un asesor"}`;
-          turnHandoffPreface = `La medida ${askedMeasure} tiene un precio de $${pi.amount}${pi.plusIva ? " + IVA" : ""} + envío.`;
+          turnHandoffPreface = `La medida ${askedMeasure} tiene un precio de ${fmtMoney(pi)} + envío.`;
           turnContextExtra =
-            `\n- COTIZA + HANDOFF: la medida ${askedMeasure} cuesta $${pi.amount}${pi.plusIva ? " + IVA" : ""} pero NO tiene link de compra en línea; ` +
-            `este precio NO incluye envío, así que dilo SIEMPRE como "$${pi.amount}${pi.plusIva ? " + IVA" : ""} + envío" (más el costo de envío). ` +
+            `\n- COTIZA + HANDOFF: la medida ${askedMeasure} cuesta ${fmtMoney(pi)} pero NO tiene link de compra en línea; ` +
+            `este precio NO incluye envío, así que dilo SIEMPRE como "${fmtMoney(pi)} + envío" (más el costo de envío). ` +
             `El sistema la pasará con un asesor para concretar. Dile el PRECIO + envío y que un asesor le ayuda a concretar la compra; NO inventes un link.`;
         } else if (pi.handoff) {
           // Reference the ACTUAL measure the customer asked for (never the leaf
@@ -2577,7 +2986,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // No link ⇒ not an ML listing (free shipping baked in), so the price does
           // NOT include shipping → must be quoted as "+ envío".
           const shipNote = !link
-            ? ` Este precio NO incluye envío: al cotizar dilo SIEMPRE como "$${pi.amount}${pi.plusIva ? " + IVA" : ""} + envío" (más el costo de envío).`
+            ? ` Este precio NO incluye envío: al cotizar dilo SIEMPRE como "${fmtMoney(pi)} + envío" (más el costo de envío).`
             : "";
           // The customer asked for a shade % we don't stock in this size → clarify.
           const sm = found.shadeMismatch;
@@ -2589,7 +2998,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             ? ` Este producto se compra en ${pi.marketplace}: comparte SU link y, si preguntan por compra/envío/devoluciones, dile que son con ${pi.marketplace}; NO menciones Mercado Libre ni "compra protegida de Mercado Libre" para este producto.`
             : "";
           turnContextExtra =
-            `\n- COTIZACIÓN SOLICITADA AHORA: el cliente pregunta por "${found.name}". Precio $${pi.amount}${pi.plusIva ? " + IVA" : ""}${disc}${srcTag}.` +
+            `\n- COTIZACIÓN SOLICITADA AHORA: el cliente pregunta por "${found.name}". Precio ${fmtMoney(pi)}${disc}${srcTag}.` +
             altNote +
             (link ? ` Link: ${link}.` : "") +
             (pi.plusIva ? ` Este precio es MÁS IVA: al cotizar di SIEMPRE "$${pi.amount} + IVA" o "más IVA".` : "") +
@@ -2636,7 +3045,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
               const leafColor = String(found.name || "").match(/\b(beige|negro|negra|verde|blanco|blanca|gris)\b/i);
               const colorTxt = leafColor ? ` en ${leafColor[1].toLowerCase()}` : "";
               directQuote =
-                `Sí, la de ${sizeTxt}${colorTxt} está en $${pi.amount}${pi.plusIva ? " + IVA" : ""}${discTxt}. ` +
+                `Sí, la de ${sizeTxt}${colorTxt} está en ${fmtMoney(pi)}${discTxt}. ` +
                 `Aquí la compras: ${link}`;
             }
           }
@@ -2646,8 +3055,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             const total = pi.amount * askedQty;
             allowedAmounts.push(total); // whitelist the total so the price clamp doesn't rewrite it to the unit price
             turnContextExtra +=
-              `\n- CANTIDAD: el cliente quiere ${askedQty} piezas de ${found.name}. Cada una $${pi.amount}${pi.plusIva ? " + IVA" : ""}; ` +
-              `el TOTAL por ${askedQty} piezas es $${total}${pi.plusIva ? " + IVA" : ""}. Dile el total y comparte el link (en Mercado Libre elige la cantidad ${askedQty}).`;
+              `\n- CANTIDAD: el cliente quiere ${askedQty} piezas de ${found.name}. Cada una ${fmtMoney(pi)}; ` +
+              `el TOTAL por ${askedQty} piezas es ${fmtMoney({ ...pi, amount: total })}. Dile el total y comparte el link (en Mercado Libre elige la cantidad ${askedQty}).`;
           }
         }
         // Available colors/variants for the requested size — so the bot can
@@ -2727,7 +3136,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         let mentionedReforzada = false;
         if (!oobHandled && inSinRefuerzo) {
           try {
-            const { resolvePrice, trackedLink } = require("./priceResolver");
+            const { resolvePrice, trackedLink, fmtMoney } = require("./priceResolver");
             const refFams = await reforzadaFamilies();
             const refLeaf = refFams.length ? await toolsMod.findProductInFamilies(String(userMessage), refFams, wantDims) : null;
             if (refLeaf) {
@@ -2775,7 +3184,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             const cDoc = await toolsMod.findProductInFamilies(closest.size || closest.label || "", familyList, closest.dims);
             if (cDoc) {
               cId = String(cDoc._id);
-              const { resolvePrice, trackedLink } = require("./priceResolver");
+              const { resolvePrice, trackedLink, fmtMoney } = require("./priceResolver");
               const cpi = await resolvePrice(cDoc, altOpt(state, cDoc));
               if (cpi && cpi.amount) {
                 cAmount = cpi.amount;
@@ -2846,7 +3255,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // is BOUND to the product: re-resolve ITS price from ML (first rule) so a
         // follow-up never reverts to the promo/default price.
         const PF = require("../../models/ProductFamily");
-        const { resolvePrice, trackedLink } = require("./priceResolver");
+        const { resolvePrice, trackedLink, fmtMoney } = require("./priceResolver");
         const doc = await PF.findById(turnActiveProductId).lean().catch(() => null);
         if (doc && doc.sellable) {
           const pi = await resolvePrice(doc, altOpt(state, doc));
@@ -2861,9 +3270,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           } else if (pi && pi.quoteThenHandoff) {
             // Price resolved but NO purchase link → quote it AND hand off to close.
             turnHandoffReason = `Cotización ${doc.size || doc.name}: ${pi.handoffReason || "sin link de compra — concretar con un asesor"}`;
-            turnHandoffPreface = `"${doc.name}" (${doc.size || ""}) tiene un precio de $${pi.amount}${pi.plusIva ? " + IVA" : ""}.`;
+            turnHandoffPreface = `"${doc.name}" (${doc.size || ""}) tiene un precio de ${fmtMoney(pi)}.`;
             turnContextExtra =
-              `\n- COTIZA + HANDOFF: "${doc.name}" (${doc.size || ""}) cuesta $${pi.amount}${pi.plusIva ? " + IVA" : ""} pero NO tiene link de compra en línea; ` +
+              `\n- COTIZA + HANDOFF: "${doc.name}" (${doc.size || ""}) cuesta ${fmtMoney(pi)} pero NO tiene link de compra en línea; ` +
               `el sistema lo pasará con un asesor para concretar. Dile el PRECIO y que un asesor le ayuda a concretar; NO inventes un link.`;
           } else if (pi && pi.handoff) {
             turnHandoffReason = `Cotización ${doc.size || doc.name}: ${pi.handoffReason || "requiere validación de precio con un asesor"}`;
@@ -2877,7 +3286,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
                 ? ` CON DESCUENTO (rebajado de $${Math.round(pi.originalPrice)} a $${pi.amount})`
                 : "";
             turnContextExtra =
-              `\n- PRODUCTO ACTIVO: el cliente sigue tratando "${doc.name}" (${doc.size || ""}). Precio $${pi.amount}${pi.plusIva ? " + IVA" : ""}${disc}${pi.source === "ml" ? " (Mercado Libre)" : " (inventario)"}.` +
+              `\n- PRODUCTO ACTIVO: el cliente sigue tratando "${doc.name}" (${doc.size || ""}). Precio ${fmtMoney(pi)}${disc}${pi.source === "ml" ? " (Mercado Libre)" : " (inventario)"}.` +
               (link ? ` Link: ${link}.` : "") +
               (pi.plusIva ? ` Este precio es MÁS IVA: di SIEMPRE "$${pi.amount} + IVA".` : "") +
               ` SIEMPRE dile el PRECIO CONCRETO ($${pi.amount})${disc ? ` y que está REBAJADO desde $${Math.round(pi.originalPrice)}` : ""} y COMPARTE el link. ` +

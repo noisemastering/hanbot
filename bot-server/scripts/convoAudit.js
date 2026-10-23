@@ -17,7 +17,8 @@ const CUTOFF = new Date(process.argv[2] || "2026-06-22T00:00:00Z");
 const openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 
 const RUBRIC = `Eres un auditor de calidad de un bot de ventas de malla sombra (Hanlob), español mexicano.
-Te doy el ÚLTIMO mensaje del BOT y el contexto previo. Marca SOLO errores reales (severidad media o alta).
+Te doy el ÚLTIMO mensaje del BOT, la HORA LOCAL (Ciudad de México) en que se envió, y el contexto previo. Marca SOLO errores reales (severidad media o alta).
+HORARIO: la atención humana es lunes a viernes de 8am a 6pm, hora de Ciudad de México. Si el bot dice "un especialista te contactará hoy a las 8am" y la hora local de la respuesta es ANTES de las 8am, es CORRECTO: no lo marques. Usa SIEMPRE la hora local que te doy, nunca supongas la hora.
 
 CATEGORÍAS de error:
 - nonsense: incoherente, se contradice, ignora lo que preguntó el cliente, mezcla productos equivocados.
@@ -41,7 +42,18 @@ Devuelve SOLO JSON:
 {"error": true|false, "categoria": "nonsense|precio|link|negacion_falsa|descuento_vago|multimedida|impermeable|nombre|otro", "severidad": "media|alta", "cita": "<texto literal del bot>", "motivo": "<por qué; NUNCA 'breve'>"}
 Si no hay error: {"error": false}. Solo error:true si severidad media o alta; "cita" obligatoria y literal.`;
 
-async function judge(botText, contextLines) {
+// EVERY date in the DB is UTC; Hanlob runs on Mexico City time (UTC-6). Printing the
+// raw ISO string made the judge (and me) read 11:54Z as "almost noon" and flag a
+// perfectly correct "un especialista te contactará hoy a las 8am" — it was 05:54 CST,
+// genuinely before opening. The judge now gets the LOCAL time and so does the report.
+function mxTime(d) {
+  try {
+    return new Date(d).toLocaleString("es-MX", { timeZone: "America/Mexico_City", dateStyle: "short", timeStyle: "short" }) + " CDMX";
+  } catch {
+    return new Date(d).toISOString();
+  }
+}
+async function judge(botText, contextLines, mxTimeStr) {
   try {
     const res = await openai.chat.completions.create({
       model: "gpt-4o",
@@ -50,7 +62,7 @@ async function judge(botText, contextLines) {
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: RUBRIC },
-        { role: "user", content: `CONTEXTO (cronológico):\n${contextLines}\n\n=== RESPUESTA DEL BOT A EVALUAR ===\n${botText}` },
+        { role: "user", content: `HORA LOCAL (Ciudad de México) DE LA RESPUESTA: ${mxTimeStr || "(desconocida)"}\n\nCONTEXTO (cronológico):\n${contextLines}\n\n=== RESPUESTA DEL BOT A EVALUAR ===\n${botText}` },
       ],
     });
     return JSON.parse(res.choices[0].message.content);
@@ -91,10 +103,10 @@ async function judge(botText, contextLines) {
       if (sess.length >= 4) break;
     }
     const contextLines = sess.reverse().map((m) => `${m.senderType === "user" ? "CLIENTE" : "BOT"}: ${(m.text || "").slice(0, 200)}`).join("\n");
-    const v = await judge(b.text, contextLines || "(sin contexto)");
+    const v = await judge(b.text, contextLines || "(sin contexto)", mxTime(b.timestamp));
     judged++;
     if (v && v.error === true && (v.severidad === "media" || v.severidad === "alta")) {
-      flags.push({ ...v, psid: b.psid, ts: b.timestamp.toISOString() });
+      flags.push({ ...v, psid: b.psid, ts: mxTime(b.timestamp) });
     }
   }
   const byCat = {};

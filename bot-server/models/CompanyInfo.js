@@ -10,6 +10,9 @@ const companyInfoSchema = new mongoose.Schema({
 
   // Contact
   phones: [{ label: String, number: String }],
+  // WhatsApp click-to-chat link (wa.me/message/...). Kept as data, not in code,
+  // so it is editable from the dashboard like every other contact detail.
+  whatsappLink: { type: String },
   emails: [{ label: String, email: String }],
   website: { type: String },
 

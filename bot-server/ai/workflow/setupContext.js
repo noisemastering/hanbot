@@ -5,7 +5,7 @@
 // router and node prompts read each turn. Also resolves the price for the
 // preloaded product via the quoting hierarchy (ML → Inventario → handoff).
 const mongoose = require("mongoose");
-const { resolvePrice, mlLinkOf } = require("./priceResolver");
+const { resolvePrice, mlLinkOf, fmtMoney } = require("./priceResolver");
 const { getBusinessInfo } = require("../../businessInfoManager");
 
 const pick = (a, b) => (a !== undefined && a !== null && a !== "" ? a : b);
@@ -593,7 +593,7 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
         pol.refund?.windowDays ? `devoluciones: ${pol.refund.windowDays} días` : null,
       ].filter(Boolean).join("; ");
       lines.push(D(
-        `- PRECIO: $${pi.amount}${pi.plusIva ? " + IVA" : ""} (fuente: ${store}${pi.hasDiscount ? `, con descuento desde $${pi.originalPrice}` : ""}). ` +
+        `- PRECIO: ${fmtMoney(pi)} (fuente: ${store}${pi.hasDiscount ? `, con descuento desde $${pi.originalPrice}` : ""}). ` +
           `Este producto se vende a través de ${store}. DÍSELO al cliente con naturalidad (que la compra, el precio, el envío y las devoluciones son con ${store}). ` +
           (polTxt ? `Políticas de ${store} → ${polTxt}. ` : "") +
           `Cotiza este precio. Link: ${plink || "(usa la herramienta)"}.`
@@ -616,7 +616,7 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
           pol.refund?.windowDays ? `devoluciones ${pol.refund.windowDays} días` : null,
         ].filter(Boolean).join("; ");
         lines.push(D(
-          `- PRECIO: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${pi.hasDiscount ? `, con descuento desde $${pi.originalPrice}` : ""}. ` +
+          `- PRECIO: ${fmtMoney(pi)}${pi.hasDiscount ? `, con descuento desde $${pi.originalPrice}` : ""}. ` +
             `Este producto se compra en ${pi.marketplace}: comparte el link de ${pi.marketplace} y, si el cliente pregunta por compra/envío/devoluciones, dile que son con ${pi.marketplace}. ` +
             `NO menciones Mercado Libre ni "compra protegida de Mercado Libre" para este producto. ` +
             (polTxt ? `Políticas de ${pi.marketplace}: ${polTxt}. ` : "") +

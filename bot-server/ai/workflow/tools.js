@@ -715,7 +715,7 @@ const REGISTRY = {
     },
     async execute(input, ctx) {
       ctx.actions.push({ tool: "share_product_link", input });
-      const { resolvePrice, trackedLink } = require("./priceResolver");
+      const { resolvePrice, trackedLink, fmtMoney } = require("./priceResolver");
       const requested = (input.product || "").trim();
 
       // Campaign-scoped alternate marketplace: price these products through the alt
@@ -764,13 +764,13 @@ const REGISTRY = {
             pInfo.hasDiscount && Number(pInfo.originalPrice) > Number(pInfo.amount)
               ? ` (CON DESCUENTO, rebajado de $${Math.round(pInfo.originalPrice)})`
               : "";
-          const price = pInfo.amount ? ` Precio: $${pInfo.amount}${pInfo.plusIva ? " + IVA" : ""}${disc}${srcLabel(pInfo)}.` : "";
+          const price = pInfo.amount ? ` Precio: ${fmtMoney(pInfo)}${disc}${srcLabel(pInfo)}.` : "";
           const linkPart = link ? `Link de compra: ${link}.` : "";
           // Price but NO purchase link → quote it AND hand off to close the sale.
           if (pInfo.quoteThenHandoff || (pInfo.handoff && !link)) {
             ctx.handoffRequested = true;
             ctx.handoffReason = pInfo.handoffReason || `Sin link de compra: ${doc.name} — concretar con un asesor`;
-            ctx.handoffPreface = ctx.handoffPreface || `${doc.name} — $${pInfo.amount}${pInfo.plusIva ? " + IVA" : ""}.`;
+            ctx.handoffPreface = ctx.handoffPreface || `${doc.name} — ${fmtMoney(pInfo)}.`;
             return { ok: true, line: `${doc.name} —${price} (sin link de compra en línea; el sistema lo pasará con un asesor para concretar la compra).` };
           }
           return { ok: true, line: `${doc.name} — ${linkPart}${price}`.trim() };
@@ -843,13 +843,13 @@ const REGISTRY = {
           pi.hasDiscount && Number(pi.originalPrice) > Number(pi.amount)
             ? ` (CON DESCUENTO, rebajado de $${Math.round(pi.originalPrice)})`
             : "";
-        const price = pi.amount ? ` Precio: $${pi.amount}${pi.plusIva ? " + IVA" : ""}${disc}${srcLabel(pi)}.` : "";
+        const price = pi.amount ? ` Precio: ${fmtMoney(pi)}${disc}${srcLabel(pi)}.` : "";
         const linkPart = link ? `Link de compra: ${link}.` : "";
         // Price but NO purchase link → quote it AND hand off to close the sale.
         if (pi.quoteThenHandoff || (pi.handoff && !link)) {
           ctx.handoffRequested = true;
           ctx.handoffReason = pi.handoffReason || `Sin link de compra: ${pName || "(producto del flujo)"} — concretar con un asesor`;
-          ctx.handoffPreface = ctx.handoffPreface || `${pName ? pName + " — " : ""}$${pi.amount}${pi.plusIva ? " + IVA" : ""}.`;
+          ctx.handoffPreface = ctx.handoffPreface || `${pName ? pName + " — " : ""}${fmtMoney(pi)}.`;
           return `${pName ? pName + " — " : ""}${price} (sin link de compra en línea; el sistema lo pasará con un asesor para concretar la compra).`.trim();
         }
         return `${pName ? pName + " — " : ""}${linkPart}${price}`.trim();
@@ -1219,6 +1219,14 @@ async function nearestRollByArea(targetArea, familyList, opts = {}) {
 // "5 unidades". Returns the integer or null. Conservative — requires a unit word
 // so a MEASURE ("4x50", "50 metros") is never mistaken for a quantity. A bare
 // number is handled by the caller only when it's clearly a quantity reply.
+// A number glued to a SMALL unit (cm/mm) is a size the customer is describing, never
+// an order quantity. "10 cm de ancho, me gusta que sobre" was read as 10 rollos in the
+// borde flow and the same hole existed in the rollo flow's bare-number fallback. One
+// definition, used by both — see ai/workflow/bordeOrder.js for why that matters.
+function hasUnitBoundNumber(text) {
+  return /\b\d{1,4}(?:[.,]\d+)?\s*(?:cm|mm|cent[ií]metros?|mil[ií]metros?)/i.test(String(text || ""));
+}
+
 function parseRollQuantity(text) {
   const t = String(text || "").toLowerCase();
   let m = t.match(/(\d+)\s*(rollos?|piezas?|pzas?\.?|unidades?|tramos?)\b/);
@@ -1229,4 +1237,4 @@ function parseRollQuantity(text) {
   return null;
 }
 
-module.exports = { REGISTRY, toolDefsFor, runTool, dimsOf, stripMeasures, findProductInFamilies, availableVariantsForProduct, availableMeasuresForFamilies, closestAvailableMeasure, nearestRollByArea, parseRollQuantity, qtyFromText, orderedQty, wantsWholesale, productShade, availableShadesForMeasure };
+module.exports = { REGISTRY, toolDefsFor, runTool, dimsOf, stripMeasures, findProductInFamilies, availableVariantsForProduct, availableMeasuresForFamilies, closestAvailableMeasure, nearestRollByArea, parseRollQuantity, hasUnitBoundNumber, qtyFromText, orderedQty, wantsWholesale, productShade, availableShadesForMeasure };

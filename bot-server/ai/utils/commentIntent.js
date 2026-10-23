@@ -39,7 +39,11 @@ async function classifyComment(comment) {
   // (greetings, praise, off-topic) fall through to the model below.
   const shippingSig = /\benv[ií]o|env[ií]an|\bflete\b|\bllega\b|\bentrega|a\s+domicilio|\bmandan|paqueter/i.test(key);
   const buyerSig = /\bprecio|cu[aá]nto|cotiz|costo|\bvale\b|\$|\d+\s*(?:x|×|por)\s*\d+|\d+\s*(?:m|mts|metros?)\b|\bquiero\b|me\s+interesa|\bocupo\b|\bnecesito\b|comprar|apart[ao]|\binformes?\b|\binfo\b|disponible|dispon[ií]bilidad|\bmedida/i.test(key);
-  if (buyerSig || shippingSig) {
+  // "Ubicación" — a one-word comment asking where we are — was dropped as
+  // not_worth_it (reported 2026-10-23). It is a lead AND an answer we already have in
+  // CompanyInfo, so it never belongs in the model's hands.
+  const locationSig = /\bubicaci|\bdirecci[oó]n\b|\bd[oó]nde\s+(est[aá]n|se\s+ubic|queda|los?\s+encuentro)|\bsucursal|c[oó]mo\s+llego|\bmapa\b|\bplanta\b/i.test(key);
+  if (buyerSig || shippingSig || locationSig) {
     const result = { reply: true, type: (shippingSig && !buyerSig) ? 'shipping' : 'general' };
     if (_cache.size >= _CACHE_MAX) _cache.delete(_cache.keys().next().value);
     _cache.set(key, result);
@@ -72,6 +76,8 @@ EJEMPLOS:
 - "hacen envíos a Sonora?" → {"reply":true,"type":"shipping"}
 - "llega a mi ciudad" → {"reply":true,"type":"shipping"}
 - "info" → {"reply":true,"type":"general"}
+- "ubicación" → {"reply":true,"type":"general"}
+- "dónde están?" → {"reply":true,"type":"general"}
 - "qué bonito 😍" → {"reply":false,"type":null}
 - "👏👏👏" → {"reply":false,"type":null}
 - "@Maria mira esto" → {"reply":false,"type":null}

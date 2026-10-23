@@ -29,6 +29,81 @@ function numericPrice(p) {
 // RULE (all flows): an active product with a price but NO purchase link is still
 // QUOTED, but it can't be bought self-service, so we ALSO hand off to a human to
 // close the sale. With a link, the quote stands as-is.
+// ── ROLLO COMPLETO ───────────────────────────────────────────────────────────
+// Decided 2026-10-23, after five reported conversations in two days.
+//
+// A full roll is a wholesale-shaped sale: an asesor quotes it, closes it and
+// quotes the freight. It is the ONE case where the live Mercado Libre price does
+// NOT win, because our ML listings for full rolls are priced well above our own
+// direct price. Ground Cover 4x100 m sold on ML for $5,314 while the direct
+// price is $4,222.40 ($3,640 sheet + IVA) — a customer who had both numbers
+// replied "juegan con sus precios" and an asesor had to apologize. So for a full
+// roll: our price sheet decides, IVA included, no buy link, always a handoff.
+//
+// IVA is folded into the amount here rather than left as a "+ IVA" suffix: the
+// asesores quote these rolls gross ($4,222.40, not "$3,640 + IVA"), and a
+// customer who anchors on the net number feels the same bait-and-switch twice.
+const IVA_RATE = 0.16;
+const round2 = (n) => Math.round(n * 100) / 100;
+
+// A full roll is identified from productCode (CAT-TYPE-SHADE-COLOR-SIZE, where
+// SIZE is e.g. 02X100 / 04X100 / 54M), with a name fallback for anything whose
+// code is missing. Only the two shapes the catalogue actually sells as full
+// rolls count: a 100 m roll of any width, and the borde's 54 m roll. The 47 m UV
+// cord roll is deliberately NOT one — it is a $300 complement with no cut
+// version, and routing it through an asesor would help nobody.
+const FULL_ROLL_CODE = /(?:^|-)(?:\d{1,2}(?:[.,]\d)?X100|54M)$/i;
+const FULL_ROLL_NAME = /(?:\b\d{1,2}(?:[.,]\d)?\s*[x\u00d7]\s*100\b|\brollo\s+de\s+54\s*m\b)/i;
+
+// Synchronous read of whatever the caller happened to load.
+function isFullRoll(product) {
+  if (!product) return false;
+  const code = String(product.productCode || "").trim();
+  if (code) return FULL_ROLL_CODE.test(code);
+  return FULL_ROLL_NAME.test(String(product.name || ""));
+}
+
+// …and the version resolvePrice actually uses.
+//
+// The sync read is not enough on its own, and the reason is worth keeping: the
+// sellable leaf for GC 4x100 m is named just "Negro" — the size lives in its
+// productCode (GC-ROL-NEG-04X100) and in its PARENT's name ("Rollo de 4x100 m").
+// Most gates build their own projections and few of them select productCode, so
+// a rule that trusted the loaded document silently did nothing for exactly the
+// product that caused the complaint. Rather than add productCode to a dozen
+// .select() lists and wait for the thirteenth to forget it, this reads the two
+// fields itself, once per product per process.
+const _fullRollCache = new Map(); // productId → boolean
+
+async function resolveIsFullRoll(product) {
+  if (!product) return false;
+  if (isFullRoll(product)) return true;
+  // A code we actually loaded and that did NOT match settles it — no lookup.
+  if (String(product.productCode || "").trim()) return false;
+  const id = product._id ? String(product._id) : null;
+  if (!id) return false;
+  if (_fullRollCache.has(id)) return _fullRollCache.get(id);
+
+  let verdict = false;
+  try {
+    const PF = require("../../models/ProductFamily");
+    const self = await PF.findById(id).select("productCode name parentId").lean();
+    if (self) {
+      verdict = isFullRoll(self);
+      if (!verdict && self.parentId) {
+        const parent = await PF.findById(self.parentId).select("productCode name").lean();
+        // The parent carries the size for colour-only leaves. Its productCode is
+        // NOT consulted: a family's code can describe a whole size group.
+        if (parent) verdict = FULL_ROLL_NAME.test(String(parent.name || ""));
+      }
+    }
+  } catch {
+    verdict = false; // never block a quote on this lookup
+  }
+  _fullRollCache.set(id, verdict);
+  return verdict;
+}
+
 function noLinkResult(base, product) {
   if (base.link) return { ...base, handoff: false };
   return {
@@ -54,6 +129,10 @@ async function resolveViaAltPos(product, pos) {
   // this POS's link for the routed products. No price API is queried.
   if (pos.kind !== "http_price_api") {
     const base = await resolvePrice(product, {}); // normal ML/inventario hierarchy
+    // A ROLLO COMPLETO is never relinked and never loses its handoff. Without
+    // this the clause below would hand back the very buy link the rule withholds
+    // and clear the handoff that routes the sale to an asesor.
+    if (base.fullRoll) return base;
     // Only relink when there's a real price to quote AND an alt link to point to;
     // otherwise leave the default result (incl. its handoff) exactly as-is.
     if (!link || !(numericPrice(base.amount) > 0)) return base;
@@ -135,8 +214,57 @@ async function resolvePrice(product, opts = {}) {
       source: null,
       handoff: true,
       soldOut: true,
-      link: mlLinkOf(product),
+      // A full roll never hands out a buy link, sold out or not — otherwise the
+      // one path that runs BEFORE the full-roll branch leaks the ML link it
+      // exists to withhold.
+      link: (await resolveIsFullRoll(product)) ? null : mlLinkOf(product),
       handoffReason: `Producto AGOTADO (activo, sin stock): ${product.name || "producto del flujo"} — pasar con un asesor para seguimiento/aviso`,
+    };
+  }
+
+  // ROLLO COMPLETO (see the note above isFullRoll): the sheet price, IVA in,
+  // no link, always a handoff. Placed BEFORE the live-ML fetch on purpose — for
+  // a full roll the ML price is not a better answer, it is the wrong one.
+  if (await resolveIsFullRoll(product)) {
+    // Read the sheet price and the tax flag from the DB, not from the caller's
+    // projection. The same missing .select() that hid productCode also hides
+    // priceExcludesTax, and quoting a net price as if it were gross undercharges
+    // by 16% — the mirror image of the bug this rule exists to fix. NOT cached:
+    // inventory prices are edited in the dashboard and must take effect at once.
+    let sheet = numericPrice(product.price);
+    let excludesTax = !!product.priceExcludesTax;
+    if (product._id) {
+      try {
+        const PF = require("../../models/ProductFamily");
+        const fresh = await PF.findById(product._id).select("price priceExcludesTax").lean();
+        if (fresh) {
+          sheet = numericPrice(fresh.price);
+          excludesTax = !!fresh.priceExcludesTax;
+        }
+      } catch { /* fall back to whatever the caller loaded */ }
+    }
+    const gross = sheet == null ? null : round2(excludesTax ? sheet * (1 + IVA_RATE) : sheet);
+    if (gross != null) {
+      return {
+        amount: gross,
+        source: "inventario",
+        live: false,
+        link: null,
+        plusIva: false,
+        ivaIncluded: excludesTax,
+        fullRoll: true,
+        handoff: true,
+        quoteThenHandoff: true,
+        handoffReason: `ROLLO COMPLETO: ${product.name || "producto"} — cotizado en $${gross}${excludesTax ? " (IVA incluido)" : ""} del precio de lista, SIN link de Mercado Libre; el asesor cierra la venta y cotiza el envío`,
+      };
+    }
+    return {
+      amount: null,
+      source: null,
+      link: null,
+      fullRoll: true,
+      handoff: true,
+      handoffReason: `ROLLO COMPLETO sin precio de lista: ${product.name || "producto"} — cotizar con un asesor, sin dar precio`,
     };
   }
 
@@ -180,9 +308,60 @@ async function resolvePrice(product, opts = {}) {
     }
   }
 
-  // The LIVE ML price was NOT available (no link, fetch failed/404, or the
-  // listing has no price). We do NOT silently quote Inventario — the ML price is
-  // paramount; Inventario is a downgrade only when there's genuinely NO ML price.
+  // NO ML LINK AT ALL → `mlPrice` describes a listing we no longer point anyone to.
+  // Nobody set that number on purpose: the sync wrote it, and the sync finds products
+  // BY their link, so the moment the link goes the cached price freezes forever (the
+  // delisted borde rolls are stuck on a June sync). Keeping it in play bought nothing
+  // — on every unlinked product it equals `price` — while the "inventario below the
+  // last ML price" guard below would fire the first time someone lowers the sheet
+  // price for a delisted item, and the bot would stop quoting a price at all. That
+  // guard protects a LIVE listing from being undersold; with no listing there is
+  // nothing to undersell. So: no link ⇒ the price sheet decides, and the quote still
+  // hands off, because the customer can't self-serve without a link.
+  if (!link) {
+    if (invPrice != null) {
+      return noLinkResult({ amount: invPrice, source: "inventario", link: null, plusIva }, product);
+    }
+    // NO SHEET PRICE EITHER → hand off, and quote NOTHING. The stale `mlPrice` is not a
+    // fallback: nobody set it, it belongs to a listing we removed, and a number no
+    // human stands behind is worse than no number. A person quotes this one.
+    return {
+      amount: null,
+      source: null,
+      handoff: true,
+      link: null,
+      handoffReason: `Sin link de compra y sin precio de lista para ${product.name || "el producto"} — cotizar con un asesor${syncedMl != null ? ` (el último precio ML conocido, $${syncedMl}, es de una publicación retirada: NO cotizarlo al cliente)` : ""}`,
+    };
+  }
+
+  // THE LINK EXISTS BUT THE LISTING SELLS NOTHING (404, paused, catalogue with no
+  // winner). The customer cannot buy there, and the cached `mlPrice` is the price of
+  // exactly that dead listing — so it is not the number to quote either. Look in the
+  // PRICE SHEET; if the sheet has nothing, quote NOTHING and hand off. The link is
+  // withheld in both cases: sending someone to a page with nothing to buy is worse
+  // than sending them nowhere. (This runs BEFORE the undersell guard below: that guard
+  // protects a LIVE listing from being undercut, and this listing isn't live.)
+  if (mlUnpriceable) {
+    if (invPrice != null) {
+      return {
+        amount: invPrice, source: "inventario", live: false, link: null, plusIva,
+        handoff: true, quoteThenHandoff: true,
+        handoffReason: `Sin publicación activa en Mercado Libre para ${product.name || "el producto"} — cotizado en $${invPrice} (precio de lista); cerrar la venta con un asesor`,
+      };
+    }
+    return {
+      amount: null,
+      source: null,
+      handoff: true,
+      link: null,
+      handoffReason: `Sin publicación activa en Mercado Libre y sin precio de lista para ${product.name || "el producto"} — cotizar con un asesor${syncedMl != null ? ` (el último precio ML conocido, $${syncedMl}, es de esa publicación caída: NO cotizarlo al cliente)` : ""}`,
+    };
+  }
+
+  // A LINK EXISTS, the listing is presumably fine, but we could NOT READ the live
+  // price (ML unreachable). Here the cached price still describes a REAL, buyable
+  // listing, so it stands in until ML answers again — and the undersell guard below
+  // still applies, because the customer can click through to the real price.
   if (syncedMl != null) {
     // 2a. We still have a last-synced ML price. If Inventario is BELOW it, the
     //     two sources disagree and quoting the cheaper Inventario would
@@ -200,19 +379,8 @@ async function resolvePrice(product, opts = {}) {
       };
     }
     // 2b. No conflict (Inventario ≥ synced, or no Inventario) → quote the
-    //     last-synced ML price (still the source of truth, just cached). If there
-    //     is NO purchase link, we still QUOTE the price but HAND OFF (a customer
-    //     can't self-serve without a link) — see noLinkResult.
-    // A link ML won't price is a dead end for the customer: quote the last known
-    // price, but close with an asesor instead of sending them to a page where
-    // nothing is buyable.
-    if (mlUnpriceable) {
-      return {
-        amount: syncedMl, source: "ml", live: false, link: null, plusIva: false,
-        handoff: true, quoteThenHandoff: true,
-        handoffReason: `Sin publicación activa en Mercado Libre para ${product.name || "el producto"} — cotizado en $${syncedMl}; cerrar la venta con un asesor`,
-      };
-    }
+    //     last-synced ML price. The listing is live; this is the same number the
+    //     customer will see when they click, just read from cache.
     return noLinkResult({ amount: syncedMl, source: "ml", live: false, link, plusIva: false }, product); // ML price → IVA included
   }
 
@@ -225,7 +393,12 @@ async function resolvePrice(product, opts = {}) {
 
   // 4. sellable but no price anywhere → human handoff (never invent a price).
   const sellable = product.active !== false && product.sellable === true;
-  if (sellable) return { amount: null, source: null, handoff: true, link };
+  if (sellable) {
+    return {
+      amount: null, source: null, handoff: true, link,
+      handoffReason: `Sin precio registrado para ${product.name || "el producto"} — cotizar con un asesor`,
+    };
+  }
 
   // 5. not quotable
   return { ...empty, link };
@@ -443,4 +616,23 @@ function clampMeasures(text, canonical, allowedPairs = []) {
   return { text: out, changed };
 }
 
-module.exports = { resolvePrice, mlLinkOf, trackedLink, sanitizeMarketplaceLinks, enforceAltMarketplaceLink, clampPrices, clampMeasures, isGenericMlUrl, officialStoreUrl };
+// One place that turns a resolved price into the text customers see. Before
+// this, twenty-odd call sites each wrote `$${pi.amount}${pi.plusIva ? " + IVA"
+// : ""}` by hand, so a new tax shape had to be added in twenty places or it
+// silently printed the wrong thing in nineteen of them.
+function fmtMoney(pi) {
+  if (!pi || pi.amount == null) return "";
+  // Cents get both digits or none: a gross price printed as "$4222.4" reads like
+  // a typo next to the asesor's "$4,222.40". Whole pesos stay bare, which is how
+  // every other price in the bot is written.
+  const n = Number(pi.amount);
+  const amt = Number.isFinite(n) && Math.round(n * 100) % 100 !== 0 ? n.toFixed(2) : String(pi.amount);
+  if (pi.plusIva) return `$${amt} + IVA`;
+  if (pi.ivaIncluded) return `$${amt} (IVA incluido)`;
+  return `$${amt}`;
+}
+
+module.exports = {
+  isFullRoll,
+  resolveIsFullRoll,
+  fmtMoney, resolvePrice, mlLinkOf, trackedLink, sanitizeMarketplaceLinks, enforceAltMarketplaceLink, clampPrices, clampMeasures, isGenericMlUrl, officialStoreUrl };

@@ -18,6 +18,13 @@ async function getBusinessInfo() {
       _cache = {
         name: info.name || 'Hanlob',
         phones: (info.phones || []).map(p => p.number).filter(Boolean),
+        // Labelled phones ("Oficina" vs "WhatsApp"), because telling a customer
+        // WHICH number is WhatsApp is the difference between a number they can
+        // use and one they have to guess about.
+        phonesLabelled: (info.phones || [])
+          .filter(p => p && p.number)
+          .map(p => ({ label: (p.label || "").trim(), number: p.number.trim() })),
+        whatsappLink: info.whatsappLink || '',
         hours: (info.schedule || [])
           .filter(s => !s.closed && s.open && s.close)
           .map(s => `${s.day}: ${s.open} - ${s.close}`)
@@ -46,6 +53,8 @@ async function getBusinessInfo() {
   return {
     name: "Hanlob",
     phones: [],
+    phonesLabelled: [],
+    whatsappLink: '',
     hours: "Lunes a Viernes de 8:00 a 18:00",
     address: "Microparque Industrial Navex Park, Querétaro",
     fullAddress: "Calle Loma de San Gremal No. 108, bodega 73, Microparque Industrial Navex Park, Col. Ejido Santa María Magdalena, C.P. 76137, Santiago de Querétaro, Qro.",
