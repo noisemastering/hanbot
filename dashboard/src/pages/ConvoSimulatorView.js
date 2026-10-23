@@ -9,10 +9,21 @@
 // `sandboxOnly` renders JUST the chat tester (no prompt editor) — used by the
 // Bot-menu sandbox so admins/campaign managers can test flows without touching
 // prompts.
+//
+// TWO WAYS IN, same engine:
+//   "por anuncio" — pick the ad; its attached flow + config (ad.workflowSetup)
+//                   are pulled and locked, which is what production seeds an
+//                   ad-routed conversation with. Nothing to assemble by hand.
+//   "por flujo"   — the original path: pick the flow, optionally override the
+//                   setup yourself. Unchanged, and still the only way to test a
+//                   flow that no ad points at yet.
+// The Bot sandbox opens on "por anuncio" (testers think in ads); the super_admin
+// playground opens on "por flujo", since its prompt editor is flow-centric.
 import React, { useState, useEffect } from "react";
 import toast from "react-hot-toast";
 import API from "../api";
 import SandboxTester from "../components/workflow/SandboxTester";
+import AdSandboxPicker from "../components/workflow/AdSandboxPicker";
 import { useAuth } from "../contexts/AuthContext";
 
 // After this many conversations tested in the Bot sandbox, we surface a
@@ -20,6 +31,9 @@ import { useAuth } from "../contexts/AuthContext";
 const SANDBOX_CONVO_LIMIT = 5;
 
 function ConvoSimulatorView({ sandboxOnly = false }) {
+  const [mode, setMode] = useState(sandboxOnly ? "ad" : "flow");
+  const [adId, setAdId] = useState("");
+  const [adConfig, setAdConfig] = useState(null);
   const [workflows, setWorkflows] = useState([]);
   const [selectedId, setSelectedId] = useState("");
   const [workflow, setWorkflow] = useState(null);
@@ -61,6 +75,16 @@ function ConvoSimulatorView({ sandboxOnly = false }) {
     }
   };
 
+  // In ad mode the ad decides the flow; in flow mode the picker does. Everything
+  // downstream (chat, prompt editor, report) reads these two, so neither mode
+  // needs its own copy of the tester.
+  const adMode = mode === "ad";
+  const activeWorkflowId = adMode ? adConfig?.workflow?.id || "" : selectedId;
+  const activeWorkflowName = adMode
+    ? adConfig?.workflow?.name || ""
+    : workflow?.name || "";
+  const adLabel = adMode && adConfig ? `${adConfig.ad.name} [${adConfig.ad.fbAdId}]` : "";
+
   // Load the workflow list once.
   useEffect(() => {
     (async () => {
@@ -87,15 +111,16 @@ function ConvoSimulatorView({ sandboxOnly = false }) {
     return wf;
   };
 
-  // Load full workflow when selection changes.
+  // Load full workflow when the driving flow changes — in ad mode that is the
+  // flow the ad points at, so the prompt editor still edits the right one.
   useEffect(() => {
     setCurrentNode(null);
     setNodePrompt("");
-    loadWorkflow(selectedId).catch((err) =>
+    loadWorkflow(activeWorkflowId).catch((err) =>
       toast.error(err.response?.data?.error || "No se pudo cargar el workflow")
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedId]);
+  }, [activeWorkflowId]);
 
   // Sync the node-prompt editor to the active node.
   useEffect(() => {
@@ -112,7 +137,7 @@ function ConvoSimulatorView({ sandboxOnly = false }) {
     if (!currentNode) return;
     setSavingNode(true);
     try {
-      const res = await API.patch(`/workflows/${selectedId}/prompts`, {
+      const res = await API.patch(`/workflows/${activeWorkflowId}/prompts`, {
         node: { id: currentNode.id, prompt: nodePrompt },
       });
       setWorkflow(res.data?.data);
@@ -127,7 +152,7 @@ function ConvoSimulatorView({ sandboxOnly = false }) {
   const saveGlobal = async () => {
     setSavingGlobal(true);
     try {
-      const res = await API.patch(`/workflows/${selectedId}/prompts`, { globalPrompt });
+      const res = await API.patch(`/workflows/${activeWorkflowId}/prompts`, { globalPrompt });
       setWorkflow(res.data?.data);
       toast.success("Prompt global guardado · aplica en el próximo mensaje");
     } catch (err) {
@@ -141,7 +166,7 @@ function ConvoSimulatorView({ sandboxOnly = false }) {
   const reloadFlow = async () => {
     setReloading(true);
     try {
-      const wf = await loadWorkflow(selectedId);
+      const wf = await loadWorkflow(activeWorkflowId);
       if (wf && currentNode) {
         const n = wf.nodes?.find((x) => x.id === currentNode.id);
         setNodePrompt(n?.prompt || "");
@@ -180,22 +205,41 @@ function ConvoSimulatorView({ sandboxOnly = false }) {
           </p>
         </div>
         <div className="flex-1" />
-        <select
-          value={selectedId}
-          onChange={(e) => setSelectedId(e.target.value)}
-          className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm min-w-[240px]"
-        >
-          <option value="">— selecciona un workflow —</option>
-          {workflows.map((w) => (
-            <option key={w._id} value={w._id}>
-              {w.name} {w.active ? "● activo" : "○ inactivo"}
-            </option>
+        <div className="inline-flex rounded-lg border border-gray-700 overflow-hidden">
+          {[
+            { k: "ad", label: "Por anuncio", hint: "Carga el flujo y la configuración ya asignados al anuncio" },
+            { k: "flow", label: "Por flujo", hint: "Elige el flujo y, si quieres, arma la configuración a mano" },
+          ].map((m) => (
+            <button
+              key={m.k}
+              onClick={() => setMode(m.k)}
+              title={m.hint}
+              className={`px-3 py-2 text-sm ${
+                mode === m.k ? "bg-primary-600 text-white font-semibold" : "bg-gray-900 text-gray-400 hover:text-gray-200"
+              }`}
+            >
+              {m.label}
+            </button>
           ))}
-        </select>
+        </div>
+        {!adMode && (
+          <select
+            value={selectedId}
+            onChange={(e) => setSelectedId(e.target.value)}
+            className="bg-gray-900 border border-gray-700 rounded-lg px-3 py-2 text-white text-sm min-w-[240px]"
+          >
+            <option value="">— selecciona un workflow —</option>
+            {workflows.map((w) => (
+              <option key={w._id} value={w._id}>
+                {w.name} {w.active ? "● activo" : "○ inactivo"}
+              </option>
+            ))}
+          </select>
+        )}
         {!sandboxOnly && (
           <button
             onClick={reloadFlow}
-            disabled={!selectedId || reloading}
+            disabled={!activeWorkflowId || reloading}
             className="px-3 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 text-white disabled:opacity-50"
             title="Re-lee el flujo desde la base de datos sin reiniciar la conversación"
           >
@@ -204,26 +248,40 @@ function ConvoSimulatorView({ sandboxOnly = false }) {
         )}
       </div>
 
-      {!selectedId ? (
+      {adMode && (
+        <div className="border border-gray-700 rounded-xl p-3 bg-gray-800/40 mb-4">
+          <AdSandboxPicker value={adId} onChange={setAdId} onConfig={setAdConfig} />
+        </div>
+      )}
+
+      {!activeWorkflowId ? (
         <div className="text-gray-500 text-sm border border-gray-700 rounded-xl p-10 text-center">
-          {workflows.length ? "Selecciona un workflow para simular." : "No hay workflows. Crea uno en Playground → Workflows."}
+          {adMode
+            ? "Selecciona un anuncio para simularlo."
+            : workflows.length
+            ? "Selecciona un workflow para simular."
+            : "No hay workflows. Crea uno en Playground → Workflows."}
         </div>
       ) : (
         <div className="flex flex-col lg:flex-row gap-4">
           {/* Chat */}
           <div className="flex-1 min-w-0">
             <SandboxTester
-              workflowId={selectedId}
-              workflowName={workflow?.name || ""}
+              workflowId={activeWorkflowId}
+              workflowName={activeWorkflowName}
               dirty={false}
               onCurrentNode={setCurrentNode}
               onSent={handleSandboxSent}
+              setupOverride={adMode ? adConfig?.setup || {} : null}
+              lockSetup={adMode}
+              adLabel={adLabel}
+              resetKey={adMode ? adId : ""}
               familyIds={
                 workflow?.families && workflow.families.length
                   ? workflow.families.filter((f) => f && f.id).map((f) => f.id)
                   : workflow?.family?.id
                   ? [workflow.family.id]
-                  : []
+                  : adConfig?.familyIds || []
               }
             />
           </div>

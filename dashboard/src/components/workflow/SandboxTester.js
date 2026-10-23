@@ -18,7 +18,22 @@ const SCENARIOS = [
   { value: "returning", label: "returning", hint: "Cliente que regresa a una conversación previa." },
 ];
 
-export default function SandboxTester({ workflowId, workflowName = "", dirty, onCurrentNode, familyIds = null, onSent = null }) {
+export default function SandboxTester({
+  workflowId,
+  workflowName = "",
+  dirty,
+  onCurrentNode,
+  familyIds = null,
+  onSent = null,
+  // Ad mode: the config comes from the ad (ad.workflowSetup), exactly as
+  // production seeds it, so there is nothing to pick and nothing to override.
+  // `adLabel` names the ad in the report; `resetKey` restarts the conversation
+  // when the ad changes even though the flow may be the same one.
+  setupOverride = null,
+  lockSetup = false,
+  adLabel = "",
+  resetKey = "",
+}) {
   const [scenario, setScenario] = useState("cold");
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
@@ -29,6 +44,11 @@ export default function SandboxTester({ workflowId, workflowName = "", dirty, on
   const [reportOpen, setReportOpen] = useState(false);
   const sessionRef = useRef(newSessionId());
   const scrollRef = useRef(null);
+
+  // In ad mode the ad's setup IS the setup — the manual picker is not just
+  // hidden, it is bypassed, so a stale manual selection can never leak into an
+  // ad simulation.
+  const effectiveSetup = lockSetup ? setupOverride || {} : setup;
 
   // Everything a reviewer needs to reproduce the turn. There is no real psid
   // here and no stored Conversation, so this text IS the whole report: the
@@ -59,12 +79,16 @@ export default function SandboxTester({ workflowId, workflowName = "", dirty, on
   const buildReportBody = () => {
     const L = [];
     L.push("--- SIMULACIÓN ---");
+    L.push(`Modo: ${lockSetup ? "por anuncio" : "por flujo (manual)"}`);
     L.push(`Flujo: ${workflowName || "(sin nombre)"}${workflowId ? ` [${workflowId}]` : ""}`);
     L.push(`Scenario: ${scenario}`);
     L.push(`Fecha y hora (CDMX): ${mxTime(Date.now())}`);
     L.push(`Sesión: ${sessionRef.current}`);
     L.push(`Nodo al reportar: ${currentNode?.name || "—"}`);
-    if (setup && Object.keys(setup).length > 0) L.push(`Setup (override): ${JSON.stringify(setup)}`);
+    if (adLabel) L.push(`Anuncio: ${adLabel}`);
+    if (effectiveSetup && Object.keys(effectiveSetup).length > 0) {
+      L.push(`Config (${lockSetup ? "del anuncio" : "override manual"}): ${JSON.stringify(effectiveSetup)}`);
+    }
     L.push("");
     L.push("--- CONVERSACIÓN SIMULADA ---");
     for (const m of messages) {
@@ -85,7 +109,8 @@ export default function SandboxTester({ workflowId, workflowName = "", dirty, on
     setSetup({});
     setMessages([]);
     setCurrentNode(null);
-  }, [workflowId]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workflowId, resetKey]);
 
   useEffect(() => {
     if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
@@ -112,7 +137,7 @@ export default function SandboxTester({ workflowId, workflowName = "", dirty, on
         sessionId: sessionRef.current,
         message: text,
         scenario,
-        setup,
+        setup: effectiveSetup,
         reset: messages.length === 0,
       });
       const data = res.data || {};
@@ -168,12 +193,14 @@ export default function SandboxTester({ workflowId, workflowName = "", dirty, on
         <button onClick={reset} className="px-3 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 text-white">
           Reiniciar
         </button>
-        <button
-          onClick={() => setSetupOpen((o) => !o)}
-          className="px-3 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 text-white"
-        >
-          {setupOpen ? "▾ Setup (override)" : "▸ Setup (override)"}
-        </button>
+        {!lockSetup && (
+          <button
+            onClick={() => setSetupOpen((o) => !o)}
+            className="px-3 py-2 text-sm rounded-lg bg-gray-700 hover:bg-gray-600 text-white"
+          >
+            {setupOpen ? "▾ Setup (override)" : "▸ Setup (override)"}
+          </button>
+        )}
         <button
           onClick={() => setReportOpen(true)}
           disabled={messages.length === 0}
@@ -197,7 +224,7 @@ export default function SandboxTester({ workflowId, workflowName = "", dirty, on
         </p>
       </div>
 
-      {setupOpen && (
+      {setupOpen && !lockSetup && (
         <div className="bg-gray-800/40 border border-gray-700 rounded-lg p-3 mb-3">
           <p className="text-[11px] text-gray-500 mb-2">
             Simula la asignación a un anuncio: estos valores sobreescriben los defaults del workflow para esta prueba.
@@ -219,6 +246,12 @@ export default function SandboxTester({ workflowId, workflowName = "", dirty, on
         <div className="px-4 py-2 border-b border-gray-800 bg-gray-800/40 flex items-center justify-between text-xs">
           <span className="text-gray-400">
             via <span className="text-gray-200">sandbox</span>
+            {adLabel && (
+              <>
+                {" · "}
+                <span className="text-sky-300">anuncio: {adLabel}</span>
+              </>
+            )}
           </span>
           <span className="text-gray-400">
             nodo actual: <span className="text-emerald-300 font-medium">{currentNode?.name || "—"}</span>
@@ -264,7 +297,7 @@ export default function SandboxTester({ workflowId, workflowName = "", dirty, on
         onClose={() => setReportOpen(false)}
         heading="Reportar conversación simulada"
         titlePrefix="Simulación reportada"
-        contextLine={`Reportado desde el Sandbox · flujo "${workflowName || workflowId}" · scenario ${scenario} · ${mxTime(Date.now())} (CDMX)`}
+        contextLine={`Reportado desde el Sandbox · ${adLabel ? `anuncio "${adLabel}" · ` : ""}flujo "${workflowName || workflowId}" · scenario ${scenario} · ${mxTime(Date.now())} (CDMX)`}
         extra={buildReportBody()}
         psid={sessionRef.current}
         source="sandbox_report"

@@ -83,6 +83,11 @@ router.get("/ads", requireAdWorkflowAccess, async (req, res) => {
   try {
     const q = (req.query.q || "").trim();
     const filter = {};
+    // attached=1 → only ads that CAN be simulated (a flow is attached). The
+    // sandbox's ad picker uses this: an ad with no flow has no config to pull.
+    if (req.query.attached === "1" || req.query.attached === "true") {
+      filter.workflowId = { $ne: null };
+    }
     if (q) {
       filter.$or = [
         { name: { $regex: q, $options: "i" } },
@@ -97,6 +102,102 @@ router.get("/ads", requireAdWorkflowAccess, async (req, res) => {
       .populate("workflowId", "name active")
       .lean();
     res.json({ success: true, data: ads, total });
+  } catch (err) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// GET /workflows/ads/:adId/sandbox-config — everything needed to simulate THIS ad.
+//
+// Production resolves an ad in exactly two steps (ai/index.js maybeRunAdWorkflow):
+//   workflow = Workflow.findById(ad.workflowId)
+//   initState(workflow, {}, ad.workflowSetup || {})
+// The sandbox's POST /:id/sandbox does the same with its `setup` body field, so
+// handing it this ad's workflowId + workflowSetup reproduces the ad's traffic
+// rather than approximating it. Keep those two in step: if production ever seeds
+// a fresh state from something else, this endpoint has to learn it too.
+//
+// `summary` is for display only — the ids in `setup` are what actually runs. It
+// resolves the two labels the setup does NOT carry (promo and alt marketplace
+// are stored as bare ids, while products already carry their names).
+router.get("/ads/:adId/sandbox-config", requireAdWorkflowAccess, async (req, res) => {
+  try {
+    // A non-ObjectId would throw a CastError and surface as a 500 — the caller's
+    // mistake reported as ours.
+    if (!require("mongoose").isValidObjectId(req.params.adId)) {
+      return res.status(400).json({ success: false, error: "Id de anuncio inválido" });
+    }
+    const ad = await Ad.findById(req.params.adId)
+      .select("name fbAdId status workflowId workflowEnabled workflowSetup")
+      .populate("workflowId", "name active families family")
+      .lean();
+    if (!ad) return res.status(404).json({ success: false, error: "Ad not found" });
+    if (!ad.workflowId) {
+      return res.status(400).json({
+        success: false,
+        error: "Este anuncio no tiene un flujo asignado todavía, así que no hay configuración que cargar.",
+      });
+    }
+
+    const setup = ad.workflowSetup || {};
+
+    // Promo: stored as an id in setup.hasPromo.
+    let promo = null;
+    if (setup.hasPromo) {
+      const Promo = require("../models/Promo");
+      const p = await Promo.findById(setup.hasPromo).select("name active").lean();
+      promo = p ? { id: String(p._id), name: p.name, active: p.active !== false } : { id: String(setup.hasPromo), name: "(promo no encontrada)", active: false };
+    }
+
+    // Alt marketplace: stored as { posId, productIds[] }.
+    let altMarketplace = null;
+    if (setup.altMarketplace && setup.altMarketplace.posId) {
+      const PointOfSale = require("../models/PointOfSale");
+      const pos = await PointOfSale.findById(setup.altMarketplace.posId).select("name kind").lean();
+      altMarketplace = {
+        posId: String(setup.altMarketplace.posId),
+        name: pos ? pos.name : "(punto de venta no encontrado)",
+        kind: pos ? pos.kind : null,
+        productCount: (setup.altMarketplace.productIds || []).length,
+      };
+    }
+
+    // The flow's families, so the sandbox can keep constraining the pickers if
+    // the tester switches back to manual mode on the same flow.
+    const wf = ad.workflowId;
+    const familyIds = (wf.families || []).filter((f) => f && f.id).map((f) => String(f.id));
+    if (!familyIds.length && wf.family?.id) familyIds.push(String(wf.family.id));
+
+    res.json({
+      success: true,
+      data: {
+        ad: {
+          id: String(ad._id),
+          name: ad.name,
+          fbAdId: ad.fbAdId,
+          status: ad.status,
+          workflowEnabled: !!ad.workflowEnabled,
+        },
+        workflow: { id: String(wf._id), name: wf.name, active: wf.active !== false },
+        familyIds,
+        setup,
+        summary: {
+          buyer: setup.buyer || null,
+          tone: setup.tone || null,
+          purchaseType: setup.purchaseType || null,
+          saleChannel: setup.saleChannel || null,
+          products: (setup.products || []).map((p) => ({
+            id: String(p.id),
+            name: p.name || String(p.id),
+            kind: p.kind || null,
+          })),
+          promo,
+          altMarketplace,
+          catalog: setup.catalog?.kind || null,
+          empty: Object.keys(setup).length === 0,
+        },
+      },
+    });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });
   }
