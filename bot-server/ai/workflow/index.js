@@ -1166,17 +1166,24 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
               const ccGC = await colorChoiceForProduct(exact, { self: pi, resolve: (d) => resolvePrice(d, altOpt(state, d)), link: mkLink });
               const ctGC = colorChoiceText(ccGC);
               state.awaitingRollQty = true; // a 2+ reply next turn → mayoreo handoff
-              if (ctGC.lines || ctGC.suffix) {
-                // Equal prices → say the price once, then the colors. Different prices →
-                // do NOT lead with one of them as if it were THE price ("está en $1531.20:
-                // • Negro $1531.20 • Blanco $1749" reads as a contradiction): name the
-                // measure and let each color carry its own number.
-                const headGC = ctGC.suffix
-                  ? `¡Claro! El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m está en ${fmtMoney(pi)}${ctGC.suffix}.`
-                  : `¡Claro! El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m lo tenemos en estos colores:`;
+              if (ccGC) {
+                // Same price ⇒ SHARE IT and name the colors. Different price ⇒ ASK which
+                // color, because here the color IS the price and we cannot quote without
+                // it. The reply must not lead with one color's number and list another
+                // underneath ("está en $1531.20: • Negro $1531.20 • Blanco $1749" reads as
+                // a contradiction), nor assert the resolved color's price as THE price.
+                if (ctGC.ask) {
+                  state.awaitingRollQty = false; // the color comes first, the quantity after
+                  return ret(
+                    `El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m lo tenemos en ${ctGC.colorsOr}, ${ctGC.ask}`,
+                    { gcColorAsk: `${dims[0]}x${dims[1]}`, gcColorsDiffer: ccGC.variants.length }
+                  );
+                }
                 return ret(
-                  `${headGC}` + (ctGC.lines ? `\n${ctGC.lines}` : "") + `\n¿Cuántos necesitas? 😊`,
-                  { gcQuoted: `${dims[0]}x${dims[1]}`, gcColorsOffered: ccGC ? ccGC.variants.length : 0 }
+                  `¡Claro! El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m está en ${fmtMoney(pi)}${ctGC.suffix}.` +
+                    (ctGC.lines ? `\n${ctGC.lines}` : "") +
+                    `\n¿Cuántos necesitas? 😊`,
+                  { gcQuoted: `${dims[0]}x${dims[1]}`, gcColorsOffered: ccGC.variants.length }
                 );
               }
               const link = await mkLink(pi, exact);
@@ -3162,11 +3169,22 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
                     productId: String((d || found)._id),
                   }),
               });
+              // The ad or the promo may already have fixed the color — this leaf IS the
+              // preloaded product — and the customer naming a color never reaches here at
+              // all (a color word puts the turn on the `otherTopic` path). With the color
+              // settled there is nothing to ask and nothing to offer: quote it.
+              const fixedByAd =
+                state.product && state.product._id && String(state.product._id) === String(found._id);
+              const ctQ = colorChoiceText(ccQ);
               if (ccQ && ccQ.allSame) {
-                const ctQ = colorChoiceText(ccQ);
                 directQuote =
                   `Sí, la de ${sizeTxt} está en ${fmtMoney(pi)}${discTxt}${ctQ.suffix}.` +
                   (ctQ.lines ? `\n${ctQ.lines}` : ` Aquí la compras: ${link}`);
+              } else if (ccQ && ctQ.ask && !fixedByAd) {
+                // Prices differ and nothing has chosen for them ⇒ ask, per the client's
+                // rule. Quoting beige here (beige resolves first, so it almost always won)
+                // told the customer a price for a color they never picked.
+                directQuote = `La ${sizeTxt} la tenemos en ${ctQ.colorsOr}, ${ctQ.ask}`;
               } else {
                 directQuote =
                   `Sí, la de ${sizeTxt}${colorTxt} está en ${fmtMoney(pi)}${discTxt}. ` +

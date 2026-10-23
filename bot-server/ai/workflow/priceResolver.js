@@ -696,18 +696,20 @@ async function colorChoiceForProduct(product, { resolve, link, self = null } = {
   }
 }
 
-// Spanish list: "beige, negro y verde".
-function joinEs(items) {
+// Spanish list: "beige, negro y verde" for a statement, "beige, negro o verde" for a
+// question. A choice joined with "y" reads as being offered all of them at once —
+// "¿Lo quieres en negro y blanco?" asks nothing.
+function joinEs(items, conj = "y") {
   const a = items.filter(Boolean);
   if (a.length <= 1) return a[0] || "";
-  return `${a.slice(0, -1).join(", ")} y ${a[a.length - 1]}`;
+  return `${a.slice(0, -1).join(", ")} ${conj} ${a[a.length - 1]}`;
 }
 
 // Renders the color half of a quote. `allSame` → the price is said ONCE and the colors
 // are named, each with its own link (never one link reused for every color: that bug
 // shipped the same URL for Beige and Verde). Otherwise every color carries its price.
 function colorChoiceText(cc) {
-  if (!cc || !cc.variants || cc.variants.length < 2) return { suffix: "", lines: "" };
+  if (!cc || !cc.variants || cc.variants.length < 2) return { suffix: "", lines: "", ask: "" };
   const discOf = (pi) =>
     pi.hasDiscount && Number.isFinite(pi.originalPrice) && pi.originalPrice > pi.amount
       ? `, rebajado de $${Math.round(pi.originalPrice)}`
@@ -717,10 +719,20 @@ function colorChoiceText(cc) {
     return {
       suffix: `, igual en ${joinEs(cc.labels.map((l) => l.toLowerCase()))}`,
       lines: lines.length ? lines.join("\n") : "",
+      ask: "",
     };
   }
+  // PRICES DIFFER ⇒ ASK WHICH COLOR (the client's rule, stated exactly: "if prices differ
+  // we ask them but if they don't we share the price"). Asking is only pointless when the
+  // answer cannot change the number — that was the original complaint, a color question
+  // standing in for the price of a full roll that costs the same either way. Here the
+  // color IS the price, so the question earns its turn. `lines` stays available for the
+  // callers that would rather show every number than ask.
   return {
     suffix: "",
+    // The caller composes ONE sentence from `colorsOr` + `ask`; the colors are named once.
+    colorsOr: joinEs(cc.labels.map((l) => l.toLowerCase()), "o"),
+    ask: `con precio distinto en cada color. ¿Cuál prefieres?`,
     lines: cc.variants
       .map((v) => `• ${v.label}: ${fmtMoney(v.pi)}${discOf(v.pi)}${v.url ? ` — ${v.url}` : ""}`)
       .join("\n"),

@@ -194,6 +194,14 @@ const CASES = [
   { id: "gc-precio-sin-medida", group: "groundcover", flow: "groundcover",
     turns: ["¿Cuál es el precio?"],
     expect: "Cotiza LOS DOS rollos completos con su precio exacto (2x100 m y 4x100 m), con IVA incluido y SIN link de Mercado Libre, y pasa con un asesor para el envío (regla ROLLO COMPLETO 2026-10-23). NO responde con un rango 'desde X hasta Y' ni con una pregunta abierta de medida. Puede mencionar en una frase que hay cortes más chicos." },
+  // The client's rule, 2026-10-23: "if prices differ we ask them but if they don't we
+  // share the price". Asking is only pointless when the answer cannot move the number.
+  { id: "gc-color-mismo-precio", group: "groundcover", flow: "groundcover",
+    turns: ["quiero 4x100"],
+    expect: "Da el precio del rollo completo (IVA incluido, sin link, con asesor) Y dice que negro y blanco cuestan lo mismo. NO pregunta el color antes de dar el precio: en esta medida el color no cambia el precio." },
+  { id: "gc-color-precio-distinto", group: "groundcover", flow: "groundcover",
+    turns: ["quiero 2x50", "negro"],
+    expect: "En 2x50 m el precio SÍ cambia por color, así que el primer turno PREGUNTA el color (negro o blanco) sin inventar un precio ni cotizar solo uno de los dos; el segundo turno, ya con el color elegido, cotiza ESE color con su precio y su propio link." },
   { id: "gc-precio-rollos", group: "groundcover", flow: "groundcover",
     turns: ["¿Qué precio tienen los rollos?"],
     expect: "Igual que gc-precio-sin-medida: es una pregunta de PRECIO, no de medidas, aunque diga 'rollos'. Cotiza los dos rollos completos con su precio exacto, sin link, con asesor. NO debe contestar con la lista/rango de medidas." },
