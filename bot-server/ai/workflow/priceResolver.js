@@ -632,7 +632,103 @@ function fmtMoney(pi) {
   return `$${amt}`;
 }
 
+
+// ─────────────────────────────────────────────────────────────────────────────
+// COLOR CHOICE COMES AFTER THE PRICE, INVENTORY-WIDE (2026-10-23, client's rule).
+// "¿La quieres en negro o en blanco?" was the entire reply to a price question. When a
+// product's colors are the same size at the same price, making the customer pick one
+// before they can learn the cost buys nothing, so we quote once and hand them the colors
+// with their links. 61 sibling sets in the catalog share a parent and a size; 54 of them
+// are priced identically, so this is the ordinary case rather than the exception.
+//
+// Equality is COMPUTED here at quote time and never assumed. Six confeccionada sizes
+// genuinely do price by color (6x4 m is $649 beige / $729 negro / $1320 verde), and the
+// live ML listings disagree with the price sheet more often than the sheet disagrees with
+// itself (ground cover 4x10 m is $690.80 negro against $933.90 blanco). When the prices
+// differ, each color is listed with its own number so the customer chooses knowing both.
+// A hardcoded "igual en negro y en blanco" would quietly start lying the day one of those
+// listings moves.
+const COLOR_LEAF_NAME = /^\s*(?:color\s+)?(beige|negro|negra|blanco|blanca|verde|gris)\s*$/i;
+
+// `resolve(doc)` → a price info object, and `link(pi, doc)` → a buy URL. Both are supplied
+// by the caller so this stays free of the engine's per-ad marketplace options and psid.
+async function colorChoiceForProduct(product, { resolve, link, self = null } = {}) {
+  try {
+    if (!product || !product.parentId || typeof resolve !== "function") return null;
+    const PF = require("../../models/ProductFamily");
+    const sibs = await PF.find({ parentId: product.parentId, sellable: true, active: { $ne: false } }).lean();
+    const colors = sibs.filter((d) => COLOR_LEAF_NAME.test(String(d.name || "")));
+    if (colors.length < 2) return null;
+    // A parent can hold colors AND sizes, so keep only the siblings of THIS size. If the
+    // size field is empty on all of them (ground cover leaves are named just "Negro"),
+    // the parent already IS the size node and every color sibling belongs.
+    const sizeKey = (d) => String(d.size || "").trim().toLowerCase();
+    const mine = sizeKey(product);
+    const sameSize = colors.filter((d) => sizeKey(d) === mine);
+    const set = sameSize.length >= 2 ? sameSize : colors;
+    if (set.length < 2) return null;
+
+    const variants = [];
+    for (const d of set) {
+      const pi =
+        self && String(d._id) === String(product._id)
+          ? self
+          : await Promise.resolve(resolve(d)).catch(() => null);
+      if (!pi || pi.amount == null) continue;
+      // Promise.resolve: a caller's link() may return null synchronously — full rolls carry
+      // no buy link by rule — and `.catch` on that plain null threw, which this function's
+      // own try/catch swallowed, so the color choice silently vanished from every reply.
+      const url =
+        typeof link === "function" ? await Promise.resolve(link(pi, d)).catch(() => null) : null;
+      variants.push({
+        id: String(d._id),
+        label: String(d.name || "").replace(/^\s*color\s+/i, "").trim() || String(d.name || ""),
+        pi,
+        url: url || null,
+      });
+    }
+    if (variants.length < 2) return null;
+    const amounts = new Set(variants.map((v) => Number(v.pi.amount)));
+    return { variants, allSame: amounts.size === 1, labels: variants.map((v) => v.label) };
+  } catch (e) {
+    console.error("⚠️ color choice failed:", e.message);
+    return null;
+  }
+}
+
+// Spanish list: "beige, negro y verde".
+function joinEs(items) {
+  const a = items.filter(Boolean);
+  if (a.length <= 1) return a[0] || "";
+  return `${a.slice(0, -1).join(", ")} y ${a[a.length - 1]}`;
+}
+
+// Renders the color half of a quote. `allSame` → the price is said ONCE and the colors
+// are named, each with its own link (never one link reused for every color: that bug
+// shipped the same URL for Beige and Verde). Otherwise every color carries its price.
+function colorChoiceText(cc) {
+  if (!cc || !cc.variants || cc.variants.length < 2) return { suffix: "", lines: "" };
+  const discOf = (pi) =>
+    pi.hasDiscount && Number.isFinite(pi.originalPrice) && pi.originalPrice > pi.amount
+      ? `, rebajado de $${Math.round(pi.originalPrice)}`
+      : "";
+  if (cc.allSame) {
+    const lines = cc.variants.filter((v) => v.url).map((v) => `• ${v.label}: ${v.url}`);
+    return {
+      suffix: `, igual en ${joinEs(cc.labels.map((l) => l.toLowerCase()))}`,
+      lines: lines.length ? lines.join("\n") : "",
+    };
+  }
+  return {
+    suffix: "",
+    lines: cc.variants
+      .map((v) => `• ${v.label}: ${fmtMoney(v.pi)}${discOf(v.pi)}${v.url ? ` — ${v.url}` : ""}`)
+      .join("\n"),
+  };
+}
+
 module.exports = {
   isFullRoll,
   resolveIsFullRoll,
+  colorChoiceForProduct, colorChoiceText,
   fmtMoney, resolvePrice, mlLinkOf, trackedLink, sanitizeMarketplaceLinks, enforceAltMarketplaceLink, clampPrices, clampMeasures, isGenericMlUrl, officialStoreUrl };

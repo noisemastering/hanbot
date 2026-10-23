@@ -31,7 +31,7 @@ const { resolveSetupContext } = require("./setupContext");
 // "fmtMoney is not defined" into a try/catch, which degraded the reply into a
 // denial instead of a quote. priceResolver's dependency tree never reaches this
 // file, so this cannot cycle.
-const { fmtMoney } = require("./priceResolver");
+const { fmtMoney, colorChoiceForProduct, colorChoiceText } = require("./priceResolver");
 
 // Alternate-marketplace routing option for a resolvePrice call. Returns { altPos }
 // when this product is one the campaign routed to a non-default POS, else {} (the
@@ -1147,46 +1147,39 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
                 // measure must not leave the customer thinking there is only one color —
                 // the bare-price answer already says "negro o blanco al mismo precio" and
                 // this path, reached by naming 4x100, said nothing about color at all.
+                const ccFR = await colorChoiceForProduct(exact, {
+                  self: pi,
+                  resolve: (d) => resolvePrice(d, altOpt(state, d)),
+                  link: () => null, // full rolls carry no buy link by rule
+                });
+                const ctFR = colorChoiceText(ccFR);
                 return beginHandoff({
-                  preface: `¡Claro! El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m está en ${fmtMoney(pi)}, igual en negro y en blanco. El rollo completo lo cotiza un asesor junto con el envío.`,
+                  preface:
+                    `¡Claro! El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m está en ${fmtMoney(pi)}${ctFR.suffix}.` +
+                    (ctFR.suffix ? "" : ctFR.lines ? `\n${ctFR.lines}` : "") +
+                    ` El rollo completo lo cotiza un asesor junto con el envío.`,
                   reason: pi.handoffReason || `Rollo completo ${dims[0]}x${dims[1]} — cerrar con un asesor`,
                 });
               }
               const discOf = (q) => (q.hasDiscount && Number.isFinite(q.originalPrice) && q.originalPrice > q.amount ? `, rebajado de $${Math.round(q.originalPrice)}` : "");
-              // COLOR COMES AFTER THE PRICE, NEVER BEFORE IT. The client's note: ground
-              // cover does not price by color, so making the customer pick one to find out
-              // what it costs buys nothing — "Claro, la de 4x100 sí la manejamos. ¿La
-              // quieres en negro o en blanco?" was the whole reply to a price question.
-              // Quote the measure first and offer both colors after. The price sheet does
-              // treat negro and blanco as equal, but the LIVE ML listings do not (4x10 is
-              // $690.80 negro vs $933.90 blanco), and live is what we quote for cut pieces
-              // — so we print whatever each listing actually says instead of asserting
-              // they match, and the customer picks a color knowing both numbers.
-              let colorLines = null;
-              try {
-                const sibs = await PF.find({ parentId: exact.parentId, sellable: true, active: { $ne: false } }).lean();
-                if (sibs.length > 1) {
-                  const rows = [];
-                  for (const v of sibs) {
-                    const vp = String(v._id) === String(exact._id) ? pi : await resolvePrice(v, altOpt(state, v)).catch(() => null);
-                    if (!vp || vp.amount == null) continue;
-                    const vl = await trackedLink(vp.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: v.name, productId: String(v._id) });
-                    const label = String(v.name || "").replace(/^\s*color\s+/i, "").trim() || v.name;
-                    rows.push(`• ${label}: ${fmtMoney(vp)}${discOf(vp)}${vl ? ` — ${vl}` : ""}`);
-                  }
-                  if (rows.length > 1) colorLines = rows;
-                }
-              } catch (e) {
-                console.error("⚠️ ground cover color variants failed:", e.message);
-              }
+              const mkLink = (q, d) => trackedLink(q.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: d ? d.name : exact.name, productId: String((d || exact)._id) });
+              const ccGC = await colorChoiceForProduct(exact, { self: pi, resolve: (d) => resolvePrice(d, altOpt(state, d)), link: mkLink });
+              const ctGC = colorChoiceText(ccGC);
               state.awaitingRollQty = true; // a 2+ reply next turn → mayoreo handoff
-              if (colorLines) {
+              if (ctGC.lines || ctGC.suffix) {
+                // Equal prices → say the price once, then the colors. Different prices →
+                // do NOT lead with one of them as if it were THE price ("está en $1531.20:
+                // • Negro $1531.20 • Blanco $1749" reads as a contradiction): name the
+                // measure and let each color carry its own number.
+                const headGC = ctGC.suffix
+                  ? `¡Claro! El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m está en ${fmtMoney(pi)}${ctGC.suffix}.`
+                  : `¡Claro! El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m lo tenemos en estos colores:`;
                 return ret(
-                  `¡Claro! El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m lo tenemos en estos colores:\n${colorLines.join("\n")}\n¿Cuántos necesitas? 😊`,
-                  { gcQuoted: `${dims[0]}x${dims[1]}`, gcColorsOffered: colorLines.length }
+                  `${headGC}` + (ctGC.lines ? `\n${ctGC.lines}` : "") + `\n¿Cuántos necesitas? 😊`,
+                  { gcQuoted: `${dims[0]}x${dims[1]}`, gcColorsOffered: ccGC ? ccGC.variants.length : 0 }
                 );
               }
-              const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: exact.name, productId: String(exact._id) });
+              const link = await mkLink(pi, exact);
               return ret(
                 `¡Claro! El ground cover (malla antimaleza) de ${dims[0]} x ${dims[1]} m está en ${fmtMoney(pi)}${discOf(pi)}.` + (link ? ` Aquí lo compras: ${link}` : "") + ` ¿Cuántos necesitas? 😊`,
                 { gcQuoted: `${dims[0]}x${dims[1]}` }
@@ -3149,9 +3142,36 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
               // is negro/blanco — all of them were being quoted "en beige".
               const leafColor = String(found.name || "").match(/\b(beige|negro|negra|verde|blanco|blanca|gris)\b/i);
               const colorTxt = leafColor ? ` en ${leafColor[1].toLowerCase()}` : "";
-              directQuote =
-                `Sí, la de ${sizeTxt}${colorTxt} está en ${fmtMoney(pi)}${discTxt}. ` +
-                `Aquí la compras: ${link}`;
+              // THE COLOR CHOICE RIDES ALONG WHEN IT COSTS NOTHING TO OFFER (client's
+              // rule, 2026-10-23). This sentence used to name the ONE color the lookup
+              // happened to resolve — beige, nearly always, since it is first — so a
+              // customer asking for a size learned there was a single color. When the
+              // size's colors all price the same, the price is said once and every color
+              // is offered with its own link. When they DON'T price the same (six
+              // confeccionada sizes genuinely differ: 6x4 m is $649/$729/$1320), the
+              // resolved color and its own price stay as they were — quoting three
+              // numbers nobody asked for is not "easier for the customer".
+              const ccQ = await colorChoiceForProduct(found, {
+                self: pi,
+                resolve: (d) => resolvePrice(d, altOpt(state, d)),
+                link: (q, d) =>
+                  require("./priceResolver").trackedLink(q.link, {
+                    psid: opts.psid || null,
+                    sandbox: !!opts.sandbox,
+                    productName: d ? d.name : found.name,
+                    productId: String((d || found)._id),
+                  }),
+              });
+              if (ccQ && ccQ.allSame) {
+                const ctQ = colorChoiceText(ccQ);
+                directQuote =
+                  `Sí, la de ${sizeTxt} está en ${fmtMoney(pi)}${discTxt}${ctQ.suffix}.` +
+                  (ctQ.lines ? `\n${ctQ.lines}` : ` Aquí la compras: ${link}`);
+              } else {
+                directQuote =
+                  `Sí, la de ${sizeTxt}${colorTxt} está en ${fmtMoney(pi)}${discTxt}. ` +
+                  `Aquí la compras: ${link}`;
+              }
             }
           }
 
