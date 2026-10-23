@@ -180,7 +180,7 @@ const CASES = [
   // BORDE ─────────────────────────────────────────────────────────────────────
   { id: "borde-por-rollo", group: "borde", flow: "borde",
     turns: ["el borde se vende por rollo?"],
-    expect: "Confirma que sí se vende por rollo/largo y menciona los largos disponibles (6, 9, 18, 54 m); no escala lo que puede contestar." },
+    expect: "Confirma que sí se vende por rollo/largo y menciona los largos disponibles (6, 9, 18, 54 m); no escala lo que puede contestar. Compartir los precios de una vez es CORRECTO y deseable (la campaña pide comunicar precios de forma proactiva desde las primeras interacciones), no cuenta como información de más." },
   { id: "borde-single", group: "borde", flow: "borde",
     turns: ["precio del borde de 18 m"],
     expect: "Da los DOS precios del rollo de 18 m (Premium y Flexible) y pide que elija versión — NO asume una versión ni pregunta la medida otra vez, y no comparte link todavía." },

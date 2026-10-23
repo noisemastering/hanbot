@@ -1294,10 +1294,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             return await mayoreo(qV, String(recQ.length));
           }
           state.awaitingBordeVariant = { length: recQ.length, qty: qV };
-          const bothV = await bordeBothVersions(String(recQ.length));
+          // We showed both prices for this length on the PREVIOUS turn, so restating
+          // the table here just says the same thing twice. Ask only what's missing.
           return retB(
-            `¡Perfecto, ${qV} rollo${qV === 1 ? "" : "s"} de ${recQ.length} m! ` +
-              (bothV || `¿Lo quieres en ${VARIANT_SPEC.grueso} o ${VARIANT_SPEC.delgado}?`),
+            `¡Perfecto, ${qV} rollo${qV === 1 ? "" : "s"} de ${recQ.length} m! ¿Lo quieres Premium (grueso) o Flexible (delgado)? 😊`,
             { bordeQtyPendingVariant: qV }
           );
         }
