@@ -347,10 +347,53 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
       `  - Las compras por Mercado Libre llevan además compra protegida.\n` +
       `  NUNCA respondas con vaguedades tipo "varios años": da el dato.`
   );
+
+  // GRADO DE PROTECCIÓN. Reported (psid 28337932562560404): "Grado de protección que
+  // ofrece y tiempo de garantía" — the garantía half got answered and the protección
+  // half was dropped, because NO flow and NO prompt ever stated it. It is the product's
+  // most basic spec and the client said so in those words. "Grado de protección" = % de
+  // sombra. Catalog truth, verified: Malla Sombra Raschel has 35/50/70/80/90% and all
+  // five have sellable leaves with live ML links; confeccionada (con y sin refuerzo) is
+  // 90% only; ground cover has no shade % at all.
+  lines.push(
+    `GRADO DE PROTECCIÓN (= % DE SOMBRA). Es la característica MÁS básica del producto: ` +
+      `contéstala SIEMPRE, DIRECTO y con el número — nunca preguntes "¿de qué producto?" ` +
+      `ni la pases a un asesor:\n` +
+      `  - La malla sombra Raschel se maneja en 35%, 50%, 70%, 80% y 90% de sombra.\n` +
+      `  - La malla CONFECCIONADA (con refuerzo y sin refuerzo) es SIEMPRE 90% de sombra.\n` +
+      `  - En rollo el % depende del rollo que se cotice: si ya hay uno en contexto, di SU %.\n` +
+      `  - El ground cover (antimaleza) NO se mide en % de sombra: es tejido cerrado que ` +
+      `bloquea la luz al suelo para que no crezca la maleza.\n` +
+      `  Si viene junto con otra pregunta (garantía, precio, medida), contesta LAS DOS en ` +
+      `la misma respuesta: un mensaje con dos preguntas necesita dos respuestas.`
+  );
   lines.push(
     `PRECIO POR METRO CUADRADO: NO vendemos por m² ni por metro suelto. La malla confeccionada se vende por PIEZA ` +
       `(ancho x largo) y el rollo por sus medidas. Si preguntan "¿a cómo sale el metro?", dilo con naturalidad y ` +
       `pide la medida (o el área) para cotizar la pieza — nunca inventes un precio por m² ni dividas un precio entre metros.`
+  );
+  // An ÁREA is a SURFACE, so it can only ever be malla sombra. Reported (psid
+  // 29182652441424827): "el metro de la oscura" + "5 metros cuadrados" was answered with
+  // a Borde Separador "Rollo de 54 m" at $1,599 — a 54-metre edging strip, quoted for
+  // someone who wanted 5 m² of shade cloth, with a buy link attached. Nothing deterministic
+  // claimed that turn (dimsOf("5 metros cuadrados") is null), so the model picked the realm.
+  lines.push(
+    `ÁREA vs METRO LINEAL: si el cliente da un ÁREA ("5 metros cuadrados", "5 m²", "20 m2"), ` +
+      `está hablando de una SUPERFICIE a cubrir, así que es SIEMPRE malla sombra (pieza o rollo). ` +
+      `Pide el ancho x largo con el que quiere cubrir esa área y cotiza ESA medida. ` +
+      `JAMÁS cotices un borde separador, una cinta plástica ni un cordón para un área: esos se ` +
+      `venden por METRO LINEAL y no cubren superficie.`
+  );
+  // Customers name colors by shade, not by name. "el metro de la oscura" got a BEIGE
+  // quote (reported, psid 29182652441424827) because nothing anywhere mapped oscura/clara
+  // onto a color. Beige is the default color in several paths, so silence here always
+  // resolves to the LIGHTEST option — the exact opposite of what was asked.
+  lines.push(
+    `COLOR DICHO POR TONO: "la oscura", "el oscuro", "la clara", "la clarita" SON una ` +
+      `petición de color. Nunca las ignores y NUNCA las contestes con beige por descarte. ` +
+      `Oscuro = negro o verde (los que existan en el producto en cuestión); claro = beige o blanco. ` +
+      `Si en el producto hay más de un tono que encaja, menciona los que aplican con su precio ` +
+      `y deja que el cliente elija; si solo hay uno, cotiza ese.`
   );
 
   // Company info — always available so any node can answer "¿dónde están?",
@@ -725,6 +768,27 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
   if (isGroundCover) {
     lines.push(
       `- ANTIMALEZA = GROUND COVER (MISMO PRODUCTO): "malla antimaleza", "antimaleza", "malla anti-maleza", "malla para el suelo/piso contra maleza/hierba/pasto" y "ground cover" son EXACTAMENTE el producto que vendes aquí. Si el cliente pregunta "¿tienen malla antimaleza?" responde que SÍ y CONFIRMA EXPLÍCITAMENTE que la antimaleza es tu ground cover (di la palabra "ground cover"), luego pregunta el LARGO o el ÁREA a cubrir para cotizar. NUNCA digas "solo manejo ground cover", NUNCA lo trates como si fuera otra cosa, NUNCA lo mandes a "malla sombra", y NUNCA ofrezcas "pasarlo con un asesor" (tú lo atiendes directo). El ground cover NO tiene % de sombra: no preguntes eso. SÍ se maneja en DOS COLORES, NEGRO y BLANCO (cada uno con su propio precio y link) — nunca digas que no tiene colores ni ofrezcas beige o verde, que no existen en este producto.`
+    );
+  }
+
+  // GROUND COVER, BARE PRICE ASK. Reported (psid 28529106973427095): "¿Cuál es el precio
+  // de la malla?" got "dime la medida" and the lead stalled; Noemi answered it by sending
+  // the TWO full rolls with their prices, and the client confirmed the rule — when the
+  // conversation is about ROLLS the options narrow to about two, so quote them all. GC's
+  // catalog is 8 sizes, but only 2x100 and 4x100 are FULL rolls; the shorter 10/25/50 m
+  // cuts are not the standard offering and come up only when a shorter length is asked
+  // for. Prices are NOT written here on purpose: they must come from the tool, so the
+  // ROLLO COMPLETO rule applies (price sheet with IVA folded in, no ML link, asesor
+  // closes it and quotes the freight).
+  if (isGroundCover) {
+    lines.push(
+      `- PRECIO SIN MEDIDA (ground cover): si el cliente pregunta el precio y NO ha dado largo ` +
+        `ni área ("¿cuánto cuesta la malla antimaleza?", "¿qué precio tiene?"), NO le devuelvas la ` +
+        `pregunta: el rollo completo se maneja en SOLO DOS medidas, 2 m x 100 m y 4 m x 100 m, así ` +
+        `que cotiza LAS DOS con la herramienta (una llamada por cada una) y pásale ambas con su ` +
+        `precio en un mensaje corto, como lo haría un asesor. Menciona que son los rollos completos ` +
+        `y que hay negro y blanco al mismo precio. Solo si el cliente pide un largo MENOR (10, 25 o ` +
+        `50 m) cotiza esa medida cortada. NUNCA inventes los precios: salen de la herramienta.`
     );
   }
 

@@ -881,6 +881,69 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         const asksBroadPrice =
           /\b(precio|precios|costo|costos|cu[aá]nto\s+(cuesta|cuestan|sale|vale|valen)|cotiz\w*|a\s+c[oó]mo)\b/i.test(msg) &&
           !/\b(env[ií]o|entrega|tarda|llega|paga|pago|tarjeta|factur|garant|instalaci|ubicaci|direcci|sucursal|mayoreo|descuento)\b/i.test(msg);
+        // (a0-bis) A bare PRICE ask is not a bare SIZE ask. "¿Qué medidas manejan?" wants
+        // the catalogue, so the range list below is the right answer. "¿Cuál es el precio?"
+        // wants NUMBERS, and the range list makes the customer pick a size before getting
+        // one — which is how psid 28529106973427095 stalled until Noemi stepped in and sent
+        // the two full rolls with their exact prices. The client's rule: once we are talking
+        // ROLLS the options narrow to about two, so quote them all. For ground cover the full
+        // rolls are exactly 2 m x 100 m and 4 m x 100 m; the 10/25/50 m cuts get one clause,
+        // not a listing. Prices come from resolvePrice, so the ROLLO COMPLETO rule applies
+        // (sheet + IVA, no ML link, asesor closes it and quotes the freight).
+        // "¿Qué precio tienen los rollos?" trips asksWhichSizes, because that pattern
+        // accepts "rollos"/"opciones" as the thing being asked about — but it is a PRICE
+        // question, and it is the client's own example of the case that must quote. So the
+        // size list only wins when the message names the SIZES themselves.
+        const asksSizesStrict =
+          /\b(medidas?|tama[nñ]os?|presentaci[oó]n(es)?|dimensiones?|anchos?|largos?)\b/i.test(msg);
+        if (asksBroadPrice && !asksSizesStrict && !dims && carried.size === 0 && rolloFams.length) {
+          try {
+            let frontierF = rolloFams.map((f) => String(f.id)).filter(Boolean);
+            const leavesF = [];
+            for (let d = 0; d < 5 && frontierF.length; d++) {
+              const kids = await PF.find({ parentId: { $in: frontierF } }).lean().catch(() => []);
+              if (!kids.length) break;
+              leavesF.push(...kids.filter((k) => k.sellable === true));
+              frontierF = kids.map((k) => String(k._id));
+            }
+            const fullRolls = leavesF.filter((k) => Number(k.attributes?.length) === 100);
+            // One quote per WIDTH: negro and blanco are separate leaves at the same price,
+            // so quoting both colours would print the same number twice.
+            const byW = new Map();
+            for (const k of fullRolls) {
+              const w = String(k.attributes?.width || "");
+              if (!w || byW.has(w)) continue;
+              byW.set(w, k);
+            }
+            const widths = [...byW.keys()].sort((a, b) => Number(a) - Number(b));
+            const rowsF = [];
+            const shorter = new Set();
+            for (const k of leavesF) {
+              const l = Number(k.attributes?.length);
+              if (l && l !== 100) shorter.add(l);
+            }
+            for (const w of widths) {
+              const pi = await resolvePrice(byW.get(w), altOpt(state, byW.get(w))).catch(() => null);
+              if (!pi || pi.amount == null) continue;
+              rowsF.push(`• Rollo de ${w} x 100 m: ${fmtMoney(pi)}`);
+            }
+            if (rowsF.length >= 1) {
+              const cuts = [...shorter].sort((a, b) => a - b);
+              const cutLine = cuts.length
+                ? ` Si necesitas menos, también lo cortamos en ${cuts.join(", ")} m.`
+                : "";
+              return beginHandoff({
+                preface:
+                  `El ground cover (malla antimaleza) va en rollo completo, negro o blanco al mismo precio:\n` +
+                  `${rowsF.join("\n")}\n` +
+                  `Es tejido cerrado para que no crezca la maleza.${cutLine}`,
+                reason: `Precio de ground cover sin medida: cotizados los ${rowsF.length} rollos completos; el asesor cierra la venta y cotiza el envío`,
+              });
+            }
+          } catch (e) {
+            console.error("\u26a0\ufe0f ground cover full-roll quote failed:", e.message);
+          }
+        }
         if ((asksWhichSizes || asksBroadPrice) && !dims && carried.size === 0 && rolloFams.length) {
           try {
             let frontierS = rolloFams.map((f) => String(f.id)).filter(Boolean);
@@ -2236,7 +2299,12 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   if (userMessage && colorAnchorId && !/sin\s*refuerzo/i.test(workflow.name || "") && !/\brollo\b/i.test(workflow.name || "")) {
     try {
       const msgC = String(userMessage).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-      const COLORW = /\b(beige|negro|negra|verde|blanc[oa]|gris|azul|rojo|caf[e]|marr[o]n|terracota|vino)\b/;
+      // "la oscura" / "la clarita" name a color by shade, not by name — and the bot used
+      // to miss them entirely: "el metro de la oscura" was answered with a BEIGE quote
+      // (reported, psid 29182652441424827). We can't know whether "oscura" means negro or
+      // verde, so we route it here: this gate LISTS the real colors with their own prices
+      // and links, which is the honest answer. It must never silently become beige.
+      const COLORW = /\b(beige|negro|negra|verde|blanc[oa]|gris|azul|rojo|caf[e]|marr[o]n|terracota|vino|oscur[oa]s?|clar[oa]s?|clarit[oa]s?)\b/;
       const asksColor = /\bcolor(es)?\b/.test(msgC) || /de\s+qu[e]\s+color/.test(msgC) || /otro\s+color/.test(msgC) || COLORW.test(msgC);
       // A fresh measure this turn must go to the MEASURE path (it resolves the right
       // product AND its colors) — NOT get swallowed here and answered for the stale

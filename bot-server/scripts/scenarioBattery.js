@@ -139,6 +139,12 @@ const CASES = [
   { id: "ref-quantity-wholesale", group: "reforzada", flow: "reforzada", setup: { hasPromo: PROMO_6X4 },
     turns: ["quiero 6 piezas de 6x4"],
     expect: "6 piezas alcanza el mínimo de mayoreo (5 para 6x4) → reconoce que es MAYOREO/volumen y pide NOMBRE, TELÉFONO y CÓDIGO POSTAL para pasar con un asesor (los tres son obligatorios al canalizar). Debe nombrar la medida como la escribió el cliente (6x4, no 4x6)." },
+  // Reported (psid 28337932562560404): two questions in one message, both dropped and
+  // replaced by the postal-code ask. "Grado de protección" was not stated in ANY flow's
+  // knowledge or prompt, so there was nothing to answer with.
+  { id: "ref-proteccion-y-garantia", group: "reforzada", flow: "reforzada", setup: { hasPromo: PROMO_6X4 },
+    turns: ["Grado de protección que ofrece y tiempo de garantía ... Gracias."],
+    expect: "Contesta LAS DOS cosas en el mismo mensaje: el grado de protección con su número (la confeccionada es 90% de sombra) Y la garantía/vida útil. NO pregunta '¿de qué producto?', NO pide el código postal en lugar de contestar, y NO pasa con un asesor." },
   { id: "ref-measure-label", group: "reforzada", flow: "reforzada", setup: { hasPromo: PROMO_6X4 },
     turns: ["cuánto la de 8x4?"],
     expect: "Cotiza la medida 8x4 (= 4x8 m, sí existe en catálogo) con un precio concreto y su link. NO compares el precio contra una cifra fija: ML cambia precios y promociones. Lo que se evalúa es la MEDIDA, que debe decirse 8x4 o 4x8 (mismo producto), preferentemente en el orden en que la escribió el cliente — NUNCA otra como 7x4 (fue un bug real reportado por el cliente)." },
@@ -181,9 +187,16 @@ const CASES = [
   { id: "gc-medidas-disponibles", group: "groundcover", flow: "groundcover",
     turns: ["¿Qué medidas están disponibles?"],
     expect: "LISTA las medidas que existen (anchos de 2 y 4 m con sus largos) con precios; NO responde con una pregunta abierta tipo '¿qué largo necesitas o qué área quieres cubrir?' sin dar antes las opciones." },
+  // Expectation tightened 2026-10-23 (client's rule): a bare PRICE ask must come back with
+  // NUMBERS, not a size range the customer has to pick from first. The full rolls are only
+  // two, so both get quoted. The old wording ("ofrece las medidas con precios") also passed
+  // for the size-range answer that made Noemi step in on psid 28529106973427095.
   { id: "gc-precio-sin-medida", group: "groundcover", flow: "groundcover",
     turns: ["¿Cuál es el precio?"],
-    expect: "Ofrece las medidas disponibles con precios en lugar de devolver una pregunta abierta de medida; el cliente debe salir del mensaje sabiendo qué existe y cuánto cuesta." },
+    expect: "Cotiza LOS DOS rollos completos con su precio exacto (2x100 m y 4x100 m), con IVA incluido y SIN link de Mercado Libre, y pasa con un asesor para el envío (regla ROLLO COMPLETO 2026-10-23). NO responde con un rango 'desde X hasta Y' ni con una pregunta abierta de medida. Puede mencionar en una frase que hay cortes más chicos." },
+  { id: "gc-precio-rollos", group: "groundcover", flow: "groundcover",
+    turns: ["¿Qué precio tienen los rollos?"],
+    expect: "Igual que gc-precio-sin-medida: es una pregunta de PRECIO, no de medidas, aunque diga 'rollos'. Cotiza los dos rollos completos con su precio exacto, sin link, con asesor. NO debe contestar con la lista/rango de medidas." },
   { id: "gc-area-sin-lados", group: "groundcover", flow: "groundcover",
     turns: ["Necesito cubrir 200 m2"],
     expect: "Recomienda un rollo real que cubra esa área (p.ej. 2x100 o 4x50 m) con su precio; NO pide que el cliente convierta el área a ancho x largo. Si el rollo recomendado es COMPLETO (100 m), va sin link y con asesor (regla 2026-10-23); si es una pieza cortada (4x50), sí lleva link." },
@@ -278,6 +291,13 @@ const CASES = [
     expect: "Recomienda los OJILLOS SUJETADORES + el CORDÓN UV (no el kit)." },
 
   // ── COLD-START (special focus — biggest concern) ─────────────────────────────
+  // Reported (psid 29182652441424827): "el metro de la oscura" + "5 metros cuadrados" was
+  // answered with a Borde Separador "Rollo de 54 m" in BEIGE at $1,599, buy link attached —
+  // a 54-metre edging strip sold for 5 m² of shade cloth, in the lightest colour available,
+  // to someone who had asked for the dark one.
+  { id: "cs-oscura-area", group: "coldstart", flow: "coldstart",
+    turns: ["Que presio tiene el metro de la oscura", "5 metros cuadrados"],
+    expect: "Reconoce que 'la oscura' pide un COLOR oscuro (negro o verde) y nunca contesta con beige. Un ÁREA (5 m²) es una superficie, así que pide el ancho x largo para cubrirla o recomienda una medida real de MALLA SOMBRA; JAMÁS cotiza un borde separador, una cinta ni un rollo de 54 m, que se venden por metro lineal." },
   { id: "cs-bare-measure", group: "coldstart", flow: "coldstart",
     turns: ["precio de 3x3"],
     expect: "Una medida 2-D pelona (3x3) debe enrutar a MALLA CONFECCIONADA (reforzada, el default) y cotizar 3x3; NUNCA tratarla como borde/rollo 1-D, ni quedarse mudo." },
