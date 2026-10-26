@@ -162,6 +162,7 @@ router.get('/grouped', async (req, res) => {
       handoff,           // 'yes' | 'no' — whether human handoff was requested
       state,             // 'new' | 'active' | 'closed' | 'needs_human' | 'human_handling'
       psid,              // user identifier search (FB PSID or WhatsApp number)
+      seen,              // 'yes' | 'no' — whether a human already opened it in the dashboard
       minCertainty       // correlation certainty floor for READING chats (0-100). RAW —
                          // deliberately ignores the sales-reporting floor and reaches 0.
     } = req.query;
@@ -342,15 +343,35 @@ router.get('/grouped', async (req, res) => {
         handoffRequested: { $ifNull: ['$conv.handoffRequested', false] },
         handoffReason: '$conv.handoffReason',
         state: '$conv.state',
-        adId: '$conv.adId'
+        adId: '$conv.adId',
+        // $ifNull so a conversation that has never been opened projects an explicit
+        // null instead of a missing field — the $match below compares against null.
+        seenAt: { $ifNull: ['$conv.seenAt', null] },
+        seenBy: { $ifNull: ['$conv.seenBy', null] }
       }
     });
+
+    // 5b. Seen filter. Deliberately applied HERE, after the projection, instead of in
+    // the Conversation pre-filter: unseen means "newer than the last look", and the
+    // lastMessageAt this list shows comes from the Message timestamps grouped above,
+    // not from Conversation.lastMessageAt (a different write path). Comparing the two
+    // fields the row itself displays is the only way the filter can't disagree with
+    // the dot next to it.
+    if (seen === 'yes' || seen === 'no') {
+      pipeline.push({
+        $match: {
+          $expr: seen === 'yes'
+            ? { $and: [{ $ne: ['$seenAt', null] }, { $gte: ['$seenAt', '$lastMessageAt'] }] }
+            : { $or: [{ $eq: ['$seenAt', null] }, { $lt: ['$seenAt', '$lastMessageAt'] }] }
+        }
+      });
+    }
 
     // 6. Sort by latest message
     pipeline.push({ $sort: { lastMessageAt: -1 } });
 
     // Count total for paginated queries
-    const shouldCount = hasDateFilter || !!adFilterPsids || !!keyword;
+    const shouldCount = hasDateFilter || !!adFilterPsids || !!keyword || seen === 'yes' || seen === 'no';
     let total = 0;
     if (shouldCount) {
       const countPipeline = [...pipeline, { $count: 'total' }];
@@ -578,6 +599,36 @@ router.post('/:psid/resolve-handoff', async (req, res) => {
   } catch (error) {
     console.error('Error resolving handoff:', error);
     res.status(500).json({ success: false, error: 'Failed to resolve handoff' });
+  }
+});
+
+// POST /conversations/:psid/seen - mark a conversation as reviewed by a human.
+// body { seen: false } un-marks it — the "mark as unread" of a mail client, for when
+// someone opens a chat they can't attend to right now and needs it to keep standing out.
+// Stamping the TIME rather than a boolean is what makes the flag self-clearing: the next
+// customer message is newer than seenAt, so the conversation goes back to unseen.
+router.post('/:psid/seen', async (req, res) => {
+  try {
+    const { psid } = req.params;
+    const seen = req.body?.seen !== false;
+    const update = seen
+      ? { seenAt: new Date(), seenBy: (req.body?.by || req.user?.email || 'dashboard').toString() }
+      : { seenAt: null, seenBy: null };
+
+    const convo = await Conversation.findOneAndUpdate(
+      { psid },
+      { $set: update },
+      { new: true }
+    ).select('psid seenAt seenBy').lean();
+
+    if (!convo) {
+      return res.status(404).json({ success: false, error: 'Conversation not found' });
+    }
+
+    res.json({ success: true, seenAt: convo.seenAt, seenBy: convo.seenBy });
+  } catch (error) {
+    console.error('Error marking conversation seen:', error);
+    res.status(500).json({ success: false, error: 'Failed to mark conversation seen' });
   }
 });
 

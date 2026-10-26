@@ -84,6 +84,7 @@ function Messages() {
   const [handoffFilter, setHandoffFilter] = useState('');
   const [stateFilter, setStateFilter] = useState('');
   const [psidFilter, setPsidFilter] = useState('');
+  const [seenFilter, setSeenFilter] = useState(''); // '' | 'no' (pendientes de revisar) | 'yes'
   const [certaintyFilter, setCertaintyFilter] = useState(0); // min correlation % (0 = all)
 
   const quickActionPsidsRef = useRef([]);
@@ -97,6 +98,7 @@ function Messages() {
   const handoffFilterRef = useRef('');
   const stateFilterRef = useRef('');
   const psidFilterRef = useRef('');
+  const seenFilterRef = useRef('');
   const certaintyFilterRef = useRef(0);
 
   // Helper function to show message excerpt
@@ -254,10 +256,44 @@ function Messages() {
         handoffRequested: conv.handoffRequested,
         handoffReason: conv.handoffReason,
         purchaseIntent: conv.purchaseIntent,
-        state: conv.state
+        state: conv.state,
+        seenAt: conv.seenAt ?? null,
+        seenBy: conv.seenBy ?? null
       };
     });
     setConversationStatuses(prev => ({ ...prev, ...statuses }));
+  };
+
+  // A conversation is UNSEEN while its last message is newer than the last time a
+  // human opened it — so a new customer message re-arms the flag on its own. The
+  // optimistic entry in conversationStatuses wins over the list payload (that's what
+  // `'seenAt' in status` checks: a deliberate "mark as unseen" sets it to null and
+  // must not fall back to the stale timestamp the list was fetched with).
+  const isUnseen = (msg, status) => {
+    const stamp = status && 'seenAt' in status ? status.seenAt : msg.seenAt;
+    if (!stamp) return true;
+    return new Date(msg.lastMessageAt).getTime() > new Date(stamp).getTime();
+  };
+
+  const markSeen = async (psid, seen = true) => {
+    setConversationStatuses(prev => ({
+      ...prev,
+      [psid]: { ...(prev[psid] || {}), seenAt: seen ? new Date().toISOString() : null, seenBy: seen ? (user?.email || 'dashboard') : null }
+    }));
+    try {
+      await API.post(`/conversations/${psid}/seen`, { seen, by: user?.email });
+    } catch (err) {
+      console.error("Error marking conversation seen:", err);
+    }
+  };
+
+  // Opening a conversation IS reading it — the asesor shouldn't have to click a second
+  // thing to say so. Every path that opens the chat modal goes through here.
+  const openConversation = (psid, channel) => {
+    setSelectedPsid(psid);
+    setSelectedChannel(channel);
+    fetchFullConversation(psid);
+    markSeen(psid);
   };
 
   const fetchFullConversation = async (psid) => {
@@ -323,6 +359,7 @@ function Messages() {
       if (handoffFilterRef.current) params.set('handoff', handoffFilterRef.current);
       if (stateFilterRef.current) params.set('state', stateFilterRef.current);
       if (psidFilterRef.current) params.set('psid', psidFilterRef.current);
+      if (seenFilterRef.current) params.set('seen', seenFilterRef.current);
       if (certaintyFilterRef.current > 0) params.set('minCertainty', String(certaintyFilterRef.current));
       const res = await API.get(`/conversations/grouped?${params}`);
       const convs = res.data.conversations || [];
@@ -416,9 +453,7 @@ function Messages() {
         const res = await API.get('/conversations/grouped?limit=1&psid=' + encodeURIComponent(incomingPsid));
         const match = res.data?.conversations?.find(c => c.psid === incomingPsid) || res.data?.conversations?.[0];
         const channel = match?.channel || (incomingPsid.startsWith('wa:') ? 'whatsapp' : 'facebook');
-        setSelectedPsid(incomingPsid);
-        setSelectedChannel(channel);
-        fetchFullConversation(incomingPsid);
+        openConversation(incomingPsid, channel);
       } catch (err) {
         console.error('Failed to open conversation from deep link:', err);
         // Fall back to filter mode so the user can still find it manually
@@ -437,13 +472,14 @@ function Messages() {
     handoffFilterRef.current = handoffFilter;
     stateFilterRef.current = stateFilter;
     psidFilterRef.current = psidFilter;
+    seenFilterRef.current = seenFilter;
     certaintyFilterRef.current = certaintyFilter;
     if (!initialLoading) {
       setCurrentPage(1);
       currentPageRef.current = 1;
       fetchFilteredPage(1);
     }
-  }, [keywordFilter, purchaseIntentFilter, productInterestFilter, sharedProductFilter, handoffFilter, stateFilter, psidFilter, certaintyFilter]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [keywordFilter, purchaseIntentFilter, productInterestFilter, sharedProductFilter, handoffFilter, stateFilter, psidFilter, seenFilter, certaintyFilter]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleTakeover = async (psid) => {
     setLoading(prev => ({ ...prev, [psid]: true }));
@@ -853,9 +889,7 @@ function Messages() {
                   <tr
                     key={handoff.psid}
                     onClick={() => {
-                      setSelectedPsid(handoff.psid);
-                      setSelectedChannel(handoff.channel);
-                      fetchFullConversation(handoff.psid);
+                      openConversation(handoff.psid, handoff.channel);
                       // Opening a pending conversation means the human is taking over —
                       // mark it taken (same as the "Tomar" button), not just viewed.
                       handleTakeoverAndResolve(handoff.psid);
@@ -1108,6 +1142,7 @@ function Messages() {
         <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #555" }}>
           <thead>
             <tr style={{ backgroundColor: "#2a1a5e", color: "#bb86fc" }}>
+              <th style={{ padding: "10px", textAlign: "center", borderBottom: "2px solid #555" }} title="Vista / no vista">👁</th>
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.channel')}</th>
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.user')}</th>
               <th style={{ padding: "10px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.date')}</th>
@@ -1124,15 +1159,12 @@ function Messages() {
               const needsHelp = status?.handoffRequested && !isHumanActive;
               const channelDisplay = getChannelDisplay(msg.channel);
               const handoffStyle = needsHelp ? getHandoffStyle(status?.handoffReason) : null;
+              const unseen = isUnseen(msg, status);
 
               return (
                 <tr
                   key={msg.psid}
-                  onClick={() => {
-                    setSelectedPsid(msg.psid);
-                    setSelectedChannel(msg.channel);
-                    fetchFullConversation(msg.psid);
-                  }}
+                  onClick={() => openConversation(msg.psid, msg.channel)}
                   style={{
                     borderBottom: "1px solid #555",
                     cursor: "pointer",
@@ -1140,6 +1172,15 @@ function Messages() {
                     borderLeft: handoffStyle ? `4px solid ${handoffStyle.borderColor}` : "none"
                   }}
                 >
+                  <td style={{ padding: "10px", textAlign: "center" }}>
+                    <span
+                      onClick={(e) => { e.stopPropagation(); markSeen(msg.psid, unseen); }}
+                      title={unseen ? "No vista — click para marcarla como vista" : `Vista${status?.seenBy ? ` por ${status.seenBy}` : ''} — click para marcarla como no vista`}
+                      style={{ cursor: "pointer", color: unseen ? "#3b82f6" : "#4b5563", fontSize: unseen ? "1.1rem" : "0.95rem" }}
+                    >
+                      {unseen ? "●" : "✓"}
+                    </span>
+                  </td>
                   <td style={{ padding: "10px", textAlign: "center" }}>
                     <span
                       style={{
@@ -1180,7 +1221,7 @@ function Messages() {
                       minute: '2-digit'
                     })}
                   </td>
-                  <td style={{ padding: "10px", paddingRight: "30px", maxWidth: "350px", overflow: "hidden", textOverflow: "ellipsis", color: "white", position: "relative", whiteSpace: "nowrap" }}>
+                  <td style={{ padding: "10px", paddingRight: "30px", maxWidth: "350px", overflow: "hidden", textOverflow: "ellipsis", color: "white", position: "relative", whiteSpace: "nowrap", fontWeight: unseen ? 700 : 400 }}>
                     {getMessageExcerpt(msg.lastMessage)}
                     <span style={{ position: "absolute", right: "10px", top: "50%", transform: "translateY(-50%)" }}>{msg.senderType === "bot" ? "🤖" : "👤"}</span>
                   </td>
@@ -1251,9 +1292,7 @@ function Messages() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedPsid(msg.psid);
-                          setSelectedChannel(msg.channel);
-                          fetchFullConversation(msg.psid);
+                          openConversation(msg.psid, msg.channel);
                         }}
                         style={{
                           padding: "6px 12px",
@@ -1391,6 +1430,20 @@ function Messages() {
           <option value="human_handling" style={{ backgroundColor: "#1a1a1a" }}>En humano</option>
         </select>
 
+        {/* Seen / unseen — "No vistas" is the working queue: what nobody has opened
+            since the customer's last message. */}
+        <select value={seenFilter} onChange={(e) => setSeenFilter(e.target.value)}
+          style={{
+            padding: "0.5rem 0.75rem",
+            backgroundColor: seenFilter ? "#3b82f6" : "rgba(255, 255, 255, 0.1)",
+            color: "white", border: seenFilter ? "2px solid #3b82f6" : "1px solid #555",
+            borderRadius: "8px", cursor: "pointer", fontSize: "0.9rem"
+          }}>
+          <option value="" style={{ backgroundColor: "#1a1a1a" }}>Vistas: todas</option>
+          <option value="no" style={{ backgroundColor: "#1a1a1a" }}>No vistas</option>
+          <option value="yes" style={{ backgroundColor: "#1a1a1a" }}>Ya vistas</option>
+        </select>
+
         {/* Certainty filter (salesman/Noemi and above) — RAW correlation %, ignores the
             sales-reporting floor and reaches 0. Filters which chats are shown. */}
         {canFilterCertainty && (
@@ -1415,12 +1468,12 @@ function Messages() {
         )}
 
         {/* Clear all (only the dropdown filters, not keyword) */}
-        {(adFilter || purchaseIntentFilter || productInterestFilter || sharedProductFilter || handoffFilter || stateFilter || certaintyFilter > 0) && (
+        {(adFilter || purchaseIntentFilter || productInterestFilter || sharedProductFilter || handoffFilter || stateFilter || seenFilter || certaintyFilter > 0) && (
           <button onClick={() => {
             setAdFilter('');
             setPurchaseIntentFilter(''); setProductInterestFilter('');
             setSharedProductFilter(''); setHandoffFilter(''); setStateFilter('');
-            setCertaintyFilter(0);
+            setSeenFilter(''); setCertaintyFilter(0);
           }} style={{ padding: "0.5rem 0.75rem", backgroundColor: "#374151", color: "white", border: "1px solid #555", borderRadius: "8px", cursor: "pointer", fontSize: "0.85rem" }}>
             Limpiar
           </button>
@@ -1518,6 +1571,7 @@ function Messages() {
           <table style={{ width: "100%", borderCollapse: "collapse", marginTop: "1rem", border: "1px solid #555" }}>
           <thead>
             <tr style={{ backgroundColor: "#1b3a1b", color: "lightgreen" }}>
+              <th style={{ padding: "8px", textAlign: "center", borderBottom: "2px solid #555" }} title="Vista / no vista">👁</th>
               <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.channel')}</th>
               <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.user')}</th>
               <th style={{ padding: "8px", textAlign: "left", borderBottom: "2px solid #555" }}>{t('messages.date')}</th>
@@ -1535,15 +1589,12 @@ function Messages() {
               const needsHelp = status?.handoffRequested && !isHumanActive;
               const channelDisplay = getChannelDisplay(msg.channel);
               const handoffStyle = needsHelp ? getHandoffStyle(status?.handoffReason) : null;
+              const unseen = isUnseen(msg, status);
 
               return (
                 <tr
                   key={msg.psid}
-                  onClick={() => {
-                    setSelectedPsid(msg.psid);
-                    setSelectedChannel(msg.channel);
-                    fetchFullConversation(msg.psid);
-                  }}
+                  onClick={() => openConversation(msg.psid, msg.channel)}
                   style={{
                     borderBottom: "1px solid #555",
                     cursor: "pointer",
@@ -1551,6 +1602,15 @@ function Messages() {
                     borderLeft: handoffStyle ? `4px solid ${handoffStyle.borderColor}` : "none"
                   }}
                 >
+                  <td style={{ padding: "8px", textAlign: "center" }}>
+                    <span
+                      onClick={(e) => { e.stopPropagation(); markSeen(msg.psid, unseen); }}
+                      title={unseen ? "No vista — click para marcarla como vista" : `Vista${status?.seenBy ? ` por ${status.seenBy}` : ''} — click para marcarla como no vista`}
+                      style={{ cursor: "pointer", color: unseen ? "#3b82f6" : "#4b5563", fontSize: unseen ? "1.1rem" : "0.95rem" }}
+                    >
+                      {unseen ? "●" : "✓"}
+                    </span>
+                  </td>
                   <td style={{ padding: "8px", textAlign: "center" }}>
                     <span
                       style={{
@@ -1584,7 +1644,7 @@ function Messages() {
                     )}
                   </td>
                   <td style={{ padding: "8px", color: "#e0e0e0" }}>{new Date(msg.lastMessageAt).toLocaleString()}</td>
-                  <td style={{ padding: "8px", paddingRight: "30px", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", color: "white", position: "relative", whiteSpace: "nowrap" }}>
+                  <td style={{ padding: "8px", paddingRight: "30px", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", color: "white", position: "relative", whiteSpace: "nowrap", fontWeight: unseen ? 700 : 400 }}>
                     {getMessageExcerpt(msg.lastMessage)}
                     <span style={{ position: "absolute", right: "8px", top: "50%", transform: "translateY(-50%)" }}>{msg.senderType === "bot" ? "🤖" : "👤"}</span>
                   </td>
@@ -1656,9 +1716,7 @@ function Messages() {
                       <button
                         onClick={(e) => {
                           e.stopPropagation();
-                          setSelectedPsid(msg.psid);
-                          setSelectedChannel(msg.channel);
-                          fetchFullConversation(msg.psid);
+                          openConversation(msg.psid, msg.channel);
                         }}
                         style={{
                           padding: "6px 12px",

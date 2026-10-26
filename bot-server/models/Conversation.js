@@ -237,6 +237,15 @@ const conversationSchema = new mongoose.Schema({
   }],
   tags: [{ type: String }],
 
+  // Dashboard "seen" flag — the moment a human opened this conversation in the
+  // dashboard. Team-wide on purpose: the inbox is shared, so one asesor opening a
+  // chat tells the rest it has been looked at. There is NO separate unread boolean:
+  // a conversation reads as unseen whenever lastMessageAt > seenAt (or seenAt is
+  // null), so a new customer message re-arms it by itself and the two can never
+  // drift apart.
+  seenAt: { type: Date, default: null },
+  seenBy: { type: String, default: null },
+
   // Previous session snapshot (for returning user context on ad-click re-entry)
   previousSession: {
     productInterest: { type: String, default: null },
