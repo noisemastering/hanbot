@@ -27,12 +27,58 @@ function applyVars(text, vars = {}) {
 // object/array is touched, and only when it carries a plain-text field — a reply
 // that merely mentions a brace is left alone.
 const REPLY_KEYS = ["text", "reply", "message", "respuesta", "mensaje", "content", "output"];
+
+// Length of the balanced JSON object/array that STARTS the string, or 0 if the
+// string doesn't open with one that parses. String-aware so a brace or bracket
+// inside a quoted value doesn't close the span early.
+function leadingJsonSpan(t) {
+  const open = t[0];
+  if (open !== "{" && open !== "[") return 0;
+  const close = open === "{" ? "}" : "]";
+  let depth = 0, inStr = false, esc = false;
+  for (let i = 0; i < t.length; i++) {
+    const ch = t[i];
+    if (inStr) {
+      if (esc) esc = false;
+      else if (ch === "\\") esc = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === open) depth++;
+    else if (ch === close) {
+      depth--;
+      if (depth === 0) {
+        const span = t.slice(0, i + 1);
+        try {
+          JSON.parse(span);
+          return i + 1;
+        } catch {
+          return 0;
+        }
+      }
+    }
+  }
+  return 0;
+}
 function unwrapJsonReply(raw) {
   if (!raw) return raw;
   let t = String(raw).trim();
   const fence = t.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
   if (fence) t = fence[1].trim();
   if (!(t.startsWith("{") || t.startsWith("["))) return raw;
+  // The model also emits its reasoning as a JSON object and THEN the real reply as
+  // prose underneath it ({"text":"Cliente pide precio de mayoreo…"} + "Claro, en
+  // mayoreo sí te atiende un asesor…"). Only the prose is for the customer, so a
+  // leading, balanced JSON value followed by text is dropped, not unwrapped.
+  const head = leadingJsonSpan(t);
+  if (head > 0 && head < t.length) {
+    const rest = t.slice(head).trim();
+    if (rest) {
+      console.warn("⚠️ [workflow] model prefixed its reply with JSON; dropped the JSON part");
+      return rest;
+    }
+  }
   let parsed;
   try {
     parsed = JSON.parse(t);

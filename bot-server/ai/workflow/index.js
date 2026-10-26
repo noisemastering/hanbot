@@ -268,6 +268,81 @@ function initState(workflow, vars = {}, setupOverrides = {}) {
  * @param {object} [opts] - { sandbox: bool, _switchDepth?: number }
  * @returns {Promise<{reply: string|null, state: object, diagnostics: object}>}
  */
+// ─────────────────────────────────────────────────────────────────────────────
+// COLD-START PRICE ANCHORS. An organic "¿cuál es el precio?" names no product and
+// no measure, and the Coldstart flow's own prompt says "tu trabajo no es dar
+// precios", so the answer was "dime el ancho y el largo" — a price question
+// answered with no number at all. Reported twice on 2026-10-23/26 (psids
+// 28529106973427095, 29319361417751588), and in both the asesor then answered by
+// hand with the ground cover roll prices. The client's call: answer with REAL
+// "desde" anchors and then ask the measure.
+//
+// One anchor per price SCALE a bare "malla" could mean — a confeccionada piece, a
+// borde roll, an antimaleza roll — never a catalogue dump. Every number comes from
+// resolvePrice (live ML, or the sheet where the rule says so, IVA handled by
+// fmtMoney); a leaf that can't be quoted is SKIPPED rather than guessed at, and
+// with fewer than two anchors the gate doesn't claim the turn at all.
+let _csAnchorCache = { at: 0, anchors: null };
+const CS_ANCHOR_TTL_MS = 30 * 60 * 1000;
+
+async function coldStartPriceAnchors() {
+  if (_csAnchorCache.anchors && Date.now() - _csAnchorCache.at < CS_ANCHOR_TTL_MS) {
+    return _csAnchorCache.anchors;
+  }
+  const PF = require("../../models/ProductFamily");
+  const { resolvePrice } = require("./priceResolver");
+  // A length-only product's `size` is not a measure (the borde's is "13x6m" — 13 CM
+  // of height by 6 m of length), so those name themselves. Same rule as the promo label.
+  const sizeTextOf = (leaf) => {
+    const ed = leaf.enabledDimensions;
+    const lengthOnly = Array.isArray(ed) && ed.length > 0 && !ed.includes("width");
+    if (lengthOnly) return String(leaf.name || "").trim();
+    const d = String(leaf.size || "").trim();
+    return d ? d.replace(/m$/i, " m").replace(/x/i, "x") : "";
+  };
+  const SPECS = [
+    // Both confeccionadas (MSR-REF reforzada and MSR-SIN con argollas) count toward
+    // the floor — "desde" has to be the real cheapest piece we can sell today, and
+    // the two differ by a few pesos at 2x2 m.
+    { key: "confeccionada", label: "la malla sombra confeccionada", re: /^MSR-(REF|SIN)-/i, lead: "desde" },
+    { key: "borde", label: "el borde separador", re: /^CIN-BOR-/i, lead: "desde" },
+    // One fixed leaf, not the cheapest: the 2x100 m roll is the anchor the asesores
+    // quote by hand, and the cuts (10/25/50 m) are the exception, not the entry point.
+    { key: "groundcover", label: "el rollo de antimaleza (ground cover)", code: "GC-ROL-NEG-02X100", lead: "en", sizeFirst: true },
+  ];
+  const anchors = [];
+  for (const spec of SPECS) {
+    try {
+      const q = { sellable: true, active: { $ne: false }, price: { $gt: 0 } };
+      if (spec.code) q.productCode = spec.code;
+      else q.productCode = { $regex: spec.re };
+      const cands = await PF.find(q)
+        .select("name size price priceExcludesTax productCode attributes enabledDimensions parentId stock onlineStoreLinks mlPrice")
+        .sort({ price: 1 })
+        .limit(spec.code ? 1 : 6)
+        .lean();
+      for (const leaf of cands) {
+        const pi = await resolvePrice(leaf).catch(() => null);
+        // A full roll legitimately hands off (an asesor closes it and quotes the
+        // freight), so a handoff only disqualifies an anchor when there is no number.
+        if (!pi || !pi.amount) continue;
+        const sz = sizeTextOf(leaf);
+        // "…(ground cover) de 2x100 m en $2111.20 (IVA incluido)" reads; the same
+        // clause with the size last gives two parentheticals in a row.
+        const text = spec.sizeFirst
+          ? `${spec.label}${sz ? ` de ${sz}` : ""} ${spec.lead} ${fmtMoney(pi)}`
+          : `${spec.label} ${spec.lead} ${fmtMoney(pi)}${sz ? ` (${sz})` : ""}`;
+        anchors.push({ key: spec.key, text });
+        break;
+      }
+    } catch (e) {
+      console.error(`⚠️ cold-start anchor "${spec.key}" failed:`, e.message);
+    }
+  }
+  _csAnchorCache = { at: Date.now(), anchors };
+  return anchors;
+}
+
 async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // 0. Self-correct: a prior turn may have switched the active flow. Always run
   // the flow the STATE points to, regardless of what the caller passed in.
@@ -706,6 +781,48 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     } catch (err) {
       console.error("⚠️ measure clarify resume failed:", err.message);
       state.pendingMeasureClarify = null;
+    }
+  }
+
+  // 1.066 A BARE PRICE ASK IN COLD START — "¿cuál es el precio?" / "¿cuál es el
+  // precio de la malla?" with no product and no measure. See coldStartPriceAnchors
+  // above for why this answers with numbers instead of asking for the measure.
+  // A SPECIFIC product word (sombra, rollo, antimaleza, borde…) means the flow can
+  // route it properly, so the gate only takes the genuinely ambiguous ask; a bare
+  // "malla" IS ambiguous — it is as much antimaleza as it is sombra. Fires once per
+  // conversation: if they ask again without naming anything, the model takes over
+  // rather than repeating the same three lines.
+  if (userMessage && workflow.isColdStart && !state.coldStartAnchorsSent) {
+    try {
+      const msgCs = String(userMessage);
+      const { dimsOf, wantsWholesale } = require("./tools");
+      const asksPrice = /\b(precio|precios|costo|costos|cotiza\w*|a\s+c[oó]mo)\b/i.test(msgCs) ||
+        /\bcu[aá]nto\s+(cuesta|cuestan|sale|salen|vale|valen|es|ser[ií]a)\b/i.test(msgCs);
+      const namesProduct =
+        /\b(sombra|rollo|rollos|antimaleza|anti\s*maleza|ground\s*cover|groundcover|borde|separador|monofilament\w*|cinta|kit|sujetador\w*|ojill\w*|cord[oó]n|lazo|herraj\w*|argolla\w*|raschel)\b/i.test(msgCs);
+      if (asksPrice && !namesProduct && !dimsOf(msgCs) && !wantsWholesale(msgCs) && !state.promoQuoted) {
+        const anchors = await coldStartPriceAnchors();
+        if (anchors.length >= 2) {
+          const parts = anchors.map((a) => a.text);
+          const list = parts.length > 1
+            ? `${parts.slice(0, -1).join(", ")} y ${parts[parts.length - 1]}`
+            : parts[0];
+          const reply = `Depende del producto: ${list}. ¿Cuál te interesa y de qué medida? 😊`;
+          history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+          return {
+            reply,
+            state: { ...state, history, nodeId: currentNode.id, coldStartAnchorsSent: true },
+            diagnostics: {
+              workflow: { id: String(workflow._id), name: workflow.name },
+              fromNode: { id: currentNode.id, name: currentNode.name },
+              toNode: { id: currentNode.id, name: currentNode.name },
+              coldStartPriceAnchors: anchors.map((a) => a.key),
+            },
+          };
+        }
+      }
+    } catch (e) {
+      console.error("⚠️ cold-start price anchors gate failed:", e.message);
     }
   }
 

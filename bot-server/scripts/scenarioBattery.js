@@ -319,6 +319,13 @@ const CASES = [
   { id: "cs-oscura-area", group: "coldstart", flow: "coldstart",
     turns: ["Que presio tiene el metro de la oscura", "5 metros cuadrados"],
     expect: "Reconoce que 'la oscura' pide un COLOR oscuro (negro o verde) y nunca contesta con beige. Un ÁREA (5 m²) es una superficie, así que pide el ancho x largo para cubrirla o recomienda una medida real de MALLA SOMBRA; JAMÁS cotiza un borde separador, una cinta ni un rollo de 54 m, que se venden por metro lineal." },
+  // Reported twice (psids 28529106973427095 and 29319361417751588): "¿Cuál es el precio
+  // de la malla?" / "¿Cuál es el precio?" were answered with no number at all — "dime el
+  // ancho y el largo" — and in both cases the asesor then had to quote by hand. The
+  // client's call: answer with real "desde" anchors and THEN ask the measure.
+  { id: "cs-bare-price-ask", group: "coldstart", flow: "coldstart",
+    turns: ["¿Cuál es el precio de la malla?"],
+    expect: "Debe dar PRECIOS REALES como ancla (al menos dos: confeccionada 'desde $…', borde separador 'desde $…', rollo de antimaleza/ground cover 2x100 m) y luego preguntar cuál producto y qué medida. NO aprueba una respuesta que sólo pida la medida sin ningún precio, ni una que liste porcentajes de sombra (35/50/70/80/90% es de los ROLLOS; la confeccionada es siempre 90%), ni una que vuelque el catálogo." },
   { id: "cs-bare-measure", group: "coldstart", flow: "coldstart",
     turns: ["precio de 3x3"],
     expect: "Una medida 2-D pelona (3x3) debe enrutar a MALLA CONFECCIONADA (reforzada, el default) y cotizar 3x3; NUNCA tratarla como borde/rollo 1-D, ni quedarse mudo." },
