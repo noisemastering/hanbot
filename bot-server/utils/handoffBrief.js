@@ -105,10 +105,19 @@ function buildHandoffBrief(convo) {
   if (!convo) return null;
   const c = typeof convo.toObject === "function" ? convo.toObject() : convo;
   const specs = c.productSpecs || {};
+  const ws = c.workflowState || {};
+  const lead = ws.lead || {};
   const reason = c.handoffReason || c.pendingHandoffReason || "";
 
-  const name = first(c.extractedName, specs.customerName, c.profileName);
-  let contact = first(c.leadData && c.leadData.contact);
+  // A name the customer TYPED beats the platform profile name — they are often not the
+  // same person. Reported 2026-10-24: the Messenger account was "Argelia Jiménez" and
+  // the buyer wrote "me llamo Maria Celia Fajardo jimenez"; extractedName holds the
+  // harvested PROFILE name, so the asesor was handed the account holder. lead.name is
+  // only ever set from what the customer actually wrote.
+  const name = first(lead.name, c.extractedName, specs.customerName, c.profileName);
+  // lead.phone matters for the same reason: captureLateContact writes the engine's lead,
+  // not leadData, so a number given after the escalation showed as "sin contacto".
+  let contact = first(c.leadData && c.leadData.contact, lead.phone, lead.email);
   if (!contact && reason) {
     try {
       contact = require("../ai/workflow/handoffGate").extractPhone(reason);
@@ -127,8 +136,7 @@ function buildHandoffBrief(convo) {
   );
   const size = first(specs.size, specs.dimensions, c.requestedSize,
     specs.width && specs.length ? `${specs.width}x${specs.length}` : null);
-  const qty = first(specs.quantity, c.workflowState && c.workflowState.lead && c.workflowState.lead.wholesaleQty);
-  const ws = c.workflowState || {};
+  const qty = first(specs.quantity, lead.wholesaleQty);
   const variant = first(ws.bordeVariant, specs.variant);
   const version = variant ? VERSION_LABEL[String(variant).toLowerCase()] || null : null;
   const extras = EXTRA.filter(([re]) => re.test(reason)).map(([, label]) => label);

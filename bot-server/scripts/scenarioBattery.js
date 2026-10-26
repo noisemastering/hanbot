@@ -209,7 +209,20 @@ const CASES = [
     turns: ["Necesito cubrir 200 m2"],
     expect: "Recomienda un rollo real que cubra esa área (p.ej. 2x100 o 4x50 m) con su precio; NO pide que el cliente convierta el área a ancho x largo. Si el rollo recomendado es COMPLETO (100 m), va sin link y con asesor (regla 2026-10-23); si es una pieza cortada (4x50), sí lleva link." },
 
+  { id: "gc-medida-de-confeccionada", group: "groundcover", flow: "groundcover",
+    turns: ["Requiero la siguiente medida. 3 × 4. En cuanto sale ?"],
+    expect: "3x4 m no es ningún rollo de ground cover (los rollos van de 10 a 100 m de largo), es una malla sombra CONFECCIONADA: debe cambiar de flujo y cotizar la de 4x3 m con su precio y su link. NO debe convertirla en '¿el área que buscas cubrir es de 12 m²?' ni acabar cotizando un rollo de 2x100 que el cliente nunca pidió (reportado 2026-10-24, psid 29364210186519165)." },
+  { id: "gc-color-que-no-existe", group: "groundcover", flow: "groundcover",
+    turns: ["¿la tienen en beige?"],
+    expect: "Dice que el ground cover va en negro y blanco Y le ofrece una salida: que la malla sombra sí viene en beige y se la cotiza si da la medida. NO debe terminar en 'solo manejamos negro y blanco' sin ofrecer nada, ni ofrecer beige en ground cover (no existe)." },
+
   // BORDE ─────────────────────────────────────────────────────────────────────
+  { id: "borde-medida-mas-cp", group: "borde", flow: "borde",
+    turns: ["¿Cuánto cuesta el Borde Separador Grueso Hanlob?", "18 mts. C P 92730"],
+    expect: "El segundo mensaje trae DOS datos: la medida elegida (18 m) y el código postal. Debe COTIZAR los 18 m — no basta con 'ya registré tu código postal', y nunca debe volver a listar los cuatro largos como si el cliente no hubiera escogido (reportado 2026-10-24, psid 30117186911215086). Registrar el CP además está bien." },
+  { id: "borde-sin-medida-inventada", group: "borde", flow: "borde",
+    turns: ["¿Cuánto cuesta el rollo de 18 m?"],
+    expect: "Lo ÚNICO que se evalúa es cómo NOMBRA la medida: NUNCA debe escribir '13x18m' ni '13 x 18' ni ninguna medida de dos lados, porque el borde se vende por LARGO y el 13 es la altura en centímetros — '13x18 m' se lee como un rollo de 13 por 18 metros, que no existe. Cualquier respuesta que hable del rollo de 18 m sin esa cadena APRUEBA, incluida la de preguntar primero la versión (Premium o Flexible), que es la respuesta normal y correcta en este largo." },
   { id: "borde-por-rollo", group: "borde", flow: "borde",
     turns: ["el borde se vende por rollo?"],
     expect: "Confirma que sí se vende por rollo/largo y menciona los largos disponibles (6, 9, 18, 54 m); no escala lo que puede contestar. Compartir los precios de una vez es CORRECTO y deseable (la campaña pide comunicar precios de forma proactiva desde las primeras interacciones), no cuenta como información de más." },

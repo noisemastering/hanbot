@@ -426,10 +426,21 @@ async function runLinkFollowUpJob() {
 
 // ─────────────────────────────────────────────────────────────────────────────
 // PENDING-HANDOFF TIMEOUT: the bot asks for the customer's name/phone before
-// escalating. If they don't answer within ~30s, escalate ANYWAY (alert the human)
-// and flag that the client never gave their info — otherwise silent leads are
-// lost. Cleared when the customer replies (their turn re-arms or resolves it).
-const PENDING_HANDOFF_TIMEOUT_MS = 30 * 1000;
+// escalating. If they don't answer in time, escalate ANYWAY (alert the human) and
+// flag that the client never gave their info — otherwise silent leads are lost.
+// Cleared when the customer replies (their turn re-arms or resolves it).
+//
+// This was 30 SECONDS, which nobody can meet: typing a name, a 10-digit phone and a
+// código postal takes longer than that, so the escalation fired mid-sentence and
+// stamped "⚠️ el cliente NO proporcionó su información de contacto" on customers who
+// were about to. 9 of the 12 handoffs in the 2026-10-24→26 window carried that flag;
+// the client reported it as the bot handing off before collecting anything. Argelia
+// (psid 28756179244021826) answered with her name, address and CP 2h35m later and the
+// note still said she gave nothing. 10 minutes is long enough for a real person and
+// still alerts the asesor promptly on a genuinely silent lead — and a reply that lands
+// after it is now captured either way (captureLateContact, called from BOTH entry
+// paths), which corrects the note.
+const PENDING_HANDOFF_TIMEOUT_MS = 10 * 60 * 1000;
 async function runPendingHandoffTimeoutJob() {
   try {
     const { triggerHandoff } = require('../services/pushNotifications');
@@ -448,7 +459,7 @@ async function runPendingHandoffTimeoutJob() {
         await updateConversation(c.psid, { pendingHandoffAt: null }).catch(() => {});
         continue;
       }
-      const reason = `${c.pendingHandoffReason || 'Cliente requiere asesor'} — ⚠️ el cliente NO proporcionó su información de contacto (sin respuesta en 30s)`;
+      const reason = `${c.pendingHandoffReason || 'Cliente requiere asesor'} — ⚠️ el cliente NO proporcionó su información de contacto (sin respuesta en ${Math.round(PENDING_HANDOFF_TIMEOUT_MS / 60000)} min)`;
       await triggerHandoff(c.psid, reason).catch((e) => console.error('❌ pending-handoff timeout escalation failed:', e.message));
       await updateConversation(c.psid, { pendingHandoffAt: null }).catch(() => {});
       console.log(`⏱️ [pending-handoff] escalated ${c.psid} after 30s of silence — client gave no info`);

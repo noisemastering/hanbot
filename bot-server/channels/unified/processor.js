@@ -1,6 +1,6 @@
 // Unified Message Processor - Channel-agnostic message processing
 
-const { generateReply } = require('../../ai/index');
+const { generateReply, captureLateContact } = require('../../ai/index');
 const Message = require('../../models/Message');
 const Conversation = require('../../models/Conversation');
 const User = require('../../models/User');
@@ -368,6 +368,15 @@ async function processMessage(normalizedMessage, io = null) {
   // 8. Check if conversation is in human_active state
   if (conversation.state === 'human_active') {
     console.log(`🚫 Conversation in human_active state, bot not responding`);
+    // Silent, but NOT deaf: the customer is often still answering the bot's last
+    // question (name / phone / código postal) and returning here used to discard it,
+    // because the engine's late-contact capture sits past this point. Same hole as the
+    // FB webhook's isHumanActive return — see captureLateContact (ai/index.js).
+    try {
+      await captureLateContact(unifiedId, processText, conversation);
+    } catch (e) {
+      console.error('⚠️ late contact capture failed:', e.message);
+    }
     return;
   }
 

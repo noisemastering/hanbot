@@ -1667,6 +1667,19 @@ app.post("/webhook", async (req, res) => {
           cancelDebounce(senderPsid);
 
           await saveMessage(senderPsid, messageText || "[image]", "user", messageId);
+          // The bot stays silent, but the customer is very often still ANSWERING the
+          // bot's last question — "¿me compartes un teléfono y tu código postal?" —
+          // and this return used to throw that answer away: the engine's late-contact
+          // capture lives past this point and never ran. Reported 2026-10-24 (psid
+          // 28756179244021826): name, street address and CP 70190 arrived 2h35m after
+          // the escalation and the conversation still showed lead {} and no zipcode.
+          try {
+            const { captureLateContact } = require("./ai/index");
+            const convo = await getConversation(senderPsid);
+            if (convo && messageText) await captureLateContact(senderPsid, messageText, convo);
+          } catch (e) {
+            console.error("⚠️ late contact capture failed:", e.message);
+          }
           res.sendStatus(200);
           return;
         }

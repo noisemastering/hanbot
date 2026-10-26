@@ -77,7 +77,7 @@ async function resolveSellableLeaf(doc, colorHint = "beige") {
     let guard = 0;
     while (queue.length && guard++ < 200) {
       const kids = await PF.find({ parentId: queue.shift() })
-        .select("name size price mlPrice onlineStoreLinks sellable active parentId")
+        .select("name size attributes enabledDimensions price mlPrice onlineStoreLinks sellable active parentId")
         .lean();
       for (const k of kids) {
         if (k.sellable && k.active !== false) sellables.push(k);
@@ -158,7 +158,7 @@ async function resolvePromo(hasPromo, opts = {}) {
         const doc = await mongoose
           .model("ProductFamily")
           .findById(rawId)
-          .select("name size attributes parentId price mlPrice onlineStoreLinks sellable active")
+          .select("name size attributes enabledDimensions parentId price mlPrice onlineStoreLinks sellable active")
           .lean();
         if (!doc) continue;
         const leaf = await resolveSellableLeaf(doc, colorFromText(p.colorNote, p.name));
@@ -778,7 +778,7 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
   const isGroundCover = realms.some((r) => /ground\s*cover|antimaleza/i.test(r));
   if (isGroundCover) {
     lines.push(
-      `- ANTIMALEZA = GROUND COVER (MISMO PRODUCTO): "malla antimaleza", "antimaleza", "malla anti-maleza", "malla para el suelo/piso contra maleza/hierba/pasto" y "ground cover" son EXACTAMENTE el producto que vendes aquí. Si el cliente pregunta "¿tienen malla antimaleza?" responde que SÍ y CONFIRMA EXPLÍCITAMENTE que la antimaleza es tu ground cover (di la palabra "ground cover"), luego pregunta el LARGO o el ÁREA a cubrir para cotizar. NUNCA digas "solo manejo ground cover", NUNCA lo trates como si fuera otra cosa, NUNCA lo mandes a "malla sombra", y NUNCA ofrezcas "pasarlo con un asesor" (tú lo atiendes directo). El ground cover NO tiene % de sombra: no preguntes eso. SÍ se maneja en DOS COLORES, NEGRO y BLANCO — nunca digas que no tiene colores ni ofrezcas beige o verde, que no existen en este producto. EL COLOR NO DEFINE EL PRECIO: en los ROLLOS COMPLETOS (2x100 y 4x100) negro y blanco cuestan LO MISMO, y en el resto de las medidas el color solo cambia el link y, si acaso, el precio publicado de ESE link. Así que NUNCA preguntes el color antes de dar el precio: primero da el precio de la medida y LUEGO ofrece los dos colores (si los dos traen precio y son distintos, di cada uno con su precio; si son iguales, dilo una vez para los dos). Si solo tienes el LARGO (p. ej. "quiero 25 metros"), lo que falta es el ANCHO (2 m o 4 m), porque ESO sí cambia el precio: pregunta SOLO el ancho y NO metas el color en esa misma pregunta — el color se ofrece después, junto con el precio.`
+      `- ANTIMALEZA = GROUND COVER (MISMO PRODUCTO): "malla antimaleza", "antimaleza", "malla anti-maleza", "malla para el suelo/piso contra maleza/hierba/pasto" y "ground cover" son EXACTAMENTE el producto que vendes aquí. Si el cliente pregunta "¿tienen malla antimaleza?" responde que SÍ y CONFIRMA EXPLÍCITAMENTE que la antimaleza es tu ground cover (di la palabra "ground cover"), luego pregunta el LARGO o el ÁREA a cubrir para cotizar. NUNCA digas "solo manejo ground cover", NUNCA lo trates como si fuera otra cosa, NUNCA lo mandes a "malla sombra", y NUNCA ofrezcas "pasarlo con un asesor" (tú lo atiendes directo). El ground cover NO tiene % de sombra: no preguntes eso. SÍ se maneja en DOS COLORES, NEGRO y BLANCO — nunca digas que no tiene colores ni ofrezcas beige o verde, que no existen en este producto. EL COLOR NO DEFINE EL PRECIO: en los ROLLOS COMPLETOS (2x100 y 4x100) negro y blanco cuestan LO MISMO, y en el resto de las medidas el color solo cambia el link y, si acaso, el precio publicado de ESE link. Así que NUNCA preguntes el color antes de dar el precio: primero da el precio de la medida y LUEGO ofrece los dos colores (si los dos traen precio y son distintos, di cada uno con su precio; si son iguales, dilo una vez para los dos). Si solo tienes el LARGO (p. ej. "quiero 25 metros"), lo que falta es el ANCHO (2 m o 4 m), porque ESO sí cambia el precio: pregunta SOLO el ancho y NO metas el color en esa misma pregunta — el color se ofrece después, junto con el precio. Si el cliente pide un COLOR que el ground cover NO tiene (beige, verde, gris): dile que el ground cover va en negro y blanco, y OFRÉCELE LA SALIDA — que la malla SOMBRA sí viene en beige y verde y se la cotizas con gusto si me dice la medida. NUNCA dejes la respuesta en "solo manejamos negro y blanco" y ahí termines: así se quedó colgado un cliente que pidió 3x4 en beige (psid 29364210186519165, 2026-10-24) y acabó con la cotización de un rollo de 2x100 negro que nunca pidió.`
     );
   }
 
@@ -866,8 +866,17 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     // está en promoción por $649" went out live. Never label a quote with it.
     let rawSize = (promo.product.size || "").trim();
     const at = promo.product.attributes || {};
-    if (!rawSize && at.width && at.length) rawSize = `${at.width}x${at.length}`;
-    if (!rawSize && promo.product.parentId) {
+    // A LENGTH-ONLY product's `size` is NOT a customer measure. The borde separador's
+    // is "13x18m" — 13 CENTIMETRES of height by 18 m of length — and it went out as
+    // "El precio del Rollo de 18 m (13x18m)", which reads as a 13 × 18 METRE roll
+    // (2026-10-24 audit). The catalogue flags these by leaving "width" out of
+    // enabledDimensions; for them the measure is the LENGTH, and the label below must
+    // use the product's own NAME — it is not malla sombra and has no color to name.
+    const _ed = promo.product.enabledDimensions;
+    const isLengthOnly = Array.isArray(_ed) && _ed.length > 0 && !_ed.includes("width");
+    if (isLengthOnly) rawSize = ""; // the NAME ("Rollo de 18 m") already states it
+    if (!rawSize && !isLengthOnly && at.width && at.length) rawSize = `${at.width}x${at.length}`;
+    if (!rawSize && !isLengthOnly && promo.product.parentId) {
       try {
         const up = await mongoose
           .model("ProductFamily")
@@ -884,7 +893,9 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     const size = rawSize.replace(/m$/i, " m").trim();
     const color = colorFromText(promo.product.name, promo.name);
     const isColorLeaf = /^color\b/i.test(String(promo.product.name || "").trim());
-    const label = size
+    const label = isLengthOnly
+      ? `el ${promo.product.name}`
+      : size
       ? `la malla sombra de ${size} en color ${color}`
       : isColorLeaf
       ? `la malla sombra en color ${color}`

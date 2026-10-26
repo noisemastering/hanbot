@@ -573,7 +573,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           city: (state.location && state.location.city) || undefined,
         }, "handoff").catch(() => {});
       }
-      const who = state.lead.name ? `, ${String(state.lead.name).split(/\s+/)[0]}` : "";
+      const who = state.lead.name || opts.profileName
+        ? `, ${String(state.lead.name || opts.profileName).split(/\s+/)[0]}`
+        : "";
       const reply = `${pre}¡Gracias${who}! 🙌 Un asesor te contactará lo antes posible para ayudarte.`;
       history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
       return {
@@ -593,8 +595,13 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     const _lead = state.lead || {};
     const _qtyAsk = wholesaleNeedsQty ? "¿Cuántas piezas te interesan? " : "";
     const _haveZip = !!(state.location && (state.location.zip || state.location.zipcode));
-    const _contactAsk = (!_lead.name || !_lead.phone)
-      ? `¿Me compartes tu nombre, un teléfono a 10 dígitos${_haveZip ? "" : " y tu código postal"} para que te contacte?`
+    // The NAME is captured from the platform profile at chat start, never asked —
+    // opts.profileName carries it (ai/index.js validates it with looksLikeName).
+    // Asking for a name the brief already prints reads as if we hadn't been paying
+    // attention; ask only for what's genuinely missing.
+    const _knownName = _lead.name || opts.profileName || null;
+    const _contactAsk = (!_knownName || !_lead.phone)
+      ? `¿Me compartes ${_knownName ? "" : "tu nombre, "}un teléfono a 10 dígitos${_haveZip ? "" : " y tu código postal"} para que te contacte?`
       : _haveZip
       ? ""
       : "¿Me compartes tu código postal para cotizarte el envío?";
@@ -728,6 +735,11 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   //   (c) RECOMMEND — on confirm, propose the nearest-area real roll + price/link.
   //   (d) QUANTITY GATE — 2+ rolls = mayoreo → specialist handoff.
   //   (e) DECLINE — customer rejects the recommendation → specialist handoff.
+  // Set when THIS turn's measure cannot be a roll in this flow (see (c) below). The
+  // cross-flow measure router is normally skipped inside a roll flow, and this is the
+  // one case where it must still run: the roll flow has just established it cannot
+  // serve the measure at all.
+  let rollFlowRejectedMeasure = false;
   if (userMessage) {
     try {
       const Wf = require("../../models/Workflow");
@@ -862,6 +874,54 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           state.rollRecommendation = null;
           return beginHandoff({ preface: `Para cubrir ${area} m² te recomiendo un rollo de ${rec.dims[0]} x ${rec.dims[1]} m.`, reason: `Rollo recomendado ${rec.dims[0]}x${rec.dims[1]} sin precio en línea` });
         };
+
+        // The shortest roll length this flow actually stocks. Used to tell a roll
+        // request apart from a confeccionada PANEL that happens to carry two numbers.
+        // Memoized: the walk is the same one (a0)/(a0-bis) do, and a turn may need it
+        // after those have already run.
+        let _minRollLen;
+        const shortestRollLength = async () => {
+          if (_minRollLen !== undefined) return _minRollLen;
+          _minRollLen = null;
+          try {
+            let frontier = rolloFams.map((f) => String(f.id)).filter(Boolean);
+            const lens = [];
+            for (let d = 0; d < 5 && frontier.length; d++) {
+              const kids = await PF.find({ parentId: { $in: frontier } }).lean().catch(() => []);
+              if (!kids.length) break;
+              for (const k of kids) {
+                const l = Number(k.attributes?.length);
+                if (k.sellable === true && Number.isFinite(l) && l > 0) lens.push(l);
+              }
+              frontier = kids.map((k) => String(k._id));
+            }
+            if (lens.length) _minRollLen = Math.min(...lens);
+          } catch (e) {
+            console.error("⚠️ shortest roll length failed:", e.message);
+          }
+          return _minRollLen;
+        };
+
+        // (a0-ter) A COLOUR GROUND COVER DOESN'T HAVE. "¿la tienen en beige?" was
+        // answered "solo negro y blanco… dime el largo o el área que quieres cubrir",
+        // which is a dead end: beige IS a real product of ours, just not this one. The
+        // company-wide directive says to offer the way out, but a prompt only managed
+        // it about half the time (gc-color-que-no-existe flipped between runs), so the
+        // answer is deterministic here. Only the SHADELESS roll flow is ground cover —
+        // the Raschel rolls carry a shade % in their family names.
+        // "área verde" / "zona verde" is landscaping talk, not a colour request, and is
+        // the single most likely false positive in this realm, so it is stripped first.
+        if (carried.size === 0 && !dims) {
+          const msgNoGreenArea = msgN.replace(/\b(areas?|zonas?|espacios?)\s+verdes?\b/g, " ");
+          const other = msgNoGreenArea.match(/\b(beige|verde|gris|azul|cafe|terracota|vino)\b/);
+          if (other) {
+            const c = other[1];
+            return ret(
+              `En ground cover solo lo manejamos en negro y blanco, en ${c} no. Si lo que buscas en ${c} es malla sombra, esa sí la tenemos — dime la medida que necesitas y te la cotizo. 😊`,
+              { gcColorNotCarried: c }
+            );
+          }
+        }
 
         // (a0) "¿QUÉ MEDIDAS ESTÁN DISPONIBLES?" — GROUND COVER. Reported 2026-10-23:
         // the customer asked exactly that and got "dime qué largo necesitas o qué área
@@ -1053,8 +1113,22 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           return beginHandoff({ preface: `Para ${qty} rollos manejamos precio de MAYOREO.`, reason: `Mayoreo: ${qty} rollos — precio y cierre con un especialista`, wholesale: true });
         }
 
-        // (c) MEASURE GIVEN
+        // (c) MEASURE GIVEN — but a 2-D measure is only a ROLL if it COULD be one
+        // here. Every roll in this flow is at least as long as the shortest length we
+        // stock, so a measure whose longest side falls under that is a confeccionada
+        // PANEL, not a roll, and reading it as an area to cover strands the customer in
+        // the wrong flow. Reported 2026-10-24 (psid 29364210186519165): "3 × 4" on the
+        // Ground Cover ad was answered "¿el área que buscas cubrir es de 12 m²?"; "Beige"
+        // then dead-ended on "aquí solo hay negro y blanco", and a "Si" two turns later
+        // bought him a quote for a 2x100 m negro roll he never asked for. Leaving the
+        // turn unclaimed lets §1.5 switch him to malla sombra, where 4x3 m is real.
+        let notARoll = false;
         if (dims) {
+          const minLen = await shortestRollLength();
+          if (minLen && Math.max(dims[0], dims[1]) < minLen) notARoll = true;
+        }
+        rollFlowRejectedMeasure = notARoll;
+        if (dims && !notARoll) {
           // Resolve at the KNOWN shade (from state or this turn), not by raw msg
           // text — otherwise a bare "80" reply can't steer the resolver to the 80%
           // variant and it would pick an arbitrary shade.
@@ -2694,7 +2768,13 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // in the rollo flow asking for a roll. Skip the router here; step 1.6 resolves
   // the roll within the flow.
   const isRollFlow = familyList.length > 0 && familyList.every((f) => /\brollo\b|ground\s*cover|antimaleza/i.test(f.name || ""));
-  if (userMessage && !inSinRefuerzo && !isRollFlow && (opts._switchDepth || 0) < 2 && !opts.sandboxNoAutoSwitch) {
+  // …EXCEPT when the roll gate has just established that this measure is no roll of
+  // ours (3x4 m on the Ground Cover ad). Skipping the router there left the turn to
+  // the "closest measure" gate, which offered a 4 x 10 m ANTIMALEZA roll for a 3 x 4 m
+  // shade-cloth panel, and to the scope classifier, whose verdict is a model call and
+  // came back "current" about half the time. routeByMeasure is deterministic: GC owns
+  // no 3x4 leaf, so case (c) sends it to the flow that does.
+  if (userMessage && !inSinRefuerzo && (!isRollFlow || rollFlowRejectedMeasure) && (opts._switchDepth || 0) < 2 && !opts.sandboxNoAutoSwitch) {
     try {
       const { dimsOf } = require("./tools");
       const earlyDims = dimsOf(String(userMessage)) || extractAllMeasures(String(userMessage))[0] || null;
@@ -3578,7 +3658,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // teléfono AND código postal. Asking for the zip later (the delivery-framed
       // gate) only fires on the purchase path, so wholesale handoffs reached the
       // asesor with no CP and the logistics question had to be asked again.
-      const ask = `${preface}¡Con gusto te paso con un asesor! 🙌 ¿Me compartes tu nombre, teléfono y código postal para que te contacte?`;
+      const _name = (ctx.lead && ctx.lead.name) || (state.lead && state.lead.name) || opts.profileName || null;
+      const ask = `${preface}¡Con gusto te paso con un asesor! 🙌 ¿Me compartes ${_name ? "" : "tu nombre, "}un teléfono a 10 dígitos y tu código postal para que te contacte?`;
       history.push({ role: "assistant", text: ask, nodeId: movedTo.id, at: new Date() });
       return {
         reply: ask,

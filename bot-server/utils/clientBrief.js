@@ -13,14 +13,17 @@ function buildClientBrief(convo) {
   if (!convo) return "";
   const c = typeof convo.toObject === "function" ? convo.toObject() : convo;
   const specs = c.productSpecs || {};
+  const lead = (c.workflowState || {}).lead || {};
   const parts = [];
 
-  const name = first(c.extractedName, specs.customerName, c.profileName);
+  // Same rule as the handoff brief: a name the customer TYPED beats the platform
+  // profile name, because they are often not the same person (see handoffBrief.js).
+  const name = first(lead.name, c.extractedName, specs.customerName, c.profileName);
   if (name) parts.push(`Cliente: ${name}`);
 
   // Prefer the structured contact; if missing, salvage a phone the model left in
   // the handoff reason (older handoffs predate deterministic capture).
-  let contact = first(c.leadData && c.leadData.contact);
+  let contact = first(c.leadData && c.leadData.contact, lead.phone, lead.email);
   if (!contact && c.handoffReason) {
     try {
       const { extractPhone } = require("../ai/workflow/handoffGate");

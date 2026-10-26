@@ -89,7 +89,14 @@ function captureZipReply(text) {
     .replace(/\bhola+\b|\bola+\b|\bbuen(os|as|a)?\b|\bdias?\b|\btardes?\b|\bnoches?\b|\bque\s*tal\b|\bsaludos?\b|\bmuchas\b|\bgracias\b|\bhey\b|\bpor\s*favor\b|\bporfa(vor|s|is)?\b|\bdisculp[ae]s?\b|\boye\b|\boiga\b|\bsenor(ita|a)?\b|\bamig[oa]\b|\bcompa\b|\bokay?\b|\bvale\b|\blisto\b|\bmira\b|\bbien\b/gi, " ")
     .replace(/[^\p{L}]+/gu, " ")
     .trim();
-  const bareNumberOnly = stripped.length <= 3;
+  // A SECOND number besides the CP means the message carries another fact — a
+  // measure, a quantity — and thanking-and-stopping would DROP it. Reported
+  // 2026-10-24 (psid 30117186911215086): "18 mts. C P 92730" was answered with
+  // "ya registré tu código postal" and the 18 m roll he had just chosen was
+  // never quoted; on the next turn the bot re-listed all four lengths. The
+  // stripper left "mts" — exactly 3 characters — so the message counted as bare.
+  const otherDigits = five ? norm.replace(five[0], " ").match(/\d/) : null;
+  const bareNumberOnly = stripped.length <= 3 && !otherDigits;
   if (five) return { isZipReply: true, zip: five[1], bareNumberOnly };
   // a bare-ish number that isn't a clean 5-digit (a typo, 4 or 6 digits) but is
   // clearly the reply to our CP ask
@@ -224,11 +231,22 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
     }
   }
 
+  const { looksLikeName: _looksLikeName } = require("../utils/convoSaleMatcher");
+  const rawProfileName = convo.extractedName || convo.customerName || convo.userName || null;
+  const profileName = rawProfileName && _looksLikeName(rawProfileName) ? String(rawProfileName).trim() : null;
+
   const { reply, state: newState, diagnostics } = await runWorkflowTurn(
     workflow,
     state,
     userMessage,
-    { psid, personaName } // psid-traceable links + the conversation's pinned persona name
+    // psid-traceable links + the conversation's pinned persona name + the name the
+    // PLATFORM already gave us. The name is CAPTURED at chat start (Messenger/WhatsApp
+    // profile, harvested in conversationManager), never asked — but the engine had no
+    // way to see it, so every handoff asked for "tu nombre, un teléfono y tu código
+    // postal" while the brief printed the name correctly from the same conversation
+    // (10 of 15 audit flags, 2026-10-24→26). Validated here with the same looksLikeName
+    // the correlation uses, so an old junk extraction can't suppress a real ask.
+    { psid, personaName, profileName: profileName || null }
   );
 
   // Map what the engine collected (lead / location / product) onto the
@@ -424,7 +442,14 @@ async function captureLateContact(psid, userMessage, convo) {
     const msg = String(userMessage);
     const phone = extractPhone(msg);
     const name = extractName(msg);
-    if (!phone && !name) return;
+    // The CÓDIGO POSTAL belongs here as much as the phone: it is what the asesor
+    // quotes the freight from and what sales correlation matches the ML order's
+    // ship-to against. Argelia's late reply (psid 28756179244021826, 2026-10-24)
+    // carried her name, her full street address and "c.p. 70190", and all of it was
+    // dropped — the conversation still had lead {} and no zipcode days later.
+    const { parseAndLookupZipCode } = require("./utils/preHandoffCheck");
+    const zipLoc = await parseAndLookupZipCode(msg).catch(() => null);
+    if (!phone && !name && !zipLoc) return;
 
     const ws = convo.workflowState || {};
     const lead = { ...(ws.lead || {}) };
@@ -438,14 +463,23 @@ async function captureLateContact(psid, userMessage, convo) {
         .trim();
     }
     const patch = { workflowState: { ...ws, lead } };
+    if (zipLoc) {
+      const nextLoc = { ...(ws.location || {}) };
+      nextLoc.zip = zipLoc.code;
+      if (zipLoc.city) nextLoc.city = zipLoc.city;
+      patch.workflowState.location = nextLoc;
+      if (!convo.zipcode) patch.zipcode = zipLoc.code;
+      if (!convo.city && zipLoc.city) patch.city = zipLoc.city;
+    }
 
-    // The 30s timeout may have stamped "NO proporcionó su información de contacto".
-    // That's no longer true — correct it so the agent sees the real data.
+    // The pending-handoff timeout may have stamped "NO proporcionó su información de
+    // contacto". That's no longer true — correct it so the agent sees the real data.
     const prev = String(convo.handoffReason || "");
-    if (/NO proporcion|sin respuesta en 30s/i.test(prev)) {
-      patch.handoffReason =
-        prev.replace(/\s*—\s*⚠️.*$/s, "").trim() +
-        ` — ✅ el cliente SÍ dio sus datos después: ${[lead.name, lead.phone].filter(Boolean).join(" / ")}`;
+    if (/NO proporcion|sin respuesta en/i.test(prev)) {
+      const got = [lead.name, lead.phone, zipLoc ? `CP ${zipLoc.code}${zipLoc.city ? ` (${zipLoc.city})` : ""}` : null]
+        .filter(Boolean)
+        .join(" / ");
+      patch.handoffReason = prev.replace(/\s*—\s*⚠️.*$/s, "").trim() + ` — ✅ el cliente SÍ dio sus datos después: ${got}`;
     }
     await updateConversation(psid, patch);
     require("./utils/locationStats")
@@ -454,7 +488,16 @@ async function captureLateContact(psid, userMessage, convo) {
         phone: lead.phone || undefined,
       }, "late_contact")
       .catch(() => {});
-    console.log(`📇 [engine] late contact captured for ${psid} (human-handled): ${[lead.name, lead.phone].filter(Boolean).join(" / ")}`);
+    // Correlation reads User.location.zipcode, never the Conversation — without this
+    // a CP given after the handoff never raises a conversion's certainty.
+    if (zipLoc) {
+      await syncLocationToUser(psid, { zipcode: zipLoc.code, city: zipLoc.city || undefined }, "late_contact").catch(() => {});
+    }
+    console.log(
+      `📇 [engine] late contact captured for ${psid} (human-handled): ${[lead.name, lead.phone, zipLoc ? `CP ${zipLoc.code}` : null]
+        .filter(Boolean)
+        .join(" / ")}`
+    );
   } catch (e) {
     console.error("⚠️ late contact capture failed:", e.message);
   }
@@ -1459,4 +1502,8 @@ function generateReply(userMessage, psid, referral = null) {
   return run;
 }
 
-module.exports = { generateReply };
+// captureLateContact is exported because BOTH entry paths stop the message before it
+// can ever reach the engine: the FB webhook returns on isHumanActive (index.js) and
+// the WhatsApp processor returns on state === 'human_active'. They each call this
+// first, so a customer still answering the bot's last question is never lost.
+module.exports = { generateReply, captureLateContact };
