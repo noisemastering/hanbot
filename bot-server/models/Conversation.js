@@ -246,6 +246,11 @@ const conversationSchema = new mongoose.Schema({
   seenAt: { type: Date, default: null },
   seenBy: { type: String, default: null },
 
+  // Why the bot said NOTHING on its last silent turn (see noteSilentTurn in
+  // ai/index.js). The engine owns its conversations and never falls back to legacy,
+  // so a failure is invisible to the customer AND to us; this is the breadcrumb.
+  lastSilentTurn: { type: mongoose.Schema.Types.Mixed, default: null },
+
   // Previous session snapshot (for returning user context on ad-click re-entry)
   previousSession: {
     productInterest: { type: String, default: null },

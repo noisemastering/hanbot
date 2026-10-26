@@ -17,6 +17,43 @@ function applyVars(text, vars = {}) {
   });
 }
 
+// The model is told to answer in plain text, and almost always does — but it can
+// wrap the answer in JSON ({"text":"El precio depende de la medida…"}) or in a
+// ```json fence, and nothing downstream unwrapped it, so the CUSTOMER received the
+// braces and the key. Seen on the Coldstart flow answering "¿Cuál es el precio de
+// la malla?" (reported 2026-10-23, psid 28529106973427095). This is the single
+// choke point where the model's text becomes our reply, so it is unwrapped here
+// rather than in the verifier or a gate. Only a string that is ENTIRELY one JSON
+// object/array is touched, and only when it carries a plain-text field — a reply
+// that merely mentions a brace is left alone.
+const REPLY_KEYS = ["text", "reply", "message", "respuesta", "mensaje", "content", "output"];
+function unwrapJsonReply(raw) {
+  if (!raw) return raw;
+  let t = String(raw).trim();
+  const fence = t.match(/^```(?:json)?\s*([\s\S]*?)\s*```$/i);
+  if (fence) t = fence[1].trim();
+  if (!(t.startsWith("{") || t.startsWith("["))) return raw;
+  let parsed;
+  try {
+    parsed = JSON.parse(t);
+  } catch {
+    return raw; // not valid JSON — it's prose that happens to start with a brace
+  }
+  const pick = (o) => {
+    if (typeof o === "string") return o;
+    if (!o || typeof o !== "object") return null;
+    for (const k of REPLY_KEYS) {
+      const v = Array.isArray(o) ? null : o[k];
+      if (typeof v === "string" && v.trim()) return v;
+    }
+    return null;
+  };
+  const out = Array.isArray(parsed) ? parsed.map(pick).filter(Boolean).join("\n") : pick(parsed);
+  if (!out || !out.trim()) return raw; // nothing readable inside → leave it for the verifier
+  console.warn("⚠️ [workflow] model replied in JSON; unwrapped the text field");
+  return out.trim();
+}
+
 function buildSystem(workflow, node, vars, contextBlock) {
   let sys = applyVars(workflow.globalPrompt || "", vars);
   if (workflow.knowledge && workflow.knowledge.length) {
@@ -88,7 +125,7 @@ async function executeNode(workflow, node, history, vars, ctx, contextBlock = ""
 
     const msg = resp.choices?.[0]?.message;
     if (!msg) break;
-    if (msg.content) finalText = msg.content.trim();
+    if (msg.content) finalText = unwrapJsonReply(msg.content.trim());
 
     if (!msg.tool_calls || msg.tool_calls.length === 0) break;
 
@@ -112,4 +149,4 @@ async function executeNode(workflow, node, history, vars, ctx, contextBlock = ""
   return { text: finalText || null, toolCalls };
 }
 
-module.exports = { executeNode, applyVars };
+module.exports = { executeNode, applyVars, unwrapJsonReply };

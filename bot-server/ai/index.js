@@ -503,6 +503,26 @@ async function captureLateContact(psid, userMessage, convo) {
   }
 }
 
+// When the engine OWNS a conversation it never falls back to legacy, so a failure
+// shows up to the customer as the bot saying nothing at all — and left no trace
+// anywhere: reported 2026-10-26 (psid 24149409157993042) the customer wrote
+// "Buenos días" + "Costo de La malla sombra" and got silence, and days later there
+// was nothing in the DB to say why (the console line had rotated out of Railway, and
+// replaying the same two messages answers correctly). One breadcrumb per
+// conversation, overwritten each time, so a silent turn can be explained next time
+// instead of guessed at.
+async function noteSilentTurn(psid, why, userMessage) {
+  try {
+    const Conversation = require("../models/Conversation");
+    await Conversation.updateOne(
+      { psid },
+      { $set: { lastSilentTurn: { at: new Date(), why: String(why).slice(0, 300), msg: String(userMessage || "").slice(0, 200) } } }
+    );
+  } catch (e) {
+    console.error("⚠️ could not record silent turn:", e.message);
+  }
+}
+
 async function maybeRunAdWorkflow(userMessage, psid) {
   const Conversation = require("../models/Conversation");
   const convo = await Conversation.findOne({ psid })
@@ -523,7 +543,10 @@ async function maybeRunAdWorkflow(userMessage, psid) {
   try {
     const Workflow = require("../models/Workflow");
     const workflow = await Workflow.findById(ad.workflowId);
-    if (!workflow) return { owned: true, reply: null };
+    if (!workflow) {
+      await noteSilentTurn(psid, `ad ${convo.adId}: workflow ${ad.workflowId} not found`, userMessage);
+      return { owned: true, reply: null };
+    }
     // Rule 1: post-July-1 ad or workflow is frozen until Liberado.
     const gated = await releaseGateReply([ad.createdAt, workflow.createdAt]);
     if (gated) return { owned: true, reply: gated };
@@ -531,11 +554,13 @@ async function maybeRunAdWorkflow(userMessage, psid) {
       sourceLabel: `ad="${ad.name || convo.adId}"`,
       initOverrides: ad.workflowSetup || {},
     });
+    if (!res?.reply) await noteSilentTurn(psid, `ad-workflow produced no reply (node ${res?.state?.nodeId || "?"})`, userMessage);
     return { owned: true, reply: res?.reply || null };
   } catch (e) {
     // Owned but the engine errored → stay silent / let the engine's own handoff
     // fallback handle it. NEVER drop to the legacy bot (that caused the bounce).
     console.error(`⚠️ ad-workflow engine error (owned, NOT falling to legacy) for ${psid}:`, e.message);
+    await noteSilentTurn(psid, `ad-workflow engine error: ${e.message}`, userMessage);
     return { owned: true, reply: null };
   }
 }
@@ -576,9 +601,11 @@ async function maybeRunColdStartWorkflow(userMessage, psid) {
       // Coldstart router has context (product interest) instead of starting blind.
       initOverrides: convo.productInterest ? { productInterest: convo.productInterest } : {},
     });
+    if (!res?.reply) await noteSilentTurn(psid, `cold-start produced no reply (node ${res?.state?.nodeId || "?"})`, userMessage);
     return { owned: true, reply: res?.reply || null };
   } catch (e) {
     console.error(`⚠️ cold-start engine error (owned, NOT falling to legacy) for ${psid}:`, e.message);
+    await noteSilentTurn(psid, `cold-start engine error: ${e.message}`, userMessage);
     return { owned: true, reply: null };
   }
 }
