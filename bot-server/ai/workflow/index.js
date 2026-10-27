@@ -492,6 +492,35 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       console.error("⚠️ pending-handoff guard failed:", err.message);
     }
   }
+  // Is this the GROUND COVER campaign? The client wrote that campaign its own opening
+  // and wording rules (2026-10-27): it opens with two messages carrying the promo
+  // prices, and it never announces the canalización. Every gate that branches on it is
+  // marked §N for the rule it implements. The Raschel rollo flow is untouched — its
+  // families carry a shade % in their names, ground cover's do not.
+  const _gcFlow = (() => {
+    try {
+      const fams = require("../../models/Workflow").familyListOf(workflow) || [];
+      return fams.length > 0 && fams.every((f) => /ground\s*cover|antimaleza/i.test(f.name || ""));
+    } catch { return false; }
+  })();
+
+  // COLONIA. The asesor quotes the freight from the CP *and* the colonia, and the Ground
+  // Cover campaign asks for it by name — but the engine captured only the CP, so a
+  // customer who answered "CP 76000, colonia Centro" had half their answer thrown away.
+  // It runs HERE, ahead of the pending-handoff resume, because that resume is exactly
+  // the turn the colonia arrives on and it returns before the passive capture below.
+  // Deliberately NOT part of `gotContact`: a colonia is not a way to reach anyone, so it
+  // must never satisfy the contact check or stamp contactDay.
+  if (userMessage) {
+    const col = String(userMessage).match(
+      /\b(?:col(?:onia)?\.?|fracc(?:ionamiento)?\.?|barrio|unidad\s+habitacional)\s+((?!postal\b)[a-z0-9áéíóúñ][a-z0-9áéíóúñ.\s]{2,38})/i
+    );
+    if (col && !(state.location && state.location.neighborhood)) {
+      const v = col[1].trim().replace(/[,;.]+$/, "").replace(/\s+/g, " ");
+      if (v) state.location = { ...(state.location || {}), neighborhood: v };
+    }
+  }
+
   if (userMessage && state.pendingHandoff) {
     try {
       const { looksLikeBareName, firstGivenName, cleanPersonName } = require("./handoffGate");
@@ -540,7 +569,11 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       const baseReason = state.pendingHandoff.reason || "El cliente requiere atención de un asesor";
       const reason = (state.lead && state.lead.wholesaleQty) ? `${baseReason} — interés: ~${state.lead.wholesaleQty} piezas` : baseReason;
       const who = state.lead && state.lead.name ? `, ${firstGivenName(state.lead.name)}` : "";
-      const reply = `¡Gracias${who}! 🙌 Un asesor te contactará lo antes posible para ayudarte.`;
+      // §3: on the Ground Cover campaign the customer hears about their cotización, not
+      // about our internal canalización. The escalation itself is unchanged.
+      const reply = _gcFlow
+        ? `¡Gracias${who}! 🙌 Con esto preparamos tu cotización y te la compartimos en seguida.`
+        : `¡Gracias${who}! 🙌 Un asesor te contactará lo antes posible para ayudarte.`;
       if (!yieldForBordeQty) {
       history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
       return {
@@ -568,7 +601,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // buying signal, so handle it deterministically here — the classic "Hola, soy X, ¿en
   // qué te puedo ayudar?" — before the model ever sees it. Only fires when the message
   // is NOTHING but a greeting (a greeting + product/measure falls through to the flow).
-  if (userMessage) {
+  if (userMessage && !(_gcFlow && !state.gcOpenerSent)) {
     const _g = String(userMessage).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
       .replace(/[!¡?¿.,]+/g, " ").replace(/\s+/g, " ").trim();
     if (/^(hola+|holi|ola|buenas|buen[oa]s?( (dias|tardes|noches))?|buen dia|que tal|que onda|que hubo|saludos|hey|hello)$/.test(_g)) {
@@ -651,7 +684,14 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       const who = state.lead.name || opts.profileName
         ? `, ${String(state.lead.name || opts.profileName).split(/\s+/)[0]}`
         : "";
-      const reply = `${pre}¡Gracias${who}! 🙌 Un asesor te contactará lo antes posible para ayudarte.`;
+      // §3 of the Ground Cover campaign spec: don't announce the canalización or narrate
+      // internal process — the conversation is about getting the customer their quote.
+      // The handoff itself is unchanged (a full roll is always closed by an asesor, the
+      // 2026-10-23 ROLLO COMPLETO rule); only what the customer hears changes, and only
+      // on this campaign.
+      const reply = _gcFlow
+        ? `${pre}¡Gracias${who}! 🙌 Con esto preparamos tu cotización y te la compartimos en seguida.`
+        : `${pre}¡Gracias${who}! 🙌 Un asesor te contactará lo antes posible para ayudarte.`;
       history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
       return {
         reply,
@@ -675,6 +715,30 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     // Asking for a name the brief already prints reads as if we hadn't been paying
     // attention; ask only for what's genuinely missing.
     const _knownName = _lead.name || opts.profileName || null;
+    // GROUND COVER (§2 + §3): ask ONLY for what is still missing — including the
+    // colonia, which the asesor needs for the freight — and frame it as preparing the
+    // cotización rather than as handing the customer over.
+    if (_gcFlow) {
+      const need = [];
+      if (!_knownName) need.push("a nombre de quién la preparamos");
+      if (!_lead.phone) need.push("un teléfono a 10 dígitos");
+      if (!_haveZip) need.push("tu código postal");
+      if (!(state.location && state.location.neighborhood)) need.push("tu colonia");
+      const list = need.length > 1 ? `${need.slice(0, -1).join(", ")} y ${need[need.length - 1]}` : need[0];
+      const askG = need.length ? `¿Me compartes ${list}? Es para incluir el envío.` : "";
+      const replyG = `${pre}¡Con gusto te preparamos tu cotización! 😊📋 ${_qtyAsk}${askG}`.trim();
+      history.push({ role: "assistant", text: replyG, nodeId: currentNode.id, at: new Date() });
+      return {
+        reply: replyG,
+        state: { ...state, history, nodeId: currentNode.id, pendingHandoff: { reason: reason || null, wholesale: !!wholesale, attempts: 1, askedAt: new Date() } },
+        diagnostics: {
+          workflow: { id: String(workflow._id), name: workflow.name },
+          fromNode: { id: currentNode.id, name: currentNode.name },
+          toNode: { id: currentNode.id, name: currentNode.name },
+          handoffPendingContact: true,
+        },
+      };
+    }
     const _contactAsk = (!_knownName || !_lead.phone)
       ? `¿Me compartes ${_knownName ? "" : "tu nombre, "}un teléfono a 10 dígitos${_haveZip ? "" : " y tu código postal"} para que te contacte?`
       : _haveZip
@@ -922,7 +986,81 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             c = c.parentId ? await PF.findById(c.parentId).select("name parentId").lean().catch(() => null) : null;
           }
         }
-        const dims = dimsOf(msg) || (extractAllMeasures(msg)[0] || null) || rememberedDims;
+        let dims = dimsOf(msg) || (extractAllMeasures(msg)[0] || null) || rememberedDims;
+
+        // Every sellable ground cover leaf, walked at most once per turn.
+        let _gcLeaves;
+        const gcLeaves = async () => {
+          if (_gcLeaves) return _gcLeaves;
+          _gcLeaves = [];
+          try {
+            let frontier = rolloFams.map((f) => String(f.id)).filter(Boolean);
+            for (let d = 0; d < 5 && frontier.length; d++) {
+              const kids = await PF.find({ parentId: { $in: frontier } }).lean().catch(() => []);
+              if (!kids.length) break;
+              _gcLeaves.push(...kids.filter((k) => k.sellable === true));
+              frontier = kids.map((k) => String(k._id));
+            }
+          } catch (e) {
+            console.error("⚠️ ground cover leaf walk failed:", e.message);
+          }
+          return _gcLeaves;
+        };
+        const gcDim = async (key) =>
+          [...new Set((await gcLeaves()).map((k) => Number(k.attributes?.[key])).filter((n) => Number.isFinite(n) && n > 0))].sort((a, b) => a - b);
+
+        // §4 — A BARE LENGTH IS A ROLL LENGTH. The client's own example, verbatim:
+        // "Gracias, quiero cotizar 10 metros". It used to reach the bare-price gate
+        // (a0-bis) — the word "cotizar" matches it and there is no 2-D measure to stop
+        // it — and came back with the two FULL rolls, so a customer who asked for 10 m
+        // never saw the 10 m price, which exists and has a buy link. A length alone
+        // still cannot be quoted: the WIDTH is what moves the number (2 m or 4 m), so
+        // remember it across turns and only then synthesize the measure, which hands the
+        // turn to the deterministic quote path at (c) — the same path that owns the
+        // colour choice and the link.
+        let gcAskWidth = null;
+        let gcNearestLen = null;
+        if (_gcFlow && !dims) {
+          const wM = msg.match(/\b(\d{1,2}(?:[.,]\d+)?)\s*(?:m|mts?|metros?)?\s+de\s+anch/i)
+            || msg.match(/\banch[oa]s?\s*(?:de\s*)?(\d{1,2}(?:[.,]\d+)?)\s*(?:m|mts?|metros?)?\b/i);
+          const w = wM ? Number(String(wM[1]).replace(",", ".")) : null;
+          if (w) state.gcWidth = w;
+          // Strip the width phrase so "2 m de ancho por 50" can't read the 2 as the
+          // length, and strip m² — an AREA belongs to (a1), which recommends a roll.
+          const rest = (wM ? msg.replace(wM[0], " ") : msg)
+            .replace(/\b\d+(?:[.,]\d+)?\s*(?:m2|m²|metros?\s+cuadrados?|mts?\s+cuadrados?)\b/gi, " ");
+          const lM = rest.match(/\b(\d{1,3}(?:[.,]\d+)?)\s*(?:m|mts?|metros?|ml)\b/i);
+          const len = lM ? Number(String(lM[1]).replace(",", ".")) : null;
+          if (len) {
+            const lens = await gcDim("length");
+            const width = state.gcWidth || null;
+            if (lens.length && !lens.includes(len)) {
+              // Nearest by absolute difference; on a tie prefer the one that COVERS it.
+              gcNearestLen = lens.reduce((best, n) => {
+                const d1 = Math.abs(n - len), d0 = Math.abs(best - len);
+                return d1 < d0 || (d1 === d0 && n > best) ? n : best;
+              }, lens[0]);
+            } else if (!width) {
+              gcAskWidth = len;
+            } else {
+              dims = [width, len];
+            }
+          } else if (w && state.gcPendingLen) {
+            // They answered the width we asked for ("2 m de ancho") and the LENGTH came
+            // a turn earlier. Without remembering it the turn had no measure, fell to
+            // the model, and it quoted "$406.80 en negro, con descuento de $407" — a
+            // discount equal to the price. The pair is complete now, so build it.
+            dims = [w, Number(state.gcPendingLen)];
+            state.gcPendingLen = null;
+          }
+        }
+        // Remember the WIDTH off any ground cover measure, however it arrived, so a
+        // later bare length ("y de 50 m?") resolves without asking it again.
+        if (_gcFlow && dims) {
+          const ws = await gcDim("width");
+          const w = dims.find((n) => ws.includes(Number(n)));
+          if (w) state.gcWidth = Number(w);
+        }
         // One-shot "awaiting quantity" flag: set when WE ask "¿cuántos?", so a
         // number reply ("3", "necesito 3", "tres") is read as the quantity next
         // turn. Consumed each turn; re-armed only when we ask again.
@@ -1018,6 +1156,114 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           }
           return _minRollLen;
         };
+
+        // Two bubbles in one turn. The Messenger webhook already sends reply.followUp
+        // as a second message; the WhatsApp processor had to learn it (dual-channel).
+        const retTwo = (reply, followUp, extra) => {
+          const r = ret(reply, extra);
+          history.push({ role: "assistant", text: followUp, nodeId: currentNode.id, at: new Date() });
+          return { ...r, followUp };
+        };
+        // The full rolls with their prices — Mensaje 1's body. Every number comes from
+        // resolvePrice, so the ROLLO COMPLETO rule applies (our price with IVA folded
+        // in, no ML link, an asesor closes it and quotes the freight). NOTE: the ad copy
+        // writes these as "$1,820 + IVA"; we show the IVA-included total, which is the
+        // same money and the 2026-10-23 rule.
+        const gcFullRollRows = async () => {
+          const byW = new Map();
+          for (const k of await gcLeaves()) {
+            if (Number(k.attributes?.length) !== 100) continue;
+            const w = String(k.attributes?.width || "");
+            if (!w || byW.has(w)) continue;
+            byW.set(w, k);
+          }
+          const rows = [];
+          for (const w of [...byW.keys()].sort((a, b) => Number(a) - Number(b))) {
+            const pi = await resolvePrice(byW.get(w), altOpt(state, byW.get(w))).catch(() => null);
+            if (!pi || pi.amount == null) continue;
+            rows.push(`• ${w} × 100 m: ${fmtMoney(pi)}`);
+          }
+          return rows;
+        };
+        // Mensaje 2 — the invitation to quote. §2: ask only what we don't already have.
+        // The NAME is captured from the platform profile at chat start and is never
+        // asked (opts.profileName), so that line appears only when we genuinely lack it.
+        const gcQuoteInvite = () => {
+          const lines = [];
+          if (!((state.lead && state.lead.name) || opts.profileName)) lines.push(`👤 ¿A nombre de quién la preparamos?`);
+          if (!(state.location && (state.location.zip || state.location.zipcode))) lines.push(`📍 Código postal`);
+          if (!(state.location && state.location.neighborhood)) lines.push(`🏘️ Colonia`);
+          lines.push(`📦 ¿Qué medida de rollo necesitas y cuántas piezas?`);
+          return `¡Con gusto te ayudamos con tu cotización! 😊📋\nPara prepararla e incluir el envío, ¿nos compartes?\n${lines.join("\n")}`;
+        };
+
+        // (a0-opener) §1 — THE CAMPAIGN'S TWO OPENING MESSAGES. Mensaje 1 presents the
+        // product with its promo prices; Mensaje 2 invites the quote and asks for the
+        // data to prepare it. Before this, the first turn of a Ground Cover ad was
+        // answered "¡Hola! …¿En qué te puedo ayudar?" — no product, no prices, no
+        // invitation, the opposite of what the ad promises. They go out as SEPARATE
+        // bubbles, which is the whole point of splitting them: short and interactive.
+        // It fires only when the opening message carries nothing else to answer — a
+        // first message that asks something specific is answered, not talked over.
+        if (_gcFlow && !state.gcOpenerSent && !history.some((h) => h.role === "assistant")) {
+          const t = String(userMessage || "").trim();
+          const isOpener =
+            t.length <= 70 && !dims && !gcAskWidth && !gcNearestLen && qty == null &&
+            // No digits at all: any number is a measure, an area ("3 hectáreas") or a
+            // quantity, and the opener must never talk over one.
+            !/\d/.test(t) &&
+            /\b(hola|buen[oa]s?|qu[eé]\s+tal|info|informaci[oó]n|precio|precios|costo|costos|cotiza\w*|me\s+interesa|interesad[oa]|disponible|quiero|busco|necesito)\b/i.test(t) &&
+            // A question about the MEDIDAS is not the opener's to answer — the size
+            // list below owns it, and answering only the price half would drop the
+            // other ("Que medidas tiene y precio?" is one question, not two turns).
+            !/\b(medidas?|tama[nñ]os?|presentaci[oó]n(es)?|dimensiones?|anchos?|largos?|hect[aá]reas?)\b/i.test(t) &&
+            !/\b(env[ií]o|entrega|pago|pagar|factur|garant|instalaci|ubicaci|direcci|d[oó]nde|color|negro|blanco|mayoreo|distribuidor)\b/i.test(t);
+          if (isOpener) {
+            const rows = await gcFullRollRows();
+            if (rows.length) {
+              state.gcOpenerSent = true;
+              // Mensaje 2 IS the collect-before-handoff ask, so arm the pending handoff:
+              // the quoted rolls are full rolls, which an asesor always closes and
+              // quotes the freight for (ROLLO COMPLETO, 2026-10-23), and §2 wants the
+              // alert raised with whatever data we have. If the customer replies with a
+              // measure or another question instead of their data, the guard above drops
+              // the pending ask and the turn is served normally.
+              state.pendingHandoff = {
+                reason: `Campaña Ground Cover: cotizados los ${rows.length} rollos completos en el mensaje de apertura; el asesor cierra la venta y cotiza el envío`,
+                wholesale: false,
+                attempts: 1,
+                askedAt: new Date(),
+              };
+              return retTwo(
+                `¡Precios de promoción! 🌱\n` +
+                  `Malla antimaleza (Ground Cover), disponible en negro y blanco al mismo precio:\n` +
+                  `${rows.join("\n")}\n` +
+                  `Ideal para controlar el crecimiento de maleza en cultivos y jardines, favoreciendo el aprovechamiento del agua y los nutrientes.`,
+                gcQuoteInvite(),
+                { gcOpener: rows.length }
+              );
+            }
+          }
+        }
+        // §4 continued — the two cases a bare length cannot resolve on its own.
+        if (gcNearestLen) {
+          const ws = await gcDim("width");
+          const wTxt = ws.length ? ws.map((w) => `${w} m`).join(" y ") : "2 m y 4 m";
+          state.gcWidth = null; // their stated width, if any, was for a length we don't cut
+          return ret(
+            `Ese largo exacto no lo cortamos. El más cercano es el rollo de ${gcNearestLen} m, en ${wTxt} de ancho y en negro o blanco. ¿Qué ancho necesitas y te paso el precio? 😊`,
+            { gcNearestLength: gcNearestLen }
+          );
+        }
+        if (gcAskWidth) {
+          const ws = await gcDim("width");
+          const wTxt = ws.length ? ws.map((w) => `${w} m`).join(" o ") : "2 m o 4 m";
+          state.gcPendingLen = gcAskWidth; // their width reply next turn completes the measure
+          return ret(
+            `¡Claro, ${gcAskWidth} m! ¿De qué ancho lo necesitas, ${wTxt}? Es lo que cambia el precio. 😊`,
+            { gcAskWidth }
+          );
+        }
 
         // (a0-ter) A COLOUR GROUND COVER DOESN'T HAVE. "¿la tienen en beige?" was
         // answered "solo negro y blanco… dime el largo o el área que quieres cubrir",

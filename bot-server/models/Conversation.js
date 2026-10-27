@@ -76,6 +76,11 @@ const conversationSchema = new mongoose.Schema({
   // Location tracking (for sales attribution)
   city: { type: String, default: null },           // City mentioned by user (e.g., "Hermosillo")
   stateMx: { type: String, default: null },        // Mexican state (e.g., "Sonora")
+  // Colonia. The asesor quotes the freight from the CP *and* the colonia, and the
+  // Ground Cover campaign asks for it by name — but nothing in the engine captured
+  // it (it existed only in the dormant legacy humanSales handler), so the brief never
+  // carried it. Written by the engine's passive capture, same path as the CP.
+  neighborhood: { type: String, default: null },   // Colonia given by the customer
   familyShown: { type: String, default: null },     // Track last family shown
   lastUnavailableSize: { type: String, default: null },  // Track unavailable size to detect insistence
   recommendedSize: { type: String, default: null },      // Size recommended by bot (for confirmation flow)

@@ -410,15 +410,27 @@ async function processMessage(normalizedMessage, io = null) {
         timestamp: { $gte: new Date(Date.now() - 60000) },
       }).select('_id').lean().catch(() => null);
       if (_dupReply) {
+        // A suppressed first bubble suppresses the second one too — the engine can split
+        // a turn in two (the Ground Cover opener), and re-sending only the invitation
+        // would leave it with nothing above it.
         console.log(`⚠️ Duplicate bot reply suppressed (WhatsApp) for ${unifiedId}`);
       } else {
         await sendMessageViaChannel(channel, userId, aiResponse);
         await saveMessage(unifiedId, aiResponse.text, 'bot', null, io);
+        // A turn may deliberately be TWO bubbles (the Ground Cover campaign opens with
+        // the prices, then the invitation to quote). The Messenger webhook has sent
+        // reply.followUp as a second message for a long time; WhatsApp never did, so the
+        // second half of a split reply was silently dropped on this channel.
+        if (aiResponse.followUp) {
+          await new Promise((resolve) => setTimeout(resolve, 500));
+          await sendMessageViaChannel(channel, userId, { type: 'text', text: aiResponse.followUp });
+          await saveMessage(unifiedId, aiResponse.followUp, 'bot', null, io);
+        }
       }
 
       // 14. Schedule silence follow-up (store link after 10min of inactivity)
       const { scheduleFollowUpIfNeeded } = require('../../jobs/silenceFollowUp');
-      scheduleFollowUpIfNeeded(unifiedId, aiResponse.text).catch(err =>
+      scheduleFollowUpIfNeeded(unifiedId, aiResponse.followUp || aiResponse.text).catch(err =>
         console.error("❌ Error scheduling silence follow-up:", err.message)
       );
 

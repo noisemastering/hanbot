@@ -2249,8 +2249,13 @@ app.post("/webhook", async (req, res) => {
 
             // Enviar texto si existe — pero NO reenviar un texto IDÉNTICO que ya salió
             // hace segundos (webhook reprocesado/reintentado → misma respuesta duplicada).
+            // A suppressed first bubble must suppress the SECOND one too: the engine can
+            // now split a turn in two (the Ground Cover opener), so a retried webhook
+            // would otherwise re-send the invitation on its own, with nothing above it.
+            let suppressedDup = false;
             if (hasText && await botJustSaid(senderPsid, reply.text)) {
               console.log(`⚠️ Duplicate bot reply suppressed for ${senderPsid}: "${reply.text.substring(0, 40)}…"`);
+              suppressedDup = true;
             } else if (hasText) {
               console.log(`🔍 [DEBUG] Sending text to FB API: "${reply.text.substring(0, 50)}..."`);
               await callSendAPI(senderPsid, { text: reply.text });
@@ -2262,7 +2267,7 @@ app.post("/webhook", async (req, res) => {
             }
 
             // Send follow-up message if exists (e.g., video link as separate bubble)
-            if (reply.followUp) {
+            if (reply.followUp && !suppressedDup) {
               console.log(`🔍 [DEBUG] Sending follow-up message...`);
               await new Promise(resolve => setTimeout(resolve, 500)); // Small delay between messages
               await callSendAPI(senderPsid, { text: reply.followUp });

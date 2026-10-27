@@ -34,8 +34,12 @@ function buildClientBrief(convo) {
   }
   if (contact) parts.push(`Contacto: ${contact}`);
 
-  const loc =
+  // The colonia rides with the location: the asesor quotes the freight from the CP AND
+  // the colonia, and the Ground Cover campaign asks the customer for both.
+  const colonia = first(c.neighborhood, c.humanSalesNeighborhood, (c.workflowState || {}).location?.neighborhood);
+  const place =
     [first(c.city), first(c.stateMx)].filter(Boolean).join(", ") || first(c.zipCode, c.zipcode);
+  const loc = [colonia ? `Col. ${colonia}` : null, place].filter(Boolean).join(", ");
   if (loc) parts.push(`Ubicación: ${loc}`);
 
   const product = first(c.poiRootName, c.productInterest, specs.productType);

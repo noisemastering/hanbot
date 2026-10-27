@@ -199,9 +199,37 @@ const CASES = [
   // NUMBERS, not a size range the customer has to pick from first. The full rolls are only
   // two, so both get quoted. The old wording ("ofrece las medidas con precios") also passed
   // for the size-range answer that made Noemi step in on psid 28529106973427095.
+  // Expectation rewritten 2026-10-27: the client's campaign spec makes this the OPENER
+  // (Mensaje 1 = producto + precios de promoción, Mensaje 2 = invitación a cotizar con
+  // los datos). The handoff is still armed; §3 of the spec forbids ANNOUNCING it.
   { id: "gc-precio-sin-medida", group: "groundcover", flow: "groundcover",
     turns: ["¿Cuál es el precio?"],
-    expect: "Cotiza LOS DOS rollos completos con su precio exacto (2x100 m y 4x100 m), con IVA incluido y SIN link de Mercado Libre, y pasa con un asesor para el envío (regla ROLLO COMPLETO 2026-10-23). NO responde con un rango 'desde X hasta Y' ni con una pregunta abierta de medida. Puede mencionar en una frase que hay cortes más chicos." },
+    expect: "Cotiza LOS DOS rollos completos con su precio exacto (2x100 m y 4x100 m), con IVA incluido y SIN link de Mercado Libre, y acto seguido invita a preparar la cotización pidiendo los datos que falten (código postal, colonia, medida y cantidad). NO responde con un rango 'desde X hasta Y' ni con una pregunta abierta de medida, y NO dice que va a 'pasar al cliente con un asesor' ni explica procesos internos." },
+  // §1 of the client's campaign spec (2026-10-27): the opening is TWO messages — the
+  // product with its promo prices, then the invitation to quote. Before this, a Ground
+  // Cover ad's first turn was answered "¡Hola! …¿En qué te puedo ayudar?".
+  { id: "gc-apertura-dos-mensajes", group: "groundcover", flow: "groundcover",
+    turns: ["Hola"],
+    expect: "Abre presentando la malla antimaleza CON los precios de los dos rollos completos (2x100 m y 4x100 m) y una línea de beneficios, y luego invita a preparar la cotización pidiendo los datos (código postal, colonia, medida y cantidad). NO contesta un saludo genérico tipo '¿en qué te puedo ayudar?' sin producto ni precios." },
+  // §4 of the spec, the client's own example: "Gracias, quiero cotizar 10 metros". This
+  // used to come back with the two FULL rolls, so the customer never saw the 10 m price.
+  { id: "gc-largo-menor-50", group: "groundcover", flow: "groundcover",
+    turns: ["Gracias, quiero cotizar 10 metros", "2 m de ancho"],
+    expect: "Entiende que 10 metros es un LARGO de rollo (no un área ni una cantidad) y pregunta el ANCHO (2 m o 4 m), que es lo que cambia el precio; con el ancho ya dado cotiza el corte de 2 x 10 m. NUNCA contesta con los precios de los rollos completos de 100 m, ni ignora el largo que pidió." },
+  // The wrong-measure bug reported 2026-10-27 (wa:5219992598760): he asked for 2 m x
+  // 50 m and the bot answered "el rollo de 2x100 m en $1531.20" — the price and the link
+  // of the 2x50 under the name of the 2x100.
+  { id: "gc-largo-tras-ancho", group: "groundcover", flow: "groundcover",
+    turns: ["El de 2 mts de ancho", "50 mts"],
+    expect: "Recuerda el ancho de 2 m y cotiza el rollo de 2 x 50 m. La medida que NOMBRA debe ser exactamente la que cotiza: decir '2x100 m' junto al precio del 2x50 m es el error. Puede pedir el color si el precio cambia por color." },
+  // §3: the handoff still happens, the canalización is never announced.
+  { id: "gc-sin-anunciar-canalizacion", group: "groundcover", flow: "groundcover",
+    turns: ["Quiero 2 rollos de 4x100"],
+    expect: "Reconoce que 2 rollos es mayoreo y pide los datos faltantes enmarcándolo como preparar la COTIZACIÓN (incluido el código postal y la colonia para el envío). NO dice 'te paso con un asesor', 'te canalizo' ni explica el proceso interno." },
+  // §2: ask only for what is missing — and the colonia must actually be captured.
+  { id: "gc-datos-solo-los-que-faltan", group: "groundcover", flow: "groundcover",
+    turns: ["Quiero 2 rollos de 4x100", "Soy Juan Pérez, mi tel 4421234567, CP 76000, colonia Centro"],
+    expect: "Tras recibir nombre, teléfono, código postal y colonia en un solo mensaje, agradece por su nombre y cierra confirmando que prepara la cotización. NO vuelve a pedir ningún dato que ya dio." },
   // The client's rule, 2026-10-23: "if prices differ we ask them but if they don't we
   // share the price". Asking is only pointless when the answer cannot move the number.
   { id: "gc-color-mismo-precio", group: "groundcover", flow: "groundcover",
@@ -416,7 +444,11 @@ async function runCase(c, flowsCache) {
       ? (d.switchedTo.name || d.switchedTo.workflowId || d.switchedTo.id || "?")
       : (d.switchedTo || "?");
     const tag = d.measureAutoSwitch ? `→switch:${sw}` : d.measureClarify ? "→clarify" : d.handoffRequested ? "→handoff" : "";
-    transcript.push({ user: msg, bot: (out.reply || out.text || "(sin respuesta)").trim(), tag });
+    // A turn may deliberately be TWO bubbles (the Ground Cover campaign opens with the
+    // prices, then the invitation to quote). Judge the whole turn — reading only the
+    // first half made the opener look like it never asked for anything.
+    const bot = [out.reply || out.text, out.followUp].filter(Boolean).join("\n\n").trim();
+    transcript.push({ user: msg, bot: bot || "(sin respuesta)", tag });
   }
   return { id: c.id, group: c.group, flow: c.flow, transcript, expect: c.expect };
 }

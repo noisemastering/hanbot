@@ -127,7 +127,11 @@ function buildHandoffBrief(convo) {
   // before giving a number — trust it over a phone salvaged from the text.
   if (RE.noContact.test(reason)) contact = contact || null;
 
-  const location = [first(c.city), first(c.stateMx)].filter(Boolean).join(", ") || first(c.zipCode, c.zipcode);
+  // The colonia belongs in the location line: the asesor quotes the freight from the CP
+  // AND the colonia, and the Ground Cover campaign asks the customer for both.
+  const colonia = first(c.neighborhood, c.humanSalesNeighborhood, (ws.location || {}).neighborhood);
+  const place = [first(c.city), first(c.stateMx)].filter(Boolean).join(", ") || first(c.zipCode, c.zipcode);
+  const location = [colonia ? `Col. ${colonia}` : null, place].filter(Boolean).join(", ");
   // poiRootName sometimes holds a COLOR leaf ("Color Beige") rather than the
   // product — useless to an asesor, so fall through to the real product field.
   const poi = first(c.poiRootName);

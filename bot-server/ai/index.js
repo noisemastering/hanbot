@@ -235,7 +235,7 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
   const rawProfileName = convo.extractedName || convo.customerName || convo.userName || null;
   const profileName = rawProfileName && _looksLikeName(rawProfileName) ? String(rawProfileName).trim() : null;
 
-  const { reply, state: newState, diagnostics } = await runWorkflowTurn(
+  const { reply, followUp, state: newState, diagnostics } = await runWorkflowTurn(
     workflow,
     state,
     userMessage,
@@ -283,6 +283,9 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
   }
   if (loc.city && !convo.city) persist.city = loc.city;
   if ((loc.zip || loc.zipcode) && !convo.zipcode) persist.zipcode = loc.zip || loc.zipcode;
+  // The colonia the engine captured. The asesor quotes the freight from the CP AND the
+  // colonia, and the Ground Cover campaign asks for it by name.
+  if (loc.neighborhood && !convo.neighborhood) persist.neighborhood = loc.neighborhood;
   if (lead.phone || lead.email) persist.leadData = { contact: lead.phone || lead.email };
   // Only store a name that actually LOOKS like one (never a phrase the extractor grabbed,
   // e.g. "que tome bien las medidas") — same validator the correlation uses.
@@ -391,7 +394,14 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
     safeText += "\n\nPor cierto, ¿a qué código postal te llegaría el pedido? 📍";
   }
 
-  return { handled: true, reply: safeText ? { type: "text", text: safeText } : null };
+  // A turn may deliberately be TWO bubbles (the Ground Cover campaign opens with
+  // Mensaje 1 = product + promo prices, Mensaje 2 = the invitation to quote). followUp
+  // is engine-authored static text — no model output, no URL, no phone number — so it
+  // does not go through the link/phone/vocabulary guards that exist for model text.
+  return {
+    handled: true,
+    reply: safeText ? { type: "text", text: safeText, ...(followUp ? { followUp } : {}) } : null,
+  };
 }
 
 // Same human-handling states everywhere: the engine must never speak over a
