@@ -344,6 +344,11 @@ router.get('/grouped', async (req, res) => {
         handoffReason: '$conv.handoffReason',
         state: '$conv.state',
         adId: '$conv.adId',
+        // Where the conversation came from. The raw id was already here and tells an
+        // asesor nothing; adHeadline is what WhatsApp CTWA gives us for an ad that was
+        // never imported into the dashboard, and is often the only readable name.
+        adHeadline: '$conv.adHeadline',
+        ctwaClid: '$conv.ctwaClid',
         // $ifNull so a conversation that has never been opened projects an explicit
         // null instead of a missing field — the $match below compares against null.
         seenAt: { $ifNull: ['$conv.seenAt', null] },
@@ -384,6 +389,17 @@ router.get('/grouped', async (req, res) => {
     pipeline.push({ $limit: limitNum });
 
     let conversations = await Message.aggregate(pipeline);
+
+    // WHICH AD DID THIS COME FROM? Three queries for the whole page (not one chain per
+    // row), then a readable label on every conversation. Reported 2026-10-27: on
+    // WhatsApp a number just appears and nobody can tell which campaign it answered.
+    try {
+      const { resolveAdNames, originOf } = require('../utils/adOrigin');
+      const names = await resolveAdNames(conversations.map((c) => c.adId));
+      conversations = conversations.map((c) => ({ ...c, origin: originOf(c, names) }));
+    } catch (e) {
+      console.error('⚠️ ad origin enrichment failed:', e.message);
+    }
 
     // If keyword search active, override lastMessage with the matching user message
     if (keywordMatchedMessages) {
@@ -723,6 +739,32 @@ router.post('/:psid/resume-bot', async (req, res) => {
 });
 
 // GET /conversations/:psid - Get messages for specific user with channel information
+// GET /conversations/:psid/origin — which ad this conversation came from, named.
+// A separate endpoint on purpose: GET /conversations/:psid returns a bare ARRAY of
+// messages and several callers depend on that shape, so widening it would be a
+// breaking change for a display detail. Must be declared BEFORE /:psid, or Express
+// matches "origin" as a psid.
+router.get('/:psid/origin', async (req, res) => {
+  try {
+    const convo = await Conversation.findOne({ psid: req.params.psid })
+      .select('adId adHeadline adBody adSourceUrl adSourceType ctwaClid campaignId channel adMainProductName currentFlow createdAt')
+      .lean();
+    if (!convo) return res.json({ success: true, origin: null });
+    const { resolveAdNames, originOf } = require('../utils/adOrigin');
+    const names = await resolveAdNames([convo.adId]);
+    res.json({
+      success: true,
+      origin: originOf(convo, names),
+      product: convo.adMainProductName || null,
+      flow: convo.currentFlow || null,
+      startedAt: convo.createdAt || null,
+    });
+  } catch (error) {
+    console.error('Error fetching conversation origin:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch origin' });
+  }
+});
+
 router.get('/:psid', async (req, res) => {
   try {
     const messages = await Message.find({ psid: req.params.psid })

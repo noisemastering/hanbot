@@ -41,6 +41,43 @@ function friendlyProduct(value) {
   return value.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 }
 
+// Where a conversation came from, as a one-line chip. Rendered only when the row
+// actually carries an origin, so a list that doesn't fetch it simply shows nothing.
+// On WhatsApp this is the whole point: without it the inbox is a list of phone
+// numbers with no clue which campaign each one answered.
+function AdOriginChip({ origin }) {
+  if (!origin || origin.organic || !origin.label) return null;
+  const title = [
+    origin.campaignName && `Campaña: ${origin.campaignName}`,
+    origin.adSetName && `Conjunto: ${origin.adSetName}`,
+    origin.adName && `Anuncio: ${origin.adName}`,
+    origin.headline && `Titular: ${origin.headline}`,
+    origin.adId && `ID: ${origin.adId}`,
+  ].filter(Boolean).join("\n");
+  return (
+    <span
+      title={title}
+      style={{
+        display: "inline-block",
+        marginTop: "3px",
+        maxWidth: "180px",
+        overflow: "hidden",
+        textOverflow: "ellipsis",
+        whiteSpace: "nowrap",
+        verticalAlign: "bottom",
+        fontSize: "0.7rem",
+        color: "#93c5fd",
+        backgroundColor: "#1d4ed822",
+        border: "1px solid #1d4ed855",
+        borderRadius: "4px",
+        padding: "1px 5px",
+      }}
+    >
+      📣 {origin.label}
+    </span>
+  );
+}
+
 function Messages() {
   const { t, locale } = useTranslation();
   // Certainty filter is for salesman (Noemi's profile) and above — i.e. anyone who can
@@ -56,6 +93,9 @@ function Messages() {
   const [selectedPsid, setSelectedPsid] = useState(null);
   const [selectedChannel, setSelectedChannel] = useState(null);
   const [fullConversation, setFullConversation] = useState([]);
+  // Which ad this conversation came from, resolved to a readable name. On WhatsApp a
+  // number just appears in the inbox and nobody can tell which campaign it answered.
+  const [convoOrigin, setConvoOrigin] = useState(null);
   const [dateFilter, setDateFilter] = useState('today');
   const [refreshing, setRefreshing] = useState(false);
   const [showLinkGenerator, setShowLinkGenerator] = useState(false);
@@ -292,8 +332,20 @@ function Messages() {
   const openConversation = (psid, channel) => {
     setSelectedPsid(psid);
     setSelectedChannel(channel);
+    setConvoOrigin(null);
     fetchFullConversation(psid);
+    fetchConversationOrigin(psid);
     markSeen(psid);
+  };
+
+  // Best-effort: the chat still opens if this fails, it just won't name the ad.
+  const fetchConversationOrigin = async (psid) => {
+    try {
+      const res = await API.get(`/conversations/${encodeURIComponent(psid)}/origin`);
+      setConvoOrigin(res.data || null);
+    } catch (err) {
+      setConvoOrigin(null);
+    }
   };
 
   const fetchFullConversation = async (psid) => {
@@ -1212,6 +1264,8 @@ function Messages() {
                     ) : (
                       <span style={{ color: '#888' }}>{msg.psid?.substring(0, 10)}...</span>
                     )}
+                    <br />
+                    <AdOriginChip origin={msg.origin} />
                   </td>
                   <td style={{ padding: "10px", color: "#e0e0e0", fontSize: "0.9rem" }}>
                     {new Date(msg.lastMessageAt).toLocaleString(locale, {
@@ -1642,6 +1696,8 @@ function Messages() {
                     ) : (
                       <span style={{ color: '#888' }}>{msg.psid?.substring(0, 10)}...</span>
                     )}
+                    <br />
+                    <AdOriginChip origin={msg.origin} />
                   </td>
                   <td style={{ padding: "8px", color: "#e0e0e0" }}>{new Date(msg.lastMessageAt).toLocaleString()}</td>
                   <td style={{ padding: "8px", paddingRight: "30px", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", color: "white", position: "relative", whiteSpace: "nowrap", fontWeight: unseen ? 700 : 400 }}>
@@ -1891,6 +1947,45 @@ function Messages() {
                   {selectedChannel === 'whatsapp' && (
                     <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#888' }}>
                       {t('messages.whatsappNote')}
+                    </p>
+                  )}
+                  {/* WHERE THIS CONVERSATION CAME FROM. The ad id was always stored on
+                      both channels but never shown, so a WhatsApp number arrived with no
+                      way to tell which campaign it answered. */}
+                  {convoOrigin && convoOrigin.origin && (
+                    <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#9ca3af', display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      {convoOrigin.origin.organic ? (
+                        <span title={t('messages.originOrganicHint')}>🌱 {t('messages.originOrganic')}</span>
+                      ) : (
+                        <>
+                          <span
+                            style={{
+                              backgroundColor: '#1d4ed822',
+                              border: '1px solid #1d4ed8',
+                              color: '#93c5fd',
+                              borderRadius: '4px',
+                              padding: '2px 6px',
+                            }}
+                            title={[
+                              convoOrigin.origin.campaignName && `Campaña: ${convoOrigin.origin.campaignName}`,
+                              convoOrigin.origin.adSetName && `Conjunto: ${convoOrigin.origin.adSetName}`,
+                              convoOrigin.origin.adName && `Anuncio: ${convoOrigin.origin.adName}`,
+                              convoOrigin.origin.headline && `Titular: ${convoOrigin.origin.headline}`,
+                              convoOrigin.origin.adId && `ID: ${convoOrigin.origin.adId}`,
+                            ].filter(Boolean).join('\n')}
+                          >
+                            📣 {convoOrigin.origin.label}
+                          </span>
+                          {convoOrigin.origin.campaignName && (
+                            <span style={{ color: '#6b7280' }}>· {convoOrigin.origin.campaignName}</span>
+                          )}
+                          {convoOrigin.origin.adStatus && convoOrigin.origin.adStatus !== 'ACTIVE' && (
+                            <span style={{ color: '#f59e0b' }} title={t('messages.originAdInactive')}>
+                              ({convoOrigin.origin.adStatus})
+                            </span>
+                          )}
+                        </>
+                      )}
                     </p>
                   )}
                 </div>
