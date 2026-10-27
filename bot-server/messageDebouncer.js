@@ -69,8 +69,31 @@ async function processQueue(psid, callback) {
   // Combine all messages into one (separated by newlines if multiple)
   const combinedMessage = messages.join('\n');
 
-  // Call the callback with combined message
-  await callback(combinedMessage);
+  // Call the callback with combined message.
+  //
+  // The try/catch is load-bearing: this runs inside a setTimeout, so a throw here is an
+  // UNHANDLED REJECTION — which in modern Node takes the whole process down, loses every
+  // other pending timer with it, and leaves the customer with no reply and no record.
+  // The queue is already cleared above, so nothing retries it either. That is the shape
+  // of the silence reported on 2026-10-26 (psid 24149409157993042: two messages saved
+  // with real mids, no answer, nothing in the logs to say why).
+  //
+  // Catching it here does NOT rescue the turn by itself — jobs/unansweredSweep.js does
+  // that, by re-reading what was never answered. This just stops one bad turn from
+  // becoming an outage.
+  try {
+    await callback(combinedMessage);
+  } catch (err) {
+    console.error(`❌ debounced reply failed for ${psid}:`, err && err.message);
+    try {
+      const Conversation = require('./models/Conversation');
+      await Conversation.updateOne({ psid }, {
+        $set: { lastSilentTurn: { at: new Date(), why: `debounced reply threw: ${String(err && err.message).slice(0, 200)}`, msg: combinedMessage.slice(0, 200) } },
+      });
+    } catch (e) {
+      console.error('⚠️ could not record the dropped turn:', e.message);
+    }
+  }
 }
 
 /**

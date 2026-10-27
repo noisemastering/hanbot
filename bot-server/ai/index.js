@@ -565,6 +565,36 @@ async function noteSilentTurn(psid, why, userMessage) {
   }
 }
 
+// THE LAST RESORT. Reached only when the engine owns the conversation and every flow
+// under it came back empty — the failure Marbella hit on 2026-10-24 (reported by the
+// asesora as "no respondió lo que se preguntó"): she wrote "Buenos días" and "Costo de
+// La malla sombra" five months after her last visit and got nothing at all, on a
+// conversation whose ad pointed at a convo_flow and whose engine turn produced no text.
+//
+// Silence is the one answer we can never defend, so this says something true, asks for
+// the two things that let a human finish the job, and escalates — the brief already has
+// a "Falla del sistema" category for exactly this, scored so it never outranks a real
+// lead. The escalation also sets state=needs_human, which makes the NEXT turn silent on
+// purpose: a broken engine can say this once per conversation, not every turn.
+const LAST_RESORT_TEXT =
+  "¡Hola! Gracias por escribirnos 😊 Tuve un problema para preparar tu respuesta, " +
+  "pero no te quiero dejar sin ella: ¿me dices qué medida necesitas y tu código postal? " +
+  "Con eso un compañero te manda el precio y el envío en un momento.";
+
+async function lastResortReply(psid, userMessage) {
+  try {
+    const { triggerHandoff } = require("../services/pushNotifications");
+    await triggerHandoff(
+      psid,
+      "⚠️ Falla del motor: el bot no pudo generar una respuesta y el cliente sigue esperando"
+    ).catch((e) => console.error("⚠️ last-resort escalation failed:", e.message));
+  } catch (e) {
+    console.error("⚠️ last-resort escalation failed:", e.message);
+  }
+  console.error(`🆘 [last-resort] ${psid} got the recovery line — every engine flow was silent`);
+  return LAST_RESORT_TEXT;
+}
+
 async function maybeRunAdWorkflow(userMessage, psid) {
   const Conversation = require("../models/Conversation");
   const convo = await Conversation.findOne({ psid })
@@ -581,7 +611,7 @@ async function maybeRunAdWorkflow(userMessage, psid) {
   if (!ad || !ad.workflowEnabled || !ad.workflowId) return null;
 
   // From here the conversation is OWNED by the engine — no legacy fallthrough.
-  if (WORKFLOW_HUMAN_STATES.has(convo.state)) { await captureLateContact(psid, userMessage, convo); return { owned: true, reply: null }; } // human handling → silent
+  if (WORKFLOW_HUMAN_STATES.has(convo.state)) { await captureLateContact(psid, userMessage, convo); return { owned: true, reply: null, silentOnPurpose: true }; } // human handling → silent ON PURPOSE
   try {
     const Workflow = require("../models/Workflow");
     const workflow = await Workflow.findById(ad.workflowId);
@@ -632,7 +662,7 @@ async function maybeRunColdStartWorkflow(userMessage, psid) {
   if (!workflow) return null; // safety net: no cold-start flow at all → legacy (should never happen in prod)
 
   // OWNED by cold-start from here — no legacy/convo_flow fallthrough.
-  if (WORKFLOW_HUMAN_STATES.has(convo.state)) { await captureLateContact(psid, userMessage, convo); return { owned: true, reply: null }; }
+  if (WORKFLOW_HUMAN_STATES.has(convo.state)) { await captureLateContact(psid, userMessage, convo); return { owned: true, reply: null, silentOnPurpose: true }; }
   // Rule 1: a post-July-1 cold-start workflow is frozen until Liberado.
   const gatedCs = await releaseGateReply([workflow.createdAt]);
   if (gatedCs) return { owned: true, reply: gatedCs };
@@ -686,11 +716,29 @@ async function _generateReplyImpl(userMessage, psid, referral = null) {
     console.error("⚠️ liberado cap gate failed:", e.message);
   }
 
+  // A turn the engine owns and cannot answer used to end in SILENCE. The client's
+  // rule (2026-10-27, on the Marbella report): "it looks like a tire kicker but we
+  // have to answer nevertheless." So an owned turn now has a ladder under it — the
+  // ad flow, then cold start, then one honest line and a human — and the only silence
+  // left is the deliberate kind, while a person is already handling the chat.
   const adOwned = await maybeRunAdWorkflow(userMessage, psid);
-  if (adOwned) return adOwned.reply;
+  if (adOwned && (adOwned.reply || adOwned.silentOnPurpose)) return adOwned.reply;
+  if (adOwned) {
+    // The ad's own flow produced nothing (missing workflow, empty reply, engine
+    // error). Cold start is the engine's general-purpose flow and answers a bare
+    // "costo de la malla sombra" with real price anchors (§1.066) — a far better
+    // answer than none. It is NOT the legacy bot, so the no-fallthrough rule holds.
+    const rescue = await maybeRunColdStartWorkflow(userMessage, psid);
+    if (rescue && (rescue.reply || rescue.silentOnPurpose)) {
+      if (rescue.reply) console.warn(`🛟 [rescue] ad flow was silent for ${psid} — cold start answered instead`);
+      return rescue.reply;
+    }
+    return await lastResortReply(psid, userMessage);
+  }
 
   const csOwned = await maybeRunColdStartWorkflow(userMessage, psid);
-  if (csOwned) return csOwned.reply;
+  if (csOwned && (csOwned.reply || csOwned.silentOnPurpose)) return csOwned.reply;
+  if (csOwned) return await lastResortReply(psid, userMessage);
   // ===== END WORKFLOW OWNERSHIP — below here is the legacy bot =====
 
   if (USE_PIPELINE) {
@@ -1575,4 +1623,6 @@ function generateReply(userMessage, psid, referral = null) {
 // can ever reach the engine: the FB webhook returns on isHumanActive (index.js) and
 // the WhatsApp processor returns on state === 'human_active'. They each call this
 // first, so a customer still answering the bot's last question is never lost.
-module.exports = { generateReply, captureLateContact };
+// lastResortReply is exported for scripts/lastResortTest.js — the recovery line is the
+// one reply nobody reviews until a customer has already seen it.
+module.exports = { generateReply, captureLateContact, lastResortReply, LAST_RESORT_TEXT };

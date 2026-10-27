@@ -237,6 +237,17 @@ const conversationSchema = new mongoose.Schema({
   pendingHandoffAt: { type: Date, default: null },
   pendingHandoffReason: { type: String, default: null },
 
+  // UNANSWERED SWEEP — the repair pass that answered a turn the live path dropped
+  // (jobs/unansweredSweep.js). `at` is also the claim that keeps two ticks from
+  // answering the same message twice; sentAt/waitedMinutes record what actually went out.
+  unansweredSweep: {
+    at: { type: Date, default: null },
+    msg: { type: String, default: null },
+    sentAt: { type: Date, default: null },
+    waitedMinutes: { type: Number, default: null },
+    times: { type: Number, default: 0 },
+  },
+
   // COLD LEAD — the customer was asked for their data before the escalation and went
   // silent without giving any of it. Reported 2026-10-27 by the asesora: "me mandó la
   // alerta y el cliente aún no contesta nada". A lead with no phone, no CP and no reply

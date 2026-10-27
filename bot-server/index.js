@@ -2517,6 +2517,22 @@ setTimeout(() => {
   setInterval(tickGc, 5 * 60 * 1000);
 }, 60000);
 
+// Unanswered-message sweeper — the safety net under every reply. Every inbound message
+// waits 10s in the debouncer's IN-MEMORY queue before the bot answers, so a restart, a
+// deploy or a throw inside that window drops the turn with nothing to retry it: reported
+// 2026-10-26 on psid 24149409157993042, two messages saved with real mids and no answer.
+// This re-reads what Message.answered says nobody replied to. Always on, and it is not
+// remarketing — it answers a question the customer is still waiting on.
+setTimeout(() => {
+  const { runUnansweredSweepJob } = require('./jobs/unansweredSweep');
+  console.log('🛟 Unanswered-message sweeper scheduled (every 3 min, 4 min–23 h window)');
+  const tickSweep = async () => {
+    try { await runUnansweredSweepJob(); } catch (e) { console.error('❌ unanswered sweep tick failed:', e.message); }
+  };
+  tickSweep();
+  setInterval(tickSweep, 3 * 60 * 1000);
+}, 45000);
+
 // Pending-handoff timeout sweeper — ALWAYS ON (not gated by remarketing). Escalates
 // any handoff where the bot asked for contact and the client went silent > 30s.
 setTimeout(() => {
