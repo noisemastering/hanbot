@@ -1551,7 +1551,17 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           .replace(/\bno\s+(?:quiero|busco|me\s+sirve|es|ser[ií]a|ese|est[ée])?\s*(?:el|la|lo)?\s*(?:delgad\w*|flexible|grues\w*|premium)\b/gi, " ")
           // "… mejor el premium QUE el flexible", "… el grueso EN VEZ DEL delgado"
           .replace(/\b(?:que|en\s+vez\s+del?|en\s+lugar\s+del?|y\s+no)\s+[^.,;!?¡¿\n]*$/i, " ");
-        return pick(kept) || pick(String(s || ""));
+        const picked = pick(kept);
+        if (picked) return picked;
+        // Nothing survived the stripper, so the only version word in this message was
+        // a rejected or comparative one. The raw-text fallback exists for an
+        // over-eager strip, but a message that OPENS with the comparative marker is
+        // the tail of the previous sentence ("Y en verdad está mejor el premium" /
+        // "Que el flexible"): it names the version being dismissed, and falling back
+        // flipped that customer to Flexible two turns after he chose Premium
+        // (reported 2026-10-23). No variant named this turn → the chosen one stands.
+        if (/^[\s,.;]*(?:que|y\s+no|en\s+vez|en\s+lugar)\b/i.test(String(s || ""))) return null;
+        return pick(String(s || ""));
       };
       const msgVariant = detectVariant(msgB);
       if (msgVariant) state.bordeVariant = msgVariant;
@@ -1559,9 +1569,38 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // defaulting silently quoted Premium prices to Flexible buyers.
       const variantKnown = () => msgVariant || state.bordeVariant || null;
       const VARIANT_FALLBACK = "grueso";
+      // THE GRUESO IS THE ONLY PRICE WE VOLUNTEER (2026-10-26, the client's call).
+      // The ad sells the "Borde Separador GRUESO" and the Flexible is $39-$220
+      // cheaper, so the two-column menu answered "Precio por favor" with a price
+      // comparison against ourselves — the customer's next words were "no lo sé"
+      // (reported: Alejandra Mora). The Flexible price goes out ONLY when the customer
+      // asks for something cheaper or names that version themselves, which is what
+      // this flow's own node prompts have said all along ("Ofrece el GRUESO POR
+      // DEFECTO. Menciona el DELGADO ÚNICAMENTE si el cliente lo pide"): the gates
+      // here are newer than those prompts and were overruling them — gates beat
+      // prompts, so a rule written only in a prompt is not in force.
+      // Second reason: the 6 and 9 m Flexible have NO live Mercado Libre listing, so
+      // half the column we were quoting could not be bought online at all.
+      const asksCheaper =
+        /\b(?:barat\w+|econ[oó]mic\w+|accesible\w*|descuentos?|rebaja\w*|car[oa]s?|mejor(?:es)?\s+precios?)\b/i.test(msgB) ||
+        /\bprecio\s+m[aá]s\s+(?:bajo|accesible)\b/i.test(msgB) ||
+        /\botra\s+(?:opci[oó]n|versi[oó]n)\b/i.test(msgB);
+      // An explicit question about the VERSIONS is the other trigger the client's own
+      // node prompts name ("si pregunta por las variedades/opciones que manejamos").
+      // It must name the variant dimension — a generic "¿qué opciones hay?" is a
+      // question about the four LENGTHS and gets the grueso list.
+      const asksVersions = /\b(?:qu[eé]|cu[aá]ntas|cu[aá]les)\s+(?:versiones|presentaciones|variedades|grosores)\b/i.test(msgB);
+      const flexAsked = asksCheaper || asksVersions;
+      if (flexAsked || msgVariant === "delgado") state.bordeShowFlexible = true;
+      // Sticky: once the comparison is on the table it stays, so the follow-up turns
+      // can still talk about either version.
+      const showFlex = () => !!state.bordeShowFlexible;
       // Offer the options, never ask an open "¿qué largo necesitas?" — used only when
       // no price resolves, so the customer still sees what exists.
-      const BORDE_MENU_FALLBACK = `Lo manejo en rollos de 6, 9, 18 y 54 m, en versión ${VARIANT_SPEC.grueso} y ${VARIANT_SPEC.delgado}. ¿Cuál te sirve? 😊`;
+      const bordeMenuFallback = () =>
+        showFlex()
+          ? `Lo manejo en rollos de 6, 9, 18 y 54 m, en versión ${VARIANT_SPEC.grueso} y ${VARIANT_SPEC.delgado}. ¿Cuál te sirve? 😊`
+          : `Lo manejo en rollos de 6, 9, 18 y 54 m (borde grueso, 3 mm). ¿Cuál te sirve? 😊`;
       // CLIENT THRESHOLDS, from §2.A / §3.2 / §5 of the campaign document. The
       // profile is decided by PIECES PER PRESENTATION, not by linear metres:
       //   individual  → up to TWO pieces of 6, 9 or 18 m, or ONE roll of 54 m:
@@ -1590,14 +1629,18 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         state.bordeWholesaleTrack = true;
         if (len) state.bordeWholesaleLen = String(len);
         const meters = len ? Number(len) * n : null;
-        const vMay = variantKnown();
+        // Same rule as the retail quotes: with the Flexible off the table the grueso
+        // IS the reference price — listing both here turned a 20-roll lead into a
+        // side-by-side comparison of our own two price lists.
+        const vMay = variantKnown() || (showFlex() ? null : VARIANT_FALLBACK);
         // Reference price first, asesor second — never a volume price we can't honor.
         // With no version named we must not silently price one of the two: give both,
         // clearly as reference, and let the asesor settle it.
         let priceLine = "";
         if (len && vMay) {
           const ref = await refPrice(len, n);
-          if (ref) priceLine = ` De referencia, el rollo ${VARIANT_LABEL[vMay]} de ${len} m está en $${ref.unit} c/u (${n} = $${ref.total}); el precio de mayoreo lo confirma un asesor.`;
+          const vLabM = showFlex() ? ` ${VARIANT_LABEL[vMay]}` : "";
+          if (ref) priceLine = ` De referencia, el rollo${vLabM} de ${len} m está en $${ref.unit} c/u (${n} = $${ref.total}); el precio de mayoreo lo confirma un asesor.`;
         } else if (len) {
           const both = [];
           for (const variant of ["grueso", "delgado"]) {
@@ -1683,40 +1726,47 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         return byLen;
       };
 
-      // THE MENU: all four lengths with BOTH versions priced, in one table. The
-      // client's rule is to offer the available options instead of asking an open
-      // question, and there are only four, so this is the default answer to any
-      // broad borde ask. Asking the version first costs a round trip and quoting one
-      // version silently misprices the other, so both go out together; the purchase
-      // links follow once they pick (the quantity is what decides self-serve vs asesor).
+      // THE MENU: the four lengths, GRUESO only — the one price list we volunteer.
+      // The client's rule is to offer the available options instead of asking an open
+      // question, and there are only four lengths, so this is the default answer to any
+      // broad borde ask. The Flexible column is added ONLY once showFlex() is on (the
+      // customer asked for something cheaper, or asked which versions we make); the
+      // purchase links follow once they pick (the quantity decides self-serve vs asesor).
       const bordeMenu = async () => {
         const byG = await bordeLeavesByLength("grueso");
-        const byD = await bordeLeavesByLength("delgado");
+        const byD = showFlex() ? await bordeLeavesByLength("delgado") : null;
+        const cols = byD ? [["grueso", byG], ["delgado", byD]] : [["grueso", byG]];
         const rows = []; const quoted = [];
         for (const len of BORDE_LENS) {
           const parts = [];
-          for (const [variant, byLen] of [["grueso", byG], ["delgado", byD]]) {
+          for (const [variant, byLen] of cols) {
             const leaf = byLen.get(len);
             if (!leaf) continue;
             const pi = await resolvePrice(leaf, altOpt(state, leaf)).catch(() => null);
-            if (pi && pi.amount) parts.push(`${VARIANT_LABEL[variant]} $${pi.amount}`);
+            if (pi && pi.amount) parts.push(`${byD ? `${VARIANT_LABEL[variant]} ` : ""}$${pi.amount}`);
           }
           if (parts.length) { rows.push(`• ${len} m — ${parts.join(" · ")}`); quoted.push(len); }
         }
         if (!rows.length) return null;
         return {
           quoted,
-          text:
-            `¡Claro! El borde separador va por rollo, en 4 medidas y 2 versiones:\n${rows.join("\n")}\n` +
-            `Premium es el grueso (3 mm) y Flexible el delgado (1.5 mm). ¿Cuál te sirve? 😊`,
+          rows,
+          text: byD
+            ? `¡Claro! El borde separador va por rollo, en 4 medidas y 2 versiones:\n${rows.join("\n")}\n` +
+              `Premium es el grueso (3 mm) y Flexible el delgado (1.5 mm). ¿Cuál te sirve? 😊`
+            // No second version to explain here, so no explainer line — and the
+            // width gate prefixes this menu with the 13 cm, which repeated it.
+            : `¡Claro! El borde separador grueso (3 mm) va por rollo, en 4 medidas:\n${rows.join("\n")}\n¿Cuál te sirve? 😊`,
         };
       };
 
-      // ONE length, BOTH versions, priced. When the customer names a length but not a
-      // version, asking "¿Premium o Flexible?" with no number spends the turn on a
-      // question and leaves a direct price ask unanswered ("de 6 en cuánto sale" got
-      // no price). Quote both and let them pick from the numbers.
+      // ONE length, BOTH versions, priced — the answer to a length named by someone
+      // who has asked for a cheaper option, so the two numbers settle it instead of
+      // another question ("de 6 en cuánto sale" used to get no price at all). Returns
+      // null while the Flexible is off the table, and every caller falls through to
+      // the plain grueso quote.
       const bordeBothVersions = async (len) => {
+        if (!showFlex()) return null;
         const parts = [];
         for (const variant of ["grueso", "delgado"]) {
           const byLen = await bordeLeavesByLength(variant);
@@ -1755,7 +1805,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         return {
           quoted,
           text:
-            `¡Excelente! El borde ${VARIANT_LABEL[variant]} está disponible en:\n${rows.join("\n")}\n` +
+            `¡Excelente! El borde ${showFlex() ? VARIANT_LABEL[variant] : "separador grueso (3 mm)"} está disponible en:\n${rows.join("\n")}\n` +
             `${shipLine} ¿Cuántos metros necesitas? 😊`,
         };
       };
@@ -1771,8 +1821,12 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // measure questions — the gates below cover the common shapes, but when the turn
       // reaches the model it must still OFFER the options rather than ask for one.
       earlyFacts.push(
-        `- BORDE SEPARADOR: 4 medidas (rollos de 6, 9, 18 y 54 m, alto fijo 13 cm) en 2 versiones: ${VARIANT_SPEC.grueso} y ${VARIANT_SPEC.delgado}. ` +
-          `PROHIBIDO preguntar "¿qué largo necesitas?" o cualquier pregunta abierta de medida: SIEMPRE ofrece las medidas disponibles con su precio, o pregunta cuál de las DOS versiones quiere. ` +
+        `- BORDE SEPARADOR: 4 medidas (rollos de 6, 9, 18 y 54 m, alto fijo 13 cm). ` +
+          `COTIZA SIEMPRE la versión ${VARIANT_SPEC.grueso}: es la única cuyo precio ofrecemos por iniciativa propia. ` +
+          (showFlex()
+            ? `El cliente ya pidió una opción más económica, así que aquí SÍ puedes dar el precio de la versión ${VARIANT_SPEC.delgado}.`
+            : `NUNCA menciones ni cotices la versión delgada/Flexible: su precio se comparte SOLO si el cliente pide algo más económico o la nombra él mismo.`) +
+          ` PROHIBIDO preguntar "¿qué largo necesitas?" o cualquier pregunta abierta de medida: SIEMPRE ofrece las medidas disponibles con su precio. ` +
           `Comparte precios desde el primer intercambio; las compras individuales en Mercado Libre llevan envío gratis.`
       );
       // §3.5 — SHIPPING FOR A MAYOREO LEAD. "El envío va incluido cuando compras por
@@ -1820,7 +1874,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         const q = await bordeOrderReply(variant, pairs);
         if (!q) return null;
         state.bordeWholesaleTrack = false; // individual order → ML free shipping applies
-        const head = `¡Perfecto! Te comparto los precios y enlaces de compra en versión ${VARIANT_LABEL[variant]}:`;
+        const head = showFlex()
+          ? `¡Perfecto! Te comparto los precios y enlaces de compra en versión ${VARIANT_LABEL[variant]}:`
+          : `¡Perfecto! Te comparto los precios y enlaces de compra:`;
         // A line with no live listing can't be bought online. Quote everything, then
         // hand off for the part we can't close — §3.3 rule 4.
         if (q.noLink.length) {
@@ -1928,7 +1984,25 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           state.bordeQuoted = menu0.quoted;
           return retB(`${width}\n${menu0.text}`, { bordeWidthAnswered: true, bordeAllQuoted: menu0.quoted });
         }
-        return retB(`${width} ${BORDE_MENU_FALLBACK}`, { bordeWidthAnswered: true, bordeAskLength: true });
+        return retB(`${width} ${bordeMenuFallback()}`, { bordeWidthAnswered: true, bordeAskLength: true });
+      }
+      // A CHEAPER OPTION ASKED FOR, with no length in the message — the ONE trigger
+      // that puts the Flexible price on the table. It has to be a gate: left to the
+      // model it would reach A2 below and answer a price objection by repeating the
+      // same prices ("ya te pasé los precios de los rollos de 6, 9, 18, 54 m"), and
+      // the whole point of holding the Flexible back is that it has somewhere to land.
+      if (flexAsked && !rMsg.hasWxL && !rMsg.lengths.length && !rMsg.countIsExplicit) {
+        const menuF = await bordeMenu();
+        if (menuF) {
+          state.bordeQuoted = menuF.quoted;
+          const leadF = asksCheaper
+            ? `Sí, hay una más económica: la versión ${VARIANT_SPEC.delgado}. Te dejo las dos, por rollo:`
+            : `Manejamos dos versiones, ${VARIANT_SPEC.grueso} y ${VARIANT_SPEC.delgado}, cada una por rollo:`;
+          return retB(`${leadF}\n${menuF.rows.join("\n")}\n¿Cuál te sirve? 😊`, {
+            bordeFlexRevealed: asksCheaper ? "cheaper" : "versions",
+            bordeAllQuoted: menuF.quoted,
+          });
+        }
       }
       // A) awaiting quantity from last turn (we asked "¿cuántos?")
       if (state.awaitingBordeQty) {
@@ -1955,6 +2029,47 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             );
           }
         }
+        // THEY ANSWERED WITH A VERSION, not a count ("Flexible", "mejor el premium").
+        // The length is already decided, so stay on it and re-ask the quantity. Without
+        // this the turn fell through to gate C, which re-listed ALL FOUR lengths and
+        // lost the roll the customer had just picked — the same "a gate answered half
+        // the message" family as the C.P. case above.
+        if (msgVariant && rA.count == null && !rA.pivotsFrom && !asksBordeWidth) {
+          const byLenV = await bordeLeavesByLength(msgVariant);
+          const leafV = byLenV.get(String(rec.length));
+          const piV = leafV ? await resolvePrice(leafV, altOpt(state, leafV)).catch(() => null) : null;
+          if (piV && piV.amount) {
+            state.activeProductId = String(leafV._id);
+            state.awaitingBordeQty = { productId: String(leafV._id), length: String(rec.length) };
+            return retB(
+              `¡Claro! El rollo ${VARIANT_LABEL[msgVariant]} de ${rec.length} m está en $${piV.amount}. ¿Cuántos rollos necesitas? 😊`,
+              { bordeVariantPicked: msgVariant, bordeAskQty: String(rec.length) }
+            );
+          }
+        }
+        // A COMPARATIVE TAIL about the versions, after they already chose one ("Que el
+        // flexible" closing "…está mejor el premium"). detectVariant returns null for
+        // it on purpose, so restate the roll they picked — letting it fall through
+        // re-listed all four lengths and threw away the 54 m.
+        if (!msgVariant && rA.count == null && !rA.pivotsFrom && !asksBordeWidth && !rMsg.numbers.length &&
+            variantKnown() && /\b(?:grues\w*|premium|delgad\w*|flexible)\b/i.test(msgB)) {
+          const byLenT = await bordeLeavesByLength(variantKnown());
+          const leafT = byLenT.get(String(rec.length));
+          const piT = leafT ? await resolvePrice(leafT, altOpt(state, leafT)).catch(() => null) : null;
+          if (piT && piT.amount) {
+            state.activeProductId = String(leafT._id);
+            state.awaitingBordeQty = { productId: String(leafT._id), length: String(rec.length) };
+            return retB(
+              `El rollo ${VARIANT_LABEL[variantKnown()]} de ${rec.length} m está en $${piT.amount}. ¿Cuántos rollos necesitas? 😊`,
+              { bordeVariantRestated: variantKnown(), bordeAskQty: String(rec.length) }
+            );
+          }
+        }
+        // Nothing in this message touches the quantity or the length (a question
+        // riding along, a "ok", a fragment): KEEP the pending roll so the turn can
+        // continue to the model or to another gate WITHOUT gate C deciding that no
+        // length was ever chosen and re-listing the four of them.
+        if (rA.count == null && !rA.pivotsFrom && !rMsg.numbers.length) state.awaitingBordeQty = rec;
         const q = rA.pivotsFrom || asksBordeWidth ? null : rA.count;
         if (q != null && q >= 1) {
           if (!isRetailOrder(rec.length, q)) return await mayoreo(q, rec.length);
@@ -1978,7 +2093,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           const vW = variantKnown();
           const byLenW = await bordeLeavesByLength(vW || VARIANT_FALLBACK);
           const leafW = byLenW.get(lenW);
-          if (leafW && vW) {
+          if (leafW && (vW || !showFlex())) {
             state.activeProductId = String(leafW._id);
             const outW = await shareLink(leafW, lenW, qW);
             if (outW) return outW;
@@ -2016,7 +2131,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         }
         // Individual purchase. The version sets the price, so never guess it: ask once,
         // remembering the order so the answer closes it (the client's flow-1).
-        const vOrd = variantKnown();
+        // With the Flexible off the table there is no version to ask about: the
+        // grueso IS the quote. It stays null once the customer has asked for a cheaper
+        // option, so that case still gets both prices and picks from the numbers.
+        const vOrd = variantKnown() || (showFlex() ? null : VARIANT_FALLBACK);
         if (!vOrd) {
           if (bordeOrderPairs.length === 1) {
             const p0 = bordeOrderPairs[0];
@@ -2193,7 +2311,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         }
         if (quoted.length >= 2) {
           state.bordeQuoted = quoted;
-          return retB(`¡Claro! Te comparto las opciones en versión ${VARIANT_LABEL[variant]}:\n${rows.join("\n")}\nTodos con envío gratis. ¿Cuántos rollos necesitas? 😊`, { bordeMultiQuoted: quoted });
+          const verB2 = showFlex() ? ` en versión ${VARIANT_LABEL[variant]}` : "";
+          return retB(`¡Claro! Te comparto las opciones${verB2}:\n${rows.join("\n")}\nTodos con envío gratis. ¿Cuántos rollos necesitas? 😊`, { bordeMultiQuoted: quoted });
         }
       }
       // C) borde price/product inquiry with NO length yet → deterministically ASK the
@@ -2207,6 +2326,17 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // the open "¿qué largo necesitas?" we are removing.
         const isInfoOpener = /^(?:[\s,.!¡?¿]*(?:hola|holi|buen[oa]s?(?:\s+(?:d[ií]as|tardes|noches))?|qu[eé]\s+tal|info|informaci[oó]n|informes|me\s+interesa|cotizaci[oó]n)[\s,.!¡?¿]*)+$/i.test(msgB.trim());
         if (isInfoOpener && !variantKnown()) {
+          // With only one version on offer there is no choice to ask about, so the
+          // opener gets the PRICES — the client's "comparte precios desde el primer
+          // intercambio" — instead of a question.
+          if (!showFlex()) {
+            const menuI = await bordeMenu();
+            if (menuI) {
+              state.bordeQuoted = menuI.quoted;
+              return retB(`¡Hola! Con gusto 😊 ${menuI.text.replace(/^¡Claro! /, "")}`, { bordeInfoOpener: true, bordeAllQuoted: menuI.quoted });
+            }
+            return retB(`¡Hola! Con gusto 😊 ${bordeMenuFallback()}`, { bordeInfoOpener: true });
+          }
           return retB(
             `¡Hola! Con gusto 😊 Manejamos el borde separador en dos versiones: ${VARIANT_SPEC.grueso} y ${VARIANT_SPEC.delgado}, ` +
               `cada una en rollos de 6, 9, 18 y 54 m. ¿Cuál versión te interesa?`,
@@ -2249,12 +2379,14 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             state.bordeQuoted = menuC.quoted;
             return retB(menuC.text, { bordeAllQuoted: menuC.quoted });
           }
-          return retB(`¡Claro! ${BORDE_MENU_FALLBACK}`, { bordeAskLength: true });
+          return retB(`¡Claro! ${bordeMenuFallback()}`, { bordeAskLength: true });
         }
         if (wantsBorde && asksSomethingElse) {
           earlyFacts.push(
-            `- BORDE SEPARADOR: se maneja en rollos de 6, 9, 18 y 54 m (el alto es fijo: 13 cm), en dos versiones: ${VARIANT_SPEC.grueso} y ${VARIANT_SPEC.delgado}. ` +
-              `Responde PRIMERO lo que el cliente preguntó y, si todavía no sabes qué largo quiere, OFRÉCELE las cuatro medidas y las dos versiones en el mismo mensaje — nunca preguntes "¿qué largo necesitas?" a secas. ` +
+            `- BORDE SEPARADOR: se maneja en rollos de 6, 9, 18 y 54 m (el alto es fijo: 13 cm). ` +
+              `Cotiza la versión ${VARIANT_SPEC.grueso}` +
+              (showFlex() ? ` y, como el cliente ya pidió algo más económico, puedes dar también la ${VARIANT_SPEC.delgado}.` : ` y NO menciones la versión delgada/Flexible.`) +
+              ` Responde PRIMERO lo que el cliente preguntó y, si todavía no sabes qué largo quiere, OFRÉCELE las cuatro medidas con su precio en el mismo mensaje — nunca preguntes "¿qué largo necesitas?" a secas. ` +
               `NO lo pases con un asesor por una pregunta que puedes contestar.`
           );
         }
