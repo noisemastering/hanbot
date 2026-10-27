@@ -70,6 +70,12 @@ async function saveMessage(psid, text, senderType, messageId = null, io = null) 
     );
   }
 
+  // A parked cold lead that writes back is no longer cold, whatever they write.
+  // Same call as the Messenger path in index.js — the Dual Channel Rule.
+  if (senderType === 'user') {
+    require('../../utils/coldLead').reviveColdLead(psid).catch(() => {});
+  }
+
   // Emit to Socket.IO if available
   if (io) {
     io.emit('new_message', msg);

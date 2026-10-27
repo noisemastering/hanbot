@@ -109,6 +109,10 @@ function Messages() {
     if (el) { el.style.height = 'auto'; el.style.height = Math.min(el.scrollHeight, 160) + 'px'; }
   }, [replyText]);
   const [pendingHandoffs, setPendingHandoffs] = useState([]);
+  // Leads the pending-handoff timeout parked instead of alerting: silent, with no
+  // phone and no CP. Collapsed by default — it is a list to work through, not an alert.
+  const [coldLeads, setColdLeads] = useState([]);
+  const [showColdLeads, setShowColdLeads] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -366,6 +370,15 @@ function Messages() {
     }
   };
 
+  const fetchColdLeads = async () => {
+    try {
+      const res = await API.get("/conversations/cold-leads");
+      setColdLeads(res.data.data || []);
+    } catch (err) {
+      console.error("Error fetching cold leads:", err);
+    }
+  };
+
   const fetchQuickActions = useCallback(async () => {
     try {
       const params = new URLSearchParams({ limit: '10' });
@@ -443,6 +456,7 @@ function Messages() {
       const [excludePsids] = await Promise.all([
         fetchQuickActions(),
         fetchPendingHandoffs(),
+        fetchColdLeads(),
         fetchAvailableAds()
       ]);
       setInitialLoading(false);
@@ -456,6 +470,7 @@ function Messages() {
       fetchQuickActions();
       fetchFilteredPage(currentPageRef.current);
       fetchPendingHandoffs();
+      fetchColdLeads();
     }, 30000);
 
     return () => clearInterval(interval);
@@ -760,7 +775,8 @@ function Messages() {
       await Promise.all([
         fetchQuickActions(),
         fetchFilteredPage(currentPageRef.current),
-        fetchPendingHandoffs()
+        fetchPendingHandoffs(),
+        fetchColdLeads()
       ]);
     } catch (err) {
       console.error("Refresh error:", err);
@@ -1091,6 +1107,92 @@ function Messages() {
               })}
             </tbody>
           </table>
+        </div>
+      )}
+
+      {/* SECTION 0b: Cold leads — parked by the pending-handoff timeout, never alerted.
+          Deliberately quiet styling and collapsed by default: these are leads to work
+          through when there is time, not something anyone has to drop what they're doing
+          for. Reported 2026-10-27: "me mandó la alerta y el cliente aún no contesta nada". */}
+      {coldLeads.length > 0 && (
+        <div style={{ marginBottom: "2rem" }}>
+          <div
+            onClick={() => setShowColdLeads((v) => !v)}
+            style={{
+              backgroundColor: "#1f2937",
+              padding: "10px 16px",
+              borderRadius: showColdLeads ? "8px 8px 0 0" : "8px",
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              cursor: "pointer",
+              border: "1px solid #374151"
+            }}
+          >
+            <div>
+              <span style={{ color: "#9ca3af", fontSize: "1.05rem", fontWeight: "bold" }}>
+                🧊 {t('messages.coldLeads')} — {coldLeads.length}
+              </span>
+              <div style={{ color: "#6b7280", fontSize: "0.75rem", marginTop: "2px" }}>
+                {t('messages.coldLeadsHint')}
+              </div>
+            </div>
+            <span style={{ color: "#9ca3af", fontSize: "0.8rem" }}>
+              {showColdLeads ? t('messages.hide') : t('messages.show')}
+            </span>
+          </div>
+          {showColdLeads && (
+            <table style={{ width: "100%", borderCollapse: "collapse", border: "1px solid #374151", borderTop: "none" }}>
+              <thead>
+                <tr style={{ backgroundColor: "#111827", color: "#9ca3af" }}>
+                  <th style={{ padding: "8px 10px", textAlign: "left" }}>{t('messages.channel')}</th>
+                  <th style={{ padding: "8px 10px", textAlign: "left" }}>{t('messages.user')}</th>
+                  <th style={{ padding: "8px 10px", textAlign: "left" }}>{t('messages.coldSince')}</th>
+                  <th style={{ padding: "8px 10px", textAlign: "left" }}>{t('messages.coldWhy')}</th>
+                  <th style={{ padding: "8px 10px", textAlign: "left" }}>{t('messages.product')}</th>
+                  <th style={{ padding: "8px 10px", textAlign: "left" }}>{t('messages.origin')}</th>
+                </tr>
+              </thead>
+              <tbody>
+                {coldLeads.map((lead) => {
+                  const ch = getChannelDisplay(lead.channel);
+                  const isWa = lead.channel === 'whatsapp' && lead.psid?.startsWith('wa:');
+                  return (
+                    <tr
+                      key={lead.psid}
+                      onClick={() => openConversation(lead.psid, lead.channel)}
+                      style={{ borderBottom: "1px solid #374151", cursor: "pointer" }}
+                    >
+                      <td style={{ padding: "8px 10px", textAlign: "center" }}>
+                        <span title={ch.label} style={{ backgroundColor: ch.color, color: "white", padding: "3px 7px", borderRadius: "4px", fontSize: "0.7rem" }}>
+                          {ch.icon}
+                        </span>
+                      </td>
+                      <td style={{ padding: "8px 10px", color: "#d1d5db", fontSize: "0.82rem" }}>
+                        {lead.name || (isWa ? lead.psid.substring(3) : `${lead.psid?.substring(0, 10)}...`)}
+                      </td>
+                      <td style={{ padding: "8px 10px", color: "#9ca3af", fontSize: "0.8rem" }}>
+                        {lead.coldAt ? new Date(lead.coldAt).toLocaleString(locale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—'}
+                      </td>
+                      <td style={{ padding: "8px 10px", color: "#9ca3af", fontSize: "0.78rem" }}>
+                        {lead.why || '—'}
+                        {lead.times > 1 && (
+                          <span style={{ color: "#6b7280" }}> ({lead.times}×)</span>
+                        )}
+                      </td>
+                      <td style={{ padding: "8px 10px", color: "#d1d5db", fontSize: "0.82rem" }}>
+                        {friendlyProduct(lead.productInterest) || '—'}
+                        {lead.requestedSize ? ` · ${lead.requestedSize}` : ''}
+                      </td>
+                      <td style={{ padding: "8px 10px", color: "#9ca3af", fontSize: "0.78rem" }}>
+                        {lead.origin || '—'}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
         </div>
       )}
 

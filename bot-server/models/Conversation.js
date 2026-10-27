@@ -237,6 +237,20 @@ const conversationSchema = new mongoose.Schema({
   pendingHandoffAt: { type: Date, default: null },
   pendingHandoffReason: { type: String, default: null },
 
+  // COLD LEAD — the customer was asked for their data before the escalation and went
+  // silent without giving any of it. Reported 2026-10-27 by the asesora: "me mandó la
+  // alerta y el cliente aún no contesta nada". A lead with no phone, no CP and no reply
+  // is nothing a salesperson can act on, so the timeout parks it here instead of
+  // alerting. revivedAt is stamped (not cleared) when they write back, so the list holds
+  // only the currently-dead ones while the parking stays auditable.
+  coldLead: {
+    at: { type: Date, default: null },
+    why: { type: String, default: null },       // what we were missing
+    reason: { type: String, default: null },    // the handoff reason it would have carried
+    revivedAt: { type: Date, default: null },   // customer came back
+    times: { type: Number, default: 0 },        // how often this conversation was parked
+  },
+
   // HUMAN SALE OVERRIDE — a human's verdict on whether this conversation converted,
   // authoritative over the correlation algorithm and surviving every re-run.
   //   "sale"    → a human knows it converted (even if the system found no match)

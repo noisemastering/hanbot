@@ -562,6 +562,50 @@ router.get('/pending-handoffs', async (req, res) => {
   }
 });
 
+// GET /conversations/cold-leads — the leads the pending-handoff timeout did NOT escalate.
+// The asesora's report (2026-10-27): "me mandó la alerta y el cliente aún no contesta
+// nada". A customer who asks one question, is asked for a phone and a CP, and never
+// writes again leaves nothing to act on, so the timeout parks them here instead of
+// alerting. They are NOT lost: the thread is intact, and the moment they write back the
+// park is revived and a real handoff fires on the data they give.
+// Must be declared BEFORE /:psid or Express reads "cold-leads" as a psid.
+router.get('/cold-leads', async (req, res) => {
+  try {
+    const { days = 30, includeRevived } = req.query;
+    const since = new Date(Date.now() - Math.min(365, Math.max(1, parseInt(days) || 30)) * 24 * 60 * 60 * 1000);
+    const query = { 'coldLead.at': { $ne: null, $gte: since } };
+    if (includeRevived !== 'yes') query['coldLead.revivedAt'] = null;
+
+    const convos = await Conversation.find(query)
+      .sort({ 'coldLead.at': -1 })
+      .limit(200)
+      .lean();
+
+    const { resolveAdNames, originLabel } = require('../utils/adOrigin');
+    const names = await resolveAdNames(convos.map((c) => c.adId));
+
+    const data = convos.map((c) => ({
+      psid: c.psid,
+      channel: c.channel || 'facebook',
+      name: c.workflowState?.lead?.name || c.extractedName || null,
+      coldAt: c.coldLead?.at || null,
+      why: c.coldLead?.why || null,
+      reason: c.coldLead?.reason || null,
+      times: c.coldLead?.times || 0,
+      revivedAt: c.coldLead?.revivedAt || null,
+      productInterest: c.productInterest || null,
+      requestedSize: c.requestedSize || null,
+      origin: originLabel(c, names),
+      lastMessageAt: c.lastMessageAt || null,
+    }));
+
+    res.json({ success: true, total: data.length, data });
+  } catch (error) {
+    console.error('Error fetching cold leads:', error);
+    res.status(500).json({ success: false, error: 'Failed to fetch cold leads' });
+  }
+});
+
 // POST /conversations/:psid/do-not-follow-up - Toggle follow-up suppression
 router.post('/:psid/do-not-follow-up', async (req, res) => {
   try {

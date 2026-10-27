@@ -340,6 +340,11 @@ async function saveMessage(psid, text, senderType, messageId = null) {
     );
   }
 
+  // A parked cold lead that writes back is no longer cold, whatever they write.
+  if (senderType === 'user') {
+    require('./utils/coldLead').reviveColdLead(psid).catch(() => {});
+  }
+
   // Frustration detection on user messages — auto-flag for no follow-up if angry
   if (senderType === 'user' && text && text !== '[image]') {
     try {

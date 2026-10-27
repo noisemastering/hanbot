@@ -440,7 +440,29 @@ async function runLinkFollowUpJob() {
 // still alerts the asesor promptly on a genuinely silent lead — and a reply that lands
 // after it is now captured either way (captureLateContact, called from BOTH entry
 // paths), which corrects the note.
+//
+// AND IT NO LONGER ESCALATES A DEAD LEAD (2026-10-27, asesora's report on psid
+// 28849089548033204). "Me mandó la alerta y el cliente aún no contesta nada": he asked
+// "¿cuánto cuesta el Ground Cover?" at 11:13, got both roll prices and the ask for a
+// phone + CP 14 seconds later, and never wrote again — so at 11:23 the timeout alerted
+// a salesperson who had a profile name and literally nothing else. The user's rule: "if
+// they don't provide their info for a quote we won't bother the salesforce with dead
+// customers." So the timeout now SPLITS: a lead carrying something to work with
+// (a phone, an email, or a CP — anything the asesor can quote freight from or dial)
+// still escalates exactly as before, and one carrying none of it is PARKED on
+// Conversation.coldLead instead, visible at /conversations/cold-leads and in the
+// dashboard's own section, with no push and no alert.
+//
+// Parking is not dropping. Nothing about the conversation changes: the bot keeps
+// answering, and the moment the customer writes back their turn runs normally — the
+// pendingHandoff resume gate catches the contact they finally give and escalates then.
+// That is also why the park does NOT touch `state` or `handoffRequested`.
 const PENDING_HANDOFF_TIMEOUT_MS = 10 * 60 * 1000;
+
+// The park-or-escalate predicate lives in utils/coldLead.js, where it can be tested
+// without this file's dependency chain behind it (scripts/coldLeadTest.js).
+const { handoffContactOf } = require('../utils/coldLead');
+
 async function runPendingHandoffTimeoutJob() {
   try {
     const { triggerHandoff } = require('../services/pushNotifications');
@@ -450,7 +472,7 @@ async function runPendingHandoffTimeoutJob() {
       pendingHandoffAt: { $ne: null, $lte: cutoff },
       handoffRequested: { $ne: true },
       state: { $nin: ['needs_human', 'human_active', 'human_handling'] },
-    }).select('psid pendingHandoffAt pendingHandoffReason').limit(50).lean();
+    }).select('psid pendingHandoffAt pendingHandoffReason workflowState leadData zipcode zipCode humanSalesZipcode coldLead').limit(50).lean();
     for (const c of stale) {
       // Definitive "did they answer?" check — any USER message after the ask.
       const replied = await Message.exists({ psid: c.psid, senderType: 'user', timestamp: { $gt: c.pendingHandoffAt } });
@@ -459,14 +481,40 @@ async function runPendingHandoffTimeoutJob() {
         await updateConversation(c.psid, { pendingHandoffAt: null }).catch(() => {});
         continue;
       }
-      const reason = `${c.pendingHandoffReason || 'Cliente requiere asesor'} — ⚠️ el cliente NO proporcionó su información de contacto (sin respuesta en ${Math.round(PENDING_HANDOFF_TIMEOUT_MS / 60000)} min)`;
+      const have = handoffContactOf(c);
+      const mins = Math.round(PENDING_HANDOFF_TIMEOUT_MS / 60000);
+
+      if (!have.any) {
+        // Nothing to act on. Park it — no alert, no push, no handoff state.
+        // Written with updateOne rather than updateConversation on purpose: that helper
+        // stamps lastMessageAt, which would make a silent conversation look like it just
+        // spoke and re-arm the unseen dot in the inbox.
+        await Conversation.updateOne({ psid: c.psid }, {
+          $set: {
+            pendingHandoffAt: null,
+            'coldLead.at': new Date(),
+            'coldLead.why': 'sin teléfono, sin CP y sin respuesta',
+            'coldLead.reason': c.pendingHandoffReason || 'Cliente requiere asesor',
+            'coldLead.revivedAt': null,
+          },
+          $inc: { 'coldLead.times': 1 },
+        }).catch((e) => console.error('❌ cold-lead park failed:', e.message));
+        console.log(`🧊 [pending-handoff] ${c.psid} parked as a cold lead after ${mins} min — no phone, no CP, no reply`);
+        continue;
+      }
+
+      // Say what they DID give, so the note can't claim they gave nothing when they gave
+      // half of it — that false flag is what the client reported on 2026-10-26.
+      const gave = [have.phone ? 'teléfono' : null, have.email ? 'correo' : null, have.zip ? 'CP' : null]
+        .filter(Boolean).join(' y ');
+      const reason = `${c.pendingHandoffReason || 'Cliente requiere asesor'} — ⚠️ el cliente dejó de responder (sin respuesta en ${mins} min); datos recibidos: ${gave}`;
       await triggerHandoff(c.psid, reason).catch((e) => console.error('❌ pending-handoff timeout escalation failed:', e.message));
       await updateConversation(c.psid, { pendingHandoffAt: null }).catch(() => {});
-      console.log(`⏱️ [pending-handoff] escalated ${c.psid} after 30s of silence — client gave no info`);
+      console.log(`⏱️ [pending-handoff] escalated ${c.psid} after ${mins} min of silence — has ${gave}`);
     }
   } catch (err) {
     console.error('❌ runPendingHandoffTimeoutJob failed:', err.message);
   }
 }
 
-module.exports = { scheduleFollowUpIfNeeded, runSilenceFollowUpJob, runLinkFollowUpJob, runPendingHandoffTimeoutJob };
+module.exports = { scheduleFollowUpIfNeeded, runSilenceFollowUpJob, runLinkFollowUpJob, runPendingHandoffTimeoutJob, handoffContactOf, PENDING_HANDOFF_TIMEOUT_MS };
