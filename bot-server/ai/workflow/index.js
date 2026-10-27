@@ -3230,6 +3230,27 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // first hit as a final fallback — worded single-measures never go unparsed.
       const wantDims = turnWantDims; // resolved once per turn, above the promo gate
 
+      // WHAT WE HAVE ALREADY QUOTED, so a later "¿por qué es más cara?" is answered
+      // with the REAL numbers instead of a rule of thumb. priceTxt is the exact
+      // string the customer was shown, so the explanation can never disagree with
+      // the quote it is explaining. Keyed by the measure with its sides SORTED (a
+      // 6x4 and a 4x6 are the same product), newest last, four deep.
+      const cmpTag = (w, l) => [Number(w), Number(l)].sort((a, b) => a - b).join("x");
+      const noteQuoted = (d, pi) => {
+        if (!Array.isArray(d) || d.length < 2 || !pi || !Number.isFinite(pi.amount)) return;
+        const { fmtMoney } = require("./priceResolver");
+        const tag = cmpTag(d[0], d[1]);
+        const entry = {
+          tag, w: Number(d[0]), l: Number(d[1]),
+          area: Math.round(Number(d[0]) * Number(d[1]) * 100) / 100,
+          amount: pi.amount,
+          orig: pi.hasDiscount && Number.isFinite(pi.originalPrice) && pi.originalPrice > pi.amount
+            ? Math.round(pi.originalPrice) : null,
+          priceTxt: fmtMoney(pi),
+        };
+        state.lastQuotes = [...(state.lastQuotes || []).filter((q) => q.tag !== tag), entry].slice(-4);
+      };
+
       // ── MULTI-MEASURE ─────────────────────────────────────────────────────
       // If the message names 2+ measures ("6x6m y otra de 6x8m"), quote EACH with
       // its OWN price + link — never collapse to one. Each resolved price is added
@@ -3265,6 +3286,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             const link = await trackedLink(pi.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: doc.name, productId: String(doc._id) });
             lines.push(`  • ${tag}: ${fmtMoney(pi)}${link ? ` → ${link}` : ""}`);
             customerLines.push(`• ${tag}: ${fmtMoney(pi)}${link ? ` → ${link}` : ""}`);
+            noteQuoted(d, pi);
             // Price but NO purchase link → still quote it, but escalate to close.
             if (pi.quoteThenHandoff || (pi.handoff && !link)) {
               multiNeedsHandoff = true;
@@ -3342,6 +3364,89 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         }
       }
 
+      // ── "¿POR QUÉ LA DE 6x4 ES MÁS CARA QUE LA DE 4x5?" ───────────────────
+      // A price COMPARISON is answered from the two prices we actually quoted, never
+      // from a rule of thumb. The rule of thumb WAS a prompt directive (added
+      // 2026-07-20, "el precio va por ÁREA, una 6x4 son 24 m² y una 6x6 son 36 m²"),
+      // and on 2026-10-23 it told a customer the 6x4 "lleva más material y sube más"
+      // one message after quoting it at $649 against $739 for the 4x5 — the bot
+      // contradicting its own numbers, 2/2 on replay. The 6x4 is the PROMO measure:
+      // its LIST price is the higher one ($1356 vs $1125) and its discount is deeper,
+      // which is the entire reason it ends up cheaper. So: the LIST price does go by
+      // m², the price the customer pays does not, and only the two numbers in front
+      // of us can say which way it falls. The customer's premise may also be backwards
+      // (it was here) — correct it, don't echo it.
+      const cmpAsk = (() => {
+        const t = String(userMessage || "");
+        const why = /\b(?:por\s*qu[eé]|porqu[eé]|a\s*qu[eé]\s+se\s+debe|diferencia)\b/i.test(t);
+        const cmp =
+          /\bm[aá]s\s+(?:car[oa]s?|barat[oa]s?|econ[oó]mic[oa]s?)\b/i.test(t) ||
+          /\b(?:cuesta|cuestan|sale|salen|vale|valen)\s+m[aá]s\b/i.test(t) ||
+          /\bdiferencia\s+(?:de|en)\s+(?:precio|costo)\b/i.test(t);
+        return why && cmp;
+      })();
+      if (cmpAsk && (state.lastQuotes || []).length >= 2) {
+        const { fmtMoney } = require("./priceResolver");
+        // Prefer the measures named in THIS message; otherwise the last two quoted.
+        const named = allMeasures.map((d) => cmpTag(d[0], d[1]));
+        const pool0 = state.lastQuotes.filter((q) => named.includes(q.tag));
+        const pool = pool0.length >= 2 ? pool0 : state.lastQuotes.slice(-2);
+        const byArea = [...pool].sort((a, b) => a.area - b.area);
+        const small = byArea[0], big = byArea[byArea.length - 1];
+        // Name the measure the way the CUSTOMER said it: the catalogue stores the
+        // sides sorted (4x6), he asked for "la de 6x4", and reading his own measure
+        // back to him flipped is one more thing that looks like we aren't listening.
+        // Read the RAW message, not allMeasures: that helper sorts the sides (so does
+        // dimsOf, so does the catalogue), and all three had agreed to tell him his
+        // own "6x4" back as "4 x 6".
+        const asNamed = new Map(
+          [...String(userMessage).matchAll(/(\d+(?:[.,]\d+)?)\s*(?:[x×*]|por)\s*(\d+(?:[.,]\d+)?)/gi)]
+            .map((m) => [Number(String(m[1]).replace(",", ".")), Number(String(m[2]).replace(",", "."))])
+            .map((d) => [cmpTag(d[0], d[1]), d])
+        );
+        const nm = (q) => { const d = asNamed.get(q.tag); return d ? `${d[0]} x ${d[1]} m` : `${q.w} x ${q.l} m`; };
+        const off = (q) => (q.orig ? Math.round((1 - q.amount / q.orig) * 100) : 0);
+        // Another topic riding along → don't let this gate own the whole turn; the
+        // model answers everything, with the real reason in context below.
+        const restCmp = String(userMessage).replace(/\d+(?:[.,]\d+)?\s*[x×*]\s*\d+(?:[.,]\d+)?/gi, " ");
+        const otherCmp =
+          /env[ií]|entrega|paga|pago|factur|garant|instalaci|ubicaci|sucursal|color|mayoreo|cu[aá]nt[oa]s\s/i.test(restCmp) ||
+          // "más cara que en Mercado Libre / que en otro lado" compares us to someone
+          // else, not our two measures to each other.
+          /mercado\s*libre|otro\s+lado|otra\s+tienda|competencia|amazon|home\s*depot|internet/i.test(restCmp);
+        let cmpTxt = null;
+        if (big.area > small.area && big.amount < small.amount) {
+          cmpTxt = big.orig
+            ? `Al contrario: la de ${nm(big)} te sale MÁS BARATA, ${big.priceTxt} contra ${small.priceTxt} de la de ${nm(small)}. ` +
+              `Es una medida en promoción: su precio de lista es $${big.orig} y quedó en ${big.priceTxt} (${off(big)}% menos)` +
+              (small.orig ? `, mientras que la de ${nm(small)} va de $${small.orig} a ${small.priceTxt} (${off(small)}% menos)` : "") +
+              `. Por eso la más grande cuesta menos. 😊`
+            : `Al contrario: la de ${nm(big)} te sale más barata, ${big.priceTxt} contra ${small.priceTxt} de la de ${nm(small)}. ` +
+              `Cada medida tiene su propio precio publicado, así que la más grande puede salir más barata. 😊`;
+        } else if (big.area > small.area && big.amount > small.amount) {
+          cmpTxt =
+            `La de ${nm(big)} cubre ${big.area} m² y la de ${nm(small)} ${small.area} m², así que lleva más material: ` +
+            `por eso la de ${nm(big)} está en ${big.priceTxt} y la de ${nm(small)} en ${small.priceTxt}` +
+            (big.orig || small.orig ? `, ya con el descuento aplicado` : "") + `. 😊`;
+        } else if (big.amount === small.amount && big.area !== small.area) {
+          cmpTxt = `En realidad las dos están al mismo precio, ${big.priceTxt}: la de ${nm(big)} trae ${big.area} m² y la de ${nm(small)} ${small.area} m². 😊`;
+        }
+        if (cmpTxt && !otherCmp) {
+          history.push({ role: "assistant", text: cmpTxt, nodeId: currentNode.id, at: new Date() });
+          return {
+            reply: cmpTxt,
+            state: { ...state, history, nodeId: currentNode.id },
+            diagnostics: {
+              workflow: { id: String(workflow._id), name: workflow.name },
+              fromNode: { id: currentNode.id, name: currentNode.name },
+              toNode: { id: currentNode.id, name: currentNode.name },
+              priceComparison: `${big.tag} vs ${small.tag}`,
+            },
+          };
+        }
+        if (cmpTxt) turnContextExtra += `\n- COMPARACIÓN DE PRECIO (ya resuelta con los números reales, úsala tal cual): ${cmpTxt}`;
+      }
+
       // AREA WITHOUT SIDES ("5 metros cuadrados", "20 m2"): never resolve a product
       // from it. There is no W×L to match, so the lookup degrades to a text match and
       // can return a leaf from a completely different family (reported: it answered
@@ -3363,6 +3468,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       } else if (found && found.priceInfo) {
         turnPriceInfo = found.priceInfo;
         const pi = found.priceInfo;
+        noteQuoted(wantDims, pi);
         // This is the measure the customer asked about THIS turn → the canonical
         // price + the rewrite target for the clamp.
         noteAmount(pi, true);

@@ -545,8 +545,21 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
       `elegida por diferencia (nunca una más chica "porque está disponible"). Pasar con un asesor no es la salida: sólo si el cliente insiste en la medida exacta ` +
       `después de que ya le diste la más cercana. NUNCA des un "no" rotundo ("no lo manejamos", "no la podemos ofrecer") sin ofrecer una alternativa real.`
   );
+  // COMPARAR DOS PRECIOS. La versión anterior de esta directiva (2026-07-20) decía
+  // que el precio va por área y que por eso una medida más grande cuesta más. El
+  // modelo se quedó con esa mitad e ignoró la de la promoción: el 2026-10-23 le dijo
+  // a un cliente que la 6x4 "lleva más material y sube más" un mensaje después de
+  // cotizarla en $649 contra $739 de la 4x5 (2/2 al reproducirlo). La 6x4 es la
+  // medida EN PROMOCIÓN: su precio de LISTA es el más alto ($1356 vs $1125) y su
+  // descuento es más profundo. El precio de lista sí va por m²; el precio que paga
+  // el cliente, no. El gate determinista de workflow/index.js ("¿POR QUÉ LA DE 6x4
+  // ES MÁS CARA…") contesta esta pregunta con los números reales; esta directiva
+  // solo cubre los turnos que el gate no reclama.
   lines.push(
-    `- PRECIO POR ÁREA (no lineal): si el cliente pregunta por qué una medida más grande cuesta más, o "por qué la 6x6 cuesta casi el doble que la 6x4 si son solo 2 m más", NO evadas ni repitas precios: explícale que el precio va por ÁREA en metros CUADRADOS, no por metros lineales. Una 6x4 son 24 m² y una 6x6 son 36 m² (50% más material), por eso sube más de lo que parece. Y si la 6x4 está en PROMOCIÓN, esa es su precio de referencia (por eso se ve barata). Contesta la pregunta de frente.`
+    `- COMPARAR DOS MEDIDAS: el precio de LISTA va por ÁREA en metros CUADRADOS (una 6x4 son 24 m² y una 6x6, 36 m²), pero el precio FINAL es el de la publicación con su descuento, y una medida en PROMOCIÓN puede quedar más barata que una más chica. ` +
+      `PROHIBIDO afirmar que una medida cuesta más "porque es más grande" sin mirar los DOS precios que tienes en el CONTEXTO: compáralos y di el número. ` +
+      `Si la más grande resulta más barata, la razón es su promoción/descuento (di de cuánto a cuánto), y si el cliente da por hecho lo contrario, corrígelo con educación — NUNCA le des la razón contra tus propios precios. ` +
+      `Contesta la pregunta de frente, sin evadir y sin repetir la cotización completa.`
   );
   lines.push(
     `- "LONA" = MALLA SOMBRA: muchos clientes le dicen "lona"/"lonas" a la malla sombra. Cuando la pidan con contexto de SOMBRA ("lonas al 90% de sombra", "lona para sombra") o con una medida, AFIRMA de una vez: "¡Sí! Manejamos malla sombra al 90% de sombra…" y sigue ayudándole. ` +

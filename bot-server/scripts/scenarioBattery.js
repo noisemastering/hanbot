@@ -115,6 +115,14 @@ const CASES = [
     expect: "Aclara que la malla sombra NO es impermeable / deja pasar el agua; no la vende como impermeable." },
 
   // REFORZADA ───────────────────────────────────────────────────────────────
+  // POR QUÉ UNA CUESTA MÁS QUE LA OTRA. La 6x4 es la medida EN PROMOCIÓN: su precio
+  // de lista es el más alto ($1356 vs $1125) y su descuento el más profundo, así que
+  // termina más barata que la 4x5. La directiva de prompt que decía "el precio va por
+  // área" hizo que el bot afirmara lo contrario un mensaje después de cotizar las dos
+  // (reportado 2026-10-26, conversación 284778387085834).
+  { id: "ref-por-que-mas-cara", group: "reforzada", flow: "reforzada", setup: { hasPromo: PROMO_6X4 },
+    turns: ["Precio de la de 6x4", "Y de medidas de 4x5 m?", "Porque es más cara la de 6x4 que la de 5x4?"],
+    expect: "La de 6x4 ($649) es MÁS BARATA que la de 4x5 ($739): debe corregir la premisa del cliente y dar la razón REAL, que es la promoción/el descuento de esa medida (de $1356 a $649). Es un ERROR afirmar que la 6x4 cuesta más, y es un ERROR explicar la diferencia por el área o los m² — eso contradice los dos precios que el propio bot acaba de dar." },
   { id: "ref-non-promo-measure", group: "reforzada", flow: "reforzada", setup: { hasPromo: PROMO_6X4 },
     turns: ["quiero la de 6x3"],
     expect: "Cotiza 6x3 con SU precio/link; NO devuelve la 6x4 de la promo." },
