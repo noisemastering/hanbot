@@ -198,6 +198,36 @@ const conversationSchema = new mongoose.Schema({
   silenceFollowUpSent: { type: Boolean, default: false },       // Whether silence follow-up was already sent
   purchaseAcknowledged: { type: Boolean, default: false },      // Customer confirmed they bought/will buy after follow-up — no more re-pitch
 
+  // GROUND COVER 24h follow-up (client spec 2026-10-27). ONE per pending
+  // conversation (§7), so `sentAt` is also the "never again" flag. `skipReason`
+  // records why a conversation was passed over, which is what makes §3.3/§4 auditable
+  // instead of invisible. The reply fields feed the dashboard indicators (§6, §8).
+  gcFollowUp: {
+    sentAt: { type: Date, default: null },
+    text: { type: String, default: null },
+    channel: { type: String, default: null },
+    // Why we did NOT send. Set every time the job passes on a conversation, so the
+    // latest reason is always visible; cleared if the conversation becomes eligible.
+    skipReason: { type: String, default: null },
+    skipAt: { type: Date, default: null },
+    // The customer's answer to the follow-up (§6).
+    repliedAt: { type: Date, default: null },
+    replyText: { type: String, default: null },
+    // What the answer meant (§5 A/B/C/D) and why they had stalled (§8).
+    outcome: {
+      type: String,
+      enum: [null, "interesado", "otra_medida", "inconformidad", "no_interesado", "otro"],
+      default: null,
+    },
+    reasonCategory: {
+      type: String,
+      enum: [null, "precio", "medidas", "atencion", "informacion", "otros"],
+      default: null,
+    },
+    reasonNote: { type: String, default: null },
+    analyzedAt: { type: Date, default: null },
+  },
+
   // Pre-handoff zip code collection (dynamic fields used by preHandoffCheck)
   pendingHandoff: { type: Boolean, default: false },
   pendingHandoffInfo: { type: mongoose.Schema.Types.Mixed, default: null },

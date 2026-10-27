@@ -94,6 +94,7 @@ import FbCommentReplyView from "./pages/FbCommentReplyView";
 import MaintenanceGate from "./components/MaintenanceGate";
 import SalesOverviewView from "./pages/SalesOverviewView";
 import MessagePerformanceView from "./pages/MessagePerformanceView";
+import GcFollowUpView from "./pages/GcFollowUpView";
 import ApiHealthAlerts from "./components/ApiHealthAlerts";
 import SimulationModeSelector from "./components/SimulationModeSelector";
 import useNewVersionCheck from "./hooks/useNewVersionCheck";
@@ -515,6 +516,14 @@ const menuItems = [
         path: "/playground/simulador",
         icon: (
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+        )
+      },
+      {
+        id: "playground-gc-seguimiento",
+        labelKey: "menu.gcFollowUp",
+        path: "/playground/seguimiento-ground-cover",
+        icon: (
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
         )
       },
       {
@@ -2706,6 +2715,7 @@ function App() {
           <Route path="/forecast" element={<SalesForecastView mode="engagement" />} />
           <Route path="/playground/conversion" element={<ConversionProbabilityView />} />
           <Route path="/playground/rendimiento-mensajes" element={<MessagePerformanceView />} />
+          <Route path="/playground/seguimiento-ground-cover" element={<GcFollowUpView />} />
 
 
           {/* Tickets Route */}

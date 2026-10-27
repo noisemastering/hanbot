@@ -32,6 +32,13 @@ const systemStateSchema = new mongoose.Schema(
     // comments (via the feed webhook). Default OFF. Also enableable via the
     // FB_COMMENT_AUTO_REPLY env var (either one turns it on).
     fbCommentReply: { type: switchSchema, default: () => ({}) },
+    // GROUND COVER 24h follow-up (client spec 2026-10-27). engaged=true → the job
+    // sends the campaign's single follow-up to pending Ground Cover conversations.
+    // Default OFF, deliberately: it messages real customers unprompted, and the
+    // blanket remarketing kill-switch was flipped off at the user's request on
+    // 2026-06-05. This is a DB switch, not an env var, so it is flipped from Spec
+    // Ops — the user never touches Railway configuration.
+    gcFollowUp: { type: switchSchema, default: () => ({}) },
     // Convo↔sale correlation freshness. `at` = when the last correlation run
     // finished; the dashboard auto-triggers a rebuild when it's >3h stale.
     // `running` guards against concurrent runs across requests/instances.

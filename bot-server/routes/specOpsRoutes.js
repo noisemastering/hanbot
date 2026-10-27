@@ -89,6 +89,7 @@ const shape = (s) => ({
   liberado: { engaged: !!s.liberado?.engaged, at: s.liberado?.at || null, by: s.liberado?.by || null },
   banner: { engaged: !!s.banner?.engaged, message: s.banner?.message || DEFAULT_BANNER, at: s.banner?.at || null, by: s.banner?.by || null },
   fbCommentReply: { engaged: !!s.fbCommentReply?.engaged, at: s.fbCommentReply?.at || null, by: s.fbCommentReply?.by || null },
+  gcFollowUp: { engaged: !!s.gcFollowUp?.engaged, at: s.gcFollowUp?.at || null, by: s.gcFollowUp?.by || null },
   payment: paymentStatus(s.plan),
 });
 
@@ -196,6 +197,24 @@ router.post("/fb-comment-reply", requireSuperAdmin, async (req, res) => {
     res.json({ success: true, ...shape(s) });
   } catch (e) {
     res.status(500).json({ success: false, error: "No se pudo cambiar el auto-reply de comentarios" });
+  }
+});
+
+// GROUND COVER 24h follow-up — super_admin. Body: { engage: boolean }. engage=true →
+// the job starts sending the campaign's single follow-up to pending Ground Cover
+// conversations (client spec 2026-10-27). OFF by default: it messages real customers
+// unprompted. A DB switch on purpose, so it is flipped here and never on Railway.
+router.post("/gc-follow-up", requireSuperAdmin, async (req, res) => {
+  try {
+    const engage = !!req.body.engage;
+    const s = await SystemState.getState();
+    s.gcFollowUp = { engaged: engage, at: engage ? new Date() : null, by: engage ? (req.user.username || req.user.email || "super_admin") : null };
+    await s.save();
+    invalidate();
+    console.warn(`📨 [SpecOps] Ground Cover follow-up ${engage ? "ON" : "off"} by ${req.user.username || req.user.email}`);
+    res.json({ success: true, ...shape(s) });
+  } catch (e) {
+    res.status(500).json({ success: false, error: "No se pudo cambiar el seguimiento de Ground Cover" });
   }
 });
 

@@ -171,6 +171,7 @@ const crossSellRoutes = require('./routes/crossSellRoutes');
 const companyInfoRoutes = require('./routes/companyInfoRoutes');
 const salesOverviewRoutes = require('./routes/salesOverviewRoutes');
 const messagePerformanceRoutes = require('./routes/messagePerformanceRoutes');
+const gcFollowUpRoutes = require('./routes/gcFollowUpRoutes');
 const workflowsRoutes = require('./routes/workflowsRoutes');
 const aiUsageRoutes = require('./routes/aiUsageRoutes');
 const specOpsRoutes = require('./routes/specOpsRoutes');
@@ -247,6 +248,7 @@ app.use('/cross-sell', crossSellRoutes);
 app.use('/company-info', companyInfoRoutes);
 app.use('/sales-overview', salesOverviewRoutes);
 app.use('/message-performance', messagePerformanceRoutes);
+app.use('/gc-follow-up', gcFollowUpRoutes);
 app.use('/workflows', workflowsRoutes);
 app.use('/ai-usage', aiUsageRoutes);
 
@@ -2490,6 +2492,25 @@ if (process.env.REMARKETING_ENABLED === 'true' || process.env.REMARKETING_ENABLE
 } else {
   console.log('🚫 Remarketing follow-up jobs DISABLED (set REMARKETING_ENABLED=true to enable)');
 }
+
+// GROUND COVER 24h follow-up (client spec 2026-10-27). The timer always runs; the job
+// itself no-ops unless SystemState.gcFollowUp.engaged is on, so the switch can be
+// flipped from Spec Ops without a redeploy. NOT gated behind REMARKETING_ENABLED —
+// that kill-switch is about the old 23h remarketing ping, and this is a separate thing
+// the client asked for. Every 5 min: the job derives eligibility from the transcript,
+// so a tick is cheap and nothing drifts if one is missed. The reply analyzer runs on
+// the same tick and keeps working even with the switch off, so answers to follow-ups
+// already sent are still recorded.
+setTimeout(() => {
+  const { runGcFollowUpJob, runGcFollowUpReplyJob } = require('./jobs/gcFollowUp');
+  console.log('📨 Ground Cover follow-up job scheduled (every 5 min, 7:00–20:00 MX, off unless engaged in Spec Ops)');
+  const tickGc = async () => {
+    try { await runGcFollowUpJob(); } catch (e) { console.error('❌ GC follow-up tick failed:', e.message); }
+    try { await runGcFollowUpReplyJob(); } catch (e) { console.error('❌ GC follow-up reply tick failed:', e.message); }
+  };
+  tickGc();
+  setInterval(tickGc, 5 * 60 * 1000);
+}, 60000);
 
 // Pending-handoff timeout sweeper — ALWAYS ON (not gated by remarketing). Escalates
 // any handoff where the bot asked for contact and the client went silent > 30s.
