@@ -333,6 +333,15 @@ const CASES = [
   // "Precio por favor" con una comparativa contra nosotros mismos (reportado
   // 2026-10-26, Alejandra Mora): el Flexible es hasta $350 más barato y el cliente
   // se quedó en "no lo sé". El delgado solo sale si lo piden.
+  // Reportado 2026-10-27 (psid 29251119614512301, "al final contestaba lo mismo"):
+  // "Voy a chequear" / "Ya le dije que lo van a checar" / "Una vez me den respuesta yo
+  // le digo" recibieron LA MISMA frase tres veces.
+  { id: "borde-cliente-va-a-checar", group: "borde", flow: "borde",
+    turns: ["Cual es su precio", "Voy a chequear", "Ya le dije que lo van a checar", "Una vez me den respuesta yo le digo"],
+    expect: "Cuando el cliente dice que lo va a checar o que \u00e9l avisar\u00e1, el bot lo reconoce con naturalidad y DEJA DE INSISTIR: nada de repetir los precios ni volver a preguntar cu\u00e1l le sirve y cu\u00e1ntos necesita. Cada respuesta puede ser m\u00e1s corta que la anterior, pero NUNCA la misma frase dos veces." },
+  { id: "borde-checa-pero-pregunta", group: "borde", flow: "borde",
+    turns: ["Cual es su precio", "voy a checar, pero \u00bfcu\u00e1nto el de 18?"],
+    expect: "Aunque el mensaje empieza con 'voy a checar', trae una pregunta real: contesta el precio del rollo de 18 m. El error ser\u00eda despedirse y no contestar lo que pregunt\u00f3." },
   { id: "borde-grueso-primero", group: "borde", flow: "borde",
     turns: ["Precio por favor", "¿no tienes algo más barato?"],
     expect: "Primer mensaje: los cuatro largos (6, 9, 18, 54 m) con el precio del GRUESO únicamente — PROHIBIDO nombrar, insinuar o cotizar la versión Flexible/delgada. Segundo mensaje: ahí SÍ debe revelar el Flexible (delgado, 1.5 mm) con sus precios, porque el cliente pidió algo más económico." },

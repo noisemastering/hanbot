@@ -624,6 +624,52 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     }
   }
 
+  // THE CUSTOMER IS DEFERRING, NOT ASKING. "Voy a chequear" / "ya le dije que lo van a
+  // checar" / "una vez me den respuesta yo le digo" is a polite pause, and the only
+  // right answer is to acknowledge it and get out of the way. Reported 2026-10-27
+  // (psid 29251119614512301, "al final contestaba lo mismo"): those three messages got
+  // the SAME sentence three times — "¡Gracias! Ya te pasé los precios de los rollos de
+  // 6 m, 9 m, 18 m, 54 m. ¿Cuál te sirve y cuántos necesitas?" — because the borde
+  // nudge is a catch-all for any turn that carries neither a length nor a count, and a
+  // deferral carries neither. Pushing a buying question at someone who just said they
+  // need to check with someone else is exactly the "insistir" the client's rules forbid.
+  //
+  // Deliberately strict: the message must be NOTHING but the deferral (no digits, no
+  // measure, short), so "voy a checar, ¿cuánto el de 18?" still gets its answer.
+  if (userMessage && !state.pendingHandoff) {
+    const _d = String(userMessage).trim();
+    const defers =
+      _d.length <= 90 &&
+      !/\d/.test(_d) &&
+      /\b(voy\s+a\s+(chequear|checar|revisar|verlo|verla|pensarlo?|consultarlo?|preguntar)|lo\s+(checo|chequeo|reviso|pienso|consulto|platico|pregunto)|d[eé]jame\s+(pensarlo|checarlo|revisarlo|consultarlo|verlo|preguntar)|lo\s+voy\s+a\s+pensar|ya\s+le\s+dije\s+que\s+lo\s+van\s+a\s+(checar|chequear|revisar|ver)|van\s+a\s+(checarlo|chequearlo|revisarlo|verlo)|una\s+vez\s+me\s+den\s+respuesta|cuando\s+me\s+(digan|confirmen|contesten|respondan)|yo\s+(le|les|te)\s+(aviso|digo|busco|contacto|marco|escribo)|(le|les|te)\s+aviso|lo\s+comento\s+con|lo\s+platico\s+con)\b/i.test(_d);
+    if (defers) {
+      // Each repeat gets SHORTER, never louder. Someone saying "I'll check" three
+      // times is winding the conversation down, and answering with the same warm
+      // paragraph every time is its own kind of nagging. The last line is the floor:
+      // it is short enough to bear repeating if they keep going.
+      const _n = (state.deferCount || 0) + 1;
+      state.deferCount = _n;
+      state.customerDeferred = true;
+      const reply =
+        _n === 1
+          ? `¡Claro, sin problema! Aquí quedo a la orden — cuando lo revises me dices y seguimos. 😊`
+          : _n === 2
+          ? `¡Claro! Aquí estamos cuando lo necesites. 😊`
+          : `Quedo al pendiente. 🙌`;
+      history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+      return {
+        reply,
+        state: { ...state, history, nodeId: currentNode.id },
+        diagnostics: {
+          workflow: { id: String(workflow._id), name: workflow.name },
+          fromNode: { id: currentNode.id, name: currentNode.name },
+          toNode: { id: currentNode.id, name: currentNode.name },
+          customerDeferred: true,
+        },
+      };
+    }
+  }
+
   // Passive SAME-DAY contact capture. If the customer VOLUNTEERS their name or a phone
   // this turn, remember it on state.lead so a handoff USES it instead of re-asking
   // (reported: gave "Eduardo Navarro" + phone, bot still asked "¿me compartes tu nombre
@@ -915,7 +961,16 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // un vivero al mayoreo" needs NO quantity — a human hears it and connects them. This
   // used to be reforzada-only, so rollo/borde/GC wholesale asks fell through (reported:
   // a vivero asking "¿a cómo de mayoreo?" got a retail rollo quote instead of a handoff).
-  if (userMessage && !workflow.isColdStart) {
+  // COLD START COUNTS TOO. This used to be `!workflow.isColdStart`, so an ORGANIC
+  // "Información para ser distribuidor" — no ad, so cold-start owns it — never reached
+  // the handoff: psid 28769615639359953 got "Te comparto nuestro catálogo 📄" with
+  // nothing attached and no escalation, and a human had to come in and paste the
+  // wholesale pitch by hand (reported 2026-10-27). The flow's own knowledge already
+  // says to escalate a distributor enquiry and ask for name and phone — but that is a
+  // PROMPT, so it was advisory. Which product they want is beside the point here: a
+  // distributor lead is a person's job whatever the product, which is exactly why this
+  // gate needs no product context and is safe on cold start.
+  if (userMessage) {
     try {
       const { wantsWholesale } = require("./tools");
       if (wantsWholesale(String(userMessage))) {

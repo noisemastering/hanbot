@@ -249,6 +249,38 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
     { psid, personaName, profileName: profileName || null }
   );
 
+  // NEVER SAY THE SAME THING TWICE IN A ROW. Reported 2026-10-27 (psid
+  // 29251119614512301, "al final contestaba lo mismo"): three different messages got
+  // one identical sentence back, because a catch-all gate fires on every turn it
+  // doesn't recognise and has no memory of having just fired. A customer reading the
+  // same words a second time learns that nobody is listening, which is worse than any
+  // single wrong answer.
+  //
+  // This is the LAST line of defence, not the fix — the deferral gate upstream is. It
+  // sits here because it is the one place every gate's reply passes through, and the
+  // engine has a dozen early returns that each would otherwise need their own guard.
+  // It only ever appends a short nudge to vary the turn; it never swallows the reply,
+  // because a repeated answer is still better than silence.
+  let replyText = reply;
+  try {
+    if (replyText && typeof replyText === "string") {
+      const prevBot = [...(newState.history || [])]
+        .filter((h) => h.role === "assistant")
+        .slice(-2, -1)[0];
+      const norm = (s) => String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
+      // A deferral turn is exempt: that gate repeats ON PURPOSE and tapers as it goes
+      // (see customerDeferred). Appending "dime con qué te ayudo" to someone who is
+      // trying to end the conversation is the nagging this whole fix removes.
+      const deferring = !!diagnostics?.customerDeferred;
+      if (!deferring && prevBot && norm(prevBot.text) === norm(replyText) && norm(replyText).length > 20) {
+        console.warn(`🔁 [workflow] identical reply suppressed for ${psid} — varying it`);
+        replyText = `${replyText}\n\nSi prefieres, dime con qué te ayudo y lo vemos. 😊`;
+      }
+    }
+  } catch (e) {
+    console.error("⚠️ repeat guard failed:", e.message);
+  }
+
   // Map what the engine collected (lead / location / product) onto the
   // Conversation so the human-handoff brief, commerce-status and zip attribution
   // have it. Don't clobber values the conversation already has.
@@ -351,11 +383,11 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
   // (instead of calling share_product_link), rewrite it to a psid-tracked
   // redirect so the click is attributed. Single chokepoint for every
   // workflow reply (main, switched, prefixed).
-  let safeText = reply;
-  if (reply) {
+  let safeText = replyText;
+  if (replyText) {
     try {
       const { sanitizeMarketplaceLinks } = require("./workflow/priceResolver");
-      safeText = await sanitizeMarketplaceLinks(reply, {
+      safeText = await sanitizeMarketplaceLinks(replyText, {
         psid,
         productName: newState.product?.name || null,
         productId: newState.product?._id ? String(newState.product._id) : null,
