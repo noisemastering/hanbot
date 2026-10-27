@@ -658,7 +658,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // phone — prefaced with any fact we owe the customer (a price quote, a sold-out
   // note) so one message both informs AND collects — and arm pendingHandoff so
   // their reply completes it next turn.
-  const beginHandoff = ({ preface, reason, wholesale } = {}) => {
+  const beginHandoff = ({ preface, reason, wholesale, complaint } = {}) => {
     const pre = preface ? `${String(preface).trim()} ` : "";
     // Same-day guard: only reuse a name/phone if the customer gave contact TODAY
     // (state.contactDay). No stamp (legacy lead from elsewhere) still counts —
@@ -718,6 +718,26 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     // GROUND COVER (§2 + §3): ask ONLY for what is still missing — including the
     // colonia, which the asesor needs for the freight — and frame it as preparing the
     // cotización rather than as handing the customer over.
+    // A COMPLAINT IS NOT A QUOTE. Someone who just told us nobody answered them does
+    // not want a cotización form; asking for their name, CP and colonia "para incluir
+    // el envío" in the same breath is the brush-off all over again. Ask for the one
+    // thing we actually need to call them back, and nothing else.
+    if (complaint) {
+      const askC = _lead.phone ? "" : "¿Me compartes un teléfono a 10 dígitos para que te busque?";
+      const replyC = `${pre}${askC}`.trim();
+      history.push({ role: "assistant", text: replyC, nodeId: currentNode.id, at: new Date() });
+      return {
+        reply: replyC,
+        state: { ...state, history, nodeId: currentNode.id, pendingHandoff: { reason: reason || null, wholesale: false, attempts: 1, askedAt: new Date() } },
+        diagnostics: {
+          workflow: { id: String(workflow._id), name: workflow.name },
+          fromNode: { id: currentNode.id, name: currentNode.name },
+          toNode: { id: currentNode.id, name: currentNode.name },
+          handoffPendingContact: true,
+          complaint: true,
+        },
+      };
+    }
     if (_gcFlow) {
       const need = [];
       if (!_knownName) need.push("a nombre de quién la preparamos");
@@ -1196,6 +1216,92 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           lines.push(`📦 ¿Qué medida de rollo necesitas y cuántas piezas?`);
           return `¡Con gusto te ayudamos con tu cotización! 😊📋\nPara prepararla e incluir el envío, ¿nos compartes?\n${lines.join("\n")}`;
         };
+
+        // (a0-envio) WHAT THE SHIPPING ACTUALLY COSTS ON A ROLL FLOW. Reported
+        // 2026-10-27 (wa:5217227079986): "¿Cuál es el costo de envío?" was answered
+        // "El envío ya va incluido en el precio, no se cobra aparte", and two minutes
+        // later the SAME conversation quoted his 2 x 100 m roll with "el rollo completo
+        // lo cotiza un asesor junto con el envío". The bot contradicted itself about
+        // money inside two turns, which is exactly the kind of thing a customer
+        // remembers. Root cause: "El costo del envío ya viene incluido en el precio" is
+        // a knowledge entry in ALL EIGHT workflows, and it is only true of what is
+        // bought on Mercado Libre — a FULL ROLL carries no ML link by the ROLLO COMPLETO
+        // rule (2026-10-23) and moves as freight an asesor prices by destination.
+        // Same family as the borde's §3.5 mayoreo-shipping gate: a promise of free
+        // shipping on an order that doesn't ship that way.
+        const asksShipping =
+          /\b(env[ií]os?|flete|paqueter[ií]a|transporte|mensajer[ií]a)\b/i.test(msg) &&
+          /\b(cu[aá]nto|costo|cuesta|precio|cobran|sale|vale|gratis|incluid[oa]s?|incluye|aparte|extra|manejan|tienen?|hacen|es\s+el)\b/i.test(msg);
+        if (asksShipping && _gcFlow) {
+          const lensE = await gcDim("length");
+          const cutsE = lensE.filter((l) => l !== 100);
+          const haveZipE = !!(state.location && (state.location.zip || state.location.zipcode));
+          // Both halves, every time — the answer cannot be wrong that way. The half
+          // that applies to what they're looking at goes first.
+          const rollFirst = (dims && dims.some((d) => Number(d) === 100)) || /\b100\b/.test(msg);
+          const rollLine = `El rollo completo de 100 m se envía por flete y se cotiza aparte según tu destino: un asesor te da el costo exacto${haveZipE ? "" : " con tu código postal"}.`;
+          const cutLine = cutsE.length
+            ? `En los cortes que se compran en línea (${cutsE.join(", ")} m) el envío ya va incluido en el precio.`
+            : "";
+          const parts = rollFirst ? [rollLine, cutLine] : [cutLine, rollLine];
+          // We are explicitly asking for the CP, so arm the capture: the PROMPTED path
+          // in captureZipReply (ai/index.js) is the lenient one, while an UNPROMPTED
+          // reply only counts when it is a bare number that exists in the ZipCode table
+          // — "es el 50000" would be dropped and we'd ask the same thing twice.
+          if (!haveZipE) state.zipAsked = true;
+          return ret(
+            `${parts.filter(Boolean).join(" ")} ${haveZipE ? "¿Qué medida necesitas y te la cotizo? 😊" : "¿Me compartes tu código postal y la medida que necesitas? 📍"}`,
+            { gcShippingAnswered: rollFirst ? "rollo" : "corte" }
+          );
+        }
+
+        // (a0-quejas) §5C of the follow-up spec — the customer says the PRICE, the
+        // MEASURE, the INFORMATION or the ATTENTION did not meet expectations. The
+        // client's rule: acknowledge it, resolve it ONLY with authorized information,
+        // otherwise hand it to a human. We have an authorized answer for a price
+        // complaint — the smaller presentations really are cheaper per piece — and we
+        // have none at all for "nobody answered me" or "you never told me the price",
+        // so those go to a person, with the complaint itself as the handoff reason.
+        // Scoped to ground cover and placed before BOTH the opener and the length
+        // gates: a complaint is never a measure, and a complaint on the very first turn
+        // ("nunca me dijeron el precio") is still a complaint — the opener used to claim
+        // it and answer with the price list, which is the brush-off the customer was
+        // already complaining about.
+        if (_gcFlow) {
+          const qAten = /\b(nadie\s+me\s+(contest|respond|atend)\w*|mal[a]?\s+(atenci[oó]n|servicio)|p[eé]sim[oa]\s+(atenci[oó]n|servicio|servicio)|no\s+me\s+(contestaron|respondieron|atendieron|resolvieron)|me\s+dejaron\s+(esperando|colgad[oa]|en\s+visto)|sigo\s+esperando\s+(respuesta|que\s+me)|muy\s+mala\s+atenci[oó]n)\b/i.test(msg);
+          const qInfo = /\b(no\s+me\s+(dieron|dijeron|mandaron|pasaron)\s+(el\s+precio|la\s+informaci[oó]n|los\s+precios|nada)|informaci[oó]n\s+(incompleta|confusa|equivocada|err[oó]nea)|nunca\s+me\s+(dijeron|mandaron|contestaron|pasaron)|no\s+entend[ií]\s+nada|no\s+me\s+quedó?\s+claro\s+nada)\b/i.test(msg);
+          const qPrecio = /\b(muy\s+car[oa]s?|est[aá]n?\s+car[oa]s?|car[ií]simo|se\s+me\s+hace\s+car[oa]|no\s+me\s+alcanza|fuera\s+de\s+mi\s+presupuesto|est[aá]\s+fuera\s+de\s+presupuesto|m[aá]s\s+barat[oa]\s+en\s+otr\w+)\b/i.test(msg);
+          if (qAten || qInfo) {
+            return beginHandoff({
+              preface: `Lamento que haya quedado así, y gracias por decírmelo. 🙏 Déjame ponerte con alguien que lo revise contigo a detalle.`,
+              reason: `Inconformidad del cliente (${qAten ? "atención" : "información"}) en campaña Ground Cover — requiere solución personalizada`,
+              complaint: true,
+            });
+          }
+          if (qPrecio) {
+            // The authorized answer, ONCE: the smaller cuts cost less per piece. If we
+            // have already shown them and the price is still the objection, there is
+            // nothing more we are allowed to offer — that is a person's call, not ours
+            // (we never invent a discount).
+            if (state.gcPriceObjection) {
+              return beginHandoff({
+                preface: `Entiendo, y gracias por tu franqueza. 🙏 Déjame ponerte con un compañero para ver qué se puede hacer con el precio.`,
+                reason: `Inconformidad de PRECIO en campaña Ground Cover tras ofrecer las presentaciones más chicas — revisar con el cliente`,
+                complaint: true,
+              });
+            }
+            const lensQ = await gcDim("length");
+            const cutsQ = lensQ.filter((l) => l !== 100);
+            if (cutsQ.length) {
+              const wsQ = await gcDim("width");
+              state.gcPriceObjection = true;
+              return ret(
+                `Te entiendo. 🙏 El rollo completo de 100 m es el que sale más alto; si no necesitas tanto, lo cortamos en ${cutsQ.join(", ")} m y la pieza te cuesta mucho menos. ¿Cuántos metros necesitas y de qué ancho, ${wsQ.length ? wsQ.map((w) => `${w} m`).join(" o ") : "2 m o 4 m"}? Te paso el precio exacto. 😊`,
+                { gcPriceObjection: cutsQ.length }
+              );
+            }
+          }
+        }
 
         // (a0-opener) §1 — THE CAMPAIGN'S TWO OPENING MESSAGES. Mensaje 1 presents the
         // product with its promo prices; Mensaje 2 invites the quote and asks for the

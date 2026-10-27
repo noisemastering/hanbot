@@ -230,6 +230,34 @@ const CASES = [
   { id: "gc-datos-solo-los-que-faltan", group: "groundcover", flow: "groundcover",
     turns: ["Quiero 2 rollos de 4x100", "Soy Juan Pérez, mi tel 4421234567, CP 76000, colonia Centro"],
     expect: "Tras recibir nombre, teléfono, código postal y colonia en un solo mensaje, agradece por su nombre y cierra confirmando que prepara la cotización. NO vuelve a pedir ningún dato que ya dio." },
+  // Reported 2026-10-27 (wa:5217227079986): "¿Cuál es el costo de envío?" → "el envío ya
+  // va incluido, no se cobra aparte", y dos minutos después su rollo de 2x100 se cotizó
+  // con "el rollo completo lo cotiza un asesor junto con el envío". El bot se contradijo
+  // sobre dinero en dos turnos.
+  { id: "gc-envio-rollo-vs-corte", group: "groundcover", flow: "groundcover",
+    turns: ["¿Cuál es el costo de envío?", "2 x100"],
+    expect: "Al preguntar por el envío distingue los DOS casos: en los cortes que se compran en línea (10, 25, 50 m) el envío va incluido, y el ROLLO COMPLETO de 100 m va por flete que un asesor cotiza según el destino. Luego cotiza el 2 x 100 m como rollo completo. El error es decir que el envío va incluido y después decir que el asesor lo cotiza: no puede contradecirse." },
+  // ── The FOLLOW-UP spec (client, 2026-10-27). §5C: una inconformidad se reconoce y,
+  // si no tenemos información autorizada para resolverla, pasa con una persona.
+  { id: "gc-queja-atencion", group: "groundcover", flow: "groundcover",
+    turns: ["Nadie me contestó la vez pasada, muy mala atención"],
+    expect: "Reconoce la queja con empatía y pasa la conversación con una persona para que la revise. NO responde con precios ni con el mensaje de apertura, y NO discute con el cliente." },
+  { id: "gc-queja-informacion", group: "groundcover", flow: "groundcover",
+    turns: ["Nunca me dijeron el precio, información incompleta"],
+    expect: "Reconoce la queja y la pasa con una persona. El error sería contestar con la lista de precios como si nada: eso es justamente de lo que se está quejando." },
+  // §5C para el PRECIO: sí tenemos una respuesta autorizada (los cortes más chicos),
+  // así que primero se ofrece; si insiste, ahí sí pasa con una persona. NUNCA inventa
+  // un descuento.
+  { id: "gc-queja-precio-opcion-autorizada", group: "groundcover", flow: "groundcover",
+    turns: ["Está muy caro"],
+    expect: "Reconoce la objeción y ofrece la alternativa real: los cortes más chicos (10, 25, 50 m) cuestan menos por pieza, y pregunta cuántos metros y qué ancho necesita. NUNCA inventa un descuento ni promete un precio especial." },
+  { id: "gc-queja-precio-insiste", group: "groundcover", flow: "groundcover",
+    turns: ["Está muy caro", "Sigue estando muy caro"],
+    expect: "Tras ofrecer los cortes más chicos, si el cliente insiste en que el precio es alto, pasa la conversación con una persona. NUNCA inventa un descuento por su cuenta." },
+  // §5B: el cliente que buscaba otra presentación — el ejemplo del propio cliente.
+  { id: "gc-seguimiento-otra-medida", group: "groundcover", flow: "groundcover",
+    turns: ["Yo buscaba nada más 5 metros lineales"],
+    expect: "Dice que ese largo exacto no lo maneja y ofrece el más cercano de las presentaciones reales (10 m), preguntando el ancho. NO contesta con los rollos completos de 100 m ni lo deja sin salida." },
   // The client's rule, 2026-10-23: "if prices differ we ask them but if they don't we
   // share the price". Asking is only pointless when the answer cannot move the number.
   { id: "gc-color-mismo-precio", group: "groundcover", flow: "groundcover",
