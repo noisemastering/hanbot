@@ -118,9 +118,9 @@ require.cache[nePath].exports = {
   // And a legitimate reply with brackets in it is NOT dropped.
   stubText = "Mira el catálogo aquí: [catálogo](https://hanlob.com.mx) y me dices.";
   const okLink = await turn(MODEL_TURN);
-  // (the engine rewrites the URL to the tracked catalog link — what matters is that
-  //  the reply SURVIVED the guard.)
-  ok("a markdown link is not a placeholder", /\[cat[aá]logo\]\(http/i.test(okLink.text), okLink.text.slice(0, 120));
+  // (the engine rewrites both the URL and sometimes the LABEL to the real catalog
+  //  file — what matters is that the reply SURVIVED the guard with its link intact.)
+  ok("a markdown link is not a placeholder", /\]\(https?:\/\//i.test(okLink.text), okLink.text.slice(0, 120));
   stubText = "Recibí tu mensaje [Reacción enviada] y con gusto te ayudo.";
   const okReact = await turn(MODEL_TURN);
   ok("bracketed text with a space is not a placeholder", okReact.text !== "", okReact.text.slice(0, 120));
