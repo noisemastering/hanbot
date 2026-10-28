@@ -2731,7 +2731,26 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // naming the two versions and asking which — a closed choice, and the fastest
         // route to a priced list. Without this the turn reached the model, which asked
         // the open "¿qué largo necesitas?" we are removing.
-        const isInfoOpener = /^(?:[\s,.!¡?¿]*(?:hola|holi|buen[oa]s?(?:\s+(?:d[ií]as|tardes|noches))?|qu[eé]\s+tal|info|informaci[oó]n|informes|me\s+interesa|cotizaci[oó]n)[\s,.!¡?¿]*)+$/i.test(msgB.trim());
+        //
+        // THE AD'S OWN CTA MESSAGE IS THAT OPENER (2026-10-28, two asesora reports).
+        // Meta prefills the click-to-WhatsApp message, and on this campaign it arrives
+        // as "¡Hola! Quiero más información" / "Quiero obtener más información." — 37
+        // of them in the last 30 days, and NEITHER matched: the old test required the
+        // WHOLE message to be one of a handful of bare tokens, so a bare "Información"
+        // got the four priced lengths while the ad's own wording fell through to the
+        // model — which has no price in context on this flow (the ad preloads the
+        // FAMILY, not a leaf, so priceInfo is null and preloadedAmounts is empty) and
+        // answered with a price-less list of largos. Reported as "no dio los precios"
+        // and "no le termina de dar precio". Same shape as the Ground Cover opener
+        // above: short, no digits, an info/greeting trigger, nothing else asked.
+        const tB = msgB.trim();
+        const isInfoOpener =
+          tB.length <= 70 &&
+          !/\d/.test(tB) &&
+          /\b(hola|holi|buen[oa]s?|qu[eé]\s+tal|info|informaci[oó]n|informes|me\s+interesa|interesad[oa]|cotizaci[oó]n|cotizar)\b/i.test(tB) &&
+          // Anything else named in the opening message is the turn's real question and
+          // belongs to the gates/model below — the opener must not talk over it.
+          !/\b(medidas?|tama[nñ]os?|largos?|anchos?|alto|altura|grosor|espesor|env[ií]o|entrega|tarda|llega|pago|pagar|tarjeta|factur|garant|instalaci|ubicaci|direcci|d[oó]nde|sucursal|color|negro|verde|material|mayoreo|distribuid\w+|revend\w+)\b/i.test(tB);
         if (isInfoOpener && !variantKnown()) {
           // With only one version on offer there is no choice to ask about, so the
           // opener gets the PRICES — the client's "comparte precios desde el primer
@@ -4557,6 +4576,28 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       }
     } catch (e) {
       console.error("⚠️ alt-link enforce failed:", e.message);
+    }
+  }
+
+  // AN UNFILLED PLACEHOLDER MUST NEVER REACH A CUSTOMER (2026-10-28, reported).
+  // Three WhatsApp customers were sent "- Rollo de 6 m: [precio]" four lines over, on
+  // the borde flow: the ad preloads the FAMILY, so no price is in context, and the
+  // model — told to share prices — wrote the TOKEN where the number goes. The same
+  // leak exists for every template variable: `applyVars` fills [first_name]-style
+  // placeholders from the vars bag and LEAVES the token verbatim when the var is
+  // missing. A reply still carrying one is a template, not an answer, so it is dropped
+  // here — the engine's rescue ladder (cold start → last resort, `ai/index.js`) then
+  // answers the turn with real numbers, which is what a price-less list was failing to
+  // do anyway. Markdown links ("[texto](url)") are not placeholders; neither is
+  // anything with a space or a digit in the brackets ("[Reacción enviada]").
+  if (text) {
+    const ph = String(text).match(/\[[a-záéíóúñ_]{3,20}\](?!\()/i);
+    if (ph) {
+      console.error(
+        `🚫 [workflow] dropped a reply with an unfilled placeholder ${ph[0]} for ${opts.psid || "(no psid)"} ` +
+          `(node ${movedTo.id}) — falling through to the rescue ladder`
+      );
+      text = null;
     }
   }
 
