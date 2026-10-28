@@ -95,8 +95,9 @@ function GcFollowUpView() {
   // it on anywhere else means deciding blind.
   const toggle = async (engage) => {
     if (engage && !window.confirm(
-      'Se enviará UN mensaje de seguimiento a cada conversación de Ground Cover que lleve 24 h sin respuesta ' +
-      'y que el sistema considere pendiente. Son mensajes reales a clientes reales. ¿Activar?'
+      'Se enviará UN mensaje de seguimiento a cada conversación de Ground Cover que lleve 23 h sin respuesta ' +
+      'y que el sistema considere pendiente (lunes a viernes 7:00–20:00; sábados hasta las 14:00; domingos no se ' +
+      'envía nada). Son mensajes reales a clientes reales. ¿Activar?'
     )) return;
     setBusy(true);
     try {
@@ -186,8 +187,13 @@ function GcFollowUpView() {
         <div>
           <h1 className="text-2xl font-bold text-white">Seguimiento · Ground Cover</h1>
           <p className="text-gray-400 text-sm mt-1">
-            Un mensaje, {data?.waitHours || 24} h después del último mensaje del cliente,
-            entre las {data?.window?.openHour ?? 7}:00 y las {data?.window?.closeHour ?? 20}:00 hora del centro
+            Un mensaje, {data?.waitHours || 23} h después del último mensaje del cliente ·
+            lunes a viernes {data?.window?.openHour ?? 7}:00–{data?.window?.closeHour ?? 20}:00,
+            sábados hasta las {data?.window?.saturdayCloseHour ?? 14}:00 (hora del centro)
+          </p>
+          <p className="text-gray-500 text-xs mt-1">
+            Si las {data?.waitHours || 23} h caen más tarde un sábado, se envía antes de las{' '}
+            {data?.window?.saturdayCloseHour ?? 14}:00 — lo que pase primero. Las que vencen en domingo se dejan ir.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -225,7 +231,11 @@ function GcFollowUpView() {
             {data?.enabled ? (
               <>
                 <strong>Seguimiento activo.</strong> El sistema envía un único mensaje por conversación pendiente
-                {data?.window?.inWindowNow ? ' (ahora está dentro del horario permitido).' : ' (ahora está FUERA del horario; se enviará a las 7:00).'}
+                {data?.window?.inWindowNow
+                  ? ' (ahora está dentro del horario permitido).'
+                  : ` (ahora está FUERA del horario; el siguiente envío posible es ${data?.window?.nextOpenAt
+                      ? new Date(data.window.nextOpenAt).toLocaleString('es-MX', { weekday: 'long', hour: '2-digit', minute: '2-digit' })
+                      : 'a las 7:00'}).`}
               </>
             ) : (
               <>

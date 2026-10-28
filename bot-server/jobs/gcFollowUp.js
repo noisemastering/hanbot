@@ -2,10 +2,21 @@
 //
 // GROUND COVER — the campaign's single 24h follow-up (client spec, 2026-10-27).
 //
-// One message, 24h after the CUSTOMER's last message, only inside 7:00–20:00 México
-// (centro), only when the conversation is genuinely PENDING, and never again after
-// that. The client's words for the goal: recover the conversation, and let the
-// customer tell us what we got wrong.
+// One message, 23h after the CUSTOMER's last message, inside the hours below, only
+// when the conversation is genuinely PENDING, and never again after that. The client's
+// words for the goal: recover the conversation, and let the customer tell us what we
+// got wrong.
+//
+// WHEN IT MAY GO OUT (the user's call, 2026-10-28, narrowing the spec's flat 24h /
+// 7:00–20:00 every day):
+//   • Monday–Friday — 23 h after their last message, inside 7:00–20:00 México.
+//   • Saturday — 7:00 to 14:00, and a conversation whose 23 h land LATER that Saturday
+//     is pinged just before 14:00 rather than waiting: "23 horas después o antes de
+//     las 14:00, lo que pase primero".
+//   • Sunday — nothing goes out, and a conversation that comes due on a Sunday is LET
+//     GO for good, with no catch-up on Monday ("if Sunday we'll have to let those
+//     go"). Two days late, the message stops being a continuation of the conversation,
+//     which was the whole point of it.
 //
 // Two things about the design are deliberate and should not be "simplified":
 //
@@ -34,10 +45,11 @@ const Conversation = require("../models/Conversation");
 const Message = require("../models/Message");
 const SystemState = require("../models/SystemState");
 
-// 24h per §3.1 (the old remarketing ping was 23h, to fit inside Meta's 24h messaging
-// window). On Messenger a standard message outside that window is rejected by Meta,
-// so the send tolerates that failure and records it rather than retrying forever.
-const WAIT_MS = 24 * 60 * 60 * 1000;
+// 23h — the user's call (2026-10-28), one hour under the spec's 24. It also fits
+// inside Meta's 24h messaging window, which is why the old remarketing ping used 23h:
+// on Messenger a standard message sent after that window is rejected outright. The
+// send tolerates that failure and records it rather than retrying forever.
+const WAIT_MS = 23 * 60 * 60 * 1000;
 
 // …and an upper bound, which the spec does not state but plainly intends: the message
 // is meant to read as "una continuación natural de la conversación". A dry run against
@@ -57,30 +69,100 @@ const MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000;
 // run considered 0 of 59).
 const GC_RE = /ground[\s_-]*cover|anti[\s_-]*maleza/i;
 
-// §3.2 — 7:00 to 20:00, hora del centro de México. Mexico abolished DST in 2022, so
-// the centre runs at a flat UTC-6 all year; DB timestamps are UTC (see the
-// convo-times-are-UTC note in CLAUDE.md). Every day is a permitted day: the spec says
-// "el siguiente día permitido" but never excludes weekends or holidays, and inventing
-// an exclusion would silently drop follow-ups the client expects.
+// §3.2 — THE SCHEDULE. Mexico abolished DST in 2022, so the centre runs at a flat
+// UTC-6 all year; DB timestamps are UTC (see the convo-times-are-UTC note in
+// CLAUDE.md). Monday–Friday the window is 7:00–20:00; Saturday it shuts at 14:00;
+// Sunday is closed and is not deferred to Monday (see the header).
 const MX_OFFSET_MS = 6 * 60 * 60 * 1000;
 const WINDOW_OPEN_H = 7;
-const WINDOW_CLOSE_H = 20;
+const WINDOW_CLOSE_H = 20; // Monday–Friday
+const SAT_CLOSE_H = 14; // Saturday's deadline
+// How long before Saturday's deadline the "lo que pase primero" sweep runs. The job
+// ticks every 5 minutes, so a 20-minute band gives it four chances to fire — and
+// waiting for the band means the customer gets as close to the full 23 h as Saturday
+// allows: a conversation due Saturday 17:00 is pinged at ~13:45, not at 07:00.
+const SAT_SWEEP_MS = 20 * 60 * 1000;
+const SUNDAY = 0;
+const SATURDAY = 6;
 
 /** The same instant, shifted so the UTC getters read as México-centro wall clock. */
 function mxClock(at = new Date()) {
   return new Date(at.getTime() - MX_OFFSET_MS);
 }
-function inSendWindow(at = new Date()) {
-  const h = mxClock(at).getUTCHours();
-  return h >= WINDOW_OPEN_H && h < WINDOW_CLOSE_H;
+/** 0 = Sunday … 6 = Saturday, in México. */
+function mxDay(at = new Date()) {
+  return mxClock(at).getUTCDay();
 }
-/** The next 7:00 México at or after `at` — today's if we're still before it. */
+function sameMxDay(a, b) {
+  const x = mxClock(a);
+  const y = mxClock(b);
+  return (
+    x.getUTCFullYear() === y.getUTCFullYear() &&
+    x.getUTCMonth() === y.getUTCMonth() &&
+    x.getUTCDate() === y.getUTCDate()
+  );
+}
+/** The hour the window shuts on that weekday, or null when the day is closed. */
+function closeHourFor(day) {
+  if (day === SUNDAY) return null;
+  return day === SATURDAY ? SAT_CLOSE_H : WINDOW_CLOSE_H;
+}
+function inSendWindow(at = new Date()) {
+  const local = mxClock(at);
+  const close = closeHourFor(local.getUTCDay());
+  if (close == null) return false;
+  const h = local.getUTCHours();
+  return h >= WINDOW_OPEN_H && h < close;
+}
+/** The next instant the window is open — today's 7:00 if we are still before it. */
 function nextWindowOpenAt(at = new Date()) {
   const local = mxClock(at);
   const open = new Date(local);
   open.setUTCHours(WINDOW_OPEN_H, 0, 0, 0);
   if (local.getUTCHours() >= WINDOW_OPEN_H) open.setUTCDate(open.getUTCDate() + 1);
+  while (open.getUTCDay() === SUNDAY) open.setUTCDate(open.getUTCDate() + 1);
   return new Date(open.getTime() + MX_OFFSET_MS);
+}
+/** Saturday's "lo que pase primero" band: the last minutes before 14:00 México. */
+function inSaturdaySweep(at = new Date()) {
+  const local = mxClock(at);
+  if (local.getUTCDay() !== SATURDAY) return false;
+  const close = new Date(local);
+  close.setUTCHours(SAT_CLOSE_H, 0, 0, 0);
+  return local.getTime() >= close.getTime() - SAT_SWEEP_MS && local.getTime() < close.getTime();
+}
+/** The next midnight México — on a Saturday, Sunday 00:00. */
+function mxNextMidnight(at = new Date()) {
+  const mid = mxClock(at);
+  mid.setUTCHours(0, 0, 0, 0);
+  mid.setUTCDate(mid.getUTCDate() + 1);
+  return new Date(mid.getTime() + MX_OFFSET_MS);
+}
+
+/**
+ * When this conversation's follow-up comes due, and whether it may still go out.
+ *
+ *   "due"     — send it now (`early` when Saturday's deadline brought it forward)
+ *   "wait"    — not yet; a later tick takes it
+ *   "domingo" — it came due on a Sunday, so it is let go for good
+ *
+ * Deriving the Sunday verdict from the customer's last message is what makes it
+ * stick without storing anything: the same Sunday is still a Sunday on Monday, and if
+ * the customer writes again the clock resets (§3.1) and the new due date is judged
+ * afresh.
+ *
+ * @param {Date|string|number} lastUserAt the customer's last message
+ * @param {Date} [now]
+ */
+function dueStatus(lastUserAt, now = new Date()) {
+  const dueAt = new Date(new Date(lastUserAt).getTime() + WAIT_MS);
+  if (mxDay(dueAt) === SUNDAY) return { state: "domingo", dueAt };
+  if (dueAt.getTime() <= now.getTime()) return { state: "due", dueAt, early: false };
+  // Saturday, due later today and after the 14:00 deadline → go now instead.
+  if (inSaturdaySweep(now) && mxDay(dueAt) === SATURDAY && sameMxDay(dueAt, now)) {
+    return { state: "due", dueAt, early: true };
+  }
+  return { state: "wait", dueAt };
 }
 
 // §2 — the client's message, verbatim.
@@ -253,7 +335,7 @@ async function noteSkip(psid, reason) {
 async function runGcFollowUpJob(opts = {}) {
   const now = opts.now ? new Date(opts.now) : new Date();
   const dryRun = !!opts.dryRun;
-  const results = { considered: 0, sent: 0, skipped: {}, deferred: 0, errors: 0 };
+  const results = { considered: 0, sent: 0, early: 0, skipped: {}, deferred: 0, errors: 0 };
   const skip = (psid, key) => {
     results.skipped[key] = (results.skipped[key] || 0) + 1;
     if (!dryRun) return noteSkip(psid, key);
@@ -264,14 +346,23 @@ async function runGcFollowUpJob(opts = {}) {
 
     // §3.2 — outside the window nothing goes out. Don't even look: the job runs on a
     // timer and the next tick inside the window picks everything up, which is exactly
-    // "programarse para las 7:00 a.m. del siguiente día permitido".
+    // "programarse para las 7:00 a.m. del siguiente día permitido" — Sundays excepted,
+    // since those conversations are let go rather than carried to Monday.
     if (!inSendWindow(now)) {
       results.deferred = -1; // sentinel: the whole tick was outside the window
+      results.closedBecause = mxDay(now) === SUNDAY ? "domingo" : "fuera_de_horario";
       return results;
     }
 
     const cutoff = new Date(now.getTime() - WAIT_MS);
     const floor = new Date(now.getTime() - MAX_AGE_MS);
+    // SATURDAY'S DEADLINE WIDENS THE QUERY. In the sweep band we also want
+    // conversations that are NOT yet 23 h old but would come due after 14:00 — the
+    // widest such case is one due just before Sunday, i.e. a last message up to 23 h
+    // before Sunday 00:00 México. Without this the sweep would find nothing, because
+    // the query only ever returned conversations already past the wait.
+    const sweeping = inSaturdaySweep(now);
+    const queryCutoff = sweeping ? new Date(mxNextMidnight(now).getTime() - WAIT_MS) : cutoff;
     // Candidates: Ground Cover, bot-active, never followed up, not opted out, and
     // between 24h and MAX_AGE old. The campaign filter is IN the query so a limit can
     // never crowd out the conversations we came for, and the newest are taken first.
@@ -281,7 +372,7 @@ async function runGcFollowUpJob(opts = {}) {
       "gcFollowUp.sentAt": null,
       doNotFollowUp: { $ne: true },
       state: { $in: ["active", "new"] },
-      lastMessageAt: { $lte: cutoff, $gte: floor },
+      lastMessageAt: { $lte: queryCutoff, $gte: floor },
       $or: [
         { currentFlow: GC_RE },
         { productInterest: GC_RE },
@@ -310,13 +401,21 @@ async function runGcFollowUpJob(opts = {}) {
           continue;
         }
 
-        // §3.1 — 24h since the CUSTOMER's last message, and the clock resets whenever
-        // they write again, which falls out of measuring from the transcript.
+        // §3.1 — 23h since the CUSTOMER's last message, and the clock resets whenever
+        // they write again, which falls out of measuring from the transcript. The day
+        // rules live in dueStatus: Saturday's 14:00 deadline can bring a send FORWARD,
+        // and a conversation that comes due on a Sunday is let go for good.
         const lastUser = userMsgs[userMsgs.length - 1];
-        if (new Date(lastUser.timestamp).getTime() > cutoff.getTime()) {
+        const due = dueStatus(lastUser.timestamp, now);
+        if (due.state === "domingo") {
+          await skip(c.psid, "vencio_en_domingo");
+          continue;
+        }
+        if (due.state === "wait") {
           results.deferred++;
           continue;
         }
+        if (due.early) results.early++;
         // If the customer wrote last, the BOT owes them an answer — a "¿encontraste lo
         // que buscabas?" on top of an unanswered question is worse than silence. That
         // is the engine's silent-turn case (lastSilentTurn), not a follow-up case.
@@ -593,7 +692,15 @@ async function gcFollowUpStats(range = {}) {
 
   return {
     enabled: await isEnabled(),
-    window: { openHour: WINDOW_OPEN_H, closeHour: WINDOW_CLOSE_H, tz: "America/Mexico_City", inWindowNow: inSendWindow() },
+    window: {
+      openHour: WINDOW_OPEN_H,
+      closeHour: WINDOW_CLOSE_H,
+      saturdayCloseHour: SAT_CLOSE_H,
+      sundayClosed: true,
+      tz: "America/Mexico_City",
+      inWindowNow: inSendWindow(),
+      nextOpenAt: nextWindowOpenAt(),
+    },
     waitHours: WAIT_MS / 3600e3,
     sent,
     replied,
@@ -630,8 +737,12 @@ module.exports = {
   aiConversationIsPending,
   inSendWindow,
   nextWindowOpenAt,
+  inSaturdaySweep,
+  dueStatus,
+  mxDay,
   hardExclusion,
   isGroundCoverConvo,
   FOLLOW_UP_TEXT,
   WAIT_MS,
+  SAT_CLOSE_H,
 };

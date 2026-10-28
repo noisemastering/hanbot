@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 // scripts/gcFollowUpTest.js
 //
-// Fast, deterministic tests for the Ground Cover 24h follow-up (client spec
-// 2026-10-27). No DB, no LLM, no network — it exercises the parts that decide whether a
+// Fast, deterministic tests for the Ground Cover follow-up (client spec 2026-10-27,
+// schedule narrowed by the user 2026-10-28: 23 h, weekdays 7:00–20:00, Saturday until
+// 14:00 with a deadline sweep, Sunday let go). No DB, no LLM, no network — it exercises the parts that decide whether a
 // real customer gets an unsolicited message, which is exactly the code that must not be
 // trusted to a prompt or to a judge.
 //
@@ -11,10 +12,13 @@
 const {
   inSendWindow,
   nextWindowOpenAt,
+  inSaturdaySweep,
+  dueStatus,
   hardExclusion,
   isGroundCoverConvo,
   FOLLOW_UP_TEXT,
   WAIT_MS,
+  SAT_CLOSE_H,
 } = require("../jobs/gcFollowUp");
 
 let pass = 0;
@@ -25,7 +29,8 @@ function ok(label, got, want) {
   else fails.push(`${label}\n     want: ${JSON.stringify(want)}\n     got:  ${JSON.stringify(got)}`);
 }
 
-// ── §3.2 THE SEND WINDOW — 7:00 to 20:00 México (centro) = UTC-6, no DST since 2022.
+// ── §3.2 THE SEND WINDOW — México centro = UTC-6, no DST since 2022. Monday to
+// Friday it is 7:00–20:00 (the dates below are a Tuesday and a Wednesday).
 // These are the boundaries a customer would feel: a message at 06:59 or 20:00 local is
 // the campaign misbehaving.
 [
@@ -49,6 +54,70 @@ ok(
   nextWindowOpenAt(new Date("2026-10-27T11:00:00Z")).toISOString(),
   "2026-10-27T13:00:00.000Z"
 );
+
+// ── THE WEEK (user's call, 2026-10-28). 2026-10-30 is a Friday, 10-31 a Saturday,
+// 11-01 a Sunday, 11-02 a Monday. SATURDAY SHUTS AT 14:00 and SUNDAY IS CLOSED — a
+// message at 14:30 on a Saturday, or any message at all on a Sunday, is the campaign
+// misbehaving.
+[
+  ["sábado 07:00 — opens", "2026-10-31T13:00:00Z", true],
+  ["sábado 13:59 — last minute", "2026-10-31T19:59:00Z", true],
+  ["sábado 14:00 — shut", "2026-10-31T20:00:00Z", false],
+  ["sábado 15:00 — shut", "2026-10-31T21:00:00Z", false],
+  ["domingo 10:00 — closed all day", "2026-11-01T16:00:00Z", false],
+  ["domingo 07:00 — closed all day", "2026-11-01T13:00:00Z", false],
+].forEach(([label, iso, want]) => ok(`week: ${label}`, inSendWindow(new Date(iso)), want));
+
+// Sunday is never the "siguiente día permitido": it is skipped, not waited for.
+ok(
+  "week: sábado 15:00 → lunes 07:00 (never domingo)",
+  nextWindowOpenAt(new Date("2026-10-31T21:00:00Z")).toISOString(),
+  "2026-11-02T13:00:00.000Z"
+);
+ok(
+  "week: domingo 09:00 → lunes 07:00",
+  nextWindowOpenAt(new Date("2026-11-01T15:00:00Z")).toISOString(),
+  "2026-11-02T13:00:00.000Z"
+);
+ok(
+  "week: viernes 21:00 → sábado 07:00",
+  nextWindowOpenAt(new Date("2026-10-31T03:00:00Z")).toISOString(),
+  "2026-10-31T13:00:00.000Z"
+);
+
+// Saturday's deadline band — the last 20 minutes before 14:00, and only on a Saturday.
+[
+  ["sábado 13:39 — too early for the sweep", "2026-10-31T19:39:00Z", false],
+  ["sábado 13:40 — sweep opens", "2026-10-31T19:40:00Z", true],
+  ["sábado 13:59 — sweep closes", "2026-10-31T19:59:00Z", true],
+  ["sábado 14:00 — deadline passed", "2026-10-31T20:00:00Z", false],
+  ["viernes 13:50 — not a Saturday", "2026-10-30T19:50:00Z", false],
+].forEach(([label, iso, want]) => ok(`sweep: ${label}`, inSaturdaySweep(new Date(iso)), want));
+
+// ── WHEN A CONVERSATION COMES DUE. This is the decision that puts a message in front
+// of a customer, so each case is a real calendar position.
+//   lastUser → dueAt is +23 h.
+[
+  // A weekday send, before and after the 23 h are up.
+  ["martes 08:00 → debido miércoles 07:00, visto 09:00", "2026-10-27T14:00:00Z", "2026-10-28T15:00:00Z", "due", false],
+  ["martes 08:00, visto el mismo martes 17:00", "2026-10-27T14:00:00Z", "2026-10-27T23:00:00Z", "wait", false],
+  // Friday evening: the 23 h fall outside the window, so it waits for Saturday 07:00.
+  ["jueves 22:00 → debido viernes 21:00, visto sábado 07:00", "2026-10-30T04:00:00Z", "2026-10-31T13:00:00Z", "due", false],
+  // SATURDAY, "lo que pase primero": due at 17:00, so it goes out before 14:00.
+  ["viernes 18:00 → debido sábado 17:00, visto en el barrido", "2026-10-31T00:00:00Z", "2026-10-31T19:50:00Z", "due", true],
+  ["viernes 18:00 → debido sábado 17:00, visto sábado 09:00", "2026-10-31T00:00:00Z", "2026-10-31T15:00:00Z", "wait", false],
+  // Due BEFORE the deadline: the 23 h came first, so nothing was brought forward.
+  ["viernes 10:00 → debido sábado 09:00, visto en el barrido", "2026-10-30T16:00:00Z", "2026-10-31T19:50:00Z", "due", false],
+  // SUNDAY: let go, and it stays let go on Monday — the verdict is derived from the
+  // customer's last message, so it cannot drift back into the queue.
+  ["sábado 06:00 → debido domingo 05:00", "2026-10-31T12:00:00Z", "2026-10-31T19:50:00Z", "domingo", false],
+  ["sábado 06:00 → debido domingo, visto el lunes", "2026-10-31T12:00:00Z", "2026-11-02T14:00:00Z", "domingo", false],
+  // A conversation that went quiet ON Sunday comes due Monday, which is a normal send.
+  ["domingo 03:00 → debido lunes 02:00, visto lunes 07:00", "2026-11-01T09:00:00Z", "2026-11-02T13:00:00Z", "due", false],
+].forEach(([label, lastUser, now, state, early]) => {
+  const d = dueStatus(new Date(lastUser), new Date(now));
+  ok(`due: ${label}`, [d.state, !!d.early], [state, early]);
+});
 
 // ── §4 THE HARD EXCLUSIONS. Every one of these is a customer we must NOT message.
 // The accented cases are load-bearing: `\b` after "compré" / "conseguí" cannot match,
@@ -131,7 +200,8 @@ ok(
 ].forEach(([label, convo, want]) => ok(`flow: ${label}`, isGroundCoverConvo(convo), want));
 
 // ── §2 / §3.1 — the message and the wait, as written.
-ok("spec: wait is 24h", WAIT_MS, 24 * 60 * 60 * 1000);
+ok("spec: wait is 23h (the user's call, 2026-10-28)", WAIT_MS, 23 * 60 * 60 * 1000);
+ok("spec: Saturday shuts at 14:00", SAT_CLOSE_H, 14);
 ok("spec: message names the product", /Ground Cover/.test(FOLLOW_UP_TEXT), true);
 ok("spec: message offers other measures", /otra medida/.test(FOLLOW_UP_TEXT), true);
 ok("spec: message carries no price or link", /\$|https?:\/\//.test(FOLLOW_UP_TEXT), false);
