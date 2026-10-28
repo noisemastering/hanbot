@@ -340,7 +340,7 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
   );
   lines.push(
     `[INTERNO] NUNCA uses vocabulario interno con el cliente: "flujo", "nodo", "familia de productos", ` +
-      `"workflow", "catálogo interno", "handoff". Habla como un asesor: "producto", "medida", "te paso con un asesor".`
+      `"workflow", "catálogo interno", "handoff". Habla como una asesora de ventas: "producto", "medida", "te paso con un especialista" (NUNCA la palabra "asesor" ni "humano" para referirte a la persona que continúa el caso).`
   );
 
   // ANSWERS PORTED BACK FROM THE DEAD LEGACY HANDLERS. These lived in

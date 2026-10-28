@@ -1291,7 +1291,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // this gate was answering both with the cost (found 2026-10-28 while testing
         // the payment gate below). The delivery TIME has the same two cases as
         // everything else here: the cuts ship through Mercado Libre, the full roll
-        // moves as freight the asesor schedules — so "llega en 2 días hábiles" (the
+        // moves as freight we schedule by destination — so "llega en 2 días hábiles" (the
         // knowledge entry's number) is not true of the roll either.
         const asksShippingTime =
           /\b(tarda\w*|demora\w*|llega\w*|tiempo\s+de\s+(entrega|env[ií]o)|cu[aá]ndo\s+(me\s+)?(llega|lo\s+env|la\s+env))\b/i.test(msg) ||
@@ -1300,7 +1300,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           const lensT = await gcDim("length");
           const cutsT = lensT.filter((l) => l !== 100);
           const rollFirstT = (dims && dims.some((d) => Number(d) === 100)) || /\b100\b/.test(msg) || !!state.gcOpenerSent;
-          const rollLineT = `El rollo completo de 100 m va por flete y el asesor te confirma el tiempo junto con el costo del envío.`;
+          const rollLineT = `El rollo completo de 100 m va por flete y te confirmamos el tiempo junto con el costo del envío.`;
           const cutLineT = cutsT.length
             ? `Los cortes de ${cutsT.join(", ")} m, que se compran en línea, normalmente llegan en 2 días hábiles (puede variar).`
             : "";
@@ -1316,7 +1316,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // Both halves, every time — the answer cannot be wrong that way. The half
           // that applies to what they're looking at goes first.
           const rollFirst = (dims && dims.some((d) => Number(d) === 100)) || /\b100\b/.test(msg);
-          const rollLine = `El rollo completo de 100 m se envía por flete y se cotiza aparte según tu destino: un asesor te da el costo exacto${haveZipE ? "" : " con tu código postal"}.`;
+          const rollLine = `El rollo completo de 100 m se envía por flete y se cotiza aparte según tu destino: te damos el costo exacto${haveZipE ? "" : " con tu código postal"}.`;
           const cutLine = cutsE.length
             ? `En los cortes que se compran en línea (${cutsE.join(", ")} m) el envío ya va incluido en el precio.`
             : "";
@@ -1361,8 +1361,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             (dims && dims.some((d) => Number(d) === 100)) || /\b100\b/.test(msg) ||
             !!state.gcOpenerSent || !!(state.priceInfo && state.priceInfo.fullRoll);
           const rollLineP =
-            `El rollo completo de 100 m lo cierra un asesor (no se vende por Mercado Libre): se paga por transferencia, ` +
-            `o con tarjeta o efectivo si pasas a la tienda, y si te lo enviamos el pago es por adelantado.`;
+            `El rollo completo de 100 m no se vende por Mercado Libre: la compra se cierra directo con nosotros ` +
+            `y se paga por transferencia, o con tarjeta o efectivo si pasas a la tienda; si te lo enviamos, el pago es por adelantado.`;
           const cutLineP = cutsP.length
             ? `Los cortes de ${cutsP.join(", ")} m se compran en línea por Mercado Libre con compra protegida, y ahí mismo pagas al ordenar.`
             : "";

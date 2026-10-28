@@ -417,6 +417,20 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
     } catch (e) {
       console.error("⚠️ workflow vocab guard failed:", e.message);
     }
+    // THE CUSTOMER NEVER HEARS "ASESOR" (2026-10-28). Seven of the nine flows' node
+    // prompts carry the client's rule — "no te refieras al asesor humano como 'asesor'
+    // o 'humano', puedes usar 'especialista' o 'supervisor'" — and the engine's own
+    // gate literals said "un asesor" anyway: a rule that lives only in a prompt is not
+    // in force. Translated here because this is the one place every reply passes,
+    // model prose and hardcoded gate text alike. Internal text (handoff reasons, the
+    // briefs, the dashboard) is deliberately untouched: that is what the team calls
+    // itself.
+    try {
+      const { sayEspecialista } = require("../utils/advisorWord");
+      safeText = sayEspecialista(safeText);
+    } catch (e) {
+      console.error("⚠️ advisor-word guard failed:", e.message);
+    }
   }
 
   // Deterministic CP ask: only append if the model didn't already ask for it this
@@ -430,9 +444,20 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
   // Mensaje 1 = product + promo prices, Mensaje 2 = the invitation to quote). followUp
   // is engine-authored static text — no model output, no URL, no phone number — so it
   // does not go through the link/phone/vocabulary guards that exist for model text.
+  // It IS customer-facing, though, so the advisor-word rule applies to it as well.
+  let followUpText = followUp;
+  try {
+    const { sayEspecialista } = require("../utils/advisorWord");
+    followUpText = sayEspecialista(followUp);
+  } catch (e) {
+    console.error("⚠️ advisor-word guard (followUp) failed:", e.message);
+  }
+
   return {
     handled: true,
-    reply: safeText ? { type: "text", text: safeText, ...(followUp ? { followUp } : {}) } : null,
+    reply: safeText
+      ? { type: "text", text: safeText, ...(followUpText ? { followUp: followUpText } : {}) }
+      : null,
   };
 }
 
@@ -1249,7 +1274,7 @@ async function _generateReplyImpl(userMessage, psid, referral = null) {
 
     return {
       type: "text",
-      text: "¡Perfecto! Anotado tu número. En un momento te contacta uno de nuestros asesores para atenderte personalmente.",
+      text: "¡Perfecto! Anotado tu número. En un momento te contacta uno de nuestros especialistas para atenderte personalmente.",
       handledBy: "phone_captured"
     };
   }
@@ -1430,7 +1455,7 @@ async function _generateReplyImpl(userMessage, psid, referral = null) {
     const { executeHandoff } = require('./utils/executeHandoff');
     response = await executeHandoff(psid, convo, userMessage, {
       reason: 'No handler matched — handing off to specialist',
-      responsePrefix: 'Déjame canalizarte con un asesor que pueda atenderte mejor. Te respondemos a la brevedad.',
+      responsePrefix: 'Déjame confirmar los detalles con un especialista para darte la mejor opción. Te respondemos a la brevedad.',
       lastIntent: 'no_handler_handoff',
       timingStyle: 'standard'
     });
