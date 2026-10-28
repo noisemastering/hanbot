@@ -237,6 +237,18 @@ const CASES = [
   { id: "gc-envio-rollo-vs-corte", group: "groundcover", flow: "groundcover",
     turns: ["¿Cuál es el costo de envío?", "2 x100"],
     expect: "Al preguntar por el envío distingue los DOS casos: en los cortes que se compran en línea (10, 25, 50 m) el envío va incluido, y el ROLLO COMPLETO de 100 m va por flete que un asesor cotiza según el destino. Luego cotiza el 2 x 100 m como rollo completo. El error es decir que el envío va incluido y después decir que el asesor lo cotiza: no puede contradecirse." },
+  // El PAGO tiene los mismos dos casos que el envío, y por la misma razón: el rollo
+  // completo no se vende por Mercado Libre. La entrada que decía "la compra se realiza
+  // por Mercado Libre" vivía en los OCHO flujos y mandaba contestarlo "SIEMPRE".
+  { id: "gc-pago-rollo-vs-corte", group: "groundcover", flow: "groundcover",
+    turns: ["precio", "¿cómo se compra?"],
+    expect: "Distingue los DOS casos de pago: los cortes (10, 25, 50 m) se compran en línea por Mercado Libre con compra protegida, y el ROLLO COMPLETO de 100 m lo cierra un asesor — se paga por transferencia, o con tarjeta/efectivo en la tienda, y si se envía el pago es por adelantado. Como acaba de cotizar los dos rollos completos, ese caso va primero. El error es decir que la compra se hace por Mercado Libre o que pague 'en el link': el rollo completo no tiene link." },
+  { id: "gc-contra-entrega", group: "groundcover", flow: "groundcover",
+    turns: ["¿es contra entrega?"],
+    expect: "Contesta que NO hay pago contra entrega, con esas palabras, y explica cómo sí se paga en cada caso. El error es dejarlo implícito o contestar sólo con el procedimiento sin decir que no." },
+  { id: "gc-tiempo-vs-costo-envio", group: "groundcover", flow: "groundcover",
+    turns: ["¿cuánto tarda el envío?"],
+    expect: "Contesta el TIEMPO, no el costo: los cortes que se compran en línea llegan normalmente en 2 días hábiles, y el rollo completo va por flete con el tiempo que confirma el asesor. El error es responder cuánto CUESTA el envío a una pregunta de cuánto TARDA." },
   // ── The FOLLOW-UP spec (client, 2026-10-27). §5C: una inconformidad se reconoce y,
   // si no tenemos información autorizada para resolverla, pasa con una persona.
   { id: "gc-queja-atencion", group: "groundcover", flow: "groundcover",

@@ -1287,6 +1287,28 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         const asksShipping =
           /\b(env[ií]os?|flete|paqueter[ií]a|transporte|mensajer[ií]a)\b/i.test(msg) &&
           /\b(cu[aá]nto|costo|cuesta|precio|cobran|sale|vale|gratis|incluid[oa]s?|incluye|aparte|extra|manejan|tienen?|hacen|es\s+el)\b/i.test(msg);
+        // "¿Cuánto TARDA el envío?" is a different question from "¿cuánto CUESTA?", and
+        // this gate was answering both with the cost (found 2026-10-28 while testing
+        // the payment gate below). The delivery TIME has the same two cases as
+        // everything else here: the cuts ship through Mercado Libre, the full roll
+        // moves as freight the asesor schedules — so "llega en 2 días hábiles" (the
+        // knowledge entry's number) is not true of the roll either.
+        const asksShippingTime =
+          /\b(tarda\w*|demora\w*|llega\w*|tiempo\s+de\s+(entrega|env[ií]o)|cu[aá]ndo\s+(me\s+)?(llega|lo\s+env|la\s+env))\b/i.test(msg) ||
+          /\bcu[aá]nt[oa]s?\s+d[ií]as\b/i.test(msg);
+        if (asksShippingTime && _gcFlow && /\b(env[ií]os?|entrega|pedido|compra|llega|tarda)\b/i.test(msg)) {
+          const lensT = await gcDim("length");
+          const cutsT = lensT.filter((l) => l !== 100);
+          const rollFirstT = (dims && dims.some((d) => Number(d) === 100)) || /\b100\b/.test(msg) || !!state.gcOpenerSent;
+          const rollLineT = `El rollo completo de 100 m va por flete y el asesor te confirma el tiempo junto con el costo del envío.`;
+          const cutLineT = cutsT.length
+            ? `Los cortes de ${cutsT.join(", ")} m, que se compran en línea, normalmente llegan en 2 días hábiles (puede variar).`
+            : "";
+          const partsT = rollFirstT ? [rollLineT, cutLineT] : [cutLineT, rollLineT];
+          return ret(`${partsT.filter(Boolean).join(" ")} ¿Qué medida necesitas? 😊`, {
+            gcDeliveryTimeAnswered: rollFirstT ? "rollo" : "corte",
+          });
+        }
         if (asksShipping && _gcFlow) {
           const lensE = await gcDim("length");
           const cutsE = lensE.filter((l) => l !== 100);
@@ -1308,6 +1330,52 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             `${parts.filter(Boolean).join(" ")} ${haveZipE ? "¿Qué medida necesitas y te la cotizo? 😊" : "¿Me compartes tu código postal y la medida que necesitas? 📍"}`,
             { gcShippingAnswered: rollFirst ? "rollo" : "corte" }
           );
+        }
+
+        // (a0-pago) HOW A FULL ROLL IS ACTUALLY PAID. Twin of (a0-envio) above, found
+        // the day after it (2026-10-28, from the sandbox): the turn quoted ONLY the two
+        // 100 m rolls and the next answer was "la compra se realiza por Mercado Libre…
+        // el pago es al momento de ordenar en línea" — for the one product that carries
+        // NO ML link (ROLLO COMPLETO, 2026-10-23) and is closed by an asesor. The
+        // knowledge entry "Pago / cómo se compra" says Mercado Libre unconditionally in
+        // all EIGHT flows, and it orders the model to answer it "SIEMPRE, sin importar
+        // cómo lo pregunten" — so it fires hardest right after a full-roll quote. The
+        // entry is corrected in the four flows that sell a full roll; this gate is what
+        // puts it beyond the model's discretion on the campaign, same as the shipping
+        // one: BOTH cases, every time, the applicable half first, so an answer built
+        // from two true halves cannot be wrong.
+        // The roll half's facts are the client's (2026-10-28): transferencia, or card
+        // and cash at the store, and a shipped order is paid UP FRONT — never contra
+        // entrega. Nothing here invents a payment method we don't offer.
+        const asksPayment =
+          /\b(pago|pagar|pagos|forma\s+de\s+pago|m[eé]todos?\s+de\s+pago|transferencia|dep[oó]sito|tarjeta|efectivo|contra\s+entrega|contraentrega|msi|meses\s+sin\s+intereses|factura\w*)\b/i.test(msg) ||
+          /\bc[oó]mo\s+(se\s+)?(compr|pag|adquier|realiz)\w*/i.test(msg) ||
+          /\bd[oó]nde\s+(se\s+)?(compr|pag)\w*/i.test(msg);
+        if (asksPayment && _gcFlow) {
+          const lensP = await gcDim("length");
+          const cutsP = lensP.filter((l) => l !== 100);
+          // Which half they're standing in: a 100 m measure this turn, or a full roll
+          // already quoted in this conversation (the opener quotes both of them, so
+          // "¿cómo se compra?" right after it is about the roll).
+          const rollFirstP =
+            (dims && dims.some((d) => Number(d) === 100)) || /\b100\b/.test(msg) ||
+            !!state.gcOpenerSent || !!(state.priceInfo && state.priceInfo.fullRoll);
+          const rollLineP =
+            `El rollo completo de 100 m lo cierra un asesor (no se vende por Mercado Libre): se paga por transferencia, ` +
+            `o con tarjeta o efectivo si pasas a la tienda, y si te lo enviamos el pago es por adelantado.`;
+          const cutLineP = cutsP.length
+            ? `Los cortes de ${cutsP.join(", ")} m se compran en línea por Mercado Libre con compra protegida, y ahí mismo pagas al ordenar.`
+            : "";
+          const partsP = rollFirstP ? [rollLineP, cutLineP] : [cutLineP, rollLineP];
+          // "¿Es contra entrega?" is a yes/no question and deserves the word "no" in
+          // front of the explanation — leaving it implied ("pagas al ordenar") makes
+          // the customer ask again.
+          const codP = /\bcontra\s*entrega\b|\bcontraentrega\b/i.test(msg)
+            ? "No manejamos pago contra entrega. "
+            : "";
+          return ret(`${codP}${partsP.filter(Boolean).join(" ")} ¿Qué medida necesitas? 😊`, {
+            gcPaymentAnswered: rollFirstP ? "rollo" : "corte",
+          });
         }
 
         // (a0-quejas) §5C of the follow-up spec — the customer says the PRICE, the
