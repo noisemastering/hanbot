@@ -724,6 +724,9 @@ async function gcFollowUpStats(range = {}) {
       outcome: r.gcFollowUp.outcome || null,
       reasonCategory: r.gcFollowUp.reasonCategory || null,
       reasonNote: r.gcFollowUp.reasonNote || null,
+      // The emergent theme the clustering pass put this answer under
+      // (jobs/gcReasonClusters.js), so the table and the themes agree.
+      clusterLabel: r.gcFollowUp.clusterLabel || null,
     })),
   };
 }

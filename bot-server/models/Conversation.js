@@ -226,6 +226,11 @@ const conversationSchema = new mongoose.Schema({
     },
     reasonNote: { type: String, default: null },
     analyzedAt: { type: Date, default: null },
+    // The emergent theme this answer was grouped under (jobs/gcReasonClusters.js).
+    // The five reasonCategory buckets are the document's; this is the label that came
+    // out of what the customers actually wrote.
+    clusterLabel: { type: String, default: null },
+    clusterAt: { type: Date, default: null },
   },
 
   // Pre-handoff zip code collection (dynamic fields used by preHandoffCheck)

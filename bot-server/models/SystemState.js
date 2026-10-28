@@ -60,6 +60,12 @@ const systemStateSchema = new mongoose.Schema(
       ),
       default: () => ({}),
     },
+    // Cached reason CLUSTERS for the Ground Cover follow-up ("why are customers not
+    // interested anymore", the client's question 2026-10-28). One blob per scope
+    // ({followup, convo}), keyed by a hash of the texts that went in, so opening the
+    // dashboard does not pay for a model call every time. Mixed because the shape is
+    // the analysis result, not state the server reasons about.
+    gcReasonClusters: { type: mongoose.Schema.Types.Mixed, default: () => ({}) },
     // Convo↔sale correlation freshness. `at` = when the last correlation run
     // finished; the dashboard auto-triggers a rebuild when it's >3h stale.
     // `running` guards against concurrent runs across requests/instances.

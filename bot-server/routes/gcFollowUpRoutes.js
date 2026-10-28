@@ -10,6 +10,7 @@
 const express = require("express");
 const router = express.Router();
 const { gcFollowUpStats, runGcFollowUpJob, runGcFollowUpReplyJob } = require("../jobs/gcFollowUp");
+const { clusterReasons, stallPoints } = require("../jobs/gcReasonClusters");
 
 // GET /gc-follow-up/stats?from=&to=
 router.get("/stats", async (req, res) => {
@@ -34,6 +35,38 @@ router.post("/run", async (req, res) => {
   } catch (e) {
     console.error("❌ /gc-follow-up/run failed:", e.message);
     res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// GET /gc-follow-up/reasons?scope=followup|convo&from=&to=&refresh=1
+//
+// "Why are customers not interested anymore" (the client, 2026-10-28). The grouped
+// WHY, built from what the customers wrote and verified against it. Cached on a hash
+// of those texts, so this is one model call per new batch of answers and not one per
+// page load; `refresh=1` forces a fresh pass.
+//
+// The two scopes are returned separately on purpose and must not be summed: "followup"
+// is a motive stated when we asked, "convo" is what a customer happened to say before
+// going quiet.
+router.get("/reasons", async (req, res) => {
+  try {
+    const out = await clusterReasons({
+      scope: req.query.scope === "convo" ? "convo" : "followup",
+      from: req.query.from,
+      to: req.query.to,
+      refresh: req.query.refresh === "1" || req.query.refresh === "true",
+    });
+    // The observed stall point rides along: it is deterministic and cheap, it covers
+    // every conversation (not only the ones that stated a motive), and the two are
+    // meant to be read side by side.
+    const stalls = await stallPoints({ from: req.query.from, to: req.query.to }).catch((e) => {
+      console.error("⚠️ stallPoints failed:", e.message);
+      return null;
+    });
+    res.json({ success: true, ...out, stalls });
+  } catch (e) {
+    console.error("❌ /gc-follow-up/reasons failed:", e.message);
+    res.status(500).json({ success: false, error: "No se pudieron agrupar los motivos" });
   }
 });
 

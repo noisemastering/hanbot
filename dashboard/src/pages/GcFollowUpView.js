@@ -41,6 +41,28 @@ const SKIP = {
   envio_fallido: 'Falló el envío',
 };
 
+// Where the conversation stopped — OBSERVED, not stated. Deterministic: it is the
+// last thing WE said before the customer went quiet, so it needs no inference about
+// motive and it covers every conversation, not only the few that explained themselves.
+const STALL = {
+  pidio_cp_o_datos: { label: 'Le pedimos sus datos (CP, colonia, nombre)', color: '#f5a623' },
+  pidio_medida: { label: 'Le preguntamos la medida', color: '#3b82f6' },
+  precio_cotizado: { label: 'Le cotizamos el precio', color: '#f44336' },
+  link_compartido: { label: 'Le compartimos el link de compra', color: '#8b5cf6' },
+  catalogo_o_info: { label: 'Le dimos información del producto', color: '#06b6d4' },
+  handoff: { label: 'Lo pasamos con un especialista', color: '#10b981' },
+  sin_respuesta_nuestra: { label: 'Escribió y NO le contestamos', color: '#ef4444' },
+  otro: { label: 'Otro', color: '#6b7280' },
+};
+
+const CATEGORY_CHIP = {
+  precio: 'bg-red-500/10 text-red-300 border-red-500/30',
+  medidas: 'bg-blue-500/10 text-blue-300 border-blue-500/30',
+  atencion: 'bg-amber-500/10 text-amber-300 border-amber-500/30',
+  informacion: 'bg-violet-500/10 text-violet-300 border-violet-500/30',
+  otros: 'bg-gray-500/10 text-gray-300 border-gray-500/30',
+};
+
 function fmtDateTime(s) {
   if (!s) return '—';
   const d = new Date(s);
@@ -54,6 +76,194 @@ function Stat({ label, value, sub, color }) {
       <div className="text-gray-400 text-xs uppercase tracking-wide">{label}</div>
       <div className="text-2xl font-bold mt-1" style={{ color: color || '#fff' }}>{value}</div>
       {sub ? <div className="text-gray-500 text-xs mt-1">{sub}</div> : null}
+    </div>
+  );
+}
+
+// "¿Por qué los clientes ya no están interesados?" (the client's question). TWO
+// SOURCES, SHOWN APART AND NEVER ADDED TOGETHER:
+//   • lo que DIJERON — themes grouped out of the customers' own words, each with the
+//     verbatim quotes it was built from. Every quote is checked against the message it
+//     is attributed to before it reaches this screen; an unverifiable one is dropped
+//     and counted, which is why the "descartados" line exists.
+//   • dónde se DETUVIERON — the last thing we said before they went quiet. A fact, no
+//     inference, and it covers everyone rather than the minority who explain
+//     themselves.
+function ReasonsSection({ period, sentCount }) {
+  const [scope, setScope] = useState(sentCount > 0 ? 'followup' : 'convo');
+  const [data, setData] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState({});
+
+  const load = useCallback(async (refresh) => {
+    setLoading(true);
+    try {
+      const token = localStorage.getItem('token');
+      const from = period === 'all' ? '' : `&from=${new Date(Date.now() - Number(period) * 864e5).toISOString()}`;
+      const res = await fetch(`${API_URL}/gc-follow-up/reasons?scope=${scope}${from}${refresh ? '&refresh=1' : ''}`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      setData(await res.json());
+    } catch (e) {
+      setData({ success: false, error: 'Error de conexión' });
+    } finally {
+      setLoading(false);
+    }
+  }, [period, scope]);
+
+  useEffect(() => { load(false); }, [load]);
+
+  const clusters = data?.clusters || [];
+  const stalls = data?.stalls?.buckets || [];
+  const maxStall = Math.max(1, ...stalls.map((b) => b.count));
+
+  return (
+    <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5 space-y-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-white font-semibold">¿Por qué no continuaron?</h2>
+          <p className="text-gray-500 text-xs mt-1">
+            Agrupado a partir de lo que los clientes escribieron. Cada tema trae sus citas textuales;
+            una cita que no se puede verificar en el mensaje del cliente se descarta.
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex gap-1 bg-gray-900/50 border border-gray-700/50 rounded-lg p-1">
+            {[
+              { v: 'followup', l: 'Respuestas al seguimiento' },
+              { v: 'convo', l: 'Conversaciones que se enfriaron' },
+            ].map((o) => (
+              <button
+                key={o.v}
+                onClick={() => setScope(o.v)}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                  scope === o.v ? 'bg-blue-600 text-white' : 'text-gray-400 hover:text-white'
+                }`}
+              >
+                {o.l}
+              </button>
+            ))}
+          </div>
+          <button
+            onClick={() => load(true)}
+            disabled={loading}
+            className="px-2.5 py-1 rounded-md text-xs font-medium bg-gray-900/50 border border-gray-700/50 text-gray-300 hover:text-white disabled:opacity-50"
+          >
+            {loading ? '…' : 'Recalcular'}
+          </button>
+        </div>
+      </div>
+
+      {data?.error ? <p className="text-red-400 text-sm">{data.error}</p> : null}
+
+      {!loading && data?.empty && (
+        <p className="text-gray-500 text-sm">
+          {scope === 'followup'
+            ? 'Todavía no hay respuestas al seguimiento que analizar — el envío está apagado.'
+            : 'No hay conversaciones de Ground Cover en este periodo.'}
+        </p>
+      )}
+
+      {!data?.empty && !data?.error && (
+        <>
+          <div className="text-xs text-gray-400">
+            Leídos <strong className="text-white">{data?.read || 0}</strong>
+            {data?.truncated ? ` de ${data?.total} (los más recientes)` : ''} ·{' '}
+            <strong className="text-white">{data?.stated || 0}</strong> expresaron un motivo ({data?.statedPct || 0}%) ·{' '}
+            {data?.sinMotivo?.length || 0} no dijeron por qué
+            {data?.unassigned?.length ? ` · ${data.unassigned.length} sin clasificar` : ''}
+            {data?.cached ? ' · en caché' : ''}
+          </div>
+
+          {clusters.length === 0 ? (
+            <p className="text-gray-500 text-sm">
+              Ningún cliente expresó un motivo en este periodo. No inventamos uno: lo que sí sabemos está abajo.
+            </p>
+          ) : (
+            <div className="space-y-3">
+              {clusters.map((c) => (
+                <div key={c.label} className="bg-gray-900/40 border border-gray-700/50 rounded-lg p-4">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-white font-medium">{c.label}</span>
+                    <span className={`px-2 py-0.5 rounded-md text-[11px] border ${CATEGORY_CHIP[c.category] || CATEGORY_CHIP.otros}`}>
+                      {REASON[c.category]?.label || c.category}
+                    </span>
+                    <span className="ml-auto text-sm text-gray-300">
+                      {c.count} cliente{c.count === 1 ? '' : 's'}
+                      {data?.read ? <span className="text-gray-500"> · {Math.round((c.count / data.read) * 1000) / 10}%</span> : null}
+                    </span>
+                  </div>
+                  {c.summary ? <p className="text-gray-400 text-xs mt-1">{c.summary}</p> : null}
+                  {c.quotes?.length ? (
+                    <ul className="mt-2 space-y-1">
+                      {c.quotes.map((q, i) => (
+                        <li key={i} className="text-sm text-gray-300 border-l-2 border-gray-600 pl-2 italic">
+                          «{q.quote}»{q.name ? <span className="text-gray-500 not-italic"> — {q.name}</span> : null}
+                        </li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <button
+                    onClick={() => setOpen((o) => ({ ...o, [c.label]: !o[c.label] }))}
+                    className="mt-2 text-xs text-blue-400 hover:text-blue-300"
+                  >
+                    {open[c.label] ? 'Ocultar' : `Ver los ${c.count} clientes`}
+                  </button>
+                  {open[c.label] && (
+                    <div className="mt-2 space-y-1">
+                      {c.members.map((m) => (
+                        <div key={m.id} className="text-xs text-gray-400 flex flex-wrap gap-2">
+                          <a href={`/messages?psid=${encodeURIComponent(m.id)}`} className="text-blue-400 hover:text-blue-300 shrink-0">
+                            {m.name || m.id}
+                          </a>
+                          <span className="text-gray-500 shrink-0">{fmtDateTime(m.at)}</span>
+                          <span className="text-gray-400">{m.text}</span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {data?.dropped && (data.dropped.quotes || data.dropped.members || data.dropped.duplicates || data.dropped.clusters) ? (
+            <p className="text-[11px] text-gray-600">
+              Descartados por no poder verificarse: {data.dropped.quotes} cita(s), {data.dropped.members} miembro(s),{' '}
+              {data.dropped.duplicates} duplicado(s), {data.dropped.clusters} tema(s) vacío(s).
+            </p>
+          ) : null}
+
+          {stalls.length > 0 && (
+            <div className="pt-4 border-t border-gray-700/50">
+              <h3 className="text-white text-sm font-semibold">Dónde se detuvo la conversación</h3>
+              <p className="text-gray-500 text-xs mt-1 mb-3">
+                Observado, no declarado: lo último que le dijimos antes de que dejara de contestar.
+                Son {data?.stalls?.read || 0} conversaciones de Ground Cover — no se suma con los motivos de arriba.
+              </p>
+              <div className="space-y-2">
+                {stalls.map((b) => (
+                  <div key={b.key}>
+                    <div className="flex justify-between text-sm mb-1">
+                      <span className="text-gray-300">{STALL[b.key]?.label || b.key}</span>
+                      <span className="text-gray-400">
+                        {b.count} · {b.pct}%
+                        {b.short ? <span className="text-gray-600"> · {b.short} nunca pasó del primer intercambio</span> : null}
+                      </span>
+                    </div>
+                    <div className="h-2 bg-gray-700/50 rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full"
+                        style={{ width: `${(b.count / maxStall) * 100}%`, backgroundColor: STALL[b.key]?.color || '#6b7280' }}
+                      />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -356,6 +566,9 @@ function GcFollowUpView() {
         </div>
       )}
 
+      {/* The client's question, 2026-10-28: why are they not interested anymore */}
+      <ReasonsSection period={period} sentCount={data?.sent || 0} />
+
       {/* §3.3 / §4 — the conversations we deliberately did NOT message */}
       {skipEntries.length > 0 && (
         <div className="bg-gray-800/50 border border-gray-700/50 rounded-xl p-5">
@@ -405,6 +618,7 @@ function GcFollowUpView() {
                   <th className="text-left px-4 py-2 font-medium">Qué dijo</th>
                   <th className="text-left px-4 py-2 font-medium">Resultado</th>
                   <th className="text-left px-4 py-2 font-medium">Motivo</th>
+                  <th className="text-left px-4 py-2 font-medium">Tema</th>
                 </tr>
               </thead>
               <tbody>
@@ -445,6 +659,9 @@ function GcFollowUpView() {
                     </td>
                     <td className="px-4 py-2 text-gray-400" title={r.reasonNote || ''}>
                       {r.reasonCategory ? (REASON[r.reasonCategory]?.label || r.reasonCategory) : <span className="text-gray-600">—</span>}
+                    </td>
+                    <td className="px-4 py-2 text-gray-400">
+                      {r.clusterLabel || <span className="text-gray-600">—</span>}
                     </td>
                   </tr>
                 ))}
