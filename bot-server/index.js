@@ -1,33 +1,12 @@
 // Load environment variables from .env file
 require('dotenv').config();
 
-// Monkey-patch OpenAI SDK to track all API calls for usage monitoring.
-// Must run before any module imports OpenAI.
-const { recordCall, recordError } = require('./utils/aiUsageTracker');
-const { recordUsage } = require('./ai/utils/aiUsageLogger');
-const OrigOpenAI = require('openai').OpenAI;
-const _origCreate = OrigOpenAI.prototype._origCreate; // save for safety
-require('openai').OpenAI = class extends OrigOpenAI {
-  constructor(...args) {
-    super(...args);
-    const origChat = this.chat.completions.create.bind(this.chat.completions);
-    this.chat.completions.create = async function (...callArgs) {
-      try {
-        const result = await origChat(...callArgs);
-        if (result?.usage) {
-          const model = result.model || callArgs[0]?.model || 'unknown';
-          recordCall(model, result.usage.prompt_tokens, result.usage.completion_tokens);
-          // Detailed, persistent per-call record (accurate cost) for the Costos IA view.
-          recordUsage(model, result.usage);
-        }
-        return result;
-      } catch (err) {
-        recordError(err);
-        throw err;
-      }
-    };
-  }
-};
+// Make every OpenAI chat call report its tokens — the in-memory budget tracker and the
+// persistent per-call cost record behind "Costos IA". This replaces a class-subclass
+// patch that assigned to `require('openai').OpenAI`, which on openai v6 is a GETTER with
+// no setter: the assignment was silently discarded and NOTHING was ever recorded (the
+// AiUsage collection held 0 docs). See utils/openaiUsagePatch.js.
+require('./utils/openaiUsagePatch').installOpenAiUsagePatch();
 
 const Message = require('./models/Message');
 
