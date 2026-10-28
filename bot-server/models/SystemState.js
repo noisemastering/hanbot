@@ -39,6 +39,27 @@ const systemStateSchema = new mongoose.Schema(
     // 2026-06-05. This is a DB switch, not an env var, so it is flipped from Spec
     // Ops — the user never touches Railway configuration.
     gcFollowUp: { type: switchSchema, default: () => ({}) },
+    // OPENAI CREDIT WATCH (2026-10-27, user's request: "I need an alert for my eyes
+    // only when I have 5 USD left"). The balance CANNOT be read from the API — a
+    // sk-proj- key gets 403 on /v1/organization/costs and the credit endpoint answers
+    // "only available through a browser" — so the super_admin types in what the billing
+    // page shows, and `balanceUsd` is drawn down by our OWN per-call cost records
+    // (AiUsage, which only started recording on 2026-10-27). It is therefore an
+    // ESTIMATE between check-ins, and every surface says so.
+    openAiCredit: {
+      type: new mongoose.Schema(
+        {
+          balanceUsd: { type: Number, default: null },   // what the billing page said
+          asOf: { type: Date, default: null },           // when it said it
+          setBy: { type: String, default: null },
+          thresholdUsd: { type: Number, default: 5 },    // alert at 5 USD left
+          notifiedAt: { type: Date, default: null },     // last low-credit push
+          notifiedBalance: { type: Number, default: null },
+        },
+        { _id: false }
+      ),
+      default: () => ({}),
+    },
     // Convo↔sale correlation freshness. `at` = when the last correlation run
     // finished; the dashboard auto-triggers a rebuild when it's >3h stale.
     // `running` guards against concurrent runs across requests/instances.

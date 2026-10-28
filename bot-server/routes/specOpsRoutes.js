@@ -94,12 +94,65 @@ const shape = (s) => ({
 });
 
 // Status — any authenticated user (drives the maintenance modal).
+//
+// The OpenAI credit picture rides along for SUPER_ADMIN ONLY ("an alert for my eyes
+// only", 2026-10-27). Every role polls this endpoint every 30 s, so attaching it here
+// costs no new request and no new poller — but it must be gated on the role, not merely
+// hidden in the UI, or the balance would be one devtools tab away from the whole team.
 router.get("/status", async (req, res) => {
   try {
     const s = await SystemState.getState();
-    res.json({ success: true, ...shape(s) });
+    const body = { success: true, ...shape(s) };
+    if (req.user.role === "super_admin") {
+      try {
+        body.openAiCredit = await require("../utils/openAiCredit").creditStatus();
+      } catch (e) {
+        console.error("⚠️ credit status failed:", e.message);
+      }
+    }
+    res.json(body);
   } catch (e) {
     res.status(500).json({ success: false, error: "No se pudo leer el estado" });
+  }
+});
+
+// OpenAI credit — super_admin. Body: { balanceUsd?, thresholdUsd? }
+// The balance is typed in from platform.openai.com because no API exposes it (see
+// utils/openAiCredit.js). Writing it RE-ANCHORS the estimate and re-arms the alert, so
+// a top-up is recorded by the same action that silences the warning.
+router.post("/openai-credit", requireSuperAdmin, async (req, res) => {
+  try {
+    const { balanceUsd, thresholdUsd } = req.body || {};
+    const s = await SystemState.getState();
+    if (!s.openAiCredit) s.openAiCredit = {};
+
+    if (balanceUsd !== undefined) {
+      const n = Number(balanceUsd);
+      if (!Number.isFinite(n) || n < 0) {
+        return res.status(400).json({ success: false, error: "Saldo inválido" });
+      }
+      s.openAiCredit.balanceUsd = n;
+      s.openAiCredit.asOf = new Date();
+      s.openAiCredit.setBy = req.user.username || req.user.email || "super_admin";
+      // Re-anchoring always re-arms: otherwise the first alert would be the last one
+      // this account ever got.
+      s.openAiCredit.notifiedAt = null;
+      s.openAiCredit.notifiedBalance = null;
+    }
+    if (thresholdUsd !== undefined) {
+      const t = Number(thresholdUsd);
+      if (!Number.isFinite(t) || t < 0) {
+        return res.status(400).json({ success: false, error: "Umbral inválido" });
+      }
+      s.openAiCredit.thresholdUsd = t;
+      s.openAiCredit.notifiedAt = null; // a new threshold deserves a fresh evaluation
+    }
+    await s.save();
+    const status = await require("../utils/openAiCredit").creditStatus();
+    res.json({ success: true, openAiCredit: status });
+  } catch (e) {
+    console.error("Error setting OpenAI credit:", e);
+    res.status(500).json({ success: false, error: "No se pudo guardar el saldo" });
   }
 });
 

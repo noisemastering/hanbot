@@ -648,7 +648,7 @@ const menuItems = [
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { user, loading: authLoading, canAccess, canManageUsers, getLandingPage, logout, simulationMode, stopSimulation, banner, payment } = useAuth();
+  const { user, loading: authLoading, canAccess, canManageUsers, getLandingPage, logout, simulationMode, stopSimulation, banner, payment, openAiCredit } = useAuth();
   const { t, locale, language, changeLanguage } = useTranslation();
   const updateAvailable = useNewVersionCheck();
 
@@ -1916,6 +1916,25 @@ function App() {
               : <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" />}
           </svg>
           <span>{t(payment.status === 'overdue' ? 'payment.overdue' : 'payment.due', { price: payment.price, currency: payment.currency, day: payment.dueDay })}</span>
+        </div>
+      )}
+      {/* OpenAI credit banner — SUPER_ADMIN ONLY, and the server only sends the data to
+          super_admin, so this is gated twice on purpose: the balance is billing, not
+          something an asesor can act on. Sits above every other banner (z-112) because
+          at $0 the bot stops answering mid-conversation and nothing else warns — OpenAI
+          alerts on spend against the monthly cap, not on a low prepaid balance. */}
+      {openAiCredit && openAiCredit.low && effectiveRole === 'super_admin' && (
+        <div className="fixed top-0 inset-x-0 z-[112] flex items-center justify-center gap-2 text-sm font-semibold py-2 px-4 shadow-lg text-center bg-amber-500 text-black">
+          <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01M5.07 19h13.86c1.54 0 2.5-1.67 1.73-3L13.73 4a2 2 0 00-3.46 0L3.34 16c-.77 1.33.19 3 1.73 3z" /></svg>
+          <span>
+            {openAiCredit.daysLeft != null
+              ? t('credit.lowBanner', {
+                  amount: `$${Number(openAiCredit.remaining).toFixed(2)}`,
+                  days: openAiCredit.daysLeft.toFixed(1),
+                })
+              : t('credit.lowBannerNoDays', { amount: `$${Number(openAiCredit.remaining).toFixed(2)}` })}
+          </span>
+          <a href="/bot/costos-ia" className="underline font-bold">{t('credit.review')}</a>
         </div>
       )}
       {/* New version banner — sits ABOVE the payment banner (z-109 > 108) so the

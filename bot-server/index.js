@@ -2496,6 +2496,20 @@ setTimeout(() => {
   setInterval(tickGc, 5 * 60 * 1000);
 }, 60000);
 
+// OpenAI low-credit watch — super_admin only. At $0 the API errors and the bot stops
+// answering mid-conversation, and nothing else in the system would warn: OpenAI's alerts
+// fire on spend-against-the-cap, not on a low prepaid balance, and auto-reload is off.
+// Fires ONCE per drop below the threshold; re-arms when the balance is re-anchored.
+setTimeout(() => {
+  const { checkAndAlertLowCredit } = require('./utils/openAiCredit');
+  console.log('💸 OpenAI credit watch scheduled (every 30 min, alerts super_admin at the threshold)');
+  const tickCredit = async () => {
+    try { await checkAndAlertLowCredit(); } catch (e) { console.error('❌ credit watch tick failed:', e.message); }
+  };
+  tickCredit();
+  setInterval(tickCredit, 30 * 60 * 1000);
+}, 90000);
+
 // Unanswered-message sweeper — the safety net under every reply. Every inbound message
 // waits 10s in the debouncer's IN-MEMORY queue before the bot answers, so a restart, a
 // deploy or a throw inside that window drops the turn with nothing to retry it: reported

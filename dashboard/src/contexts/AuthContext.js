@@ -19,6 +19,9 @@ export const AuthProvider = ({ children }) => {
   const [banner, setBanner] = useState(null);
   // Billing/payment status for the current month. { status: 'paid'|'due'|'overdue', price, currency, dueDay, month, ... }
   const [payment, setPayment] = useState(null);
+  // OpenAI credit estimate — the server only sends this to super_admin, so a null here
+  // means "not yours to see" as often as it means "not configured". { remaining, low, … }
+  const [openAiCredit, setOpenAiCredit] = useState(null);
   const refreshLiberado = async () => {
     try {
       const t = localStorage.getItem('token');
@@ -32,6 +35,7 @@ export const AuthProvider = ({ children }) => {
         setLiberado(!!data.liberado?.engaged);
         setBanner(data.banner || null);
         setPayment(data.payment || null);
+        setOpenAiCredit(data.openAiCredit || null);
       }
     } catch (_) { /* keep restricted on error */ }
   };
@@ -253,6 +257,8 @@ export const AuthProvider = ({ children }) => {
     refreshBanner: refreshLiberado,
     // Billing/payment status for the current month
     payment,
+    // OpenAI credit (super_admin only; null for everyone else)
+    openAiCredit,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

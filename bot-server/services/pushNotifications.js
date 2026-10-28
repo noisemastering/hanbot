@@ -69,6 +69,54 @@ async function sendHandoffNotification(psid, convo, reason) {
 }
 
 /**
+ * Push to SUPER_ADMINS only. Subscriptions carry a userId, so "for my eyes only" is
+ * enforceable: the low-credit alert must not land on an asesor's phone — it is a
+ * billing matter, and the money is not theirs to act on.
+ *
+ * @param {string} title
+ * @param {string} body
+ * @param {string} url  where the dashboard should open on tap
+ */
+async function sendToSuperAdmins(title, body, url = "/") {
+  try {
+    const DashboardUser = require("../models/DashboardUser");
+    const admins = await DashboardUser.find({ role: "super_admin", active: true }).select("_id").lean();
+    if (!admins.length) return { sent: 0, reason: "no super_admin users" };
+
+    const subs = await PushSubscription.find({ userId: { $in: admins.map((a) => a._id) } });
+    if (!subs.length) {
+      // Not an error: the dashboard banner still shows it. Worth saying out loud,
+      // because a push nobody is subscribed to looks identical to one that worked.
+      console.warn(`🔔 no push subscriptions for super_admin — "${title}" only shows in the dashboard`);
+      return { sent: 0, reason: "no subscriptions" };
+    }
+
+    const payload = JSON.stringify({
+      title, body, icon: "/logo192.png", badge: "/logo192.png", data: { url },
+    });
+    const results = await Promise.allSettled(
+      subs.map(async (sub) => {
+        try {
+          await webpush.sendNotification({ endpoint: sub.endpoint, keys: sub.keys }, payload);
+          return true;
+        } catch (error) {
+          if (error.statusCode === 410 || error.statusCode === 404) {
+            await PushSubscription.deleteOne({ endpoint: sub.endpoint });
+          }
+          throw error;
+        }
+      })
+    );
+    const sent = results.filter((r) => r.status === "fulfilled").length;
+    console.log(`🔔 super_admin push "${title}": ${sent}/${subs.length}`);
+    return { sent, total: subs.length };
+  } catch (e) {
+    console.error("Error sending super_admin push:", e.message);
+    return { sent: 0, error: e.message };
+  }
+}
+
+/**
  * Centralized handoff trigger: updates conversation state AND sends push notification.
  * Use this anywhere a bot needs to hand off to a human — guarantees notification fires.
  */
@@ -101,4 +149,4 @@ async function triggerHandoff(psid, reason, options = {}) {
   }
 }
 
-module.exports = { sendHandoffNotification, triggerHandoff };
+module.exports = { sendHandoffNotification, triggerHandoff, sendToSuperAdmins };

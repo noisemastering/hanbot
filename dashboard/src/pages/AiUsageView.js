@@ -46,6 +46,13 @@ export default function AiUsageView() {
   const [loading, setLoading] = useState(true);
   const [fx, setFx] = useState(DEFAULT_FX);
   const [fxDate, setFxDate] = useState(null);
+  // Prepaid credit. No API returns it (a sk-proj- key gets 403 and the credit endpoint
+  // is browser-only), so the balance is typed in here from platform.openai.com and then
+  // drawn down by our own per-call costs — an estimate, labelled as one.
+  const [credit, setCredit] = useState(null);
+  const [balanceInput, setBalanceInput] = useState("");
+  const [thresholdInput, setThresholdInput] = useState("");
+  const [savingCredit, setSavingCredit] = useState(false);
 
   // Live USD→MXN rate (editable). Falls back silently to DEFAULT_FX.
   useEffect(() => {
@@ -81,6 +88,36 @@ export default function AiUsageView() {
     load();
   }, [load]);
 
+  const loadCredit = useCallback(async () => {
+    try {
+      const res = await API.get("/spec-ops/status");
+      const c = res.data?.openAiCredit || null;
+      setCredit(c);
+      if (c?.thresholdUsd != null && thresholdInput === "") setThresholdInput(String(c.thresholdUsd));
+    } catch {
+      /* the page still works without it */
+    }
+  }, [thresholdInput]);
+
+  useEffect(() => {
+    loadCredit();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const saveCredit = async (payload, okMsg) => {
+    setSavingCredit(true);
+    try {
+      const res = await API.post("/spec-ops/openai-credit", payload);
+      setCredit(res.data?.openAiCredit || null);
+      setBalanceInput("");
+      toast.success(okMsg);
+    } catch (e) {
+      toast.error(e?.response?.data?.error || "No se pudo guardar");
+    } finally {
+      setSavingCredit(false);
+    }
+  };
+
   const t = data?.totals || {};
   const totalUsd = t.costUsd || 0;
   const perConvoUsd = data?.costPerConvoUsd || 0;
@@ -115,6 +152,74 @@ export default function AiUsageView() {
       <p className="text-sm text-gray-400 -mt-3">
         Gasto real de OpenAI (telemetría por llamada). Costo por conversación = gasto ÷ conversaciones activas en el periodo.
       </p>
+
+      {/* Prepaid credit — the number that decides whether the bot keeps answering. */}
+      <div className={`rounded-xl p-5 border ${credit?.low ? "bg-amber-500/10 border-amber-500/50" : "bg-gray-800/50 border-gray-700/50"}`}>
+        <div className="flex items-start justify-between flex-wrap gap-4">
+          <div>
+            <div className="text-xs font-medium text-gray-400 uppercase tracking-wide">Crédito OpenAI restante (estimado)</div>
+            {credit?.configured ? (
+              <>
+                <div className={`text-3xl font-bold mt-1 ${credit.low ? "text-amber-400" : "text-white"}`}>
+                  {usd(credit.remaining)}
+                  {credit.daysLeft != null && (
+                    <span className="text-base font-medium text-gray-400 ml-2">· ~{credit.daysLeft.toFixed(1)} días</span>
+                  )}
+                </div>
+                <div className="text-xs text-gray-500 mt-1">
+                  Saldo capturado {usd(credit.balanceUsd)} el {new Date(credit.asOf).toLocaleString("es-MX")} − {usd(credit.spentSince)} gastados desde entonces.
+                  {credit.burnPerDay != null
+                    ? ` Ritmo: ${usd(credit.burnPerDay)}/día.`
+                    : " El ritmo diario aparece cuando haya 24 h de telemetría (la medición por llamada empezó el 27/10/2026)."}
+                </div>
+                <div className="text-xs text-gray-500">
+                  Es un estimado: OpenAI no expone el saldo por API. Vuelve a capturarlo cuando lo consultes o recargues.
+                </div>
+              </>
+            ) : (
+              <div className="text-sm text-gray-300 mt-1">
+                Sin saldo capturado. Míralo en{" "}
+                <a className="text-indigo-400 underline" href="https://platform.openai.com/settings/organization/billing/overview" target="_blank" rel="noreferrer">
+                  platform.openai.com
+                </a>{" "}
+                y escríbelo aquí para activar la alerta.
+              </div>
+            )}
+          </div>
+          <div className="flex items-end gap-2 flex-wrap">
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Saldo actual (USD)</label>
+              <input
+                type="number" step="0.01" min="0" value={balanceInput} placeholder="16.76"
+                onChange={(e) => setBalanceInput(e.target.value)}
+                className="w-28 px-2 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+            <button
+              onClick={() => saveCredit({ balanceUsd: parseFloat(balanceInput) }, "Saldo actualizado")}
+              disabled={savingCredit || balanceInput === "" || isNaN(parseFloat(balanceInput))}
+              className="px-3 py-1.5 rounded-md text-sm font-semibold bg-indigo-600 text-white hover:bg-indigo-500 disabled:opacity-40"
+            >
+              Guardar
+            </button>
+            <div>
+              <label className="block text-xs text-gray-400 mb-1">Avisarme en (USD)</label>
+              <input
+                type="number" step="0.5" min="0" value={thresholdInput}
+                onChange={(e) => setThresholdInput(e.target.value)}
+                className="w-24 px-2 py-1.5 bg-gray-700 border border-gray-600 rounded-md text-gray-100 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              />
+            </div>
+            <button
+              onClick={() => saveCredit({ thresholdUsd: parseFloat(thresholdInput) }, "Umbral actualizado")}
+              disabled={savingCredit || thresholdInput === "" || isNaN(parseFloat(thresholdInput))}
+              className="px-3 py-1.5 rounded-md text-sm font-semibold bg-gray-700 text-gray-100 hover:bg-gray-600 disabled:opacity-40"
+            >
+              Guardar umbral
+            </button>
+          </div>
+        </div>
+      </div>
 
       {/* FX control */}
       <div className="flex items-center gap-2 text-sm text-gray-300">
