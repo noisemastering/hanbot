@@ -1436,9 +1436,15 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           const rollFirstP =
             (dims && dims.some((d) => Number(d) === 100)) || /\b100\b/.test(msg) ||
             !!state.gcOpenerSent || !!(state.priceInfo && state.priceInfo.fullRoll);
+          // "¿Es contra entrega?" (the client's rule, 2026-10-29: "COD is always the
+          // same, we only accept it on purchases at the store") — the ONE exception
+          // belongs to the whole answer, not to the full-roll line, because a customer
+          // asking about a CUT used to hear the rule with no exception at all. Stated
+          // once in the prefix below, and dropped from the roll line so it isn't said twice.
+          const codAskedP = /\bcontra\s*entrega\b|\bcontraentrega\b/i.test(msg);
           const rollLineP =
             `El rollo completo de 100 m no se vende por Mercado Libre: la compra se cierra directo con nosotros ` +
-            `y se paga por transferencia, o con tarjeta o efectivo si pasas a la tienda; si te lo enviamos, el pago es por adelantado.`;
+            `y se paga por transferencia${codAskedP ? "" : ", o con tarjeta o efectivo si pasas a la tienda"}; si te lo enviamos, el pago es por adelantado.`;
           const cutLineP = cutsP.length
             ? `Los cortes de ${cutsP.join(", ")} m se compran en línea por Mercado Libre con compra protegida, y ahí mismo pagas al ordenar.`
             : "";
@@ -1446,8 +1452,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // "¿Es contra entrega?" is a yes/no question and deserves the word "no" in
           // front of the explanation — leaving it implied ("pagas al ordenar") makes
           // the customer ask again.
-          const codP = /\bcontra\s*entrega\b|\bcontraentrega\b/i.test(msg)
-            ? "No manejamos pago contra entrega. "
+          const codP = codAskedP
+            ? "No manejamos pago contra entrega: lo único que se paga en el momento es si pasas a la tienda por tu pedido. "
             : "";
           return ret(`${codP}${partsP.filter(Boolean).join(" ")} ¿Qué medida necesitas? 😊`, {
             gcPaymentAnswered: rollFirstP ? "rollo" : "corte",
@@ -2559,14 +2565,18 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         }
         cutsB.sort((a, b) => a - b);
         rollsB.sort((a, b) => a - b);
-        const codB = /\bcontra\s*entrega\b|\bcontraentrega\b/i.test(msgB)
-          ? "No manejamos pago contra entrega. "
+        // Same single exception as the ground cover twin (the client's rule): the only
+        // payment on the spot is picking the order up at the store. It has to sit in the
+        // prefix, because the 6/9/18 m cuts' line never mentioned it.
+        const codAskedB = /\bcontra\s*entrega\b|\bcontraentrega\b/i.test(msgB);
+        const codB = codAskedB
+          ? "No manejamos pago contra entrega: lo único que se paga en el momento es si pasas a la tienda por tu pedido. "
           : "";
         const cutLineB = cutsB.length
           ? `Los rollos de ${cutsB.join(", ")} m se compran en línea por Mercado Libre con compra protegida, y ahí mismo pagas al ordenar.`
           : "";
         const rollLineB = rollsB.length
-          ? `El de ${rollsB.join(" y ")} m es rollo completo: ese lo cerramos directo contigo y se paga por transferencia, o con tarjeta o efectivo si pasas a la tienda; si te lo enviamos, el pago es por adelantado.`
+          ? `El de ${rollsB.join(" y ")} m es rollo completo: ese lo cerramos directo contigo y se paga por transferencia${codAskedB ? "" : ", o con tarjeta o efectivo si pasas a la tienda"}; si te lo enviamos, el pago es por adelantado.`
           : "";
         return retB(`${codB}${[cutLineB, rollLineB].filter(Boolean).join(" ")} ¿Qué largo necesitas? 😊`, {
           bordePaymentAnswered: true,
