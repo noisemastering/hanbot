@@ -1309,6 +1309,44 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             gcDeliveryTimeAnswered: rollFirstT ? "rollo" : "corte",
           });
         }
+        // THE CUSTOMER NAMES THE FULL ROLL — arm the freight quote without claiming the
+        // turn (gates contribute facts, they do not swallow the message). In the
+        // reported conversation the shipping answer came first with the CUTS half in
+        // front, so the flag below was never armed by it; he then wrote "El rollo
+        // completo" and the CP, and nothing connected the two.
+        if (
+          _gcFlow &&
+          (state.gcShippingAnswered || state.gcOpenerSent) &&
+          /\brollo\s+complet|\bel\s+de\s+100\b|\b100\s*m\b|\b100\b/i.test(msg)
+        ) {
+          state.gcFreightPending = true;
+        }
+
+        // (a0-flete) THE CP ARRIVED AND IT WAS THE LAST MISSING PIECE. Armed by the
+        // shipping gate below when the answer was about the full roll, which is the
+        // one case where the freight has to be quoted by a person. Anything else the
+        // customer wrote this turn still reaches the gates after this one, because the
+        // handoff ask is the end of the turn either way.
+        if (_gcFlow && state.gcFreightPending) {
+          // The CP normally arrives already captured (ai/index.js runs its capture
+          // before the engine and now stands aside for this flag), but the engine must
+          // not DEPEND on that: read a bare 5-digit CP out of the message too, so the
+          // gate works the same when it is driven directly — which is how the battery
+          // and every repro script run it.
+          const zipHere = (String(msg).match(/\b(\d{5})\b/) || [])[1] || null;
+          if (zipHere && !(state.location && (state.location.zip || state.location.zipcode))) {
+            state.location = { ...(state.location || {}), zip: zipHere };
+          }
+          const zipNow = (state.location && (state.location.zip || state.location.zipcode)) || null;
+          if (zipNow) {
+            state.gcFreightPending = false;
+            return beginHandoff({
+              preface: `¡Gracias! Con tu código postal (${zipNow}) ya podemos cotizarte el flete del rollo completo.`,
+              reason: `Cotizar flete de rollo completo de ground cover al CP ${zipNow}`,
+            });
+          }
+        }
+
         if (asksShipping && _gcFlow) {
           const lensE = await gcDim("length");
           const cutsE = lensE.filter((l) => l !== 100);
@@ -1326,6 +1364,18 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // reply only counts when it is a bare number that exists in the ZipCode table
           // — "es el 50000" would be dropped and we'd ask the same thing twice.
           if (!haveZipE) state.zipAsked = true;
+          // THEIR CP IS THE LAST THING WE NEED. Reported 2026-10-28 (wa:5212461613346,
+          // "debió pasar a un humano y no lo hizo"): he asked the full roll's shipping
+          // cost, we asked for his CP, he sent "90620" — and the answer was "¡Gracias!
+          // Ya registré tu código postal. ¿Te ayudo con alguna medida?", so Noemí had
+          // to come in and quote the freight by hand. Once this flag is armed the
+          // arriving CP completes a freight quote; the gate below turns it into the
+          // handoff instead of a receipt.
+          if (rollFirst || !cutsE.length) state.gcFreightPending = true;
+          // STATE, not just a diagnostic: `ret(text, {...})` fills the DIAGNOSTICS bag,
+          // so a flag written there is gone by the next turn. The arming gate above
+          // reads this one.
+          state.gcShippingAnswered = true;
           return ret(
             `${parts.filter(Boolean).join(" ")} ${haveZipE ? "¿Qué medida necesitas y te la cotizo? 😊" : "¿Me compartes tu código postal y la medida que necesitas? 📍"}`,
             { gcShippingAnswered: rollFirst ? "rollo" : "corte" }
@@ -1347,6 +1397,30 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // The roll half's facts are the client's (2026-10-28): transferencia, or card
         // and cash at the store, and a shipped order is paid UP FRONT — never contra
         // entrega. Nothing here invents a payment method we don't offer.
+        // (a0-unidad) "¿ES POR METRO CUADRADO?" The ground cover is sold by the ROLL
+        // or by the cut, never by m² — and a customer who asks this and gets the
+        // generic nudge reads it as a dodge. Same family as the borde's version of the
+        // question (reported the same day on wa:5213324227528).
+        // A NUMBER IN FRONT MAKES IT AN AREA, NOT A QUESTION ABOUT UNITS. "Quiero cubrir
+        // 200 m2" is a measure the quoting path owns; hijacking it with "el precio es
+        // por rollo, no por metro cuadrado" would be the same half-answer this gate
+        // exists to prevent.
+        const saysArea = /\d+\s*(m2|m²|metros?\s+(cuadrados?|lineales?))/i.test(msg);
+        const asksUnit =
+          !saysArea &&
+          (/\bmetros?\s*(cuadrados?|lineales?)\b|\bm2\b|\bm²\b|\bpor\s+metro\b/i.test(msg) ||
+            /\bes\s+en\s+cuadrado\b/i.test(msg));
+        if (asksUnit && _gcFlow) {
+          const lensU = await gcDim("length");
+          const cutsU = lensU.filter((l) => l !== 100);
+          return ret(
+            `El precio es por ROLLO o por corte completo, no por metro cuadrado: el rollo de 2 × 100 m cubre 200 m² y el de 4 × 100 m, 400 m². ` +
+              (cutsU.length ? `También cortamos tramos de ${cutsU.join(", ")} m. ` : "") +
+              `¿Qué medida necesitas? 😊`,
+            { gcUnitAnswered: true }
+          );
+        }
+
         const asksPayment =
           /\b(pago|pagar|pagos|forma\s+de\s+pago|m[eé]todos?\s+de\s+pago|transferencia|dep[oó]sito|tarjeta|efectivo|contra\s+entrega|contraentrega|msi|meses\s+sin\s+intereses|factura\w*)\b/i.test(msg) ||
           /\bc[oó]mo\s+(se\s+)?(compr|pag|adquier|realiz)\w*/i.test(msg) ||
@@ -2437,6 +2511,66 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // pushing the largo (reported: customer asked "cuánto mide de ancho" 3× and never
       // got 13 cm). Answer it FIRST, then continue: if they named a single length, quote
       // that roll; otherwise ask the largo.
+      // 0-bis) "¿ES POR METRO CUADRADO O LINEAL?" Reported 2026-10-28
+      // (wa:5213324227528): "Esas son las medidas es en cuadrado" got the catch-all
+      // nudge — "ya te pasé los precios… ¿cuál te sirve?" — and Noemí had to write
+      // "estas medidas que te proporcionamos es por metro lineal". The borde is 13 cm
+      // of height by the length you choose, so the unit is the one thing about it that
+      // is never ambiguous to us and was never said to him. Same family as the width
+      // question below: a question we can answer must never be answered with a nudge.
+      // Same guard as the ground cover one: "18 metros lineales" is a LENGTH the order
+      // path owns, not a question about which unit we sell by.
+      const saysAreaB = /\d+\s*(m2|m²|metros?\s+(cuadrados?|lineales?))/i.test(msgB);
+      const asksUnitB =
+        !saysAreaB &&
+        (/\bmetros?\s*(cuadrados?|lineales?)\b|\bm2\b|\bm²\b|\bpor\s+metro\b/i.test(msgB) ||
+          /\b(es|son|van?)\s+(en|por)\s+cuadrados?\b/i.test(msgB));
+      if (asksUnitB) {
+        const byLenU = await bordeLeavesByLength(variantKnown() || VARIANT_FALLBACK).catch(() => new Map());
+        const lensU = [...byLenU.keys()].map(Number).filter(Number.isFinite).sort((a, b) => a - b);
+        return retB(
+          `Son metros LINEALES, no metros cuadrados: el borde mide 13 cm de alto y el rollo trae el largo que elijas` +
+            `${lensU.length ? ` (${lensU.join(", ")} m)` : ""}. ¿Qué largo necesitas? 😊`,
+          { bordeUnitAnswered: true }
+        );
+      }
+
+      // 0-ter) HOW IT IS PAID. Reported 2026-10-28 (wa:5215510160541): "Los pagos son
+      // a contra entrega" got the same catch-all nudge, and the asesora answered it by
+      // hand 44 minutes later. The payment gate shipped that morning only covered the
+      // ground cover campaign (a0-pago); the facts are the same company-wide, and the
+      // split is the ROLLO COMPLETO rule — the cuts carry a Mercado Libre link and are
+      // paid there, the full roll (the borde's 54 m) is closed by us. Which length is
+      // which comes from the catalogue through isFullRoll, never from a hardcoded 54.
+      const asksPaymentB =
+        /\b(pago|pagar|pagos|forma\s+de\s+pago|m[eé]todos?\s+de\s+pago|transferencia|dep[oó]sito|tarjeta|efectivo|contra\s+entrega|contraentrega|msi|meses\s+sin\s+intereses)\b/i.test(msgB) ||
+        /\bc[oó]mo\s+(se\s+)?(compr|pag|adquier)\w*/i.test(msgB);
+      if (asksPaymentB) {
+        const { isFullRoll } = require("./priceResolver");
+        const byLenP = await bordeLeavesByLength(variantKnown() || VARIANT_FALLBACK).catch(() => new Map());
+        const cutsB = [];
+        const rollsB = [];
+        for (const [len, leaf] of byLenP) {
+          const n = Number(len);
+          if (!Number.isFinite(n)) continue;
+          (isFullRoll(leaf) ? rollsB : cutsB).push(n);
+        }
+        cutsB.sort((a, b) => a - b);
+        rollsB.sort((a, b) => a - b);
+        const codB = /\bcontra\s*entrega\b|\bcontraentrega\b/i.test(msgB)
+          ? "No manejamos pago contra entrega. "
+          : "";
+        const cutLineB = cutsB.length
+          ? `Los rollos de ${cutsB.join(", ")} m se compran en línea por Mercado Libre con compra protegida, y ahí mismo pagas al ordenar.`
+          : "";
+        const rollLineB = rollsB.length
+          ? `El de ${rollsB.join(" y ")} m es rollo completo: ese lo cerramos directo contigo y se paga por transferencia, o con tarjeta o efectivo si pasas a la tienda; si te lo enviamos, el pago es por adelantado.`
+          : "";
+        return retB(`${codB}${[cutLineB, rollLineB].filter(Boolean).join(" ")} ¿Qué largo necesitas? 😊`, {
+          bordePaymentAnswered: true,
+        });
+      }
+
       if (asksBordeWidth) {
         const width = "El borde separador mide 13 cm de alto (el largo lo eliges tú).";
         const r0 = rMsg;
@@ -4508,7 +4642,19 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // gate) only fires on the purchase path, so wholesale handoffs reached the
       // asesor with no CP and the logistics question had to be asked again.
       const _name = (ctx.lead && ctx.lead.name) || (state.lead && state.lead.name) || opts.profileName || null;
-      const ask = `${preface}¡Con gusto te paso con un asesor! 🙌 ¿Me compartes ${_name ? "" : "tu nombre, "}un teléfono a 10 dígitos y tu código postal para que te contacte?`;
+      // ASK ONLY FOR WHAT IS MISSING (§2 of the campaign rules). This literal asked for
+      // the código postal even when the customer had just given it — which is what the
+      // freight case looked like from his side: he sent 90620 and was asked for it
+      // again. And on the ground cover campaign the hand-off is never announced (§3):
+      // it is framed as preparing the cotización.
+      const _zipKnown = !!(ctx.location && (ctx.location.zip || ctx.location.zipcode)) ||
+        !!(state.location && (state.location.zip || state.location.zipcode));
+      const _wants = [_name ? null : "tu nombre", "un teléfono a 10 dígitos", _zipKnown ? null : "tu código postal"]
+        .filter(Boolean);
+      const _lead = _gcFlow
+        ? "¡Con gusto te preparamos tu cotización! 😊📋"
+        : "¡Con gusto te paso con un asesor! 🙌";
+      const ask = `${preface}${_lead} ¿Me compartes ${_wants.join(" y ")}${_gcFlow ? " para incluir el envío" : " para que te contacte"}?`;
       history.push({ role: "assistant", text: ask, nodeId: movedTo.id, at: new Date() });
       return {
         reply: ask,
@@ -4761,6 +4907,28 @@ async function detectFlowSwitch(message, familyList, currentWorkflow) {
   }
   const sr = probe.scopeResult;
   if (sr && sr.verdict === "other_flow" && sr.toWorkflowId && String(sr.toWorkflowId) !== String(currentWorkflow._id)) {
+    // "ROLLO" IS A GROUND COVER WORD TOO (2026-10-28, two reports with one cause).
+    // On the antimaleza campaign "El rollo completo" was classified as belonging to
+    // the Malla Sombra — Rollo flow and the turn was handed over to it. Everything
+    // downstream then went wrong at once: the campaign's state went with it (so the
+    // freight quote armed for his CP was lost, and wa:5212461613346 got "ya registré
+    // tu código postal" instead of a hand-off), and the Raschel flow asked him for a
+    // SHADE PERCENTAGE — reported from the sandbox as "habla de malla sombra cuando el
+    // anuncio es de ground cover", severity alta. Ground cover is sold BY THE ROLL:
+    // 2 x 100 m and 4 x 100 m are the campaign's two headline products, so the word
+    // cannot be evidence of another flow here. The switch is only refused when the
+    // message carries NO shade-cloth marker of its own — "quiero malla sombra en
+    // rollo" still routes, because it names the other product outright.
+    const gcHere = /ground\s*cover|anti\s*-?\s*maleza/i.test(String(currentWorkflow?.name || ""));
+    if (gcHere) {
+      const rollWord = /\brollos?\b|\bcomplet[oa]s?\b|\b100\s*m?\b/i.test(message);
+      const shadeMarker =
+        /\bmalla\s+sombra\b|\braschel\b|\bsombra\b|\b\d{2}\s*%|\bconfeccionad|\btoldo|\blona\b|\bborde\b|\bsujetador|\bcord[oó]n\b/i.test(message);
+      if (rollWord && !shadeMarker) {
+        console.log(`🌱 [workflow] kept "${message.slice(0, 40)}" on the ground cover flow — "rollo" is ours too`);
+        return null;
+      }
+    }
     return { toWorkflowId: sr.toWorkflowId, toName: sr.toName, product: sr.product };
   }
   // A product we MAKE but no active flow covers (needs_human — e.g. monofilamento):

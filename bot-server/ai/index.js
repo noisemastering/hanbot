@@ -216,7 +216,13 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
       // Conversation), so without this the captured CP never raises certainty.
       if (z.zip) await syncLocationToUser(psid, { zipcode: z.zip, ...(city ? { city } : {}) }, "conversation").catch(() => {});
       console.log(`📮 [workflow] CP capturado para ${psid}: ${z.zip || "(número no estándar)"}${city ? ` (${city})` : ""}`);
-      if (z.bareNumberOnly) {
+      // …unless the CP was the LAST thing we needed. When the engine has armed a
+      // freight quote for a full roll (gcFreightPending), the arriving CP completes it
+      // and the turn belongs to the engine's (a0-flete) gate, which hands it to a
+      // person. Reported 2026-10-28 (wa:5212461613346): "¡Gracias! Ya registré tu
+      // código postal. ¿Te ayudo con alguna medida?" was the answer to a customer who
+      // had just asked what the freight costs and given us everything to quote it.
+      if (z.bareNumberOnly && !state.gcFreightPending) {
         // The message was essentially just the zip → acknowledge warmly and stop
         // (no model turn, so it can't treat a lone number as nonsense/a measure).
         // ALWAYS invite the customer to continue — a CP often means they're deciding
@@ -430,6 +436,24 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
       safeText = sayEspecialista(safeText);
     } catch (e) {
       console.error("⚠️ advisor-word guard failed:", e.message);
+    }
+    // GROUND COVER HAS NO SHADE PERCENTAGE. The Raschel percentages (35/50/70/80/90%)
+    // belong to malla sombra; on the antimaleza flow they are a different product and
+    // a question the customer cannot answer. Reported from the sandbox 2026-10-28.
+    try {
+      // …and never on a turn that switched flows: the customer asked about malla
+      // sombra, the engine handed the turn to that flow, and a shade percentage is
+      // then the right answer.
+      if (/ground\s*cover|antimaleza/i.test(String(workflow?.name || "")) && !diagnostics?.switchedTo) {
+        const { stripShadeTalk } = require("../utils/shadeTalk");
+        const cleaned = stripShadeTalk(safeText);
+        if (cleaned !== safeText) {
+          console.warn(`🌱 [workflow] dropped shade-% talk from a ground cover reply for ${psid}`);
+          safeText = cleaned;
+        }
+      }
+    } catch (e) {
+      console.error("⚠️ shade-talk guard failed:", e.message);
     }
   }
 

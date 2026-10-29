@@ -246,6 +246,19 @@ const CASES = [
   { id: "gc-contra-entrega", group: "groundcover", flow: "groundcover",
     turns: ["¿es contra entrega?"],
     expect: "Contesta que NO hay pago contra entrega, con esas palabras, y explica cómo sí se paga en cada caso. El error es dejarlo implícito o contestar sólo con el procedimiento sin decir que no." },
+  // "ROLLO" ES PALABRA DEL GROUND COVER TAMBIÉN (2026-10-28, dos reportes, una causa).
+  // "El rollo completo" mandaba la conversación al flujo de Malla Sombra — Rollo: se
+  // perdía el estado de la campaña (y con él la cotización de flete que esperaba el CP)
+  // y el flujo Raschel pedía PORCENTAJE DE SOMBRA, que en antimaleza no existe.
+  { id: "gc-rollo-se-queda-en-antimaleza", group: "groundcover", flow: "groundcover",
+    turns: ["precio", "quiero el rollo completo"],
+    expect: "Sigue hablando de ground cover / malla antimaleza: cotiza el rollo completo de 100 m (2x100 o 4x100) o pregunta el ancho. NUNCA pregunta ni menciona PORCENTAJE DE SOMBRA (35/50/70/80/90%) — eso es malla sombra Raschel y el ground cover no se mide así. Tampoco cambia de producto." },
+  { id: "gc-flete-con-cp", group: "groundcover", flow: "groundcover",
+    turns: ["¿Cuál es el costo de envío?", "El rollo completo", "90620"],
+    expect: "Sigue hablando de ground cover (nunca pide porcentaje de sombra) y, cuando llega el código postal, el flete del rollo completo queda en manos de una persona: lo escala o dice que con ese CP se prepara la cotización del envío, pidiendo a lo sumo lo que falte (un teléfono o la colonia). Los errores son contestar 'ya registré tu código postal, ¿te ayudo con algo más?' sin hacer nada con él, y volver a pedir el código postal que el cliente acaba de dar." },
+  { id: "gc-metro-cuadrado", group: "groundcover", flow: "groundcover",
+    turns: ["precio", "¿el precio es por metro cuadrado?"],
+    expect: "Contesta que el precio es por ROLLO o por corte completo, no por metro cuadrado, y puede decir cuánta superficie cubre cada rollo (2x100 = 200 m², 4x100 = 400 m²). El error es ignorar la pregunta y volver a pedir la medida." },
   { id: "gc-tiempo-vs-costo-envio", group: "groundcover", flow: "groundcover",
     turns: ["¿cuánto tarda el envío?"],
     expect: "Contesta el TIEMPO, no el costo: los cortes que se compran en línea llegan normalmente en 2 días hábiles, y el rollo completo va por flete con el tiempo que confirma el asesor. El error es responder cuánto CUESTA el envío a una pregunta de cuánto TARDA." },
@@ -348,6 +361,14 @@ const CASES = [
   // Reportado 2026-10-27 (psid 29251119614512301, "al final contestaba lo mismo"):
   // "Voy a chequear" / "Ya le dije que lo van a checar" / "Una vez me den respuesta yo
   // le digo" recibieron LA MISMA frase tres veces.
+  // Una PREGUNTA que podemos contestar nunca se contesta con el empujón "ya te pasé los
+  // precios" (2026-10-28, dos reportes: unidades y pago).
+  { id: "borde-metro-lineal", group: "borde", flow: "borde",
+    turns: ["Precio", "Esas son las medidas es en cuadrado"],
+    expect: "Aclara que son metros LINEALES, no metros cuadrados, y que el borde mide 13 cm de alto por el largo que elija (6, 9, 18, 54 m). El error es repetir 'ya te pasé los precios de los rollos… ¿cuál te sirve?' sin contestar la pregunta." },
+  { id: "borde-pago-contra-entrega", group: "borde", flow: "borde",
+    turns: ["Precio", "Los pagos son a contra entrega"],
+    expect: "Contesta que NO hay pago contra entrega y explica cómo sí se paga: los rollos de 6, 9 y 18 m se compran en línea por Mercado Libre con compra protegida, y el de 54 m (rollo completo) se cierra directo con nosotros — transferencia, o tarjeta/efectivo en la tienda, y por adelantado si se envía. El error es el empujón 'ya te pasé los precios' sin contestar la pregunta de pago." },
   { id: "borde-cliente-va-a-checar", group: "borde", flow: "borde",
     turns: ["Cual es su precio", "Voy a chequear", "Ya le dije que lo van a checar", "Una vez me den respuesta yo le digo"],
     expect: "Cuando el cliente dice que lo va a checar o que \u00e9l avisar\u00e1, el bot lo reconoce con naturalidad y DEJA DE INSISTIR: nada de repetir los precios ni volver a preguntar cu\u00e1l le sirve y cu\u00e1ntos necesita. Cada respuesta puede ser m\u00e1s corta que la anterior, pero NUNCA la misma frase dos veces." },
