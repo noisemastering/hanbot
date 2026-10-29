@@ -235,6 +235,26 @@ async function locationBlock() {
   }
 }
 
+// THE PAYMENT FACTS, COMPANY-WIDE (the client's rule, restated 2026-10-29):
+//   "if the product is eligible for ML we mention that ML is an option, and for
+//    wholesale we accept transfers, but payments are always upfront"
+// So the invariant is UP FRONT — never on delivery — and Mercado Libre is ONE OPTION
+// where a product is listed there, not the channel the sale has to go through. Buying
+// direct from us is by transferencia (which is also how mayoreo pays), and a customer
+// who comes to the store pays at the store. Earlier versions split the answer by
+// LENGTH and said the cuts "se compran por Mercado Libre", which read as ML-only and
+// tied the payment rule to which roll you wanted. Written once because the same three
+// sentences were edited in two separate gates twice in two days and drifted apart each
+// time — the gates supply the product phrases, this owns the money.
+function paymentAnswer({ mlPhrase = "", directPhrase = "", codAsked = false, mlFirst = false } = {}) {
+  const lead = codAsked
+    ? "No manejamos pago contra entrega: el pago siempre es por adelantado."
+    : "El pago siempre es por adelantado.";
+  const halves = mlFirst ? [mlPhrase, directPhrase] : [directPhrase, mlPhrase];
+  return [lead, ...halves.filter(Boolean), "Si pasas a la tienda, puedes pagar ahí con tarjeta o efectivo."]
+    .join(" ");
+}
+
 async function reforzadaFamilies() {
   if (_refFamCache.fams && Date.now() - _refFamCache.at < 30000) return _refFamCache.fams;
   const W = require("../../models/Workflow");
@@ -1436,26 +1456,21 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           const rollFirstP =
             (dims && dims.some((d) => Number(d) === 100)) || /\b100\b/.test(msg) ||
             !!state.gcOpenerSent || !!(state.priceInfo && state.priceInfo.fullRoll);
-          // "¿Es contra entrega?" (the client's rule, 2026-10-29: "COD is always the
-          // same, we only accept it on purchases at the store") — the ONE exception
-          // belongs to the whole answer, not to the full-roll line, because a customer
-          // asking about a CUT used to hear the rule with no exception at all. Stated
-          // once in the prefix below, and dropped from the roll line so it isn't said twice.
+          // Only the 100 m roll is off Mercado Libre (ROLLO COMPLETO, 2026-10-23); the
+          // cuts are listed there, so ML is named as an option for them. "¿Es contra
+          // entrega?" is a yes/no question and deserves the word "no" in front of the
+          // explanation — leaving it implied ("pagas al ordenar") makes them ask again.
           const codAskedP = /\bcontra\s*entrega\b|\bcontraentrega\b/i.test(msg);
-          const rollLineP =
-            `El rollo completo de 100 m no se vende por Mercado Libre: la compra se cierra directo con nosotros ` +
-            `y se paga por transferencia${codAskedP ? "" : ", o con tarjeta o efectivo si pasas a la tienda"}; si te lo enviamos, el pago es por adelantado.`;
-          const cutLineP = cutsP.length
-            ? `Los cortes de ${cutsP.join(", ")} m se compran en línea por Mercado Libre con compra protegida, y ahí mismo pagas al ordenar.`
-            : "";
-          const partsP = rollFirstP ? [rollLineP, cutLineP] : [cutLineP, rollLineP];
-          // "¿Es contra entrega?" is a yes/no question and deserves the word "no" in
-          // front of the explanation — leaving it implied ("pagas al ordenar") makes
-          // the customer ask again.
-          const codP = codAskedP
-            ? "No manejamos pago contra entrega: lo único que se paga en el momento es si pasas a la tienda por tu pedido. "
-            : "";
-          return ret(`${codP}${partsP.filter(Boolean).join(" ")} ¿Qué medida necesitas? 😊`, {
+          const textP = paymentAnswer({
+            codAsked: codAskedP,
+            mlFirst: !rollFirstP,
+            mlPhrase: cutsP.length
+              ? `Los cortes de ${cutsP.join(", ")} m los encuentras en Mercado Libre con compra protegida, y ahí mismo pagas al ordenar, o directo con nosotros por transferencia.`
+              : "",
+            directPhrase:
+              `El rollo completo de 100 m no se vende por Mercado Libre: ese lo cerramos directo contigo por transferencia.`,
+          });
+          return ret(`${textP} ¿Qué medida necesitas? 😊`, {
             gcPaymentAnswered: rollFirstP ? "rollo" : "corte",
           });
         }
@@ -2565,22 +2580,21 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         }
         cutsB.sort((a, b) => a - b);
         rollsB.sort((a, b) => a - b);
-        // Same single exception as the ground cover twin (the client's rule): the only
-        // payment on the spot is picking the order up at the store. It has to sit in the
-        // prefix, because the 6/9/18 m cuts' line never mentioned it.
+        // Which lengths are on Mercado Libre and which we close ourselves comes from
+        // the catalogue through isFullRoll, never from a hardcoded 54. The money itself
+        // is paymentAnswer's — always up front, ML as an option where it applies.
         const codAskedB = /\bcontra\s*entrega\b|\bcontraentrega\b/i.test(msgB);
-        const codB = codAskedB
-          ? "No manejamos pago contra entrega: lo único que se paga en el momento es si pasas a la tienda por tu pedido. "
-          : "";
-        const cutLineB = cutsB.length
-          ? `Los rollos de ${cutsB.join(", ")} m se compran en línea por Mercado Libre con compra protegida, y ahí mismo pagas al ordenar.`
-          : "";
-        const rollLineB = rollsB.length
-          ? `El de ${rollsB.join(" y ")} m es rollo completo: ese lo cerramos directo contigo y se paga por transferencia${codAskedB ? "" : ", o con tarjeta o efectivo si pasas a la tienda"}; si te lo enviamos, el pago es por adelantado.`
-          : "";
-        return retB(`${codB}${[cutLineB, rollLineB].filter(Boolean).join(" ")} ¿Qué largo necesitas? 😊`, {
-          bordePaymentAnswered: true,
+        const textB = paymentAnswer({
+          codAsked: codAskedB,
+          mlFirst: true,
+          mlPhrase: cutsB.length
+            ? `Los rollos de ${cutsB.join(", ")} m los encuentras en Mercado Libre con compra protegida, y ahí mismo pagas al ordenar, o directo con nosotros por transferencia.`
+            : "",
+          directPhrase: rollsB.length
+            ? `El de ${rollsB.join(" y ")} m es rollo completo: ese lo cerramos directo contigo por transferencia.`
+            : "",
         });
+        return retB(`${textB} ¿Qué largo necesitas? 😊`, { bordePaymentAnswered: true });
       }
 
       if (asksBordeWidth) {

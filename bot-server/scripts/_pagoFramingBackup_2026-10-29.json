@@ -1,0 +1,58 @@
+[
+  {
+    "workflowId": "6a19d9bda16c14f7db660bcc",
+    "workflow": "Malla Sombra Confeccionada con Refuerzo — Venta Retail",
+    "index": 1,
+    "field": "content",
+    "before": "CÓMO SE PAGA (contéstalo TÚ SIEMPRE, sin importar cómo lo pregunten: \"el pago cómo es\", \"forma de pago\", \"cómo se hace la compra\", \"aceptan tarjeta\", \"es contra entrega\", \"no será estafa\"): la compra se realiza por Mercado Libre con COMPRA PROTEGIDA (si no llega o llega mal, le devuelven su dinero) y el pago es al momento de ordenar en línea, con los medios que ofrece Mercado Libre (tarjeta, transferencia, efectivo en tiendas, meses sin intereses según la promoción). NO manejamos pago contra entrega, salvo que el cliente recoja directamente en nuestra planta en Querétaro. NUNCA pases al cliente con un asesor por una pregunta de pago: es información que ya tienes, respóndela y sigue con la venta. Si ya le compartiste un link, recuérdale que ahí mismo completa el pago."
+  },
+  {
+    "workflowId": "6a1dedea9f158542fc7edcd7",
+    "workflow": "Malla Sombra — Rollo",
+    "index": 1,
+    "field": "content",
+    "before": "CÓMO SE PAGA (contéstalo TÚ SIEMPRE, sin importar cómo lo pregunten: \"el pago cómo es\", \"forma de pago\", \"cómo se hace la compra\", \"aceptan tarjeta\", \"es contra entrega\", \"no será estafa\"): la compra se realiza por Mercado Libre con COMPRA PROTEGIDA (si no llega o llega mal, le devuelven su dinero) y el pago es al momento de ordenar en línea, con los medios que ofrece Mercado Libre (tarjeta, transferencia, efectivo en tiendas, meses sin intereses según la promoción). NO manejamos pago contra entrega, salvo que el cliente recoja directamente en nuestra planta en Querétaro. NUNCA pases al cliente con un asesor por una pregunta de pago: es información que ya tienes, respóndela y sigue con la venta. Si ya le compartiste un link, recuérdale que ahí mismo completa el pago. ROLLO COMPLETO — LA EXCEPCIÓN: el rollo completo de 100 m NO se compra por Mercado Libre (no tiene link): lo cierra un asesor, que confirma el pago y cotiza el envío. En ese caso se paga por TRANSFERENCIA, o con TARJETA o EFECTIVO si el cliente pasa por la tienda, y cuando se envía el pago es POR ADELANTADO (no hay pago contra entrega). A quien está cotizando un rollo completo NUNCA le digas que la compra se hace por Mercado Libre ni que pague \"en el link\": para esa medida no hay link."
+  },
+  {
+    "workflowId": "6a2335661b1bdd7c8ded416b",
+    "workflow": "Coldstart",
+    "index": 5,
+    "field": "content",
+    "before": "CÓMO SE PAGA (contéstalo TÚ SIEMPRE, sin importar cómo lo pregunten: \"el pago cómo es\", \"forma de pago\", \"cómo se hace la compra\", \"aceptan tarjeta\", \"es contra entrega\", \"no será estafa\"): la compra se realiza por Mercado Libre con COMPRA PROTEGIDA (si no llega o llega mal, le devuelven su dinero) y el pago es al momento de ordenar en línea, con los medios que ofrece Mercado Libre (tarjeta, transferencia, efectivo en tiendas, meses sin intereses según la promoción). NO manejamos pago contra entrega, salvo que el cliente recoja directamente en nuestra planta en Querétaro. NUNCA pases al cliente con un asesor por una pregunta de pago: es información que ya tienes, respóndela y sigue con la venta. Si ya le compartiste un link, recuérdale que ahí mismo completa el pago. ROLLO COMPLETO — LA EXCEPCIÓN: cualquier rollo completo (100 m de malla o antimaleza, 54 m de borde separador) NO se compra por Mercado Libre (no tiene link): lo cierra un asesor, que confirma el pago y cotiza el envío. En ese caso se paga por TRANSFERENCIA, o con TARJETA o EFECTIVO si el cliente pasa por la tienda, y cuando se envía el pago es POR ADELANTADO (no hay pago contra entrega). A quien está cotizando un rollo completo NUNCA le digas que la compra se hace por Mercado Libre ni que pague \"en el link\": para esa medida no hay link."
+  },
+  {
+    "workflowId": "6a2365cfd03beb5a435d0160",
+    "workflow": "Malla Sombra Confeccionada Sin Refuerzo — Venta Retail",
+    "index": 1,
+    "field": "content",
+    "before": "CÓMO SE PAGA (contéstalo TÚ SIEMPRE, sin importar cómo lo pregunten: \"el pago cómo es\", \"forma de pago\", \"cómo se hace la compra\", \"aceptan tarjeta\", \"es contra entrega\", \"no será estafa\"): la compra se realiza por Mercado Libre con COMPRA PROTEGIDA (si no llega o llega mal, le devuelven su dinero) y el pago es al momento de ordenar en línea, con los medios que ofrece Mercado Libre (tarjeta, transferencia, efectivo en tiendas, meses sin intereses según la promoción). NO manejamos pago contra entrega, salvo que el cliente recoja directamente en nuestra planta en Querétaro. NUNCA pases al cliente con un asesor por una pregunta de pago: es información que ya tienes, respóndela y sigue con la venta. Si ya le compartiste un link, recuérdale que ahí mismo completa el pago."
+  },
+  {
+    "workflowId": "6a286dfbad0ab617355c63f8",
+    "workflow": "Borde separador - Mayoreo y menudeo",
+    "index": 1,
+    "field": "content",
+    "before": "CÓMO SE PAGA (contéstalo TÚ SIEMPRE, sin importar cómo lo pregunten: \"el pago cómo es\", \"forma de pago\", \"cómo se hace la compra\", \"aceptan tarjeta\", \"es contra entrega\", \"no será estafa\"): la compra se realiza por Mercado Libre con COMPRA PROTEGIDA (si no llega o llega mal, le devuelven su dinero) y el pago es al momento de ordenar en línea, con los medios que ofrece Mercado Libre (tarjeta, transferencia, efectivo en tiendas, meses sin intereses según la promoción). NO manejamos pago contra entrega, salvo que el cliente recoja directamente en nuestra planta en Querétaro. NUNCA pases al cliente con un asesor por una pregunta de pago: es información que ya tienes, respóndela y sigue con la venta. Si ya le compartiste un link, recuérdale que ahí mismo completa el pago. ROLLO COMPLETO — LA EXCEPCIÓN: el rollo completo de 54 m NO se compra por Mercado Libre (no tiene link): lo cierra un asesor, que confirma el pago y cotiza el envío. En ese caso se paga por TRANSFERENCIA, o con TARJETA o EFECTIVO si el cliente pasa por la tienda, y cuando se envía el pago es POR ADELANTADO (no hay pago contra entrega). A quien está cotizando un rollo completo NUNCA le digas que la compra se hace por Mercado Libre ni que pague \"en el link\": para esa medida no hay link."
+  },
+  {
+    "workflowId": "6a305211c11b984a67a09ba6",
+    "workflow": "Dinámicas",
+    "index": 7,
+    "field": "content",
+    "before": "CÓMO SE PAGA (contéstalo TÚ SIEMPRE, sin importar cómo lo pregunten: \"el pago cómo es\", \"forma de pago\", \"cómo se hace la compra\", \"aceptan tarjeta\", \"es contra entrega\", \"no será estafa\"): la compra se realiza por Mercado Libre con COMPRA PROTEGIDA (si no llega o llega mal, le devuelven su dinero) y el pago es al momento de ordenar en línea, con los medios que ofrece Mercado Libre (tarjeta, transferencia, efectivo en tiendas, meses sin intereses según la promoción). NO manejamos pago contra entrega, salvo que el cliente recoja directamente en nuestra planta en Querétaro. NUNCA pases al cliente con un asesor por una pregunta de pago: es información que ya tienes, respóndela y sigue con la venta. Si ya le compartiste un link, recuérdale que ahí mismo completa el pago."
+  },
+  {
+    "workflowId": "6a3f358014e50267ac99f614",
+    "workflow": "Ground Cover (Malla Antimaleza)",
+    "index": 1,
+    "field": "content",
+    "before": "CÓMO SE PAGA (contéstalo TÚ SIEMPRE, sin importar cómo lo pregunten: \"el pago cómo es\", \"forma de pago\", \"cómo se hace la compra\", \"aceptan tarjeta\", \"es contra entrega\", \"no será estafa\"): la compra se realiza por Mercado Libre con COMPRA PROTEGIDA (si no llega o llega mal, le devuelven su dinero) y el pago es al momento de ordenar en línea, con los medios que ofrece Mercado Libre (tarjeta, transferencia, efectivo en tiendas, meses sin intereses según la promoción). NO manejamos pago contra entrega, salvo que el cliente recoja directamente en nuestra planta en Querétaro. NUNCA pases al cliente con un asesor por una pregunta de pago: es información que ya tienes, respóndela y sigue con la venta. Si ya le compartiste un link, recuérdale que ahí mismo completa el pago. ROLLO COMPLETO — LA EXCEPCIÓN: el rollo completo de 100 m (2 x 100 m y 4 x 100 m) NO se compra por Mercado Libre (no tiene link): lo cierra un asesor, que confirma el pago y cotiza el envío. En ese caso se paga por TRANSFERENCIA, o con TARJETA o EFECTIVO si el cliente pasa por la tienda, y cuando se envía el pago es POR ADELANTADO (no hay pago contra entrega). A quien está cotizando un rollo completo NUNCA le digas que la compra se hace por Mercado Libre ni que pague \"en el link\": para esa medida no hay link."
+  },
+  {
+    "workflowId": "6a42bbb45ed51bc58b6e5afb",
+    "workflow": "Complementos de Instalación — Venta Retail",
+    "index": 1,
+    "field": "content",
+    "before": "CÓMO SE PAGA (contéstalo TÚ SIEMPRE, sin importar cómo lo pregunten: \"el pago cómo es\", \"forma de pago\", \"cómo se hace la compra\", \"aceptan tarjeta\", \"es contra entrega\", \"no será estafa\"): la compra se realiza por Mercado Libre con COMPRA PROTEGIDA (si no llega o llega mal, le devuelven su dinero) y el pago es al momento de ordenar en línea, con los medios que ofrece Mercado Libre (tarjeta, transferencia, efectivo en tiendas, meses sin intereses según la promoción). NO manejamos pago contra entrega, salvo que el cliente recoja directamente en nuestra planta en Querétaro. NUNCA pases al cliente con un asesor por una pregunta de pago: es información que ya tienes, respóndela y sigue con la venta. Si ya le compartiste un link, recuérdale que ahí mismo completa el pago."
+  }
+]
