@@ -528,7 +528,10 @@ function GcFollowUpView() {
                   <XAxis type="number" stroke="#9ca3af" allowDecimals={false} />
                   <YAxis type="category" dataKey="name" stroke="#9ca3af" width={130} tick={{ fontSize: 12 }} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: 8 }}
+                    contentStyle={{ backgroundColor: '#1f2937', border: '1px solid #374151', borderRadius: 8, color: '#fff' }}
+                    labelStyle={{ color: '#fff' }}
+                    itemStyle={{ color: '#fff' }}
+                    cursor={{ fill: 'rgba(255,255,255,0.06)' }}
                     formatter={(v) => [`${v} cliente(s)`, 'Total']}
                   />
                   <Bar dataKey="value" radius={[0, 4, 4, 0]}>
