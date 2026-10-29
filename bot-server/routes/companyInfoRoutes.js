@@ -84,6 +84,12 @@ router.put("/", authenticate, requireAdmin, async (req, res) => {
       { new: true, upsert: true, runValidators: true }
     ).lean();
 
+    // The bot reads this through a 5-minute cache, and MAPS_URL / STORE_ADDRESS /
+    // SHORT_LOCATION were warmed once at boot — so without this an address change
+    // saved here reached customers only after the next redeploy. That is exactly how
+    // the bot kept posting the old Navex Park address after the move to Colón.
+    try { require('../businessInfoManager').invalidateCache(); } catch (_) {}
+
     res.json({ success: true, data: info });
   } catch (err) {
     res.status(500).json({ success: false, error: err.message });

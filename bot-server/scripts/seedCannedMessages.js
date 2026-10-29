@@ -41,7 +41,7 @@ const MSGS = [
     "Para cotizarle el envío necesito:\n\n¿A nombre de quién hago la cotización?\nCódigo Postal\nColonia\n¿Qué rollos desea cotizar y cuántos?" },
 
   { dynamic: false, title: "Dirección / Ubicación", body:
-    "Buen día, con gusto le atendemos. Estamos en Querétaro y despachamos a toda la República. Le comparto nuestra dirección y ubicación en Google Maps:\n\nHANLOB — Microparque Industrial Navex Park\nCalle Loma de San Gremal No. 108, bodega 73\nColonia Ejido Santa María Magdalena, 76137\nSantiago de Querétaro, Qro.\n\nhttps://www.google.com/maps/place/Hanlob/@20.5937761,-100.4633763,479m/data=!3m1!1e3!4m6!3m5!1s0x85d3512fd56b68f3:0x34ca9be8b6e65a52!8m2!3d20.5947278!4d-100.4629681!16s%2Fg%2F11fskp_mvj?hl=es-419&entry=ttu" },
+    "Buen día, con gusto le atendemos. Estamos en Colón, Querétaro y despachamos a toda la República. Le comparto nuestra dirección y ubicación en Google Maps:\n\nHANLOB — Planta Colón\nQRO 110 7380, El Arroyito\nColón, Qro., C.P. 76286\n\nhttps://maps.app.goo.gl/7g9HmoY4TtaHQ26e8" },
 
   { dynamic: false, title: "Mayoreo desde 5 mallas", body:
     "🎉 ¡Precio de mayoreo desde 5 mallas! 🎉\n\nTe compartimos nuestra lista de precios actualizada, donde ahora puedes acceder a precio de mayoreo a partir de la compra de 5 mallas en adelante.\n\nEs una excelente oportunidad para comenzar o fortalecer tu venta de malla sombra con mejores márgenes, sin compras excesivas y de forma sencilla." },

@@ -2229,7 +2229,7 @@ async function handleGlobalIntents(msg, psid, convo = {}) {
     if (/quer[ée]taro/i.test(msg)) {
       return {
         type: "text",
-        text: `Sí, estamos en Querétaro 🏡. Nuestra bodega está en el Microparque Industrial Navex Park.\n\nRecuerda que enviamos a todo México y Estados Unidos.\n\n¿Qué medida te interesa?`
+        text: `Sí, estamos en Querétaro 🏡. Nuestra planta está en El Arroyito, Colón.\n\nRecuerda que enviamos a todo México y Estados Unidos.\n\n¿Qué medida te interesa?`
       };
     }
 

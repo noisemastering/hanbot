@@ -217,15 +217,17 @@ async function locationBlock() {
     parts.push(`Estamos en ${biz.city || "Querétaro"}${biz.state && biz.state !== biz.city ? `, ${biz.state}` : ""} y hacemos envíos a toda la República. 📦`);
     if (biz.fullAddress) parts.push(`📍 ${biz.fullAddress}`);
     if (biz.googleMapsUrl) parts.push(`🌐 ${biz.googleMapsUrl}`);
-    // MOVE NOTICE — temporary and self-retiring. These are the last days at the
-    // current site; from Nov 1 customers find Hanlob at the Colón plant. Shown only
-    // while CompanyInfo still holds the OLD address (C.P. 76137) AND we are before
-    // Nov 1, so it disappears on its own when the address is updated and in any case
-    // after the move — no second deploy, and it can never contradict the address
-    // printed above it.
-    const MOVE_CUTOFF = Date.parse("2026-11-01T06:00:00Z"); // Nov 1, 00:00 CST
-    if (Date.now() < MOVE_CUTOFF && String(biz.zipCode || "").trim() === "76137") {
-      parts.push("Estos son nuestros últimos días en esta ubicación: a partir del 1ero de noviembre nos podrás encontrar en nuestra planta en Colón. 🚚");
+    // MOVE NOTICE — a correction, and self-retiring. The move to the Colón plant has
+    // ALREADY happened: the team has been sending customers the Colón address since
+    // 2026-10-21, and an asesora reported the bot still posting the Navex Park one
+    // ("La dirección que coloco ya no es", 2026-10-28). It fires only while
+    // CompanyInfo still holds the OLD address (C.P. 76137), so the moment that record
+    // is updated this disappears on its own and can never contradict the address
+    // printed above it. It is deliberately NOT a promise about a future date — the
+    // first version said "a partir del 1ero de noviembre", which was already false
+    // when it went out.
+    if (String(biz.zipCode || "").trim() === "76137") {
+      parts.push("⚠️ Ojo: ya nos mudamos. Ahora nos encuentras en nuestra planta en Colón, Querétaro — QRO 110 7380, El Arroyito, C.P. 76286. 🚚");
     }
     return parts;
   } catch {

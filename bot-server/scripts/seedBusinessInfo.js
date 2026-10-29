@@ -29,7 +29,7 @@ async function seedBusinessInfo() {
         "442 352 1646"
       ],
       hours: "Lunes a Viernes de 8:00 a 18:00",
-      address: "Calle Loma de San Gremal No. 108, bodega 73, Col. Ejido Santa María Magdalena, C.P. 76137, Santiago de Querétaro, Qro.",
+      address: "QRO 110 7380, El Arroyito, Colón, Qro., C.P. 76286",
       updatedAt: new Date()
     });
 

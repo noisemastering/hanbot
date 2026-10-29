@@ -11,7 +11,7 @@ const openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 const { INTENTS } = require("../classifier");
 const ProductFamily = require("../../models/ProductFamily");
 const { getOrCreateClickLink } = require("../../tracking");
-const { MAPS_URL } = require("../../businessInfoManager");
+const { MAPS_URL, SHORT_LOCATION } = require("../../businessInfoManager");
 
 const AVAILABLE_INTENTS = Object.values(INTENTS).join(", ");
 
@@ -134,7 +134,7 @@ async function tryRegexAnswer(segment, convo = null) {
   }
 
   if (intent === "location_query") {
-    return { type: 'text', text: `Estamos en Querétaro. Te comparto nuestra ubicación:\n${MAPS_URL}\n\nRecuerda que enviamos a todo México.`, isLocation: true };
+    return { type: 'text', text: `Estamos en ${SHORT_LOCATION}. Te comparto nuestra ubicación:\n${MAPS_URL}\n\nRecuerda que enviamos a todo México.`, isLocation: true };
   }
 
   if (intent === "installation_query") {
@@ -189,7 +189,7 @@ COLORES: solo beige.
 MEDIDAS: Solo medidas estándar en números enteros (ej: 2x4, 3x5, 4x6). NO manejamos medidas con decimales (ej: 2.50, 3.50). Si preguntan por una medida con decimales, explicar que solo manejamos medidas enteras y que se recomienda la medida inmediata inferior para dar espacio a los tensores o soga sujetadora.
 ENVÍO: incluido a todo México vía Mercado Libre.
 PAGO: El pago se realiza al ordenar en Mercado Libre (tarjeta, OXXO, meses sin intereses). NO contra entrega. Tu compra es segura.
-UBICACIÓN: Querétaro, Microparque Industrial Navex Park, Tlacote.
+UBICACIÓN: ${SHORT_LOCATION} (planta Hanlob).
 MAYOREO: a partir de 5 piezas.
 WhatsApp: https://wa.me/524425957432
 

@@ -9,7 +9,7 @@
 // }
 
 const { OpenAI } = require("openai");
-const { getBusinessInfo, MAPS_URL, STORE_ADDRESS } = require("../../businessInfoManager");
+const { getBusinessInfo, MAPS_URL, STORE_ADDRESS, SHORT_LOCATION } = require("../../businessInfoManager");
 const { updateConversation } = require("../../conversationManager");
 const { executeHandoff } = require("../utils/executeHandoff");
 const { isBusinessHours } = require("../utils/businessHours");
@@ -113,8 +113,8 @@ FORMATO DE RESPUESTAS:
 
     const businessData = `DATOS DEL NEGOCIO:
 ${channelBlock}
-- Ubicación: Querétaro, Microparque Industrial Navex Park, Tlacote
-- Dirección: ${STORE_ADDRESS || 'Microparque Industrial Navex Park, Tlacote, Querétaro'}
+- Ubicación: ${SHORT_LOCATION}
+- Dirección: ${STORE_ADDRESS || 'Planta Hanlob, Colón, Querétaro'}
 - Google Maps: ${MAPS_URL}
 - Teléfono: ${info?.phones?.[0] || '442 352 1646'}
 - WhatsApp: https://wa.me/524425957432

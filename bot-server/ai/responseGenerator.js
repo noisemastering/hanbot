@@ -5,7 +5,7 @@
 const { OpenAI } = require("openai");
 const openai = new OpenAI({ apiKey: process.env.AI_API_KEY });
 const { handleOpenAIError } = require("./utils/openaiErrorHandler");
-const { MAPS_URL, STORE_ADDRESS } = require("../businessInfoManager");
+const { MAPS_URL, STORE_ADDRESS, SHORT_LOCATION } = require("../businessInfoManager");
 
 /**
  * Generate a natural response using AI
@@ -76,8 +76,8 @@ VARIANTES QUE NO FABRICAMOS:
 - Servicio de reparación o mantenimiento
 
 DATOS DEL NEGOCIO:
-- Ciudad: Querétaro
-- Ubicación corta: Microparque Industrial Navex Park, Tlacote
+- Ciudad: ${SHORT_LOCATION}
+- Ubicación corta: Planta Hanlob, ${SHORT_LOCATION}
 - Dirección completa: ${STORE_ADDRESS}
 - Link de ubicación en Google Maps: ${MAPS_URL}
 - Envío: A todo México y Estados Unidos
@@ -130,7 +130,7 @@ ESCENARIOS ESPECIALES:
 - product_comparison: El cliente pregunta la diferencia entre productos. Lee userMessage para entender qué comparan (raschel vs monofilamento, confeccionada vs rollo, etc.) y explica las diferencias.
 - location_query: El cliente pregunta dónde estamos. Analiza userQuestion para decidir:
   1. Si preguntan "están en [ciudad]?" (ej: Mexicali) → Di que estamos en Querétaro pero enviamos a esa ciudad. NO des dirección.
-  2. Si quieren VISITAR o piden ubicación general → Da ubicación corta: "Querétaro, en el Microparque Industrial Navex Park" + comparte el link de Google Maps.
+  2. Si quieren VISITAR o piden ubicación general → Da ubicación corta: "nuestra planta en ${SHORT_LOCATION}" + comparte el link de Google Maps.
   3. Si piden dirección específica, referencia, calle, o si includeFullAddress es true → Da la dirección completa (fullAddress) Y el link de Google Maps.
   4. Si solo preguntan "dónde están?" sin contexto → Menciona Querétaro + comparte el link de Google Maps.
   REGLA: SIEMPRE comparte el link de Google Maps cuando pregunten ubicación. Si el cliente pide referencias o dice que no puede ubicar en el mapa, da la dirección completa. SIEMPRE incluye "Recuerda que enviamos a todo México y Estados Unidos".

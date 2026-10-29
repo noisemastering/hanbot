@@ -63,7 +63,8 @@ module.exports = async function pendingResponses(ctx, next) {
 
       let text = `Perfecto, enviamos a ${locationStr} a trav\u00E9s de Mercado Libre \u{1F4E6}`;
       if (isQueretaro) {
-        text += `\n\nTambi\u00E9n puedes visitar nuestra tienda en el parque industrial Navex, Tlacote.`;
+        const { SHORT_LOCATION } = require("../../businessInfoManager");
+        text += `\n\nTambi\u00E9n puedes pasar por tu pedido a nuestra planta en ${SHORT_LOCATION}.`;
       }
 
       const hasSpecs = convo.productSpecs?.width || convo.productSpecs?.height || convo.productSpecs?.dimensions;

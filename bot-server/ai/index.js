@@ -1076,7 +1076,8 @@ async function _generateReplyImpl(userMessage, psid, referral = null) {
       let response = `Perfecto, enviamos a ${locationStr} a través de Mercado Libre 📦`;
 
       if (isQueretaro) {
-        response += `\n\nTambién puedes visitar nuestra tienda en el parque industrial Navex, Tlacote.`;
+        const { SHORT_LOCATION } = require("../businessInfoManager");
+        response += `\n\nTambién puedes pasar por tu pedido a nuestra planta en ${SHORT_LOCATION}.`;
       }
 
       // If we already have dimensions or shared a product, don't ask "what size?" again
