@@ -44,6 +44,17 @@ const requireSuperAdmin = (req, res, next) => {
   next();
 };
 
+// The Ground Cover follow-up switch is the one control here that is NOT an emergency
+// lever: it is a campaign the supervisors run, and its own page (/playground/
+// seguimiento-ground-cover) is open to super_user and above — so the switch is too.
+// Everything else in Spec Ops stays super_admin.
+const requireSuperUser = (req, res, next) => {
+  if (!["super_admin", "admin", "super_user"].includes(req.user.role)) {
+    return res.status(403).json({ success: false, error: "No tienes permiso para cambiar el seguimiento" });
+  }
+  next();
+};
+
 router.use(authenticate);
 
 const DEFAULT_BANNER = "El uso de OpenAI se está agotando, es necesario liberar el sistema para continuar operando";
@@ -253,15 +264,15 @@ router.post("/fb-comment-reply", requireSuperAdmin, async (req, res) => {
   }
 });
 
-// GROUND COVER 24h follow-up — super_admin. Body: { engage: boolean }. engage=true →
+// GROUND COVER 24h follow-up — super_user and above. Body: { engage: boolean }. engage=true →
 // the job starts sending the campaign's single follow-up to pending Ground Cover
 // conversations (client spec 2026-10-27). OFF by default: it messages real customers
 // unprompted. A DB switch on purpose, so it is flipped here and never on Railway.
-router.post("/gc-follow-up", requireSuperAdmin, async (req, res) => {
+router.post("/gc-follow-up", requireSuperUser, async (req, res) => {
   try {
     const engage = !!req.body.engage;
     const s = await SystemState.getState();
-    s.gcFollowUp = { engaged: engage, at: engage ? new Date() : null, by: engage ? (req.user.username || req.user.email || "super_admin") : null };
+    s.gcFollowUp = { engaged: engage, at: engage ? new Date() : null, by: engage ? (req.user.username || req.user.email || req.user.role) : null };
     await s.save();
     invalidate();
     console.warn(`📨 [SpecOps] Ground Cover follow-up ${engage ? "ON" : "off"} by ${req.user.username || req.user.email}`);
