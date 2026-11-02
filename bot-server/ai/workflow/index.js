@@ -546,7 +546,11 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   const FOREIGN_PRODUCTS = [
     { re: /\bborde|separador|bordillo|delimitador/i, flow: /borde|separador/i },
     { re: /antimaleza|anti\s*-?\s*malez|anti\s*-?\s*males|ground\s*cover/i, flow: /ground\s*cover|antimaleza/i },
-    { re: /\bmalla\s+sombra|\braschel\b|confeccionad/i, flow: /sombra|raschel|confeccionad|rollo/i },
+    // Bare "sombra" counts, not just "malla sombra": on the antimaleza and borde flows a
+    // customer who says "quiero sombra para mis vacas" wants the other product, and the
+    // opener used to answer them with antimaleza promo prices. (a0-sombra) runs ahead of
+    // this and owns "¿esta malla DA sombra?", so the two never compete.
+    { re: /\bsombra\b|\braschel\b|confeccionad/i, flow: /sombra|raschel|confeccionad|rollo/i },
     { re: /sujetador|ojillo|argolla|cord[oó]n\s+uv/i, flow: /complement|sujetador|kit/i },
   ];
   const namesOtherProduct = (t) => {
@@ -708,6 +712,34 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           fromNode: { id: currentNode.id, name: currentNode.name },
           toNode: { id: currentNode.id, name: currentNode.name },
           greeting: true,
+        },
+      };
+    }
+  }
+
+  // A PRODUCT WE DON'T MAKE GETS A STRAIGHT ANSWER, NOT A PRICE LIST (2026-11-02,
+  // wa:5213311303031, "no respondió lo que se preguntó"). He sent a video and asked
+  // three times for wire mesh — "La maya donde sercan alas cabras?" — and got malla
+  // sombra offers and then the ask for his phone and CP; Noemí answered it by hand.
+  // Flow-agnostic and placed here on purpose, ahead of every flow's price gates: wire
+  // mesh is not a measure, not a length and not a colour, so whichever gate ran first
+  // would otherwise claim it. The scope classifier also learned to call it not_sold, but
+  // this is the deterministic half — the standing lesson that a rule living only in a
+  // prompt is not in force. `utils/wireMesh.js` owns both the predicate and the wording.
+  if (userMessage && !state.wireMeshAnswered) {
+    const { asksWireMesh, wireMeshAnswer } = require("../../utils/wireMesh");
+    if (asksWireMesh(String(userMessage))) {
+      state.wireMeshAnswered = true;
+      const reply = wireMeshAnswer();
+      history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+      return {
+        reply,
+        state: { ...state, history, nodeId: currentNode.id },
+        diagnostics: {
+          workflow: { id: String(workflow._id), name: workflow.name },
+          fromNode: { id: currentNode.id, name: currentNode.name },
+          toNode: { id: currentNode.id, name: currentNode.name },
+          wireMeshAnswered: true,
         },
       };
     }
