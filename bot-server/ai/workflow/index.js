@@ -731,7 +731,40 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       _d.length <= 90 &&
       !/\d/.test(_d) &&
       /\b(voy\s+a\s+(chequear|checar|revisar|verlo|verla|pensarlo?|consultarlo?|preguntar)|lo\s+(checo|chequeo|reviso|pienso|consulto|platico|pregunto)|d[eé]jame\s+(pensarlo|checarlo|revisarlo|consultarlo|verlo|preguntar)|lo\s+voy\s+a\s+pensar|ya\s+le\s+dije\s+que\s+lo\s+van\s+a\s+(checar|chequear|revisar|ver)|van\s+a\s+(checarlo|chequearlo|revisarlo|verlo)|una\s+vez\s+me\s+den\s+respuesta|cuando\s+me\s+(digan|confirmen|contesten|respondan)|yo\s+(le|les|te)\s+(aviso|digo|busco|contacto|marco|escribo)|(le|les|te)\s+aviso|lo\s+comento\s+con|lo\s+platico\s+con)\b/i.test(_d);
-    if (defers) {
+    // A BARE THANK-YOU IS A SIGN-OFF TOO, AND SO IS "ESPERO EL BUEN FIN" (2026-11-02,
+    // wa:5217443178473, "se repitió / se atoró"). "Ok gracias", "Muy amable" and "Solo
+    // espero el buen fin" each got the §B nudge — the same sentence four times in three
+    // minutes. The gate above only knew the "voy a checar" family; a courtesy close and
+    // a wait-for-the-sale are the same situation, and the right answer is the same one:
+    // acknowledge and get out of the way.
+    // COURTESY is matched on the WHOLE message, token by token, and it must carry an
+    // actual thanks — so "Gracias, ¿me pasas el link?" is not a sign-off, and a bare
+    // "sí"/"claro" (which confirms something we asked) can never land here at all.
+    const COURTESY = new Set(
+      ("ok okey okay oka sale va vale bien muy mucha muchas muchisima muchisimas mil gracias grax " +
+       "amable amables de acuerdo entendido entendida enterado enterada por tu su la el lo info " +
+       "informacion ayuda todo atencion apoyo buen buenos buena buenas dia dias tarde tardes noche " +
+       "noches saludos igualmente quedo estamos perfecto excelente genial listo").split(" ")
+    );
+    const _plain = _d
+      .toLowerCase()
+      .normalize("NFD")
+      .replace(/[̀-ͯ]/g, "")
+      .replace(/[^a-z\s]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+    const _tokens = _plain ? _plain.split(" ") : [];
+    const _isThanks =
+      !/\?/.test(_d) &&
+      _tokens.length > 0 &&
+      _tokens.length <= 7 &&
+      _tokens.some((w) => w === "gracias" || w === "grax" || w === "amable" || w === "amables") &&
+      _tokens.every((w) => COURTESY.has(w));
+    // Waiting for a sale is a date, not a no: "Solo espero el buen fin".
+    const _waitsForSale =
+      /\b(buen\s+fin|black\s+friday|hot\s+sale|quincena|aguinaldo|fin\s+de\s+mes)\b/i.test(_d) &&
+      /\b(espero|esperar\w*|esperando|hasta|cuando|para|en\s+la|despu[eé]s)\b/i.test(_d);
+    if (defers || _isThanks || _waitsForSale) {
       // Each repeat gets SHORTER, never louder. Someone saying "I'll check" three
       // times is winding the conversation down, and answering with the same warm
       // paragraph every time is its own kind of nagging. The last line is the floor:
@@ -741,7 +774,11 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       state.customerDeferred = true;
       const reply =
         _n === 1
-          ? `¡Claro, sin problema! Aquí quedo a la orden — cuando lo revises me dices y seguimos. 😊`
+          ? _isThanks
+            ? `¡Con gusto! 🙌 Aquí estamos cuando lo necesites.`
+            : _waitsForSale
+            ? `¡Perfecto! Aquí estamos cuando quieras cerrarlo. 😊`
+            : `¡Claro, sin problema! Aquí quedo a la orden — cuando lo revises me dices y seguimos. 😊`
           : _n === 2
           ? `¡Claro! Aquí estamos cuando lo necesites. 😊`
           : `Quedo al pendiente. 🙌`;
