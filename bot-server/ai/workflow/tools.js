@@ -644,7 +644,7 @@ ${currentIsColdStart ? `\n⚠️ EL FLUJO ACTUAL ES DE TRIAGE (ARRANQUE EN FRÍO
 
 REGLAS:
 - "no_product": el mensaje NO nombra un producto concreto. Saludos, agradecimientos, un color suelto (beige/negro/verde…), o preguntas como "¿qué hago?", "me interesa", "info" → no_product. Los COLORES son ATRIBUTOS, nunca productos.
-- IMPORTANTE — una PREGUNTA o PETICIÓN que SÍ nombra un producto sigue nombrando ese producto: "¿tienen X?", "¿venden X?", "¿manejan X?", "¿hay X?", "busco X", "quiero X", "necesito X", "me das precio de X" → EXTRAE X y clasifícalo normalmente (NUNCA lo marques no_product solo por venir como pregunta). Ej.: "¿venden sujetadores plásticos?" nombra el producto "sujetadores plásticos".
+- IMPORTANTE — una PREGUNTA o PETICIÓN que SÍ nombra un producto sigue nombrando ese producto: "¿tienen X?", "¿venden X?", "¿manejan X?", "¿hay X?", "busco X", "quiero X", "necesito X", "me das precio de X" → EXTRAE X y clasifícalo normalmente (NUNCA lo marques no_product solo por venir como pregunta). Ej.: "¿venden sujetadores plásticos?" nombra el producto "sujetadores plásticos". Esto incluye la forma NEGATIVA, que es como el cliente reclama cuando cree que no lo tenemos: "¿no vendes X?", "¿no manejan X?", "¿no tienen X?", "¿no hay X?", "¿ya no venden X?" nombran X EXACTAMENTE igual que la forma afirmativa — NUNCA las marques no_product.
 - "current": el producto pertenece al FLUJO ACTUAL (misma categoría que ya está atendiendo). ${currentIsColdStart ? "NO USES ESTE VALOR — el flujo actual es de triage." : ""}
 - "other_flow": pertenece claramente a OTRO flujo activo distinto del actual (un especialista). Pon su nombre EXACTO en targetFlow.
 - "needs_human": es malla sombra o algo que Hanlob fabrica, pero ningún flujo activo lo cubre.

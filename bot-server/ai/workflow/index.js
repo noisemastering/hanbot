@@ -246,13 +246,16 @@ async function locationBlock() {
 // tied the payment rule to which roll you wanted. Written once because the same three
 // sentences were edited in two separate gates twice in two days and drifted apart each
 // time — the gates supply the product phrases, this owns the money.
-function paymentAnswer({ mlPhrase = "", directPhrase = "", codAsked = false, mlFirst = false } = {}) {
+function paymentAnswer({ mlPhrase = "", directPhrase = "", codAsked = false, mlFirst = false, leadLast = false } = {}) {
   const lead = codAsked
     ? "No manejamos pago contra entrega: el pago siempre es por adelantado."
     : "El pago siempre es por adelantado.";
   const halves = mlFirst ? [mlPhrase, directPhrase] : [directPhrase, mlPhrase];
-  return [lead, ...halves.filter(Boolean), "Si pasas a la tienda, puedes pagar ahí con tarjeta o efectivo."]
-    .join(" ");
+  const body = [...halves.filter(Boolean), "Si pasas a la tienda, puedes pagar ahí con tarjeta o efectivo."];
+  // "¿Dónde se consigue?" is a question about the CHANNEL, so the channels lead and the
+  // money invariant closes. It is the same sentence either way — this owner still writes
+  // it — only the order changes, so the rule cannot drift by being reordered.
+  return (leadLast ? [...body, lead] : [lead, ...body]).join(" ");
 }
 
 async function reforzadaFamilies() {
@@ -526,6 +529,35 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     } catch { return false; }
   })();
 
+  // A GATE MUST NOT ANSWER ABOUT A PRODUCT ITS FLOW DOES NOT SELL (2026-11-02, three
+  // reports with one cause). On the ground cover flow, "quiero borde plastico , pero
+  // tengo un vivero dame precio" was answered with the two antimaleza rolls — and so
+  // were both follow-ups that asked for the borde price again (sandbox, "se atora con
+  // una pregunta fuera del producto central"). Mirrored on the borde flow, "Malla Anti
+  // malesa" got the §B nudge instead of the ground cover prices (wa:5215549680085), and
+  // Noemí sent them by hand. The scope classifier gets all of these RIGHT; the problem
+  // is that the gates run hundreds of lines before §1.5's switch probe, so whichever
+  // gate claims the turn has the last word. This guard only DISQUALIFIES a gate — it
+  // answers nothing and routes nothing — so the decision lands where it belongs, with
+  // the classifier, and the flow switch happens as it already knows how to.
+  // Each entry is one routable product: `re` is what customers call it, `flow` is how
+  // the flow that SELLS it names itself, so "borde" is foreign on ground cover and
+  // native on the borde flow without either gate having to know about the other.
+  const FOREIGN_PRODUCTS = [
+    { re: /\bborde|separador|bordillo|delimitador/i, flow: /borde|separador/i },
+    { re: /antimaleza|anti\s*-?\s*malez|anti\s*-?\s*males|ground\s*cover/i, flow: /ground\s*cover|antimaleza/i },
+    { re: /\bmalla\s+sombra|\braschel\b|confeccionad/i, flow: /sombra|raschel|confeccionad|rollo/i },
+    { re: /sujetador|ojillo|argolla|cord[oó]n\s+uv/i, flow: /complement|sujetador|kit/i },
+  ];
+  const namesOtherProduct = (t) => {
+    const x = String(t || "");
+    // "¿trae refuerzo en los bordes?" / "las orillas vienen reforzadas" is an ATTRIBUTE
+    // of a malla, not the separador product — the same exception the classifier makes.
+    if (/\brefuerzo|reforzad|orilla|costura/i.test(x)) return false;
+    const here = String(workflow?.name || "");
+    return FOREIGN_PRODUCTS.some((p) => p.re.test(x) && !p.flow.test(here));
+  };
+
   // COLONIA. The asesor quotes the freight from the CP *and* the colonia, and the Ground
   // Cover campaign asks for it by name — but the engine captured only the CP, so a
   // customer who answered "CP 76000, colonia Centro" had half their answer thrown away.
@@ -588,6 +620,41 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             !/\d{5}/.test(_wsMsg) &&
             !/\d{10}/.test(_wsMsg.replace(/\D/g, "")) &&
             (/\b\d{1,3}\b/.test(_wsMsg) || /\b(un|uno|una|dos|tres|cuatro|cinco|seis|siete|ocho|nueve|diez)\b/i.test(_wsMsg))));
+      // A COURTESY REPLY IS NOT CONTACT INFO, AND IT MUST NOT RAISE AN ALERT
+      // (2026-11-02, two asesora reports on the same day: "Me paso la alerta pero no
+      // requiere de ayuda" for psid 9842980679120728, whose whole reply was "😏", and
+      // "El cliente no requiera de atención y me mando la alerta" for 9864541876987642,
+      // who wrote "Gracias por tu atención"). The two guards above drop the pending ask
+      // when the customer comes back with a NEW QUESTION, but a thank-you and an emoji
+      // are neither a question nor contact — so they fell straight through to the
+      // escalation and woke a salesperson with a lead holding nothing at all. That is
+      // the same thing the cold-lead split was written to stop (2026-10-27, the user's
+      // rule: "if they don't provide their info for a quote we won't bother the
+      // salesforce with dead customers") — it just never covered the case where the
+      // customer DOES answer, politely, with nothing. Reachability is judged by the one
+      // predicate that owns it, so a name alone still does not count as a way to reach
+      // anyone. The ask is dropped rather than repeated: one ask only, we never nag.
+      // handoffContactOf reads a Conversation shape (workflowState.lead / .location) and
+      // returns {phone, email, zip, any} — the object itself is always truthy, so it is
+      // `.any` that answers the question.
+      const _reachable = require("../../utils/coldLead").handoffContactOf({
+        workflowState: { lead: state.lead || {}, location: state.location || {} },
+      }).any;
+      if (!_reachable && !(state.lead && state.lead.name)) {
+        console.log(`🙇 [workflow] courtesy reply, no data — no alert raised for ${opts.psid || "(no psid)"}`);
+        const closing = "¡Con gusto! 🙌 Aquí estamos cuando quieras continuar.";
+        history.push({ role: "assistant", text: closing, nodeId: currentNode.id, at: new Date() });
+        return {
+          reply: closing,
+          state: { ...state, history, nodeId: currentNode.id, pendingHandoff: null },
+          diagnostics: {
+            workflow: { id: String(workflow._id), name: workflow.name },
+            fromNode: { id: currentNode.id, name: currentNode.name },
+            toNode: { id: currentNode.id, name: currentNode.name },
+            pendingHandoffDroppedNoData: true,
+          },
+        };
+      }
       const baseReason = state.pendingHandoff.reason || "El cliente requiere atención de un asesor";
       const reason = (state.lead && state.lead.wholesaleQty) ? `${baseReason} — interés: ~${state.lead.wholesaleQty} piezas` : baseReason;
       const who = state.lead && state.lead.name ? `, ${firstGivenName(state.lead.name)}` : "";
@@ -1294,6 +1361,35 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           return `¡Con gusto te ayudamos con tu cotización! 😊📋\nPara prepararla e incluir el envío, ¿nos compartes?\n${lines.join("\n")}`;
         };
 
+        // (a0-sombra) "¿ESTA MALLA TAMBIÉN SIRVE DE SOMBRA?" Reported 2026-10-30
+        // (psid 29285635167791094): right after being quoted the 2 x 100 m roll he
+        // asked "¿Está malla también sirve para instalarse como sombra para las
+        // plantas?" and got the SAME price again — '"Negro" (2x100m) tiene un precio
+        // de $2111.20' — plus the data ask. Noemí answered it by hand: the antimaleza
+        // goes on the GROUND and does not give shade; what gives shade is the Raschel.
+        // It is the mirror of the 2026-10-28 bug in the other direction (the Raschel
+        // flow asking a ground cover customer for a shade %), so the answer says what
+        // this product IS for and names the other one WITHOUT switching: he asked
+        // about THIS roll, and if he wants the Raschel his next message routes there
+        // through §1.5 as usual. No percentage is quoted here, so stripShadeTalk —
+        // which drops shade-% talk from a ground cover reply — leaves it intact.
+        const asksAsShade =
+          _gcFlow &&
+          /\bsombra|sombrear|asolear|sol\b/i.test(msg) &&
+          /\b(sirve|sirven|funciona|funcionan|puede|puedo|se\s+puede|usar|usarse|poner|ponerse|instalar|instalarse|tambi[eé]n|tapar|cubrir\s+del\s+sol)\b/i.test(msg) &&
+          // "áreas verdes" is landscaping talk, and a customer naming malla sombra
+          // outright is asking for the other product — §1.5 routes that one.
+          !/\b[aá]reas?\s+verdes?\b/i.test(msg) &&
+          !/\bmalla\s+sombra\b/i.test(msg);
+        if (asksAsShade) {
+          return ret(
+            `El ground cover (malla antimaleza) va en el SUELO para que no crezca la maleza, no da sombra: por eso no se mide en porcentaje. ` +
+              `Para dar sombra a las plantas lo que se usa es la malla tipo Raschel, que también fabricamos. ` +
+              `¿Te comparto precios de la malla sombra o seguimos con la antimaleza? 😊`,
+            { gcShadeUseAnswered: true }
+          );
+        }
+
         // (a0-envio) WHAT THE SHIPPING ACTUALLY COSTS ON A ROLL FLOW. Reported
         // 2026-10-27 (wa:5217227079986): "¿Cuál es el costo de envío?" was answered
         // "El envío ya va incluido en el precio, no se cobra aparte", and two minutes
@@ -1543,7 +1639,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             // list below owns it, and answering only the price half would drop the
             // other ("Que medidas tiene y precio?" is one question, not two turns).
             !/\b(medidas?|tama[nñ]os?|presentaci[oó]n(es)?|dimensiones?|anchos?|largos?|hect[aá]reas?)\b/i.test(t) &&
-            !/\b(env[ií]o|entrega|pago|pagar|factur|garant|instalaci|ubicaci|direcci|d[oó]nde|color|negro|blanco|mayoreo|distribuidor)\b/i.test(t);
+            !/\b(env[ií]o|entrega|pago|pagar|factur|garant|instalaci|ubicaci|direcci|d[oó]nde|color|negro|blanco|mayoreo|distribuidor)\b/i.test(t) &&
+            // A first message that names another product is that product's to answer.
+            !namesOtherProduct(t);
           if (isOpener) {
             const rows = await gcFullRollRows();
             if (rows.length) {
@@ -1645,7 +1743,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // size list only wins when the message names the SIZES themselves.
         const asksSizesStrict =
           /\b(medidas?|tama[nñ]os?|presentaci[oó]n(es)?|dimensiones?|anchos?|largos?)\b/i.test(msg);
-        if (asksBroadPrice && !asksSizesStrict && !dims && carried.size === 0 && rolloFams.length) {
+        if (asksBroadPrice && !asksSizesStrict && !dims && carried.size === 0 && rolloFams.length &&
+            !namesOtherProduct(msg)) {
           try {
             let frontierF = rolloFams.map((f) => String(f.id)).filter(Boolean);
             const leavesF = [];
@@ -1693,7 +1792,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             console.error("\u26a0\ufe0f ground cover full-roll quote failed:", e.message);
           }
         }
-        if ((asksWhichSizes || asksBroadPrice) && !dims && carried.size === 0 && rolloFams.length) {
+        if ((asksWhichSizes || asksBroadPrice) && !dims && carried.size === 0 && rolloFams.length &&
+            !namesOtherProduct(msg)) {
           try {
             let frontierS = rolloFams.map((f) => String(f.id)).filter(Boolean);
             const leavesS = [];
@@ -2597,6 +2697,107 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         return retB(`${textB} ¿Qué largo necesitas? 😊`, { bordePaymentAnswered: true });
       }
 
+      // 0-quater) WHAT THE SHIPPING COSTS, AND HOW LONG IT TAKES — on the BORDE flow.
+      // Reported 2026-10-30 (wa:5219541278285): "Incluye envío ? Estoy en puerto
+      // escondido Oax ?" got the §B catch-all nudge, he asked again in plain words
+      // ("Gracias por los precios pero pregunté si ese precio incluye gastos de envío ?"),
+      // got the same nudge, wrote "Gastos de Envío" and got it a THIRD time, and Noemí
+      // answered it by hand. The ground cover flow has had this gate since 2026-10-27
+      // (a0-envio); the borde had nothing, although the facts are the same shape and
+      // live in its own "Tiempo de entrega" knowledge entry: what is bought on Mercado
+      // Libre carries the shipping in the price, and a ROLLO COMPLETO (the borde's 54 m)
+      // moves as freight quoted against the CP. Both halves go out every time, the one
+      // that applies first — an answer built from two true halves cannot be wrong.
+      // "Gastos de envío" and "costo del envío" name the cost by themselves — he wrote
+      // exactly that on the third try and got the nudge again, because the second half
+      // of this test wanted a word like "cuánto" that his message never had.
+      const asksShipB =
+        /\bgastos?\s+de\s+env[ií]o|\bcostos?\s+(de|del)\s+env[ií]o|\bprecio\s+(de|del)\s+env[ií]o|\bflete\b/i.test(msgB) ||
+        (/\b(env[ií]os?|paqueter[ií]a|transporte|mensajer[ií]a)\b/i.test(msgB) &&
+          /\b(cu[aá]nto|costo|costos|cuesta|precio|cobran|sale|vale|gratis|incluid[oa]s?|incluye|incluyen|aparte|extra|manejan|tienen?|hacen|hay|es\s+el|son)\b/i.test(msgB));
+      const asksShipTimeB =
+        /\b(tarda\w*|demora\w*|llega\w*|tiempo\s+de\s+(entrega|env[ií]o)|cu[aá]ndo\s+(me\s+)?(llega|lo\s+env|la\s+env))\b/i.test(msgB) &&
+        /\b(env[ií]os?|entrega|pedido|compra|llega|tarda)\b/i.test(msgB);
+      if (asksShipB || asksShipTimeB) {
+        const { isFullRoll } = require("./priceResolver");
+        const byLenE = await bordeLeavesByLength(variantKnown() || VARIANT_FALLBACK).catch(() => new Map());
+        const cutsE = [];
+        const rollsE = [];
+        for (const [len, leaf] of byLenE) {
+          const n = Number(len);
+          if (!Number.isFinite(n)) continue;
+          (isFullRoll(leaf) ? rollsE : cutsE).push(n);
+        }
+        cutsE.sort((a, b) => a - b);
+        rollsE.sort((a, b) => a - b);
+        const haveZipE = !!(state.location && (state.location.zip || state.location.zipcode));
+        // Which half goes first: the roll if that is what they are looking at.
+        // The numbers come straight off the message: `allNums` is declared ~270 lines
+        // below, so reading it here is a temporal-dead-zone ReferenceError that the
+        // section's try/catch swallows — the gate looked fine and answered nothing.
+        const numsE = (msgB.match(/\d+(?:\.\d+)?/g) || []).map(Number);
+        const rollFirstE = rollsE.length > 0 && numsE.some((n) => rollsE.includes(n));
+        let cutLineE, rollLineE;
+        if (asksShipTimeB && !asksShipB) {
+          cutLineE = cutsE.length
+            ? `Los rollos de ${cutsE.join(", ")} m, que se compran en línea, normalmente llegan en 2 días hábiles (puede variar).`
+            : "";
+          rollLineE = rollsE.length
+            ? `El de ${rollsE.join(" y ")} m es rollo completo: va por flete y te confirmamos el tiempo junto con el costo del envío.`
+            : "";
+        } else {
+          cutLineE = cutsE.length
+            ? `En los rollos de ${cutsE.join(", ")} m que se compran en línea el envío ya va incluido en el precio.`
+            : "";
+          rollLineE = rollsE.length
+            ? `El de ${rollsE.join(" y ")} m es rollo completo: se envía por flete y se cotiza aparte según tu destino, te damos el costo exacto${haveZipE ? "" : " con tu código postal"}.`
+            : "";
+        }
+        const partsE = rollFirstE ? [rollLineE, cutLineE] : [cutLineE, rollLineE];
+        if (partsE.filter(Boolean).length) {
+          if (!haveZipE && rollsE.length) state.zipAsked = true;
+          return retB(
+            `${partsE.filter(Boolean).join(" ")} ¿Qué largo necesitas? 😊`,
+            { bordeShippingAnswered: asksShipTimeB && !asksShipB ? "tiempo" : "costo" }
+          );
+        }
+      }
+
+      // 0-quinquies) WHERE DO I GET IT. Reported 2026-11-02 (wa:5214443475099): "En
+      // dónde se consigue" got the §B nudge, and so did his next message ("Estoy en
+      // slp"); Noemí answered with the Mercado Libre store link. It is a CHANNEL
+      // question, and the channels are already settled company-wide by paymentAnswer
+      // (always up front, ML as an option where the product is listed, direct by
+      // transferencia, or at the store) — the only thing missing was somewhere to say
+      // it when the customer asks WHERE instead of HOW. The location comes from
+      // CompanyInfo through locationBlock, never from a literal.
+      const asksWhereBuyB =
+        /\b(d[oó]nde|donde)\b/i.test(msgB) &&
+        /\b(consig\w*|compr\w*|adquier\w*|vend\w*|encuentr\w*|surt\w*|hay|est[aá]n?|ubicad|tienda|sucursal|local)\b/i.test(msgB);
+      if (asksWhereBuyB) {
+        const { isFullRoll } = require("./priceResolver");
+        const byLenW = await bordeLeavesByLength(variantKnown() || VARIANT_FALLBACK).catch(() => new Map());
+        const cutsW = [];
+        for (const [len, leaf] of byLenW) {
+          const n = Number(len);
+          if (Number.isFinite(n) && !isFullRoll(leaf)) cutsW.push(n);
+        }
+        cutsW.sort((a, b) => a - b);
+        const loc = await locationBlock();
+        const whereTxt = paymentAnswer({
+          mlFirst: true,
+          leadLast: true,
+          mlPhrase: cutsW.length
+            ? `Los rollos de ${cutsW.join(", ")} m los encuentras en nuestra tienda oficial de Mercado Libre con compra protegida.`
+            : "",
+          directPhrase: `También puedes comprarlo directo con nosotros por transferencia y te lo enviamos a toda la República.`,
+        });
+        return retB(
+          `${whereTxt}${loc && loc.length ? `\n${loc.join("\n")}` : ""}\n¿Qué largo necesitas? 😊`,
+          { bordeWhereToBuyAnswered: true }
+        );
+      }
+
       if (asksBordeWidth) {
         const width = "El borde separador mide 13 cm de alto (el largo lo eliges tú).";
         const r0 = rMsg;
@@ -2828,7 +3029,18 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // quantities ("¡Perfecto, 18!") because every length was already quoted.
         const picksLength = !rB.countIsExplicit && allNums.length === 1;
         const hasNewLen = allNums.some((n) => !state.bordeQuoted.includes(n));
-        if (!picksLength && !hasNewLen) {
+        // A LENGTH WE DON'T CARRY is still a length they asked for, and the nearest-
+        // length path (and the total-run → mayoreo branch beside it) is what owns it.
+        // Without this, "500 ml aprox precio" after the menu fell into the nudge,
+        // because `allNums` holds CATALOGUE lengths only and 500 is not one of them
+        // (wa:5219988441283). The regex is written out here rather than reusing
+        // `isLengthAsk`, which is declared ~200 lines below — reading it from here is a
+        // temporal-dead-zone ReferenceError the section's try/catch would swallow.
+        const asksOtherLength =
+          rB.numbers.length === 1 &&
+          !BORDE_LENS.includes(String(rB.numbers[0])) &&
+          /\b\d{1,3}\s*(?:m\b|ml\b|mts?\b|metros?\b|metros?\s+lineales?\b)/i.test(msgB);
+        if (!picksLength && !hasNewLen && !asksOtherLength) {
           const q = rB.count;
           // Linear metres need a length. With exactly ONE roll quoted we know it;
           // with several on the table a bare "2" doesn't say 2 of WHICH, so ask
@@ -2840,7 +3052,12 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           if (q != null && q >= 1 && state.bordeQuoted.length > 1) {
             return retB(`¡Perfecto, ${q}! ¿De cuál largo los quieres: ${state.bordeQuoted.map((l) => l + " m").join(", ")}? 😊`, { bordeNeedLengthForQty: q });
           }
-          return retB(`¡Gracias! Ya te pasé los precios de los rollos de ${state.bordeQuoted.map((l) => l + " m").join(", ")}. ¿Cuál te sirve y cuántos necesitas? 😊`, { bordeQuotedNudge: state.bordeQuoted });
+          // This nudge is the borde flow's "I didn't understand", so it must be the LAST
+          // thing tried — and it must never be the answer to a question about ANOTHER
+          // product (wa:5215549680085 asked for "Malla Anti malesa" and got it).
+          if (!namesOtherProduct(msgB)) {
+            return retB(`¡Gracias! Ya te pasé los precios de los rollos de ${state.bordeQuoted.map((l) => l + " m").join(", ")}. ¿Cuál te sirve y cuántos necesitas? 😊`, { bordeQuotedNudge: state.bordeQuoted });
+          }
         }
         state.bordeQuoted = null; // a genuinely NEW length → fall through to resolve it
       }
@@ -2888,9 +3105,25 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // whole point here is a length we do NOT carry — "quiero 20 metros" — so filtering
       // to the catalogue first makes this gate unreachable and the menu answers instead
       // of naming the nearest presentation.
-      const isLengthAsk = /\b\d{1,3}\s*(?:m\b|mts?\b|metros?\b)/i.test(msgB);
+      const isLengthAsk = /\b\d{1,3}\s*(?:m\b|ml\b|mts?\b|metros?\b|metros?\s+lineales?\b)/i.test(msgB);
       if (!hasWxL && isLengthAsk && rMsg.numbers.length === 1 && !state.awaitingBordeQty) {
         const want = parseInt(rMsg.numbers[0], 10);
+        // A RUN LONGER THAN OUR LONGEST ROLL IS A TOTAL, NOT A ROLL LENGTH (reported
+        // 2026-11-02, wa:5219988441283, "debió pasar a un humano y no lo hizo"). He
+        // asked for "500 ml aprox precio" and then "Total aprox 500 m"; the nearest-
+        // length path answered "El de 500 m no lo manejamos; el más cercano es el rollo
+        // de 54 m" — offering ONE roll to somebody who needs five hundred metres — and
+        // Noemí came in with the mayoreo prices (20+ pzas on the 18 m, 7+ on the 54 m).
+        // Nobody buys 500 m as a single piece: it is a number of rolls, and that many
+        // rolls is mayoreo, which the handoff below already knows how to quote.
+        const longestLen = Math.max(...BORDE_LENS.map(Number));
+        if (Number.isFinite(want) && want > longestLen) {
+          const rollsNeeded = Math.ceil(want / longestLen);
+          if (!isRetailOrder(longestLen, rollsNeeded)) {
+            state.bordeWholesaleLen = String(longestLen);
+            return await mayoreo(rollsNeeded, String(longestLen));
+          }
+        }
         if (Number.isFinite(want) && !BORDE_LENS.includes(String(want))) {
           // Nearest by absolute difference; on a tie prefer the LARGER (it covers the need).
           const nearest = BORDE_LENS.map(Number).sort((a, b) => Math.abs(a - want) - Math.abs(b - want) || b - a)[0];

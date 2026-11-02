@@ -55,7 +55,10 @@ const NON_COUNT_NOUN =
   "tipos?|presentaci(?:[oó]n|ones)|variantes?|modelos?|grosores?|grosor|calidad(?:es)?|" +
   "anchos?|largos?|v(?:ez|eces)|a[nñ]os?|meses?|semanas?|d[ií]as?|horas?|jardines?|" +
   "metros\\s+cuadrados|m2)";
-const LEN_UNIT = "(?:m|mts?|metros?|mtrs?)";
+// "ml" is METROS LINEALES, which is how this product is actually sold, and it was not
+// in this list — so "500 ml aprox precio" read 500 as a COUNT and the bot answered
+// "¡Perfecto, 500! ¿De cuál largo los quieres?" (wa:5219988441283, 2026-11-02).
+const LEN_UNIT = "(?:m|ml|mts?|mls?|metros?|mtrs?|metros?\\s+lineales?)";
 const SMALL_UNIT = "(?:cm|mm|cent[ií]metros?|mil[ií]metros?)";
 
 const numOf = (tok) => (/^\d+$/.test(tok) ? parseInt(tok, 10) : WORD_NUM[String(tok).toLowerCase()] ?? null);
