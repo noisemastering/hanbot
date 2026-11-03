@@ -416,42 +416,24 @@ async function findProductInFamilies(query, familyList, wantDimsArg = null) {
   return candidates.find((c) => (c.name || "").toLowerCase().includes(q)) || null;
 }
 
-// When a requested measure isn't in the catalog (e.g. 13x3, out of range),
-// find the CLOSEST available measure so the bot can offer a real size and ask
-// if the customer still wants the exact one — instead of inventing a size or
-// saying "no manejamos decimales". Closeness = squared distance between the
-// sorted dimension pairs (so 13x3 → nearest by both width and length).
-// Returns the measure object from availableMeasuresForFamilies, or null.
-async function closestAvailableMeasure(query, familyList, wantDimsArg = null) {
+// When a requested measure isn't in the catalog (e.g. 13x3, out of range), find the
+// CLOSEST available measure so the bot can offer a real size — instead of inventing
+// one or saying "no manejamos decimales".
+//
+// CLOSENESS IS PER LINEAR DIMENSION, AND IT IS BOUNDED (2026-11-02). It used to be
+// the unbounded nearest, so it always returned SOMETHING: 6.20 x 18 m came back as
+// 7x10 (the biggest thing we make, 70 m² against 112 m²) and was offered with a buy
+// link as "la más cercana". A null here is a real answer — it means the size is
+// sobre medida and a specialist has to quote it. `utils/customSize.js` owns the rule
+// and the tolerance so this and the engine's gate can never drift apart.
+//
+// Returns a measure object from availableMeasuresForFamilies, or null.
+async function closestAvailableMeasure(query, familyList, wantDimsArg = null, opts = {}) {
   const want = wantDimsArg || dimsOf(query);
   if (!want) return null;
   const measures = await availableMeasuresForFamilies(familyList);
-
-  // A two-number (width × length) request — e.g. "4x50" — is by definition a
-  // 2-D product (malla rollo / confeccionada). LENGTH-ONLY products (borde
-  // separador: you choose only a length; the 13 cm is a fixed height spec, not a
-  // width) are a different KIND of product and must never match. The catalog
-  // tells us which is which via enabledDimensions (no "width" → length-only),
-  // so this is a structural exclusion, not a numeric guess. This is why "4 m"
-  // can never match "13 cm".
-  const candidates = measures.filter((m) => m.dims && !m.lengthOnly);
-  if (!candidates.length) return null; // no 2-D product in scope → don't offer a length-only one
-
-  // Among real 2-D products, pick the closest by RELATIVE distance (squared
-  // log-ratio) so scale is respected proportionally: "4x50" lands on "4x100",
-  // not on a smaller piece that's near in raw units.
-  let best = null;
-  let bestDist = Infinity;
-  for (const m of candidates) {
-    const dw = Math.log(m.dims[0] / want[0]);
-    const dl = Math.log(m.dims[1] / want[1]);
-    const d = dw * dw + dl * dl;
-    if (d < bestDist) {
-      bestDist = d;
-      best = m;
-    }
-  }
-  return best;
+  const { closestByLinear } = require("../../utils/customSize");
+  return closestByLinear(want, measures, opts);
 }
 
 // Given a resolved product leaf, return its sibling VARIANTS — the other

@@ -542,8 +542,11 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
       `esa medida SÍ la manejamos — cotízala y ya. NUNCA la niegues, NUNCA digas que "no está en el rango" ni que es "medida especial", y NUNCA la compares ` +
       `contra el rango de arriba para decidir si existe (el rango es sólo para responder "¿qué medidas manejan?", y NO tiene orientación: 10x5 es lo mismo que 5x10). ` +
       `SÓLO cuando este contexto diga explícitamente que la medida NO está en catálogo debes ofrecer la MÁS CERCANA de las MEDIDAS DISPONIBLES, con su precio y su link, ` +
-      `elegida por diferencia (nunca una más chica "porque está disponible"). Pasar con un asesor no es la salida: sólo si el cliente insiste en la medida exacta ` +
-      `después de que ya le diste la más cercana. NUNCA des un "no" rotundo ("no lo manejamos", "no la podemos ofrecer") sin ofrecer una alternativa real.`
+      `elegida por CERCANÍA EN CADA LADO (ancho contra ancho y largo contra largo, nunca por área, y nunca una más chica "porque está disponible"): si a una 6.2x18 m ` +
+      `lo más parecido que tienes es una 7x10 m, ESO NO ES UNA MEDIDA CERCANA y no se la ofreces. ` +
+      `TODA MEDIDA SOBRE MEDIDA SE PASA CON UN ESPECIALISTA: si ninguna medida del catálogo le queda cerca por lado, o si el cliente pide EXACTAMENTE la medida que dio ` +
+      `("a medida", "una sola pieza", "la que te di"), AFIRMA que sí la fabricamos sobre medida, pídele sus datos (nombre, teléfono a 10 dígitos y código postal) y pásala ` +
+      `con un especialista — NUNCA le insistas con otra medida ni le des un precio inventado. NUNCA des un "no" rotundo ("no lo manejamos", "no la podemos ofrecer") sin ofrecer una alternativa real.`
   );
   // COMPARAR DOS PRECIOS. La versión anterior de esta directiva (2026-07-20) decía
   // que el precio va por área y que por eso una medida más grande cuesta más. El

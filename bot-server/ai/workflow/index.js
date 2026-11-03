@@ -982,6 +982,38 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     };
   };
 
+  // 1.04 THEY ASKED FOR THEIR EXACT MEASURE AGAIN, WITH NO MEASURE IN THE MESSAGE.
+  // Her third try was "No pa ya te la dije como 3 veces y la ocupo en una sola pieza a
+  // medida la q te di" — not one digit in it, so the measure path below never sees a
+  // W×L and the turn fell to the model, which asked for her data but fired NO handoff
+  // (diagnostics handoffRequested:false): the asesora's report, "debió pasar a un
+  // humano y no lo hizo". The measure comes from `state.customSizeDims` (set by the
+  // custom-size block when a sobre-medida measure went by) or else from the last thing
+  // we QUOTED — "6x6" and then "la quiero a medida" is the same request, and it was
+  // also answered by the model with no handoff. Needing a known measure is what keeps
+  // this from hijacking an opener: a first message asking "¿la hacen a la medida?" with
+  // no measure at all has nothing for a specialist to quote, so it goes to the normal
+  // routing and the prompt rule covers it.
+  const _lastQuoted = (state.lastQuotes || []).slice(-1)[0];
+  const _knownCustomDims = state.customSizeDims || (_lastQuoted ? [_lastQuoted.w, _lastQuoted.l] : null);
+  if (userMessage && _knownCustomDims && !state.customSizeHandedOff) {
+    const { asksExactCustomSize } = require("../../utils/customSize");
+    const { dimsOf } = require("./tools");
+    if (asksExactCustomSize(String(userMessage)) && !dimsOf(String(userMessage))) {
+      const d = _knownCustomDims;
+      state.customSizeAsked = true;
+      state.customSizeHandedOff = true;
+      // Only promise "una sola pieza" if that is what they asked for — it is the
+      // thing she had to repeat three times, but we don't put words in their mouth.
+      const _onePiece = /\b(?:una\s+sola\s+pieza|en\s+una\s+pieza|de\s+una\s+pieza)\b/i.test(String(userMessage))
+        ? ", en una sola pieza" : "";
+      return beginHandoff({
+        preface: `Claro: tu medida de ${d[0]}x${d[1]} m la fabricamos a tu medida${_onePiece}.`,
+        reason: `Medida sobre medida ${d[0]}x${d[1]} m — el cliente la pide exacta; cotizar la pieza a medida`,
+      });
+    }
+  }
+
   // 1.05 ALREADY-PURCHASED. The customer signals the sale is DONE ("ya la compré",
   // "ya pagué", "acabo de comprarla"). NEVER re-pitch the promo or re-share a buy
   // link at them — acknowledge the purchase. Dismiss the promo so it vanishes from
@@ -4701,24 +4733,54 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             console.error("⚠️ sin→reforzada mention failed:", err.message);
           }
         }
-        // The customer named a MEASURE not exact in catalog (13x3, 8x10, 4.5x4.5,
-        // decimals). THE RULE: always offer the CLOSEST AVAILABLE size — NEVER hand
-        // off, deny, or say "medida especial" for a size we can approximate. Ceil the
-        // fractional sides first (2.8x2.9→3x3, 4.5x4.5→5x5; never undersize), then pick
-        // the nearest real size and offer it DETERMINISTICALLY — the model kept
-        // overriding the soft directive with an asesor handoff (reported: 8x10→asesor,
-        // 6x12→asesor, 10x10→asesor instead of offering 7x10 / 6x10 / 8x8).
+        // THE CUSTOMER NAMED A MEASURE WE DON'T HAVE EXACTLY. Two rules, both the
+        // user's, owned by `utils/customSize.js` so this gate and the prompt can't
+        // drift (2026-11-02, psid 29059373267045334 — 6.20 x 18 m was answered with
+        // "la de 7m x 10m" and a buy link, then with "la de 5m x 6m"):
+        //   • CLOSE ENOUGH IS MEASURED PER SIDE, NOT BY AREA — 6.2x18 may be offered
+        //     a 7x15 or a 6x20, never a 7x10 that misses the length by 8 m. When
+        //     nothing is within tolerance, `closest` is null and that IS the answer.
+        //   • ANYTHING WE'D HAVE TO FABRICATE GOES TO A PERSON. We only skip the
+        //     hand-off when we're selling a STOCK size instead (close enough, and the
+        //     customer didn't ask for their exact measure). Asking for it — "a medida",
+        //     "una sola pieza", "la q te di" — is a hand-off every time, and it is
+        //     STICKY: once they've said it, we stop proposing other sizes at them.
+        // Fractional sides are ceiled first (2.8x2.9 → 3x3) — we never undersize — so
+        // a measure whose ceiled sides ARE a catalogue size is rounding, not custom.
         const wantCeil = [Math.ceil(wantDims[0]), Math.ceil(wantDims[1])].sort((a, b) => a - b);
+        const wantTxt = `${wantDims[0]}x${wantDims[1]} m`;
+        // Remember it: the next message may be the insistence ("la ocupo en una sola
+        // pieza a medida la q te di") with no measure in it at all, and the gate above
+        // needs to know WHICH measure they mean.
+        state.customSizeDims = [wantDims[0], wantDims[1]];
+        const { asksExactCustomSize } = require("../../utils/customSize");
+        if (asksExactCustomSize(String(userMessage))) state.customSizeAsked = true;
+        const insistsExact = !!state.customSizeAsked;
         const closest = (oobHandled || mentionedReforzada) ? null : await toolsMod.closestAvailableMeasure(null, familyList, wantCeil);
+
+        // They want THEIR measure. Don't name another size again — that is the
+        // reported annoyance ("ya te la dije como 3 veces y la ocupo en una sola
+        // pieza a medida la q te di"). Affirm we fabricate it and collect their data.
+        if (insistsExact && !oobHandled && !mentionedReforzada) {
+          state.customSizeHandedOff = true;
+          const _onePieceB = /\b(?:una\s+sola\s+pieza|en\s+una\s+pieza|de\s+una\s+pieza)\b/i.test(String(userMessage))
+            ? ", en una sola pieza" : "";
+          return beginHandoff({
+            preface: `Tu medida de ${wantTxt} la fabricamos a tu medida${_onePieceB}.`,
+            reason: `Medida sobre medida ${wantTxt} — el cliente la pide exacta; cotizar la pieza a medida`,
+          });
+        }
+
         if (closest) {
-          usedClosestMeasure = true; // reply names the nearest size, not the requested one
+          const isExact = closest.dims && closest.dims[0] === wantCeil[0] && closest.dims[1] === wantCeil[1];
+          usedClosestMeasure = !isExact; // the reply names a different size than the one asked for
           let cAmount = Number.isFinite(closest.price) && closest.price > 0 ? closest.price : null;
           let cOrig = null, cLink = null, cId = null;
           try {
             const cDoc = await toolsMod.findProductInFamilies(closest.size || closest.label || "", familyList, closest.dims);
             if (cDoc) {
               cId = String(cDoc._id);
-              const { resolvePrice, trackedLink, fmtMoney } = require("./priceResolver");
+              const { resolvePrice, trackedLink } = require("./priceResolver");
               const cpi = await resolvePrice(cDoc, altOpt(state, cDoc));
               if (cpi && cpi.amount) {
                 cAmount = cpi.amount;
@@ -4729,22 +4791,18 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           } catch (err) {
             console.error("⚠️ closest price/link resolve failed:", err.message);
           }
+          const cSize = closest.dims ? `${closest.dims[0]}m x ${closest.dims[1]}m` : (closest.label || "esa medida");
           if (Number.isFinite(cAmount) && cAmount > 0) {
-            // DETERMINISTIC offer of the closest available size — enforces the rule so
-            // the model can't hand off on the size. Clean size from dims (labels can be
-            // a full product name), price + tracked link, and bind it as the active
-            // product so a follow-up ("sí, la quiero") resolves to it.
-            const cSize = closest.dims ? `${closest.dims[0]}m x ${closest.dims[1]}m` : (closest.label || "esa medida");
-            const isExact = closest.dims && closest.dims[0] === wantCeil[0] && closest.dims[1] === wantCeil[1];
+            // A STOCK size that genuinely fits (within tolerance on BOTH sides) — sell
+            // it, with its price and its own tracked link, and bind it as the active
+            // product so "sí, la quiero" resolves to it. Never a flat "no la manejo":
+            // the sobre-medida invitation rides along, and if they take it up the
+            // sticky flag above sends the next turn to a person.
             const priceStr = `$${cAmount}${cOrig ? ` (rebajado de $${cOrig})` : ""}`;
-            // Lead with the OFFER (never a "no la manejo" that reads as a flat denial —
-            // we DO make sobre medida; we're just proposing the closest ready size).
             const lead = isExact
-              ? `Para tu medida de ${wantDims[0]}x${wantDims[1]} m te queda la de ${cSize} en ${priceStr}.`
-              : `La medida que manejo más cercana a tu ${wantDims[0]}x${wantDims[1]} m es la de ${cSize}, en ${priceStr}.`;
-            // Affirm sobre-medida for a genuinely different size (NEVER deny custom —
-            // Hanlob does make it) — but the closest BUYABLE size stays the primary offer.
-            const customNote = isExact ? "" : ` Y si la necesitas exacta, también la hacemos a tu medida. 😊`;
+              ? `Para tu medida de ${wantTxt} te queda la de ${cSize} en ${priceStr}.`
+              : `La medida más cercana que manejo a tu ${wantTxt} es la de ${cSize}, en ${priceStr}.`;
+            const customNote = isExact ? "" : ` Y si la necesitas exacta de ${wantTxt}, también la fabricamos a tu medida: dime y te la cotizamos. 😊`;
             const reply = lead + (cLink ? ` Aquí la compras: ${cLink}` : "") + customNote;
             if (cId) state.activeProductId = cId;
             history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
@@ -4760,27 +4818,21 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
               },
             };
           }
-          // NEAREST SIZE FOUND BUT NOT QUOTABLE (no live price / no link) → offer it,
+          // NEAREST SIZE FOUND BUT NOT QUOTABLE (no live price / no link) → name it,
           // then hand off. "Nothing to quote ⇒ escalate" is the oldest rule in the
-          // project; it was dropped in 37cf982 (2026-05-27) when the promo-cage fix
-          // replaced the escalation branch with a catalog-wide search and left no
-          // floor under it, and the workflow cutover never brought it back. Note this
-          // is NOT a handoff over the SIZE (that stays forbidden — the branch above
-          // offers any size we can price); it's a handoff because we have no price to
-          // give, which is the one thing the bot must never improvise.
-          const _cSizeNP = closest.dims ? `${closest.dims[0]}m x ${closest.dims[1]}m` : (closest.label || "esa medida");
+          // project; a price is the one thing the bot must never improvise.
           return beginHandoff({
-            preface: `La medida que manejo más cercana a tu ${wantDims[0]}x${wantDims[1]} m es la de ${_cSizeNP}, pero deja confirmo el precio contigo.`,
-            reason: `Medida ${wantDims[0]}x${wantDims[1]} m — la más cercana (${_cSizeNP}) no tiene precio en línea; cotizar con asesor`,
+            preface: `La medida más cercana que manejo a tu ${wantTxt} es la de ${cSize}, pero deja confirmo el precio contigo.`,
+            reason: `Medida ${wantTxt} — la más cercana (${cSize}) no tiene precio en línea; cotizar con asesor`,
           });
         }
         if (!oobHandled && !mentionedReforzada) {
-          // NOTHING in the catalog comes close to the requested measure → nothing to
-          // quote at all. Same restored rule: never leave the customer with a question
-          // or an improvised answer — affirm we make it and escalate with the measure.
+          // NOTHING IS CLOSE ENOUGH ON EITHER SIDE → it is a sobre-medida order, which
+          // is exactly what 6.20 x 18 m was. Affirm we make it (we do), never dress a
+          // 7x10 up as "la más cercana", and collect their data for a specialist.
           return beginHandoff({
-            preface: `Tu medida de ${wantDims[0]}x${wantDims[1]} m sí la fabricamos a la medida.`,
-            reason: `Medida ${wantDims[0]}x${wantDims[1]} m sin equivalente en catálogo — cotización sobre medida con asesor`,
+            preface: `Tu medida de ${wantTxt} sí la fabricamos sobre medida.`,
+            reason: `Medida sobre medida ${wantTxt} — sin equivalente cercano en catálogo; cotización a medida`,
           });
         }
       } else if (turnActiveProductId) {
