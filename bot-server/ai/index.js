@@ -366,9 +366,36 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
   // CATALOG DOCUMENT: the share_catalog tool flags a PDF to send as a file
   // attachment (replicates legacy sendCatalog — arrives as a document bubble,
   // not a link). Send it on the right channel; the text reply goes separately.
-  if (diagnostics?.catalogToSend?.url) {
+  // A CLAIM TO SEND IT MUST BE BACKED BY THE FILE (2026-11-04, psid 28764912069844715,
+  // "No le mando el catalogo"). The promise is the model's PROSE and the attachment is a
+  // TOOL CALL, and nothing tied the two together: he asked for "un catalogo con su
+  // precios", the reply said "Te comparto nuestro catálogo 📄" and no file was sent
+  // (reproduced 3/3 — every run wrote the sentence, every run came back with
+  // catalogToSend undefined). Same family as the unfilled placeholder: nothing in the
+  // sentence is false, it just describes an action that never happened. So either we
+  // attach the catalog the flow resolved, or the claim comes out of the reply.
+  let catalogToSend = diagnostics?.catalogToSend || null;
+  if (!catalogToSend && replyText) {
     try {
-      const cat = diagnostics.catalogToSend;
+      const { claimsCatalog, stripCatalogClaim } = require("../utils/catalogClaim");
+      if (claimsCatalog(replyText)) {
+        const resolved = (newState && newState.catalog) || null;
+        if (resolved && resolved.url) {
+          catalogToSend = { url: resolved.url, filename: "Catalogo_Hanlob.pdf" };
+          console.log(`📄 [workflow] reply promised the catalog without calling the tool — attaching it for ${psid}`);
+        } else {
+          const before = replyText;
+          replyText = stripCatalogClaim(replyText);
+          if (replyText !== before) console.warn(`📄 [workflow] no catalog configured — dropped the empty promise for ${psid}`);
+        }
+      }
+    } catch (e) {
+      console.error("⚠️ catalog claim check failed:", e.message);
+    }
+  }
+  if (catalogToSend?.url) {
+    try {
+      const cat = catalogToSend;
       const isWhatsApp = (convo.channel === "whatsapp") || String(psid).startsWith("wa:");
       if (isWhatsApp) {
         const { sendDocumentMessage } = require("../channels/whatsapp/api");
