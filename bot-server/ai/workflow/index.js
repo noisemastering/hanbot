@@ -638,13 +638,24 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // customer DOES answer, politely, with nothing. Reachability is judged by the one
       // predicate that owns it, so a name alone still does not count as a way to reach
       // anyone. The ask is dropped rather than repeated: one ask only, we never nag.
-      // handoffContactOf reads a Conversation shape (workflowState.lead / .location) and
-      // returns {phone, email, zip, any} — the object itself is always truthy, so it is
-      // `.any` that answers the question.
-      const _reachable = require("../../utils/coldLead").handoffContactOf({
+      // `worthAlerting` takes a Conversation shape (workflowState.lead / .location) and
+      // answers the only question that matters here: is there something a person could
+      // ACT on? A phone or an email the customer typed, yes; a CP alone, no — same call
+      // as the pending-handoff timeout makes (2026-11-04, wa:5217351681034). Note
+      // handoffContactOf's own object is always truthy, which is why neither of these
+      // reads it directly.
+      const _actionable = require("../../utils/coldLead").worthAlerting({
         workflowState: { lead: state.lead || {}, location: state.location || {} },
-      }).any;
-      if (!_reachable && !(state.lead && state.lead.name)) {
+      });
+      // Scoped to a reply with NOTHING IN IT — a bare thank-you or a wordless emoji.
+      // It used to be "nothing reachable AND no name", which let a reply that DID say
+      // something ("me llamo Nubia Cervantes") escalate on a name alone; now a name is
+      // not info (the user's rule, 2026-11-04) and such a reply must not land here
+      // either, or an engaged customer gets closed down with "aquí estamos cuando
+      // quieras continuar". The courtesy judgement lives in utils/courtesy.js, shared
+      // with the deferral gate so the two can't drift.
+      const _courtesyOnly = require("../../utils/courtesy").isCourtesyOnly(String(userMessage));
+      if (!_actionable && _courtesyOnly) {
         console.log(`🙇 [workflow] courtesy reply, no data — no alert raised for ${opts.psid || "(no psid)"}`);
         const closing = "¡Con gusto! 🙌 Aquí estamos cuando quieras continuar.";
         history.push({ role: "assistant", text: closing, nodeId: currentNode.id, at: new Date() });
@@ -656,6 +667,45 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             fromNode: { id: currentNode.id, name: currentNode.name },
             toNode: { id: currentNode.id, name: currentNode.name },
             pendingHandoffDroppedNoData: true,
+          },
+        };
+      }
+      // THEY ANSWERED, BUT NOT WITH A WAY TO REACH THEM (2026-11-04, the user's rule:
+      // "customers must provide their info before handed off, otherwise they are not
+      // showing interest"). A name and a CP are both useful — the brief prints them and
+      // the freight quote starts at the CP — but neither is something a salesperson can
+      // act on, and the platform gives us a name for free. So when the reply moves the
+      // conversation forward without giving us a phone or an email, ask for the phone
+      // ONE more time: they are plainly engaging (they just answered us), which is not
+      // the "nagging a customer who is going quiet" the one-ask rule is about. If they
+      // then go silent, the timeout parks them as a cold lead and nobody is woken.
+      // `attempts` caps it at exactly one extra ask, and the wholesale quantity turn
+      // yields to the borde gate as before.
+      const _actionableNow = require("../../utils/coldLead").worthAlerting({
+        workflowState: { lead: state.lead || {}, location: state.location || {} },
+      });
+      if (!_actionableNow && !yieldForBordeQty && (Number(state.pendingHandoff.attempts) || 1) < 2) {
+        // (a courtesy-only reply never reaches this: the guard above closed the turn)
+        const _whoN = state.lead && state.lead.name ? `, ${firstGivenName(state.lead.name)}` : "";
+        const _zipK = !!(state.location && (state.location.zip || state.location.zipcode));
+        const askPhone =
+          `¡Gracias${_whoN}! 🙌 Para ${_gcFlow ? "mandarte la cotización" : "poder contactarte"} me falta ` +
+          `un teléfono a 10 dígitos${_zipK ? "" : " y tu código postal"}. ¿Me los compartes?`;
+        console.log(`📞 [workflow] reply without a phone — asking once more for ${opts.psid || "(no psid)"}`);
+        history.push({ role: "assistant", text: askPhone, nodeId: currentNode.id, at: new Date() });
+        return {
+          reply: askPhone,
+          state: {
+            ...state, history, lead: state.lead || null, location: state.location || null,
+            nodeId: currentNode.id,
+            pendingHandoff: { ...state.pendingHandoff, attempts: 2, askedAt: new Date() },
+          },
+          diagnostics: {
+            workflow: { id: String(workflow._id), name: workflow.name },
+            fromNode: { id: currentNode.id, name: currentNode.name },
+            toNode: { id: currentNode.id, name: currentNode.name },
+            handoffPendingContact: true,
+            handoffPhoneReasked: true,
           },
         };
       }
@@ -772,26 +822,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     // COURTESY is matched on the WHOLE message, token by token, and it must carry an
     // actual thanks — so "Gracias, ¿me pasas el link?" is not a sign-off, and a bare
     // "sí"/"claro" (which confirms something we asked) can never land here at all.
-    const COURTESY = new Set(
-      ("ok okey okay oka sale va vale bien muy mucha muchas muchisima muchisimas mil gracias grax " +
-       "amable amables de acuerdo entendido entendida enterado enterada por tu su la el lo info " +
-       "informacion ayuda todo atencion apoyo buen buenos buena buenas dia dias tarde tardes noche " +
-       "noches saludos igualmente quedo estamos perfecto excelente genial listo").split(" ")
-    );
-    const _plain = _d
-      .toLowerCase()
-      .normalize("NFD")
-      .replace(/[̀-ͯ]/g, "")
-      .replace(/[^a-z\s]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-    const _tokens = _plain ? _plain.split(" ") : [];
-    const _isThanks =
-      !/\?/.test(_d) &&
-      _tokens.length > 0 &&
-      _tokens.length <= 7 &&
-      _tokens.some((w) => w === "gracias" || w === "grax" || w === "amable" || w === "amables") &&
-      _tokens.every((w) => COURTESY.has(w));
+    // The courtesy vocabulary and the token test live in utils/courtesy.js, shared with
+    // the pending-handoff resume — the same judgement in two places, one owner.
+    const _isThanks = require("../../utils/courtesy").isThanksOnly(_d);
     // Waiting for a sale is a date, not a no: "Solo espero el buen fin".
     const _waitsForSale =
       /\b(buen\s+fin|black\s+friday|hot\s+sale|quincena|aguinaldo|fin\s+de\s+mes)\b/i.test(_d) &&
@@ -868,7 +901,11 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     // (state.contactDay). No stamp (legacy lead from elsewhere) still counts —
     // backward-compatible.
     const _fresh = !state.contactDay || state.contactDay === _mxDay();
-    const haveContact = !!(_fresh && state.lead && (state.lead.phone || state.lead.email || state.lead.name));
+    // A NAME IS NOT INFO (2026-11-04, the user's rule: "customers must provide their
+    // info before handed off, otherwise they are not showing interest"). It used to
+    // count here, so a handoff could complete with nothing a salesperson could call —
+    // and the platform profile hands us a name on every conversation for free.
+    const haveContact = !!(_fresh && state.lead && (state.lead.phone || state.lead.email));
     // A WHOLESALE handoff must ALSO capture HOW MANY items they want (for the volume
     // quote) — don't escalate straight through until we have that quantity too.
     const wholesaleNeedsQty = !!wholesale && !(state.lead && state.lead.wholesaleQty);
@@ -5018,9 +5055,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // (state.pendingHandoff); the resume above completes it next turn with whatever
   // they give. Skip during an LLM-outage handoff (escalate immediately).
   if (ctx.handoffRequested && !(decision.llmError || nodeLlmError) && !state.pendingHandoff) {
+    // Phone or email ONLY — a name is not info (2026-11-04, see beginHandoff above).
     const haveContact = !!(
-      (ctx.lead && (ctx.lead.phone || ctx.lead.email || ctx.lead.name)) ||
-      (state.lead && (state.lead.phone || state.lead.email || state.lead.name))
+      (ctx.lead && (ctx.lead.phone || ctx.lead.email)) ||
+      (state.lead && (state.lead.phone || state.lead.email))
     );
     if (!haveContact) {
       // If this turn owed the customer a fact (price quote / sold-out note), lead

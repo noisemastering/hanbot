@@ -461,7 +461,7 @@ const PENDING_HANDOFF_TIMEOUT_MS = 10 * 60 * 1000;
 
 // The park-or-escalate predicate lives in utils/coldLead.js, where it can be tested
 // without this file's dependency chain behind it (scripts/coldLeadTest.js).
-const { handoffContactOf } = require('../utils/coldLead');
+const { handoffContactOf, worthAlerting } = require('../utils/coldLead');
 
 async function runPendingHandoffTimeoutJob() {
   try {
@@ -484,7 +484,14 @@ async function runPendingHandoffTimeoutJob() {
       const have = handoffContactOf(c);
       const mins = Math.round(PENDING_HANDOFF_TIMEOUT_MS / 60000);
 
-      if (!have.any) {
+      // A CP ALONE IS NOT WORTH A PUSH (2026-11-04, wa:5217351681034, reported twice:
+      // "Me mandó la alerta y no requería atención"). She gave her CP in answer to the
+      // SHIPPING question, was then asked for a phone and a colonia, gave neither and
+      // stopped writing — so this fired on a conversation with nothing outstanding. The
+      // CP is still contact everywhere else (the freight quote starts there, and the
+      // brief prints it), it is simply not something a person can act on: on WhatsApp
+      // the thread is always open anyway. A phone or an email the customer TYPED is.
+      if (!worthAlerting(c)) {
         // Nothing to act on. Park it — no alert, no push, no handoff state.
         // Written with updateOne rather than updateConversation on purpose: that helper
         // stamps lastMessageAt, which would make a silent conversation look like it just
@@ -493,13 +500,15 @@ async function runPendingHandoffTimeoutJob() {
           $set: {
             pendingHandoffAt: null,
             'coldLead.at': new Date(),
-            'coldLead.why': 'sin teléfono, sin CP y sin respuesta',
+            // Say what they DID give: an asesora reading the cold list needs to know a
+            // CP is already on file, and "sin CP" would be a lie.
+            'coldLead.why': have.zip ? 'solo CP, sin teléfono y sin respuesta' : 'sin teléfono, sin CP y sin respuesta',
             'coldLead.reason': c.pendingHandoffReason || 'Cliente requiere asesor',
             'coldLead.revivedAt': null,
           },
           $inc: { 'coldLead.times': 1 },
         }).catch((e) => console.error('❌ cold-lead park failed:', e.message));
-        console.log(`🧊 [pending-handoff] ${c.psid} parked as a cold lead after ${mins} min — no phone, no CP, no reply`);
+        console.log(`🧊 [pending-handoff] ${c.psid} parked as a cold lead after ${mins} min — ${have.zip ? "CP only" : "no phone, no CP"}, no reply`);
         continue;
       }
 
@@ -517,4 +526,4 @@ async function runPendingHandoffTimeoutJob() {
   }
 }
 
-module.exports = { scheduleFollowUpIfNeeded, runSilenceFollowUpJob, runLinkFollowUpJob, runPendingHandoffTimeoutJob, handoffContactOf, PENDING_HANDOFF_TIMEOUT_MS };
+module.exports = { scheduleFollowUpIfNeeded, runSilenceFollowUpJob, runLinkFollowUpJob, runPendingHandoffTimeoutJob, handoffContactOf, worthAlerting, PENDING_HANDOFF_TIMEOUT_MS };
