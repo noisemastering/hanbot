@@ -118,9 +118,23 @@ const FULL_ROLL_CASES = [
     p: { ...base, productCode: "MSR-ROL-70-BEI-04X100", price: 3340.8, priceExcludesTax: true, onlineStoreLinks: ML() },
     expect: { amount: 3875.33, fullRoll: true, link: null, handoff: true } },
 
-  { why: "borde 54 m is a full roll; its sheet price carries no IVA, so no gross-up",
-    p: { ...base, productCode: "CIN-BOR-GRU-54M", price: 1699, onlineStoreLinks: ML() },
-    expect: { amount: 1699, link: null, plusIva: false, ivaIncluded: false, fullRoll: true, handoff: true } },
+  // THE BORDE IS OUT OF THIS RULE (2026-11-04, the user's call): "all borde products
+  // must be offered the link unless their wholesale threshold is reached". Its 54 m roll
+  // was a full roll from 2026-10-23, so it was quoted from the sheet with no link and
+  // always handed off — reported by an asesora, who then sent the link herself
+  // (wa:5215561713855). A single 54 m roll ships through Mercado Libre like the shorter
+  // ones; 2+ is `isRetailOrder`'s job and goes to mayoreo in the flow, not here.
+  // This harness stubs ML to "nothing to sell there", so the assertion here is that the
+  // 54 m is no longer flagged `fullRoll` and falls through to the ORDINARY path — where
+  // a live listing wins (the real one is live at $1,699) and a dead one is withheld
+  // exactly like any other product's.
+  { why: "borde 54 m is NOT a full roll any more → ordinary path, not the sheet-only rule",
+    p: { ...base, productCode: "CIN-BOR-GRU-54M", price: 1599, mlPrice: 1699, onlineStoreLinks: ML() },
+    expect: { fullRoll: undefined, amount: 1599, source: "inventario", link: null, handoff: true, quoteThenHandoff: true } },
+
+  { why: "neither is the delgado 54 m",
+    p: { ...base, productCode: "CIN-BOR-DEL-54M", price: 1249, onlineStoreLinks: ML() },
+    expect: { fullRoll: undefined } },
 
   { why: "a full roll with NO sheet price quotes NOTHING and hands off",
     p: { ...base, productCode: "GC-ROL-NEG-04X100", price: null, mlPrice: 5314, onlineStoreLinks: ML() },

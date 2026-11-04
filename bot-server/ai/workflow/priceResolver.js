@@ -47,13 +47,24 @@ const IVA_RATE = 0.16;
 const round2 = (n) => Math.round(n * 100) / 100;
 
 // A full roll is identified from productCode (CAT-TYPE-SHADE-COLOR-SIZE, where
-// SIZE is e.g. 02X100 / 04X100 / 54M), with a name fallback for anything whose
-// code is missing. Only the two shapes the catalogue actually sells as full
-// rolls count: a 100 m roll of any width, and the borde's 54 m roll. The 47 m UV
-// cord roll is deliberately NOT one — it is a $300 complement with no cut
-// version, and routing it through an asesor would help nobody.
-const FULL_ROLL_CODE = /(?:^|-)(?:\d{1,2}(?:[.,]\d)?X100|54M)$/i;
-const FULL_ROLL_NAME = /(?:\b\d{1,2}(?:[.,]\d)?\s*[x\u00d7]\s*100\b|\brollo\s+de\s+54\s*m\b)/i;
+// SIZE is e.g. 02X100 / 04X100), with a name fallback for anything whose code is
+// missing. ONLY a 100 m roll of any width counts. The 47 m UV cord roll is
+// deliberately NOT one — it is a $300 complement with no cut version, and routing
+// it through an asesor would help nobody.
+//
+// THE BORDE IS OUT OF THIS RULE (2026-11-04, the user's call): "all borde products
+// must be offered the link unless their wholesale threshold is reached". Its 54 m
+// roll was in here from 2026-10-23, so it was quoted from the sheet with no link and
+// always handed off — and an asesora reported exactly that ("debió de mandarle el
+// link, solo es 1 borde de 54", wa:5215561713855) before sending the link herself.
+// The reasoning that put the 100 m rolls here does not transfer: those are freight
+// that an asesor prices by destination and whose ML listings run far above our direct
+// price, while a single 54 m borde roll ships through Mercado Libre like the 6, 9 and
+// 18 m ones. The one exception is now the THRESHOLD, which the borde flow already
+// owns: `isRetailOrder` sends 2+ rolls of 54 m (or 3+ of the shorter ones) to
+// `mayoreo()`, where a person quotes the volume and the freight.
+const FULL_ROLL_CODE = /(?:^|-)\d{1,2}(?:[.,]\d)?X100$/i;
+const FULL_ROLL_NAME = /\b\d{1,2}(?:[.,]\d)?\s*[x\u00d7]\s*100\b/i;
 
 // Synchronous read of whatever the caller happened to load.
 function isFullRoll(product) {
