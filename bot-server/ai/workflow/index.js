@@ -1503,19 +1503,21 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // rule (2026-10-23) and moves as freight an asesor prices by destination.
         // Same family as the borde's §3.5 mayoreo-shipping gate: a promise of free
         // shipping on an order that doesn't ship that way.
-        const asksShipping =
-          /\b(env[ií]os?|flete|paqueter[ií]a|transporte|mensajer[ií]a)\b/i.test(msg) &&
-          /\b(cu[aá]nto|costo|cuesta|precio|cobran|sale|vale|gratis|incluid[oa]s?|incluye|aparte|extra|manejan|tienen?|hacen|es\s+el)\b/i.test(msg);
+        // The three triggers live in `utils/shippingAsk.js`: these four regexes were
+        // copy-pasted into the borde's 0-quater too, and NEITHER copy knew the word
+        // "entrega" — so "Y modo de entrega" and "Es entrega a domicilio ??" missed
+        // both gates (wa:5217774678321, 2026-11-04, nudged twice).
+        const _shipAsk = require("../../utils/shippingAsk");
+        const asksShipHowGc = _shipAsk.asksShipHow(msg);
+        const asksShipping = _shipAsk.asksShipCost(msg) || asksShipHowGc;
         // "¿Cuánto TARDA el envío?" is a different question from "¿cuánto CUESTA?", and
         // this gate was answering both with the cost (found 2026-10-28 while testing
         // the payment gate below). The delivery TIME has the same two cases as
         // everything else here: the cuts ship through Mercado Libre, the full roll
         // moves as freight we schedule by destination — so "llega en 2 días hábiles" (the
         // knowledge entry's number) is not true of the roll either.
-        const asksShippingTime =
-          /\b(tarda\w*|demora\w*|llega\w*|tiempo\s+de\s+(entrega|env[ií]o)|cu[aá]ndo\s+(me\s+)?(llega|lo\s+env|la\s+env))\b/i.test(msg) ||
-          /\bcu[aá]nt[oa]s?\s+d[ií]as\b/i.test(msg);
-        if (asksShippingTime && _gcFlow && /\b(env[ií]os?|entrega|pedido|compra|llega|tarda)\b/i.test(msg)) {
+        const asksShippingTime = _shipAsk.asksShipTime(msg);
+        if (asksShippingTime && _gcFlow) {
           const lensT = await gcDim("length");
           const cutsT = lensT.filter((l) => l !== 100);
           const rollFirstT = (dims && dims.some((d) => Number(d) === 100)) || /\b100\b/.test(msg) || !!state.gcOpenerSent;
@@ -1577,6 +1579,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           const cutLine = cutsE.length
             ? `En los cortes que se compran en línea (${cutsE.join(", ")} m) el envío ya va incluido en el precio.`
             : "";
+          // "¿Es entrega a domicilio?" deserves the word "sí" before the detail.
+          const yesHow = asksShipHowGc ? "Sí, enviamos a domicilio a toda la República. " : "";
           const parts = rollFirst ? [rollLine, cutLine] : [cutLine, rollLine];
           // We are explicitly asking for the CP, so arm the capture: the PROMPTED path
           // in captureZipReply (ai/index.js) is the lenient one, while an UNPROMPTED
@@ -1596,7 +1600,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // reads this one.
           state.gcShippingAnswered = true;
           return ret(
-            `${parts.filter(Boolean).join(" ")} ${haveZipE ? "¿Qué medida necesitas y te la cotizo? 😊" : "¿Me compartes tu código postal y la medida que necesitas? 📍"}`,
+            `${yesHow}${parts.filter(Boolean).join(" ")} ${haveZipE ? "¿Qué medida necesitas y te la cotizo? 😊" : "¿Me compartes tu código postal y la medida que necesitas? 📍"}`,
             { gcShippingAnswered: rollFirst ? "rollo" : "corte" }
           );
         }
@@ -2812,14 +2816,17 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // "Gastos de envío" and "costo del envío" name the cost by themselves — he wrote
       // exactly that on the third try and got the nudge again, because the second half
       // of this test wanted a word like "cuánto" that his message never had.
-      const asksShipB =
-        /\bgastos?\s+de\s+env[ií]o|\bcostos?\s+(de|del)\s+env[ií]o|\bprecio\s+(de|del)\s+env[ií]o|\bflete\b/i.test(msgB) ||
-        (/\b(env[ií]os?|paqueter[ií]a|transporte|mensajer[ií]a)\b/i.test(msgB) &&
-          /\b(cu[aá]nto|costo|costos|cuesta|precio|cobran|sale|vale|gratis|incluid[oa]s?|incluye|incluyen|aparte|extra|manejan|tienen?|hacen|hay|es\s+el|son)\b/i.test(msgB));
-      const asksShipTimeB =
-        /\b(tarda\w*|demora\w*|llega\w*|tiempo\s+de\s+(entrega|env[ií]o)|cu[aá]ndo\s+(me\s+)?(llega|lo\s+env|la\s+env))\b/i.test(msgB) &&
-        /\b(env[ií]os?|entrega|pedido|compra|llega|tarda)\b/i.test(msgB);
-      if (asksShipB || asksShipTimeB) {
+      // "ENTREGA" IS A SHIPPING WORD, AND NEITHER COPY OF THIS TRIGGER KNEW IT
+      // (2026-11-04, wa:5217774678321). "Y modo de entrega" and "Es entrega a
+      // domicilio ??" both got the §B catch-all nudge — the same failure this gate was
+      // written to stop, two days after it shipped — because the test demanded a word
+      // from {envío, flete, paquetería, transporte, mensajería}. The three questions now
+      // come from `utils/shippingAsk.js`, one owner for both flows' gates.
+      const _shipAskB = require("../../utils/shippingAsk");
+      const asksShipB = _shipAskB.asksShipCost(msgB);
+      const asksShipTimeB = _shipAskB.asksShipTime(msgB);
+      const asksShipHowB = _shipAskB.asksShipHow(msgB);
+      if (asksShipB || asksShipTimeB || asksShipHowB) {
         const { isFullRoll } = require("./priceResolver");
         const byLenE = await bordeLeavesByLength(variantKnown() || VARIANT_FALLBACK).catch(() => new Map());
         const cutsE = [];
@@ -2838,28 +2845,30 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // section's try/catch swallows — the gate looked fine and answered nothing.
         const numsE = (msgB.match(/\d+(?:\.\d+)?/g) || []).map(Number);
         const rollFirstE = rollsE.length > 0 && numsE.some((n) => rollsE.includes(n));
-        let cutLineE, rollLineE;
-        if (asksShipTimeB && !asksShipB) {
-          cutLineE = cutsE.length
-            ? `Los rollos de ${cutsE.join(", ")} m, que se compran en línea, normalmente llegan en 2 días hábiles (puede variar).`
-            : "";
-          rollLineE = rollsE.length
-            ? `El de ${rollsE.join(" y ")} m es rollo completo: va por flete y te confirmamos el tiempo junto con el costo del envío.`
-            : "";
-        } else {
-          cutLineE = cutsE.length
-            ? `En los rollos de ${cutsE.join(", ")} m que se compran en línea el envío ya va incluido en el precio.`
-            : "";
-          rollLineE = rollsE.length
-            ? `El de ${rollsE.join(" y ")} m es rollo completo: se envía por flete y se cotiza aparte según tu destino, te damos el costo exacto${haveZipE ? "" : " con tu código postal"}.`
-            : "";
+        // ONE QUESTION, ONE ANSWER — but "¿cuánto cuesta y en cuánto llega?" is TWO
+        // questions and used to get only the cost, because cost won the branch. Each
+        // half that was asked is answered; "modo de entrega" wants the money facts
+        // (included on the cuts, freight on the full roll) with a plain "sí" first.
+        const ordered = (cut, roll) => (rollFirstE ? [roll, cut] : [cut, roll]).filter(Boolean);
+        const blocksE = [];
+        if (asksShipB || asksShipHowB || !asksShipTimeB) {
+          blocksE.push(...ordered(
+            cutsE.length ? `En los rollos de ${cutsE.join(", ")} m que se compran en línea el envío ya va incluido en el precio.` : "",
+            rollsE.length ? `El de ${rollsE.join(" y ")} m es rollo completo: se envía por flete y se cotiza aparte según tu destino, te damos el costo exacto${haveZipE ? "" : " con tu código postal"}.` : ""
+          ));
         }
-        const partsE = rollFirstE ? [rollLineE, cutLineE] : [cutLineE, rollLineE];
-        if (partsE.filter(Boolean).length) {
+        if (asksShipTimeB) {
+          blocksE.push(...ordered(
+            cutsE.length ? `Los rollos de ${cutsE.join(", ")} m, que se compran en línea, normalmente llegan en 2 días hábiles (puede variar).` : "",
+            rollsE.length ? `El de ${rollsE.join(" y ")} m es rollo completo: va por flete y te confirmamos el tiempo junto con el costo del envío.` : ""
+          ));
+        }
+        if (blocksE.length) {
           if (!haveZipE && rollsE.length) state.zipAsked = true;
+          const yesHowB = asksShipHowB ? "Sí, enviamos a domicilio a toda la República. " : "";
           return retB(
-            `${partsE.filter(Boolean).join(" ")} ¿Qué largo necesitas? 😊`,
-            { bordeShippingAnswered: asksShipTimeB && !asksShipB ? "tiempo" : "costo" }
+            `${yesHowB}${blocksE.join(" ")} ¿Qué largo necesitas? 😊`,
+            { bordeShippingAnswered: asksShipTimeB && !asksShipB ? "tiempo" : asksShipHowB && !asksShipB ? "domicilio" : "costo" }
           );
         }
       }
