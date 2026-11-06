@@ -255,6 +255,35 @@ async function resolveCatalog(familyList) {
   return null;
 }
 
+// Resolve the FICHA TÉCNICA to share (2026-11-06, psid 28508399788837176). Same climb
+// as resolveCatalog with ONE deliberate difference: there is NO company-wide fallback.
+// A catalog is a price list and the global one is better than nothing; a ficha técnica
+// belongs to one product, so sending the ground cover sheet to a malla sombra customer
+// would be a wrong answer dressed as an attachment. No sheet for this family ⇒ null, and
+// the prompt is told not to offer one.
+// Returns { url, name, label, source } or null.
+async function resolveTechSheet(familyList) {
+  const PF = mongoose.model("ProductFamily");
+  for (const fam of familyList || []) {
+    if (!fam.id || !mongoose.isValidObjectId(fam.id)) continue;
+    let cur = await PF.findById(fam.id).select("name parentId techSheet").lean();
+    let guard = 0;
+    while (cur && guard++ < 12) {
+      if (cur.techSheet?.url) {
+        return {
+          url: cur.techSheet.url,
+          name: cur.techSheet.name || "Ficha_Tecnica_Hanlob.pdf",
+          label: cur.techSheet.label || cur.name,
+          source: `family:${cur.name}`,
+        };
+      }
+      if (!cur.parentId) break;
+      cur = await PF.findById(cur.parentId).select("name parentId techSheet").lean();
+    }
+  }
+  return null;
+}
+
 async function resolveSetupContext(workflowSetup, overrides, families, opts = {}) {
   const setup = mergeSetup(workflowSetup, overrides);
   const lines = [];
@@ -863,6 +892,19 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     lines.push(`- Catálogo disponible (PDF): ${catalogResolved.url}. Compártelo (usa share_catalog) si el cliente lo pide.`);
   }
 
+  // FICHA TÉCNICA. Either we have the file for this product or we must not offer it:
+  // the bot has been promising one in prose for a year with nothing attached.
+  const techSheetResolved = await resolveTechSheet(familyList);
+  if (techSheetResolved) {
+    lines.push(
+      `- FICHA TÉCNICA disponible (PDF) de ${techSheetResolved.label}. Si el cliente pide características, grosor, gramaje, calibre, densidad o especificaciones, dile que le compartes la ficha técnica: el archivo se adjunta solo. NO inventes ni retecleés cifras del material.`
+    );
+  } else {
+    lines.push(
+      `- NO tenemos ficha técnica en PDF de este producto. NUNCA ofrezcas ni prometas una ficha técnica, hoja técnica ni datos técnicos en archivo. Responde con lo que sí está en tu conocimiento (uso, material general, garantía) y, si piden cifras exactas del material, ofrece pasarlos con un especialista.`
+    );
+  }
+
   // Deterministic promo QUOTE — used when the customer asks for the promo and
   // there is NO verbatim pitch. The featured promo product + its price + a
   // tracked link, so the engine can answer the promo-buy click directly instead
@@ -935,6 +977,7 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     product: product || null,
     priceInfo,
     catalog: catalogResolved || null,
+    techSheet: techSheetResolved || null, // ficha técnica PDF for THIS product (no global fallback)
     preloadedAmounts,
     promoPitch: (promo && promo.pitch) || null, // verbatim sales pitch (sent once, on ask)
     promoQuote, // deterministic quote (product + price + link) when no pitch is set

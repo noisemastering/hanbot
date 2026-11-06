@@ -172,6 +172,19 @@ const productFamilySchema = new mongoose.Schema({
     publicId: { type: String },
     name: { type: String },
     uploadedAt: { type: Date }
+  },
+  // FICHA TÉCNICA (data sheet) PDF — the document an asesora sends when the customer
+  // asks for características / grosor / gramaje (2026-11-06, psid 28508399788837176).
+  // It is NOT the catalog: the catalog is a price list and resolves up to a company-wide
+  // file, while a ficha técnica belongs to ONE product and must never be substituted —
+  // sending the ground cover sheet to a malla sombra customer would be worse than
+  // sending nothing. Resolution therefore climbs the family tree and stops there.
+  techSheet: {
+    url: { type: String },
+    publicId: { type: String },
+    name: { type: String },      // file name, as it should arrive in the chat
+    label: { type: String },     // how the bot names the product in the sentence
+    uploadedAt: { type: Date }
   }
 }, {
   timestamps: true

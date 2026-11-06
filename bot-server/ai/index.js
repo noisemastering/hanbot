@@ -287,6 +287,27 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
     console.error("⚠️ repeat guard failed:", e.message);
   }
 
+  // FICHA TÉCNICA RIDING ALONG. The customer asked for the sheet AND for something the
+  // flow quotes deterministically ("¿cuál es el gramaje del rollo de 2x100?"), so the
+  // gate left the turn to the quote path and flagged the file instead of dropping it —
+  // the standing "a gate that answers HALF the message drops the other half" rule. The
+  // flag is consumed and cleared HERE, before workflowState is persisted, so the file
+  // can never be attached twice.
+  let pendingSheet = null;
+  if (newState.techSheetPending) {
+    newState.techSheetPending = false;
+    const sheet = newState.techSheet || null;
+    if (sheet?.url && replyText) {
+      pendingSheet = { url: sheet.url, filename: sheet.name || "Ficha_Tecnica_Hanlob.pdf" };
+      try {
+        const { claimsTechSheet, techSheetLead } = require("../utils/techSheet");
+        if (!claimsTechSheet(replyText)) replyText = `${techSheetLead(sheet.label)} ${replyText}`;
+      } catch (e) {
+        console.error("⚠️ tech sheet lead failed:", e.message);
+      }
+    }
+  }
+
   // Map what the engine collected (lead / location / product) onto the
   // Conversation so the human-handoff brief, commerce-status and zip attribution
   // have it. Don't clobber values the conversation already has.
@@ -375,6 +396,34 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
   // sentence is false, it just describes an action that never happened. So either we
   // attach the catalog the flow resolved, or the claim comes out of the reply.
   let catalogToSend = diagnostics?.catalogToSend || null;
+
+  // FICHA TÉCNICA: same contract as the catalog, one document down. A gate can queue the
+  // file directly (diagnostics.docToSend), and a reply that CLAIMS it must be backed by
+  // it — the bot has been writing "también te paso la ficha técnica" for a year with
+  // nothing attached (2026-06-14, 2026-07-02, 2026-09-13), which is the exact failure
+  // reported on the catalog. There is NO company-wide ficha to fall back on, so when the
+  // product has none the claim comes out of the reply. utils/techSheet.js owns both
+  // halves; resolveTechSheet (setupContext) owns which file belongs to this product.
+  let docToSend = diagnostics?.docToSend || pendingSheet || null;
+  if (replyText) {
+    try {
+      const { claimsTechSheet, stripTechSheetClaim } = require("../utils/techSheet");
+      if (claimsTechSheet(replyText)) {
+        const sheet = (newState && newState.techSheet) || null;
+        if (!docToSend && sheet && sheet.url) {
+          docToSend = { url: sheet.url, filename: sheet.name || "Ficha_Tecnica_Hanlob.pdf" };
+          console.log(`📄 [workflow] reply promised the ficha técnica — attaching ${sheet.source || "it"} for ${psid}`);
+        } else if (!docToSend) {
+          const before = replyText;
+          replyText = stripTechSheetClaim(replyText);
+          if (replyText !== before) console.warn(`📄 [workflow] no ficha técnica for this product — dropped the empty promise for ${psid}`);
+        }
+      }
+    } catch (e) {
+      console.error("⚠️ tech sheet claim check failed:", e.message);
+    }
+  }
+
   if (!catalogToSend && replyText) {
     try {
       const { claimsCatalog, stripCatalogClaim } = require("../utils/catalogClaim");
@@ -393,22 +442,22 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
       console.error("⚠️ catalog claim check failed:", e.message);
     }
   }
-  if (catalogToSend?.url) {
+  for (const doc of [catalogToSend, docToSend]) {
+    if (!doc?.url) continue;
     try {
-      const cat = catalogToSend;
       const isWhatsApp = (convo.channel === "whatsapp") || String(psid).startsWith("wa:");
       if (isWhatsApp) {
         const { sendDocumentMessage } = require("../channels/whatsapp/api");
         const phone = String(psid).replace(/^wa:/, "");
-        await sendDocumentMessage(phone, cat.url, cat.filename || "Catalogo_Hanlob.pdf", null);
+        await sendDocumentMessage(phone, doc.url, doc.filename || "Catalogo_Hanlob.pdf", null);
       } else {
         const { sendCatalog } = require("../utils/sendCatalog");
         const fbPsid = String(psid).replace(/^fb:/, "");
-        await sendCatalog(fbPsid, cat.url, null); // file only; the text reply is separate
+        await sendCatalog(fbPsid, doc.url, null); // file only; the text reply is separate
       }
-      console.log(`📄 [workflow] catalog document sent to ${psid}`);
+      console.log(`📄 [workflow] document sent to ${psid}: ${doc.filename || doc.url}`);
     } catch (e) {
-      console.error("⚠️ workflow catalog send failed:", e.message);
+      console.error("⚠️ workflow document send failed:", e.message);
     }
   }
 

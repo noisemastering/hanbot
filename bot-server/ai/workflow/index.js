@@ -409,7 +409,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     try {
       const Workflow = require("../../models/Workflow");
       const familyList = Workflow.familyListOf(workflow);
-      const { contextBlock, product, priceInfo, catalog, preloadedAmounts, promoPitch, promoQuote, altPos, altProductIds } = await resolveSetupContext(
+      const { contextBlock, product, priceInfo, catalog, techSheet, preloadedAmounts, promoPitch, promoQuote, altPos, altProductIds } = await resolveSetupContext(
         workflow.setup,
         state.setupOverrides,
         familyList,
@@ -423,6 +423,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       if (product && product._id && !state.activeProductId) state.activeProductId = String(product._id);
       state.priceInfo = priceInfo || null;
       state.catalog = catalog || null; // resolved catalog (climb): {url, kind, source}
+      state.techSheet = techSheet || null; // ficha técnica PDF for this product, or null
       state.preloadedAmounts = preloadedAmounts || []; // every preloaded product's price (clamp allow-set)
       state.promoPitch = promoPitch || null; // verbatim sales pitch (sent once, on ask)
       state.promoQuote = promoQuote || null; // deterministic quote when no pitch is set
@@ -790,6 +791,49 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           fromNode: { id: currentNode.id, name: currentNode.name },
           toNode: { id: currentNode.id, name: currentNode.name },
           wireMeshAnswered: true,
+        },
+      };
+    }
+  }
+
+  // A TECHNICAL QUESTION IS ANSWERED WITH THE FICHA TÉCNICA (2026-11-06, psid
+  // 28508399788837176, "No respondió lo que se preguntó"). "Quiero características de ese
+  // ground cover . Grosor" was answered with the campaign's promo prices and then with
+  // the ask for his CP and colonia — the question was never touched — and Noemí answered
+  // it three hours later with the file: "Le comparto ficha técnica del cover" + PDF. We
+  // do exactly that. Flow-agnostic and placed here on purpose, AHEAD of every flow's
+  // price gates (the GC opener owns a first message with no digits in it, which is
+  // precisely this one), same as the wire-mesh gate above.
+  //
+  // It only fires when a sheet actually RESOLVES for this flow's product, which is what
+  // keeps it from hijacking answers that already work: the borde's "grosores" means its
+  // two versions (asksVersions), and malla sombra's specs are answered from knowledge —
+  // neither family has a sheet, so neither reaches this gate. A measure in the message
+  // means the turn has a quote to produce as well, so the gate stands aside and the
+  // model path handles both halves (the claim guard in ai/index.js attaches the file
+  // when the reply says it is sharing it).
+  if (userMessage && state.techSheet && state.techSheet.url && !(state.techSheetSent >= 2)) {
+    const { asksTechSheet, techSheetReply } = require("../../utils/techSheet");
+    const _ts = String(userMessage);
+    const { dimsOf: _tsDims } = require("./tools");
+    if (asksTechSheet(_ts) && _tsDims(_ts) && !namesOtherProduct(_ts)) {
+      // Both halves asked at once ("precio por rollo y ficha técnica", a real message).
+      // The quote path below owns the price, so don't claim the turn — flag the sheet
+      // and ai/index.js attaches it to whatever reply this turn produces.
+      state.techSheetPending = true;
+    } else if (asksTechSheet(_ts) && !namesOtherProduct(_ts)) {
+      state.techSheetSent = (state.techSheetSent || 0) + 1;
+      const reply = techSheetReply(state.techSheet.label);
+      history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
+      return {
+        reply,
+        state: { ...state, history, nodeId: currentNode.id },
+        diagnostics: {
+          workflow: { id: String(workflow._id), name: workflow.name },
+          fromNode: { id: currentNode.id, name: currentNode.name },
+          toNode: { id: currentNode.id, name: currentNode.name },
+          techSheetSent: state.techSheet.source || true,
+          docToSend: { url: state.techSheet.url, filename: state.techSheet.name },
         },
       };
     }
@@ -1769,7 +1813,14 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // bubbles, which is the whole point of splitting them: short and interactive.
         // It fires only when the opening message carries nothing else to answer — a
         // first message that asks something specific is answered, not talked over.
-        if (_gcFlow && !state.gcOpenerSent && !history.some((h) => h.role === "assistant")) {
+        // The opener normally gets the FIRST bot turn only. One exception: when that
+        // turn was the ficha técnica (the gate above answers a specs question before any
+        // price is quoted), the campaign's prices have not gone out yet — so the opener
+        // may still claim the next message that qualifies for it.
+        const _gcOpenerTurn =
+          !history.some((h) => h.role === "assistant") ||
+          (!!state.techSheetSent && history.filter((h) => h.role === "assistant").length === 1);
+        if (_gcFlow && !state.gcOpenerSent && _gcOpenerTurn) {
           const t = String(userMessage || "").trim();
           const isOpener =
             t.length <= 70 && !dims && !gcAskWidth && !gcNearestLen && qty == null &&
