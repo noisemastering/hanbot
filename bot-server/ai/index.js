@@ -255,34 +255,70 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
     { psid, personaName, profileName: profileName || null }
   );
 
-  // NEVER SAY THE SAME THING TWICE IN A ROW. Reported 2026-10-27 (psid
-  // 29251119614512301, "al final contestaba lo mismo"): three different messages got
-  // one identical sentence back, because a catch-all gate fires on every turn it
-  // doesn't recognise and has no memory of having just fired. A customer reading the
-  // same words a second time learns that nobody is listening, which is worse than any
-  // single wrong answer.
+  // NEVER SAY THE SAME THING TWICE AS IF IT WERE THE FIRST TIME. The user's rule,
+  // 2026-11-06, after psid 28881861821437120 got ONE identical paragraph five times in
+  // nine minutes (including as the answer to "Ya para de mmr"):
   //
-  // This is the LAST line of defence, not the fix — the deferral gate upstream is. It
-  // sits here because it is the one place every gate's reply passes through, and the
-  // engine has a dozen early returns that each would otherwise need their own guard.
-  // It only ever appends a short nudge to vary the turn; it never swallows the reply,
-  // because a repeated answer is still better than silence.
+  //   "the bot must not repeat the same answer even if the client asks the same
+  //    question, it must at least make clear that it already mentioned it and/or change
+  //    the wording for the next response, if the client asks the same question a third
+  //    time it should escalate if it's a good prospect or stop replying if he's just
+  //    trolling"
+  //
+  // The 2026-10-27 version of this guard DID fire — it appended a fixed line, and
+  // because the engine stores the BARE reply in history, every later turn compared
+  // bare-to-bare, matched again, and sent the identical appended text. A remedy that
+  // produces the same bytes is not a remedy. So: a ladder, counted per ANSWER on
+  // `state.answerCounts` (so the same answer coming back later in the conversation
+  // counts too, not only on consecutive turns), owned by utils/repeatGuard.js.
+  //
+  // This is still the LAST line of defence, not the fix — the gate that should have
+  // answered is. It lives here because it is the one place every gate's reply passes.
   let replyText = reply;
+  let repeatEscalation = null; // reason string when the 3rd time escalates
+  let repeatSilence = false;   // the 3rd time with nothing to rescue → stay quiet
   try {
     if (replyText && typeof replyText === "string") {
-      const prevBot = [...(newState.history || [])]
-        .filter((h) => h.role === "assistant")
-        .slice(-2, -1)[0];
-      const norm = (s) => String(s || "").replace(/\s+/g, " ").trim().toLowerCase();
       // A deferral turn is exempt: that gate repeats ON PURPOSE and tapers as it goes
-      // (see customerDeferred). Appending "dime con qué te ayudo" to someone who is
-      // trying to end the conversation is the nagging this whole fix removes.
+      // (see customerDeferred). Appending anything to someone who is trying to end the
+      // conversation is the nagging that fix removed.
       const deferring = !!diagnostics?.customerDeferred;
-      if (!deferring && prevBot && norm(prevBot.text) === norm(replyText) && norm(replyText).length > 20) {
-        console.warn(`🔁 [workflow] identical reply suppressed for ${psid} — varying it`);
-        replyText = `${replyText}\n\nSi prefieres, dime con qué te ayudo y lo vemos. 😊`;
+      if (!deferring) {
+        const { bumpAnswer, restate, isGoodProspect } = require("../utils/repeatGuard");
+        const times = bumpAnswer(newState, replyText);
+        if (times === 2) {
+          console.warn(`🔁 [workflow] same answer a 2nd time for ${psid} — restating it`);
+          replyText = restate(replyText);
+        } else if (times >= 3) {
+          const good = isGoodProspect({ state: newState, convo });
+          if (good && !newState.repeatEscalated) {
+            newState.repeatEscalated = true;
+            repeatEscalation =
+              "El bot dio la MISMA respuesta 3 veces y el cliente sigue preguntando — no lo está entendiendo; retomar la venta";
+            replyText =
+              "Perdón, creo que no te estoy entendiendo bien. 🙏 Ya pasé tu conversación con una persona del equipo para que te atienda directo por aquí.";
+            console.warn(`🙋 [workflow] 3rd identical answer for ${psid} — escalating (good prospect)`);
+          } else if (good) {
+            // Already escalated: a human owns it. Say nothing rather than repeat.
+            replyText = null;
+            repeatSilence = true;
+          } else {
+            // Nothing in this conversation to rescue — a quote, a measure, a CP, a
+            // phone, a click: none. Answering again is what is being played with, so
+            // STOP REPLYING. The thread stays open and the moment they say something
+            // new the ladder has nothing to match and the bot answers normally.
+            newState.repeatMuted = true;
+            replyText = null;
+            repeatSilence = true;
+            console.warn(`🤐 [workflow] 3rd identical answer for ${psid} with nothing to rescue — staying quiet`);
+          }
+        }
       }
     }
+    // A turn that produced something to say lifts the mute: the customer moved on,
+    // so the bot answers normally again. Without this the sweeper would keep skipping
+    // the conversation for good.
+    if (replyText && newState.repeatMuted) newState.repeatMuted = false;
   } catch (e) {
     console.error("⚠️ repeat guard failed:", e.message);
   }
@@ -377,6 +413,20 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
       console.log(`🙋 [workflow] handoff escalated for ${psid}: ${diagnostics.handoffReason || "(sin motivo)"}`);
     } catch (e) {
       console.error("⚠️ engine handoff trigger failed:", e.message);
+    }
+  }
+
+  // The 3rd identical answer to a GOOD PROSPECT is a hand-off, not a nicer sentence.
+  // It alerts whatever the customer gave us — like an engine failure or an unreadable
+  // image, this is our breakdown, not a lead going quiet, so the cold-lead split does
+  // not apply (2026-11-06, the user's rule).
+  if (repeatEscalation) {
+    try {
+      const { triggerHandoff } = require("../services/pushNotifications");
+      await triggerHandoff(psid, repeatEscalation);
+      console.log(`🙋 [workflow] repeat escalation for ${psid}: ${repeatEscalation}`);
+    } catch (e) {
+      console.error("⚠️ repeat escalation trigger failed:", e.message);
     }
   }
 
@@ -558,6 +608,11 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
     reply: safeText
       ? { type: "text", text: safeText, ...(followUpText ? { followUp: followUpText } : {}) }
       : null,
+    // Silence the repeat ladder chose ON PURPOSE (3rd identical answer, nothing in the
+    // conversation to rescue). It must NOT reach the rescue ladder — cold start would
+    // answer with price anchors, which is the repetition all over again — and it must
+    // not be recorded as a silent turn, because nothing failed.
+    silentOnPurpose: repeatSilence || undefined,
   };
 }
 
@@ -751,8 +806,8 @@ async function maybeRunAdWorkflow(userMessage, psid) {
       sourceLabel: `ad="${ad.name || convo.adId}"`,
       initOverrides: ad.workflowSetup || {},
     });
-    if (!res?.reply) await noteSilentTurn(psid, `ad-workflow produced no reply (node ${res?.state?.nodeId || "?"})`, userMessage);
-    return { owned: true, reply: res?.reply || null };
+    if (!res?.reply && !res?.silentOnPurpose) await noteSilentTurn(psid, `ad-workflow produced no reply (node ${res?.state?.nodeId || "?"})`, userMessage);
+    return { owned: true, reply: res?.reply || null, silentOnPurpose: !!res?.silentOnPurpose };
   } catch (e) {
     // Owned but the engine errored → stay silent / let the engine's own handoff
     // fallback handle it. NEVER drop to the legacy bot (that caused the bounce).
@@ -798,8 +853,8 @@ async function maybeRunColdStartWorkflow(userMessage, psid) {
       // Coldstart router has context (product interest) instead of starting blind.
       initOverrides: convo.productInterest ? { productInterest: convo.productInterest } : {},
     });
-    if (!res?.reply) await noteSilentTurn(psid, `cold-start produced no reply (node ${res?.state?.nodeId || "?"})`, userMessage);
-    return { owned: true, reply: res?.reply || null };
+    if (!res?.reply && !res?.silentOnPurpose) await noteSilentTurn(psid, `cold-start produced no reply (node ${res?.state?.nodeId || "?"})`, userMessage);
+    return { owned: true, reply: res?.reply || null, silentOnPurpose: !!res?.silentOnPurpose };
   } catch (e) {
     console.error(`⚠️ cold-start engine error (owned, NOT falling to legacy) for ${psid}:`, e.message);
     await noteSilentTurn(psid, `cold-start engine error: ${e.message}`, userMessage);

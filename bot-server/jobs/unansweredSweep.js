@@ -110,10 +110,15 @@ async function runUnansweredSweepJob(opts = {}) {
       const skip = (reason) => out.skipped.push({ psid, reason });
 
       const convo = await Conversation.findOne({ psid })
-        .select("state channel unansweredSweep lastMessageAt")
+        .select("state channel unansweredSweep lastMessageAt workflowState.repeatMuted")
         .lean();
       if (!convo) { skip("sin conversación"); continue; }
       if (HUMAN_STATES.has(convo.state)) { skip(`la atiende una persona (${convo.state})`); continue; }
+      // SILENCE THE BOT CHOSE. The repeat ladder stops replying when the same answer
+      // has already gone out three times and there is nothing in the conversation to
+      // rescue (the user's rule, 2026-11-06: "stop replying if he's just trolling").
+      // Re-answering it here would be the repetition the mute exists to end.
+      if (convo.workflowState?.repeatMuted) { skip("silencio deliberado (respuesta repetida)"); continue; }
       if (convo.unansweredSweep?.at && now - new Date(convo.unansweredSweep.at).getTime() < RECLAIM_MS) {
         skip("barrida hace poco"); continue;
       }

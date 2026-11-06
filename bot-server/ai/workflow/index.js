@@ -580,7 +580,28 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     }
   }
 
-  if (userMessage && state.pendingHandoff) {
+  // FRUSTRATION BEATS THE PENDING-HANDOFF RESUME. Read the verdict HERE, before that
+  // resume returns: Ernesto's "Ya te dije lo que quiero 😀..." arrived while a pending
+  // ask was armed, so the resume claimed the turn and asked him for a phone and a CP —
+  // one more question at the man who was telling us to stop asking (2026-11-06, psid
+  // 28881861821437120). The gate that acts on it is §1.035, which needs beginHandoff
+  // and therefore lives further down; this is only the verdict, and the resume stands
+  // down when it is set. Same shape as the resume's other stand-downs (a new question,
+  // a courtesy-only reply).
+  let _frustration = false;
+  if (userMessage && !state.frustrationEscalated) {
+    try {
+      const { frustrationOf } = require("../../utils/frustration");
+      const { dimsOf: _fD, qtyFromText: _fQ } = require("./tools");
+      const _fmsg = String(userMessage);
+      const _fCarries = !!(_fD(_fmsg) || /\d/.test(_fmsg) || (_fQ && _fQ(_fmsg) != null));
+      _frustration = frustrationOf(_fmsg, { carriesNewData: _fCarries });
+    } catch (e) {
+      console.error("⚠️ frustration read failed:", e.message);
+    }
+  }
+
+  if (userMessage && state.pendingHandoff && !_frustration) {
     try {
       const { looksLikeBareName, firstGivenName, cleanPersonName } = require("./handoffGate");
       if (!(state.lead && state.lead.name) && looksLikeBareName(String(userMessage))) {
@@ -939,7 +960,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // phone — prefaced with any fact we owe the customer (a price quote, a sold-out
   // note) so one message both informs AND collects — and arm pendingHandoff so
   // their reply completes it next turn.
-  const beginHandoff = ({ preface, reason, wholesale, complaint } = {}) => {
+  const beginHandoff = ({ preface, reason, wholesale, complaint, pickup, now } = {}) => {
     const pre = preface ? `${String(preface).trim()} ` : "";
     // Same-day guard: only reuse a name/phone if the customer gave contact TODAY
     // (state.contactDay). No stamp (legacy lead from elsewhere) still counts —
@@ -1007,6 +1028,45 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     // not want a cotización form; asking for their name, CP and colonia "para incluir
     // el envío" in the same breath is the brush-off all over again. Ask for the one
     // thing we actually need to call them back, and nothing else.
+    // A BOT THAT ISN'T UNDERSTOOD ESCALATES WITHOUT ASKING FOR ANYTHING (2026-11-06,
+    // psid 28881861821437120). The collect-before-handoff rule exists so we don't
+    // bother the salesforce with dead leads — but a customer who has told us what he
+    // wants three times and is now writing "ya para de mmr" is the opposite of a dead
+    // lead, and one more question is the insult. Same exception as an engine failure or
+    // an unreadable image: a person has to step in whatever the customer gave us.
+    if (now) {
+      const replyN = pre.trim();
+      history.push({ role: "assistant", text: replyN, nodeId: currentNode.id, at: new Date() });
+      return {
+        reply: replyN,
+        state: { ...state, history, nodeId: currentNode.id, pendingHandoff: null },
+        diagnostics: {
+          workflow: { id: String(workflow._id), name: workflow.name },
+          fromNode: { id: currentNode.id, name: currentNode.name },
+          toNode: { id: currentNode.id, name: currentNode.name },
+          handoffRequested: true,
+          handoffReason: reason || null,
+        },
+      };
+    }
+    // A PICKUP needs a phone to call when the order is ready — and never the código
+    // postal, which is the whole point of coming to get it.
+    if (pickup) {
+      const askP = _lead.phone ? "" : "¿Me compartes un teléfono a 10 dígitos para avisarte cuando esté listo?";
+      const replyP = `${pre}${askP}`.trim();
+      history.push({ role: "assistant", text: replyP, nodeId: currentNode.id, at: new Date() });
+      return {
+        reply: replyP,
+        state: { ...state, history, nodeId: currentNode.id, pendingHandoff: { reason: reason || null, wholesale: false, attempts: 1, askedAt: new Date() } },
+        diagnostics: {
+          workflow: { id: String(workflow._id), name: workflow.name },
+          fromNode: { id: currentNode.id, name: currentNode.name },
+          toNode: { id: currentNode.id, name: currentNode.name },
+          handoffPendingContact: true,
+          pickup: true,
+        },
+      };
+    }
     if (complaint) {
       const askC = _lead.phone ? "" : "¿Me compartes un teléfono a 10 dígitos para que te busque?";
       const replyC = `${pre}${askC}`.trim();
@@ -1062,6 +1122,72 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       },
     };
   };
+
+  // 1.035 "YA TE DIJE LO QUE QUIERO" → A PERSON, NOW (2026-11-06, psid
+  // 28881861821437120, "No respondió lo que se preguntó"). Ernesto told us four
+  // different ways that he had already answered — and then wrote "Ya para de mmr"
+  // three times — and every one of those eight messages got the borde flow's catch-all
+  // nudge, three of them word for word. A customer reporting that we are not listening
+  // is not a message to parse: it is the end of the bot's usefulness on that
+  // conversation, and the only right move is to stop selling and put a person on it.
+  // Same family as §5C (a complaint about the attention goes straight to a person);
+  // this is the shape it takes when the complaint is about us, mid-sale.
+  //
+  // It escalates with NO ask (`now`): he has said what he wants three times, the thread
+  // is open, and one more question is the insult. "Ya te dije que quiero el de 18 m"
+  // carries the answer, so a message with data in it is still answered by the flow —
+  // only an outright insult escalates regardless. utils/frustration.js owns both.
+  if (userMessage && !state.frustrationEscalated) {
+    const { frustrationAnswer } = require("../../utils/frustration");
+    const kind = _frustration; // read above, ahead of the pending-handoff resume
+    if (kind) {
+      state.frustrationEscalated = true;
+      return beginHandoff({
+        now: true,
+        preface: frustrationAnswer(kind),
+        reason:
+          kind === "angry"
+            ? "El cliente está molesto y el bot no lo estaba entendiendo — atención humana inmediata"
+            : "El cliente dice que YA dio la información y el bot volvió a preguntar — atención humana inmediata",
+      });
+    }
+  }
+
+  // 1.036 "YO LO PASO A RECOGER Y A PAGAR" IS A LOCATION QUESTION (2026-11-06, same
+  // conversation). It got the payment answer — Mercado Libre, transferencia, "si pasas
+  // a la tienda puedes pagar ahí" — and then "¿Qué largo necesitas?", a length he had
+  // given twenty minutes before. Nobody told him WHERE the plant is; Noemí sent the
+  // address at the end. The word "pagar" is why: every flow's payment gate owns a
+  // message with pago/pagar in it and runs first, so the pickup gate has to run ahead
+  // of all of them — hence here, flow-agnostic, right after beginHandoff exists.
+  //
+  // Pickup answers did exist, but only in the LEGACY paths (ai/global/intents.js,
+  // ai/handlers/logistics.js, ai/utils/locationIntent.js), which this engine never
+  // reads — the standing "legacy answers are stranded" trap.
+  //
+  // It hands off, because a pickup is an order nobody can prepare but a person, and it
+  // asks ONLY for a phone to call when it is ready — never the código postal, which is
+  // the whole point of coming to get it.
+  if (userMessage && !state.pickupAnswered) {
+    const { asksPickup, pickupAnswer } = require("../../utils/pickup");
+    if (asksPickup(String(userMessage))) {
+      state.pickupAnswered = true;
+      let _hours = null;
+      try {
+        const { getBusinessInfo } = require("../../businessInfoManager");
+        const _biz = await getBusinessInfo().catch(() => null);
+        _hours = (_biz && (_biz.hours || _biz.businessHours)) || null;
+        if (_hours && typeof _hours !== "string") _hours = null;
+      } catch { /* hours are optional */ }
+      const _locLines = await locationBlock();
+      const _knowIt = !!((state.lastQuotes && state.lastQuotes.length) || (state.bordeQuoted && state.bordeQuoted.length) || state.activeProductId);
+      return beginHandoff({
+        pickup: true,
+        preface: pickupAnswer({ locationLines: _locLines, hours: _hours, knowWhatTheyWant: _knowIt }),
+        reason: "El cliente pasa a recoger a la planta y paga en tienda — preparar el pedido",
+      });
+    }
+  }
 
   // 1.04 THEY ASKED FOR THEIR EXACT MEASURE AGAIN, WITH NO MEASURE IN THE MESSAGE.
   // Her third try was "No pa ya te la dije como 3 veces y la ocupo en una sola pieza a
