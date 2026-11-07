@@ -214,7 +214,11 @@ async function locationBlock() {
     const biz = await getBusinessInfo().catch(() => null);
     if (!biz || (!biz.fullAddress && !biz.googleMapsUrl)) return null;
     const parts = [];
-    parts.push(`Estamos en ${biz.city || "Querétaro"}${biz.state && biz.state !== biz.city ? `, ${biz.state}` : ""} y hacemos envíos a toda la República. 📦`);
+    // `shortLocation` is the composed value, not the raw `city` field: the record's city
+    // still reads "Santiago de Querétaro" while its address is the Colón plant, and this
+    // line used to announce the town we left directly above the right address
+    // (2026-11-06). businessInfoManager owns that reconciliation — read it, don't redo it.
+    parts.push(`Estamos en ${biz.shortLocation || biz.state || "Querétaro"} y hacemos envíos a toda la República. 📦`);
     if (biz.fullAddress) parts.push(`📍 ${biz.fullAddress}`);
     if (biz.googleMapsUrl) parts.push(`🌐 ${biz.googleMapsUrl}`);
     // MOVE NOTICE — a correction, and self-retiring. The move to the Colón plant has

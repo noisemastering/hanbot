@@ -33,9 +33,9 @@ async function getBusinessInfo() {
         city: info.city || '',
         state: info.state || '',
         zipCode: info.zipCode || '',
-        fullAddress: [info.address, info.city, info.state, info.zipCode ? `C.P. ${info.zipCode}` : ''].filter(Boolean).join(', '),
+        fullAddress: fullAddressOf(info),
         shortLocation: shortLocationOf(info),
-        googleMapsUrl: info.googleMapsUrl || '',
+        googleMapsUrl: mapsUrlOf(info),
         website: info.website || '',
         catalog: info.catalog || {},
         social: info.social || {},
@@ -84,7 +84,76 @@ let _mapsUrl = "https://maps.app.goo.gl/7g9HmoY4TtaHQ26e8";
 let _storeAddress = "QRO 110 7380, El Arroyito, Colón, Querétaro, C.P. 76286";
 let _shortLocation = "Colón, Querétaro";
 
+// THE ADDRESS IS THE SINGLE SOURCE OF TRUTH, AND THE SEPARATE FIELDS MUST NOT CONTRADICT
+// IT (2026-11-06). The record's `address` is the Colón plant and correct; `city` still
+// reads "Santiago de Querétaro" (the site we left) and `googleMapsUrl` is still the old
+// Navex Park pin. The old code glued the fields together blindly —
+// [address, city, state, C.P. zip].join(", ") — so a customer was shown
+//   "…, Colón, Querétaro, C.P. 76286, México., Santiago de Querétaro, Querétaro, C.P. 76286"
+// and, one line below it, a map of the previous town. Concatenating strings without
+// looking at what they already say is the same blindness as matching words without
+// reading the sentence.
+//
+// So: append a part ONLY when the address does not already carry it, and DERIVE the map
+// from the address instead of trusting a stored pin that can rot while the address is
+// updated. One source of truth, and the map can never disagree with the address printed
+// above it.
+const _plain = (v) =>
+  String(v || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^a-z0-9]+/g, " ").trim();
+
+function fullAddressOf(info) {
+  const addr = String(info?.address || "").trim().replace(/[\s,.]+$/, "");
+  const have = _plain(addr);
+  // AN ADDRESS THAT CARRIES ITS OWN C.P. IS ALREADY COMPLETE — append nothing to it.
+  // This is what the record holds today ("…, El Lindero, Colón, Querétaro, C.P. 76286,
+  // México"), and the separate `city` field disagrees with it, so appending that field
+  // produced an address ending in a town we left. The test is a fact about the string,
+  // not an attempt to parse it: if the postal code is in there, the team wrote the whole
+  // thing and nothing of ours belongs after it.
+  const zip = _plain(info?.zipCode);
+  if (zip && have.includes(zip)) return addr;
+  const parts = [addr];
+  for (const extra of [info?.city, info?.state, info?.zipCode ? `C.P. ${info.zipCode}` : ""]) {
+    const v = String(extra || "").trim();
+    if (!v) continue;
+    const key = _plain(v).replace(/^c p /, ""); // "C.P. 76286" → "76286"
+    if (key && have.includes(key)) continue; // the address already says it
+    parts.push(v);
+  }
+  return parts.filter(Boolean).join(", ");
+}
+
+// A Google Maps link built from the address we are printing. A stored place pin is used
+// ONLY when it is a link the team pasted themselves (maps.app.goo.gl short link); the
+// hand-typed /@lat,lng pin in the record is from the old site and is ignored.
+function mapsUrlOf(info) {
+  const stored = String(info?.googleMapsUrl || "").trim();
+  if (/maps\.app\.goo\.gl/i.test(stored)) return stored;
+  const q = fullAddressOf(info);
+  if (!q) return stored; // nothing better to offer
+  return `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(q)}`;
+}
+
 function shortLocationOf(info) {
+  // Never announce a city the address contradicts ("Estamos en Santiago de Querétaro"
+  // above an address in Colón). When they disagree, the STATE is true in both, and the
+  // full address printed next to it carries the specifics.
+  const city = String(info?.city || "").trim();
+  const state = String(info?.state || "").trim();
+  const addr = _plain(info?.address);
+  const zip = _plain(info?.zipCode);
+  // The city is only CONTRADICTED when the address is COMPLETE (it carries its own C.P.,
+  // so the team wrote the whole thing) and that complete address does not name the city.
+  // A street-only address simply doesn't mention its town — that is not a contradiction,
+  // and the city field is the only place the town is written.
+  const addressIsComplete = !!(zip && addr.includes(zip));
+  if (city && addressIsComplete && !addr.includes(_plain(city))) {
+    return state || city;
+  }
+  return shortLocationLegacy(info);
+}
+
+function shortLocationLegacy(info) {
   return [info?.city, info?.state]
     .map((v) => String(v || "").trim())
     .filter(Boolean)
@@ -97,10 +166,12 @@ function shortLocationOf(info) {
 // a dashboard edit to the address could not reach the bot without a redeploy.
 function warmConstants() {
   return CompanyInfo.findById("hanlob").lean().then(info => {
-    if (info?.googleMapsUrl) _mapsUrl = info.googleMapsUrl;
-    if (info?.address) {
-      _storeAddress = [info.address, info.city, info.state, info.zipCode ? `C.P. ${info.zipCode}` : ''].filter(Boolean).join(', ');
-    }
+    // Same two helpers getBusinessInfo uses: these constants are the DESTRUCTURED copies
+    // six legacy call sites hold, so a different composition here would print a
+    // different address than the engine does.
+    const m = mapsUrlOf(info);
+    if (m) _mapsUrl = m;
+    if (info?.address) _storeAddress = fullAddressOf(info);
     const short = shortLocationOf(info);
     if (short) _shortLocation = short;
   }).catch(() => {});
