@@ -492,22 +492,54 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
       console.error("⚠️ catalog claim check failed:", e.message);
     }
   }
+  // A DOCUMENT THE BOT SENDS MUST BE RECORDED, AND A FAILED SEND MUST NOT READ AS A
+  // SUCCESS (2026-11-06, psid 29499442322972928 — the catalogue reported a THIRD time:
+  // "El bot le dijo que le mandaba el catalogo y no le mando nada").
+  //
+  // That report was about a send that WORKED. Meta's own record for that conversation
+  // has the application/pdf at 06:20:39 and the text at 06:20:40 — the 2026-11-04 guard
+  // did its job. What was missing is that NO send path writes a Message for the file
+  // (neither utils/sendCatalog nor the WhatsApp sendDocumentMessage), so the dashboard
+  // transcript showed the promise with nothing after it: the asesora read exactly what
+  // the customer would have read if the bug were real, and reported it. An invisible
+  // action is indistinguishable from one that never happened.
+  //
+  // And `sendCatalog` CATCHES its own axios error, logs it and returns normally, so the
+  // old `await` + "document sent" log claimed success unconditionally. Now the result is
+  // checked, the send is recorded with the same `[PDF: url]` marker the dashboard's own
+  // attachment route uses (so the UI renders it), and a failure puts the link INTO the
+  // reply, because a promise the file didn't back is the original bug.
   for (const doc of [catalogToSend, docToSend]) {
     if (!doc?.url) continue;
+    let sent = false;
     try {
       const isWhatsApp = (convo.channel === "whatsapp") || String(psid).startsWith("wa:");
       if (isWhatsApp) {
         const { sendDocumentMessage } = require("../channels/whatsapp/api");
         const phone = String(psid).replace(/^wa:/, "");
         await sendDocumentMessage(phone, doc.url, doc.filename || "Catalogo_Hanlob.pdf", null);
+        sent = true; // throws on failure
       } else {
         const { sendCatalog } = require("../utils/sendCatalog");
         const fbPsid = String(psid).replace(/^fb:/, "");
-        await sendCatalog(fbPsid, doc.url, null); // file only; the text reply is separate
+        const res = await sendCatalog(fbPsid, doc.url, null); // file only; text is separate
+        sent = !!res?.fileSent; // it swallows its own errors — read the result
+        if (!sent) console.error(`⚠️ [workflow] document NOT sent to ${psid}:`, JSON.stringify(res?.errors || []).slice(0, 300));
       }
-      console.log(`📄 [workflow] document sent to ${psid}: ${doc.filename || doc.url}`);
     } catch (e) {
       console.error("⚠️ workflow document send failed:", e.message);
+    }
+    if (sent) {
+      console.log(`📄 [workflow] document sent to ${psid}: ${doc.filename || doc.url}`);
+      try {
+        const Message = require("../models/Message");
+        await Message.create({ psid, text: `[PDF: ${doc.url}]`, senderType: "bot", timestamp: new Date() });
+      } catch (e) {
+        console.error("⚠️ could not record the sent document:", e.message);
+      }
+    } else if (replyText) {
+      // The claim is unbacked again. Give them the link rather than an empty promise.
+      replyText = `${replyText}\n\n${doc.url}`;
     }
   }
 
