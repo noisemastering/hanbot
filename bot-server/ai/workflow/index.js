@@ -3376,12 +3376,53 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           if (q != null && q >= 1 && state.bordeQuoted.length > 1) {
             return retB(`¡Perfecto, ${q}! ¿De cuál largo los quieres: ${state.bordeQuoted.map((l) => l + " m").join(", ")}? 😊`, { bordeNeedLengthForQty: q });
           }
-          // This nudge is the borde flow's "I didn't understand", so it must be the LAST
-          // thing tried — and it must never be the answer to a question about ANOTHER
-          // product (wa:5215549680085 asked for "Malla Anti malesa" and got it).
-          if (!namesOtherProduct(msgB)) {
+          // THIS NUDGE IS NO LONGER A CATCH-ALL (2026-11-06, wa:5214622537550 — the
+          // ninth report of the same shape). "Q colores tienes" got it, then got it
+          // again, then "Verde" got it, then "Eras en irapuato" got it: four turns in a
+          // row, and Noemí answered the colour question by hand the next morning
+          // ("solo lo tengo en color negro").
+          //
+          // Every previous fix taught this gate ONE more exception — the deferral, the
+          // courtesy close, metros lineales, pago, envío, dónde se consigue, otro
+          // producto, 500 m — and the next phrasing walked straight past it. The gate
+          // was written for a reply that carries NOTHING to act on ("sí claro", a bare
+          // CP, "gracias"), and that is now all it answers: a CONFIRMATION or an empty
+          // acknowledgement. Anything else — any question we might be able to answer —
+          // goes to the MODEL, which has this flow's knowledge and tools, instead of
+          // being swallowed by a word list that can never be finished. The context line
+          // below tells it what we already quoted so it does not re-ask the largo.
+          //
+          // `_ack` is a CLOSED set of confirmations, not an attempt to recognise topics:
+          // that is the distinction the user asked for — regex may only confirm, never
+          // interpret.
+          const _ackOnly = (() => {
+            const t = msgB
+              .toLowerCase()
+              .normalize("NFD")
+              .replace(/[\u0300-\u036f]/g, "")
+              .replace(/[^a-z0-9ñ ]/g, " ")
+              .replace(/\s+/g, " ")
+              .trim();
+            if (!t) return true; // a sticker or an emoji: nothing to answer
+            const words = t.split(" ").filter(Boolean);
+            if (words.length > 4) return false;
+            const ACK = new Set([
+              "si", "sip", "simon", "sii", "claro", "ok", "oka", "okey", "okay", "va", "vale",
+              "bien", "perfecto", "listo", "dale", "sale", "correcto", "exacto", "aja", "ajá",
+              "entendido", "enterado", "de", "acuerdo", "gracias", "grax", "muy", "amable",
+              "bueno", "buenas", "buenos", "dias", "tardes", "noches", "hola", "y", "pues",
+              "mmm", "ah", "oh", "este", "el", "la", "lo", "los", "las",
+            ]);
+            return words.every((w) => ACK.has(w) || /^\d{5}$/.test(w));
+          })();
+          if (_ackOnly && !namesOtherProduct(msgB)) {
             return retB(`¡Gracias! Ya te pasé los precios de los rollos de ${state.bordeQuoted.map((l) => l + " m").join(", ")}. ¿Cuál te sirve y cuántos necesitas? 😊`, { bordeQuotedNudge: state.bordeQuoted });
           }
+          // Not a confirmation → the model answers it, with what we already quoted in
+          // front of it so the largo is never asked twice.
+          state.turnContextExtra = (state.turnContextExtra ? state.turnContextExtra + "\n" : "") +
+            `YA LE COMPARTISTE los precios de los rollos de ${state.bordeQuoted.map((l) => l + " m").join(", ")}. ` +
+            `NO vuelvas a preguntar el largo ni repitas esos precios: contesta lo que el cliente acaba de preguntar.`;
         }
         state.bordeQuoted = null; // a genuinely NEW length → fall through to resolve it
       }
@@ -4388,6 +4429,15 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // inject it FRESH each turn so the handoff node can tell the customer whether
   // a specialist responds now or in the next business window.
   let turnContextExtra = businessHoursContext();
+  // A gate that DECLINED to claim the turn may still have a fact the model needs — the
+  // borde nudge hands over what it already quoted so the largo is never asked twice
+  // (2026-11-06). This is the "contribute a fact and let the turn continue" shape: the
+  // gate stops short-circuiting, the model answers, and nothing is dropped. Consumed
+  // here and cleared, so it never leaks into a later turn.
+  if (state.turnContextExtra) {
+    turnContextExtra += `\n- ${state.turnContextExtra}`;
+    state.turnContextExtra = null;
+  }
   // ALREADY-STATED SHADE %: the rollo deterministic handler persists state.rollShade
   // when the customer states/implies a shade (incl. a bare "80" or one said earlier
   // in the conversation). Tell the model so the descubrir node asks for the LARGO/
