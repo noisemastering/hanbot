@@ -550,6 +550,27 @@ async function enforceAltMarketplaceLink(text, opts = {}) {
 // chit-chat), allowedAmounts is empty and this is a no-op — range replies like
 // "desde 4x7m hasta 7x10m" are never touched (they carry no prices anymore).
 //
+// A LINE TOTAL IS NOT AN INVENTED PRICE (2026-11-06, psid 25041287378833944,
+// "El precio que supo de 2 mallas esta mal"). Alejandro asked three times what two
+// pieces of 6x4 would cost and was told **$649** each time — the unit price — until
+// Noemí answered "$1298" by hand. The model had it right; THIS FUNCTION broke it. The
+// allow-set that turn was {649, 1356}, so the correct total $1,298 matched nothing and
+// was rewritten to the primary amount, turning a right sentence into a wrong one:
+//   model: "Cada pieza te queda en $649 y por 2 piezas serían $1,298."
+//   sent:  "Cada pieza te queda en $649 y por 2 piezas serían $649."
+// Arithmetic on a price the engine resolved is not authorship — it is the same price,
+// counted. So an amount is now ACCOUNTED FOR when it is a resolved amount, an integer
+// multiple of one (2 piezas, 10 rollos), or a sum of two such multiples (a mixed order:
+// one 4x6 at $649 plus one 5x5 at $739 = $1,388). Anything that matches no product and
+// no multiple of one is still rewritten — that is the hallucinated-price bug this exists
+// for, and it is unaffected.
+//
+// NOTE ON WHAT IS STILL A PATTERN HERE: finding "$1,298" in a sentence is tokenising a
+// currency amount, not deciding what the customer meant — the decision this function
+// makes is now pure arithmetic against the prices the engine itself resolved. The money
+// a customer is told still must never be the model's invention; it just stops being
+// OURS either.
+//
 // @param {string} text
 // @param {number[]} allowedAmounts - every price the engine resolved this turn
 // @param {number|null} primaryAmount - what to rewrite a wrong price TO (the
@@ -564,7 +585,37 @@ function clampPrices(text, allowedAmounts = [], primaryAmount = null) {
 
   const primary = Number.isFinite(primaryAmount) && primaryAmount > 0 ? primaryAmount : allowed[0];
   // Tolerate rounding (e.g. ML 804.3 vs the bot saying $804).
-  const ok = (v) => allowed.some((a) => Math.abs(v - a) <= Math.max(1, a * 0.01));
+  const near = (v, a) => Math.abs(v - a) <= Math.max(1, a * 0.01);
+  // Every amount the engine's own prices can account for: each resolved price, its
+  // integer multiples (a quantity), and the sum of two such multiples (a mixed order).
+  // Bounded deliberately — MAX_UNITS covers any retail order (past it the mayoreo path
+  // owns the quote), and the pair search stays small because `allowed` holds a handful
+  // of prices.
+  const MAX_UNITS = 60;
+  const MAX_PAIR_UNITS = 12;
+  const ok = (v) => {
+    if (!Number.isFinite(v) || v <= 0) return false;
+    for (const a of allowed) {
+      for (let n = 1; n <= MAX_UNITS; n++) {
+        const t = a * n;
+        if (near(v, t)) return true;
+        if (t > v + 1) break; // multiples only grow
+      }
+    }
+    for (const a of allowed) {
+      for (const b of allowed) {
+        for (let i = 1; i <= MAX_PAIR_UNITS; i++) {
+          if (a * i > v + 1) break;
+          for (let j = 1; j <= MAX_PAIR_UNITS; j++) {
+            const t = a * i + b * j;
+            if (t > v + 1) break;
+            if (near(v, t)) return true;
+          }
+        }
+      }
+    }
+    return false;
+  };
   const display = String(Math.round(primary));
   let changed = false;
 
