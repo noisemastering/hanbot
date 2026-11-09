@@ -638,6 +638,10 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
 
   let priceInfo = null;
   let product = null;
+  // The flow's own reference price rows (ground cover's two full rolls today) — the
+  // same lines the prompt carries, kept on state so the output guard can BACK an
+  // empty "te comparto el precio" with the real numbers instead of dropping it.
+  let flowPriceRows = [];
   // Every preloaded product's RESOLVED price — fed to the deterministic price
   // clamp so it can't corrupt a legit multi-product quote (and so a neighbor's
   // price can be detected). See clampPrices / runWorkflowTurn.
@@ -832,20 +836,57 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
   // the TWO full rolls with their prices, and the client confirmed the rule — when the
   // conversation is about ROLLS the options narrow to about two, so quote them all. GC's
   // catalog is 8 sizes, but only 2x100 and 4x100 are FULL rolls; the shorter 10/25/50 m
-  // cuts are not the standard offering and come up only when a shorter length is asked
-  // for. Prices are NOT written here on purpose: they must come from the tool, so the
-  // ROLLO COMPLETO rule applies (price sheet with IVA folded in, no ML link, asesor
-  // closes it and quotes the freight).
+  // cuts are not the standard offering and come up only when a shorter length is asked for.
+  //
+  // THE NUMBERS ARE WRITTEN HERE NOW (2026-11-09, wa:5218180999001, "Nunca le paso precio
+  // del cover"). They deliberately were not: the rule said the prices must come from the
+  // tool. But the only tool that returns a price is share_product_link, whose own
+  // description is "use only when you are ready to send them to buy" — and a full roll
+  // has no buy link at all — so the model does not reach for it to ANSWER a price
+  // question. It wrote "te comparto el precio de ambos rollos completos" and stated
+  // neither, three turns running, until Noemí pasted $2,111.20 / $4,222.40 by hand.
+  // The numbers existed in exactly one place: gate (a0-bis), whose trigger is a word list,
+  // and "Me das elmptecio de los dos" walked past it. A fact the model needs in order to
+  // answer must be IN ITS CONTEXT, not behind a regex that has to recognise the question
+  // first — so the deterministic resolver (fullRollRows, the gate's own) puts the two
+  // prices in the prompt and noteResolved() adds them to the clamp's allow-set, which is
+  // what makes it safe: these are resolved prices, not remembered ones.
   if (isGroundCover) {
-    lines.push(
-      `- PRECIO SIN MEDIDA (ground cover): si el cliente pregunta el precio y NO ha dado largo ` +
-        `ni área ("¿cuánto cuesta la malla antimaleza?", "¿qué precio tiene?"), NO le devuelvas la ` +
-        `pregunta: el rollo completo se maneja en SOLO DOS medidas, 2 m x 100 m y 4 m x 100 m, así ` +
-        `que cotiza LAS DOS con la herramienta (una llamada por cada una) y pásale ambas con su ` +
-        `precio en un mensaje corto, como lo haría un asesor. Menciona que son los rollos completos ` +
-        `y que hay negro y blanco al mismo precio. Solo si el cliente pide un largo MENOR (10, 25 o ` +
-        `50 m) cotiza esa medida cortada. NUNCA inventes los precios: salen de la herramienta.`
-    );
+    let rollRows = [];
+    let rollCuts = [];
+    try {
+      const { fullRollRows } = require("./priceResolver");
+      const got = await fullRollRows((familyList || []).map((f) => f.id), { resolveFor: resolvePriceFor });
+      rollRows = got.rows || [];
+      rollCuts = got.cuts || [];
+      for (const r of rollRows) noteResolved({ amount: r.amount });
+    } catch (err) {
+      console.error("⚠️ full-roll price rows failed:", err.message);
+    }
+    if (rollRows.length) {
+      const rowTxt = rollRows.map((r) => `${r.label} = ${r.money}`).join("; ");
+      const cutTxt = rollCuts.length
+        ? ` Si pide un largo MENOR (${rollCuts.join(", ")} m) cotiza ESA medida cortada con la herramienta — esos precios NO están aquí.`
+        : "";
+      lines.push(
+        `- PRECIO DE LOS ROLLOS COMPLETOS (precios REALES, ya resueltos por el sistema — ÚSALOS): ${rowTxt}. ` +
+          `Negro y blanco cuestan lo MISMO. Si el cliente pregunta el precio sin dar medida, o pide "el precio de los dos", ` +
+          `o escribe la palabra precio con errores de dedo, DILE ESTOS NÚMEROS en el mismo mensaje — nunca contestes ` +
+          `"te comparto el precio" sin el número, y nunca le devuelvas la pregunta. ` +
+          `NUNCA ofrezcas ni prometas un link de compra del rollo completo: no existe, la compra se cierra directo con nosotros y el envío va por flete según su código postal — pero esto ÚLTIMO dilo solo si el cliente pregunta por el link, el pago o el envío.${cutTxt}`
+      );
+    } else {
+      lines.push(
+        `- PRECIO SIN MEDIDA (ground cover): si el cliente pregunta el precio y NO ha dado largo ` +
+          `ni área ("¿cuánto cuesta la malla antimaleza?", "¿qué precio tiene?"), NO le devuelvas la ` +
+          `pregunta: el rollo completo se maneja en SOLO DOS medidas, 2 m x 100 m y 4 m x 100 m, así ` +
+          `que cotiza LAS DOS con la herramienta (una llamada por cada una) y pásale ambas con su ` +
+          `precio en un mensaje corto, como lo haría un asesor. Menciona que son los rollos completos ` +
+          `y que hay negro y blanco al mismo precio. Solo si el cliente pide un largo MENOR (10, 25 o ` +
+          `50 m) cotiza esa medida cortada. NUNCA inventes los precios: salen de la herramienta.`
+      );
+    }
+    flowPriceRows = rollRows.map((r) => `• ${r.label}: ${r.money}`);
   }
 
   if (promo)
@@ -978,6 +1019,7 @@ async function resolveSetupContext(workflowSetup, overrides, families, opts = {}
     priceInfo,
     catalog: catalogResolved || null,
     techSheet: techSheetResolved || null, // ficha técnica PDF for THIS product (no global fallback)
+    flowPriceRows, // customer-ready price lines for this flow's headline products
     preloadedAmounts,
     promoPitch: (promo && promo.pitch) || null, // verbatim sales pitch (sent once, on ask)
     promoQuote, // deterministic quote (product + price + link) when no pitch is set

@@ -75,4 +75,21 @@ function asksShipping(text) {
   return asksShipCost(text) || asksShipTime(text) || asksShipHow(text);
 }
 
-module.exports = { asksShipCost, asksShipTime, asksShipHow, asksShipping };
+/**
+ * THE SHIPPING COST WITH NO PRODUCT NAMED YET (2026-11-09, wa:5218180999001).
+ *
+ * The bodies of the shipping answer live in the flows, because only the flow knows its
+ * own cut lengths — but COLD START has no product yet and had no answer at all: his
+ * "¿Cuál es el costo de envío?" was answered with three product prices and not one word
+ * about shipping. Both halves are true of EVERY product we sell (2026-10-27, 2026-10-28)
+ * and neither names a length, so the generic line belongs here beside the predicates
+ * rather than as a fourth copy that can drift from the other three.
+ */
+function genericShipLine() {
+  return (
+    "Sobre el envío: lo que se compra por Mercado Libre ya lo lleva incluido en el precio, " +
+    "y el rollo completo va por flete, que se cotiza según tu código postal."
+  );
+}
+
+module.exports = { asksShipCost, asksShipTime, asksShipHow, asksShipping, genericShipLine };

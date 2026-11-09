@@ -413,7 +413,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     try {
       const Workflow = require("../../models/Workflow");
       const familyList = Workflow.familyListOf(workflow);
-      const { contextBlock, product, priceInfo, catalog, techSheet, preloadedAmounts, promoPitch, promoQuote, altPos, altProductIds } = await resolveSetupContext(
+      const { contextBlock, product, priceInfo, catalog, techSheet, flowPriceRows, preloadedAmounts, promoPitch, promoQuote, altPos, altProductIds } = await resolveSetupContext(
         workflow.setup,
         state.setupOverrides,
         familyList,
@@ -428,6 +428,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       state.priceInfo = priceInfo || null;
       state.catalog = catalog || null; // resolved catalog (climb): {url, kind, source}
       state.techSheet = techSheet || null; // ficha técnica PDF for this product, or null
+      state.flowPriceRows = flowPriceRows || []; // this flow's reference price lines (empty-promise guard)
       state.preloadedAmounts = preloadedAmounts || []; // every preloaded product's price (clamp allow-set)
       state.promoPitch = promoPitch || null; // verbatim sales pitch (sent once, on ask)
       state.promoQuote = promoQuote || null; // deterministic quote when no pitch is set
@@ -1331,6 +1332,19 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         /\bcu[aá]nto\s+(cuesta|cuestan|sale|salen|vale|valen|es|ser[ií]a)\b/i.test(msgCs);
       const namesProduct =
         /\b(sombra|rollo|rollos|antimaleza|anti\s*maleza|ground\s*cover|groundcover|borde|separador|monofilament\w*|cinta|kit|sujetador\w*|ojill\w*|cord[oó]n|lazo|herraj\w*|argolla\w*|raschel)\b/i.test(msgCs);
+      // A SHIPPING QUESTION IS NOT A PRICE ASK (2026-11-09, wa:5218180999001). His first
+      // message was "¿Cuál es el costo de envío?" and this gate claimed it — "costo" is
+      // in the trigger — answering with three PRODUCT prices and not one word about
+      // shipping. The shipping question has its own owner (utils/shippingAsk.js) and the
+      // flow's knowledge answers it, so the gate must not claim that turn.
+      //
+      // It does not simply stand down either: "precio de la malla y costo de envío" asks
+      // BOTH, and dropping the anchors there would be the standing "a gate that answers
+      // HALF the message drops the other half" bug in the other direction — on cold start
+      // the model has no prices of its own to fall back on. So when shipping rides along
+      // it CONTRIBUTES the anchors as turn context and lets the model answer both halves.
+      const { asksShipping } = require("../../utils/shippingAsk");
+      const shippingToo = asksShipping(msgCs);
       if (asksPrice && !namesProduct && !dimsOf(msgCs) && !wantsWholesale(msgCs) && !state.promoQuoted) {
         const anchors = await coldStartPriceAnchors();
         if (anchors.length >= 2) {
@@ -1338,7 +1352,15 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           const list = parts.length > 1
             ? `${parts.slice(0, -1).join(", ")} y ${parts[parts.length - 1]}`
             : parts[0];
-          const reply = `Depende del producto: ${list}. ¿Cuál te interesa y de qué medida? 😊`;
+          // Contributing the anchors as turn context was tried first and the model
+          // IGNORED them — it asked for the product instead, which is the standing "a fix
+          // written as a prompt sentence is not a fix" trap. So both halves are
+          // deterministic: the shipping answer (its own owner, no lengths in it) and the
+          // anchors, applicable half first.
+          const { genericShipLine } = require("../../utils/shippingAsk");
+          const reply = shippingToo
+            ? `${genericShipLine()} Y sobre precios, depende del producto: ${list}. ¿Cuál te interesa y de qué medida? 😊`
+            : `Depende del producto: ${list}. ¿Cuál te interesa y de qué medida? 😊`;
           history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
           return {
             reply,
@@ -2069,37 +2091,16 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         if (asksBroadPrice && !asksSizesStrict && !dims && carried.size === 0 && rolloFams.length &&
             !namesOtherProduct(msg)) {
           try {
-            let frontierF = rolloFams.map((f) => String(f.id)).filter(Boolean);
-            const leavesF = [];
-            for (let d = 0; d < 5 && frontierF.length; d++) {
-              const kids = await PF.find({ parentId: { $in: frontierF } }).lean().catch(() => []);
-              if (!kids.length) break;
-              leavesF.push(...kids.filter((k) => k.sellable === true));
-              frontierF = kids.map((k) => String(k._id));
-            }
-            const fullRolls = leavesF.filter((k) => Number(k.attributes?.length) === 100);
-            // One quote per WIDTH: negro and blanco are separate leaves at the same price,
-            // so quoting both colours would print the same number twice.
-            const byW = new Map();
-            for (const k of fullRolls) {
-              const w = String(k.attributes?.width || "");
-              if (!w || byW.has(w)) continue;
-              byW.set(w, k);
-            }
-            const widths = [...byW.keys()].sort((a, b) => Number(a) - Number(b));
-            const rowsF = [];
-            const shorter = new Set();
-            for (const k of leavesF) {
-              const l = Number(k.attributes?.length);
-              if (l && l !== 100) shorter.add(l);
-            }
-            for (const w of widths) {
-              const pi = await resolvePrice(byW.get(w), altOpt(state, byW.get(w))).catch(() => null);
-              if (!pi || pi.amount == null) continue;
-              rowsF.push(`• Rollo de ${w} x 100 m: ${fmtMoney(pi)}`);
-            }
+            // Same rows the model is given in its prompt (setupContext), from the one
+            // owner — so the gate and the model can never quote different numbers.
+            const { fullRollRows } = require("./priceResolver");
+            const { rows: fullRows, cuts: shorterCuts } = await fullRollRows(
+              rolloFams.map((f) => f.id),
+              { resolveFor: (leaf) => resolvePrice(leaf, altOpt(state, leaf)) }
+            );
+            const rowsF = fullRows.map((r) => `• ${r.label}: ${r.money}`);
             if (rowsF.length >= 1) {
-              const cuts = [...shorter].sort((a, b) => a - b);
+              const cuts = shorterCuts;
               const cutLine = cuts.length
                 ? ` Si necesitas menos, también lo cortamos en ${cuts.join(", ")} m.`
                 : "";

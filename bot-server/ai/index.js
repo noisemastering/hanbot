@@ -492,6 +492,32 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
       console.error("⚠️ catalog claim check failed:", e.message);
     }
   }
+
+  // A PROMISE OF A PRICE MUST CARRY THE PRICE (2026-11-09, wa:5218180999001, "Nunca le
+  // paso precio del cover"). "Te comparto el precio de ambos rollos completos" with no
+  // number in it is the same empty promise as the catalog one above: nothing in the
+  // sentence is false, so the grounding verifier and the price clamp both pass it. The
+  // flow's resolved rows (state.flowPriceRows, from setupContext — the SAME numbers gate
+  // a0-bis would have quoted) back it; with none, the promise comes out.
+  if (replyText) {
+    try {
+      const { claimsPriceWithoutNumber, backPriceClaim, stripPriceClaim } = require("../utils/priceClaim");
+      if (claimsPriceWithoutNumber(replyText)) {
+        const rows = (newState && newState.flowPriceRows) || [];
+        const before = replyText;
+        replyText = rows.length ? backPriceClaim(replyText, rows) : stripPriceClaim(replyText);
+        if (replyText !== before) {
+          console.warn(
+            rows.length
+              ? `💲 [workflow] reply promised a price without stating one — backed it with ${rows.length} resolved row(s) for ${psid}`
+              : `💲 [workflow] reply promised a price without stating one and this flow has no reference rows — dropped the promise for ${psid}`
+          );
+        }
+      }
+    } catch (e) {
+      console.error("⚠️ price claim check failed:", e.message);
+    }
+  }
   // A DOCUMENT THE BOT SENDS MUST BE RECORDED, AND A FAILED SEND MUST NOT READ AS A
   // SUCCESS (2026-11-06, psid 29499442322972928 — the catalogue reported a THIRD time:
   // "El bot le dijo que le mandaba el catalogo y no le mando nada").

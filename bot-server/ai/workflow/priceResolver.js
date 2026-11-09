@@ -801,8 +801,60 @@ function colorChoiceText(cc) {
   };
 }
 
+// THE FULL-ROLL PRICES, IN ONE PLACE (2026-11-09, wa:5218180999001 — "Nunca le paso
+// precio del cover").
+//
+// Gate (a0-bis) in the engine computes the two ground cover roll prices and answers a
+// bare price ask with them; the model's PROMPT, meanwhile, was told to "cotiza las dos
+// con la herramienta" and given no numbers at all. So the numbers existed in exactly one
+// place — inside a gate whose trigger is a word list — and a customer who wrote
+// "Me das elmptecio de los dos" walked straight past it: the model took the turn,
+// promised both prices and stated neither. Two readers of the same facts, so they live
+// here and both read them, the same reason paymentAnswer() and shippingAsk exist.
+//
+// One row per WIDTH: negro and blanco are separate leaves at the same price, so quoting
+// both colours would print the same number twice. The prices come from resolvePrice, so
+// the ROLLO COMPLETO rule applies on its own (sheet with IVA folded in, no ML link).
+//
+// @param {Array<string>} familyIds the flow's family ids
+// @param {object} [opts]
+// @param {(leaf:object)=>Promise<object>} [opts.resolveFor] price resolver (campaign alt
+//        POS routing lives in the caller; default is the plain resolvePrice)
+// @returns {Promise<{rows: Array<{width:string,label:string,money:string,amount:number,leaf:object}>, cuts:number[]}>}
+async function fullRollRows(familyIds, opts = {}) {
+  const PF = require("../../models/ProductFamily");
+  const resolveFor = typeof opts.resolveFor === "function" ? opts.resolveFor : (leaf) => resolvePrice(leaf);
+  let frontier = (Array.isArray(familyIds) ? familyIds : [familyIds]).map((f) => String(f || "")).filter(Boolean);
+  const leaves = [];
+  for (let d = 0; d < 5 && frontier.length; d++) {
+    const kids = await PF.find({ parentId: { $in: frontier } }).lean().catch(() => []);
+    if (!kids.length) break;
+    leaves.push(...kids.filter((k) => k.sellable === true));
+    frontier = kids.map((k) => String(k._id));
+  }
+  const byW = new Map();
+  for (const k of leaves) {
+    if (Number(k.attributes && k.attributes.length) !== 100) continue;
+    const w = String((k.attributes && k.attributes.width) || "");
+    if (!w || byW.has(w)) continue;
+    byW.set(w, k);
+  }
+  const rows = [];
+  for (const w of [...byW.keys()].sort((a, b) => Number(a) - Number(b))) {
+    const leaf = byW.get(w);
+    const pi = await resolveFor(leaf).catch(() => null);
+    if (!pi || pi.amount == null) continue;
+    rows.push({ width: w, label: `Rollo de ${w} x 100 m`, money: fmtMoney(pi), amount: pi.amount, leaf });
+  }
+  const cuts = [...new Set(leaves
+    .map((k) => Number(k.attributes && k.attributes.length))
+    .filter((l) => l && l !== 100))].sort((a, b) => a - b);
+  return { rows, cuts };
+}
+
 module.exports = {
   isFullRoll,
+  fullRollRows,
   resolveIsFullRoll,
   colorChoiceForProduct, colorChoiceText,
   fmtMoney, resolvePrice, mlLinkOf, trackedLink, sanitizeMarketplaceLinks, enforceAltMarketplaceLink, clampPrices, clampMeasures, isGenericMlUrl, officialStoreUrl };
