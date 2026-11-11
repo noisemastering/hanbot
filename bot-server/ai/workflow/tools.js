@@ -681,6 +681,102 @@ Responde SOLO JSON: {"verdict":"no_product|current|other_flow|needs_human|not_so
   }
 }
 
+// WE MUST NEVER DENY OUR OWN PRODUCT (2026-11-11, wa:5218441323155, "Ocupo la malla
+// antimaleza" → "no manejamos malla antimaleza", ON THE ANTIMALEZA CAMPAIGN).
+//
+// The verdict→instruction mapping used to be inline, ordered, and ended in an
+// UNCONDITIONAL `return` of the not_sold denial — so it was not the "not_sold" branch,
+// it was the FALL-THROUGH. An `other_flow` verdict whose targetFlow could not be
+// resolved to a DIFFERENT flow skipped its own `if (other)` block, skipped needs_human,
+// and landed on "No vendemos X. Dile que no manejamos ese producto" — about the product
+// the flow exists to sell. The classifier's own rule is what aimed it there: "GROUND
+// COVER = MALLA ANTIMALEZA … enrútalo SIEMPRE al flujo que vende Ground Cover", which on
+// the Ground Cover flow IS the current flow.
+//
+// So the decision is a function now, every verdict is named, and the denial is reachable
+// ONLY from a literal "not_sold". Anything unresolvable falls back to CONTINUE, which is
+// the same safest-default the classifier itself documents: no false switch, no false
+// denial. Tests: node scripts/scopeDecisionTest.js
+function scopeDecision(verdict, { query = "", currentFlowName = null, flowCatalog = [], isColdStart = false } = {}) {
+  const q = String(query || "").trim();
+  const out = (text, extra) => ({
+    text,
+    scopeResult: null,
+    handoffRequested: false,
+    handoffReason: null,
+    ...(extra || {}),
+  });
+
+  // The message names no product we have to act on — don't switch, don't deny.
+  const CONTINUE =
+    "[INTERNO — no menciones nada de esto al cliente] El mensaje no nombra un producto distinto; continúa la conversación normalmente sin cambiar de tema ni de flujo.";
+
+  // It is OURS. A normal flow answers it; a TRIAGE flow can't (its job is to route, and
+  // if it kept the product the customer would dead-end on "no puedo cotizar"), so it
+  // offers a person instead.
+  const mine = () =>
+    isColdStart
+      ? out(
+          `[INTERNO — no menciones flujos ni procesos internos] No pudiste enrutar este producto a un flujo especialista. Ofrece de forma natural pasarlo con un asesor que le cotiza (usa request_handoff). NUNCA digas que no puedes dar precios sin ofrecer el asesor.`,
+          {
+            handoffRequested: true,
+            handoffReason: `Cliente en flujo de triage pidió "${q}"; no se pudo enrutar a un especialista — requiere asesor`,
+          }
+        )
+      : out(`[INTERNO — no menciones nada de esto al cliente] Eso sí lo manejas tú aquí. Atiéndelo con normalidad como parte de esta conversación.`);
+
+  switch (verdict && verdict.verdict) {
+    case "no_product":
+      return out(CONTINUE);
+
+    case "current":
+      return mine();
+
+    case "other_flow": {
+      // Resolve the target by its EXACT name. Excluding the current flow by name (not by
+      // the family-overlap flag) is deliberate and predates this: a triage flow shares
+      // families with its specialists, so overlap is not identity.
+      const target = (flowCatalog || []).find((f) => f && f.name === verdict.targetFlow);
+      if (target && target.name !== (currentFlowName || "")) {
+        return out(
+          `[INTERNO — NUNCA menciones flujos, especialistas, ni que "se maneja en otro lado"; el cambio debe ser TRANSPARENTE para el cliente] Sí vendemos ${
+            verdict.productName ? `"${verdict.productName}"` : "ese producto"
+          }. Es otro producto de nuestro catálogo, así que confirma de forma natural que es lo que busca y, cuando lo confirme, usa la herramienta switch_flow para continuar atendiéndolo sobre ese producto SIN avisarle de ningún cambio. NO inventes datos de ese producto tú misma.`,
+          {
+            scopeResult: {
+              verdict: "other_flow",
+              product: verdict.productName ? { kind: "product", name: verdict.productName } : null,
+              toWorkflowId: target.id,
+              toName: target.name,
+            },
+          }
+        );
+      }
+      // THE CLASSIFIER POINTED AT THIS VERY FLOW. There is nothing to switch to and the
+      // product is anything but foreign — it is the one we sell. Answer it here.
+      if (target) return mine();
+      // A targetFlow we cannot resolve at all (renamed or deactivated flow). We know the
+      // product is SOLD — the classifier said so — so the one thing we must not do is
+      // deny it. Carry on; the flow's own knowledge and gates still answer.
+      return out(CONTINUE);
+    }
+
+    case "needs_human":
+      return out(
+        `[INTERNO — no menciones flujos ni procesos internos] Sí lo vendemos, pero para cotizarlo necesitas a un asesor. De forma natural ofrece pasarlo con un asesor (usa request_handoff). NUNCA digas que no lo vendemos.`,
+        { handoffRequested: true, handoffReason: `Cliente pidió "${q}" — sí se vende pero no hay flujo; requiere asesor` }
+      );
+
+    case "not_sold":
+      return out(
+        `[INTERNO — no menciones nada de esto al cliente] No vendemos "${q}". Dile de forma amable y natural que no manejamos ese producto, sin tecnicismos.`
+      );
+
+    default:
+      return out(CONTINUE);
+  }
+}
+
 const REGISTRY = {
   share_product_link: {
     definition: {
@@ -1028,69 +1124,43 @@ const REGISTRY = {
             const path = f.id ? await familyFullPath(PF, f.id) : "";
             names.push(path || f.name || "");
           }
-          const isCurrent = fams.some((f) => flowFamilyIds.has(String(f.id)));
+          // IDENTITY, NOT OVERLAP. This flag only labels the prompt's "(FLUJO ACTUAL)",
+          // and family overlap is not identity: Coldstart carries the "Ground Cover"
+          // family verbatim, so on the Ground Cover flow THREE flows were announced as
+          // the current one — one of them the triage flow, which is what made the
+          // classifier route the campaign's own product away from it.
+          const isCurrent = !!ctx.currentFlowName && w.name === ctx.currentFlowName;
           return { id: String(w._id), name: w.name, families: names, desc: w.description || "", isCurrent, isColdStart: !!w.isColdStart };
         })
       );
 
-      // Is the CURRENT flow the cold-start/triage flow? If so, it must always
-      // route OUT to a specialist — never claim "current" — because its broad
-      // family realm overlaps every specialist flow.
-      const currentIsColdStart = flowCatalog.some((f) => f.isCurrent && f.isColdStart);
+      // Is the CURRENT flow the cold-start/triage flow? Read it from the CURRENT FLOW
+      // ITSELF (ctx.isColdStart, set by both call sites from workflow.isColdStart) —
+      // never by asking the catalog which flows look current. That test was
+      // `f.isCurrent && f.isColdStart` over a family-OVERLAP flag, and Coldstart carries
+      // the "Ground Cover" family verbatim, so the Ground Cover campaign was told it was
+      // a triage flow and forbidden from claiming its own product (2026-11-11).
+      const currentIsColdStart =
+        ctx.isColdStart != null
+          ? !!ctx.isColdStart
+          : !!(flowCatalog.find((f) => f.name === (ctx.currentFlowName || "")) || {}).isColdStart;
 
       const verdict = await aiClassifyProductScope(q, ctx.currentFlowName || null, flowCatalog, currentIsColdStart);
 
-      // no_product → the message didn't name a concrete product (greeting,
-      // color, filler). Don't switch, don't deny — just continue.
-      if (verdict.verdict === "no_product") {
-        return "[INTERNO — no menciones nada de esto al cliente] El mensaje no nombra un producto distinto; continúa la conversación normalmente sin cambiar de tema ni de flujo.";
-      }
-
-      // current → product belongs to this flow.
-      // SAFETY: a cold-start/triage flow must never keep a product as "current"
-      // — its job is to route out. If the classifier still said "current" here
-      // (e.g. its broad realm overlapped a specialist), treat it as needs_human
-      // so the customer gets a real asesor instead of a dead-end "no puedo
-      // cotizar". Better than parking them on the triage node.
-      if (verdict.verdict === "current") {
-        if (currentIsColdStart) {
-          ctx.handoffRequested = true;
-          ctx.handoffReason = `Cliente en flujo de triage pidió "${q}"; no se pudo enrutar a un especialista — requiere asesor`;
-          return `[INTERNO — no menciones flujos ni procesos internos] No pudiste enrutar este producto a un flujo especialista. Ofrece de forma natural pasarlo con un asesor que le cotiza (usa request_handoff). NUNCA digas que no puedes dar precios sin ofrecer el asesor.`;
-        }
-        return `[INTERNO — no menciones nada de esto al cliente] Eso sí lo manejas tú aquí. Atiéndelo con normalidad como parte de esta conversación.`;
-      }
-
-      // other_flow → belongs to a different active flow → surface switch target.
-      if (verdict.verdict === "other_flow" && verdict.targetFlow) {
-        // Exclude only the ACTUAL current flow (by name) — NOT by the family-overlap
-        // `isCurrent` flag. A triage/cold-start flow shares families with its
-        // specialists (e.g. cold-start carries the Ground Cover family), so a
-        // specialist gets wrongly flagged isCurrent and the switch target was being
-        // dropped → "ground cover" never routed out of cold-start.
-        const other = flowCatalog.find(
-          (f) => f.name === verdict.targetFlow && f.name !== (ctx.currentFlowName || "")
-        );
-        if (other) {
-          ctx.scopeResult = {
-            verdict: "other_flow",
-            product: verdict.productName ? { kind: "product", name: verdict.productName } : null,
-            toWorkflowId: other.id,
-            toName: other.name,
-          };
-          return `[INTERNO — NUNCA menciones flujos, especialistas, ni que "se maneja en otro lado"; el cambio debe ser TRANSPARENTE para el cliente] Sí vendemos ${verdict.productName ? `"${verdict.productName}"` : "ese producto"}. Es otro producto de nuestro catálogo, así que confirma de forma natural que es lo que busca y, cuando lo confirme, usa la herramienta switch_flow para continuar atendiéndolo sobre ese producto SIN avisarle de ningún cambio. NO inventes datos de ese producto tú misma.`;
-        }
-      }
-
-      // needs_human → sold but no active flow handles it → human.
-      if (verdict.verdict === "needs_human") {
+      // One owner for what each verdict MEANS — see scopeDecision above. The denial is
+      // reachable only from a literal "not_sold"; nothing falls through to it.
+      const decision = scopeDecision(verdict, {
+        query: q,
+        currentFlowName: ctx.currentFlowName || null,
+        flowCatalog,
+        isColdStart: currentIsColdStart,
+      });
+      if (decision.scopeResult) ctx.scopeResult = decision.scopeResult;
+      if (decision.handoffRequested) {
         ctx.handoffRequested = true;
-        ctx.handoffReason = `Cliente pidió "${q}" — sí se vende pero no hay flujo; requiere asesor`;
-        return `[INTERNO — no menciones flujos ni procesos internos] Sí lo vendemos, pero para cotizarlo necesitas a un asesor. De forma natural ofrece pasarlo con un asesor (usa request_handoff). NUNCA digas que no lo vendemos.`;
+        ctx.handoffReason = decision.handoffReason;
       }
-
-      // not_sold → genuinely not our category.
-      return `[INTERNO — no menciones nada de esto al cliente] No vendemos "${q}". Dile de forma amable y natural que no manejamos ese producto, sin tecnicismos.`;
+      return decision.text;
     },
   },
 
@@ -1220,4 +1290,4 @@ function parseRollQuantity(text) {
   return null;
 }
 
-module.exports = { REGISTRY, toolDefsFor, runTool, dimsOf, stripMeasures, findProductInFamilies, availableVariantsForProduct, availableMeasuresForFamilies, closestAvailableMeasure, nearestRollByArea, parseRollQuantity, hasUnitBoundNumber, qtyFromText, orderedQty, wantsWholesale, productShade, availableShadesForMeasure };
+module.exports = { REGISTRY, scopeDecision, toolDefsFor, runTool, dimsOf, stripMeasures, findProductInFamilies, availableVariantsForProduct, availableMeasuresForFamilies, closestAvailableMeasure, nearestRollByArea, parseRollQuantity, hasUnitBoundNumber, qtyFromText, orderedQty, wantsWholesale, productShade, availableShadesForMeasure };
