@@ -12,8 +12,7 @@
 const jwt = require("jsonwebtoken");
 const DashboardUser = require("../models/DashboardUser");
 
-const jwtSecret = () =>
-  process.env.JWT_SECRET || "your-super-secret-jwt-key-change-in-production";
+const { getJwtSecret } = require("../utils/jwtSecret");
 
 // [method, path] pairs reachable with no token. Each one is here for a reason:
 const PUBLIC = [
@@ -44,7 +43,7 @@ async function userFromRequest(req) {
   try {
     const header = req.headers.authorization || "";
     if (!/^Bearer\s+\S/.test(header)) return null;
-    const decoded = jwt.verify(header.replace(/^Bearer\s+/, ""), jwtSecret());
+    const decoded = jwt.verify(header.replace(/^Bearer\s+/, ""), await getJwtSecret());
     const user = await DashboardUser.findById(decoded.id).select("-password");
     return user && user.active ? user : null;
   } catch {

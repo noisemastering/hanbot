@@ -6,7 +6,7 @@ const crypto = require("crypto");
 const DashboardUser = require("../models/DashboardUser");
 const { sendPasswordResetEmail } = require("../utils/emailService");
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-jwt-key-change-in-production";
+const { getJwtSecret } = require("../utils/jwtSecret");
 const JWT_EXPIRES_IN = "7d"; // Token expires in 7 days
 
 // POST /auth/login - Login
@@ -63,7 +63,7 @@ router.post("/login", async (req, res) => {
         role: user.role,
         profile: user.profile
       },
-      JWT_SECRET,
+      await getJwtSecret(),
       { expiresIn: JWT_EXPIRES_IN }
     );
 
@@ -122,7 +122,7 @@ router.get("/me", async (req, res) => {
     }
 
     // Verify token
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, await getJwtSecret());
     console.log(`🔍 Token verification - Decoded user ID: ${decoded.id}, username from token: ${decoded.username}`);
 
     // Find user
@@ -214,7 +214,7 @@ router.post("/change-password", async (req, res) => {
     }
 
     // Verify token and get user
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, await getJwtSecret());
     const user = await DashboardUser.findById(decoded.id);
 
     if (!user || !user.active) {

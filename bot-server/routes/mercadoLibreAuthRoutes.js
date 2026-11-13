@@ -14,7 +14,7 @@ const {
   getValidAccessToken
 } = require("../utils/mercadoLibreOAuth");
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-jwt-key-change-in-production";
+const { getJwtSecret } = require("../utils/jwtSecret");
 
 // ============================================
 // AUTHENTICATION MIDDLEWARE
@@ -27,7 +27,7 @@ const authenticate = async (req, res, next) => {
       return res.status(401).json({ success: false, error: "No token provided" });
     }
 
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, await getJwtSecret());
     const user = await DashboardUser.findById(decoded.id).select("-password");
 
     if (!user || !user.active) {

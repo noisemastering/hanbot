@@ -15,7 +15,7 @@ const DashboardUser = require("../models/DashboardUser");
 const SystemState = require("../models/SystemState");
 const { invalidate } = require("../utils/systemState");
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-jwt-key-change-in-production";
+const { getJwtSecret } = require("../utils/jwtSecret");
 
 // Nuke'em secret code (two parts). Overridable via env, defaults to the agreed code.
 const NUKE_SECRET_WORD = process.env.NUKE_SECRET_WORD || "FuckC0mm13S";
@@ -25,7 +25,7 @@ const authenticate = async (req, res, next) => {
   try {
     const token = req.headers.authorization?.replace("Bearer ", "");
     if (!token) return res.status(401).json({ success: false, error: "No token provided" });
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, await getJwtSecret());
     const user = await DashboardUser.findById(decoded.id);
     if (!user || !user.active) {
       return res.status(401).json({ success: false, error: "Invalid token or inactive user" });

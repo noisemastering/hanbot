@@ -3,13 +3,13 @@ const router = express.Router();
 const jwt = require("jsonwebtoken");
 const DashboardUser = require("../models/DashboardUser");
 
-const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-jwt-key-change-in-production";
+const { getJwtSecret } = require("../utils/jwtSecret");
 
 const authenticate = async (req, res, next) => {
   try {
     const token = req.headers.authorization?.replace("Bearer ", "");
     if (!token) return res.status(401).json({ success: false, error: "No token provided" });
-    const decoded = jwt.verify(token, JWT_SECRET);
+    const decoded = jwt.verify(token, await getJwtSecret());
     const user = await DashboardUser.findById(decoded.id).select("-password");
     if (!user || !user.active) return res.status(401).json({ success: false, error: "Invalid token" });
     req.user = user;
