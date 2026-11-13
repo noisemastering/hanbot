@@ -784,8 +784,7 @@ function App() {
   const fetchMessages = async () => {
     try {
       const res = await fetch(`${API_URL}/conversations`, {
-        credentials: 'include',
-        headers: { Authorization: "Bearer hanlob_admin_2025" }
+        credentials: 'include'
       });
       const data = await res.json();
       setMessages(data || []);

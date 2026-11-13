@@ -1,3 +1,5 @@
+// Must run before anything issues a request: see utils/authTransport.js.
+import { installAuthTransport } from './utils/authTransport';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
@@ -6,6 +8,8 @@ import App from './App';
 import { LanguageProvider } from './i18n';
 import { AuthProvider } from './contexts/AuthContext';
 import reportWebVitals from './reportWebVitals';
+
+installAuthTransport();
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(
