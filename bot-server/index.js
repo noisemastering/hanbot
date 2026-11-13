@@ -71,27 +71,10 @@ mongoose.connect(process.env.MONGODB_URI)
 const cors = require("cors");
 
 // CORS configuration
+const { corsOrigin } = require('./utils/allowedOrigins');
 const corsOptions = {
-  origin: function(origin, callback) {
-    // Allow requests with no origin (mobile apps, Postman, etc.)
-    if (!origin) return callback(null, true);
-
-    const allowedOrigins = [
-      "http://localhost:3000",
-      "http://localhost:3001",
-      "http://localhost:3002",
-      "https://dashboard.hanlob.com.mx",
-      "https://hanbot-nu.vercel.app",
-      "https://emanational-leeanna-impressionable.ngrok-free.dev"
-    ];
-
-    // Allow all vercel.app subdomains
-    if (origin.includes('.vercel.app') || allowedOrigins.includes(origin)) {
-      callback(null, true);
-    } else {
-      callback(new Error('Not allowed by CORS'));
-    }
-  },
+  // Exact-match allow-list; see utils/allowedOrigins.js.
+  origin: corsOrigin,
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
@@ -270,10 +253,7 @@ const { Server } = require("socket.io");
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: [
-      "http://localhost:3001",
-      "https://hanbot-nu.vercel.app"
-    ],
+    origin: corsOrigin,
     methods: ["GET", "POST"],
     allowedHeaders: ["Content-Type", "Authorization"]
   }
