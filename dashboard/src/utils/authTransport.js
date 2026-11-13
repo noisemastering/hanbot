@@ -50,7 +50,17 @@ export function installAuthTransport() {
       (init && init.headers) || (input instanceof Request ? input.headers : undefined)
     );
     headers.set("Authorization", `Bearer ${token}`);
-    return nativeFetch(input, { ...(init || {}), headers });
+    return nativeFetch(input, { ...(init || {}), headers }).then((res) => {
+      // The API refused the token we sent: the session is over (expired, user
+      // deactivated, signing secret rotated). Drop it and reload, which lands on the
+      // login page — instead of every screen failing in its own way with a dead token.
+      // /auth/* is left to AuthContext, which already handles its own answers.
+      if (res.status === 401 && currentToken() === token && !/\/auth\//.test(String(url))) {
+        try { localStorage.removeItem("token"); } catch { /* ignore */ }
+        window.location.reload();
+      }
+      return res;
+    });
   };
 
   // --- bare axios (the shared instance in api.js has its own interceptor) ---

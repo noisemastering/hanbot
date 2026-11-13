@@ -785,12 +785,16 @@ function App() {
   const [analyticsLoading, setAnalyticsLoading] = useState(true);
 
   const fetchMessages = async () => {
+    // Nothing to ask for without a session: the API answers logged-in users only.
+    if (!localStorage.getItem('token')) { setLoading(false); return; }
     try {
       const res = await fetch(`${API_URL}/conversations`, {
         credentials: 'include'
       });
       const data = await res.json();
-      setMessages(data || []);
+      // A refusal (401 when logged out / session expired) is an OBJECT, not a list —
+      // storing it crashed the first render and left a blank page instead of the login.
+      setMessages(Array.isArray(data) ? data : []);
     } catch (error) {
       console.error("Error fetching messages:", error);
     } finally {
@@ -1603,8 +1607,6 @@ function App() {
   };
 
   useEffect(() => {
-    fetchMessages();
-
     socket.on("new_message", (msg) => {
       setMessages((prev) => [msg, ...prev]);
       playPopSound();
@@ -1612,6 +1614,14 @@ function App() {
 
     return () => socket.disconnect();
   }, []);
+
+  // Conversations load once there is a session — on page load when already logged in,
+  // and again right after a login (this used to run before login with a static password).
+  useEffect(() => {
+    if (user) fetchMessages();
+    else setMessages([]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [user?.id, user?._id]);
 
   useEffect(() => {
     if (location.pathname === "/products") {
