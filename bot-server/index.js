@@ -95,7 +95,7 @@ const corsOptions = {
   credentials: true,
   methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
   allowedHeaders: ["Content-Type", "Authorization"],
-  exposedHeaders: ["Content-Type", "Authorization"]
+  exposedHeaders: ["Content-Type", "Authorization", "Content-Disposition"]
 };
 
 app.use(cors(corsOptions));
@@ -180,6 +180,11 @@ app.use(async (req, res, next) => {
   } catch (e) { /* fail open */ }
   next();
 });
+
+// Everything below requires a logged-in dashboard user unless middleware/auth.js
+// lists it as PUBLIC. Keep this ABOVE every route.
+const { apiGuard, userFromRequest } = require('./middleware/auth');
+app.use(apiGuard);
 
 // Auth routes (no prefix, will be /auth/login, /auth/me, etc.)
 app.use('/auth', authRoutes);
@@ -597,11 +602,6 @@ async function callSendAPI(senderPsid, messageData) {
 
 // Ruta para ver mensajes desde el dashboard
 app.get("/messages", async (req, res) => {
-  const auth = req.headers.authorization;
-  if (!auth || auth.trim() !== "Bearer hanlob_admin_2025") {
-    return res.status(403).json({ success: false, error: "Unauthorized" });
-  }
-
   try {
     const messages = await Message.find().sort({ timestamp: -1 });
     res.json({ success: true, data: messages });
@@ -613,11 +613,6 @@ app.get("/messages", async (req, res) => {
 
 // Ruta para obtener todos los usuarios con sus nombres
 app.get("/users", async (req, res) => {
-  const auth = req.headers.authorization;
-  if (!auth || auth.trim() !== "Bearer hanlob_admin_2025") {
-    return res.status(403).json({ success: false, error: "Unauthorized" });
-  }
-
   try {
     // Get all unique PSIDs from messages
     const uniquePsids = await Message.distinct('psid');
@@ -638,11 +633,6 @@ app.get("/users", async (req, res) => {
 
 // Manual endpoint to force-sync all missing user profiles from Facebook
 app.post("/sync-users", async (req, res) => {
-  const auth = req.headers.authorization;
-  if (!auth || auth.trim() !== "Bearer hanlob_admin_2025") {
-    return res.status(403).json({ success: false, error: "Unauthorized" });
-  }
-
   try {
     console.log("🔄 Starting manual user sync...");
 
@@ -723,42 +713,8 @@ app.post("/sync-users", async (req, res) => {
   }
 });
 
-// Ruta temporal para insertar mensaje de prueba
-app.post("/test-message", async (req, res) => {
-  try {
-    const msg = await saveMessage("test_user_123", "Mensaje de prueba desde API local", "user");
-    console.log("💾 Test message saved:", msg);
-    res.status(201).json({ success: true, message: msg });
-  } catch (err) {
-    console.error("❌ Error saving test message:", err);
-    res.status(500).json({ success: false, error: err.message });
-  }
-});
-
-// Helper function to validate authentication (supports both hardcoded token and JWT)
-const validateAuth = async (auth) => {
-  if (!auth) return false;
-
-  // Check hardcoded token first (backward compatibility)
-  if (auth.trim() === "Bearer hanlob_admin_2025") {
-    return true;
-  }
-
-  // Check JWT token
-  try {
-    const token = auth.replace("Bearer ", "");
-    const jwt = require("jsonwebtoken");
-    const JWT_SECRET = process.env.JWT_SECRET || "your-super-secret-jwt-key-change-in-production";
-    const decoded = jwt.verify(token, JWT_SECRET);
-
-    // Optionally verify user exists and is active
-    const DashboardUser = require("./models/DashboardUser");
-    const user = await DashboardUser.findById(decoded.id);
-    return user && user.active;
-  } catch (err) {
-    return false;
-  }
-};
+// Kept for the three takeover routes below; the decision itself lives in middleware/auth.js.
+const validateAuth = async (auth) => !!(await userFromRequest({ headers: { authorization: auth } }));
 
 // 👨‍💼 API: Manual human takeover
 app.post("/api/conversation/:psid/takeover", async (req, res) => {

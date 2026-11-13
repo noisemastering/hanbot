@@ -398,11 +398,26 @@ function InventarioView() {
     fetchProductTree();
   }, []);
 
-  // Download the full inventory (coded sellable units) as an .xlsx. The
-  // Content-Disposition: attachment header makes the browser download it
-  // without navigating away from the page.
-  const handleExportExcel = () => {
-    window.location.href = `${API_URL}/product-families/export-inventory`;
+  // Download the full inventory (coded sellable units) as an .xlsx. It is fetched
+  // (not navigated to) because the API requires the user's token, and a plain
+  // browser navigation cannot carry one.
+  const handleExportExcel = async () => {
+    try {
+      const res = await fetch(`${API_URL}/product-families/export-inventory`);
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      const blob = await res.blob();
+      const name = (/filename="?([^";]+)"?/i.exec(res.headers.get('Content-Disposition') || '') || [])[1] || 'inventario.xlsx';
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = name;
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error('Error exporting inventory:', err);
+    }
   };
 
   // Upload an edited spreadsheet to bulk-update Inventario prices. Rows are
