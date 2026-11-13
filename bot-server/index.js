@@ -279,6 +279,20 @@ const io = new Server(server, {
   }
 });
 
+// The live feed carries every message as it is saved (customer, bot and asesor), so it
+// is for logged-in dashboard users only — ALL of them, with no per-role split, which is
+// the team's rule. The express guard (middleware/auth.js) cannot cover this: socket.io
+// answers its own requests before express sees them, so it is refused here, at the
+// handshake, with the same check.
+io.use(async (socket, next) => {
+  const token = socket.handshake.auth && socket.handshake.auth.token;
+  const header = token ? `Bearer ${token}` : socket.handshake.headers.authorization;
+  const user = await require("./middleware/auth").userFromRequest({ headers: { authorization: header } });
+  if (!user) return next(new Error("Unauthorized"));
+  socket.data.userId = String(user._id);
+  next();
+});
+
 io.on("connection", (socket) => {
   console.log("⚡ Cliente conectado al WebSocket");
   socket.on("disconnect", () => console.log("🔌 Cliente desconectado"));

@@ -102,7 +102,10 @@ import useNewVersionCheck from "./hooks/useNewVersionCheck";
 const API_URL = process.env.REACT_APP_API_URL || "https://hanbot-production.up.railway.app";
 const socket = io(API_URL, {
   reconnection: false, // Don't keep trying to reconnect
-  autoConnect: false   // Don't connect automatically
+  autoConnect: false,  // Don't connect automatically
+  // The server refuses a live-feed connection without a valid login. Read at connect
+  // time (not at import), so it is the token of whoever is logged in right then.
+  auth: (cb) => cb({ token: localStorage.getItem("token") })
 });
 
 function playPopSound() {
