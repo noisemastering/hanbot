@@ -15,6 +15,8 @@ const USERS = {
   u2: { _id: "u2", role: "admin", active: false },
   u3: { _id: "u3", role: "user", profile: "salesman", active: true, getAllPermissions: async () => ["conversations", "crm-customers"] },
   u4: { _id: "u4", role: "super_admin", active: true },
+  u5: { _id: "u5", role: "admin", active: true, passwordChangedAt: new Date(Date.now() + 60 * 60 * 1000) },
+  u6: { _id: "u6", role: "admin", active: true, passwordChangedAt: new Date(Date.now() - 60 * 60 * 1000) },
 };
 delete process.env.JWT_SECRET; // the test signs with a throwaway secret of its own
 process.env.JWT_SECRET = "test-only-secret";
@@ -72,6 +74,8 @@ const run = (method, p, headers = {}) => new Promise((resolve) => {
   ok("token signed with another secret is refused", (await run("GET", "/conversations", { authorization: tok("u1", "some-other-secret") })).code === 401);
   ok("expired token is refused", (await run("GET", "/conversations", { authorization: tok("u1", "test-only-secret", { expiresIn: -10 }) })).code === 401);
   ok("unsigned (alg none) token is refused", (await run("GET", "/conversations", { authorization: "Bearer " + jwt.sign({ id: "u1" }, "", { algorithm: "none" }) })).code === 401);
+  ok("a token issued BEFORE the password changed is refused", (await run("GET", "/conversations", { authorization: tok("u5") })).code === 401);
+  ok("a token issued AFTER the password changed passes", (await run("GET", "/conversations", { authorization: tok("u6") })).next === true);
   // WHO passed; now MAY — the level table is applied by the same guard (accessPolicy.js).
   const as = (id, m, p) => run(m, p, { authorization: tok(id) });
   ok("limited account: own screen passes", (await as("u3", "GET", "/conversations")).next === true);

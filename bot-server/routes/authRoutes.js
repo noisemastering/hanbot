@@ -8,11 +8,24 @@ const { sendPasswordResetEmail } = require("../utils/emailService");
 
 const { getJwtSecret } = require("../utils/jwtSecret");
 const JWT_EXPIRES_IN = "7d"; // Token expires in 7 days
+const throttle = require("../utils/loginThrottle");
+// A valid bcrypt hash of a random value nobody knows; only ever compared against.
+const DUMMY_HASH = require("bcryptjs").hashSync(crypto.randomBytes(24).toString("hex"), 10);
+
+// Request fields must be plain strings of a sane length. An OBJECT in their place is a
+// query operator ({"$ne": null} matches the first account), and a megabyte "password"
+// is a cheap way to keep the server busy hashing.
+const str = (v, max = 200) => (typeof v === "string" && v.length > 0 && v.length <= max ? v : null);
+const tooMany = (res, sec) => res.status(429).set("Retry-After", String(sec)).json({
+  success: false,
+  error: `Demasiados intentos. Intenta de nuevo en ${Math.max(1, Math.ceil(sec / 60))} min.`,
+});
 
 // POST /auth/login - Login
 router.post("/login", async (req, res) => {
   try {
-    const { username, password } = req.body;
+    const username = str((req.body || {}).username, 120);
+    const password = str((req.body || {}).password);
 
     // Validate input
     if (!username || !password) {
@@ -22,19 +35,27 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // Find user
+    // Too many recent failures from here / for this account? (utils/loginThrottle.js)
+    const keys = throttle.loginKeys(username, throttle.clientIp(req));
+    const gate = await throttle.check(keys);
+    if (gate.blocked) return tooMany(res, gate.retryAfterSec);
+
+    // Find user. An unknown username and a wrong password get the SAME answer and both
+    // count as a failure, so the form never confirms which usernames exist.
     const user = await DashboardUser.findOne({ username });
-    if (!user) {
-      console.log(`❌ Login failed: User "${username}" not found`);
+    // (An unknown username still pays for one hash, so the response time does not
+    // reveal whether the account exists.)
+    const isMatch = user ? await user.comparePassword(password) : (await require("bcryptjs").compare(password, DUMMY_HASH), false);
+    if (!user || !isMatch) {
+      await throttle.fail(keys);
+      console.log(`❌ Login failed for "${username}"`);
       return res.status(401).json({
         success: false,
         error: "Invalid credentials"
       });
     }
 
-    console.log(`🔍 Login attempt for username: "${username}" (ID: ${user._id}, Email: ${user.email})`);
-
-    // Check if user is active
+    // Only someone who knows the password learns that the account is switched off.
     if (!user.active) {
       return res.status(403).json({
         success: false,
@@ -42,14 +63,7 @@ router.post("/login", async (req, res) => {
       });
     }
 
-    // Verify password
-    const isMatch = await user.comparePassword(password);
-    if (!isMatch) {
-      return res.status(401).json({
-        success: false,
-        error: "Invalid credentials"
-      });
-    }
+    await throttle.clear(keys.filter((k) => k.rule === "pair"));
 
     // Update last login
     user.lastLogin = new Date();
@@ -187,7 +201,8 @@ router.post("/logout", (req, res) => {
 router.post("/change-password", async (req, res) => {
   try {
     const token = req.headers.authorization?.replace("Bearer ", "");
-    const { currentPassword, newPassword } = req.body;
+    const currentPassword = str((req.body || {}).currentPassword);
+    const newPassword = str((req.body || {}).newPassword);
 
     // Validate token
     if (!token) {
@@ -239,9 +254,18 @@ router.post("/change-password", async (req, res) => {
 
     console.log(`✅ Password changed for user: ${user.username}`);
 
+    // Changing the password ends every session issued before it (middleware/auth.js),
+    // including this one — so hand this browser a fresh token to carry on with.
+    const freshToken = jwt.sign(
+      { id: user._id, username: user.username, role: user.role, profile: user.profile },
+      await getJwtSecret(),
+      { expiresIn: JWT_EXPIRES_IN }
+    );
+
     res.json({
       success: true,
-      message: "Password changed successfully"
+      message: "Password changed successfully",
+      token: freshToken
     });
   } catch (error) {
     console.error("Change password error:", error);
@@ -263,7 +287,7 @@ router.post("/change-password", async (req, res) => {
 // POST /auth/forgot-password - Request password reset
 router.post("/forgot-password", async (req, res) => {
   try {
-    const { email } = req.body;
+    const email = str((req.body || {}).email, 200);
 
     if (!email) {
       return res.status(400).json({
@@ -271,6 +295,15 @@ router.post("/forgot-password", async (req, res) => {
         error: "Email is required"
       });
     }
+
+    // Each call can send an e-mail: cap it per caller and per address.
+    const fKeys = [
+      { rule: "forgotIp", key: `forgot-ip:${throttle.clientIp(req)}` },
+      { rule: "forgotEmail", key: `forgot-email:${throttle.norm(email)}` },
+    ];
+    const fGate = await throttle.check(fKeys);
+    if (fGate.blocked) return tooMany(res, fGate.retryAfterSec);
+    await throttle.fail(fKeys); // every request counts, whether or not the address exists
 
     // Find user by email
     const user = await DashboardUser.findOne({ email: email.toLowerCase().trim() });
@@ -322,7 +355,8 @@ router.post("/forgot-password", async (req, res) => {
 // POST /auth/reset-password - Reset password with token
 router.post("/reset-password", async (req, res) => {
   try {
-    const { token, password } = req.body;
+    const token = str((req.body || {}).token, 200);
+    const password = str((req.body || {}).password);
 
     if (!token || !password) {
       return res.status(400).json({
@@ -362,6 +396,8 @@ router.post("/reset-password", async (req, res) => {
     user.resetPasswordExpires = undefined;
     await user.save();
 
+    // The owner proved who they are by e-mail: lift any lockout on the account.
+    await throttle.clear([{ key: `user:${throttle.norm(user.username)}` }]);
     console.log(`✅ Password reset successful for user: ${user.username}`);
 
     res.json({
@@ -380,7 +416,7 @@ router.post("/reset-password", async (req, res) => {
 // GET /auth/verify-reset-token - Verify if reset token is valid (for frontend validation)
 router.get("/verify-reset-token", async (req, res) => {
   try {
-    const { token } = req.query;
+    const token = str(req.query.token, 200);
 
     if (!token) {
       return res.status(400).json({

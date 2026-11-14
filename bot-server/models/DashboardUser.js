@@ -40,6 +40,11 @@ const dashboardUserSchema = new mongoose.Schema(
     createdBy: { type: mongoose.Schema.Types.ObjectId, ref: "DashboardUser" },
 
     // Password Reset
+    // When the password last changed. A login token issued BEFORE this moment is refused
+    // (middleware/auth.js), so changing or resetting a password ends every older session —
+    // otherwise a stolen 7-day token would outlive the password it was obtained with.
+    passwordChangedAt: { type: Date },
+
     resetPasswordToken: { type: String },
     resetPasswordExpires: { type: Date }
   },
@@ -100,6 +105,7 @@ dashboardUserSchema.pre("save", async function(next) {
 // Hash password before saving
 dashboardUserSchema.pre("save", async function(next) {
   if (!this.isModified("password")) return next();
+  if (!this.isNew) this.passwordChangedAt = new Date();
 
   try {
     const salt = await bcrypt.genSalt(10);

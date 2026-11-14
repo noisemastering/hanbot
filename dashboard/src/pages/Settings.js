@@ -250,6 +250,10 @@ function Settings() {
 
       const data = await response.json();
 
+      // The server ends every session issued before the change and returns a new token
+      // for this one; keep it, or the next request would bounce to the login page.
+      if (data.success && data.token) localStorage.setItem("token", data.token);
+
       if (data.success) {
         setMessage({ type: "success", text: t('settings.passwordChanged') });
         setFormData({ currentPassword: "", newPassword: "", confirmPassword: "" });

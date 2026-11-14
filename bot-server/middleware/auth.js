@@ -45,7 +45,11 @@ async function userFromRequest(req) {
     if (!/^Bearer\s+\S/.test(header)) return null;
     const decoded = jwt.verify(header.replace(/^Bearer\s+/, ""), await getJwtSecret());
     const user = await DashboardUser.findById(decoded.id).select("-password -resetPasswordToken -resetPasswordExpires");
-    return user && user.active ? user : null;
+    if (!user || !user.active) return null;
+    // A token issued before the password last changed belongs to a session that the
+    // change was meant to end. (1 s of slack: `iat` is in whole seconds.)
+    if (user.passwordChangedAt && decoded.iat * 1000 < user.passwordChangedAt.getTime() - 1000) return null;
+    return user;
   } catch {
     return null;
   }
