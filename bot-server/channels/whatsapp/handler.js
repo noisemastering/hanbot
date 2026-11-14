@@ -13,9 +13,11 @@ function verifyWhatsAppWebhook(req, res) {
 
   const verifyToken = process.env.WHATSAPP_VERIFY_TOKEN;
 
-  if (mode === 'subscribe' && token === verifyToken) {
+  // `verifyToken &&` matters: with the variable unset, a request with NO token used to
+  // pass (undefined === undefined). The challenge is caller-supplied: plain text only.
+  if (verifyToken && mode === 'subscribe' && token === verifyToken) {
     console.log('✅ WhatsApp webhook verified');
-    res.status(200).send(challenge);
+    res.status(200).type('text/plain').send(String(challenge ?? ''));
   } else {
     console.error('❌ WhatsApp webhook verification failed');
     res.sendStatus(403);

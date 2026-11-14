@@ -87,7 +87,12 @@ app.use(cors(corsOptions));
 app.options(/.*/, cors(corsOptions));
 
 // Middleware - Parse JSON payloads (MUST come before routes)
-app.use(bodyParser.json({ limit: '5mb' }));
+app.use(bodyParser.json({
+  limit: '5mb',
+  // Meta signs the EXACT bytes it sent; once parsed they cannot be reproduced, so the
+  // webhook routes keep them (utils/webhookSignature.js). Only there — it is a copy.
+  verify: (req, res, buf) => { if (/^\/webhook(\/|$)/.test(req.url || '')) req.rawBody = buf; }
+}));
 
 // Register routes AFTER CORS and body-parser middleware
 const productRoutes = require('./routes/productsRoutes');
@@ -929,16 +934,18 @@ app.get("/r/:clickId", async (req, res) => {
 
 // GET /webhook - Facebook webhook verification
 app.get("/webhook", (req, res) => {
-  const VERIFY_TOKEN = process.env.FB_VERIFY_TOKEN || "hanlob_verify_token_2025";
+  // No fallback: a token written in the repo verifies nothing. (Production has its own.)
+  const VERIFY_TOKEN = process.env.FB_VERIFY_TOKEN;
 
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
   if (mode && token) {
-    if (mode === "subscribe" && token === VERIFY_TOKEN) {
+    if (VERIFY_TOKEN && mode === "subscribe" && token === VERIFY_TOKEN) {
       console.log("✅ Webhook verificado correctamente");
-      res.status(200).send(challenge);
+      // Plain text: the challenge is caller-supplied and must never render as HTML.
+      res.status(200).type("text/plain").send(String(challenge ?? ""));
     } else {
       console.log("❌ Token de verificación incorrecto");
       res.sendStatus(403);
@@ -949,6 +956,8 @@ app.get("/webhook", (req, res) => {
 });
 
 app.post("/webhook", async (req, res) => {
+  // Is this really Meta? (Self-arming; see utils/webhookSignature.js.)
+  if (!(await require('./utils/webhookSignature').acceptWebhook('messenger', req, res))) return;
   const body = req.body;
 
   // Spec Ops: when Killswitch or Nuke'em is engaged the bot stays SILENT on every
@@ -2241,7 +2250,8 @@ const { verifyWhatsAppWebhook, handleWhatsAppWebhook } = require('./channels/wha
 app.get("/webhook/whatsapp", verifyWhatsAppWebhook);
 
 // POST /webhook/whatsapp - WhatsApp incoming messages
-app.post("/webhook/whatsapp", (req, res) => {
+app.post("/webhook/whatsapp", async (req, res) => {
+  if (!(await require('./utils/webhookSignature').acceptWebhook('whatsapp', req, res))) return;
   handleWhatsAppWebhook(req, res, io);
 });
 
