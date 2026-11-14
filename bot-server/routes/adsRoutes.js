@@ -1,5 +1,6 @@
 // routes/adsRoutes.js
 const express = require("express");
+const { escapeRegex } = require("../utils/escapeRegex");
 const router = express.Router();
 const mongoose = require("mongoose");
 const Ad = require("../models/Ad");
@@ -22,8 +23,8 @@ router.get("/", async (req, res) => {
     const { adSetId, search } = req.query;
     const filter = adSetId ? { adSetId } : {};
 
-    if (search && search.trim()) {
-      const regex = new RegExp(search.trim(), "i");
+    if (search && String(search).trim()) {
+      const regex = new RegExp(escapeRegex(String(search).trim()), "i");
       filter.$or = [
         { name: regex },
         { fbAdId: regex },

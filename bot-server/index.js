@@ -96,6 +96,10 @@ app.use(bodyParser.json({
   verify: (req, res, buf) => { if (/^\/webhook(\/|$)/.test(req.url || '')) req.rawBody = buf; }
 }));
 
+// A request body is data, never a database instruction: drop `$`-operator keys once,
+// here, before any route can build a query from them (middleware/sanitizeBody.js).
+app.use(require('./middleware/sanitizeBody').sanitizeBody);
+
 // Register routes AFTER CORS and body-parser middleware
 const productRoutes = require('./routes/productsRoutes');
 const campaignRoutes = require('./routes/campaignsRoutes');

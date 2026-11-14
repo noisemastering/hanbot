@@ -4,6 +4,7 @@
 // CRUD + JSON import + a chat-style sandbox that drives the router+node engine
 // against an ephemeral in-memory conversation (never a real Meta user).
 const express = require("express");
+const { escapeRegex } = require("../utils/escapeRegex");
 const router = express.Router();
 const jwt = require("jsonwebtoken");
 const Workflow = require("../models/Workflow");
@@ -90,8 +91,8 @@ router.get("/ads", requireAdWorkflowAccess, async (req, res) => {
     }
     if (q) {
       filter.$or = [
-        { name: { $regex: q, $options: "i" } },
-        { fbAdId: { $regex: q, $options: "i" } },
+        { name: { $regex: escapeRegex(q), $options: "i" } },
+        { fbAdId: { $regex: escapeRegex(q), $options: "i" } },
       ];
     }
     const total = await Ad.countDocuments(filter);

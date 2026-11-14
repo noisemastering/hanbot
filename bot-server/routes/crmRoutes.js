@@ -1,5 +1,6 @@
 // routes/crmRoutes.js
 const express = require('express');
+const { escapeRegex } = require("../utils/escapeRegex");
 const router = express.Router();
 const jwt = require('jsonwebtoken');
 const Conversation = require('../models/Conversation');
@@ -55,7 +56,7 @@ router.get('/customers', async (req, res) => {
     };
 
     if (search) {
-      const regex = { $regex: search, $options: 'i' };
+      const regex = { $regex: escapeRegex(search), $options: 'i' };
       match.$and = [
         { $or: [
           { crmName: regex },
@@ -134,7 +135,7 @@ router.get('/sales', async (req, res) => {
     }
 
     if (search) {
-      const regex = { $regex: search, $options: 'i' };
+      const regex = { $regex: escapeRegex(search), $options: 'i' };
       match.$or = [
         { productName: regex },
         { 'conversionData.buyerFirstName': regex },

@@ -1,5 +1,6 @@
 // routes/usosRoutes.js
 const express = require("express");
+const { escapeRegex } = require("../utils/escapeRegex");
 const router = express.Router();
 const mongoose = require("mongoose");
 const Uso = require("../models/Uso");
@@ -37,7 +38,7 @@ router.get("/search/:query", async (req, res) => {
   try {
     const query = req.params.query.toLowerCase().trim();
     const usos = await Uso.find({
-      keywords: { $regex: query, $options: 'i' },
+      keywords: { $regex: escapeRegex(query), $options: 'i' },
       available: true
     })
       .populate('products', 'name description imageUrl price sellable generation')

@@ -1,5 +1,6 @@
 // routes/adSetsRoutes.js
 const express = require("express");
+const { escapeRegex } = require("../utils/escapeRegex");
 const router = express.Router();
 const AdSet = require("../models/AdSet");
 const Campaign = require("../models/Campaign");
@@ -10,8 +11,8 @@ router.get("/", async (req, res) => {
     const { campaignId, search } = req.query;
     const filter = campaignId ? { campaignId } : {};
 
-    if (search && search.trim()) {
-      const regex = new RegExp(search.trim(), "i");
+    if (search && String(search).trim()) {
+      const regex = new RegExp(escapeRegex(String(search).trim()), "i");
       filter.$or = [
         { name: regex },
         { fbAdSetId: regex },
