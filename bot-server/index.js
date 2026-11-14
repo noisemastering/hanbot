@@ -72,6 +72,8 @@ const cors = require("cors");
 
 // CORS configuration
 const { corsOrigin } = require('./utils/allowedOrigins');
+// Record WHICH webhook secret this instance holds (fingerprint only), once the DB is up.
+setTimeout(() => require('./utils/webhookSignature').noteConfig(), 15000);
 const corsOptions = {
   // Exact-match allow-list; see utils/allowedOrigins.js.
   origin: corsOrigin,

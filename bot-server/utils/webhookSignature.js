@@ -55,6 +55,20 @@ function appSecrets() {
   return [process.env.FB_APP_SECRET, process.env.WHATSAPP_APP_SECRET, process.env.META_APP_SECRET];
 }
 
+// Which secret is this instance holding? Not the value — a short keyed fingerprint, so
+// two environments can be compared ("does production hold the same app secret as the
+// machine where it was verified against Meta?") without the secret leaving either one.
+const fingerprint = (secret) => crypto.createHmac("sha256", String(secret).trim()).update("hanlob-webhook-secret-fingerprint").digest("hex").slice(0, 10);
+function noteConfig() {
+  try {
+    const where = process.env.RAILWAY_ENVIRONMENT || process.env.RAILWAY_PROJECT_ID ? "prod" : "local";
+    const names = ["FB_APP_SECRET", "WHATSAPP_APP_SECRET", "META_APP_SECRET"];
+    const held = {};
+    for (const n of names) if ((process.env[n] || "").trim()) held[n] = fingerprint(process.env[n]);
+    col().updateOne({ _id: `_config:${where}` }, { $set: { held, at: new Date() } }, { upsert: true }).catch(() => {});
+  } catch { /* diagnostics only */ }
+}
+
 async function isArmed(channel) {
   if (armedCache[channel]) return true;
   const doc = await col().findOne({ _id: channel }, { projection: { armedAt: 1 } });
@@ -118,4 +132,4 @@ async function acceptWebhook(channel, req, res) {
   return false;
 }
 
-module.exports = { signatureVerdict, decide, acceptWebhook, VALID, INVALID, MISSING, NO_SECRET };
+module.exports = { signatureVerdict, decide, acceptWebhook, noteConfig, fingerprint, VALID, INVALID, MISSING, NO_SECRET };
