@@ -26,11 +26,21 @@ const RULES = {
   forgotEmail: { max: 3, windowMs: 60 * MIN },
 };
 
-// The address the nearest proxy saw. The LAST X-Forwarded-For entry is the one our own
-// edge appended; earlier entries are whatever the caller chose to send.
+// The caller's address as OUR infrastructure saw it. Measured on production
+// (2026-11-14): the request reaches the app as
+//     X-Forwarded-For: <caller>, <Railway edge>
+// — the platform appends its own edge address LAST, and discards whatever
+// X-Forwarded-For the caller sent (a spoofed "9.9.9.9" never arrived). So the caller is
+// the entry just before the last one. Reading the LAST entry, as the first version did,
+// counted every user in the world as the same edge address: twenty wrong passwords by
+// anyone would have locked the whole team out. Counting from the RIGHT also stays
+// correct if a platform ever appends instead of replacing ("spoofed, caller, edge").
+// With a single entry (or none: local development) there is no edge hop to skip.
 function clientIp(req) {
   const xff = String((req.headers && req.headers["x-forwarded-for"]) || "").split(",").map((s) => s.trim()).filter(Boolean);
-  return xff.length ? xff[xff.length - 1] : (req.ip || (req.socket && req.socket.remoteAddress) || "unknown");
+  if (xff.length >= 2) return xff[xff.length - 2];
+  if (xff.length === 1) return xff[0];
+  return req.ip || (req.socket && req.socket.remoteAddress) || "unknown";
 }
 
 const norm = (s) => String(s || "").trim().toLowerCase().slice(0, 120);

@@ -48,13 +48,6 @@ router.post("/login", async (req, res) => {
     const isMatch = user ? await user.comparePassword(password) : (await require("bcryptjs").compare(password, DUMMY_HASH), false);
     if (!user || !isMatch) {
       await throttle.fail(keys);
-      // TEMPORARY (one deploy): which forwarding headers does the edge give us? Only for
-      // the diagnostic username, only the caller's own request headers.
-      if (username.startsWith("zz-diag-")) {
-        const h = req.headers, pick = {};
-        for (const k of Object.keys(h)) if (/forward|real-ip|client-ip|envoy|cf-|true-client|railway/i.test(k)) pick[k] = String(h[k]).slice(0, 200);
-        require("mongoose").connection.collection("auth_attempts").updateOne({ _id: `diag:${username}` }, { $set: { headers: pick, reqIp: req.ip, expireAt: new Date(Date.now() + 10 * 60 * 1000) } }, { upsert: true }).catch(() => {});
-      }
       console.log(`❌ Login failed for "${username}"`);
       return res.status(401).json({
         success: false,

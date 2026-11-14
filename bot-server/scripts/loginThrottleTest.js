@@ -65,9 +65,11 @@ const attempt = async (user, ip, good = false) => {
   await t.clear([{ key: "user:" + t.norm("admin") }]);
   ok("a password reset (clear user) lifts it", !(await attempt("admin", "7.7.7.7")).blocked);
 
-  // ---- the address we count is the one OUR proxy saw ----
-  ok("last X-Forwarded-For entry wins", t.clientIp({ headers: { "x-forwarded-for": "6.6.6.6, 10.0.0.1, 203.0.113.9" } }) === "203.0.113.9");
-  ok("a caller-supplied first entry cannot pose as someone else", t.clientIp({ headers: { "x-forwarded-for": "1.2.3.4, 203.0.113.9" } }) !== "1.2.3.4");
+  // ---- the address we count is the CALLER's, as our own edge reported it ----
+  ok("caller is the entry before the edge's own", t.clientIp({ headers: { "x-forwarded-for": "189.0.0.7, 84.17.44.226" } }) === "189.0.0.7");
+  ok("two callers behind the same edge are told apart", t.clientIp({ headers: { "x-forwarded-for": "189.0.0.7, 84.17.44.226" } }) !== t.clientIp({ headers: { "x-forwarded-for": "201.0.0.9, 84.17.44.226" } }));
+  ok("a platform that APPENDS cannot be fooled by a spoofed first entry", t.clientIp({ headers: { "x-forwarded-for": "9.9.9.9, 189.0.0.7, 84.17.44.226" } }) === "189.0.0.7");
+  ok("a single entry is used as-is", t.clientIp({ headers: { "x-forwarded-for": "189.0.0.7" } }) === "189.0.0.7");
   ok("no header falls back to the socket", t.clientIp({ headers: {}, socket: { remoteAddress: "::1" } }) === "::1");
 
   // ---- the store being down must not lock the whole team out ----
