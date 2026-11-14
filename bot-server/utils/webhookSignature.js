@@ -51,8 +51,22 @@ const refusedSinceValid = {};     // channel -> count, this process
 let alertedAt = 0;
 const col = () => mongoose.connection.collection("webhook_guard");
 
-function appSecrets() {
-  return [process.env.FB_APP_SECRET, process.env.WHATSAPP_APP_SECRET, process.env.META_APP_SECRET];
+// Candidate secrets: the environment's, plus one kept in the database. The DB one exists
+// because production's FB_APP_SECRET turned out to be a DIFFERENT value from the one Meta
+// actually signs with (166 real deliveries, 0 verified, 2026-11-14) and the deployment's
+// variables are not ours to change. It lives in the raw `server_secrets` collection
+// (no model, no route serialises it) and is written by scripts/setMetaAppSecret.js, which
+// checks the value against Meta before storing it. Re-read every 5 min, so a corrected
+// secret reaches every instance without a deploy.
+let dbSecret = { at: 0, value: null };
+async function appSecrets() {
+  if (Date.now() - dbSecret.at > 5 * 60 * 1000) {
+    try {
+      const doc = await mongoose.connection.collection("server_secrets").findOne({ _id: "meta_app_secret" });
+      dbSecret = { at: Date.now(), value: doc && typeof doc.value === "string" ? doc.value : null };
+    } catch { dbSecret.at = Date.now(); /* keep the last known value */ }
+  }
+  return [process.env.FB_APP_SECRET, process.env.WHATSAPP_APP_SECRET, process.env.META_APP_SECRET, dbSecret.value];
 }
 
 // Which secret is this instance holding? Not the value — a short keyed fingerprint, so
@@ -65,6 +79,7 @@ function noteConfig() {
     const names = ["FB_APP_SECRET", "WHATSAPP_APP_SECRET", "META_APP_SECRET"];
     const held = {};
     for (const n of names) if ((process.env[n] || "").trim()) held[n] = fingerprint(process.env[n]);
+    appSecrets().then((all) => { if (all[3]) col().updateOne({ _id: `_config:${where}` }, { $set: { "held.database": fingerprint(all[3]) } }).catch(() => {}); }).catch(() => {});
     col().updateOne({ _id: `_config:${where}` }, { $set: { held, at: new Date() } }, { upsert: true }).catch(() => {});
   } catch { /* diagnostics only */ }
 }
@@ -105,7 +120,7 @@ function maybeAlert(channel) {
 async function acceptWebhook(channel, req, res) {
   let verdict, armed = false;
   try {
-    verdict = signatureVerdict(req.rawBody, req.headers["x-hub-signature-256"], appSecrets());
+    verdict = signatureVerdict(req.rawBody, req.headers["x-hub-signature-256"], await appSecrets());
     armed = await isArmed(channel);
     if (verdict === VALID) {
       lastValidAt[channel] = Date.now();
@@ -132,4 +147,4 @@ async function acceptWebhook(channel, req, res) {
   return false;
 }
 
-module.exports = { signatureVerdict, decide, acceptWebhook, noteConfig, fingerprint, VALID, INVALID, MISSING, NO_SECRET };
+module.exports = { _resetSecrets: () => { dbSecret = { at: 0, value: null }; }, signatureVerdict, decide, acceptWebhook, noteConfig, fingerprint, VALID, INVALID, MISSING, NO_SECRET };

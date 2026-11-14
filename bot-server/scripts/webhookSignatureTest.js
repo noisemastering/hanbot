@@ -13,7 +13,7 @@ mongoose.connection.collection = () => ({
   },
 });
 require.cache[require.resolve("../services/pushNotifications")] = { exports: { sendToSuperAdmins: async () => {} }, loaded: true, id: "stub" };
-const { signatureVerdict, decide, acceptWebhook, VALID, INVALID, MISSING, NO_SECRET } = require("../utils/webhookSignature");
+const { signatureVerdict, decide, acceptWebhook, _resetSecrets, VALID, INVALID, MISSING, NO_SECRET } = require("../utils/webhookSignature");
 
 let pass = 0, fail = 0;
 const ok = (n, c) => { c ? pass++ : (fail++, console.log("  ✗ " + n)); };
@@ -84,6 +84,19 @@ const call = async (channel, headers, raw = body) => {
   delete process.env.FB_APP_SECRET;
   r = await call("telegram", { "x-hub-signature-256": sign(body, SECRET) });
   ok("no secret configured: observes, never arms, never refuses", r.accepted && !(docs.telegram || {}).armedAt && docs.telegram["count.no_secret"] === 1);
+
+  // The production case: the ENV secret is the wrong one, the right one is in the database.
+  process.env.FB_APP_SECRET = "stale-value-in-the-environment";
+  r = await call("wa2", { "x-hub-signature-256": sign(body, SECRET) });
+  ok("wrong env secret, nothing in the DB: real delivery reads as invalid but is not refused", r.accepted && !(docs.wa2 || {}).armedAt);
+  docs.meta_app_secret = { _id: "meta_app_secret", value: SECRET };
+  _resetSecrets();
+  r = await call("wa2", { "x-hub-signature-256": sign(body, SECRET) });
+  ok("the DB secret verifies the real delivery and arms the channel", r.accepted && !!docs.wa2.armedAt);
+  r = await call("wa2", { "x-hub-signature-256": sign(body, "stale-value-in-the-environment") });
+  ok("…and a delivery signed with the stale env value still passes (either secret)", r.accepted);
+  r = await call("wa2", { "x-hub-signature-256": sign(body, "attacker-guess") });
+  ok("…while a forgery is now refused", !r.accepted && r.code === 403);
 
   await new Promise((r) => setTimeout(r, 20));
   console.log(`${pass} passed, ${fail} failed`);
