@@ -16,7 +16,7 @@ const authenticate = async (req, res, next) => {
     }
 
     const decoded = jwt.verify(token, await getJwtSecret());
-    const user = await DashboardUser.findById(decoded.id).select("-password");
+    const user = await DashboardUser.findById(decoded.id).select("-password -resetPasswordToken -resetPasswordExpires");
 
     if (!user || !user.active) {
       return res.status(401).json({ success: false, error: "Invalid token or inactive user" });
@@ -36,7 +36,7 @@ router.use(authenticate);
 router.get("/", async (req, res) => {
   try {
     const users = await DashboardUser.find()
-      .select("-password")
+      .select("-password -resetPasswordToken -resetPasswordExpires")
       .populate("createdBy", "username firstName lastName")
       .sort({ createdAt: -1 });
 

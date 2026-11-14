@@ -44,7 +44,7 @@ async function userFromRequest(req) {
     const header = req.headers.authorization || "";
     if (!/^Bearer\s+\S/.test(header)) return null;
     const decoded = jwt.verify(header.replace(/^Bearer\s+/, ""), await getJwtSecret());
-    const user = await DashboardUser.findById(decoded.id).select("-password");
+    const user = await DashboardUser.findById(decoded.id).select("-password -resetPasswordToken -resetPasswordExpires");
     return user && user.active ? user : null;
   } catch {
     return null;
@@ -65,11 +65,49 @@ function requireSuperAdmin(req, res, next) {
   next();
 }
 
-// Mounted once, ahead of every route.
+// ---- level / permission (middleware/accessPolicy.js decides; this applies it) ----
+const { decideAccess } = require("./accessPolicy");
+
+// An account's merged role + profile permissions. Cached briefly: it costs two queries
+// and is asked on every request; a change made in the dashboard lands within a minute.
+const permCache = new Map(); // userId -> { at, perms }
+async function permissionsOf(user) {
+  if (user.role === "super_admin" || user.role === "admin") return ["*"];
+  const key = String(user._id);
+  const hit = permCache.get(key);
+  if (hit && Date.now() - hit.at < 60000) return hit.perms;
+  let perms = [];
+  try { perms = (await user.getAllPermissions()) || []; } catch { perms = []; }
+  permCache.set(key, { at: Date.now(), perms });
+  return perms;
+}
+
+// Would-be refusals while the section table is only observed. One small document per
+// (role, profile, method kind, API area), so the collection stays tiny.
+function noteObserved(user, method, path, why) {
+  try {
+    const area = "/" + (path.split("/")[1] || "");
+    const k = method === "GET" || method === "HEAD" ? "R" : "W";
+    require("mongoose").connection.collection("access_observe").updateOne(
+      { _id: `${user.role}|${user.profile || "-"}|${k}|${area}` },
+      { $inc: { count: 1 }, $set: { lastPath: path.slice(0, 120), lastAt: new Date(), why } },
+      { upsert: true }
+    ).catch(() => {});
+  } catch { /* observing must never break a request */ }
+}
+
+async function authorize(req, res, next) {
+  const verdict = decideAccess({ role: req.user.role, permissions: await permissionsOf(req.user) }, req.method, req.path);
+  if (!verdict.allow) return res.status(403).json({ success: false, error: "Forbidden" });
+  if (verdict.observe) noteObserved(req.user, req.method, req.path, verdict.observe);
+  next();
+}
+
+// Mounted once, ahead of every route: WHO are you, then MAY you.
 function apiGuard(req, res, next) {
   if (req.method === "OPTIONS") return next(); // CORS preflight carries no credentials
   if (isPublic(req.method, req.path)) return next();
-  return authenticate(req, res, next);
+  return authenticate(req, res, () => authorize(req, res, next).catch(next));
 }
 
 module.exports = { apiGuard, authenticate, requireSuperAdmin, userFromRequest, isPublic, PUBLIC };

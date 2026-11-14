@@ -10,7 +10,12 @@ require.cache[require.resolve(path.join("..", "models", "DashboardUser"))] = {
   },
   loaded: true, id: "stub",
 };
-const USERS = { u1: { _id: "u1", role: "admin", active: true }, u2: { _id: "u2", role: "admin", active: false } };
+const USERS = {
+  u1: { _id: "u1", role: "admin", active: true },
+  u2: { _id: "u2", role: "admin", active: false },
+  u3: { _id: "u3", role: "user", profile: "salesman", active: true, getAllPermissions: async () => ["conversations", "crm-customers"] },
+  u4: { _id: "u4", role: "super_admin", active: true },
+};
 delete process.env.JWT_SECRET; // the test signs with a throwaway secret of its own
 process.env.JWT_SECRET = "test-only-secret";
 const jwt = require("jsonwebtoken");
@@ -67,6 +72,17 @@ const run = (method, p, headers = {}) => new Promise((resolve) => {
   ok("token signed with another secret is refused", (await run("GET", "/conversations", { authorization: tok("u1", "some-other-secret") })).code === 401);
   ok("expired token is refused", (await run("GET", "/conversations", { authorization: tok("u1", "test-only-secret", { expiresIn: -10 }) })).code === 401);
   ok("unsigned (alg none) token is refused", (await run("GET", "/conversations", { authorization: "Bearer " + jwt.sign({ id: "u1" }, "", { algorithm: "none" }) })).code === 401);
+  // WHO passed; now MAY — the level table is applied by the same guard (accessPolicy.js).
+  const as = (id, m, p) => run(m, p, { authorization: tok(id) });
+  ok("limited account: own screen passes", (await as("u3", "GET", "/conversations")).next === true);
+  ok("limited account: cannot edit accounts (403, not 401)", (await as("u3", "PUT", "/dashboard-users/x")).code === 403);
+  ok("limited account: cannot reach the ML playground", (await as("u3", "PUT", "/ml/playground/item/MLM1/price")).code === 403);
+  ok("limited account: cannot read roles", (await as("u3", "GET", "/roles")).code === 403);
+  ok("admin: may edit accounts", (await as("u1", "PUT", "/dashboard-users/x")).next === true);
+  ok("admin: cannot edit intents (super_admin area)", (await as("u1", "POST", "/intents")).code === 403);
+  ok("admin: cannot change roles", (await as("u1", "PUT", "/roles/x")).code === 403);
+  ok("super_admin: may edit intents", (await as("u4", "POST", "/intents")).next === true);
+  ok("super_admin: may change roles", (await as("u4", "PUT", "/roles/x")).next === true);
   console.log(`${pass} passed, ${fail} failed`);
   process.exit(fail ? 1 : 0);
 })();
