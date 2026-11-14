@@ -925,9 +925,11 @@ router.post('/reply-attachment', attachmentUpload.single('file'), async (req, re
       return res.status(400).json({ success: false, error: 'Missing psid or file' });
     }
 
-    // Detect type from mimetype
-    const isImage = file.mimetype.startsWith('image/');
-    const isPdf = file.mimetype === 'application/pdf';
+    // Detect the type from the file's CONTENT (utils/fileKind.js). The mimetype is typed
+    // by the uploader, and this file goes to a customer in Hanlob's name.
+    const kind = require('../utils/fileKind').fileKind(file.buffer);
+    const isImage = require('../utils/fileKind').isImageKind(kind);
+    const isPdf = kind === 'pdf';
 
     if (!isImage && !isPdf) {
       return res.status(400).json({ success: false, error: 'Only images and PDFs are supported' });

@@ -127,6 +127,10 @@ router.get("/export-inventory", async (req, res) => {
 router.post("/import-prices", uploadXlsx.single("file"), async (req, res) => {
   try {
     if (!req.file) return res.status(400).json({ success: false, error: "No se recibió ningún archivo" });
+    // An .xlsx is a zip container; anything else never reaches the spreadsheet parser.
+    if (require("../utils/fileKind").fileKind(req.file.buffer) !== "zip") {
+      return res.status(400).json({ success: false, error: "El archivo no es un Excel (.xlsx) válido" });
+    }
     const wb = XLSX.read(req.file.buffer, { type: "buffer" });
     const ws = wb.Sheets[wb.SheetNames[0]];
     if (!ws) return res.status(400).json({ success: false, error: "El archivo no tiene hojas" });

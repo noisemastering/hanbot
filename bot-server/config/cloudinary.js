@@ -10,21 +10,54 @@ cloudinary.config({
   api_secret: process.env.CLOUDINARY_API_SECRET
 });
 
-// Storage for catalogs (PDFs and AI files saved as PDF)
-const catalogStorage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: {
-    folder: 'hanlob/catalogs',
-    resource_type: 'raw', // Required for PDFs
-    allowed_formats: ['pdf', 'ai'],  // AI files created in Illustrator but saved as PDF
-    public_id: (req, file) => {
-      const timestamp = Date.now();
-      const name = file.originalname.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9]/g, '_');
-      const ext = file.originalname.match(/\.([^/.]+)$/)?.[1] || 'pdf';
-      return `${name}_${timestamp}.${ext}`;
-    }
-  }
-});
+// ---- Catalogs (PDFs, and Illustrator files saved as PDF) --------------------------
+// The file is held in memory first so its CONTENT can be checked before anything is
+// stored (utils/fileKind.js): the previous setup streamed straight to Cloudinary and
+// only looked at the file's extension, so anything named "x.pdf" became a catalog — and
+// a catalog is a file the bot hands to customers. `req.file` keeps the shape the routes
+// already use: `path` (the URL), `filename` (the Cloudinary public id), `originalname`.
+const { fileKind } = require('../utils/fileKind');
+const CATALOG_KINDS = new Set(['pdf', 'postscript']);
+
+function catalogPublicId(originalname) {
+  const base = String(originalname || 'catalogo');
+  const name = base.replace(/\.[^/.]+$/, '').replace(/[^a-zA-Z0-9]/g, '_').slice(0, 120) || 'catalogo';
+  const ext = (base.match(/\.([^/.]+)$/)?.[1] || 'pdf').toLowerCase();
+  return `${name}_${Date.now()}.${ext === 'ai' ? 'ai' : 'pdf'}`;
+}
+
+function storeCatalog(buffer, originalname) {
+  return new Promise((resolve, reject) => {
+    const stream = cloudinary.uploader.upload_stream(
+      { folder: 'hanlob/catalogs', resource_type: 'raw', public_id: catalogPublicId(originalname) },
+      (err, result) => (err ? reject(err) : resolve(result))
+    );
+    stream.end(buffer);
+  });
+}
+
+const catalogMemory = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024 } }); // 10MB max
+
+// Same call shape as a multer instance: uploadCatalog.single('catalog').
+const uploadCatalog = {
+  single(field) {
+    const parse = catalogMemory.single(field);
+    return (req, res, next) => parse(req, res, async (err) => {
+      if (err) return next(err);
+      if (!req.file) return next(); // the route answers "No file uploaded"
+      if (!CATALOG_KINDS.has(fileKind(req.file.buffer))) {
+        return res.status(400).json({ success: false, error: 'El archivo no es un PDF válido.' });
+      }
+      try {
+        const result = await storeCatalog(req.file.buffer, req.file.originalname);
+        req.file.path = result.secure_url;
+        req.file.filename = result.public_id;
+        delete req.file.buffer;
+        next();
+      } catch (e) { next(e); }
+    });
+  },
+};
 
 // Storage for images
 const imageStorage = new CloudinaryStorage({
@@ -37,11 +70,6 @@ const imageStorage = new CloudinaryStorage({
 });
 
 // Multer upload instances
-const uploadCatalog = multer({
-  storage: catalogStorage,
-  limits: { fileSize: 10 * 1024 * 1024 } // 10MB max
-});
-
 const uploadImage = multer({
   storage: imageStorage,
   limits: { fileSize: 5 * 1024 * 1024 } // 5MB max
@@ -61,6 +89,8 @@ async function deleteFile(publicId, resourceType = 'raw') {
 module.exports = {
   cloudinary,
   uploadCatalog,
+  storeCatalog,
+  catalogPublicId,
   uploadImage,
   deleteFile
 };

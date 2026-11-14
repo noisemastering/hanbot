@@ -7,6 +7,16 @@ const AdSet = require('../models/AdSet');
 const Ad = require('../models/Ad');
 const ProductFamily = require('../models/ProductFamily');
 
+// https://res.cloudinary.com/<our cloud>/... and nothing else: exact host, our own
+// cloud name as the first path segment, https only.
+function isOurCloudinaryUrl(value) {
+  try {
+    const cloud = require('../config/cloudinary').cloudinary.config().cloud_name;
+    const u = new URL(String(value));
+    return !!cloud && u.protocol === 'https:' && u.hostname === 'res.cloudinary.com' && u.pathname.startsWith(`/${cloud}/`);
+  } catch { return false; }
+}
+
 /**
  * Upload catalog for a Campaign
  * POST /uploads/catalog/campaign/:id
@@ -367,6 +377,13 @@ router.put('/catalog/:entityType/:id', async (req, res) => {
       return res.status(400).json({ success: false, error: 'URL is required' });
     }
 
+    // "Assign an existing catalog" means one of OUR files. Without this check any address
+    // could be saved here, and the bot would send whatever lives there to customers as
+    // Hanlob's catalog.
+    if (!isOurCloudinaryUrl(url)) {
+      return res.status(400).json({ success: false, error: 'El catálogo debe ser un archivo ya subido a este sistema.' });
+    }
+
     const modelMap = {
       'campaign': Campaign,
       'adset': AdSet,
@@ -505,3 +522,4 @@ router.get('/catalog/global', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.isOurCloudinaryUrl = isOurCloudinaryUrl;
