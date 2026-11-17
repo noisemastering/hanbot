@@ -5674,6 +5674,34 @@ async function runWorkflowTurnCore(workflow, state, userMessage, opts = {}) {
     }
   }
 
+  // DETERMINISTIC LINK GUARD — a link is not the model's to author either. On "Ok" it
+  // once wrote a purchase URL that exists in no catalogue entry, no flow and no tool
+  // output, for a length nobody chose (utils/linkGuard.js). A URL in the reply must
+  // be one the system produced: a tool output this turn, the flow's own context and
+  // knowledge, or something already sent in this conversation.
+  if (text && /https?:\/\//i.test(text)) {
+    try {
+      const { stripUnknownLinks } = require("../../utils/linkGuard");
+      const linkSources = [
+        effectiveContext,
+        turnContextExtra,
+        ...(toolCalls || []).map((t) => (t && t.output ? String(t.output) : "")),
+        ...history.filter((h) => h && h.role === "assistant").map((h) => String(h.text || "")),
+        JSON.stringify(workflow && workflow.toObject ? workflow.toObject() : workflow || {}),
+        state.catalog && state.catalog.url,
+        state.techSheet && state.techSheet.url,
+        turnPriceInfo && turnPriceInfo.link,
+      ].filter(Boolean).join("\n");
+      const lg = stripUnknownLinks(text, linkSources);
+      if (lg.removed.length) {
+        console.warn(`🔗 [workflow] removed ${lg.removed.length} link(s) the system never produced for ${opts.psid || "(no psid)"}: ${lg.removed.join(", ")}`);
+        text = lg.text || "¿De qué medida lo necesitas? Con eso te paso el link correcto. 😊";
+      }
+    } catch (e) {
+      console.error("⚠️ link guard failed:", e.message);
+    }
+  }
+
   // DETERMINISTIC MEASURE CLAMP — like the price clamp, but for the W×L label. When
   // the customer asked for exactly ONE measure and we quoted it (NOT a nearest-
   // substitution, NOT a multi-measure turn), any divergent W×L token in the reply
