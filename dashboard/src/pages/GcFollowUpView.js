@@ -1,7 +1,37 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
+
+// OPENING A CONVERSATION IS ONE LINK, AND IT POINTED AT A ROUTE THAT DOES NOT EXIST
+// (2026-11-17, reported: "clicking a convo takes you to an empty control panel").
+// Both links here were `/messages?psid=…`; the route is `/conversations` (Messages.js
+// reads ?psid= from the URL and opens the chat modal). React Router matched nothing,
+// so the app shell rendered with an empty page where the conversation should be.
+// Two call sites in this file — the cluster members and the Detalle table — so the URL
+// is built in exactly one place and they cannot drift apart again.
+//
+// It stays a real <a href> so ⌘/ctrl-click and middle-click still open a new tab; a
+// plain left click navigates in-app instead of reloading the whole dashboard.
+function ConvoLink({ psid, className, title, children }) {
+  const navigate = useNavigate();
+  const href = `/conversations?psid=${encodeURIComponent(psid)}`;
+  return (
+    <a
+      href={href}
+      title={title}
+      className={className}
+      onClick={(e) => {
+        if (e.metaKey || e.ctrlKey || e.shiftKey || e.altKey || e.button !== 0) return;
+        e.preventDefault();
+        navigate(href);
+      }}
+    >
+      {children}
+    </a>
+  );
+}
 
 const API_URL = process.env.REACT_APP_API_URL || 'http://localhost:3000';
 
@@ -213,9 +243,9 @@ function ReasonsSection({ period, sentCount }) {
                     <div className="mt-2 space-y-1">
                       {c.members.map((m) => (
                         <div key={m.id} className="text-xs text-gray-400 flex flex-wrap gap-2">
-                          <a href={`/messages?psid=${encodeURIComponent(m.id)}`} className="text-blue-400 hover:text-blue-300 shrink-0">
+                          <ConvoLink psid={m.id} className="text-blue-400 hover:text-blue-300 shrink-0">
                             {m.name || m.id}
-                          </a>
+                          </ConvoLink>
                           <span className="text-gray-500 shrink-0">{fmtDateTime(m.at)}</span>
                           <span className="text-gray-400">{m.text}</span>
                         </div>
@@ -631,13 +661,13 @@ function GcFollowUpView() {
                 {rows.map((r) => (
                   <tr key={r.psid} className="border-t border-gray-700/30 hover:bg-gray-700/20">
                     <td className="px-4 py-2">
-                      <a
-                        href={`/messages?psid=${encodeURIComponent(r.psid)}`}
+                      <ConvoLink
+                        psid={r.psid}
                         className="text-blue-400 hover:text-blue-300"
                         title={r.psid}
                       >
                         {r.name || r.psid}
-                      </a>
+                      </ConvoLink>
                     </td>
                     <td className="px-4 py-2 text-gray-400 whitespace-nowrap">{fmtDateTime(r.sentAt)}</td>
                     <td className="px-4 py-2 text-gray-400 whitespace-nowrap">
