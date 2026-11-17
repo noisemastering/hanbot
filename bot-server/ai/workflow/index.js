@@ -372,7 +372,38 @@ async function coldStartPriceAnchors() {
   return anchors;
 }
 
+// ONE REPLY CAN CARRY SEVERAL ANSWERS (2026-11-17). A gate used to END the turn the
+// moment it recognised its one topic, which is how a message asking the price AND the
+// shipping got the shipping answer and a question about the measure it had just given.
+// Now a gate whose topic is only PART of the message pushes its answer onto
+// `turn.parts` and lets the turn go on; whoever finishes the turn — another gate, the
+// quote path, the model — writes the rest, and this wrapper puts the parts in front.
+// It wraps every return of the engine at once (there are 87), which is the only way
+// this could be added without touching each of them.
 async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
+  if (opts._turn) return runWorkflowTurnCore(workflow, state, userMessage, opts);
+  const turn = { parts: [], reading: undefined };
+  const out = await runWorkflowTurnCore(workflow, state, userMessage, { ...opts, _turn: turn });
+  if (out && turn.parts.length) {
+    const lead = turn.parts.filter(Boolean).join(" ");
+    const before = out.reply;
+    out.reply = before ? `${lead}\n\n${before}` : lead;
+    // Keep the transcript the engine stores in step with what the customer read.
+    const h = out.state && Array.isArray(out.state.history) ? out.state.history : null;
+    if (h) {
+      for (let i = h.length - 1; i >= 0; i--) {
+        if (h[i] && h[i].role === "assistant") {
+          if (!before || h[i].text === before) h[i] = { ...h[i], text: out.reply };
+          break;
+        }
+      }
+    }
+    out.diagnostics = { ...(out.diagnostics || {}), turnParts: turn.parts.length };
+  }
+  return out;
+}
+
+async function runWorkflowTurnCore(workflow, state, userMessage, opts = {}) {
   // 0. Self-correct: a prior turn may have switched the active flow. Always run
   // the flow the STATE points to, regardless of what the caller passed in.
   if (state.workflowId && workflow && String(workflow._id) !== state.workflowId) {
@@ -465,14 +496,92 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     return { reply: null, state, diagnostics: { error: "workflow has no nodes" } };
   }
 
+  // What we said last — a short reply ("sí", "64102", "3") is an answer to it.
+  const _lastBotText = (() => {
+    for (let i = history.length - 1; i >= 0; i--) if (history[i] && history[i].role === "assistant") return String(history[i].text || "");
+    return null;
+  })();
+
   // 1. record the incoming message
   if (userMessage != null && userMessage !== "") {
     history.push({ role: "user", text: String(userMessage), nodeId: currentNode.id, at: new Date() });
   }
 
+  // 1.01 THE MODEL READS THE MESSAGE; THE GATES BELOW ONLY ANSWER (2026-11-17).
+  // One call tells the whole turn what was asked and which facts came with it — see
+  // ai/workflow/turnReader.js for why. `reading` is null when the call fails or is
+  // switched off, and then every gate falls back to the regex it used before, so an
+  // outage degrades to the behaviour that already shipped.
+  //   asked("envio_costo", () => oldRegex)   the message asks this
+  //   is("aplaza", () => oldRegex)           the message IS this, as a whole
+  //   more("envio_costo")                    it ALSO asks something this gate can't answer
+  const _turn = opts._turn || { parts: [], reading: undefined };
+  if (_turn.reading === undefined) {
+    _turn.reading = null;
+    if (userMessage && opts.reading !== undefined) _turn.reading = opts.reading;
+    else if (userMessage) {
+      try {
+        _turn.reading = await require("./turnReader").readTurn(String(userMessage), {
+          flowName: workflow.name,
+          lastBotMessage: _lastBotText,
+        });
+      } catch (e) {
+        console.error("⚠️ turn reader failed:", e.message);
+      }
+    }
+  }
+  const reading = userMessage ? _turn.reading : null;
+  const asked = (labels, fallback) =>
+    reading ? reading.asked(...[].concat(labels)) : !!(typeof fallback === "function" ? fallback() : fallback);
+  const is = (labels, fallback) =>
+    reading ? reading.is(...[].concat(labels)) : !!(typeof fallback === "function" ? fallback() : fallback);
+  // Facts the reader pulled out of THIS message.
+  const said = reading ? reading.facts : {};
+  const _saidMeasure = !!(reading && ((said.ancho && said.largo) || said.largo || said.ancho));
+  const _saidData = !!(reading && (_saidMeasure || said.cp || said.cantidad || said.telefono || said.colonia));
+  // Is there more in this message than `mine`? Only the reader can know; without it a
+  // gate behaves as it always did (answers and ends the turn).
+  _turn.answered = _turn.answered || [];
+  const more = (...mine) => !!reading && reading.asksBeyond(...mine, ..._turn.answered);
+  // A gate that answered only PART of the message leaves its answer here, and names
+  // the questions it settled so the next gate doesn't count them as still open.
+  // Asked, and not already answered earlier in this same turn.
+  const askedOpen = (labels, fallback) =>
+    reading
+      ? [].concat(labels).some((l) => reading.asks.has(l) && !_turn.answered.includes(l))
+      : !!(typeof fallback === "function" ? fallback() : fallback);
+  const alsoAnswered = (text, ...labels) => {
+    if (text) _turn.parts.push(String(text).trim());
+    _turn.answered.push(...labels);
+  };
+
+  // 1.011 THE CP AND THE COLONIA, WHEREVER THEY CAME IN THE SENTENCE. The capture in
+  // ai/index.js only trusts a CP when the message is nothing but the number, so
+  // "…envío a Gutiérrez Zamora Veracruz, CP 93556" was thrown away and the reply asked
+  // for it (wa:5217661038231). The reader hands it over as a fact; we keep it only if
+  // it is a real Mexican postal code, which is the check the bare-number path makes.
+  if (reading && said.cp && !(state.location && (state.location.zip || state.location.zipcode))) {
+    try {
+      const cpDoc = await require("../../models/ZipCode")
+        .findOne({ code: String(said.cp).padStart(5, "0") })
+        .select("code city municipality")
+        .lean();
+      if (cpDoc) {
+        const city = cpDoc.city || cpDoc.municipality || said.ciudad || null;
+        state.location = { ...(state.location || {}), zip: said.cp, ...(city ? { city } : {}) };
+        state.zipCaptured = true;
+      }
+    } catch (e) {
+      console.error("⚠️ CP lookup (turn reader) failed:", e.message);
+    }
+  }
+  if (reading && said.colonia && !(state.location && state.location.neighborhood)) {
+    state.location = { ...(state.location || {}), neighborhood: said.colonia };
+  }
+
   // Rain/waterproof intent — gates the promo/default quotes and forces an honest
   // "malla sombra is not waterproof" clarification (it's shade mesh).
-  const rainIntent = userMessage ? wantsWaterproof(String(userMessage)) : false;
+  const rainIntent = userMessage ? asked("impermeable", () => wantsWaterproof(String(userMessage))) : false;
 
   // 1.02 DETERMINISTIC LEAD CAPTURE. A phone (or "me llamo X") in the message IS
   // contact info — persist it even when the model doesn't call capture_lead, so a
@@ -511,8 +620,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       const askedAt = state.pendingHandoff.askedAt ? new Date(state.pendingHandoff.askedAt).getTime() : null;
       const isStale = askedAt ? Date.now() - askedAt > PENDING_HANDOFF_TTL_MS : false;
       const hasContact = !!(extractPhone(_m) || extractName(_m) || looksLikeBareName(_m));
-      const isNewQuestion =
-        /\?|\bprecio\b|cu[aá]nto|c[oó]mo\b|pag(?:o|a|ar|ar[ií]a|an)\b|env[ií]o|entrega|medida|garant|instalaci|\d{1,3}\s*[x×]\s*\d{1,3}/i.test(_m);
+      const isNewQuestion = reading
+        ? !reading.asksNothing() || !!(said.ancho && said.largo)
+        : /\?|\bprecio\b|cu[aá]nto|c[oó]mo\b|pag(?:o|a|ar|ar[ií]a|an)\b|env[ií]o|entrega|medida|garant|instalaci|\d{1,3}\s*[x×]\s*\d{1,3}/i.test(_m);
       if (isStale || (!hasContact && isNewQuestion)) {
         console.log(
           `🧹 [workflow] dropping pending handoff ask (${isStale ? "stale" : "new question, not contact info"}) for ${opts.psid || "(no psid)"}`
@@ -600,7 +710,15 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       const { dimsOf: _fD, qtyFromText: _fQ } = require("./tools");
       const _fmsg = String(userMessage);
       const _fCarries = !!(_fD(_fmsg) || /\d/.test(_fmsg) || (_fQ && _fQ(_fmsg) != null));
-      _frustration = frustrationOf(_fmsg, { carriesNewData: _fCarries });
+      // The reader decides whether he is telling us we are not listening; the word
+      // list is only the fallback. "Ya te la puse arriba" is in no list.
+      _frustration = reading
+        ? reading.is("enojo")
+          ? "angry"
+          : reading.is("ya_lo_dije") && !reading.is("aplaza") && !_saidData && reading.asksNothing()
+          ? "said_already"
+          : false
+        : frustrationOf(_fmsg, { carriesNewData: _fCarries });
     } catch (e) {
       console.error("⚠️ frustration read failed:", e.message);
     }
@@ -681,7 +799,11 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // either, or an engaged customer gets closed down with "aquí estamos cuando
       // quieras continuar". The courtesy judgement lives in utils/courtesy.js, shared
       // with the deferral gate so the two can't drift.
-      const _courtesyOnly = require("../../utils/courtesy").isCourtesyOnly(String(userMessage));
+      const _courtesyMod = require("../../utils/courtesy");
+      const _courtesyOnly = reading
+        ? reading.asksNothing() && !_saidData && !said.nombre &&
+          (reading.is("cortesia") || _courtesyMod.isWordlessReply(String(userMessage)))
+        : _courtesyMod.isCourtesyOnly(String(userMessage));
       if (!_actionable && _courtesyOnly) {
         console.log(`🙇 [workflow] courtesy reply, no data — no alert raised for ${opts.psid || "(no psid)"}`);
         const closing = "¡Con gusto! 🙌 Aquí estamos cuando quieras continuar.";
@@ -774,7 +896,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   if (userMessage && !(_gcFlow && !state.gcOpenerSent)) {
     const _g = String(userMessage).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "")
       .replace(/[!¡?¿.,]+/g, " ").replace(/\s+/g, " ").trim();
-    if (/^(hola+|holi|ola|buenas|buen[oa]s?( (dias|tardes|noches))?|buen dia|que tal|que onda|que hubo|saludos|hey|hello)$/.test(_g)) {
+    const _bareGreeting = reading
+      ? reading.is("saludo") && reading.signals.size === 1 && reading.asksNothing() && !_saidData
+      : /^(hola+|holi|ola|buenas|buen[oa]s?( (dias|tardes|noches))?|buen dia|que tal|que onda|que hubo|saludos|hey|hello)$/.test(_g);
+    if (_bareGreeting) {
       const greeted = Array.isArray(history) && history.some((h) => h.role === "assistant");
       const nm = opts.personaName;
       const reply = greeted
@@ -805,7 +930,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // prompt is not in force. `utils/wireMesh.js` owns both the predicate and the wording.
   if (userMessage && !state.wireMeshAnswered) {
     const { asksWireMesh, wireMeshAnswer } = require("../../utils/wireMesh");
-    if (asksWireMesh(String(userMessage))) {
+    if (asked("malla_alambre", () => asksWireMesh(String(userMessage)))) {
       state.wireMeshAnswered = true;
       const reply = wireMeshAnswer();
       history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
@@ -842,12 +967,13 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     const { asksTechSheet, techSheetReply } = require("../../utils/techSheet");
     const _ts = String(userMessage);
     const { dimsOf: _tsDims } = require("./tools");
-    if (asksTechSheet(_ts) && _tsDims(_ts) && !namesOtherProduct(_ts)) {
+    const _asksSheet = asked("ficha_tecnica", () => asksTechSheet(_ts));
+    if (_asksSheet && (_tsDims(_ts) || more("ficha_tecnica")) && !namesOtherProduct(_ts)) {
       // Both halves asked at once ("precio por rollo y ficha técnica", a real message).
       // The quote path below owns the price, so don't claim the turn — flag the sheet
       // and ai/index.js attaches it to whatever reply this turn produces.
       state.techSheetPending = true;
-    } else if (asksTechSheet(_ts) && !namesOtherProduct(_ts)) {
+    } else if (_asksSheet && !namesOtherProduct(_ts)) {
       state.techSheetSent = (state.techSheetSent || 0) + 1;
       const reply = techSheetReply(state.techSheet.label);
       history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
@@ -879,7 +1005,13 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // measure, short), so "voy a checar, ¿cuánto el de 18?" still gets its answer.
   if (userMessage && !state.pendingHandoff) {
     const _d = String(userMessage).trim();
-    const defers =
+    // The reader says what the message IS; these three are true only when it is
+    // NOTHING ELSE — no question, no data — which is what the length and digit tests
+    // below were approximating ("voy a checar, ¿cuánto el de 18?" must get its price).
+    const _nothingElse = !!reading && reading.asksNothing() && !_saidData;
+    // "Ok gracias" answering a question of ours is a YES, not a goodbye.
+    const _answersOurQuestion = !!reading && reading.is("afirma") && /¿[^?]*\?\s*[^¿?]*$/.test(String(_lastBotText || ""));
+    const _defersRx =
       _d.length <= 90 &&
       !/\d/.test(_d) &&
       /\b(voy\s+a\s+(chequear|checar|revisar|verlo|verla|pensarlo?|consultarlo?|preguntar)|lo\s+(checo|chequeo|reviso|pienso|consulto|platico|pregunto)|d[eé]jame\s+(pensarlo|checarlo|revisarlo|consultarlo|verlo|preguntar)|lo\s+voy\s+a\s+pensar|ya\s+le\s+dije\s+que\s+lo\s+van\s+a\s+(checar|chequear|revisar|ver)|van\s+a\s+(checarlo|chequearlo|revisarlo|verlo)|una\s+vez\s+me\s+den\s+respuesta|cuando\s+me\s+(digan|confirmen|contesten|respondan)|yo\s+(le|les|te)\s+(aviso|digo|busco|contacto|marco|escribo)|(le|les|te)\s+aviso|lo\s+comento\s+con|lo\s+platico\s+con)\b/i.test(_d);
@@ -894,11 +1026,15 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     // "sí"/"claro" (which confirms something we asked) can never land here at all.
     // The courtesy vocabulary and the token test live in utils/courtesy.js, shared with
     // the pending-handoff resume — the same judgement in two places, one owner.
-    const _isThanks = require("../../utils/courtesy").isThanksOnly(_d);
+    const defers = reading ? _nothingElse && reading.is("aplaza") : _defersRx;
+    const _isThanks = reading
+      ? _nothingElse && reading.is("cortesia") && !reading.is("aplaza", "espera_oferta") && !_answersOurQuestion
+      : require("../../utils/courtesy").isThanksOnly(_d);
     // Waiting for a sale is a date, not a no: "Solo espero el buen fin".
-    const _waitsForSale =
-      /\b(buen\s+fin|black\s+friday|hot\s+sale|quincena|aguinaldo|fin\s+de\s+mes)\b/i.test(_d) &&
-      /\b(espero|esperar\w*|esperando|hasta|cuando|para|en\s+la|despu[eé]s)\b/i.test(_d);
+    const _waitsForSale = reading
+      ? _nothingElse && reading.is("espera_oferta")
+      : /\b(buen\s+fin|black\s+friday|hot\s+sale|quincena|aguinaldo|fin\s+de\s+mes)\b/i.test(_d) &&
+        /\b(espero|esperar\w*|esperando|hasta|cuando|para|en\s+la|despu[eé]s)\b/i.test(_d);
     if (defers || _isThanks || _waitsForSale) {
       // Each repeat gets SHORTER, never louder. Someone saying "I'll check" three
       // times is winding the conversation down, and answering with the same warm
@@ -1175,7 +1311,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // the whole point of coming to get it.
   if (userMessage && !state.pickupAnswered) {
     const { asksPickup, pickupAnswer } = require("../../utils/pickup");
-    if (asksPickup(String(userMessage))) {
+    if (asked("recoger", () => asksPickup(String(userMessage)))) {
       state.pickupAnswered = true;
       let _hours = null;
       try {
@@ -1231,10 +1367,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // link at them — acknowledge the purchase. Dismiss the promo so it vanishes from
   // context now and on future turns. If they ALSO asked something ("ya la compré,
   // ¿cuándo llega?"), let the model answer (promo dismissed so it won't re-sell).
-  if (userMessage && !state.purchased && saysAlreadyBought(String(userMessage))) {
+  if (userMessage && !state.purchased && is("ya_compro", () => saysAlreadyBought(String(userMessage)))) {
     state.purchased = true;
     state.promoDismissed = true;
-    if (!hasFollowUpQuestion(String(userMessage))) {
+    if (reading ? reading.asksNothing() : !hasFollowUpQuestion(String(userMessage))) {
       const reply =
         "¡Qué gusto! 🙌 Muchas gracias por tu compra. Si tienes cualquier duda con tu pedido o necesitas algo más, aquí estoy para ayudarte. 😊";
       history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
@@ -1328,8 +1464,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     try {
       const msgCs = String(userMessage);
       const { dimsOf, wantsWholesale } = require("./tools");
-      const asksPrice = /\b(precio|precios|costo|costos|cotiza\w*|a\s+c[oó]mo)\b/i.test(msgCs) ||
-        /\bcu[aá]nto\s+(cuesta|cuestan|sale|salen|vale|valen|es|ser[ií]a)\b/i.test(msgCs);
+      const asksPrice = asked("precio", () =>
+        /\b(precio|precios|costo|costos|cotiza\w*|a\s+c[oó]mo)\b/i.test(msgCs) ||
+        /\bcu[aá]nto\s+(cuesta|cuestan|sale|salen|vale|valen|es|ser[ií]a)\b/i.test(msgCs));
       const namesProduct =
         /\b(sombra|rollo|rollos|antimaleza|anti\s*maleza|ground\s*cover|groundcover|borde|separador|monofilament\w*|cinta|kit|sujetador\w*|ojill\w*|cord[oó]n|lazo|herraj\w*|argolla\w*|raschel)\b/i.test(msgCs);
       // A SHIPPING QUESTION IS NOT A PRICE ASK (2026-11-09, wa:5218180999001). His first
@@ -1344,8 +1481,30 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // the model has no prices of its own to fall back on. So when shipping rides along
       // it CONTRIBUTES the anchors as turn context and lets the model answer both halves.
       const { asksShipping } = require("../../utils/shippingAsk");
-      const shippingToo = asksShipping(msgCs);
-      if (asksPrice && !namesProduct && !dimsOf(msgCs) && !wantsWholesale(msgCs) && !state.promoQuoted) {
+      const shippingToo = asked(["envio_costo", "envio_modo"], () => asksShipping(msgCs));
+      // A SHIPPING-COST QUESTION ON COLD START GETS THE SHIPPING ANSWER. With no product
+      // named the model answered "¿Cuál es el costo de envío?" with the delivery TIME
+      // ("generalmente llega en 2 días hábiles"), twice in reported conversations. The
+      // answer has an owner (genericShipLine, true of every product), and the reader
+      // now tells us that the cost — and nothing else — is what was asked.
+      if (reading && reading.asked("envio_costo") && !asksPrice &&
+          !reading.asksBeyond("envio_costo", "envio_modo") && !namesProduct && !_saidMeasure) {
+        const { genericShipLine: _gsl } = require("../../utils/shippingAsk");
+        const replyS = `${_gsl()} ¿Qué producto y qué medida te interesa? 😊`;
+        history.push({ role: "assistant", text: replyS, nodeId: currentNode.id, at: new Date() });
+        return {
+          reply: replyS,
+          state: { ...state, history, nodeId: currentNode.id },
+          diagnostics: {
+            workflow: { id: String(workflow._id), name: workflow.name },
+            fromNode: { id: currentNode.id, name: currentNode.name },
+            toNode: { id: currentNode.id, name: currentNode.name },
+            coldStartShippingAnswered: true,
+          },
+        };
+      }
+      const _bareAsk = !reading || (!reading.asksBeyond("precio", "envio_costo", "envio_modo") && !_saidMeasure);
+      if (asksPrice && _bareAsk && !namesProduct && !dimsOf(msgCs) && !wantsWholesale(msgCs) && !state.promoQuoted) {
         const anchors = await coldStartPriceAnchors();
         if (anchors.length >= 2) {
           const parts = anchors.map((a) => a.text);
@@ -1396,7 +1555,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   if (userMessage) {
     try {
       const { wantsWholesale } = require("./tools");
-      if (wantsWholesale(String(userMessage))) {
+      if (asked("mayoreo", () => wantsWholesale(String(userMessage)))) {
         return beginHandoff({
           preface: `¡Claro que manejamos mayoreo por volumen!`,
           reason: `Mayoreo (solicitud explícita de mayoreo)`,
@@ -1432,8 +1591,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // Accent-insensitive for yes/no detection: \b doesn't fit accented chars
         // (e.g. \bsí\b fails because "í" isn't a regex word-char), so normalize.
         const msgN = msg.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-        const affirm = /\b(si|correcto|exacto|asi\s+es|claro|va|vale|sale|dale|de\s+acuerdo|ok|okay|perfecto|adelante|me\s+convence|esa)\b/.test(msgN);
-        const decline = /\b(no|otra|otro|distint\w*|diferente|mejor\s+otra?|busco\s+otra|algo\s+mas|no\s+gracias)\b/.test(msgN);
+        const affirm = is("afirma", () => /\b(si|correcto|exacto|asi\s+es|claro|va|vale|sale|dale|de\s+acuerdo|ok|okay|perfecto|adelante|me\s+convence|esa)\b/.test(msgN));
+        const decline = is("niega", () => /\b(no|otra|otro|distint\w*|diferente|mejor\s+otra?|busco\s+otra|algo\s+mas|no\s+gracias)\b/.test(msgN));
         // Shades this rollo flow carries (e.g. 35/50/70/80/90).
         const carried = new Set();
         for (const f of rolloFams) for (const s of String(f.name || "").match(/\d{2,3}(?=\s*%)/g) || []) carried.add(s);
@@ -1485,6 +1644,11 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           }
         }
         let dims = dimsOf(msg) || (extractAllMeasures(msg)[0] || null) || rememberedDims;
+        // The parser is still the first word on a measure; the reader covers what it
+        // cannot spell ("de dos metros de ancho por cien de largo").
+        if (!dims && said.ancho && said.largo) dims = [Math.min(said.ancho, said.largo), Math.max(said.ancho, said.largo)];
+        // Did THIS message bring a measure (as opposed to one remembered from before)?
+        let msgHasDims = !!dims && dims !== rememberedDims;
 
         // Every sellable ground cover leaf, walked at most once per turn.
         let _gcLeaves;
@@ -1552,6 +1716,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             state.gcPendingLen = null;
           }
         }
+        // (a width and a length given apart may have been joined into a measure above)
+        msgHasDims = !!dims && dims !== rememberedDims;
         // Remember the WIDTH off any ground cover measure, however it arrived, so a
         // later bare length ("y de 50 m?") resolves without asking it again.
         if (_gcFlow && dims) {
@@ -1708,20 +1874,22 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // through §1.5 as usual. No percentage is quoted here, so stripShadeTalk —
         // which drops shade-% talk from a ground cover reply — leaves it intact.
         const asksAsShade =
-          _gcFlow &&
+          _gcFlow && asked("uso_sombra", () =>
           /\bsombra|sombrear|asolear|sol\b/i.test(msg) &&
           /\b(sirve|sirven|funciona|funcionan|puede|puedo|se\s+puede|usar|usarse|poner|ponerse|instalar|instalarse|tambi[eé]n|tapar|cubrir\s+del\s+sol)\b/i.test(msg) &&
           // "áreas verdes" is landscaping talk, and a customer naming malla sombra
           // outright is asking for the other product — §1.5 routes that one.
           !/\b[aá]reas?\s+verdes?\b/i.test(msg) &&
-          !/\bmalla\s+sombra\b/i.test(msg);
+          !/\bmalla\s+sombra\b/i.test(msg));
         if (asksAsShade) {
-          return ret(
+          const shadeFact =
             `El ground cover (malla antimaleza) va en el SUELO para que no crezca la maleza, no da sombra: por eso no se mide en porcentaje. ` +
-              `Para dar sombra a las plantas lo que se usa es la malla tipo Raschel, que también fabricamos. ` +
-              `¿Te comparto precios de la malla sombra o seguimos con la antimaleza? 😊`,
-            { gcShadeUseAnswered: true }
-          );
+            `Para dar sombra a las plantas lo que se usa es la malla tipo Raschel, que también fabricamos.`;
+          if (more("uso_sombra") || msgHasDims) alsoAnswered(shadeFact, "uso_sombra");
+          else
+            return ret(`${shadeFact} ¿Te comparto precios de la malla sombra o seguimos con la antimaleza? 😊`, {
+              gcShadeUseAnswered: true,
+            });
         }
 
         // (a0-envio) WHAT THE SHIPPING ACTUALLY COSTS ON A ROLL FLOW. Reported
@@ -1741,15 +1909,17 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // "entrega" — so "Y modo de entrega" and "Es entrega a domicilio ??" missed
         // both gates (wa:5217774678321, 2026-11-04, nudged twice).
         const _shipAsk = require("../../utils/shippingAsk");
-        const asksShipHowGc = _shipAsk.asksShipHow(msg);
-        const asksShipping = _shipAsk.asksShipCost(msg) || asksShipHowGc;
+        const asksShipHowGc = asked("envio_modo", () => _shipAsk.asksShipHow(msg));
+        const asksShipping = asked("envio_costo", () => _shipAsk.asksShipCost(msg)) || asksShipHowGc;
+        // The measure THIS message brought, if any: a full roll (…x100) or a cut.
+        const msgFullRoll = msgHasDims && dims.some((d) => Number(d) === 100);
         // "¿Cuánto TARDA el envío?" is a different question from "¿cuánto CUESTA?", and
         // this gate was answering both with the cost (found 2026-10-28 while testing
         // the payment gate below). The delivery TIME has the same two cases as
         // everything else here: the cuts ship through Mercado Libre, the full roll
         // moves as freight we schedule by destination — so "llega en 2 días hábiles" (the
         // knowledge entry's number) is not true of the roll either.
-        const asksShippingTime = _shipAsk.asksShipTime(msg);
+        const asksShippingTime = asked("envio_tiempo", () => _shipAsk.asksShipTime(msg));
         if (asksShippingTime && _gcFlow) {
           const lensT = await gcDim("length");
           const cutsT = lensT.filter((l) => l !== 100);
@@ -1759,9 +1929,21 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             ? `Los cortes de ${cutsT.join(", ")} m, que se compran en línea, normalmente llegan en 2 días hábiles (puede variar).`
             : "";
           const partsT = rollFirstT ? [rollLineT, cutLineT] : [cutLineT, rollLineT];
-          return ret(`${partsT.filter(Boolean).join(" ")} ¿Qué medida necesitas? 😊`, {
-            gcDeliveryTimeAnswered: rollFirstT ? "rollo" : "corte",
-          });
+          // THE MEASURE IS IN THE MESSAGE, OR THERE IS ANOTHER QUESTION IN IT: answer the
+          // time and let the turn go on — the quote path / the next gate writes the
+          // rest. With the measure known we say only the half that applies to it.
+          if (msgHasDims) {
+            alsoAnswered(
+              msgFullRoll ? rollLineT : `Ese corte se compra en línea y normalmente llega en 2 días hábiles (puede variar).`,
+              "envio_tiempo"
+            );
+          } else if (more("envio_tiempo")) {
+            alsoAnswered(partsT.filter(Boolean).join(" "), "envio_tiempo");
+          } else {
+            return ret(`${partsT.filter(Boolean).join(" ")} ¿Qué medida necesitas? 😊`, {
+              gcDeliveryTimeAnswered: rollFirstT ? "rollo" : "corte",
+            });
+          }
         }
         // THE CUSTOMER NAMES THE FULL ROLL — arm the freight quote without claiming the
         // turn (gates contribute facts, they do not swallow the message). In the
@@ -1819,6 +2001,28 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // in captureZipReply (ai/index.js) is the lenient one, while an UNPROMPTED
           // reply only counts when it is a bare number that exists in the ZipCode table
           // — "es el 50000" would be dropped and we'd ask the same thing twice.
+          // THE MESSAGE ALREADY CARRIES THE MEASURE (2026-11-17, wa:5217661038231). "…el
+          // costo total de un rollo de 2*100 ya con IVA y envío a …, CP 93556" asked the
+          // price AND the shipping and gave the measure and the CP; this gate matched
+          // "envío", claimed the turn and asked him for the measure and the CP. The
+          // quote path below owns a turn that brings its measure: it prices it and, for
+          // a full roll, starts the freight quote — so here we only add what it does not
+          // say. A cut's shipping is included; a full roll's freight is in the quote.
+          if (msgHasDims) {
+            alsoAnswered(
+              msgFullRoll
+                ? yesHow.trim()
+                : `${yesHow}En ese corte, que se compra en línea, el envío ya va incluido en el precio.`,
+              "envio_costo", "envio_modo"
+            );
+            state.gcShippingAnswered = true;
+          } else if (more("envio_costo", "envio_modo")) {
+            // Another question rides along (the price, the payment…): answer the
+            // shipping and let whoever owns the rest finish the turn.
+            alsoAnswered(`${yesHow}${parts.filter(Boolean).join(" ")}`, "envio_costo", "envio_modo");
+            if (rollFirst || !cutsE.length) state.gcFreightPending = true;
+            state.gcShippingAnswered = true;
+          } else {
           if (!haveZipE) state.zipAsked = true;
           // THEIR CP IS THE LAST THING WE NEED. Reported 2026-10-28 (wa:5212461613346,
           // "debió pasar a un humano y no lo hizo"): he asked the full roll's shipping
@@ -1836,6 +2040,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             `${yesHow}${parts.filter(Boolean).join(" ")} ${haveZipE ? "¿Qué medida necesitas y te la cotizo? 😊" : "¿Me compartes tu código postal y la medida que necesitas? 📍"}`,
             { gcShippingAnswered: rollFirst ? "rollo" : "corte" }
           );
+          }
         }
 
         // (a0-pago) HOW A FULL ROLL IS ACTUALLY PAID. Twin of (a0-envio) above, found
@@ -1862,25 +2067,24 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // por rollo, no por metro cuadrado" would be the same half-answer this gate
         // exists to prevent.
         const saysArea = /\d+\s*(m2|m²|metros?\s+(cuadrados?|lineales?))/i.test(msg);
-        const asksUnit =
+        const asksUnit = asked("unidad", () =>
           !saysArea &&
           (/\bmetros?\s*(cuadrados?|lineales?)\b|\bm2\b|\bm²\b|\bpor\s+metro\b/i.test(msg) ||
-            /\bes\s+en\s+cuadrado\b/i.test(msg));
+            /\bes\s+en\s+cuadrado\b/i.test(msg)));
         if (asksUnit && _gcFlow) {
           const lensU = await gcDim("length");
           const cutsU = lensU.filter((l) => l !== 100);
-          return ret(
-            `El precio es por ROLLO o por corte completo, no por metro cuadrado: el rollo de 2 × 100 m cubre 200 m² y el de 4 × 100 m, 400 m². ` +
-              (cutsU.length ? `También cortamos tramos de ${cutsU.join(", ")} m. ` : "") +
-              `¿Qué medida necesitas? 😊`,
-            { gcUnitAnswered: true }
-          );
+          const unitFact =
+            `El precio es por ROLLO o por corte completo, no por metro cuadrado: el rollo de 2 × 100 m cubre 200 m² y el de 4 × 100 m, 400 m².` +
+            (cutsU.length ? ` También cortamos tramos de ${cutsU.join(", ")} m.` : "");
+          if (more("unidad") || msgHasDims) alsoAnswered(unitFact, "unidad");
+          else return ret(`${unitFact} ¿Qué medida necesitas? 😊`, { gcUnitAnswered: true });
         }
 
-        const asksPayment =
+        const asksPayment = asked(["pago", "contra_entrega"], () =>
           /\b(pago|pagar|pagos|forma\s+de\s+pago|m[eé]todos?\s+de\s+pago|transferencia|dep[oó]sito|tarjeta|efectivo|contra\s+entrega|contraentrega|msi|meses\s+sin\s+intereses|factura\w*)\b/i.test(msg) ||
           /\bc[oó]mo\s+(se\s+)?(compr|pag|adquier|realiz)\w*/i.test(msg) ||
-          /\bd[oó]nde\s+(se\s+)?(compr|pag)\w*/i.test(msg);
+          /\bd[oó]nde\s+(se\s+)?(compr|pag)\w*/i.test(msg));
         if (asksPayment && _gcFlow) {
           const lensP = await gcDim("length");
           const cutsP = lensP.filter((l) => l !== 100);
@@ -1894,7 +2098,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // cuts are listed there, so ML is named as an option for them. "¿Es contra
           // entrega?" is a yes/no question and deserves the word "no" in front of the
           // explanation — leaving it implied ("pagas al ordenar") makes them ask again.
-          const codAskedP = /\bcontra\s*entrega\b|\bcontraentrega\b/i.test(msg);
+          const codAskedP = asked("contra_entrega", () => /\bcontra\s*entrega\b|\bcontraentrega\b/i.test(msg));
           const textP = paymentAnswer({
             codAsked: codAskedP,
             mlFirst: !rollFirstP,
@@ -1904,9 +2108,11 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             directPhrase:
               `El rollo completo de 100 m no se vende por Mercado Libre: ese lo cerramos directo contigo por transferencia.`,
           });
-          return ret(`${textP} ¿Qué medida necesitas? 😊`, {
-            gcPaymentAnswered: rollFirstP ? "rollo" : "corte",
-          });
+          if (more("pago", "contra_entrega") || msgHasDims) alsoAnswered(textP, "pago", "contra_entrega");
+          else
+            return ret(`${textP} ¿Qué medida necesitas? 😊`, {
+              gcPaymentAnswered: rollFirstP ? "rollo" : "corte",
+            });
         }
 
         // (a0-quejas) §5C of the follow-up spec — the customer says the PRICE, the
@@ -1922,9 +2128,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // it and answer with the price list, which is the brush-off the customer was
         // already complaining about.
         if (_gcFlow) {
-          const qAten = /\b(nadie\s+me\s+(contest|respond|atend)\w*|mal[a]?\s+(atenci[oó]n|servicio)|p[eé]sim[oa]\s+(atenci[oó]n|servicio|servicio)|no\s+me\s+(contestaron|respondieron|atendieron|resolvieron)|me\s+dejaron\s+(esperando|colgad[oa]|en\s+visto)|sigo\s+esperando\s+(respuesta|que\s+me)|muy\s+mala\s+atenci[oó]n)\b/i.test(msg);
-          const qInfo = /\b(no\s+me\s+(dieron|dijeron|mandaron|pasaron)\s+(el\s+precio|la\s+informaci[oó]n|los\s+precios|nada)|informaci[oó]n\s+(incompleta|confusa|equivocada|err[oó]nea)|nunca\s+me\s+(dijeron|mandaron|contestaron|pasaron)|no\s+entend[ií]\s+nada|no\s+me\s+quedó?\s+claro\s+nada)\b/i.test(msg);
-          const qPrecio = /\b(muy\s+car[oa]s?|est[aá]n?\s+car[oa]s?|car[ií]simo|se\s+me\s+hace\s+car[oa]|no\s+me\s+alcanza|fuera\s+de\s+mi\s+presupuesto|est[aá]\s+fuera\s+de\s+presupuesto|m[aá]s\s+barat[oa]\s+en\s+otr\w+)\b/i.test(msg);
+          const qAten = is("queja_atencion", () => /\b(nadie\s+me\s+(contest|respond|atend)\w*|mal[a]?\s+(atenci[oó]n|servicio)|p[eé]sim[oa]\s+(atenci[oó]n|servicio|servicio)|no\s+me\s+(contestaron|respondieron|atendieron|resolvieron)|me\s+dejaron\s+(esperando|colgad[oa]|en\s+visto)|sigo\s+esperando\s+(respuesta|que\s+me)|muy\s+mala\s+atenci[oó]n)\b/i.test(msg));
+          const qInfo = is("queja_info", () => /\b(no\s+me\s+(dieron|dijeron|mandaron|pasaron)\s+(el\s+precio|la\s+informaci[oó]n|los\s+precios|nada)|informaci[oó]n\s+(incompleta|confusa|equivocada|err[oó]nea)|nunca\s+me\s+(dijeron|mandaron|contestaron|pasaron)|no\s+entend[ií]\s+nada|no\s+me\s+quedó?\s+claro\s+nada)\b/i.test(msg));
+          const qPrecio = is("queja_precio", () => /\b(muy\s+car[oa]s?|est[aá]n?\s+car[oa]s?|car[ií]simo|se\s+me\s+hace\s+car[oa]|no\s+me\s+alcanza|fuera\s+de\s+mi\s+presupuesto|est[aá]\s+fuera\s+de\s+presupuesto|m[aá]s\s+barat[oa]\s+en\s+otr\w+)\b/i.test(msg));
           if (qAten || qInfo) {
             return beginHandoff({
               preface: `Lamento que haya quedado así, y gracias por decírmelo. 🙏 Déjame ponerte con alguien que lo revise contigo a detalle.`,
@@ -1974,7 +2180,16 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           (!!state.techSheetSent && history.filter((h) => h.role === "assistant").length === 1);
         if (_gcFlow && !state.gcOpenerSent && _gcOpenerTurn) {
           const t = String(userMessage || "").trim();
-          const isOpener =
+          // With a reading: the first message is a greeting, a general "info" or a bare
+          // price ask, and NOTHING ELSE — no other question, no measure, no data. That
+          // is what the word tests below were approximating.
+          const isOpener = reading
+            ? !dims && !gcAskWidth && !gcNearestLen && qty == null && !_saidData &&
+              (reading.is("saludo", "info_general") || reading.asked("precio")) &&
+              !reading.asksBeyond("precio") &&
+              !reading.is("queja_atencion", "queja_info", "queja_precio", "aplaza", "ya_lo_dije", "enojo") &&
+              !namesOtherProduct(t)
+            :
             t.length <= 70 && !dims && !gcAskWidth && !gcNearestLen && qty == null &&
             // No digits at all: any number is a measure, an area ("3 hectáreas") or a
             // quantity, and the opener must never talk over one.
@@ -2062,17 +2277,19 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // blanco), so offer it instead of asking an open measure question — the same
         // rule the borde campaign states. Shades are what make the Raschel rollo
         // catalogue too long to list, so this fires only on the shadeless flow.
-        const asksWhichSizes =
+        const asksWhichSizes = asked("medidas", () =>
           /\b(qu[eé]|cu[aá]l(es)?)\b[^?]*\b(medidas?|tama[nñ]os?|presentaci[oó]n(es)?|dimensiones?|anchos?|largos?|rollos?|opciones?)\b/i.test(msg) ||
           /\b(medidas?|tama[nñ]os?|presentaciones?|anchos?|largos?)\s+(disponibles?|manejan|tienen|hay|existen)\b/i.test(msg) ||
-          /\b(qu[eé]|cu[aá]les)\s+(medidas?|tama[nñ]os?)\b/i.test(msg);
+          /\b(qu[eé]|cu[aá]les)\s+(medidas?|tama[nñ]os?)\b/i.test(msg));
         // A bare price ask with no measure belongs here too: "¿Cuál es el precio?" got
         // "¿me dices qué largo necesitas o qué área quieres cubrir?" and a human had to
         // step in and paste the catalogue (reported same day). Offer the options and
         // their prices — unless the message asks something else, which the turn answers.
-        const asksBroadPrice =
+        // With a reading the price ask stands on its own: a shipping or payment question
+        // in the same message has already been answered above and rides along in front.
+        const asksBroadPrice = asked("precio", () =>
           /\b(precio|precios|costo|costos|cu[aá]nto\s+(cuesta|cuestan|sale|vale|valen)|cotiz\w*|a\s+c[oó]mo)\b/i.test(msg) &&
-          !/\b(env[ií]o|entrega|tarda|llega|paga|pago|tarjeta|factur|garant|instalaci|ubicaci|direcci|sucursal|mayoreo|descuento)\b/i.test(msg);
+          !/\b(env[ií]o|entrega|tarda|llega|paga|pago|tarjeta|factur|garant|instalaci|ubicaci|direcci|sucursal|mayoreo|descuento)\b/i.test(msg));
         // (a0-bis) A bare PRICE ask is not a bare SIZE ask. "¿Qué medidas manejan?" wants
         // the catalogue, so the range list below is the right answer. "¿Cuál es el precio?"
         // wants NUMBERS, and the range list makes the customer pick a size before getting
@@ -2086,8 +2303,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // accepts "rollos"/"opciones" as the thing being asked about — but it is a PRICE
         // question, and it is the client's own example of the case that must quote. So the
         // size list only wins when the message names the SIZES themselves.
-        const asksSizesStrict =
-          /\b(medidas?|tama[nñ]os?|presentaci[oó]n(es)?|dimensiones?|anchos?|largos?)\b/i.test(msg);
+        const asksSizesStrict = asked("medidas", () =>
+          /\b(medidas?|tama[nñ]os?|presentaci[oó]n(es)?|dimensiones?|anchos?|largos?)\b/i.test(msg));
         if (asksBroadPrice && !asksSizesStrict && !dims && carried.size === 0 && rolloFams.length &&
             !namesOtherProduct(msg)) {
           try {
@@ -2483,14 +2700,18 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     // "tiempo de entrega") must NOT be treated as a borde inquiry — the ask-length gate's
     // trigger matches "cuánto" inside "cuántos días" and answered a shipping question with
     // "¿qué largo necesitas?" (reported). Yield so the turn answers about delivery instead.
-    const isDeliveryQuestion = /(cu[aá]nto?s?\s+d[ií]as|cu[aá]ndo\s+(me\s+)?(llega|lleg[ao]|entregan|sale)|tiempo\s+de\s+(entrega|env[ií]o)|en\s+cu[aá]nto\s+(tiempo|llega)|d[ií]as?\s+(en\s+)?(llega|entrega|env)|cu[aá]nto\s+tarda|rastreo|paqueter[ií]a|gu[ií]a\s+de\s+env)/i.test(String(userMessage));
+    // With a reading the delivery question yields only when it is ALL the message is:
+    // one that also brings a length keeps its quote, and 0-quater answers the time.
+    const isDeliveryQuestion = reading
+      ? reading.asked("envio_tiempo") && !reading.asksBeyond("envio_tiempo") && !_saidMeasure && !said.cantidad
+      : /(cu[aá]nto?s?\s+d[ií]as|cu[aá]ndo\s+(me\s+)?(llega|lleg[ao]|entregan|sale)|tiempo\s+de\s+(entrega|env[ií]o)|en\s+cu[aá]nto\s+(tiempo|llega)|d[ií]as?\s+(en\s+)?(llega|entrega|env)|cu[aá]nto\s+tarda|rastreo|paqueter[ií]a|gu[ií]a\s+de\s+env)/i.test(String(userMessage));
     // ASKING FOR OUR CONTACT, not about borde. This gate runs long before the phone
     // gate, and the word-number map read the "un" in "facilitarme un num" as quantity
     // 1 — so a customer who asked for a phone number got "¡Perfecto, 1! ¿De cuál largo
     // los quieres?" (reported). Yield so the contact gate answers him.
-    const isContactRequest =
+    const isContactRequest = asked(["telefono", "humano"], () =>
       /\b(num(ero)?s?|tel(efono|éfono)?s?|cel(ular)?|whats?app?|wasap|wpp|contacto|marcar|llamar|hablar|comunicar\w*)\b/i.test(String(userMessage)) &&
-      !/\bmi\s+(num|tel|cel|whats)/i.test(String(userMessage));
+      !/\bmi\s+(num|tel|cel|whats)/i.test(String(userMessage)));
     if (userMessage && isBordeFlow && !wantsNonBordeProduct && !isDeliveryQuestion && !isContactRequest) {
       const { findProductInFamilies } = require("./tools");
       const { resolvePrice, trackedLink, fmtMoney } = require("./priceResolver");
@@ -2500,7 +2721,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // same message used to vanish: "Solo ocupo uno!! / Dónde están ubicados? / O
       // donde lo hacen llegar?" got a purchase link and a CP ask, and the address was
       // never shared (reported 2026-10-23). Answer the roll AND say where we are.
-      const bordeLocParts = asksLocationOrShipping(msgB) ? await locationBlock() : null;
+      const bordeLocParts = asked("ubicacion", () => asksLocationOrShipping(msgB)) ? await locationBlock() : null;
       const withLoc = (reply) => (bordeLocParts && bordeLocParts.length ? `${reply}\n\n${bordeLocParts.join("\n")}` : reply);
       const retB = (reply, extra) => {
         reply = withLoc(reply);
@@ -2577,15 +2798,15 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // prompts, so a rule written only in a prompt is not in force.
       // Second reason: the 6 and 9 m Flexible have NO live Mercado Libre listing, so
       // half the column we were quoting could not be bought online at all.
-      const asksCheaper =
+      const asksCheaper = asked("mas_barato", () =>
         /\b(?:barat\w+|econ[oó]mic\w+|accesible\w*|descuentos?|rebaja\w*|car[oa]s?|mejor(?:es)?\s+precios?)\b/i.test(msgB) ||
         /\bprecio\s+m[aá]s\s+(?:bajo|accesible)\b/i.test(msgB) ||
-        /\botra\s+(?:opci[oó]n|versi[oó]n)\b/i.test(msgB);
+        /\botra\s+(?:opci[oó]n|versi[oó]n)\b/i.test(msgB));
       // An explicit question about the VERSIONS is the other trigger the client's own
       // node prompts name ("si pregunta por las variedades/opciones que manejamos").
       // It must name the variant dimension — a generic "¿qué opciones hay?" is a
       // question about the four LENGTHS and gets the grueso list.
-      const asksVersions = /\b(?:qu[eé]|cu[aá]ntas|cu[aá]les)\s+(?:versiones|presentaciones|variedades|grosores)\b/i.test(msgB);
+      const asksVersions = asked("versiones", () => /\b(?:qu[eé]|cu[aá]ntas|cu[aá]les)\s+(?:versiones|presentaciones|variedades|grosores)\b/i.test(msgB));
       const flexAsked = asksCheaper || asksVersions;
       if (flexAsked || msgVariant === "delgado") state.bordeShowFlexible = true;
       // Sticky: once the comparison is on the table it stays, so the follow-up turns
@@ -2831,9 +3052,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // an asesor can price it. The model gave the Mercado Libre answer to a customer
       // who had just asked for 50 rolls of 18 m, which quietly promises free shipping
       // on an order that doesn't ship that way.
-      const asksShippingCost =
+      const asksShippingCost = asked("envio_costo", () =>
         /env[ií]o|flete|paqueter[ií]a|transporte/i.test(msgB) &&
-        /(cu[aá]nto|costo|cuesta|precio|cobran|sale|vale|gratis|incluido|incluye|manejan|tiene)/i.test(msgB);
+        /(cu[aá]nto|costo|cuesta|precio|cobran|sale|vale|gratis|incluido|incluye|manejan|tiene)/i.test(msgB));
       if (asksShippingCost && (state.bordeWholesaleTrack || (state.pendingHandoff && state.pendingHandoff.wholesale))) {
         const haveZipS = !!(state.location && (state.location.zip || state.location.zipcode));
         return retB(
@@ -2890,7 +3111,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // the pending-version gate took the 10 from "10 cm". The borde is a fixed 13 cm
       // de alto, so a measurement here is never an order. NOTE: "grueso/delgado" is the
       // VARIANT, not a width — match alto/altura/ancho/grosor, never grueso.
-      const asksBordeWidth = /\b(alto|altura|ancho|anchura|grosor|espesor)\b/i.test(msgB) || /qu[eé]\s+tan\s+(ancho|alto)/i.test(msgB);
+      const asksBordeWidth =
+        (!!reading && reading.asked("dimension_producto")) ||
+        /\b(alto|altura|ancho|anchura|grosor|espesor)\b/i.test(msgB) || /qu[eé]\s+tan\s+(ancho|alto)/i.test(msgB);
       // A0) We asked WHICH VERSION for a length they already picked — resolve it the
       // moment they answer, in either vocabulary (Premium/grueso, Flexible/delgado).
       // A multi-presentation order waits here too (the client's flow-1: "¿Los prefieres
@@ -2968,18 +3191,22 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // Same guard as the ground cover one: "18 metros lineales" is a LENGTH the order
       // path owns, not a question about which unit we sell by.
       const saysAreaB = /\d+\s*(m2|m²|metros?\s+(cuadrados?|lineales?))/i.test(msgB);
-      const asksUnitB =
+      // Does THIS message also bring a length to quote? Then an answer gate below must
+      // not end the turn: it leaves its answer and the quote path writes the price.
+      const bordeBringsLength = !!reading && Array.isArray(rMsg.lengths) && rMsg.lengths.length > 0;
+      const bMore = (...mine) => more(...mine) || bordeBringsLength;
+      const asksUnitB = asked("unidad", () =>
         !saysAreaB &&
         (/\bmetros?\s*(cuadrados?|lineales?)\b|\bm2\b|\bm²\b|\bpor\s+metro\b/i.test(msgB) ||
-          /\b(es|son|van?)\s+(en|por)\s+cuadrados?\b/i.test(msgB));
+          /\b(es|son|van?)\s+(en|por)\s+cuadrados?\b/i.test(msgB)));
       if (asksUnitB) {
         const byLenU = await bordeLeavesByLength(variantKnown() || VARIANT_FALLBACK).catch(() => new Map());
         const lensU = [...byLenU.keys()].map(Number).filter(Number.isFinite).sort((a, b) => a - b);
-        return retB(
+        const unitFactB =
           `Son metros LINEALES, no metros cuadrados: el borde mide 13 cm de alto y el rollo trae el largo que elijas` +
-            `${lensU.length ? ` (${lensU.join(", ")} m)` : ""}. ¿Qué largo necesitas? 😊`,
-          { bordeUnitAnswered: true }
-        );
+          `${lensU.length ? ` (${lensU.join(", ")} m)` : ""}.`;
+        if (bMore("unidad")) alsoAnswered(unitFactB, "unidad");
+        else return retB(`${unitFactB} ¿Qué largo necesitas? 😊`, { bordeUnitAnswered: true });
       }
 
       // 0-ter) HOW IT IS PAID. Reported 2026-10-28 (wa:5215510160541): "Los pagos son
@@ -2989,9 +3216,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // split is the ROLLO COMPLETO rule — the cuts carry a Mercado Libre link and are
       // paid there, the full roll (the borde's 54 m) is closed by us. Which length is
       // which comes from the catalogue through isFullRoll, never from a hardcoded 54.
-      const asksPaymentB =
+      const asksPaymentB = asked(["pago", "contra_entrega"], () =>
         /\b(pago|pagar|pagos|forma\s+de\s+pago|m[eé]todos?\s+de\s+pago|transferencia|dep[oó]sito|tarjeta|efectivo|contra\s+entrega|contraentrega|msi|meses\s+sin\s+intereses)\b/i.test(msgB) ||
-        /\bc[oó]mo\s+(se\s+)?(compr|pag|adquier)\w*/i.test(msgB);
+        /\bc[oó]mo\s+(se\s+)?(compr|pag|adquier)\w*/i.test(msgB));
       if (asksPaymentB) {
         const { isFullRoll } = require("./priceResolver");
         const byLenP = await bordeLeavesByLength(variantKnown() || VARIANT_FALLBACK).catch(() => new Map());
@@ -3007,7 +3234,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // Which lengths are on Mercado Libre and which we close ourselves comes from
         // the catalogue through isFullRoll, never from a hardcoded 54. The money itself
         // is paymentAnswer's — always up front, ML as an option where it applies.
-        const codAskedB = /\bcontra\s*entrega\b|\bcontraentrega\b/i.test(msgB);
+        const codAskedB = asked("contra_entrega", () => /\bcontra\s*entrega\b|\bcontraentrega\b/i.test(msgB));
         const textB = paymentAnswer({
           codAsked: codAskedB,
           mlFirst: true,
@@ -3018,7 +3245,8 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             ? `El de ${rollsB.join(" y ")} m es rollo completo: ese lo cerramos directo contigo por transferencia.`
             : "",
         });
-        return retB(`${textB} ¿Qué largo necesitas? 😊`, { bordePaymentAnswered: true });
+        if (bMore("pago", "contra_entrega")) alsoAnswered(textB, "pago", "contra_entrega");
+        else return retB(`${textB} ¿Qué largo necesitas? 😊`, { bordePaymentAnswered: true });
       }
 
       // 0-quater) WHAT THE SHIPPING COSTS, AND HOW LONG IT TAKES — on the BORDE flow.
@@ -3042,9 +3270,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // from {envío, flete, paquetería, transporte, mensajería}. The three questions now
       // come from `utils/shippingAsk.js`, one owner for both flows' gates.
       const _shipAskB = require("../../utils/shippingAsk");
-      const asksShipB = _shipAskB.asksShipCost(msgB);
-      const asksShipTimeB = _shipAskB.asksShipTime(msgB);
-      const asksShipHowB = _shipAskB.asksShipHow(msgB);
+      const asksShipB = asked("envio_costo", () => _shipAskB.asksShipCost(msgB));
+      const asksShipTimeB = asked("envio_tiempo", () => _shipAskB.asksShipTime(msgB));
+      const asksShipHowB = asked("envio_modo", () => _shipAskB.asksShipHow(msgB));
       if (asksShipB || asksShipTimeB || asksShipHowB) {
         const { isFullRoll } = require("./priceResolver");
         const byLenE = await bordeLeavesByLength(variantKnown() || VARIANT_FALLBACK).catch(() => new Map());
@@ -3085,6 +3313,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         if (blocksE.length) {
           if (!haveZipE && rollsE.length) state.zipAsked = true;
           const yesHowB = asksShipHowB ? "Sí, enviamos a domicilio a toda la República. " : "";
+          if (bMore("envio_costo", "envio_tiempo", "envio_modo")) {
+            alsoAnswered(`${yesHowB}${blocksE.join(" ")}`, "envio_costo", "envio_tiempo", "envio_modo");
+          } else
           return retB(
             `${yesHowB}${blocksE.join(" ")} ¿Qué largo necesitas? 😊`,
             { bordeShippingAnswered: asksShipTimeB && !asksShipB ? "tiempo" : asksShipHowB && !asksShipB ? "domicilio" : "costo" }
@@ -3100,9 +3331,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // transferencia, or at the store) — the only thing missing was somewhere to say
       // it when the customer asks WHERE instead of HOW. The location comes from
       // CompanyInfo through locationBlock, never from a literal.
-      const asksWhereBuyB =
+      const asksWhereBuyB = asked("donde_comprar", () =>
         /\b(d[oó]nde|donde)\b/i.test(msgB) &&
-        /\b(consig\w*|compr\w*|adquier\w*|vend\w*|encuentr\w*|surt\w*|hay|est[aá]n?|ubicad|tienda|sucursal|local)\b/i.test(msgB);
+        /\b(consig\w*|compr\w*|adquier\w*|vend\w*|encuentr\w*|surt\w*|hay|est[aá]n?|ubicad|tienda|sucursal|local)\b/i.test(msgB));
       if (asksWhereBuyB) {
         const { isFullRoll } = require("./priceResolver");
         const byLenW = await bordeLeavesByLength(variantKnown() || VARIANT_FALLBACK).catch(() => new Map());
@@ -3121,10 +3352,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             : "",
           directPhrase: `También puedes comprarlo directo con nosotros por transferencia y te lo enviamos a toda la República.`,
         });
-        return retB(
-          `${whereTxt}${loc && loc.length ? `\n${loc.join("\n")}` : ""}\n¿Qué largo necesitas? 😊`,
-          { bordeWhereToBuyAnswered: true }
-        );
+        const whereFact = `${whereTxt}${loc && loc.length ? `\n${loc.join("\n")}` : ""}`;
+        if (bMore("donde_comprar", "ubicacion")) alsoAnswered(whereFact, "donde_comprar", "ubicacion");
+        else return retB(`${whereFact}\n¿Qué largo necesitas? 😊`, { bordeWhereToBuyAnswered: true });
       }
 
       if (asksBordeWidth) {
@@ -3400,7 +3630,16 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           // `_ack` is a CLOSED set of confirmations, not an attempt to recognise topics:
           // that is the distinction the user asked for — regex may only confirm, never
           // interpret.
-          const _ackOnly = (() => {
+          // With a reading: the message asks nothing, brings no data, and IS a yes, a
+          // thank-you, a greeting, a lone CP or an emoji. The closed word set below is
+          // the fallback.
+          const _ackOnly = reading
+            ? reading.asksNothing() && !_saidMeasure && !said.cantidad &&
+              !reading.is("niega", "aplaza", "ya_lo_dije", "enojo", "queja_atencion", "queja_info", "queja_precio") &&
+              (reading.is("afirma", "cortesia", "saludo") ||
+                require("../../utils/courtesy").isWordlessReply(msgB) ||
+                /^\D*\d{5}\D*$/.test(msgB))
+            : (() => {
             const t = msgB
               .toLowerCase()
               .normalize("NFD")
@@ -3575,7 +3814,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // and "no le termina de dar precio". Same shape as the Ground Cover opener
         // above: short, no digits, an info/greeting trigger, nothing else asked.
         const tB = msgB.trim();
-        const isInfoOpener =
+        const isInfoOpener = reading
+          ? reading.is("saludo", "info_general") && reading.asksNothing() && !_saidData &&
+            !reading.is("aplaza", "cortesia", "ya_lo_dije", "enojo", "queja_atencion", "queja_info", "queja_precio")
+          :
           tB.length <= 70 &&
           !/\d/.test(tB) &&
           /\b(hola|holi|buen[oa]s?|qu[eé]\s+tal|info|informaci[oó]n|informes|me\s+interesa|interesad[oa]|cotizaci[oó]n|cotizar)\b/i.test(tB) &&
@@ -3600,15 +3842,18 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             { bordeInfoOpener: true }
           );
         }
-        const wantsBorde = /(precio|cuánto|cuanto|cotiz|cost|vale|borde|separador|rollo|metr|largo|premium|flexible|grues|delgad)/i.test(msgB);
+        const _wantsBordeRx = /(precio|cuánto|cuanto|cotiz|cost|vale|borde|separador|rollo|metr|largo|premium|flexible|grues|delgad)/i.test(msgB);
+        // Asks the price or the sizes — or simply names the product and asks nothing.
+        const wantsBorde = reading ? reading.asked("precio", "medidas") || (_wantsBordeRx && reading.asksNothing()) : _wantsBordeRx;
         // Only ask the length when the message asks NOTHING ELSE. Words like "cuánto"
         // appear in plenty of other questions ("cuánto mide de ancho", "cuánto tarda
         // en llegar", "cómo es el pago"), and intercepting those replaced the answer
         // with "¿qué largo necesitas?" — the customer's actual question never reached
         // the model. When something else is asked we contribute the borde facts and
         // let the turn continue, so the reply covers both.
-        const asksSomethingElse =
-          /alto|altura|ancho|anchura|grosor|espesor|sobresale|entierra|env[ií]|entrega|tarda|llega|paga|pago|tarjeta|factur|garant|instalaci|color|negro|verde|material|dura|ubicaci|sucursal|mayoreo/i.test(msgB);
+        const asksSomethingElse = reading
+          ? reading.asksBeyond("precio", "medidas", ..._turn.answered)
+          : /alto|altura|ancho|anchura|grosor|espesor|sobresale|entierra|env[ií]|entrega|tarda|llega|paga|pago|tarjeta|factur|garant|instalaci|color|negro|verde|material|dura|ubicaci|sucursal|mayoreo/i.test(msgB);
         if (wantsBorde && !asksSomethingElse) {
           // BROAD PRICE ASK → QUOTE THE WHOLE LIST. There are only four lengths, so
           // "costos" / "¿a cómo está el metro?" deserves all of them with live prices
@@ -3715,14 +3960,18 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // fresh link re-arms this). One-shot.
   if (userMessage && state.pendingZipAsk) {
     const haveZip = !!(state.location && (state.location.zip || state.location.zipcode));
-    const msgHasZip = /\b\d{5}\b/.test(String(userMessage));
+    const msgHasZip = /\b\d{5}\b/.test(String(userMessage)) || !!said.cp;
     // Fire ONLY on a bland acknowledgement. This used to be a BLOCKLIST of topic
     // words, which meant any topic it hadn't anticipated got swallowed: "Grado de
     // protección que ofrece y tiempo de garantía" was answered with "¿a qué código
     // postal te llegaría el pedido?" and the customer's two questions were never
     // answered (reported). An allowlist can only ever drop the CP ask, never a question.
     const ackTxt = String(userMessage).trim();
-    const isBlandAck =
+    // With a reading: the reply asks nothing and brings nothing — that is all "bland"
+    // ever meant. The word blocklist below is the fallback.
+    const isBlandAck = reading
+      ? reading.asksNothing() && !_saidData && !reading.is("niega", "aplaza", "ya_lo_dije", "enojo")
+      :
       ackTxt.length <= 45 &&
       !/[?¿]/.test(ackTxt) &&
       !/\b(que|qu[eé]|cual|cu[aá]l|cuanto|cu[aá]nto|como|c[oó]mo|donde|d[oó]nde|cuando|cu[aá]ndo|quien|qui[eé]n|porque|por\s*qu[eé]|sirve|tiene[n]?|manejan|hay|puedo|puede[n]?|grado|garant\w*|protecci\w*|dura\w*|env[ií]\w*|entrega|paga\w*|pago|factur\w*|color\w*|medida|precio|metro\w*|rollo|ubicaci\w*|direcci\w*|telefono|tel[eé]fono|num\w*|cotiz\w*|descuento|mayoreo|disponib\w*|stock)\b/i.test(ackTxt) &&
@@ -3814,7 +4063,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   if (userMessage) {
     try {
       const msgL = String(userMessage).toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-      if (asksLocationOrShipping(userMessage)) {
+      if (askedOpen(["ubicacion", "envio_modo"], () => asksLocationOrShipping(userMessage))) {
         const parts = await locationBlock();
         if (parts && parts.length) {
           // Only OWN the turn when location/shipping is all they asked. Anything else
@@ -3823,7 +4072,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             .replace(/\b(donde|estan|se|ubican|encuentran|ubicaci\w*|ubicados?|direccion|domicilio|sucursal|planta|maps|mapa|como|llego|hacen?|env[ií]?o?s?|envian|mandan|llegan?|entregan|cobertura|a|toda|todo|la|lo|los|las|le|me|mi|nos|republica|el|pais|en|que|estado|ciudad|de|son|y|o|hola|buenas?|buenos?|dias|tardes|gracias|por|favor)\b/g, " ")
             .replace(/[^a-z0-9]/g, "")
             .trim();
-          if (!restL) {
+          const _onlyLocation = reading
+            ? reading.asked("ubicacion") && !reading.asksBeyond("ubicacion", "envio_modo", ..._turn.answered) && !_saidMeasure
+            : !restL;
+          if (_onlyLocation) {
             const reply = parts.join("\n");
             history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
             return {
@@ -3855,7 +4107,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       const givingOwn = /\bmi\b[^]*\b(numero|telefono|tel|whats?app?|whats|wasap|wpp)\b/.test(msgP) || /\d{10}/.test(msgP.replace(/\D/g, ""));
       const hasPhoneWord = /\btelefono\b|\btel\b|\bwhat?sapp?\b|\bwhats\b|\bwasap\b|\bwpp\b|\blada\b/.test(msgP);
       const numeroReq = /\bnum(ero)?\b/.test(msgP) && /\balgun|\bun\b|\buno\b|\bsu\b|\btu\b|\bel\b|\botro\b|\bdame\b|\bdas\b|\bpasa|\btiene|\bhay\b|\bcual\b|\ba que\b|\bpara\b|\bcontacto\b|\bmarcar\b|\bllamar\b|\bhablar\b|\bcomunicar|\bme das\b|\bfacilit/.test(msgP);
-      const isPhoneRequest = !givingOwn && (hasPhoneWord || numeroReq);
+      const isPhoneRequest = reading
+        ? reading.asked("telefono") && !said.telefono
+        : !givingOwn && (hasPhoneWord || numeroReq);
       if (isPhoneRequest) {
         const { getBusinessInfo } = require("../../businessInfoManager");
         const biz = await getBusinessInfo().catch(() => null);
@@ -3922,7 +4176,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
       // verde, so we route it here: this gate LISTS the real colors with their own prices
       // and links, which is the honest answer. It must never silently become beige.
       const COLORW = /\b(beige|negro|negra|verde|blanc[oa]|gris|azul|rojo|caf[e]|marr[o]n|terracota|vino|oscur[oa]s?|clar[oa]s?|clarit[oa]s?)\b/;
-      const asksColor = /\bcolor(es)?\b/.test(msgC) || /de\s+qu[e]\s+color/.test(msgC) || /otro\s+color/.test(msgC) || COLORW.test(msgC);
+      const asksColor = asked("colores", () => /\bcolor(es)?\b/.test(msgC) || /de\s+qu[e]\s+color/.test(msgC) || /otro\s+color/.test(msgC) || COLORW.test(msgC));
       // A fresh measure this turn must go to the MEASURE path (it resolves the right
       // product AND its colors) — NOT get swallowed here and answered for the stale
       // anchor. dimsOf catches the VERBOSE form too ("6 por 3", "6 metros por 3"); the
@@ -4162,7 +4416,10 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     !state.promoDismissed &&
     state.product &&
     state.product._id &&
-    isNoMeasureBuyingSignal(String(userMessage)) &&
+    (reading
+      ? (reading.asked("precio") || reading.is("info_general") || isNoMeasureBuyingSignal(String(userMessage))) &&
+        !reading.asksBeyond("precio")
+      : isNoMeasureBuyingSignal(String(userMessage))) &&
     // NO measure named this turn. Must use the turn's AI-resolved measure, not just the
     // digit matcher: "4 m. De largo por 3.60 m de ancho" is invisible to
     // extractAllMeasures, so this gate quoted the preloaded PROMO (6x4, $699) and
@@ -4439,6 +4696,13 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
   // (2026-11-06). This is the "contribute a fact and let the turn continue" shape: the
   // gate stops short-circuiting, the model answers, and nothing is dropped. Consumed
   // here and cleared, so it never leaks into a later turn.
+  if (_turn.parts.length) {
+    // The engine already answered part of this message deterministically and will put
+    // it in FRONT of whatever the model writes — so the model writes only the rest.
+    turnContextExtra +=
+      `\n- EL SISTEMA YA CONTESTÓ ESTO EN ESTE MISMO MENSAJE y va ANTES de tu respuesta: "${_turn.parts.join(" ")}". ` +
+      `NO lo repitas, NO lo contradigas y NO vuelvas a saludar: contesta SOLO lo demás que el cliente preguntó.`;
+  }
   if (state.turnContextExtra) {
     turnContextExtra += `\n- ${state.turnContextExtra}`;
     state.turnContextExtra = null;
@@ -4649,7 +4913,7 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
           /\bm[aá]s\s+(?:car[oa]s?|barat[oa]s?|econ[oó]mic[oa]s?)\b/i.test(t) ||
           /\b(?:cuesta|cuestan|sale|salen|vale|valen)\s+m[aá]s\b/i.test(t) ||
           /\bdiferencia\s+(?:de|en)\s+(?:precio|costo)\b/i.test(t);
-        return why && cmp;
+        return asked("comparacion_precio", () => why && cmp);
       })();
       if (cmpAsk && (state.lastQuotes || []).length >= 2) {
         const { fmtMoney } = require("./priceResolver");
@@ -4676,7 +4940,9 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
         // model answers everything, with the real reason in context below.
         const restCmp = String(userMessage).replace(/\d+(?:[.,]\d+)?\s*[x×*]\s*\d+(?:[.,]\d+)?/gi, " ");
         const otherCmp =
-          /env[ií]|entrega|paga|pago|factur|garant|instalaci|ubicaci|sucursal|color|mayoreo|cu[aá]nt[oa]s\s/i.test(restCmp) ||
+          (reading
+            ? reading.asksBeyond("comparacion_precio", "precio", "mas_barato")
+            : /env[ií]|entrega|paga|pago|factur|garant|instalaci|ubicaci|sucursal|color|mayoreo|cu[aá]nt[oa]s\s/i.test(restCmp)) ||
           // "más cara que en Mercado Libre / que en otro lado" compares us to someone
           // else, not our two measures to each other.
           /mercado\s*libre|otro\s+lado|otra\s+tienda|competencia|amazon|home\s*depot|internet/i.test(restCmp);
@@ -4836,8 +5102,14 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
             // necesito si la maneja". It's "does this message raise any OTHER topic".
             // If it doesn't, the quote IS the whole answer and we return it.
             const rest = String(userMessage).replace(/\d+(?:[.,]\d+)?\s*[x×*]\s*\d+(?:[.,]\d+)?/gi, " ");
-            const otherTopic =
+            const _otherTopicRx =
               /env[ií]|entrega|paga|pago|pagar|contra\s*entrega|tarjeta|transferencia|factur|garant|instalaci|sucursal|ubicaci|direcci|d[oó]nde|color|negro|verde|blanco|mayoreo|descuento|cu[aá]nt[oa]s\s|rollo|borde|antimaleza|ground|kit|cord[oó]n|lluvia|impermeable|dura|duraci[oó]n/i.test(rest);
+            // Does the message ask anything besides the price of this measure? The
+            // reader answers that directly; a quantity or a named product still counts.
+            const otherTopic = reading
+              ? reading.asksBeyond("precio", "medidas") || !!said.cantidad ||
+                /rollo|borde|antimaleza|ground|kit|cord[oó]n/i.test(rest)
+              : _otherTopicRx;
             const secondMeasure = extractAllMeasures(String(userMessage)).length > 1;
             const onlyTheMeasure = !otherTopic && !secondMeasure;
             if (onlyTheMeasure) {

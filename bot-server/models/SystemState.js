@@ -39,6 +39,12 @@ const systemStateSchema = new mongoose.Schema(
     // 2026-06-05. This is a DB switch, not an env var, so it is flipped from Spec
     // Ops — the user never touches Railway configuration.
     gcFollowUp: { type: switchSchema, default: () => ({}) },
+    // THE TURN READER'S OFF SWITCH (2026-11-17). The model reads every message and
+    // the gates answer from that reading (ai/workflow/turnReader.js). engaged=true
+    // turns the reader OFF and every gate falls back to its old regex — the exact
+    // behaviour that shipped before — with no deploy. Default: reader ON.
+    //   node scripts/turnReaderSwitch.js off | on | status
+    turnReaderOff: { type: switchSchema, default: () => ({}) },
     // OPENAI CREDIT WATCH (2026-10-27, user's request: "I need an alert for my eyes
     // only when I have 5 USD left"). The balance CANNOT be read from the API — a
     // sk-proj- key gets 403 on /v1/organization/costs and the credit endpoint answers

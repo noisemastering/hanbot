@@ -234,6 +234,20 @@ const CASES = [
   // va incluido, no se cobra aparte", y dos minutos después su rollo de 2x100 se cotizó
   // con "el rollo completo lo cotiza un asesor junto con el envío". El bot se contradijo
   // sobre dinero en dos turnos.
+  // UN MENSAJE, VARIAS PREGUNTAS Y VARIOS DATOS (2026-11-17, wa:5217661038231). La
+  // compuerta de envío reconocía la palabra "envío", se quedaba con el turno y pedía
+  // el código postal y la medida que el cliente acababa de escribir. Ahora el modelo
+  // lee el mensaje completo (ai/workflow/turnReader.js) y cada compuerta solo contesta
+  // lo suyo. Estos casos fallan si una compuerta vuelve a quedarse con medio mensaje.
+  { id: "gc-precio-envio-cp-un-mensaje", group: "groundcover", flow: "groundcover",
+    turns: ["En cuanto me saldria el costo total de un rollo de 2*100 ya con IVA y envío a Gutiérrez Zamora Veracruz, CP 93556"],
+    expect: "Da el precio del rollo de 2 x 100 m ($2,111.20 con IVA incluido) y explica que el envío del rollo completo se cotiza aparte (flete). NO le pide el código postal ni la medida: el cliente ya dio los dos en ese mismo mensaje. Sí puede pedirle nombre, teléfono o colonia para preparar la cotización." },
+  { id: "gc-corte-envio-y-pago", group: "groundcover", flow: "groundcover",
+    turns: ["precio del 2x50 con envio a CP 64102 y como se paga"],
+    expect: "Contesta las TRES cosas en una sola respuesta: el precio del corte de 2 x 50 m, que en ese corte el envío ya va incluido, y cómo se paga (por adelantado; Mercado Libre o transferencia). NO le pide el código postal, que ya dio. El error es contestar solo una de las tres." },
+  { id: "gc-precio-con-error-de-dedo", group: "groundcover", flow: "groundcover",
+    turns: ["El rollo antimalesa", "Me das elmptecio de los dos"],
+    expect: "En el segundo turno entiende que 'elmptecio' es 'el precio' y da los DOS precios con número: rollo de 2 x 100 m y de 4 x 100 m. El error es prometer el precio sin decir ningún número, o preguntar de nuevo qué quiere." },
   { id: "gc-envio-rollo-vs-corte", group: "groundcover", flow: "groundcover",
     turns: ["¿Cuál es el costo de envío?", "2 x100"],
     expect: "Al preguntar por el envío distingue los DOS casos: en los cortes que se compran en línea (10, 25, 50 m) el envío va incluido, y el ROLLO COMPLETO de 100 m va por flete que un asesor cotiza según el destino. Luego cotiza el 2 x 100 m como rollo completo. El error es decir que el envío va incluido y después decir que el asesor lo cotiza: no puede contradecirse." },
@@ -363,6 +377,9 @@ const CASES = [
   // le digo" recibieron LA MISMA frase tres veces.
   // Una PREGUNTA que podemos contestar nunca se contesta con el empujón "ya te pasé los
   // precios" (2026-10-28, dos reportes: unidades y pago).
+  { id: "borde-tres-preguntas", group: "borde", flow: "borde",
+    turns: ["el de 18 cuanto cuesta, es entrega a domicilio? y como se paga"],
+    expect: "Contesta las TRES preguntas en una sola respuesta: el precio del rollo de 18 m, que sí se entrega a domicilio (el envío va incluido), y la forma de pago (por adelantado; Mercado Libre o transferencia). El error es contestar solo una y preguntar '¿qué largo necesitas?' cuando ya dijo 18." },
   { id: "borde-metro-lineal", group: "borde", flow: "borde",
     turns: ["Precio", "Esas son las medidas es en cuadrado"],
     expect: "Aclara que son metros LINEALES, no metros cuadrados, y que el borde mide 13 cm de alto por el largo que elija (6, 9, 18, 54 m). El error es repetir 'ya te pasé los precios de los rollos… ¿cuál te sirve?' sin contestar la pregunta." },
@@ -436,6 +453,9 @@ const CASES = [
   // de la malla?" / "¿Cuál es el precio?" were answered with no number at all — "dime el
   // ancho y el largo" — and in both cases the asesor then had to quote by hand. The
   // client's call: answer with real "desde" anchors and THEN ask the measure.
+  { id: "cs-costo-de-envio", group: "coldstart", flow: "coldstart",
+    turns: ["¿Cuál es el costo de envío?"],
+    expect: "Contesta sobre el COSTO del envío: lo que se compra por Mercado Libre ya lo lleva incluido y el rollo completo va por flete que se cotiza según el código postal. Luego pregunta qué producto o medida le interesa. El error es contestar con el TIEMPO de entrega ('llega en 2 días') o con una lista de precios de productos." },
   { id: "cs-bare-price-ask", group: "coldstart", flow: "coldstart",
     turns: ["¿Cuál es el precio de la malla?"],
     expect: "Debe dar PRECIOS REALES como ancla (al menos dos: confeccionada 'desde $…', borde separador 'desde $…', rollo de antimaleza/ground cover 2x100 m) y luego preguntar cuál producto y qué medida. NO aprueba una respuesta que sólo pida la medida sin ningún precio, ni una que liste porcentajes de sombra (35/50/70/80/90% es de los ROLLOS; la confeccionada es siempre 90%), ni una que vuelque el catálogo." },
