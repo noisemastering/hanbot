@@ -675,7 +675,10 @@ Responde SOLO JSON: {"verdict":"no_product|current|other_flow|needs_human|not_so
   //          the ~95% of messages that are no_product/current. (Recommended.)
   //   high|low → reasoning on EVERY classification (most expensive).
   const mode = (process.env.FLOW_SWITCH_REASONING || "off").toLowerCase();
-  const CONSEQUENTIAL = new Set(["other_flow", "needs_human"]);
+  // not_sold is consequential too (2026-11-18): the engine now answers it itself
+  // ("no manejamos X") instead of leaving the model to improvise, and denying a
+  // product we DO sell is the worst outcome there is — so it is confirmed first.
+  const CONSEQUENTIAL = new Set(["other_flow", "needs_human", "not_sold"]);
 
   try {
     const client = getClient();
@@ -727,6 +730,8 @@ function scopeDecision(verdict, { query = "", currentFlowName = null, flowCatalo
   const q = String(query || "").trim();
   const out = (text, extra) => ({
     text,
+    verdict: (verdict && verdict.verdict) || null,
+    productName: (verdict && verdict.productName) || null,
     scopeResult: null,
     handoffRequested: false,
     handoffReason: null,
@@ -1181,6 +1186,9 @@ const REGISTRY = {
         flowCatalog,
         isColdStart: currentIsColdStart,
       });
+      // What the classifier concluded, for the engine's own probe (detectFlowSwitch).
+      ctx.scopeVerdict = decision.verdict;
+      ctx.scopeProductName = decision.productName;
       if (decision.scopeResult) ctx.scopeResult = decision.scopeResult;
       if (decision.handoffRequested) {
         ctx.handoffRequested = true;

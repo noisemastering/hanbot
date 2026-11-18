@@ -4701,6 +4701,40 @@ async function runWorkflowTurnCore(workflow, state, userMessage, opts = {}) {
           /con\s*refuerzo/i.test(det.toName) && !/sin\s*refuerzo/i.test(det.toName)) {
         det = null;
       }
+      // A PRODUCT WE DON'T SELL GETS "NO", FROM THE ENGINE (2026-11-18). "¿venden
+      // tinacos?" on cold start was answered "Sí, también manejamos otros productos
+      // para jardín y hogar" about one time in six. The rule exists — the node prompt
+      // says "si el producto que busca no lo tenemos infórmale amablemente" and the
+      // company directive says never to offer anything outside the families — but both
+      // are prompts, the cold-start entry node does not even have check_product_scope
+      // among its tools, and its globalPrompt reads "también vendemos otros productos",
+      // which is the sentence the model was repeating. The classifier already reaches
+      // the right verdict on this very turn (it runs for the flow switch); it was
+      // simply discarded. Now it is the answer. The waterproof ask keeps its own
+      // clarification (rainIntent), and wire mesh was answered upstream.
+      if (det && det.notSold && !rainIntent) {
+        const what = det.product ? String(det.product).trim().replace(/[.?!¿¡]+$/g, "") : "";
+        const fact =
+          `${what ? `No manejamos ${what}.` : "Ese producto no lo manejamos."} ` +
+          `En Hanlob fabricamos malla sombra, malla antimaleza (ground cover) y borde separador para jardín.`;
+        if (reading && (reading.asksBeyond("otro") || _saidMeasure)) {
+          alsoAnswered(fact, "otro");
+        } else {
+          const replyNS = `${fact} ¿Te ayudo con alguno de esos? 😊`;
+          history.push({ role: "assistant", text: replyNS, nodeId: currentNode.id, at: new Date() });
+          return {
+            reply: replyNS,
+            state: { ...state, history, nodeId: currentNode.id },
+            diagnostics: {
+              workflow: { id: String(workflow._id), name: workflow.name },
+              fromNode: { id: currentNode.id, name: currentNode.name },
+              toNode: { id: currentNode.id, name: currentNode.name },
+              notSold: what || true,
+            },
+          };
+        }
+      }
+      if (det && det.notSold) det = null;
       if (det && det.needsHuman) {
         // Product we make but no active flow serves it (e.g. monofilamento) → hand off
         // to a human. NEVER substitute a lookalike active product (Raschel) as if it
@@ -5993,6 +6027,11 @@ async function detectFlowSwitch(message, familyList, currentWorkflow) {
   // hands off to a human instead of substituting a lookalike active-flow product.
   if (probe.handoffRequested) {
     return { needsHuman: true, reason: probe.handoffReason || null };
+  }
+  // Something we do NOT sell at all (tinacos, toldos…). The verdict used to be thrown
+  // away here — only a switch or a handoff came back — so the model answered alone.
+  if (probe.scopeVerdict === "not_sold") {
+    return { notSold: true, product: probe.scopeProductName || null };
   }
   return null;
 }
