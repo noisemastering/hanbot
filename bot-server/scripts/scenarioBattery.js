@@ -158,6 +158,15 @@ const CASES = [
     expect: "Cotiza la medida 8x4 (= 4x8 m, sí existe en catálogo) con un precio concreto y su link. NO compares el precio contra una cifra fija: ML cambia precios y promociones. Lo que se evalúa es la MEDIDA, que debe decirse 8x4 o 4x8 (mismo producto), preferentemente en el orden en que la escribió el cliente — NUNCA otra como 7x4 (fue un bug real reportado por el cliente)." },
 
   // ROLLO ─────────────────────────────────────────────────────────────────────
+  // "4 x 100" ES EL 4.2 x 100, Y DOS SOMBRAS SON DOS COTIZACIONES (2026-11-18, psid
+  // 9502472699867645). El catálogo nombra "4.2 x 100" a todos los rollos menos el de 90%,
+  // así que pedir "4x100 al 50%" se contestaba con "no manejamos 50% en esa medida".
+  { id: "rollo-4x100-es-4-2", group: "rollo", flow: "rollo",
+    turns: ["rollo de 4x100 al 50%"],
+    expect: "Cotiza el rollo de 4.2 x 100 m al 50% con su precio. El error es decir que no se maneja el 50% en esa medida, u ofrecer solo el 90%." },
+  { id: "rollo-dos-sombras", group: "rollo", flow: "rollo",
+    turns: ["rollo de 4x100", "Solo necesito 2 rollos, del mismo tamaño, uno al 50% y el otro al 70% de sombra"],
+    expect: "En el segundo turno da el precio de LOS DOS rollos (4.2 x 100 m): el de 50% y el de 70%, cada uno con su precio, y pide los datos de contacto para la cotización. El error es cotizar solo uno, o decir 'para 2 rollos manejamos mayoreo' sin dar ningún precio." },
   { id: "rollo-ask-length-area", group: "rollo", flow: "rollo",
     turns: ["me interesa la malla en rollo"],
     expect: "Pregunta qué LARGO necesita o qué ÁREA cubrir; NO enumera todas las medidas ni da un rango sin sentido." },
@@ -248,6 +257,9 @@ const CASES = [
   { id: "gc-precio-con-error-de-dedo", group: "groundcover", flow: "groundcover",
     turns: ["El rollo antimalesa", "Me das elmptecio de los dos"],
     expect: "En el segundo turno entiende que 'elmptecio' es 'el precio' y da los DOS precios con número: rollo de 2 x 100 m y de 4 x 100 m. El error es prometer el precio sin decir ningún número, o preguntar de nuevo qué quiere." },
+  { id: "gc-area-mayor-que-un-rollo", group: "groundcover", flow: "groundcover",
+    turns: ["para un invernadero de 4 mil metros"],
+    expect: "Entiende que son 4,000 m² y hace la cuenta: 10 rollos de 4 x 100 m (o 20 de 2 x 100 m), con el precio por rollo, y pide los datos para preparar la cotización por volumen. El error es preguntar de qué largo lo quiere (10, 25, 50 o 100) o seguir preguntando la medida." },
   { id: "gc-envio-rollo-vs-corte", group: "groundcover", flow: "groundcover",
     turns: ["¿Cuál es el costo de envío?", "2 x100"],
     expect: "Al preguntar por el envío distingue los DOS casos: en los cortes que se compran en línea (10, 25, 50 m) el envío va incluido, y el ROLLO COMPLETO de 100 m va por flete que un asesor cotiza según el destino. Luego cotiza el 2 x 100 m como rollo completo. El error es decir que el envío va incluido y después decir que el asesor lo cotiza: no puede contradecirse." },

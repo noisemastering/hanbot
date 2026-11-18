@@ -294,6 +294,32 @@ async function availableShadesForMeasure(familyList, wantDims) {
   return [...shades].sort((a, b) => Number(a) - Number(b));
 }
 
+// Every sellable roll under these families with its measure and its shade %, from ONE
+// walk of the tree. The roll flow needs the whole picture to answer two things the
+// exact-match lookup cannot: "4 x 100" when the catalogue calls that roll 4.2 x 100
+// (asked for at 50% it was DENIED — "no manejamos 50% en 4 x 100, lo tenemos en 90%" —
+// because only the 90% is exactly 4 m wide), and two shades asked for in one message.
+async function rollCatalog(familyList) {
+  const PF = require("../../models/ProductFamily");
+  const ids = (Array.isArray(familyList) ? familyList : familyList ? [familyList] : [])
+    .filter((f) => f && f.id).map((f) => String(f.id));
+  const queue = [...ids];
+  const out = [];
+  let g = 0;
+  while (queue.length && g++ < 500) {
+    const kids = await PF.find({ parentId: queue.shift() })
+      .select("name size sellable active parentId enabledDimensions productCode price priceExcludesTax mlPrice onlineStoreLinks stock").lean();
+    for (const k of kids) {
+      if (k.sellable && k.active !== false && !isTriangularProduct(k)) {
+        const d = dimsOf(k.size) || dimsOf(k.name);
+        if (d) out.push({ w: d[0], l: d[1], shade: await productShade(k), leaf: k });
+      }
+      queue.push(k._id);
+    }
+  }
+  return out;
+}
+
 // Pick the right sibling VARIANT among candidates that all match the requested
 // measure (e.g. grueso vs delgado "Rollo de 18 m"). The distinguishing word is
 // on a parent node, so score each candidate's ancestry against the query words;
@@ -1290,4 +1316,4 @@ function parseRollQuantity(text) {
   return null;
 }
 
-module.exports = { REGISTRY, scopeDecision, toolDefsFor, runTool, dimsOf, stripMeasures, findProductInFamilies, availableVariantsForProduct, availableMeasuresForFamilies, closestAvailableMeasure, nearestRollByArea, parseRollQuantity, hasUnitBoundNumber, qtyFromText, orderedQty, wantsWholesale, productShade, availableShadesForMeasure };
+module.exports = { REGISTRY, scopeDecision, rollCatalog, toolDefsFor, runTool, dimsOf, stripMeasures, findProductInFamilies, availableVariantsForProduct, availableMeasuresForFamilies, closestAvailableMeasure, nearestRollByArea, parseRollQuantity, hasUnitBoundNumber, qtyFromText, orderedQty, wantsWholesale, productShade, availableShadesForMeasure };

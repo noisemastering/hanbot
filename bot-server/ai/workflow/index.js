@@ -2393,6 +2393,104 @@ async function runWorkflowTurnCore(workflow, state, userMessage, opts = {}) {
         // got "dime de cuánto por cuánto lo quieres cubrir" when 4x50 m covers it
         // exactly. (The confeccionada flow is the opposite case — there a measure is
         // width × length and refusing to guess from an area is correct.)
+        // ── RASCHEL ROLLS: "4 x 100" IS THE 4.2 x 100, AND TWO SHADES ARE TWO QUOTES
+        // (2026-11-18, psid 9502472699867645). He asked for "4 m por 100" at "50% y 70%"
+        // and then spelled it out — "2 rollos, del mismo tamaño, uno al 50% y el otro al
+        // 70%". He was quoted only the 50%, then told "para 2 rollos manejamos precio de
+        // MAYOREO" with no 70% price at all; replayed, the exact-match lookup even DENIED
+        // it ("no manejamos 50% en 4 x 100; lo tenemos en 90%"), because the catalogue
+        // names every roll but the 90% "4.2 x 100". Customers say 4; the team itself
+        // writes "4.20 x 100" in its own quotes.
+        if (carried.size > 0) {
+          const _cat = await require("./tools").rollCatalog(rolloFams).catch(() => []);
+          // The roll the customer means: the exact measure when we stock it at that
+          // shade, otherwise the same length within 25 cm of width.
+          const snapRoll = (d, sh) => {
+            if (!d) return d;
+            const ok = (e) => !sh || e.shade === String(sh);
+            if (_cat.some((e) => e.w === d[0] && e.l === d[1] && ok(e))) return d;
+            const near = _cat
+              .filter((e) => e.l === d[1] && Math.abs(e.w - d[0]) <= 0.25 && ok(e))
+              .sort((x, y) => Math.abs(x.w - d[0]) - Math.abs(y.w - d[0]));
+            return near.length ? [near[0].w, near[0].l] : d;
+          };
+          // Every shade asked for in THIS message — from the reader when there is one.
+          const shadesNamed = (() => {
+            const found = new Set();
+            if (reading) for (const x of said.sombras || []) if (carried.has(String(x))) found.add(String(x));
+            const bare = require("./tools").stripMeasures(msg);
+            for (const m of bare.matchAll(/(\d{2,3})\s*(?:%|por\s*ciento|porciento)/gi)) if (carried.has(m[1])) found.add(m[1]);
+            return [...found].sort((x, y) => Number(x) - Number(y));
+          })();
+          const baseDims = dims || state.rollLastDims || null;
+          if (shadesNamed.length >= 2 && baseDims) {
+            const money = (n) => "$" + Number(n).toLocaleString("es-MX", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+            const lines = [];
+            const missing = [];
+            for (const sh of shadesNamed) {
+              const d = snapRoll(baseDims, sh);
+              const entry = _cat.find((e) => e.w === d[0] && e.l === d[1] && e.shade === sh);
+              const pi = entry ? await resolvePrice(entry.leaf, altOpt(state, entry.leaf)).catch(() => null) : null;
+              if (pi && pi.amount) lines.push(`Rollo de ${d[0]} x ${d[1]} m al ${sh}%: ${money(pi.amount)} + envío`);
+              else missing.push(sh);
+            }
+            if (lines.length) {
+              state.rollLastDims = baseDims;
+              state.awaitingRollShade = null;
+              const missTxt = missing.length
+                ? `\n\nAl ${missing.join("% y al ")}% no lo manejamos en esa medida.`
+                : "";
+              return beginHandoff({
+                preface:
+                  `Te comparto nuestras promociones en Malla Sombra Raschel (IVA incluido):\n\n${lines.join("\n")}${missTxt}\n\n` +
+                  `📦 Contamos con descuentos especiales por compras al mayoreo.\n\n`,
+                reason: `Rollos Raschel de ${baseDims[0]}x${baseDims[1]} al ${shadesNamed.join("% y ")}% — cotizados ${lines.length}; cerrar la venta y cotizar el envío`,
+              });
+            }
+          }
+          if (dims) {
+            dims = snapRoll(dims, reqShade);
+            state.rollLastDims = dims;
+          }
+        }
+
+        // ── GROUND COVER: AN AREA BIGGER THAN ONE ROLL IS A NUMBER OF ROLLS (2026-11-18,
+        // psid 9297864033594328, "se repitió / se atoró"). "Para un invernadero de 4 mil
+        // metros" → "¿de 2 m o de 4 m?" → "de 4 metros de ancho" → "¿cuántos metros de
+        // largo: 10, 25, 50 o 100?". He had given everything: 4,000 m² at 4 m wide is ten
+        // rolls of 4 x 100. Same shape as the borde's "500 ml" (2026-11-02): a run longer
+        // than the longest roll is a TOTAL, so we do the division instead of asking.
+        if (_gcFlow) {
+          const _areaTxt = !dims && msg.match(/\b(\d{1,6}(?:[.,]\d+)?)\s*(?:m2|m²|metros?\s+cuadrados?|mts?\s+cuadrados?)\b/i);
+          const _areaNow = _areaTxt ? Number(String(_areaTxt[1]).replace(",", ".")) : (!dims && said.area_m2) || null;
+          if (_areaNow) state.gcArea = _areaNow;
+          const _area = _areaNow || ((said.ancho && !said.largo && !dims) ? state.gcArea : null);
+          if (_area) {
+            const { fullRollRows } = require("./priceResolver");
+            const { rows: _fr } = await fullRollRows(rolloFams.map((f) => f.id), {
+              resolveFor: (leaf) => resolvePrice(leaf, altOpt(state, leaf)),
+            }).catch(() => ({ rows: [] }));
+            const _maxArea = Math.max(0, ..._fr.map((r) => Number(r.width) * 100));
+            if (_fr.length && _area > _maxArea) {
+              const _w = Number(said.ancho) || null;
+              const _use = _w && _fr.some((r) => Number(r.width) === _w) ? _fr.filter((r) => Number(r.width) === _w) : _fr;
+              const _opts = _use
+                .slice()
+                .sort((x, y) => Number(y.width) - Number(x.width))
+                .map((r) => ({ n: Math.ceil(_area / (Number(r.width) * 100)), r }));
+              const _fmtArea = Number(_area).toLocaleString("es-MX");
+              const _txt = _opts.map((o) => `${o.n} rollos de ${o.r.width} x 100 m (${o.r.money} c/u)`).join(" o ");
+              state.gcArea = null;
+              state.lead = { ...(state.lead || {}), wholesaleQty: String(_opts[0].n) };
+              return beginHandoff({
+                preface: `Para cubrir ${_fmtArea} m² de ground cover (malla antimaleza) necesitas ${_txt}, en negro o blanco. Por ser volumen te preparamos una cotización con precio especial y el envío.`,
+                reason: `Ground cover para ${_fmtArea} m²: ${_opts.map((o) => `${o.n} rollos de ${o.r.width}x100`).join(" o ")} — volumen; cotizar precio y flete`,
+                wholesale: true,
+              });
+            }
+          }
+        }
+
         const areaOnlyM = !dims && msg.match(/\b(\d{1,5}(?:[.,]\d+)?)\s*(?:m2|m²|metros?\s+cuadrados?|mts?\s+cuadrados?)\b/i);
         if (areaOnlyM) {
           const areaV = Number(String(areaOnlyM[1]).replace(",", "."));

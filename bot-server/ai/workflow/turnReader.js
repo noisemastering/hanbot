@@ -93,6 +93,8 @@ Devuelve SOLO este JSON:
     "ciudad": texto o null,
     "estado": texto o null,
     "colonia": texto o null,
+    "area_m2": número o null,      // superficie TOTAL a cubrir, en metros cuadrados
+    "sombras": [...],              // porcentajes de sombra que pide, como números (50, 70)
     "cantidad": número o null,     // cuántas PIEZAS o ROLLOS quiere (nunca una medida, nunca un CP)
     "colores": [...],              // colores que nombra
     "nombre": texto o null,        // SOLO si el cliente dice su propio nombre
@@ -147,6 +149,8 @@ REGLAS:
 1. Un mensaje puede traer VARIAS preguntas: ponlas TODAS. "¿Cuánto cuesta y cuánto tarda el envío?" → ["envio_costo","envio_tiempo"]. Nunca te quedes con una sola.
 2. Un dato NO es una pregunta. "CP 93556" es facts.cp, no una pregunta. "2x100" es ancho 2, largo 100.
 3. MEDIDAS: en "A x B" el menor suele ser el ancho y el mayor el largo. "rollo de 2*100" → ancho 2, largo 100. "18 metros", "el de 54", "500 ml" son SOLO largo. "de 4 de ancho" es SOLO ancho. Los porcentajes (90%) NO son medidas. Un número de 5 dígitos solo NO es una medida.
+3b. ÁREA: una superficie total a cubrir va en area_m2, NO en largo: "200 m2", "cubrir 500 metros cuadrados", "un invernadero de 4 mil metros" (= 4000), "media hectárea" (= 5000), "2 hectáreas" (= 20000). Un terreno, invernadero, huerta o cultivo medido en "metros" sin ancho ni largo es un ÁREA. "18 metros" de borde o "50 metros de largo" es un largo.
+3c. SOMBRAS: todos los porcentajes de sombra que pide, cada uno como número: "al 50% y al 70%" → [50, 70]; "uno de 50 y otro de 70" (hablando de sombra) → [50, 70]. Si contesta a nuestra pregunta "¿qué porcentaje?" con "50 y 70", también.
 4. CANTIDAD es cuántas piezas o rollos, y SOLO cuando el cliente da un número de piezas: "dos rollos", "3 piezas", "quiero 5". El artículo "una"/"un" ("una de 7x7", "un rollo de 18") NO es una cantidad: null. NUNCA tomes como cantidad una medida, un porcentaje, un CP ni un teléfono. Si dudas, null.
 5. CP: 5 dígitos que el cliente da como su código postal, lo etiquete o no ("CP 93556", "mi código es 20900", "soy del 76000"), o cuando contesta a nuestra pregunta por el CP.
 6. Usa el ÚLTIMO MENSAJE DEL BOT para entender respuestas cortas: si preguntamos el código postal, "64102" es el cp; si preguntamos cuántos, "3" es cantidad; si preguntamos la medida, "18" es largo; "sí" es "afirma".
@@ -188,6 +192,8 @@ function shapeReading(parsed) {
     ciudad: strOrNull(f.ciudad),
     estado: strOrNull(f.estado),
     colonia: strOrNull(f.colonia),
+    area_m2: numOrNull(f.area_m2),
+    sombras: [...new Set((Array.isArray(f.sombras) ? f.sombras : []).map((x) => numOrNull(typeof x === "string" ? x.replace("%", "") : x)).filter((n) => n && n <= 100).map((n) => String(Math.round(n))))],
     cantidad: numOrNull(f.cantidad),
     colores: (Array.isArray(f.colores) ? f.colores : []).map(strOrNull).filter(Boolean),
     nombre: strOrNull(f.nombre),
