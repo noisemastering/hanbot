@@ -1022,7 +1022,7 @@ const es = {
   "credit.lowBanner": "Crédito de OpenAI bajo: quedan ~{{amount}} (~{{days}} días). En $0 el bot deja de responder.",
   "credit.review": "Ver",
   "credit.lowBannerNoDays": "Crédito de OpenAI bajo: quedan ~{{amount}}. En $0 el bot deja de responder.",
-  "messages.coldLeads": "Leads sin contacto",
+  "messages.coldLeads": "Abandonos",
   "messages.coldLeadsHint": "Dejaron de responder sin dar teléfono ni CP — no se alertó a nadie. Si vuelven a escribir, salen de aquí.",
   "messages.coldSince": "Sin respuesta desde",
   "messages.coldWhy": "Falta",

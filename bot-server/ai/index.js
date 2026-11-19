@@ -278,7 +278,39 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
   let repeatEscalation = null; // reason string when the 3rd time escalates
   let repeatSilence = false;   // the 3rd time with nothing to rescue → stay quiet
   try {
+    // THE CUSTOMER'S OWN REPEATS come first (2026-11-18, psid 28809731695389746: "Bay"
+    // fourteen times, a reply to nearly every one). The ladder below counts OUR
+    // answers, and the model words a greeting differently each time, so it never
+    // climbed. The same message arriving a third time is the directive's own case,
+    // whatever we answered — and it applies to deferral turns too, which the answer
+    // ladder exempts.
+    let msgVerdict = "send";
     if (replyText && typeof replyText === "string") {
+      const { bumpMessage, repeatedMessageAction, isGoodProspect } = require("../utils/repeatGuard");
+      const rs = diagnostics?.readingSummary || null;
+      const msgTimes = bumpMessage(newState, userMessage, rs);
+      msgVerdict = repeatedMessageAction({
+        times: msgTimes,
+        text: userMessage,
+        reading: rs,
+        good: msgTimes >= 3 && isGoodProspect({ state: newState, convo }),
+        alreadyEscalated: !!newState.repeatEscalated,
+      });
+      if (msgVerdict === "escalate") {
+        newState.repeatEscalated = true;
+        repeatEscalation =
+          "El cliente escribió el MISMO mensaje 3 veces y el bot no lo está resolviendo; retomar la venta";
+        replyText =
+          "Perdón, creo que no te estoy entendiendo bien. 🙏 Ya pasé tu conversación con una persona del equipo para que te atienda directo por aquí.";
+        console.warn(`🙋 [workflow] same message a 3rd time from ${psid} — escalating (good prospect)`);
+      } else if (msgVerdict === "silence") {
+        newState.repeatMuted = true;
+        replyText = null;
+        repeatSilence = true;
+        console.warn(`🤐 [workflow] same message ${msgTimes}x from ${psid} — staying quiet`);
+      }
+    }
+    if (msgVerdict === "send" && replyText && typeof replyText === "string") {
       // A deferral turn is exempt: that gate repeats ON PURPOSE and tapers as it goes
       // (see customerDeferred). Appending anything to someone who is trying to end the
       // conversation is the nagging that fix removed.

@@ -109,5 +109,68 @@ for (const [label, state, expect] of PROSPECTS) {
   got ? ok("prospect the CP of whom is only on the Conversation") : bad("convo zipcode", got);
 }
 
+console.log("\n════════ the customer's own repeats (2026-11-18) ════════\n");
+{
+  const { messageKey, isRoutineMessage, bumpMessage, repeatedMessageAction } = require("../utils/repeatGuard");
+  const H = 60 * 60 * 1000;
+  const BYE = { asks: [], signals: ["cortesia"] };
+  const PRICE = { asks: ["precio"], signals: [] };
+  const eq = (l, got, want) => (got === want ? ok(l) : bad(l, `expected ${want}, got ${got}`));
+
+  // Pepa: "Bay" over and over, whatever we answered.
+  {
+    const st = {};
+    const t0 = Date.parse("2026-11-14T03:51:00Z");
+    eq("Bay 1st → 1", bumpMessage(st, "Bay", BYE, t0), 1);
+    eq("Bay 2nd (12 h later) → 2", bumpMessage(st, "Bay", BYE, t0 + 12 * H), 2);
+    eq("Bay 3rd → 3", bumpMessage(st, "bay.", BYE, t0 + 14 * H), 3);
+    eq("Bay four days later still counts (asks nothing ⇒ a week)", bumpMessage(st, "Bay", BYE, t0 + 110 * H), 4);
+    eq("a different message is not a repeat", bumpMessage(st, "Estoy henferma me atropellaron", { asks: [], signals: [] }, t0 + 111 * H), 1);
+    eq("Bay after 8 quiet days starts over", bumpMessage(st, "Bay", BYE, t0 + 110 * H + 8 * 24 * H), 1);
+  }
+  // A question is remembered for a day only.
+  {
+    const st = {};
+    eq("precio 1st", bumpMessage(st, "precio", PRICE, 0), 1);
+    eq("precio 2nd same day", bumpMessage(st, "Precio", PRICE, 2 * H), 2);
+    eq("precio two days later starts over", bumpMessage(st, "precio", PRICE, 50 * H), 1);
+  }
+  // What is never counted: data, or no words.
+  eq("a message with a digit carries data", messageKey("el de 18 m"), null);
+  eq("a bare CP", messageKey("76286"), null);
+  eq("an emoji alone", messageKey("👍"), null);
+  // The count is by TEXT: a reading that changes between turns must not skip one.
+  {
+    const st = {};
+    bumpMessage(st, "Bay", { asks: [], signals: ["saludo"] }, 0);
+    bumpMessage(st, "Bay", BYE, H);
+    eq("Bay read as a greeting once still counts", bumpMessage(st, "Bay", BYE, 2 * H), 3);
+  }
+  // What may repeat freely.
+  const routine = (l, text, reading, want) => eq(l, isRoutineMessage(text, reading), want);
+  routine("'sí' answers whatever we asked", "sí", { asks: [], signals: ["afirma"] }, true);
+  routine("'no' too", "nel pastel", { asks: [], signals: ["niega"] }, true);
+  routine("a greeting opens every visit", "Qué onda", { asks: [], signals: ["saludo"] }, true);
+  routine("the ad's own opener", "¡Hola! Quiero más información", { asks: [], signals: ["saludo", "info_general"] }, true);
+  routine("'ok gracias' confirms", "ok gracias", { asks: [], signals: ["afirma", "cortesia"] }, true);
+  routine("'no gracias' is a closing, so it is not routine", "no gracias", { asks: [], signals: ["niega", "cortesia"] }, false);
+  routine("'Bay' is not routine", "Bay", BYE, false);
+  routine("no reading: 'ok' is routine", "Ok", null, true);
+  routine("no reading: the ad opener is routine", "Hola, quiero más información", null, true);
+  routine("no reading: 'Bay' is not", "Bay", null, false);
+  routine("'sí' misread once is still routine (closed vocabulary)", "sí", { asks: [], signals: [] }, true);
+
+  // What the 3rd arrival gets.
+  eq("2nd time → send", repeatedMessageAction({ times: 2, reading: BYE, good: true }), "send");
+  eq("3rd goodbye, nothing to rescue → silence", repeatedMessageAction({ times: 3, reading: BYE, good: false }), "silence");
+  eq("3rd goodbye from someone we quoted → still silence, no alert", repeatedMessageAction({ times: 3, reading: BYE, good: true }), "silence");
+  eq("3rd identical QUESTION from a good prospect → a person", repeatedMessageAction({ times: 3, reading: PRICE, good: true }), "escalate");
+  eq("…once: after that, silence", repeatedMessageAction({ times: 4, reading: PRICE, good: true, alreadyEscalated: true }), "silence");
+  eq("3rd identical question, nothing to rescue → silence", repeatedMessageAction({ times: 3, reading: PRICE, good: false }), "silence");
+  eq("reader down, 3rd time → silence (never an alert on a guess)", repeatedMessageAction({ times: 3, text: "Bay", reading: null, good: true }), "silence");
+  eq("10th 'sí' → send", repeatedMessageAction({ times: 10, text: "sí", reading: { asks: [], signals: ["afirma"] }, good: true }), "send");
+  eq("5th 'Hola' → send", repeatedMessageAction({ times: 5, text: "Hola", reading: { asks: [], signals: ["saludo"] }, good: false }), "send");
+}
+
 console.log(`\n${pass}/${pass + fail} pass${fail ? ` — ${fail} FAILED` : ""}\n`);
 process.exit(fail ? 1 : 0);

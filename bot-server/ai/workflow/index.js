@@ -400,6 +400,16 @@ async function runWorkflowTurn(workflow, state, userMessage, opts = {}) {
     }
     out.diagnostics = { ...(out.diagnostics || {}), turnParts: turn.parts.length };
   }
+  // What the reader made of the message, in plain arrays, for the caller's own guards
+  // (the repeat ladder needs to know whether a message repeated three times ASKS
+  // anything). null = the reader did not read this turn.
+  if (out) {
+    const r = turn.reading;
+    out.diagnostics = {
+      ...(out.diagnostics || {}),
+      readingSummary: r ? { asks: [...(r.asks || [])], signals: [...(r.signals || [])] } : null,
+    };
+  }
   return out;
 }
 
