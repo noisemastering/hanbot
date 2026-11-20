@@ -39,6 +39,7 @@ const ASKS = [
   "envio_costo",       // cuánto cuesta el envío, si va incluido, gastos de envío, flete
   "envio_tiempo",      // cuánto tarda en llegar, tiempo de entrega
   "envio_modo",        // si entregan a domicilio, cómo lo mandan, si llegan a su ciudad
+  "datos_envio",       // si necesitamos SU domicilio/dirección/datos para enviarle, o dónde los da
   "pago",              // cómo se paga o se compra, formas de pago, tarjeta, transferencia, factura
   "contra_entrega",    // específicamente pago contra entrega / al recibir
   "unidad",            // si se vende por metro cuadrado, metro lineal, por rollo
@@ -109,6 +110,7 @@ VALORES PERMITIDOS EN "asks":
 - "envio_costo": cuánto cuesta el envío, si el envío va incluido ("¿incluye envío?", "¿ya con envío?"), gastos de envío, flete. "costo total ... con envío a <lugar>" pregunta precio Y envio_costo. "¿Incluye envío? Estoy en <ciudad>" es envio_costo (la ciudad es un dato).
 - "envio_tiempo": cuánto tarda, cuándo llega, tiempo de entrega.
 - "envio_modo": si entregan a domicilio, cómo lo envían, modo de entrega, si mandan a su ciudad o estado.
+- "datos_envio": pregunta si necesitamos SU domicilio, dirección o datos para mandarle el pedido, o dónde/cómo nos los da ("¿no ocupan mi domicilio?", "¿a dónde les mando mi dirección?", "¿no me piden mis datos?"). NO es envio_modo: no pregunta si entregamos, pregunta por SUS datos.
 - "pago": cómo se paga, cómo se compra, formas de pago, tarjeta, transferencia, meses sin intereses, factura. Vale aunque venga sin signos de interrogación ("los pagos son a contra entrega" ES una pregunta sobre el pago).
 - "contra_entrega": pregunta por pago contra entrega / pagar al recibir (pon también "pago").
 - "unidad": pregunta si la medida o el precio es por metro CUADRADO o por metro LINEAL ("¿es en cuadrado?", "¿es por metro lineal?"). "¿Se vende por rollo?" / "¿lo venden por metro?" NO es esto: pregunta por las presentaciones → "medidas".

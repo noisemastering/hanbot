@@ -27,6 +27,16 @@ const CASES = [
   { m: "Ya te la puse arriba", flow: GC, last: "¿Me compartes tu código postal y la medida que necesitas? 📍", is: ["ya_lo_dije"] },
   { m: "Y quiero malla antimaleza, no malla sombra", flow: GC, notAsk: ["precio", "uso_sombra"] },
 
+  // ── tickets of 2026-11-19 ────────────────────────────────────────────────────
+  { m: "No ocupan mi domicilio ?", flow: BORDE, last: "¡Perfecto! El rollo de 18 m está en $687. Aquí lo compras, con envío gratis: https://agente.hanlob.com.mx/r/21719906", ask: ["datos_envio"] },
+  { m: "Es entrega a domicilio?", flow: BORDE, ask: ["envio_modo"], notAsk: ["datos_envio"] },
+  { m: "Cuanto con envío\nA villa hermosa", flow: BORDE, last: "¡Claro! El rollo de 54 m está en $1699. ¿Cuántos rollos necesitas? 😊", ask: ["envio_costo"] },
+  { m: "Me puede enviar las opciones para distribución", flow: COLD, ask: ["mayoreo"] },
+  { m: "Hay algún agente de ventas o área comercial", flow: COLD, ask: ["humano"] },
+  { m: "30 mtrs\n4777531214", flow: GC, facts: { largo: 30 } },
+  { m: "Gracias.👍", flow: BORDE, last: "• 6 m — $289\n• 9 m — $489\n• 18 m — $687\n• 54 m — $1699\n¿Cuál te sirve? 😊", is: ["cortesia"], nothing: true },
+  { m: "me das costos porfavor", flow: COLD, ask: ["precio"] },
+
   // ── typos the word lists missed ─────────────────────────────────────────────
   { m: "Me das elmptecio de los dos", flow: GC, ask: ["precio"] },
   { m: "Malla Anti malesa", flow: BORDE, notAsk: ["envio_costo", "pago"] },

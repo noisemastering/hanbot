@@ -423,6 +423,28 @@ async function runWorkflowTurnCore(workflow, state, userMessage, opts = {}) {
 
   const vars = state.vars || {};
   const history = Array.isArray(state.history) ? [...state.history] : [];
+  // A NEW VISIT STARTS CLEAN (2026-11-19, wa:5215539674335). He clicked the borde ad
+  // on 11-08 and got the four prices; eleven days later he clicked it again and the
+  // ad's own "¡Hola! Quiero más información" was answered "¡Gracias! Ya te pasé los
+  // precios…" — prices from a visit he no longer has in front of him, one of which had
+  // changed since. What we "already told them" only holds inside one sitting, so the
+  // turn-to-turn memory of it is dropped when our last message is over 12 hours old.
+  // The lead, the CP, the quote ledger and the flow itself are untouched.
+  if (userMessage) {
+    let _lastBotAt = 0;
+    for (let i = history.length - 1; i >= 0; i--) {
+      if (history[i] && history[i].role === "assistant" && history[i].at) {
+        _lastBotAt = new Date(history[i].at).getTime();
+        break;
+      }
+    }
+    if (_lastBotAt && Date.now() - _lastBotAt > 12 * 60 * 60 * 1000) {
+      state.bordeQuoted = null;
+      state.awaitingBordeQty = null;
+      state.deferCount = 0;
+      state.customerDeferred = false;
+    }
+  }
   // Facts contributed by the early gates. A gate must NOT end the turn just because
   // it recognised ONE topic — a single message can raise several (a measure AND a
   // payment question), and several messages can deserve one answer. Gates push their
@@ -843,7 +865,18 @@ async function runWorkflowTurnCore(workflow, state, userMessage, opts = {}) {
       const _actionableNow = require("../../utils/coldLead").worthAlerting({
         workflowState: { lead: state.lead || {}, location: state.location || {} },
       });
-      if (!_actionableNow && !yieldForBordeQty && (Number(state.pendingHandoff.attempts) || 1) < 2) {
+      // THE ANSWER TO THE OPENER WAS A CUT, NOT A FULL ROLL (2026-11-19, psid
+      // 29225212180501524, reported twice: "debió de haber pasado precio y medidas de
+      // los rollos pequeños"). The Ground Cover opener quotes the two 100 m rolls and
+      // arms this ask, because a full roll is closed by a person. He answered "30 mtrs"
+      // and his phone — and the phone completed the hand-off for rolls he had not asked
+      // for, while the length he did ask for was never priced. A length under 100 m is
+      // a cut: it has a price and its own buy link, so the turn goes to the length gate
+      // and the ask is dropped. The phone is already on the lead (captured above).
+      const yieldForGcCut =
+        _gcFlow && !state.pendingHandoff.wholesale &&
+        Number(said.largo) > 0 && Number(said.largo) < 100 && !(Number(said.cantidad) > 1);
+      if (!_actionableNow && !yieldForBordeQty && !yieldForGcCut && (Number(state.pendingHandoff.attempts) || 1) < 2) {
         // (a courtesy-only reply never reaches this: the guard above closed the turn)
         const _whoN = state.lead && state.lead.name ? `, ${firstGivenName(state.lead.name)}` : "";
         const _zipK = !!(state.location && (state.location.zip || state.location.zipcode));
@@ -876,7 +909,8 @@ async function runWorkflowTurnCore(workflow, state, userMessage, opts = {}) {
       const reply = _gcFlow
         ? `¡Gracias${who}! 🙌 Con esto preparamos tu cotización y te la compartimos en seguida.`
         : `¡Gracias${who}! 🙌 Un asesor te contactará lo antes posible para ayudarte.`;
-      if (!yieldForBordeQty) {
+      if (yieldForGcCut) state.pendingHandoff = null;
+      if (!yieldForBordeQty && !yieldForGcCut) {
       history.push({ role: "assistant", text: reply, nodeId: currentNode.id, at: new Date() });
       return {
         reply,
@@ -1020,7 +1054,24 @@ async function runWorkflowTurnCore(workflow, state, userMessage, opts = {}) {
     // below were approximating ("voy a checar, ¿cuánto el de 18?" must get its price).
     const _nothingElse = !!reading && reading.asksNothing() && !_saidData;
     // "Ok gracias" answering a question of ours is a YES, not a goodbye.
-    const _answersOurQuestion = !!reading && reading.is("afirma") && /¿[^?]*\?\s*[^¿?]*$/.test(String(_lastBotText || ""));
+    // …and only a YES/NO question can be answered with a yes. "Gracias.👍" under a
+    // price list that ends "¿Cuál te sirve?" chooses nothing (wa:5215539674335 got the
+    // nudge for it); the open question is recognised in OUR OWN last sentence.
+    const _lastQ = (String(_lastBotText || "").match(/¿[^?]*\?\s*[^¿?]*$/) || [""])[0];
+    const _openQ = /^¿\s*(?:y\s+)?(?:de\s+|a\s+|en\s+|para\s+|con\s+)?(cu[aá]l|cu[aá]les|qu[eé]|cu[aá]nt[oa]s?|c[oó]mo|d[oó]nde|qui[eé]n)\b/i.test(_lastQ);
+    const _answersOurQuestion = !!reading && reading.is("afirma") && !!_lastQ && !_openQ;
+    // THEY ALREADY SAID GOODBYE. After "checo bien cuántos metros necesito" and
+    // "Gracias", a lone 👍 got the price nudge, which made it the third identical
+    // answer and raised an alert for a customer who needed nothing. One turn after a
+    // sign-off, an acknowledgement with nothing in it is still the sign-off.
+    const _wasDeferring = !!state.customerDeferred;
+    const _stillClosing =
+      _wasDeferring &&
+      !/\d/.test(_d) &&
+      (reading
+        ? reading.asksNothing() && !_saidData && !reading.is("niega", "ya_lo_dije", "enojo", "queja_atencion", "queja_info", "queja_precio", "info_general", "saludo")
+        : require("../../utils/courtesy").isCourtesyOnly(_d));
+    state.customerDeferred = false; // re-armed below only if THIS turn is a sign-off too
     const _defersRx =
       _d.length <= 90 &&
       !/\d/.test(_d) &&
@@ -1045,7 +1096,7 @@ async function runWorkflowTurnCore(workflow, state, userMessage, opts = {}) {
       ? _nothingElse && reading.is("espera_oferta")
       : /\b(buen\s+fin|black\s+friday|hot\s+sale|quincena|aguinaldo|fin\s+de\s+mes)\b/i.test(_d) &&
         /\b(espero|esperar\w*|esperando|hasta|cuando|para|en\s+la|despu[eé]s)\b/i.test(_d);
-    if (defers || _isThanks || _waitsForSale) {
+    if (defers || _isThanks || _waitsForSale || _stillClosing) {
       // Each repeat gets SHORTER, never louder. Someone saying "I'll check" three
       // times is winding the conversation down, and answering with the same warm
       // paragraph every time is its own kind of nagging. The last line is the floor:
@@ -1340,6 +1391,43 @@ async function runWorkflowTurnCore(workflow, state, userMessage, opts = {}) {
     }
   }
 
+  // "¿NO OCUPAN MI DOMICILIO?" (2026-11-18, psid 28558105803817619, "debió de haber
+  // mandado instrucciones de cómo realizar la compra mediante el link"). He had the buy
+  // link in hand and asked whether we needed his address; the borde shipping gate read
+  // it as "do you deliver?" and answered "Sí, enviamos a domicilio… ¿Qué largo
+  // necesitas?" — a length he had chosen two turns earlier. He is asking how the order
+  // gets his address, and the answer is the purchase itself: Mercado Libre takes the
+  // address and the payment at checkout. Only the reader can tell this from a delivery
+  // question, so there is no word-list fallback.
+  if (userMessage && reading && reading.asked("datos_envio")) {
+    let _lastLink = null;
+    for (let i = history.length - 1; i >= 0 && !_lastLink; i--) {
+      const h = history[i];
+      if (h && h.role === "assistant") {
+        const m = String(h.text || "").match(/https?:\/\/\S*(?:\/r\/|mercadolibre)\S*/i);
+        if (m) _lastLink = m[0].replace(/[).,;]+$/, "");
+      }
+    }
+    const _how = _lastLink
+      ? `No hace falta que nos lo mandes por aquí 😊 Al entrar al link y dar clic en comprar, Mercado Libre te pide tu domicilio de entrega y la forma de pago, y el pedido te llega a esa dirección: ${_lastLink}`
+      : `Sí lo vamos a necesitar para el envío, pero todavía no 😊 Si compras por Mercado Libre lo registras ahí mismo al pagar, y si compras directo con nosotros te lo pedimos al cerrar tu pedido.`;
+    if (more("datos_envio", "envio_modo")) {
+      alsoAnswered(_how, "datos_envio", "envio_modo");
+    } else {
+      history.push({ role: "assistant", text: _how, nodeId: currentNode.id, at: new Date() });
+      return {
+        reply: _how,
+        state: { ...state, history, nodeId: currentNode.id },
+        diagnostics: {
+          workflow: { id: String(workflow._id), name: workflow.name },
+          fromNode: { id: currentNode.id, name: currentNode.name },
+          toNode: { id: currentNode.id, name: currentNode.name },
+          addressAskAnswered: _lastLink ? "link" : "sin_link",
+        },
+      };
+    }
+  }
+
   // 1.04 THEY ASKED FOR THEIR EXACT MEASURE AGAIN, WITH NO MEASURE IN THE MESSAGE.
   // Her third try was "No pa ya te la dije como 3 veces y la ocupo en una sola pieza a
   // medida la q te di" — not one digit in it, so the measure path below never sees a
@@ -1515,6 +1603,47 @@ async function runWorkflowTurnCore(workflow, state, userMessage, opts = {}) {
       }
       const _bareAsk = !reading || (!reading.asksBeyond("precio", "envio_costo", "envio_modo") && !_saidMeasure);
       if (asksPrice && _bareAsk && !namesProduct && !dimsOf(msgCs) && !wantsWholesale(msgCs) && !state.promoQuoted) {
+        // THE PRODUCT MAY ALREADY BE ON THE TABLE (2026-11-19, wa:5218711196554). She
+        // opened with "Quiero más información sobre el plástico separador", answered
+        // two questions about it, and "me das costos porfavor" got the three generic
+        // anchors — malla sombra first — because this gate read only the message in
+        // hand, which names nothing. A price ask is bare only if the CONVERSATION names
+        // no product either, so what she already wrote is classified before answering.
+        const _prior = history
+          .filter((h) => h && h.role === "user" && h.text)
+          .slice(0, -1)
+          .slice(-4)
+          .map((h) => String(h.text));
+        if (_prior.length && (opts._switchDepth || 0) < 2 && !opts.sandboxNoAutoSwitch) {
+          const _detCtx = await detectFlowSwitch(
+            _prior.join(". "),
+            require("../../models/Workflow").familyListOf(workflow),
+            workflow
+          );
+          if (_detCtx && _detCtx.toWorkflowId) {
+            const handover = await performSwitch(_detCtx, {
+              history,
+              vars,
+              lead: state.lead || null,
+              location: state.location || null,
+              basket: state.basket || [],
+              opts,
+            });
+            if (handover) {
+              return {
+                reply: handover.reply,
+                state: handover.state,
+                diagnostics: {
+                  workflow: { id: String(workflow._id), name: workflow.name },
+                  autoSwitch: true,
+                  switchedTo: { id: _detCtx.toWorkflowId, name: _detCtx.toName },
+                  switchFromContext: true,
+                  afterSwitch: handover.diagnostics,
+                },
+              };
+            }
+          }
+        }
         const anchors = await coldStartPriceAnchors();
         if (anchors.length >= 2) {
           const parts = anchors.map((a) => a.text);
@@ -1692,26 +1821,43 @@ async function runWorkflowTurnCore(workflow, state, userMessage, opts = {}) {
         // colour choice and the link.
         let gcAskWidth = null;
         let gcNearestLen = null;
+        let gcAskedLen = null;
         if (_gcFlow && !dims) {
           const wM = msg.match(/\b(\d{1,2}(?:[.,]\d+)?)\s*(?:m|mts?|metros?)?\s+de\s+anch/i)
             || msg.match(/\banch[oa]s?\s*(?:de\s*)?(\d{1,2}(?:[.,]\d+)?)\s*(?:m|mts?|metros?)?\b/i);
-          const w = wM ? Number(String(wM[1]).replace(",", ".")) : null;
+          // The reader's own facts back the two patterns up: "30 mtrs" matched neither
+          // (psid 29225212180501524), so the turn had no length and fell to the model.
+          const w = wM
+            ? Number(String(wM[1]).replace(",", "."))
+            : Number(said.ancho) > 0 && !(Number(said.largo) > 0) ? Number(said.ancho) : null;
           if (w) state.gcWidth = w;
           // Strip the width phrase so "2 m de ancho por 50" can't read the 2 as the
           // length, and strip m² — an AREA belongs to (a1), which recommends a roll.
           const rest = (wM ? msg.replace(wM[0], " ") : msg)
             .replace(/\b\d+(?:[.,]\d+)?\s*(?:m2|m²|metros?\s+cuadrados?|mts?\s+cuadrados?)\b/gi, " ");
           const lM = rest.match(/\b(\d{1,3}(?:[.,]\d+)?)\s*(?:m|mts?|metros?|ml)\b/i);
-          const len = lM ? Number(String(lM[1]).replace(",", ".")) : null;
+          const len = lM
+            ? Number(String(lM[1]).replace(",", "."))
+            : Number(said.largo) > 0 && !(Number(said.ancho) > 0) && !(Number(said.area_m2) > 0) ? Number(said.largo) : null;
           if (len) {
             const lens = await gcDim("length");
             const width = state.gcWidth || null;
             if (lens.length && !lens.includes(len)) {
-              // Nearest by absolute difference; on a tie prefer the one that COVERS it.
-              gcNearestLen = lens.reduce((best, n) => {
-                const d1 = Math.abs(n - len), d0 = Math.abs(best - len);
-                return d1 < d0 || (d1 === d0 && n > best) ? n : best;
-              }, lens[0]);
+              // THE ROLL THAT COVERS IT, not the one nearest on paper (2026-11-19, psid
+              // 29225212180501524): he asked for 30 m and the nearest length is 25 m,
+              // which leaves him 5 m short — the asesora quoted him the 2 x 50. We never
+              // undersize (the same rule as rounding a fractional measure up), so it is
+              // the shortest roll that reaches; past the longest one, the longest.
+              gcAskedLen = len;
+              const cover = lens.find((n) => n >= len) || lens[lens.length - 1];
+              if (width && (await gcDim("width")).includes(Number(width))) {
+                // The width is already known, so there is nothing left to ask: say why
+                // the measure changed and let the quote path price the roll.
+                alsoAnswered(`${len} m exactos no los cortamos; el rollo que te alcanza es el de ${cover} m.`);
+                dims = [Number(width), cover];
+              } else {
+                gcNearestLen = cover;
+              }
             } else if (!width) {
               gcAskWidth = len;
             } else {
@@ -2243,9 +2389,14 @@ async function runWorkflowTurnCore(workflow, state, userMessage, opts = {}) {
         if (gcNearestLen) {
           const ws = await gcDim("width");
           const wTxt = ws.length ? ws.map((w) => `${w} m`).join(" y ") : "2 m y 4 m";
-          state.gcWidth = null; // their stated width, if any, was for a length we don't cut
+          // The width reply next turn completes the measure, exactly as for a length we
+          // do cut — without this the width arrived alone and the turn went to the
+          // model, which asked him to confirm "un área de 60 m²".
+          state.gcPendingLen = gcNearestLen;
+          const lensTxt = (await gcDim("length")).map((n) => `${n}`).join(", ");
+          const asked0 = gcAskedLen ? `${gcAskedLen} m exactos` : "Ese largo exacto";
           return ret(
-            `Ese largo exacto no lo cortamos. El más cercano es el rollo de ${gcNearestLen} m, en ${wTxt} de ancho y en negro o blanco. ¿Qué ancho necesitas y te paso el precio? 😊`,
+            `${asked0} no los cortamos: los rollos son de ${lensTxt} m. El que te alcanza es el de ${gcNearestLen} m, en negro o blanco. ¿Lo necesitas de ${wTxt.replace(" y ", " o ")} de ancho? Con eso te paso el precio. 😊`,
             { gcNearestLength: gcNearestLen }
           );
         }
@@ -3423,11 +3574,38 @@ async function runWorkflowTurnCore(workflow, state, userMessage, opts = {}) {
           const yesHowB = asksShipHowB ? "Sí, enviamos a domicilio a toda la República. " : "";
           if (bMore("envio_costo", "envio_tiempo", "envio_modo")) {
             alsoAnswered(`${yesHowB}${blocksE.join(" ")}`, "envio_costo", "envio_tiempo", "envio_modo");
-          } else
+          } else {
+          // THE LENGTH IS ALREADY CHOSEN (2026-11-19, psids 26952282627765244 and
+          // 28558105803817619). "de 54 metros precio" → "$1699, ¿cuántos rollos?" →
+          // "¿Cuánto con envío? A Villahermosa" was answered with all four lengths and
+          // "¿Qué largo necesitas?" — the length he had named one message earlier — and
+          // an asesora sent the price and the link by hand. When one length is on the
+          // table the shipping answer is about THAT roll, and since its price already
+          // carries the shipping, the answer is the link.
+          const _knownId = String((state.awaitingBordeQty && state.awaitingBordeQty.productId) || state.activeProductId || "");
+          let _knownLen = null;
+          let _knownLeaf = null;
+          for (const [len, leaf] of byLenE) {
+            if (_knownId && String(leaf._id) === _knownId && !isFullRoll(leaf)) { _knownLen = Number(len); _knownLeaf = leaf; }
+          }
+          if (_knownLeaf) {
+            const piK = await resolvePrice(_knownLeaf, altOpt(state, _knownLeaf)).catch(() => null);
+            const linkK = piK && piK.amount && piK.link
+              ? await trackedLink(piK.link, { psid: opts.psid || null, sandbox: !!opts.sandbox, productName: _knownLeaf.name, productId: String(_knownLeaf._id) })
+              : null;
+            if (linkK) {
+              const timeK = asksShipTimeB ? " Normalmente llega en 2 días hábiles (puede variar)." : "";
+              return retB(
+                `${yesHowB}El rollo de ${_knownLen} m está en ${fmtMoney(piK)} y el envío a tu domicilio ya va incluido en ese precio.${timeK} Aquí lo compras: ${linkK}`,
+                { bordeShippingAnswered: "largo_conocido", bordeQuoted: _knownLen }
+              );
+            }
+          }
           return retB(
             `${yesHowB}${blocksE.join(" ")} ¿Qué largo necesitas? 😊`,
             { bordeShippingAnswered: asksShipTimeB && !asksShipB ? "tiempo" : asksShipHowB && !asksShipB ? "domicilio" : "costo" }
           );
+          }
         }
       }
 
@@ -4792,6 +4970,14 @@ async function runWorkflowTurnCore(workflow, state, userMessage, opts = {}) {
   // (e.g. no live ML + inventario below the last-synced ML), we fire a REAL
   // handoff with this reason — not just a textual "te paso con un asesor".
   let turnHandoffReason = null;
+  // THEY ASKED FOR A PERSON (2026-11-18, psid 28996036726744215). "Hay algún agente de
+  // ventas o área comercial" was answered "si necesitas hablar con alguien del área
+  // comercial, te paso con un especialista" — an offer, with no hand-off behind it, to
+  // someone who had just asked for exactly that. Whatever else the turn answers, the
+  // request for a person is honoured for real.
+  if (reading && reading.asked("humano")) {
+    turnHandoffReason = "El cliente pidió hablar con una persona del área de ventas";
+  }
   // When a handoff fires this turn but we still owe the customer a fact (a price
   // quote, a "sold out" acknowledgement), this preface is prepended to the
   // collect-before-handoff ask so the same message both informs them AND asks for
@@ -5700,6 +5886,12 @@ async function runWorkflowTurnCore(workflow, state, userMessage, opts = {}) {
   // If we have no contact yet, ask ONCE for name + phone and PARK the handoff
   // (state.pendingHandoff); the resume above completes it next turn with whatever
   // they give. Skip during an LLM-outage handoff (escalate immediately).
+  // They asked for a person AND something else ("¿Tiene garantía? ¿Hay algún agente de
+  // ventas?"): the model's answer to the other half leads the hand-off ask instead of
+  // being replaced by it.
+  if (ctx.handoffRequested && !ctx.handoffPreface && text && reading && reading.asked("humano") && reading.asksBeyond("humano")) {
+    ctx.handoffPreface = text;
+  }
   if (ctx.handoffRequested && !(decision.llmError || nodeLlmError) && !state.pendingHandoff) {
     // Phone or email ONLY — a name is not info (2026-11-04, see beginHandoff above).
     const haveContact = !!(

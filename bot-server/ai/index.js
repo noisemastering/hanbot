@@ -322,7 +322,13 @@ async function runEngineWorkflow(workflow, convo, psid, userMessage, { sourceLab
           console.warn(`🔁 [workflow] same answer a 2nd time for ${psid} — restating it`);
           replyText = restate(replyText);
         } else if (times >= 3) {
-          const good = isGoodProspect({ state: newState, convo });
+          // Only a QUESTION can be something we failed to answer. A 👍 or a "gracias"
+          // that drew the same line a third time is not a sale to rescue
+          // (wa:5215539674335: the alert went out for a customer who had just said he
+          // would check his measure). Reader down ⇒ the old behaviour.
+          const _rs = diagnostics?.readingSummary || null;
+          const asksNothing = !!_rs && !(Array.isArray(_rs.asks) && _rs.asks.length);
+          const good = !asksNothing && isGoodProspect({ state: newState, convo });
           if (good && !newState.repeatEscalated) {
             newState.repeatEscalated = true;
             repeatEscalation =

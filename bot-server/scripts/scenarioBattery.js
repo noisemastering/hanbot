@@ -222,6 +222,24 @@ const CASES = [
     expect: "Abre presentando la malla antimaleza CON los precios de los dos rollos completos (2x100 m y 4x100 m) y una línea de beneficios, y luego invita a preparar la cotización pidiendo los datos (código postal, colonia, medida y cantidad). NO contesta un saludo genérico tipo '¿en qué te puedo ayudar?' sin producto ni precios." },
   // §4 of the spec, the client's own example: "Gracias, quiero cotizar 10 metros". This
   // used to come back with the two FULL rolls, so the customer never saw the 10 m price.
+  // ── tickets of 2026-11-19 ──────────────────────────────────────────────────────
+  // psid 29225212180501524: "30 mtrs" + his phone completed a hand-off for the full
+  // rolls; the length he asked for was never priced.
+  { id: "gc-largo-que-no-cortamos", group: "groundcover", flow: "groundcover",
+    turns: ["Cuanto cuesta el Ground Cover?", "30 mtrs\n4777531214", "Ancho\n2mt"],
+    expect: "Tras el mensaje de apertura, al pedir 30 metros explica que ese largo exacto no se corta y propone el rollo que SÍ alcanza (50 m, nunca el de 25 m que queda corto), preguntando el ancho. Con el ancho de 2 m cotiza el corte de 2 x 50 m con precio y link de compra. NO cierra la conversación con 'preparamos tu cotización' sin haber dado el precio del corte, y NO pregunta por un área en m²." },
+  // wa:5215539674335: a thumbs-up after a goodbye raised an alert.
+  { id: "borde-pulgar-tras-despedida", group: "borde", flow: "borde",
+    turns: ["precio", "Gracias.👍", "Checo bien cuantos metros necesito va.👍", "Gracias.", "👍"],
+    expect: "Después de los precios, el agradecimiento y el 'checo cuántos metros necesito' se responden con un cierre breve y amable (el último, muy corto, puede repetirse). NUNCA repite 'ya te pasé los precios', NUNCA dice 'no te estoy entendiendo' y NUNCA pasa la conversación con una persona ni pide datos." },
+  // psid 26952282627765244: he had named the 54 m roll; the shipping answer asked the length again.
+  { id: "borde-envio-con-largo-elegido", group: "borde", flow: "borde",
+    turns: ["de 54 metros precio", "Cuanto con envío\nA villa hermosa"],
+    expect: "A la pregunta del envío contesta sobre el rollo de 54 m que el cliente ya eligió: el envío va incluido en su precio, y entrega el link de compra de ese rollo. NO vuelve a preguntar qué largo necesita ni lista los cuatro largos." },
+  // psid 28558105803817619: "¿no ocupan mi domicilio?" with the buy link in hand.
+  { id: "borde-no-ocupan-mi-domicilio", group: "borde", flow: "borde",
+    turns: ["Ocupo el de 18 metros", "Uno", "No ocupan mi domicilio ?"],
+    expect: "Explica que el domicilio no hace falta mandarlo por el chat: se captura en Mercado Libre al comprar con el link, junto con la forma de pago. NO pregunta qué largo necesita (ya eligió el de 18 m) ni contesta solo 'sí enviamos a domicilio'." },
   { id: "gc-largo-menor-50", group: "groundcover", flow: "groundcover",
     turns: ["Gracias, quiero cotizar 10 metros", "2 m de ancho"],
     expect: "Entiende que 10 metros es un LARGO de rollo (no un área ni una cantidad) y pregunta el ANCHO (2 m o 4 m), que es lo que cambia el precio; con el ancho ya dado cotiza el corte de 2 x 10 m. NUNCA contesta con los precios de los rollos completos de 100 m, ni ignora el largo que pidió." },
@@ -468,6 +486,15 @@ const CASES = [
   { id: "cs-costo-de-envio", group: "coldstart", flow: "coldstart",
     turns: ["¿Cuál es el costo de envío?"],
     expect: "Contesta sobre el COSTO del envío: lo que se compra por Mercado Libre ya lo lleva incluido y el rollo completo va por flete que se cotiza según el código postal. Luego pregunta qué producto o medida le interesa. El error es contestar con el TIEMPO de entrega ('llega en 2 días') o con una lista de precios de productos." },
+  // wa:5218711196554: the product was named in the opener; the price ask three turns
+  // later was answered with the generic anchors, malla sombra first.
+  { id: "cs-producto-en-el-saludo", group: "coldstart", flow: "coldstart",
+    turns: ["¡Hola! Quiero más información sobre el plástico separador", "para separar áreas", "me das costos porfavor"],
+    expect: "Reconoce desde el primer mensaje que el 'plástico separador' es el BORDE SEPARADOR y contesta con sus largos y precios. Al pedir costos responde con los precios del borde separador. NUNCA ofrece malla sombra ni antimaleza, ni pregunta qué producto le interesa, ni dice que no lo maneja." },
+  // psid 28996036726744215: asked for a salesperson and got an offer, not a hand-off.
+  { id: "cs-pide-area-comercial", group: "coldstart", flow: "coldstart",
+    turns: ["Tiene garantía?\nHay algún agente de ventas o área comercial"],
+    expect: "Contesta la garantía Y ADEMÁS atiende la petición de hablar con una persona pidiendo los datos de contacto (teléfono) para que lo contacten. No se limita a ofrecerlo como posibilidad." },
   { id: "cs-bare-price-ask", group: "coldstart", flow: "coldstart",
     turns: ["¿Cuál es el precio de la malla?"],
     expect: "Debe dar PRECIOS REALES como ancla (al menos dos: confeccionada 'desde $…', borde separador 'desde $…', rollo de antimaleza/ground cover 2x100 m) y luego preguntar cuál producto y qué medida. NO aprueba una respuesta que sólo pida la medida sin ningún precio, ni una que liste porcentajes de sombra (35/50/70/80/90% es de los ROLLOS; la confeccionada es siempre 90%), ni una que vuelque el catálogo." },
@@ -581,6 +608,9 @@ async function judge(c, r) {
   let cases = CASES;
   if (flowArg) cases = cases.filter((c) => c.flow.toLowerCase() === flowArg.toLowerCase());
   if (groupArg) cases = cases.filter((c) => c.group.toLowerCase() === groupArg.toLowerCase());
+  // --id=a,b,c runs just those cases (a new case can be judged without its whole group).
+  const idArg = (args.find((a) => a.startsWith("--id=")) || "").split("=")[1];
+  if (idArg) { const ids = idArg.split(","); cases = cases.filter((c) => ids.includes(c.id)); }
   if (smoke) cases = cases.filter((c) => c.group === "coldstart").slice(0, 1);
 
   console.log(`\n════════ SCENARIO BATTERY — ${cases.length} cases${smoke ? " (SMOKE)" : ""} ════════`);
