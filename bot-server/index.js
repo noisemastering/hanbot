@@ -208,6 +208,7 @@ app.use('/crm', crmRoutes);
 app.use('/users', usersRoutes);
 app.use('/analytics', analyticsRoutes);
  app.use('/correlation', convoCorrelationRoutes);
+app.use('/quotes', require('./routes/quotesRoutes'));
 app.use('/master-catalog', masterCatalogRoutes);
 app.use('/usos', usosRoutes);
 app.use('/grupos', gruposRoutes);

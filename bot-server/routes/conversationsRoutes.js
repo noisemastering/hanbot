@@ -401,6 +401,19 @@ router.get('/grouped', async (req, res) => {
       console.error('⚠️ ad origin enrichment failed:', e.message);
     }
 
+    // COTIZADA: the folios an asesor recorded for each conversation on this page
+    // (one query for the page), so the inbox shows which chats already carry a quote.
+    try {
+      const ConvoQuote = require('../models/ConvoQuote');
+      const rows = await ConvoQuote.find({ psid: { $in: conversations.map((c) => c.psid) } })
+        .select('psid quoteNumber').sort({ createdAt: 1 }).lean();
+      const byPsid = {};
+      for (const r of rows) (byPsid[r.psid] = byPsid[r.psid] || []).push(r.quoteNumber);
+      conversations = conversations.map((c) => ({ ...c, quoteNumbers: byPsid[c.psid] || [] }));
+    } catch (e) {
+      console.error('⚠️ quote enrichment failed:', e.message);
+    }
+
     // If keyword search active, override lastMessage with the matching user message
     if (keywordMatchedMessages) {
       conversations = conversations.map(c => ({

@@ -8,6 +8,7 @@ import toast from "react-hot-toast";
 import API from "../api";
 import ReportModal from "./ReportModal";
 import MatchDataCompare from "./MatchDataCompare";
+import ConversationQuotes from "./ConversationQuotes";
 
 export default function ConversationCommercePanel({ psid }) {
   const [status, setStatus] = useState(null);
@@ -198,6 +199,9 @@ export default function ConversationCommercePanel({ psid }) {
           )}
         </div>
       )}
+
+      {/* Cotizada — the quote an asesor issued after the hand-off (folio + items). */}
+      <ConversationQuotes psid={psid} />
 
       <button
         onClick={() => setModalOpen(true)}

@@ -1368,6 +1368,14 @@ function Messages() {
                     )}
                     <br />
                     <AdOriginChip origin={msg.origin} />
+                    {msg.quoteNumbers?.length > 0 && (
+                      <span
+                        title={`Cotizada: #${msg.quoteNumbers.join(', #')}`}
+                        style={{ display: 'inline-block', marginTop: 3, padding: '1px 6px', borderRadius: 4, fontSize: '0.7rem', color: '#7dd3fc', border: '1px solid rgba(56,189,248,0.45)', background: 'rgba(14,116,144,0.18)' }}
+                      >
+                        🧾 Cotizada #{msg.quoteNumbers[msg.quoteNumbers.length - 1]}{msg.quoteNumbers.length > 1 ? ` +${msg.quoteNumbers.length - 1}` : ''}
+                      </span>
+                    )}
                   </td>
                   <td style={{ padding: "10px", color: "#e0e0e0", fontSize: "0.9rem" }}>
                     {new Date(msg.lastMessageAt).toLocaleString(locale, {
@@ -1800,6 +1808,14 @@ function Messages() {
                     )}
                     <br />
                     <AdOriginChip origin={msg.origin} />
+                    {msg.quoteNumbers?.length > 0 && (
+                      <span
+                        title={`Cotizada: #${msg.quoteNumbers.join(', #')}`}
+                        style={{ display: 'inline-block', marginTop: 3, padding: '1px 6px', borderRadius: 4, fontSize: '0.7rem', color: '#7dd3fc', border: '1px solid rgba(56,189,248,0.45)', background: 'rgba(14,116,144,0.18)' }}
+                      >
+                        🧾 Cotizada #{msg.quoteNumbers[msg.quoteNumbers.length - 1]}{msg.quoteNumbers.length > 1 ? ` +${msg.quoteNumbers.length - 1}` : ''}
+                      </span>
+                    )}
                   </td>
                   <td style={{ padding: "8px", color: "#e0e0e0" }}>{new Date(msg.lastMessageAt).toLocaleString()}</td>
                   <td style={{ padding: "8px", paddingRight: "30px", maxWidth: "300px", overflow: "hidden", textOverflow: "ellipsis", color: "white", position: "relative", whiteSpace: "nowrap", fontWeight: unseen ? 700 : 400 }}>
