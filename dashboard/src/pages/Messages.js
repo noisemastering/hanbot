@@ -101,6 +101,7 @@ function Messages() {
   const [showLinkGenerator, setShowLinkGenerator] = useState(false);
   const [showSaleForm, setShowSaleForm] = useState(false);
   const [showReportPanel, setShowReportPanel] = useState(false); // collapsed by default → messages get the space
+  const [quoteSignal, setQuoteSignal] = useState(0); // "Cotizar" pressed → open the quote form
   const [replyText, setReplyText] = useState('');
   const [sendingReply, setSendingReply] = useState(false);
   const replyRef = useRef(null); // composer textarea (auto-grows to fit multi-line content)
@@ -335,6 +336,7 @@ function Messages() {
   // thing to say so. Every path that opens the chat modal goes through here.
   const openConversation = (psid, channel) => {
     setSelectedPsid(psid);
+    setQuoteSignal(0);
     setSelectedChannel(channel);
     setConvoOrigin(null);
     fetchFullConversation(psid);
@@ -2307,6 +2309,20 @@ function Messages() {
                   </button>
                 </FeatureTip>
                 <button
+                  onClick={() => { setShowSaleForm(false); setShowLinkGenerator(false); setShowReportPanel(true); setQuoteSignal(Date.now()); }}
+                  style={{
+                    padding: "8px 16px",
+                    backgroundColor: "#0284c7",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "8px",
+                    cursor: "pointer"
+                  }}
+                  title="Registrar el número de cotización y los productos cotizados"
+                >
+                  🧾 {t('messages.markQuoted')}
+                </button>
+                <button
                   onClick={() => handleResumeBot(selectedPsid)}
                   disabled={resumingBot}
                   style={{
@@ -2383,7 +2399,7 @@ function Messages() {
               <>
                 <div style={{ padding: "0 1rem 0.5rem 1rem" }}>
                   <button
-                    onClick={() => setShowReportPanel((v) => !v)}
+                    onClick={() => { setQuoteSignal(0); setShowReportPanel((v) => !v); }}
                     style={{ width: "100%", padding: "8px 12px", background: "#232323", border: "1px solid #333", borderRadius: "8px", color: "#bbb", cursor: "pointer", fontSize: "0.85rem", display: "flex", justifyContent: "space-between", alignItems: "center" }}
                   >
                     <span>🧾 {t('messages.reportTools')}</span>
@@ -2392,7 +2408,7 @@ function Messages() {
                 </div>
                 {showReportPanel && (
                   <div style={{ padding: "0 1rem 1rem 1rem" }}>
-                    <ConversationCommercePanel psid={selectedPsid} />
+                    <ConversationCommercePanel psid={selectedPsid} quoteSignal={quoteSignal} />
                     <ConversationHandoffPanel psid={selectedPsid} />
                   </div>
                 )}

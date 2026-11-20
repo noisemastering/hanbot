@@ -10,7 +10,7 @@ import ReportModal from "./ReportModal";
 import MatchDataCompare from "./MatchDataCompare";
 import ConversationQuotes from "./ConversationQuotes";
 
-export default function ConversationCommercePanel({ psid }) {
+export default function ConversationCommercePanel({ psid, quoteSignal = 0 }) {
   const [status, setStatus] = useState(null);
   const [loading, setLoading] = useState(false);
   const [correlating, setCorrelating] = useState(false);
@@ -201,7 +201,7 @@ export default function ConversationCommercePanel({ psid }) {
       )}
 
       {/* Cotizada — the quote an asesor issued after the hand-off (folio + items). */}
-      <ConversationQuotes psid={psid} />
+      <ConversationQuotes psid={psid} openSignal={quoteSignal} />
 
       <button
         onClick={() => setModalOpen(true)}

@@ -8,7 +8,7 @@
 // One chat can be several conversations (a customer returns weeks later about
 // something else), so a quote is filed under the VISIT it belongs to, and a
 // visit can carry more than one quote when they cover different items.
-import React, { useState, useEffect, useCallback, useMemo } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import toast from "react-hot-toast";
 import API from "../api";
 
@@ -17,9 +17,10 @@ const sameDay = (a, b) => new Date(a).toDateString() === new Date(b).toDateStrin
 const visitLabel = (s) => (sameDay(s.start, s.end) ? fmtDay(s.start) : `${fmtDay(s.start)} – ${fmtDay(s.end)}`);
 const digits = (v) => String(v || "").replace(/\D/g, "").slice(0, 6);
 
-export default function ConversationQuotes({ psid }) {
+export default function ConversationQuotes({ psid, openSignal = 0 }) {
   const [data, setData] = useState(null);
   const [modal, setModal] = useState(null); // null | { quote? }
+  const handled = useRef(0);
 
   const load = useCallback(async () => {
     if (!psid) return;
@@ -35,6 +36,15 @@ export default function ConversationQuotes({ psid }) {
     setData(null);
     load();
   }, [load]);
+
+  // The "Cotizar" button in the chat's action row asks us to open the form: each
+  // press bumps the signal, and it is answered once the conversation has loaded.
+  useEffect(() => {
+    if (!openSignal || openSignal === handled.current || !data) return;
+    handled.current = openSignal;
+    if (data.eligible) setModal({});
+    else toast("Esta conversación todavía no ha pasado a una persona", { icon: "ℹ️" });
+  }, [openSignal, data]);
 
   const remove = async (q) => {
     if (!window.confirm(`¿Quitar la cotización ${q.quoteNumber} de esta conversación?`)) return;
