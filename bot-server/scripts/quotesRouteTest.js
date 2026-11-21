@@ -97,6 +97,23 @@ const ok = (name, cond, extra) => { cond ? pass++ : fail++; if (!cond) console.l
     ok("two quotes listed", r.body.quotes.length === 2);
     ok("each visit shows its own folio", r.body.sessions[0].quoteNumbers.join() === "0099" && r.body.sessions[1].quoteNumbers.join() === "45678", r.body.sessions);
 
+    // the Cotizaciones page and the ad-performance column
+    await Conversation.updateOne({ psid: A }, { $set: { adId: "test-ad-777", extractedName: "Zutano Pruebas" } });
+    r = await call("GET", "/?search=Zutano");
+    ok("list finds by customer name", r.body.quotes.length === 2 && r.body.quotes[0].customer.name === "Zutano Pruebas", r.body);
+    ok("list carries the ad", r.body.quotes[0].origin && r.body.quotes[0].origin.adId === "test-ad-777", r.body.quotes[0].origin);
+    ok("list totals", r.body.totals.quotes === 2 && r.body.totals.conversations === 1, r.body.totals);
+    r = await call("GET", "/?search=45678");
+    ok("list finds by folio", r.body.quotes.length >= 1 && r.body.quotes.some((x) => x.psid === A && x.quoteNumber === "45678"));
+    r = await call("GET", "/?search=" + encodeURIComponent("(("));
+    ok("a regex-breaking search does not 500", r.status === 200);
+    r = await call("GET", "/?limit=1&page=1");
+    ok("pagination", r.body.quotes.length === 1 && r.body.pagination.limit === 1);
+    r = await call("GET", "/by-ad");
+    ok("by-ad counts the conversation once, both quotes", r.body.byAd["test-ad-777"] && r.body.byAd["test-ad-777"].conversations === 1 && r.body.byAd["test-ad-777"].quotes === 2, r.body.byAd["test-ad-777"]);
+    r = await call("GET", "/by-ad?dateTo=2020-01-01T00:00:00.000Z");
+    ok("by-ad honours the range", !r.body.byAd["test-ad-777"]);
+
     r = await call("PUT", `/${q._id}`, { quoteNumber: "0099" });
     ok("edit into a taken folio refused", r.status === 409);
     r = await call("PUT", `/${q._id}`, { quoteNumber: "456789", items: [{ productId: gc.productId, qty: 12 }] });

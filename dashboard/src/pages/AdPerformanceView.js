@@ -67,6 +67,7 @@ function AdPerformanceView() {
   const [geoData, setGeoData] = useState([]);
   const [genderData, setGenderData] = useState([]);
   const [humanConversions, setHumanConversions] = useState(0);
+  const [quotedByAd, setQuotedByAd] = useState({}); // adId → { conversations, quotes }
   const [correlating, setCorrelating] = useState(false);
   const [correlationProgress, setCorrelationProgress] = useState(null);
 
@@ -99,6 +100,10 @@ function AdPerformanceView() {
       setGeoData(geoRes.data?.data || []);
       setGenderData(genderRes.data?.data || []);
       setHumanConversions(humanRes.data?.data?.total || 0);
+      // Cotizadas — on its own so a failure here never blanks the rest of the page.
+      API.get(`/quotes/by-ad?dateFrom=${dateFromISO}&dateTo=${dateToISO}`)
+        .then((r) => setQuotedByAd(r.data?.byAd || {}))
+        .catch(() => setQuotedByAd({}));
     } catch (err) {
       console.error('Error fetching ad performance:', err);
     } finally {
@@ -556,6 +561,7 @@ function AdPerformanceView() {
                   <th className="px-4 py-3 text-right">Click Rate</th>
                   <th className="px-4 py-3 text-right">Conv.</th>
                   <th className="px-4 py-3 text-right">Conv. Rate</th>
+                  <th className="px-4 py-3 text-right" title="Conversaciones de este anuncio que un asesor marcó como cotizadas en el periodo">Cotizadas</th>
                   <th className="px-4 py-3 text-right" title="Conversaciones con el click ID de Meta (CTWA) capturado — clave para atribución vía Conversions API">ctwa_clid</th>
                   {canSeeSales && <th className="px-4 py-3 text-right">Ingresos</th>}
                   <th className="px-4 py-3 text-right"></th>
@@ -583,6 +589,13 @@ function AdPerformanceView() {
                     <td className="px-6 py-4 text-right text-sm text-gray-300">{ad.totals.clickRate}%</td>
                     <td className="px-6 py-4 text-right text-sm text-green-400 font-medium">{ad.totals.conversions}</td>
                     <td className="px-6 py-4 text-right text-sm text-gray-300">{ad.totals.conversionRate}%</td>
+                    <td
+                      className="px-4 py-4 text-right text-sm font-medium"
+                      style={{ color: quotedByAd[ad.adId]?.conversations ? '#7dd3fc' : '#4b5563' }}
+                      title={quotedByAd[ad.adId] ? `${quotedByAd[ad.adId].quotes} cotización(es) en ${quotedByAd[ad.adId].conversations} conversación(es)` : 'Sin cotizaciones en el periodo'}
+                    >
+                      {quotedByAd[ad.adId]?.conversations || 0}
+                    </td>
                     <td className="px-4 py-4 text-right text-sm" style={{ color: (ad.totals.ctwaClids || 0) > 0 ? '#c4b5fd' : '#4b5563' }}>{ad.totals.ctwaClids || 0}</td>
                     {canSeeSales && <td className="px-6 py-4 text-right text-sm text-green-400 font-semibold">{formatCurrency(ad.totals.revenue)}</td>}
                     <td className="px-6 py-4 text-right">
@@ -609,6 +622,7 @@ function AdPerformanceView() {
                   <td className="px-6 py-4 text-right text-sm text-white">
                     {grandTotals.clicks > 0 ? ((grandTotals.conversions / grandTotals.clicks) * 100).toFixed(1) : '0'}%
                   </td>
+                  <td className="px-4 py-4 text-right text-sm text-sky-300">{ads.reduce((s, a) => s + (quotedByAd[a.adId]?.conversations || 0), 0)}</td>
                   <td className="px-4 py-4 text-right text-sm text-white">{ads.reduce((s, a) => s + (a.totals.ctwaClids || 0), 0)}</td>
                   {canSeeSales && <td className="px-6 py-4 text-right text-sm text-green-400">{formatCurrency(grandTotals.revenue)}</td>}
                   <td></td>

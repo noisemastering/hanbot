@@ -61,6 +61,95 @@ router.get("/catalog", async (req, res) => {
   }
 });
 
+// A date range on the day the quote was RECORDED. Bad or missing dates are ignored.
+function rangeOf(q) {
+  const out = {};
+  const from = typeof q.dateFrom === "string" ? new Date(q.dateFrom) : null;
+  const to = typeof q.dateTo === "string" ? new Date(q.dateTo) : null;
+  if (from && !isNaN(from)) out.$gte = from;
+  if (to && !isNaN(to)) out.$lte = to;
+  return Object.keys(out).length ? { createdAt: out } : {};
+}
+
+// The list for the Cotizaciones page: every quote with who it is for and which
+// ad the conversation came from.
+router.get("/", async (req, res) => {
+  try {
+    const { escapeRegex } = require("../utils/escapeRegex");
+    const page = Math.max(parseInt(req.query.page, 10) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit, 10) || 30, 1), 100);
+    const filter = rangeOf(req.query);
+    const search = typeof req.query.search === "string" ? req.query.search.trim().slice(0, 60) : "";
+    if (search) {
+      const re = new RegExp(escapeRegex(search), "i");
+      const named = await Conversation.find({
+        $or: [{ extractedName: re }, { "workflowState.lead.name": re }, { crmName: re }],
+      }).select("psid").limit(500).lean();
+      filter.$or = [
+        { quoteNumber: re }, { "items.label": re }, { "items.productCode": re }, { psid: re },
+        { psid: { $in: named.map((c) => c.psid) } },
+      ];
+    }
+    const [total, rows, totalsAgg] = await Promise.all([
+      ConvoQuote.countDocuments(filter),
+      ConvoQuote.find(filter).sort({ createdAt: -1 }).skip((page - 1) * limit).limit(limit).lean(),
+      ConvoQuote.aggregate([{ $match: filter }, { $group: { _id: "$psid" } }, { $count: "n" }]),
+    ]);
+    const convos = await Conversation.find({ psid: { $in: rows.map((r) => r.psid) } })
+      .select("psid channel extractedName crmName workflowState.lead adId adHeadline adSourceUrl ctwaClid city stateMx").lean();
+    const byPsid = new Map(convos.map((c) => [c.psid, c]));
+    const { resolveAdNames, originOf } = require("../utils/adOrigin");
+    const names = await resolveAdNames(convos.map((c) => c.adId));
+    res.json({
+      success: true,
+      quotes: rows.map((q) => {
+        const c = byPsid.get(q.psid) || null;
+        const lead = (c && c.workflowState && c.workflowState.lead) || {};
+        return {
+          ...q,
+          customer: {
+            name: lead.name || (c && (c.crmName || c.extractedName)) || null,
+            phone: lead.phone || (String(q.psid).startsWith("wa:") ? String(q.psid).slice(3) : null),
+            channel: (c && c.channel) || (String(q.psid).startsWith("wa:") ? "whatsapp" : "facebook"),
+            city: (c && c.city) || null,
+            state: (c && c.stateMx) || null,
+          },
+          origin: c ? originOf(c, names) : null,
+        };
+      }),
+      totals: { quotes: total, conversations: (totalsAgg[0] && totalsAgg[0].n) || 0 },
+      pagination: { page, limit, total, pages: Math.max(Math.ceil(total / limit), 1) },
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// Quoted conversations per AD, for the ad-performance table: how many
+// conversations that came from each ad carry a quote recorded in the range.
+router.get("/by-ad", async (req, res) => {
+  try {
+    const rows = await ConvoQuote.find(rangeOf(req.query)).select("psid").lean();
+    const psids = [...new Set(rows.map((r) => r.psid))];
+    const quotesOf = {};
+    for (const r of rows) quotesOf[r.psid] = (quotesOf[r.psid] || 0) + 1;
+    const convos = await Conversation.find({ psid: { $in: psids } }).select("psid adId").lean();
+    const adOf = new Map(convos.map((c) => [c.psid, c.adId ? String(c.adId) : null]));
+    const byAd = {};
+    let noAd = 0;
+    for (const psid of psids) {
+      const ad = adOf.get(psid);
+      if (!ad) { noAd++; continue; }
+      const e = (byAd[ad] = byAd[ad] || { conversations: 0, quotes: 0 });
+      e.conversations++;
+      e.quotes += quotesOf[psid];
+    }
+    res.json({ success: true, byAd, noAd, total: psids.length });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // Everything the panel needs: is it quotable, its quotes, and its visits.
 router.get("/convo/:psid", async (req, res) => {
   try {

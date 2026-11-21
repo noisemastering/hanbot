@@ -10,6 +10,7 @@ const es = {
   "menu.crm": "CRM",
   "menu.crmCustomers": "Clientes",
   "menu.crmSales": "Ventas",
+  "menu.crmQuotes": "Cotizaciones",
   "menu.catalog": "Catálogo",
   "menu.families": "Familias",
   "menu.usosGrupos": "Usos y Grupos",
