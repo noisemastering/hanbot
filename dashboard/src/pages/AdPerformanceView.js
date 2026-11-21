@@ -553,24 +553,24 @@ function AdPerformanceView() {
             <table className="w-full">
               <thead className="bg-gray-900/50">
                 <tr className="text-left text-xs text-gray-400 uppercase">
-                  <th className="px-6 py-3">Anuncio</th>
-                  <th className="px-4 py-3 text-right">Inversión</th>
-                  <th className="px-4 py-3 text-right">Impresiones</th>
-                  <th className="px-4 py-3 text-right">Links</th>
-                  <th className="px-4 py-3 text-right">Clicks</th>
-                  <th className="px-4 py-3 text-right">Click Rate</th>
-                  <th className="px-4 py-3 text-right">Conv.</th>
-                  <th className="px-4 py-3 text-right">Conv. Rate</th>
-                  <th className="px-4 py-3 text-right" title="Conversaciones de este anuncio que un asesor marcó como cotizadas en el periodo">Cotizadas</th>
-                  <th className="px-4 py-3 text-right" title="Conversaciones con el click ID de Meta (CTWA) capturado — clave para atribución vía Conversions API">ctwa_clid</th>
-                  {canSeeSales && <th className="px-4 py-3 text-right">Ingresos</th>}
-                  <th className="px-4 py-3 text-right"></th>
+                  <th className="pl-6 pr-3 py-3">Anuncio</th>
+                  <th className="px-3 py-3 text-right">Inversión</th>
+                  <th className="px-3 py-3 text-right">Impresiones</th>
+                  <th className="px-3 py-3 text-right">Links</th>
+                  <th className="px-3 py-3 text-right">Clicks</th>
+                  <th className="px-3 py-3 text-right">Click Rate</th>
+                  <th className="px-3 py-3 text-right">Conv.</th>
+                  <th className="px-3 py-3 text-right">Conv. Rate</th>
+                  <th className="px-3 py-3 text-right" title="Conversaciones de este anuncio que un asesor marcó como cotizadas en el periodo">Cotizadas</th>
+                  <th className="px-3 py-3 text-right" title="Conversaciones con el click ID de Meta (CTWA) capturado — clave para atribución vía Conversions API">ctwa_clid</th>
+                  {canSeeSales && <th className="px-3 py-3 text-right">Ingresos</th>}
+                  <th className="px-3 py-3 text-right"></th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-700/50">
                 {ads.map((ad, i) => (
                   <tr key={ad.adId} className="hover:bg-gray-700/20">
-                    <td className="px-6 py-4">
+                    <td className="pl-6 pr-3 py-4">
                       <div className="flex items-center gap-3">
                         <span
                           className="w-3 h-3 rounded-full shrink-0"
@@ -582,23 +582,23 @@ function AdPerformanceView() {
                         </div>
                       </div>
                     </td>
-                    <td className="px-4 py-4 text-right text-sm text-red-400">${(spendByAd[ad.adId]?.spend || 0).toLocaleString('es-MX', { maximumFractionDigits: 0 })}</td>
-                    <td className="px-4 py-4 text-right text-sm text-gray-300">{(spendByAd[ad.adId]?.impressions || 0).toLocaleString()}</td>
-                    <td className="px-4 py-4 text-right text-sm text-gray-300">{ad.totals.links.toLocaleString()}</td>
-                    <td className="px-4 py-4 text-right text-sm text-white font-medium">{ad.totals.clicks.toLocaleString()}</td>
-                    <td className="px-6 py-4 text-right text-sm text-gray-300">{ad.totals.clickRate}%</td>
-                    <td className="px-6 py-4 text-right text-sm text-green-400 font-medium">{ad.totals.conversions}</td>
-                    <td className="px-6 py-4 text-right text-sm text-gray-300">{ad.totals.conversionRate}%</td>
+                    <td className="px-3 py-4 text-right text-sm text-red-400">${(spendByAd[ad.adId]?.spend || 0).toLocaleString('es-MX', { maximumFractionDigits: 0 })}</td>
+                    <td className="px-3 py-4 text-right text-sm text-gray-300">{(spendByAd[ad.adId]?.impressions || 0).toLocaleString()}</td>
+                    <td className="px-3 py-4 text-right text-sm text-gray-300">{ad.totals.links.toLocaleString()}</td>
+                    <td className="px-3 py-4 text-right text-sm text-white font-medium">{ad.totals.clicks.toLocaleString()}</td>
+                    <td className="px-3 py-4 text-right text-sm text-gray-300">{ad.totals.clickRate}%</td>
+                    <td className="px-3 py-4 text-right text-sm text-green-400 font-medium">{ad.totals.conversions}</td>
+                    <td className="px-3 py-4 text-right text-sm text-gray-300">{ad.totals.conversionRate}%</td>
                     <td
-                      className="px-4 py-4 text-right text-sm font-medium"
+                      className="px-3 py-4 text-right text-sm font-medium"
                       style={{ color: quotedByAd[ad.adId]?.conversations ? '#7dd3fc' : '#4b5563' }}
                       title={quotedByAd[ad.adId] ? `${quotedByAd[ad.adId].quotes} cotización(es) en ${quotedByAd[ad.adId].conversations} conversación(es)` : 'Sin cotizaciones en el periodo'}
                     >
                       {quotedByAd[ad.adId]?.conversations || 0}
                     </td>
-                    <td className="px-4 py-4 text-right text-sm" style={{ color: (ad.totals.ctwaClids || 0) > 0 ? '#c4b5fd' : '#4b5563' }}>{ad.totals.ctwaClids || 0}</td>
-                    {canSeeSales && <td className="px-6 py-4 text-right text-sm text-green-400 font-semibold">{formatCurrency(ad.totals.revenue)}</td>}
-                    <td className="px-6 py-4 text-right">
+                    <td className="px-3 py-4 text-right text-sm" style={{ color: (ad.totals.ctwaClids || 0) > 0 ? '#c4b5fd' : '#4b5563' }}>{ad.totals.ctwaClids || 0}</td>
+                    {canSeeSales && <td className="px-3 py-4 text-right text-sm text-green-400 font-semibold">{formatCurrency(ad.totals.revenue)}</td>}
+                    <td className="pl-3 pr-6 py-4 text-right">
                       <button
                         onClick={() => navigate(`/ad-performance/${ad.adId}`)}
                         className="px-2 py-1 text-xs text-green-400 hover:bg-green-500/20 rounded-lg transition-colors"
@@ -610,21 +610,21 @@ function AdPerformanceView() {
                 ))}
                 {/* Totals row */}
                 <tr className="bg-gray-900/30 font-semibold">
-                  <td className="px-6 py-4 text-sm text-white">Total</td>
-                  <td className="px-4 py-4 text-right text-sm text-red-400">${fbSpendTotals.spend.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</td>
-                  <td className="px-4 py-4 text-right text-sm text-white">{fbSpendTotals.impressions.toLocaleString()}</td>
-                  <td className="px-4 py-4 text-right text-sm text-white">{grandTotals.links.toLocaleString()}</td>
-                  <td className="px-4 py-4 text-right text-sm text-white">{grandTotals.clicks.toLocaleString()}</td>
-                  <td className="px-6 py-4 text-right text-sm text-white">
+                  <td className="pl-6 pr-3 py-4 text-sm text-white">Total</td>
+                  <td className="px-3 py-4 text-right text-sm text-red-400">${fbSpendTotals.spend.toLocaleString('es-MX', { maximumFractionDigits: 0 })}</td>
+                  <td className="px-3 py-4 text-right text-sm text-white">{fbSpendTotals.impressions.toLocaleString()}</td>
+                  <td className="px-3 py-4 text-right text-sm text-white">{grandTotals.links.toLocaleString()}</td>
+                  <td className="px-3 py-4 text-right text-sm text-white">{grandTotals.clicks.toLocaleString()}</td>
+                  <td className="px-3 py-4 text-right text-sm text-white">
                     {grandTotals.links > 0 ? ((grandTotals.clicks / grandTotals.links) * 100).toFixed(1) : '0'}%
                   </td>
-                  <td className="px-6 py-4 text-right text-sm text-green-400">{grandTotals.conversions}</td>
-                  <td className="px-6 py-4 text-right text-sm text-white">
+                  <td className="px-3 py-4 text-right text-sm text-green-400">{grandTotals.conversions}</td>
+                  <td className="px-3 py-4 text-right text-sm text-white">
                     {grandTotals.clicks > 0 ? ((grandTotals.conversions / grandTotals.clicks) * 100).toFixed(1) : '0'}%
                   </td>
-                  <td className="px-4 py-4 text-right text-sm text-sky-300">{ads.reduce((s, a) => s + (quotedByAd[a.adId]?.conversations || 0), 0)}</td>
-                  <td className="px-4 py-4 text-right text-sm text-white">{ads.reduce((s, a) => s + (a.totals.ctwaClids || 0), 0)}</td>
-                  {canSeeSales && <td className="px-6 py-4 text-right text-sm text-green-400">{formatCurrency(grandTotals.revenue)}</td>}
+                  <td className="px-3 py-4 text-right text-sm text-sky-300">{ads.reduce((s, a) => s + (quotedByAd[a.adId]?.conversations || 0), 0)}</td>
+                  <td className="px-3 py-4 text-right text-sm text-white">{ads.reduce((s, a) => s + (a.totals.ctwaClids || 0), 0)}</td>
+                  {canSeeSales && <td className="px-3 py-4 text-right text-sm text-green-400">{formatCurrency(grandTotals.revenue)}</td>}
                   <td></td>
                 </tr>
               </tbody>
